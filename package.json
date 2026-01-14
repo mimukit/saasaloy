@@ -6,13 +6,18 @@
   "packageManager": "pnpm@10.28.0",
   "scripts": {
     "build": "turbo run build",
+    "check-types": "turbo run check-types",
+    "commitlint": "commitlint --edit",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
     "format": "prettier --write .",
-    "check-types": "turbo run check-types"
+    "lint": "turbo run lint",
+    "prepare": "husky"
   },
   "devDependencies": {
+    "@commitlint/cli": "^20.3.1",
+    "@commitlint/config-conventional": "^20.3.1",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "husky": "^9.1.7",
     "prettier": "^3.7.4",
     "turbo": "^2.7.4",
     "typescript": "5.9.3"
