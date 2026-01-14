@@ -1,5 +1,8 @@
 .contentlayer
+.gitignore
 .next
+.prettierignore
+*.svg
 **/fixtures
 build
 coverage
