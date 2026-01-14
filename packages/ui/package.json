@@ -23,6 +23,7 @@
   },
   "exports": {
     "./components": "./src/components/index.tsx",
+    "./components/*": "./src/components/*.tsx",
     "./globals.css": "./src/styles/globals.css",
     "./hooks/*": "./src/hooks/*.ts",
     "./lib/*": "./src/lib/*.ts",

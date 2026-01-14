@@ -3,10 +3,11 @@
   "type": "module",
   "version": "0.0.0",
   "scripts": {
-    "dev": "astro dev --port 3000",
+    "astro": "astro",
     "build": "astro build",
-    "preview": "astro preview",
-    "astro": "astro"
+    "check-types": "tsc --noEmit",
+    "dev": "astro dev --port 3000",
+    "preview": "astro preview"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.1.18",
