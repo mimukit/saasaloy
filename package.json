@@ -7,11 +7,12 @@
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
+    "clean": "rimraf -g '**/node_modules' '**/.turbo' '**/dist' '**/.astro'",
     "commitlint": "commitlint --edit",
     "dev": "turbo run dev",
     "format": "prettier --write .",
-    "lint": "turbo run lint",
     "lint-staged": "lint-staged",
+    "lint": "turbo run lint",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -24,6 +25,7 @@
     "prettier": "^3.7.4",
     "prettier-plugin-astro": "^0.14.1",
     "prettier-plugin-tailwindcss": "^0.7.2",
+    "rimraf": "^6.1.2",
     "turbo": "^2.7.4",
     "typescript": "5.9.3"
   },
