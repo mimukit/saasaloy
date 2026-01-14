@@ -18,6 +18,7 @@
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^20.3.1",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
+    "eslint": "^9.39.2",
     "husky": "^9.1.7",
     "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
@@ -29,7 +30,7 @@
       "eslint --fix"
     ],
     "*": [
-      "prettier --write ."
+      "prettier --write"
     ]
   },
   "engines": {
