@@ -6,4 +6,14 @@ export default {
   jsxSingleQuote: false,
   tabWidth: 2,
   trailingComma: "es5",
+  plugins: ["@trivago/prettier-plugin-sort-imports"],
+  importOrder: [
+    "^react",
+    "<BUILTIN_MODULES>",
+    "<THIRD_PARTY_MODULES>",
+    "^@/(.*)$",
+    "^[./]",
+  ],
+  importOrderSeparation: true,
+  importOrderSortSpecifiers: true,
 };
