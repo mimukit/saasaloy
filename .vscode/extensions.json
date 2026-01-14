@@ -1,3 +1,11 @@
 {
-  "recommendations": ["esbenp.prettier-vscode"]
+  "recommendations": [
+    "esbenp.prettier-vscode",
+    "astro-build.astro-vscode",
+    "eamodio.gitlens",
+    "ms-azuretools.vscode-docker",
+    "dbaeumer.vscode-eslint",
+    "unifiedjs.vscode-mdx",
+    "bradlc.vscode-tailwindcss"
+  ]
 }
