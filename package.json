@@ -11,6 +11,7 @@
     "dev": "turbo run dev",
     "format": "prettier --write .",
     "lint": "turbo run lint",
+    "lint-staged": "lint-staged",
     "prepare": "husky"
   },
   "devDependencies": {
@@ -18,9 +19,18 @@
     "@commitlint/config-conventional": "^20.3.1",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "husky": "^9.1.7",
+    "lint-staged": "^16.2.7",
     "prettier": "^3.7.4",
     "turbo": "^2.7.4",
     "typescript": "5.9.3"
+  },
+  "lint-staged": {
+    "*.{js,ts,jsx,tsx}": [
+      "eslint --fix"
+    ],
+    "*": [
+      "prettier --write ."
+    ]
   },
   "engines": {
     "node": ">=24"
