@@ -2,7 +2,7 @@
   "extends": "@repo/typescript-config/astro.json",
   "include": [".astro/types.d.ts", "**/*"],
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "jsxImportSource": "react"
+    "jsx": "preserve",
+    "jsxImportSource": "astro"
   }
 }

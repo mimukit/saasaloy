@@ -1,0 +1,72 @@
+---
+import { getCollection } from "astro:content";
+import BaseLayout from "../../layouts/BaseLayout.astro";
+
+const blogPosts = await getCollection("blog");
+const sortedPosts = blogPosts.sort(
+  (a, b) => b.data.pubDate.getTime() - a.data.pubDate.getTime()
+);
+
+const formatDate = (date: Date) => {
+  return new Intl.DateTimeFormat("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  }).format(date);
+};
+---
+
+<BaseLayout
+  title="Blog | SaasAloy"
+  description="Latest blog posts from SaasAloy"
+>
+  <div class="container mx-auto px-4 py-12">
+    <header class="mb-12">
+      <h1 class="mb-4 text-4xl font-bold">Blog</h1>
+      <p class="text-muted-foreground text-xl">
+        Latest articles and updates from the SaasAloy team
+      </p>
+    </header>
+
+    {
+      sortedPosts.length === 0 ? (
+        <div class="py-12 text-center">
+          <p class="text-muted-foreground">
+            No blog posts yet. Check back soon!
+          </p>
+        </div>
+      ) : (
+        <div class="grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {sortedPosts.map((post) => (
+            <a
+              href={`/blog/${post.id}`}
+              class="group bg-card hover:border-primary/50 block overflow-hidden rounded-lg border transition-colors"
+            >
+              {post.data.heroImage && (
+                <img
+                  src={post.data.heroImage.src}
+                  alt={post.data.title}
+                  class="h-48 w-full object-cover"
+                />
+              )}
+              <div class="p-6">
+                <h2 class="group-hover:text-primary mb-2 text-xl font-semibold transition-colors">
+                  {post.data.title}
+                </h2>
+                <p class="text-muted-foreground mb-4 line-clamp-2 text-sm">
+                  {post.data.description}
+                </p>
+                <time
+                  datetime={post.data.pubDate.toISOString()}
+                  class="text-muted-foreground text-xs"
+                >
+                  {formatDate(post.data.pubDate)}
+                </time>
+              </div>
+            </a>
+          ))}
+        </div>
+      )
+    }
+  </div>
+</BaseLayout>

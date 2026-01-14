@@ -1,0 +1,55 @@
+---
+import "../styles/web.css";
+
+interface Props {
+  title?: string;
+  description?: string;
+}
+
+const { title = "SaasAloy - Open-source AI SaaS starter kit", description } =
+  Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <meta name="viewport" content="width=device-width" />
+    <meta name="generator" content={Astro.generator} />
+    <meta name="description" content={description} />
+    <title>{title}</title>
+  </head>
+  <body>
+    <nav
+      class="bg-background/95 supports-[backdrop-filter]:bg-background/60 border-b backdrop-blur"
+    >
+      <div
+        class="container mx-auto flex items-center justify-between px-4 py-4"
+      >
+        <a href="/" class="text-primary text-xl font-bold">SaasAloy</a>
+        <a
+          href="/blog"
+          class="text-muted-foreground hover:text-foreground text-sm transition-colors"
+        >
+          Blog
+        </a>
+      </div>
+    </nav>
+    <main>
+      <slot />
+    </main>
+  </body>
+</html>
+
+<style>
+  html {
+    font-family: system-ui, sans-serif;
+  }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    background-color: hsl(var(--background));
+    color: hsl(var(--foreground));
+  }
+</style>

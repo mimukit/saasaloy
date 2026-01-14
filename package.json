@@ -18,6 +18,7 @@
   "devDependencies": {
     "@commitlint/cli": "^20.3.1",
     "@commitlint/config-conventional": "^20.3.1",
+    "@repo/eslint-config": "workspace:*",
     "@trivago/prettier-plugin-sort-imports": "^6.0.2",
     "eslint": "^9.39.2",
     "husky": "^9.1.7",

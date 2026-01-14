@@ -1,6 +1,9 @@
 {
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": ["./base.json", "astro/tsconfigs/strict"],
-  "compilerOptions": {},
+  "compilerOptions": {
+    "strictNullChecks": true,
+    "allowJs": true
+  },
   "exclude": ["dist"]
 }
