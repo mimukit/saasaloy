@@ -12,6 +12,7 @@
     "check-types": "turbo run check-types"
   },
   "devDependencies": {
+    "typescript": "5.9.3",
     "turbo": "^2.7.4"
   },
   "engines": {
