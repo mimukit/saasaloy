@@ -1,0 +1,4 @@
+{
+  "extends": "@repo/typescript-config/astro.json",
+  "include": [".astro/types.d.ts", "**/*"]
+}
