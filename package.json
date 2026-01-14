@@ -1,11 +1,21 @@
 {
   "name": "saasaloy",
-  "version": "0.0.1",
+  "version": "0.0.0",
   "description": "SaasAloy is an open-source AI SaaS starter kit, designed for modular & scalable AI applications",
   "main": "index.js",
   "packageManager": "pnpm@10.27.0",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "build": "turbo run build",
+    "dev": "turbo run dev",
+    "lint": "turbo run lint",
+    "format": "prettier --write \"**/*.{ts,tsx,md}\"",
+    "check-types": "turbo run check-types"
+  },
+  "devDependencies": {
+    "turbo": "^2.7.4"
+  },
+  "engines": {
+    "node": ">=24"
   },
   "keywords": [
     "saas",
