@@ -1,0 +1,9 @@
+.contentlayer
+.next
+**/fixtures
+build
+coverage
+deprecated
+dist
+node_modules
+pnpm-lock.yaml
