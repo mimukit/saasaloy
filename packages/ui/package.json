@@ -1,11 +1,6 @@
 {
   "name": "@repo/ui",
   "version": "0.0.0",
-  "exports": {
-    "./globals.css": "./src/styles/globals.css",
-    "./components/*": "./src/components/*.tsx",
-    "./lib/*": "./src/lib/*.ts"
-  },
   "scripts": {
     "check-types": "tsc --noEmit"
   },
@@ -25,5 +20,12 @@
     "@repo/eslint-config": "workspace:*",
     "@repo/typescript-config": "workspace:*",
     "@types/react": "^19.2.8"
+  },
+  "exports": {
+    "./components": "./src/components/index.tsx",
+    "./globals.css": "./src/styles/globals.css",
+    "./hooks/*": "./src/hooks/*.ts",
+    "./lib/*": "./src/lib/*.ts",
+    "./postcss.config": "./postcss.config.mjs"
   }
 }
