@@ -139,6 +139,7 @@ vite.config.ts.timestamp-*
 .vinxi/
 count.txt
 todos.json
+routeTree.gen.ts
 
 # DynamoDB Local
 .dynamodb/
