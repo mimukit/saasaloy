@@ -2,6 +2,7 @@
 import mdx from "@astrojs/mdx";
 import react from "@astrojs/react";
 import starlight from "@astrojs/starlight";
+import "@repo/config/env/web";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 import starlightThemeBlack from "starlight-theme-black";
