@@ -3,9 +3,7 @@
   "name": "saasaloy-server",
   "main": "src/index.ts",
   "compatibility_date": "2026-01-11",
-  // "compatibility_flags": [
-  //   "nodejs_compat"
-  // ],
+  "compatibility_flags": ["nodejs_compat"],
   // "vars": {
   //   "MY_VAR": "my-variable"
   // },
