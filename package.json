@@ -7,7 +7,7 @@
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
-    "clean": "rimraf -g '**/node_modules' '**/.turbo' '**/dist' '**/.astro'",
+    "clean": "rimraf -g '**/node_modules' '**/.turbo' '**/dist' '**/.astro' '**/.wrangler'",
     "commitlint": "commitlint --edit",
     "dev": "turbo run dev",
     "format": "prettier --write .",
