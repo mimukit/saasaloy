@@ -11,16 +11,17 @@
   },
   "dependencies": {
     "@astrojs/mdx": "^4.3.13",
+    "@astrojs/starlight": "^0.37.2",
     "@tailwindcss/vite": "^4.1.18",
     "astro": "^5.16.9",
-    "react-dom": "^19.2.3",
-    "react": "^19.2.3"
+    "react": "^19.2.3",
+    "react-dom": "^19.2.3"
   },
   "devDependencies": {
     "@astrojs/react": "^4.4.2",
     "@repo/typescript-config": "workspace:*",
     "@repo/ui": "workspace:*",
-    "@types/react-dom": "^19.2.3",
-    "@types/react": "^19.2.8"
+    "@types/react": "^19.2.8",
+    "@types/react-dom": "^19.2.3"
   }
 }
