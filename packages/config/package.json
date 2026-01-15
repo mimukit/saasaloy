@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "exports": {
-    "./env/*": "./src/env/*",
+    "./env/app": "./src/env/app.ts",
+    "./env/server": "./src/env/server.ts",
+    "./env/web": "./src/env/web.ts",
     "./global": "./src/global.ts"
   },
   "scripts": {

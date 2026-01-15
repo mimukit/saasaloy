@@ -3,7 +3,10 @@ import { z } from "zod";
 
 export const serverEnv = createEnv({
   server: {
-    DATABASE_URL: z.string().url(),
+    DATABASE_URL: z
+      .string()
+      .url()
+      .default("postgresql://postgres:postgres@localhost:5432/saasaloy"),
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
