@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@repo/config": "workspace:^",
+    "@repo/logger": "workspace:*",
     "@tanstack/react-router": "^1.150.0",
     "@tanstack/react-router-devtools": "^1.150.0",
     "react": "^19.2.3",

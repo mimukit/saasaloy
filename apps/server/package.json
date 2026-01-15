@@ -4,18 +4,17 @@
   "type": "module",
   "scripts": {
     "cf-typegen": "wrangler types --env-interface CloudflareBindings",
-    "check-env": "tsx -e \"import('@repo/config/env/server')\"",
     "check-types": "tsc --noEmit",
     "deploy": "wrangler deploy --minify",
-    "dev": "pnpm check-env && wrangler dev --port 4000"
+    "dev": "wrangler dev --port 4000"
   },
   "dependencies": {
     "@repo/api": "workspace:*",
-    "@repo/config": "workspace:*"
+    "@repo/config": "workspace:*",
+    "@repo/logger": "workspace:*"
   },
   "devDependencies": {
     "@repo/typescript-config": "workspace:*",
-    "tsx": "^4.21.0",
     "wrangler": "^4.4.0"
   }
 }
