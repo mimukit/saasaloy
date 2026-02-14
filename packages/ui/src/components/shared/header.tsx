@@ -1,5 +1,6 @@
 import React from "react";
 
+import { globalConfigs } from "@repo/config/global";
 import { useFramework } from "@repo/ui/adapters";
 import { Logo } from "@repo/ui/components/shared/logo";
 import { ThemeToggle } from "@repo/ui/components/shared/theme-toggle";
@@ -94,7 +95,7 @@ export const Header = () => {
                   size="sm"
                   className={cn(isScrolled && "lg:hidden")}
                 >
-                  <Link href="#">
+                  <Link href={globalConfigs.auth.loginUrl}>
                     <span>Login</span>
                   </Link>
                 </Button>
@@ -103,8 +104,8 @@ export const Header = () => {
                   size="sm"
                   className={cn(isScrolled && "lg:hidden")}
                 >
-                  <Link href="#">
-                    <span>Sign Up</span>
+                  <Link href={globalConfigs.auth.registerUrl}>
+                    <span>Register</span>
                   </Link>
                 </Button>
                 <Button
@@ -112,7 +113,7 @@ export const Header = () => {
                   size="sm"
                   className={cn(isScrolled ? "lg:inline-flex" : "hidden")}
                 >
-                  <Link href="#">
+                  <Link href={globalConfigs.auth.registerUrl}>
                     <span>Get Started</span>
                   </Link>
                 </Button>

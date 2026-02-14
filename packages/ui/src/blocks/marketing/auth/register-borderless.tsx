@@ -15,7 +15,9 @@ export function Register() {
           <Link href="/" aria-label="go home" className="inline-block py-3">
             <Logo className="mx-auto w-fit" />
           </Link>
-          <h1 className="mt-3 font-serif text-4xl font-medium">Sign up</h1>
+          <h1 className="mt-3 font-serif text-4xl font-medium">
+            Create an account
+          </h1>
         </div>
 
         <form action="" className="mt-12 space-y-4">
