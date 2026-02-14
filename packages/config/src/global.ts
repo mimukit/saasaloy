@@ -8,4 +8,7 @@ export const globalConfigs = {
     "http://localhost:3001",
     "http://localhost:4000",
   ],
+  support: {
+    email: "support@saasaloy.com",
+  },
 };
