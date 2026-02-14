@@ -2,6 +2,7 @@ import React from "react";
 
 import { useFramework } from "@repo/ui/adapters";
 import { Logo } from "@repo/ui/components/shared/logo";
+import { ThemeToggle } from "@repo/ui/components/shared/theme-toggle";
 import { Button } from "@repo/ui/components/ui/button";
 import { cn } from "@repo/ui/lib/utils";
 import { Menu, X } from "lucide-react";
@@ -86,6 +87,7 @@ export const Header = () => {
                 </ul>
               </div>
               <div className="flex w-full flex-col space-y-3 sm:flex-row sm:gap-3 sm:space-y-0 md:w-fit">
+                <ThemeToggle />
                 <Button
                   asChild
                   variant="ghost"

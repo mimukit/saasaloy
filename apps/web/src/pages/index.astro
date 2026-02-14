@@ -13,6 +13,8 @@ import "../styles/web.css";
     <meta name="viewport" content="width=device-width" />
     <meta name="generator" content={Astro.generator} />
     <title>SaasAloy - Open-source AI SaaS starter kit</title>
+    <!-- Theme setup script to prevent FOUC -->
+    <script is:inline src="/scripts/theme.js"></script>
   </head>
   <body>
     <Header client:load />
