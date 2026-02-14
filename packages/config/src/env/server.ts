@@ -10,6 +10,12 @@ export const serverEnv = createEnv({
     NODE_ENV: z
       .enum(["development", "production", "test"])
       .default("development"),
+    BETTER_AUTH_SECRET: z.string().min(1).default("secret"),
+    BETTER_AUTH_URL: z.string().url().default("http://localhost:3001"),
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
+    GITHUB_CLIENT_ID: z.string().optional(),
+    GITHUB_CLIENT_SECRET: z.string().optional(),
   },
   runtimeEnv: typeof process !== "undefined" ? process.env : {},
   skipValidation:
