@@ -20,7 +20,7 @@ const faqCategories = [
         id: "gs-1",
         question: "How do I create an account?",
         answer:
-          'Click "Sign Up" and follow the prompts. You can sign up with email or connect your Google account.',
+          'Click "Create an account" and follow the prompts. You can register with email or connect your Google account.',
       },
       {
         id: "gs-2",
