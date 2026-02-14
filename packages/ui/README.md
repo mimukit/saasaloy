@@ -102,7 +102,7 @@ export function AstroFrameworkProvider({ children }) {
 When building new components in `@repo/ui`, always use the `useFramework` hook for links and images:
 
 ```tsx
-import { useFramework } from "../adapters";
+import { useFramework } from "@repo/ui/adapters";
 
 export const MyComponent = () => {
   const { Link, Image } = useFramework();
