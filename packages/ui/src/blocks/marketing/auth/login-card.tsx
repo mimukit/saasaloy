@@ -111,10 +111,10 @@ export function Login() {
         <p className="text-muted-foreground mt-6 text-center text-sm">
           Don&apos;t have an account?{" "}
           <Link
-            href={globalConfigs.auth.signupUrl}
+            href={globalConfigs.auth.registerUrl}
             className="text-primary font-medium hover:underline"
           >
-            Register
+            Create an account
           </Link>
         </p>
       </div>
