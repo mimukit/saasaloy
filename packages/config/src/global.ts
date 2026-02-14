@@ -11,4 +11,9 @@ export const globalConfigs = {
   support: {
     email: "support@saasaloy.com",
   },
+  auth: {
+    registerUrl: "/auth/register",
+    loginUrl: "/auth/login",
+    forgotPasswordUrl: "/auth/forgot-password",
+  },
 };
