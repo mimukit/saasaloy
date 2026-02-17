@@ -12,6 +12,7 @@
 *.bmp
 *.tiff
 *.ico
+*.txt
 **/fixtures
 build
 coverage
