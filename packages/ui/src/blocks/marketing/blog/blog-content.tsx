@@ -251,11 +251,11 @@ export function BlogContent({ posts }: { posts: BlogPost[] }) {
                     <h3 className="text-foreground group-hover:text-primary truncate text-sm font-medium transition-colors">
                       {post.title}
                     </h3>
-                    <p className="text-muted-foreground mt-0.5 line-clamp-1 text-xs">
+                    <p className="text-muted-foreground mt-2 line-clamp-1 text-xs">
                       {post.description}
                     </p>
                   </div>
-                  <div className="flex shrink-0 flex-col items-end gap-1">
+                  <div className="flex shrink-0 flex-col items-end gap-3">
                     <time className="text-muted-foreground text-xs">
                       {formatDate(post.publishedAt)}
                     </time>
