@@ -29,6 +29,6 @@ const serializedPosts: BlogPost[] = sortedPosts.map((post) => ({
   description="Latest blog posts from SaasAloy"
 >
   <BlogHero />
-  <BlogFeatured posts={serializedPosts} />
-  <BlogContent posts={serializedPosts} client:load />
+  <BlogFeatured posts={serializedPosts} client:idle />
+  <BlogContent posts={serializedPosts} client:idle />
 </BaseLayout>
