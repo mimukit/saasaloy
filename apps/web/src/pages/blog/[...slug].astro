@@ -4,13 +4,47 @@ import BlogPostLayout from "../../layouts/BlogPostLayout.astro";
 
 export async function getStaticPaths() {
   const blogPosts = await getCollection("blog");
-  return blogPosts.map((post) => ({
-    params: { slug: post.id },
-    props: { post },
-  }));
+
+  // Sort posts by date (newest first) for navigation
+  const sorted = [...blogPosts].sort(
+    (a, b) => b.data.publishedAt.getTime() - a.data.publishedAt.getTime()
+  );
+
+  return sorted.map((post, idx) => {
+    // Related posts: same category, excluding the current post
+    const related = sorted
+      .filter(
+        (p) =>
+          p.id !== post.id &&
+          p.data.category &&
+          p.data.category === post.data.category
+      )
+      .slice(0, 3)
+      .map((p) => ({
+        id: p.id,
+        title: p.data.title,
+        publishedAt: p.data.publishedAt.toISOString(),
+        category: p.data.category,
+      }));
+
+    // Previous / next navigation
+    const prev =
+      idx < sorted.length - 1
+        ? { id: sorted[idx + 1]!.id, title: sorted[idx + 1]!.data.title }
+        : undefined;
+    const next =
+      idx > 0
+        ? { id: sorted[idx - 1]!.id, title: sorted[idx - 1]!.data.title }
+        : undefined;
+
+    return {
+      params: { slug: post.id },
+      props: { post, relatedPosts: related, navigation: { prev, next } },
+    };
+  });
 }
 
-const { post } = Astro.props;
+const { post, relatedPosts, navigation } = Astro.props;
 const { Content } = await render(post);
 ---
 
@@ -20,6 +54,10 @@ const { Content } = await render(post);
   publishedAt={post.data.publishedAt}
   updatedDate={post.data.updatedDate}
   heroImage={post.data.heroImage}
+  category={post.data.category}
+  tags={post.data.tags}
+  relatedPosts={relatedPosts}
+  navigation={navigation}
 >
   <Content />
 </BlogPostLayout>
