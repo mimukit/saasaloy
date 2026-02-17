@@ -343,7 +343,7 @@ export function BlogCard({
         <time className="text-muted-foreground text-xs tracking-wide">
           {date}
         </time>
-        <h3 className="text-foreground group-hover:text-primary line-clamp-2 text-sm leading-snug font-medium transition-colors">
+        <h3 className="text-foreground group-hover:text-primary text-sm leading-snug font-medium transition-colors">
           {title}
         </h3>
         {category && (
