@@ -5,12 +5,12 @@ import { Button } from "@repo/ui/components";
 interface Props {
   title: string;
   description: string;
-  pubDate: Date;
+  publishedAt: Date;
   updatedDate?: Date;
   heroImage?: ImageMetadata;
 }
 
-const { title, description, pubDate, updatedDate, heroImage } = Astro.props;
+const { title, description, publishedAt, updatedDate, heroImage } = Astro.props;
 
 const formatDate = (date: Date) => {
   return new Intl.DateTimeFormat("en-US", {
@@ -43,8 +43,8 @@ const formatDate = (date: Date) => {
       <h1 class="mb-4 text-4xl font-bold">{title}</h1>
       <p class="text-muted-foreground mb-4 text-xl">{description}</p>
       <div class="text-muted-foreground flex items-center gap-4 text-sm">
-        <time datetime={pubDate.toISOString()}>
-          Published: {formatDate(pubDate)}
+        <time datetime={publishedAt.toISOString()}>
+          Published: {formatDate(publishedAt)}
         </time>
         {
           updatedDate && (
