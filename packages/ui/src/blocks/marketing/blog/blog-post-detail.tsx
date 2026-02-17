@@ -359,12 +359,12 @@ export function BlogPostDetail({
         </div>
 
         {/* Title */}
-        <h1 className="font-serif text-3xl font-medium tracking-tight text-balance md:text-4xl lg:text-5xl">
+        <h1 className="font-serif text-3xl font-medium tracking-tight md:text-4xl lg:text-5xl">
           {title}
         </h1>
 
         {/* Description */}
-        <p className="text-muted-foreground mx-auto mt-4 max-w-2xl text-lg text-balance">
+        <p className="text-muted-foreground mx-auto mt-4 max-w-2xl text-lg">
           {description}
         </p>
 
