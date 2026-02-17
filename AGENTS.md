@@ -212,6 +212,7 @@ function Button({ className, variant }) {
 
 ### 🚫 Never Do
 
+- Never use `npm` or `npx`, instead use `pnpm` & `pnpm dlx`
 - Commit secrets, API keys, or environment variables
 - Modify `node_modules/` or `pnpm-lock.yaml` manually (use `pnpm install`)
 - Remove or disable TypeScript strict mode
