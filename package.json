@@ -3,7 +3,7 @@
   "version": "0.0.0",
   "description": "SaasAloy is an open-source AI SaaS starter kit, designed for modular & scalable AI applications",
   "type": "module",
-  "packageManager": "pnpm@10.28.0",
+  "packageManager": "pnpm@10.29.3",
   "scripts": {
     "build": "turbo run build",
     "check-types": "turbo run check-types",
