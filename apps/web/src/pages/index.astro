@@ -1,5 +1,5 @@
 ---
-import { Header } from "@repo/ui/components/shared/header";
+import BaseLayout from "../layouts/BaseLayout.astro";
 import { HeroSection } from "@repo/ui/blocks/marketing/hero/hero-section-with-logos";
 import { Features } from "@repo/ui/blocks/marketing/features/features-grid";
 import { Stats } from "@repo/ui/blocks/marketing/stats/stats-with-globe";
@@ -10,30 +10,16 @@ import { FAQs } from "@repo/ui/blocks/marketing/faqs/faqs-accordion";
 import { Contact } from "@repo/ui/blocks/marketing/contact/contact-form";
 import { CTA } from "@repo/ui/blocks/marketing/cta/cta-text";
 import { Footer } from "@repo/ui/blocks/marketing/footer/footer-center";
-
-import "../styles/web.css";
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>SaasAloy - Open-source AI SaaS starter kit</title>
-    <!-- Theme setup script to prevent FOUC -->
-    <script is:inline src="/scripts/theme.js"></script>
-  </head>
-  <body>
-    <Header client:load />
-    <HeroSection />
-    <Features />
-    <Integrations />
-    <Pricing />
-    <FAQs client:visible />
-    <Testimonials />
-    <Stats />
-    <CTA />
-    <Footer />
-  </body>
-</html>
+<BaseLayout>
+  <HeroSection />
+  <Features />
+  <Integrations />
+  <Pricing />
+  <FAQs client:visible />
+  <Testimonials />
+  <Stats />
+  <CTA />
+  <Footer />
+</BaseLayout>
