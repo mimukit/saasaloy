@@ -10,23 +10,23 @@
     "preview": "astro preview"
   },
   "dependencies": {
-    "@astrojs/mdx": "^4.3.13",
-    "@astrojs/starlight": "^0.37.2",
+    "@astrojs/mdx": "^5.0.4",
+    "@astrojs/starlight": "^0.38.4",
     "@fontsource/geist-mono": "^5.2.7",
     "@fontsource/geist-sans": "^5.2.5",
     "@repo/config": "workspace:^",
     "@repo/logger": "workspace:*",
-    "@tailwindcss/vite": "^4.1.18",
-    "astro": "^5.16.9",
-    "react": "^19.2.3",
-    "react-dom": "^19.2.3",
+    "@tailwindcss/vite": "^4.2.4",
+    "astro": "^6.1.10",
+    "react": "^19.2.5",
+    "react-dom": "^19.2.5",
     "starlight-theme-black": "^0.6.0"
   },
   "devDependencies": {
-    "@astrojs/react": "^4.4.2",
+    "@astrojs/react": "^5.0.4",
     "@repo/typescript-config": "workspace:*",
     "@repo/ui": "workspace:*",
-    "@types/react": "^19.2.8",
+    "@types/react": "^19.2.14",
     "@types/react-dom": "^19.2.3"
   }
 }
