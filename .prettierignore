@@ -3,6 +3,17 @@
 .next
 .prettierignore
 *.svg
+*.jpg
+*.jpeg
+*.png
+*.gif
+*.webp
+*.ico
+*.bmp
+*.tiff
+*.ico
+*.txt
+*.toml
 **/fixtures
 build
 coverage

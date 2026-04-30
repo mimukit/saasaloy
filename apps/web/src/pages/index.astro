@@ -1,36 +1,24 @@
 ---
-import { Button } from "@repo/ui/components";
-import { logger } from "@repo/logger";
-import "../styles/web.css";
-
-logger.info("💡 Web server starting...");
+import BaseLayout from "../layouts/BaseLayout.astro";
+import { HeroSection } from "@repo/ui/blocks/marketing/hero/hero-section-with-logos";
+import { Features } from "@repo/ui/blocks/marketing/features/features-grid";
+import { Stats } from "@repo/ui/blocks/marketing/stats/stats-with-globe";
+import { Integrations } from "@repo/ui/blocks/marketing/integrations/integrations-row";
+import { Testimonials } from "@repo/ui/blocks/marketing/testimonials/testimonials-simple";
+import { Pricing } from "@repo/ui/blocks/marketing/pricing/pricing-card";
+import { FAQs } from "@repo/ui/blocks/marketing/faqs/faqs-accordion";
+import { CTA } from "@repo/ui/blocks/marketing/cta/cta-text";
+import { Footer } from "@repo/ui/blocks/marketing/footer/footer-center";
 ---
 
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <meta name="viewport" content="width=device-width" />
-    <meta name="generator" content={Astro.generator} />
-    <title>SaasAloy - Open-source AI SaaS starter kit</title>
-  </head>
-  <body>
-    <h1 class="text-primary text-2xl font-bold">
-      SaasAloy - Open-source AI SaaS starter kit
-    </h1>
-    <p class="text-muted-foreground">
-      SaasAloy is an enterprise-grade, open-source SaaS starter kit designed for
-      2026's "Native-AI" landscape, prioritizing data sovereignty and agentic
-      autonomy without the typical "platform tax" of proprietary boilerplates.
-      Built on a Next.js 15 Turborepo foundation with a modular,
-      framework-agnostic component architecture, the project secures
-      multi-tenancy at the database layer using Postgres Row-Level Security
-      (RLS) and integrates the Vercel AI SDK for autonomous reasoning loops. By
-      providing a sovereign pgvector RAG pipeline and a high-performance AI
-      usage ledger for real-time token tracking and billing, SaasAloy enables
-      B2B developers to launch privacy-compliant, scalable AI applications that
-      remain fully portable via Docker.
-    </p>
-    <Button variant="default">Click me</Button>
-  </body>
-</html>
+<BaseLayout>
+  <HeroSection />
+  <Features />
+  <Integrations />
+  <Pricing />
+  <FAQs client:visible />
+  <Testimonials />
+  <Stats />
+  <CTA />
+  <Footer />
+</BaseLayout>

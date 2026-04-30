@@ -1,1 +1,10 @@
 @import "@repo/ui/globals.css";
+
+/* Scrollbar utility for horizontal scrolling areas */
+.scrollbar-hide {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+.scrollbar-hide::-webkit-scrollbar {
+  display: none;
+}
