@@ -11,8 +11,7 @@
   "scripts": {
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "typecheck": "turbo run typecheck",
-    "sync": "saasaloy sync"
+    "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
     "turbo": "^2",

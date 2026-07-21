@@ -3,12 +3,12 @@ import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { pathExists } from "../lib/fs-utils.js";
 import { copyTemplate } from "../lib/scaffold.js";
-import { syncProject } from "../lib/sync-core.js";
 import { logger } from "../lib/logger.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
-// + @repo/config), generate the agent views, and print next steps. Churny modules
-// (api, database, auth, admin, features) are added later via `saasaloy add`.
+// + @repo/config) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
+// (fixed common rules); nothing is generated. Churny modules (api, database, auth,
+// admin, features) are added later via `saasaloy add`, which copies their skills in.
 
 // Bundled at <pkg>/templates/base; at runtime import.meta.url is <pkg>/dist/index.js.
 const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url));
@@ -50,16 +50,13 @@ export async function runInit(argv: string[]): Promise<number> {
   await copyTemplate(TEMPLATE_DIR, target, { PROJECT_NAME: projectName });
   logger.step("wrote base (apps/web · packages/ui · packages/config)");
 
-  const result = await syncProject(target);
-  logger.step(`generated agent views (${result.fragmentCount} fragment(s))`);
-
   logger.success(`created ${projectName}`);
   logger.info("");
   logger.info("Next steps:");
   if (nameArg !== ".") logger.step(`cd ${nameArg}`);
   logger.step("pnpm install");
   logger.step("pnpm dev                    # astro dev on apps/web");
-  logger.step("pnpm --filter web deploy    # wrangler deploy to Cloudflare");
+  logger.step("pnpm --filter web run deploy  # wrangler deploy to Cloudflare");
   logger.step("saasaloy add waitlist       # add your first feature");
   return 0;
 }

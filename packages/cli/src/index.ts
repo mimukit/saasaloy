@@ -1,11 +1,10 @@
 #!/usr/bin/env node
 // saasaloy CLI entrypoint. Thin dispatcher; each command lives in commands/.
-// Roadmap (docs/plans/saasaloy-build-spec.md): Phase 0 `init`/`sync`, Phase 1 `add`/`list`.
+// Roadmap (docs/plans/saasaloy-build-spec.md): Phase 0 `init`, Phase 1 `add`/`list`.
 
 import { runAdd } from "./commands/add.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
-import { runSync } from "./commands/sync.js";
 
 interface Command {
   describe: string;
@@ -24,10 +23,6 @@ const COMMANDS: Record<string, Command> = {
   list: {
     describe: "list available modules",
     run: runList,
-  },
-  sync: {
-    describe: "regenerate agent views (AGENTS.md, CLAUDE.md, .claude/skills links)",
-    run: runSync,
   },
 };
 

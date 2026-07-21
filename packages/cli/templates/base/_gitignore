@@ -20,8 +20,3 @@ pnpm-debug.log*
 .DS_Store
 .idea/
 .vscode-test
-
-# Saasaloy generated agent views (regenerated from .agents/ by `saasaloy sync`)
-/AGENTS.md
-/CLAUDE.md
-/.claude/skills/

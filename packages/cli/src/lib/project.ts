@@ -1,13 +1,12 @@
 import { dirname, join, parse } from "node:path";
 import { pathExists } from "./fs-utils.js";
-import { AGENT_CONFIG_FILE } from "./agent-config.js";
 
 // Walk up from `start` looking for a Saasaloy project marker so commands work from
 // any subdirectory, like git. `package.json` is deliberately NOT a marker: in a
 // monorepo every package has one, which would stop the search at the nearest
-// package instead of the project root that owns .agents/. Falls back to the
+// package instead of the project root that owns saasaloy.json. Falls back to the
 // starting dir when nothing is found.
-const MARKERS = [AGENT_CONFIG_FILE, ".agents", "saasaloy.json"];
+const MARKERS = ["saasaloy.json"];
 
 export async function findProjectRoot(start: string = process.cwd()): Promise<string> {
   let dir = start;
