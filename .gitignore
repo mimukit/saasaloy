@@ -147,6 +147,12 @@ routeTree.gen.ts
 # Firebase
 .firebase/
 
+# ---- Saasaloy generated agent views (regenerated from .agents/ by `saasaloy sync`) ----
+/AGENTS.md
+/CLAUDE.md
+/.claude/skills/
+/.saasaloy/
+
 # ---- Environment & Secrets ----
 .env
 .env.local
