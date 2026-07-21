@@ -1,0 +1,26 @@
+{
+  "name": "saasaloy",
+  "version": "0.0.0",
+  "description": "Composable SaaS accelerator kit.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "saasaloy": "./dist/index.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=24.13.0"
+  },
+  "scripts": {
+    "build": "tsup",
+    "dev": "tsup --watch",
+    "start": "node ./dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "26.1.1",
+    "tsup": "8.5.1"
+  }
+}
