@@ -55,7 +55,7 @@ pnpm dev
 **Expected:** The page shows a large heading `my-app` (the name you passed to `init`), the tagline "A Cloudflare-native SaaS, scaffolded with Saasaloy.", the `saasaloy add <module>` line, and Terms · Privacy links. Browser tab title reads `my-app — coming soon`. No console errors, no unreplaced `{{PROJECT_NAME}}`.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Generated site deploys green to a real Cloudflare account · 🔴 Critical
@@ -80,7 +80,7 @@ pnpm --filter web run deploy
 **Expected:** Deploy completes without error and the deployed URL serves the same landing page (project name, links, terms/privacy reachable). The Worker name is `my-app-web`.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Navigation between landing, terms, and privacy works · 🟡 Normal
@@ -90,7 +90,7 @@ pnpm --filter web run deploy
 **Expected:** `/terms` and `/privacy` each render a titled placeholder page mentioning `my-app`, with a working "← Home" link back to `/`.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — `pnpm dev` hot-reload reflects an edit without restart · 🟡 Normal
@@ -100,7 +100,7 @@ pnpm --filter web run deploy
 **Expected:** The browser updates near-instantly without a manual restart (Astro/Vite HMR).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Light/dark rendering is acceptable · 🟡 Normal
@@ -112,7 +112,7 @@ The landing sets `color-scheme: light dark`; only a human can judge both look fi
 **Expected:** Text is legible with adequate contrast in both modes; nothing is invisible (e.g. dark text on dark background).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Generated project is agent-native in Claude Code · 🟡 Normal
@@ -125,7 +125,7 @@ Confirms the committed `AGENTS.md`/`CLAUDE.md` reach the tool in a real generate
 **Expected:** The answer reflects `AGENTS.md` (use `saasaloy add`, settings in `pnpm-workspace.yaml`) — proving `CLAUDE.md` → `@AGENTS.md` resolves in the generated project. These are plain committed files (no `sync`, not git-ignored), so they are present the moment `init` finishes and survive a `git clone`. No "no context" reply.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Landing is readable/responsive on mobile width · 🟢 Low
@@ -135,7 +135,7 @@ Confirms the committed `AGENTS.md`/`CLAUDE.md` reach the tool in a real generate
 **Expected:** Heading and text scale sensibly (the heading uses `clamp()`), content stays centered and readable, no horizontal scroll.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — `init` console output and next-steps are clear and correct · 🟢 Low
@@ -145,7 +145,7 @@ Confirms the committed `AGENTS.md`/`CLAUDE.md` reach the tool in a real generate
 **Expected:** The printed steps (`cd`, `pnpm install`, `pnpm dev`, `pnpm --filter web deploy`, `saasaloy add waitlist`) are accurate and in a sensible order; a newcomer could follow them without guessing.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
