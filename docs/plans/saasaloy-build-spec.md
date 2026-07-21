@@ -8,7 +8,7 @@
 
 ## 1. What we're building (one paragraph)
 
-Saasaloy is a **personal SaaS accelerator for Cloudflare**, built first to kill *my own* re-scaffolding pain and designed to become an open-source product later without rework. It is a **composable CLI + module system**, not a static boilerplate. A near-inert base (`saasaloy init`) scaffolds a Cloudflare-native Turborepo monorepo containing only a marketing landing page; everything churny — the API, database, auth, admin app, and SaaS features — installs on demand via `saasaloy add <module>`, each module carrying *today's correct wiring*. It steals **shadcn's distribution mechanics** (declarative, you-own-the-code descriptors) but implements only a **local applier** for v1, deferring the HTTP registry until there are other users. Every project it generates is **AI-agent-native**: Saasaloy ships and generates the agent instructions, guidelines, and skills that tools like Claude Code, Codex, and Antigravity read, and the workflow prefers AI-assisted solutions for any non-deterministic step. The wedge: Cloudflare's building blocks are all mature, but nobody assembles *and maintains* them — static boilerplates rot within a release cycle, and the thinner the frozen base, the less there is to rot.
+Saasaloy is a **personal SaaS accelerator for Cloudflare**, built first to kill *my own* re-scaffolding pain and designed to become an open-source product later without rework. It is a **composable CLI + module system**, not a static boilerplate. A near-inert base (`saasaloy init`) scaffolds a Cloudflare-native Turborepo monorepo containing only a marketing landing page; everything churny — the API, database, auth, admin app, and SaaS features — installs on demand via `saasaloy add <module>`, each module carrying *today's correct wiring*. It steals **shadcn's distribution mechanics** (declarative, you-own-the-code descriptors) but implements only a **local applier** for v1, deferring the HTTP registry until there are other users. Every project it generates is **AI-agent-native**: Saasaloy ships the agent instructions, guidelines, and skills that tools like Claude Code, Codex, and Antigravity read (committed `AGENTS.md`/`CLAUDE.md` plus module-supplied Claude skills), and the workflow prefers AI-assisted solutions for any non-deterministic step. The wedge: Cloudflare's building blocks are all mature, but nobody assembles *and maintains* them — static boilerplates rot within a release cycle, and the thinner the frozen base, the less there is to rot.
 
 ---
 
@@ -110,17 +110,16 @@ When Saasaloy graduates to a remote registry, it is **a GitHub repo of JSON desc
 
 Development of both Saasaloy and every project it generates is assumed to be **heavily AI-assisted** (Claude Code, Codex, Antigravity, …). This is a design constraint, not an afterthought, and it has two halves plus a governing principle.
 
-**Saasaloy *generates* agent context into every project.** The base and each module contribute the instructions, guidelines, and skills that agent tools consume, using a **single canonical source compiled/linked to per-tool views** (chosen over hand-maintaining per-tool files, which triples authoring and drifts):
+**Saasaloy *ships* agent context into every project.** The base and each module supply the instructions, guidelines, and skills that agent tools consume — split into two kinds handled differently:
 
-- Canonical source lives in **`.agents/`** — ordered guidance fragments (`.agents/NN-*.md`) and skills (`.agents/skills/<name>/`). Modules contribute by **dropping a fragment and/or a skill folder** (a convention-based extension point, exactly like routes and schema — no shared-file patching).
-- **`AGENTS.md`** is the deterministic **concatenation** of `.agents/*.md`, because Codex/Antigravity read `AGENTS.md` literally (no import support). It is a build artifact, tracked in the manifest — never hand-maintained.
-- **`CLAUDE.md`** is a **one-line `@AGENTS.md` import** (Claude Code supports `@`-imports), so there is no second copy of the guidance.
-- **`.claude/skills/<name>`** (and any other tool's skills dir) are **links** to the canonical `.agents/skills/<name>`, never copies.
-- **`saasaloy sync`** regenerates all tool views from canonical source: re-concats `AGENTS.md`, rebuilds `CLAUDE.md`, and recreates the skill links per-OS. It is also wired as a pnpm `postinstall`. The links themselves are **git-ignored and regenerated** (not committed) so they survive macOS/Linux/Windows without relying on git's unreliable Windows symlink handling; only canonical `.agents/` is committed. Adding a new agent tool later = one new target entry, then `sync` — zero module changes.
+- **Fixed common rules → committed `AGENTS.md` + `CLAUDE.md`.** The base ships a static `AGENTS.md` (project-wide rules: pnpm/ESM conventions, "add features, don't hand-wire", the layout) copied verbatim from `templates/base` at `init`, plus a one-line `CLAUDE.md` (`@AGENTS.md`, since Claude Code supports `@`-imports). Both are **plain committed files — not generated, not git-ignored**. They exist the instant `init` finishes and survive a `git clone`, so any agent tool (Claude Code, Codex, Antigravity) opens the project with context immediately.
+- **Module-specific guidance → Claude skills.** A module's runbook ships as a **skill folder** that `saasaloy add` **copies** into `.claude/skills/<name>/` (recorded in the manifest so `remove` can undo it). Skills are on-demand: the agent loads the waitlist runbook only when working on waitlist, keeping the always-in-context `AGENTS.md` lean. Modules never append to a shared agent file — adding/removing a module is adding/removing a self-contained folder, with no concat, no regeneration, and a clean remove path.
 
-**Saasaloy *contains* agent context for its own development.** The CLI/registry repo carries its own `.agents/` (compiled to `AGENTS.md`/`CLAUDE.md`) and skills for authoring modules — e.g. a skill that scaffolds a new `registry-item.json` + files + agent fragment following the conventions — so building Saasaloy is itself AI-assisted and self-consistent.
+**Why this replaced the earlier canonical-source pipeline (reversal).** An earlier design made `AGENTS.md` a deterministic **concatenation** of ordered `.agents/*.md` fragments, with `CLAUDE.md` and per-OS skill **symlinks** regenerated by a `saasaloy sync` step and the outputs **git-ignored** (so symlinks wouldn't rely on git's flaky Windows handling). That machinery existed solely to let `AGENTS.md` grow as modules dropped fragments — but git-ignored, regenerated views are **absent on a fresh clone or a new agent session until `sync` runs**, and `saasaloy` isn't a dependency of generated projects, so the agent opens with no context (caught in Phase 0 QA, TC-6). Committing a static `AGENTS.md` and copying skills removes that entire failure class along with the concat/fragment/manifest-hash/`sync` machinery. The cost, accepted deliberately: module guidance is now **Claude-Code-only and on-demand** (skills aren't read by Codex/Antigravity) instead of concatenated cross-tool into `AGENTS.md`. For a Claude-first personal accelerator that's the right trade — the committed `AGENTS.md` still carries the universal rules to every tool.
 
-**Governing principle — prefer AI for non-deterministic tasks.** Deterministic steps stay deterministic and scripted (copy a file, add a dep, glob a route, concat fragments). For anything genuinely non-deterministic — a `--diff` merge into a hand-edited file, reconciling a migration against existing data, adapting a patch that no longer applies cleanly to a customized project — the CLI's default is to **emit a structured, agent-ready plan** (natural-language intent + the target files + old/new context) rather than fail or force a brittle deterministic transform. The tool stays agent-agnostic (it produces artifacts any agent can execute); optionally auto-invoking a detected agent CLI (`claude`, `codex`) is a later convenience, not a dependency. The update-merge design in [2.9](#29-update-story--copy-in---diff--manifest-tracked-files) is the first instance of this principle; it generalizes to every non-deterministic seam.
+**Saasaloy *contains* agent context for its own development.** The CLI/registry repo carries its own **hand-maintained** `AGENTS.md`/`CLAUDE.md` and an `author-module` skill (scaffolds a new `registry-item.json` + files + skill following the conventions) so building Saasaloy is itself AI-assisted and self-consistent. This repo is the CLI, not a generated project, so it does **not** run `saasaloy sync` on itself — its agent docs are tracked directly.
+
+**Governing principle — prefer AI for non-deterministic tasks.** Deterministic steps stay deterministic and scripted (copy a file, add a dep, glob a route, copy a skill folder). For anything genuinely non-deterministic — a `--diff` merge into a hand-edited file, reconciling a migration against existing data, adapting a patch that no longer applies cleanly to a customized project — the CLI's default is to **emit a structured, agent-ready plan** (natural-language intent + the target files + old/new context) rather than fail or force a brittle deterministic transform. The tool stays agent-agnostic (it produces artifacts any agent can execute); optionally auto-invoking a detected agent CLI (`claude`, `codex`) is a later convenience, not a dependency. The update-merge design in [2.9](#29-update-story--copy-in---diff--manifest-tracked-files) is the first instance of this principle; it generalizes to every non-deterministic seam.
 
 ---
 
@@ -138,20 +137,16 @@ saasaloy/                        # created by `saasaloy init`
     ui/                          # BASE — shadcn-based React components
     config/                      # BASE — @repo/tsconfig, @repo/eslint-config
     db/                          # via `add database` — Drizzle schema barrel + repository layer
-  .agents/                       # BASE — canonical agent source (fragments + skills)
-    00-overview.md               #   guidance fragment (base); modules drop NN-*.md here
-    skills/                      #   canonical skills; modules drop skill folders here
   .saasaloy/
-    manifest.json                # managed-file tracking (hashes) + link map
+    manifest.json                # module-applied file tracking (hashes) — created by `add`
   saasaloy.json                  # consumer manifest: alias map + installed modules
-  saasaloy.agent.json            # BASE — agent-tool targets (which views to emit/link)
-  AGENTS.md                      # BASE — generated: concat of .agents/*.md
-  CLAUDE.md                      # BASE — "@AGENTS.md" (one-line import)
-  .claude/skills/                # links → .agents/skills/* (git-ignored, regenerated by `sync`)
+  AGENTS.md                      # BASE — committed: fixed common project rules (not generated)
+  CLAUDE.md                      # BASE — committed: "@AGENTS.md" (one-line import)
+  .claude/skills/                # module skill folders copied in by `add` (empty in base)
   turbo.json
 ```
 
-Only the BASE entries exist after `init`; everything marked `via add …` is added on demand. `AGENTS.md`, `CLAUDE.md`, and the skill links are regenerated from canonical `.agents/` by `saasaloy sync` (also a pnpm `postinstall`).
+Only the BASE entries exist after `init`; everything marked `via add …` is added on demand. `AGENTS.md` and `CLAUDE.md` are **committed static files** copied from the base template — nothing regenerates them and there is no `saasaloy sync`. `.claude/skills/` is empty in the base; `saasaloy add` **copies** each module's skill folder into it (tracked in the manifest for a clean `remove`).
 
 ### <a id="32-saasaloyjson--saasaloymanifestjson"></a>3.2 `saasaloy.json` + `.saasaloy/manifest.json`
 
@@ -170,21 +165,18 @@ Only the BASE entries exist after `init`; everything marked `via add …` is add
 }
 ```
 
-`.saasaloy/manifest.json` — managed-file tracking (replaces in-file markers). Records each file Saasaloy generated/owns with a content hash, and the canonical→link map for tool views:
+`.saasaloy/manifest.json` — managed-file tracking (replaces in-file markers). Records each file a module applied — copied source files **and** copied skill files — with a content hash and the owning module, so `remove`/update know exactly what to undo. The base writes no manifest (`init` is a pure copy of static files); it is created by the first `saasaloy add`:
 
 ```jsonc
 {
   "managed": {
-    "AGENTS.md":                    { "source": "agent-compile", "hash": "a1b2…" },
-    "apps/api/src/lib/auth.ts":     { "module": "auth", "hash": "c3d4…" }
-  },
-  "links": {
-    ".claude/skills/test-webhooks": ".agents/skills/test-webhooks"
+    "apps/api/src/lib/auth.ts":            { "module": "auth", "hash": "c3d4…" },
+    ".claude/skills/test-webhooks/SKILL.md": { "module": "billing", "hash": "e5f6…" }
   }
 }
 ```
 
-On update, the tool hashes a managed file: match → clean regenerate/overwrite; drift → route to AI-merge. Links in `links` are git-ignored and recreated per-OS by `saasaloy sync`.
+On update, the tool hashes a managed file: match → clean overwrite; drift → route to AI-merge. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries — they are static base files, edited by hand.
 
 ### 3.3 Module descriptor (authored in the CLI/registry repo)
 
@@ -203,13 +195,12 @@ On update, the tool hashes a managed file: match → clean regenerate/overwrite;
   "envVars": {},
   "patches": {},                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context contributed by this module
-    "fragments": ["agent/30-waitlist.md"],    //   dropped into .agents/, re-concats AGENTS.md
-    "skills": []                              //   optional: skill folders dropped into .agents/skills/
+    "skills": ["skills/waitlist"]             //   skill folder(s) copied into .claude/skills/ by `add`
   }
 }
 ```
 
-Capability modules additionally carry `scaffolds` (new workspaces) and the structural `patches` (e.g. `wrangler.jsonc` bindings, Better Auth plugin-array insertions). The `agent` block is a convention-based extension point: fragments and skills are dropped into `.agents/`, and `saasaloy sync` re-derives `AGENTS.md`/`CLAUDE.md`/`.claude/skills` — a module never edits a shared agent file directly.
+Capability modules additionally carry `scaffolds` (new workspaces) and the structural `patches` (e.g. `wrangler.jsonc` bindings, Better Auth plugin-array insertions). The `agent` block is a convention-based extension point: a module ships one or more **skill folders**, and `saasaloy add` **copies** them into `.claude/skills/` (recorded in the manifest for a clean `remove`) — a module never edits the committed `AGENTS.md`/`CLAUDE.md`. Module guidance is thus on-demand Claude skills, not text concatenated into the shared agent file.
 
 ### 3.4 Config-patch strategy
 
@@ -221,7 +212,7 @@ Declarative merges for the 90% (env vars, schema additions via barrel, simple ke
 
 The draft's phases are re-sequenced to reflect the thin base, granular modules, and personal-first cuts.
 
-- **Phase 0 — Base + agent scaffolding** (#1). `saasaloy init` → Astro landing + `packages/ui` + `packages/config`, deploys green to Cloudflare (#2). Also scaffolds the agent layer: canonical `.agents/` (base overview fragment + any base skills), `saasaloy.agent.json` targets, and `saasaloy sync` producing `AGENTS.md` + `CLAUDE.md` + `.claude/skills` links (#3). Proves scaffolding + Turborepo + CF deploy + the canonical→tool-view pipeline.
+- **Phase 0 — Base + agent scaffolding** (#1). `saasaloy init` → Astro landing + `packages/ui` + `packages/config`, deploys green to Cloudflare (#2). Also scaffolds the agent layer: **committed static `AGENTS.md` + `CLAUDE.md`** (fixed common rules) copied from the base template — no `sync`, no generation (#3). Proves scaffolding + Turborepo + CF deploy + agent-native-out-of-the-box context. (Module skills are copied into `.claude/skills/` later, by Phase 1's `add`.)
 - **Phase 1 — Applier + first proof** (#4). Build the local applier (descriptor read, alias resolution, `dependsOn` topo-sort + confirmation, `.saasaloy/manifest.json` hash tracking, `--dry-run`/`--diff`) (#6) over `$schema`-validated manifests (#5), with declarative + `magicast`/`jsonc-parser` patches (#7). Ship `api` (#8) + `database` (#9) capability modules and **`waitlist`** (#10) as the first end-to-end proof.
 - **Phase 2 — Auth + hard proof + feature set** (#11). `auth` (#12) + `admin` (#13) capability modules (httpOnly-cookie + subdomain flow). **`billing`** (#14) as the harder proof (Better Auth Stripe plugin + webhooks + pricing UI). Then `teams` (#16), `email` (#15), `admin` panel pages. Introduce the full update flow (migrations regen + smoke verify) (#17).
 - **Future (open-source phase, out of v1 scope).** HTTP/GitHub remote registry (`readFile` → `fetch`, git-tag versions), community namespaces + PR contribution, Sigstore provenance + reputational signals, framework breadth, and — only if ever needed — multi-cloud adapters and the `@saasaloy/*` package hybrid.
@@ -241,7 +232,8 @@ The draft's phases are re-sequenced to reflect the thin base, granular modules, 
 | Billing first (hardest module) | **Waitlist first, billing second** | Matches real MVP stages; waitlist proves the machinery, billing stresses it. |
 | `create-saasaloy` | **`saasaloy init`** | One binary/package, consistent with shadcn. |
 | `registry.saasaloy.dev` custom host | **GitHub-hosted, git-tag-versioned**; custom domain optional | Zero infra, versioning for free, PR contribution path. |
-| (draft had no AI-agent concept) | **AI-agent-native projects** — canonical `.agents/` → generated `AGENTS.md` + `CLAUDE.md` import + linked `.claude/skills`; modules contribute fragments/skills; prefer-AI for non-deterministic steps | Development is heavily AI-assisted; agent context must be first-class and self-updating. |
+| (draft had no AI-agent concept) | **AI-agent-native projects** — base ships committed static `AGENTS.md` + `CLAUDE.md` (`@AGENTS.md`); modules ship Claude **skills** copied into `.claude/skills/` by `add`; prefer-AI for non-deterministic steps | Development is heavily AI-assisted; agent context must be first-class and present on clone. |
+| Canonical `.agents/` → `saasaloy sync` → generated + git-ignored `AGENTS.md`/`CLAUDE.md`/skill-links | **Committed static `AGENTS.md`/`CLAUDE.md`; module guidance = copied Claude skills; `sync` removed** | Git-ignored, regenerated views were absent on fresh clones/sessions until `sync` ran, and `saasaloy` isn't a dep of generated projects — the agent opened with no context (Phase 0 TC-6). Committing the base rules and copying skills kills that failure class and the concat/`sync`/manifest-hash machinery; accepted cost is module guidance being Claude-only + on-demand. |
 | `// saasaloy:managed` in-file markers | **`.saasaloy/manifest.json` hash tracking** | Keeps generated files clean; applies to all managed files, not just agent files. |
 
 ---
@@ -254,7 +246,7 @@ Parked deliberately — each is a lower-altitude decision to settle when its fea
 2. **`admin` shell scope** — what the base admin app includes (nav, session guard, empty dashboard) before feature modules add pages. Resolve when building `add admin`.
 3. **CI / anti-rot testing** — how (and whether) to test each module against *latest* Cloudflare / Better Auth / Stripe on a schedule, so churn is caught before it reaches a project. Resolve alongside Phase 2's update flow.
 4. **`saasaloy.json` + `registry-item.json` schemas** — the exact manifest + extension-field schemas (including the `agent` block), drafted as a `$schema`-validated forcing function. Resolve at the start of Phase 1 (it surfaces the real applier design).
-5. **Agent-tool targets + Saasaloy's own authoring skills** — confirm each default target's exact conventions (Claude Code `@`-imports + `.claude/skills`, Codex `AGENTS.md`, Antigravity's rules format) when wiring `saasaloy.agent.json`, and define the module-authoring skill set that ships in Saasaloy's own repo. Resolve when building Phase 0's agent layer.
+5. **Cross-tool coverage of module guidance** — module runbooks now ship as Claude skills copied into `.claude/skills/`, which Codex/Antigravity don't read (the committed `AGENTS.md` still covers common rules cross-tool). If those tools ever need module-specific guidance, decide the mechanism (a second copied target, or a per-tool skills convention). Revisit only if Codex/Antigravity become primary. Saasaloy's own `author-module` skill set lives in this repo.
 
 ---
 
