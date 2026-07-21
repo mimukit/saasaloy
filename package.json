@@ -1,5 +1,5 @@
 {
-  "name": "saasaloy-monorepo",
+  "name": "saasaloy-cli",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -17,7 +17,6 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "cli": "node packages/cli/dist/index.js",
-    "sync": "pnpm --filter saasaloy build && node packages/cli/dist/index.js sync",
     "cli:link": "pnpm --filter saasaloy build && pnpm add --global ./packages/cli",
     "cli:unlink": "pnpm rm --global saasaloy",
     "cli:dev": "pnpm --filter saasaloy dev",
