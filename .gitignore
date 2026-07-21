@@ -153,6 +153,9 @@ routeTree.gen.ts
 /.claude/skills/
 /.saasaloy/
 
+# ---- Saasaloy local dev playground (scaffolded by `pnpm play:init` / `play:watch`) ----
+/.dev/
+
 # ---- Environment & Secrets ----
 .env
 .env.local

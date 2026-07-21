@@ -17,7 +17,14 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "cli": "node packages/cli/dist/index.js",
-    "sync": "pnpm --filter saasaloy build && node packages/cli/dist/index.js sync"
+    "sync": "pnpm --filter saasaloy build && node packages/cli/dist/index.js sync",
+    "cli:link": "pnpm --filter saasaloy build && pnpm -C packages/cli link --global",
+    "cli:unlink": "pnpm rm --global saasaloy",
+    "cli:dev": "pnpm --filter saasaloy dev",
+    "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force && pnpm -C .dev/playground install",
+    "play:sync": "node packages/cli/dist/index.js init .dev/playground --force",
+    "play:dev": "pnpm -C .dev/playground dev",
+    "play:watch": "node scripts/watch-template.mjs"
   },
   "devDependencies": {
     "turbo": "2.10.5",
