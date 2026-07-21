@@ -1,41 +1,67 @@
 #!/usr/bin/env node
-// saasaloy CLI entrypoint. The command surface is stubbed here; implementations
-// land per the roadmap in docs/plans/saasaloy-build-spec.md:
-//   - Phase 0: `init`, `sync`   (base scaffold + agent-view generation)
-//   - Phase 1: `add`, `list`    (local applier over module descriptors)
+// saasaloy CLI entrypoint. Thin dispatcher; each command lives in commands/.
+// Roadmap (docs/plans/saasaloy-build-spec.md): Phase 0 `init`/`sync`, Phase 1 `add`/`list`.
 
-const COMMANDS: Record<string, string> = {
-  init: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
-  add: "apply a module into the current project (resolves dependsOn)",
-  list: "list available modules",
-  sync: "regenerate agent views (AGENTS.md, CLAUDE.md, .claude/skills links)",
+import { runAdd } from "./commands/add.js";
+import { runInit } from "./commands/init.js";
+import { runList } from "./commands/list.js";
+import { runSync } from "./commands/sync.js";
+
+interface Command {
+  describe: string;
+  run: (argv: string[]) => Promise<number> | number;
+}
+
+const COMMANDS: Record<string, Command> = {
+  init: {
+    describe: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
+    run: runInit,
+  },
+  add: {
+    describe: "apply a module into the current project (resolves dependsOn)",
+    run: runAdd,
+  },
+  list: {
+    describe: "list available modules",
+    run: runList,
+  },
+  sync: {
+    describe: "regenerate agent views (AGENTS.md, CLAUDE.md, .claude/skills links)",
+    run: runSync,
+  },
 };
 
 function printHelp(): void {
   console.log("saasaloy — composable SaaS accelerator for Cloudflare\n");
   console.log("Usage: saasaloy <command> [options]\n");
   console.log("Commands:");
-  for (const [name, desc] of Object.entries(COMMANDS)) {
-    console.log(`  ${name.padEnd(6)} ${desc}`);
+  for (const [name, command] of Object.entries(COMMANDS)) {
+    console.log(`  ${name.padEnd(6)} ${command.describe}`);
   }
 }
 
-function main(argv: string[]): number {
-  const [command] = argv;
+async function main(argv: string[]): Promise<number> {
+  const [name, ...rest] = argv;
 
-  if (!command || command === "--help" || command === "-h") {
+  if (!name || name === "--help" || name === "-h") {
     printHelp();
     return 0;
   }
 
-  if (!(command in COMMANDS)) {
-    console.error(`Unknown command: ${command}\n`);
+  const command = COMMANDS[name];
+  if (!command) {
+    console.error(`Unknown command: ${name}\n`);
     printHelp();
     return 1;
   }
 
-  console.error(`\`saasaloy ${command}\` is not implemented yet.`);
-  return 1;
+  return command.run(rest);
 }
 
-process.exit(main(process.argv.slice(2)));
+main(process.argv.slice(2)).then(
+  (code) => process.exit(code),
+  (error: unknown) => {
+    console.error(error instanceof Error ? error.message : error);
+    process.exit(1);
+  },
+);
