@@ -72,7 +72,7 @@ pnpm --filter web exec wrangler login
 
 ```sh
 pnpm --filter web build
-pnpm --filter web deploy
+pnpm --filter web run deploy
 ```
 
 3. Open the `*.workers.dev` URL wrangler prints.
@@ -116,13 +116,13 @@ The landing sets `color-scheme: light dark`; only a human can judge both look fi
 - [ ] Fail
 
 ### TC-6 — Generated project is agent-native in Claude Code · 🟡 Normal
-Confirms the scaffolded `.agents/` → generated `CLAUDE.md`/`AGENTS.md` reach the tool in a real project (not just this repo).
+Confirms the committed `AGENTS.md`/`CLAUDE.md` reach the tool in a real generated project (not just this repo).
 
 **Steps**
 1. Open the scaffolded `my-app` in a fresh Claude Code session.
-2. Ask something answerable only from `.agents/00-overview.md`, e.g. "Per this project's agent guidance, how should I add an API, and where do pnpm settings live?"
+2. Ask something answerable only from `AGENTS.md`, e.g. "Per this project's agent guidance, how should I add an API, and where do pnpm settings live?"
 
-**Expected:** The answer reflects the generated overview (use `saasaloy add`, settings in `pnpm-workspace.yaml`) — proving `CLAUDE.md` → `@AGENTS.md` → fragment loaded in the generated project. No "no context" reply.
+**Expected:** The answer reflects `AGENTS.md` (use `saasaloy add`, settings in `pnpm-workspace.yaml`) — proving `CLAUDE.md` → `@AGENTS.md` resolves in the generated project. These are plain committed files (no `sync`, not git-ignored), so they are present the moment `init` finishes and survive a `git clone`. No "no context" reply.
 **Actual:** _(tester fills in)_
 
 - [ ] Pass
@@ -149,8 +149,8 @@ Confirms the scaffolded `.agents/` → generated `CLAUDE.md`/`AGENTS.md` reach t
 - [ ] Fail
 
 ## Regression checks
-- [ ] This tool repo's own `pnpm sync` still regenerates its `AGENTS.md`/`CLAUDE.md`/`.claude/skills` (the shared `syncProject` refactor didn't break the `sync` command).
-- [ ] `saasaloy sync` run standalone inside a generated project regenerates its views after you edit a fragment.
+- [ ] Generated project ships committed `AGENTS.md`/`CLAUDE.md` (name substituted, not git-ignored): `git check-ignore AGENTS.md CLAUDE.md` reports them as NOT ignored.
+- [ ] `saasaloy --help` no longer lists a `sync` command, and `init` prints no "generated agent views" line (nothing is generated — the base ships fixed common rules).
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off. Run against a fresh scaffold `qa-app`._
@@ -171,8 +171,8 @@ pnpm --filter web exec wrangler deploy --dry-run
 
 - ✅ Scaffold → 22 files written; `_gitignore` correctly emitted as `.gitignore`.
 - ✅ Token substitution → root pkg `qa-app`, `wrangler.name` = `qa-app-web`, `@repo/ui` `siteName` = `qa-app`; `grep "{{"` found **no** unreplaced tokens.
-- ✅ Sync during init → `AGENTS.md` (begins `# qa-app — agent overview`), one-line `CLAUDE.md`, and `.saasaloy/manifest.json` with hashes all generated.
-- ✅ Generated `.gitignore` → `git check-ignore` confirms `AGENTS.md`, `CLAUDE.md`, `.claude/skills` are ignored in the scaffolded project.
+- ✅ Committed agent views → `AGENTS.md` (begins `# qa-app — agent overview`) and one-line `CLAUDE.md` (`@AGENTS.md`) are copied straight from `templates/base` with the name substituted. No `sync`, no `.saasaloy/manifest.json` — nothing is generated.
+- ✅ Generated `.gitignore` → `git check-ignore AGENTS.md CLAUDE.md` reports them NOT ignored (they are committed files now, always present for agent tools and clones).
 - ✅ init edge cases → no-arg, `Bad_Name` (uppercase/underscore), and non-empty-dir each exit 1 with a clear message.
 - ✅ `pnpm install` → clean; pre-approved build scripts (esbuild, workerd, sharp) ran with no prompts.
 - ✅ `pnpm build` → Astro built 3 pages (`/`, `/terms`, `/privacy`) into `apps/web/dist`.
