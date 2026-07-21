@@ -1,0 +1,29 @@
+# pnpm workspace + settings. On pnpm 11 all non-auth settings live here
+# (camelCase), not in .npmrc — .npmrc is read only for registry/auth tokens.
+
+packages:
+  - "packages/*"
+
+# --- Dependency versioning ---
+# Pin exact versions in package.json (no ^ or ~), so manifest and lockfile agree.
+saveExact: true
+
+# --- Supply-chain security ---
+# Quarantine newly published versions until they're this many MINUTES old, so a
+# freshly compromised release can't land before it's caught. pnpm 11 defaults to
+# 1440 (1 day); we widen to 3 days. Applies to transitive deps too.
+minimumReleaseAge: 4320
+# Escape hatch: packages/versions exempt from the cooldown (globs allowed).
+# `pnpm audit --fix` also appends security fixes here automatically.
+# minimumReleaseAgeExclude:
+#   - "@mimukit/*"
+
+# --- Correctness / hygiene ---
+# Fail installs when Node/pnpm don't satisfy `engines` in package.json.
+engineStrict: true
+# Collapse duplicate peer-dependency installs across the monorepo.
+dedupePeerDependents: true
+# Allow-list of dependencies permitted to run install/build scripts (pnpm 11
+# blocks all by default). esbuild is tsup's bundler and needs its postinstall.
+allowBuilds:
+  esbuild: true
