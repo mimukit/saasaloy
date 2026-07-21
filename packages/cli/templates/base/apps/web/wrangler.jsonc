@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "{{PROJECT_NAME}}-web",
+  "compatibility_date": "2025-06-01",
+  // Pure static site: serve Astro's build output as Workers static assets, no Worker code.
+  "assets": {
+    "directory": "./dist"
+  }
+}

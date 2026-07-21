@@ -1,0 +1,7 @@
+{
+  "aliases": {
+    "@web": "apps/web/src",
+    "@ui": "packages/ui/src"
+  },
+  "installed": ["web"]
+}

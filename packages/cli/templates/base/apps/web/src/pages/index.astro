@@ -1,0 +1,41 @@
+---
+import { siteName } from "@repo/ui";
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{siteName} — coming soon</title>
+    <meta name="description" content={`${siteName}, a Cloudflare-native SaaS.`} />
+    <style>
+      :root { color-scheme: light dark; }
+      body {
+        font-family: system-ui, sans-serif;
+        margin: 0;
+        min-height: 100dvh;
+        display: grid;
+        place-items: center;
+        text-align: center;
+        padding: 2rem;
+      }
+      main { max-width: 40rem; }
+      h1 { font-size: clamp(2rem, 6vw, 3.5rem); margin: 0 0 0.5rem; }
+      p { font-size: 1.125rem; line-height: 1.6; opacity: 0.8; }
+      code { font-family: ui-monospace, monospace; }
+      nav { margin-top: 2rem; font-size: 0.9rem; opacity: 0.7; }
+      a { color: inherit; }
+    </style>
+  </head>
+  <body>
+    <main>
+      <h1>{siteName}</h1>
+      <p>A Cloudflare-native SaaS, scaffolded with Saasaloy.</p>
+      <p>Add features with <code>saasaloy add &lt;module&gt;</code>.</p>
+      <nav>
+        <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+      </nav>
+    </main>
+  </body>
+</html>
