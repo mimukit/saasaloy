@@ -33,8 +33,18 @@ The Phase-3 prioritization axis: a capability's rank equals how many downstream 
 ## Registry & applier
 
 ### Applier
-The local engine behind `saasaloy add`: it reads a module descriptor off disk, resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. The HTTP registry is a later, additive `readFile → fetch` swap.
-_Avoid: registry (the applier is local; the "registry" is the collection of descriptors)._
+The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default (the `readFile → fetch` swap has landed — [ADR 0012](docs/adr/0012-remote-first-registry-repo-is-the-registry.md)); a local checkout is a dev/offline override.
+_Avoid: registry (the applier is the engine; the "registry" is a [registry source](#registry-source))._
+
+### Registry source
+Where the applier fetches descriptors from: a GitHub repo (`owner/repo`) by convention (`modules/<name>/registry-item.json` + `files/`), resolved to a commit SHA and fetched via giget. `SAASALOY_REGISTRY_DIR` points the applier at a local checkout for dev/offline. The repo *is* the registry — no build step, no committed index, no central submission.
+_Avoid: registry server, registry service._
+
+### Default registry
+The built-in registry source (`mimukit/saasaloy`) a bare `saasaloy add <name>` resolves against. An explicit `owner/repo/name` [module coordinate](#module-coordinate) targets a third-party registry instead.
+
+### Module coordinate
+How a module is addressed on the `saasaloy add` command line: `name` (default registry) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
 
 ### `registry-item.json`
 A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsOn[]`, `dependencies[]` (npm), `patches`, and an `agent` block.
@@ -47,6 +57,10 @@ The consumer manifest in a generated project: the alias map plus the list of ins
 
 ### `.saasaloy/manifest.json`
 Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries.
+
+### `saasaloy-lock.json`
+Machine-owned provenance at the consumer root: per installed module, its [registry source](#registry-source) + ref + resolved commit **SHA** + resolved `dependsOn` graph. The npm-style lock to `saasaloy.json`'s intent — it makes remote installs reproducible (the SHA *is* the integrity anchor), so the default ref can be a live branch rather than a hand-pinned tag.
+_Avoid: putting resolved SHAs in `saasaloy.json`._
 
 ### File aliases
 The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin`.
