@@ -2,9 +2,10 @@ import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cancel, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
+import { cancel, intro, isCancel, note, outro, select, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
 import { pathExists } from "../lib/fs-utils.js";
+import { logger } from "../lib/logger.js";
 import { copyTemplate } from "../lib/scaffold.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
@@ -23,7 +24,12 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 // throws — failures come back as { ok: false } so init can carry on regardless.
 function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }> {
   return new Promise((resolvePromise) => {
-    const child = spawn("pnpm", ["install"], { cwd, stdio: ["ignore", "ignore", "pipe"] });
+    // On Windows pnpm is `pnpm.cmd`, which bare spawn won't resolve — go via the shell there.
+    const child = spawn("pnpm", ["install"], {
+      cwd,
+      stdio: ["ignore", "ignore", "pipe"],
+      shell: process.platform === "win32",
+    });
     let stderr = "";
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
@@ -58,7 +64,7 @@ export async function runInit(argv: string[]): Promise<number> {
       message: "Project name?",
       placeholder: "my-app (use `.` for the current directory)",
       validate: (value) => {
-        const trimmed = value.trim();
+        const trimmed = value?.trim() ?? "";
         if (!trimmed) return "Enter a project name (or `.` for the current directory).";
         // Mirror the arg path: name is the basename of the resolved target.
         const name = basename(resolve(process.cwd(), trimmed));
@@ -119,11 +125,11 @@ export async function runInit(argv: string[]): Promise<number> {
       install.stop(`Installed dependencies ${pc.dim("(pnpm install)")}`);
     } else {
       // Don't break the flow — report and let the user finish it by hand.
-      install.stop(pc.yellow("pnpm install did not finish"), 1);
-      log.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
+      install.stop(pc.yellow("pnpm install did not finish"));
+      logger.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
       if (result.message) {
         // Keep it to the tail so the rail output stays readable.
-        log.error(result.message.split("\n").slice(-5).join("\n"));
+        logger.error(result.message.split("\n").slice(-5).join("\n"));
       }
     }
   }
