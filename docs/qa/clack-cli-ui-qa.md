@@ -69,7 +69,7 @@ node packages/cli/dist/index.js init .dev/qa-playground --force
 **Expected:** A spinner animates next to `Scaffolding qa-playground` (the project name accented), then resolves to a completed step `Scaffolded qa-playground (apps/web · packages/ui · packages/config)` with the parenthetical dimmed. The cursor is restored afterward (no missing/hidden cursor, no leftover `[?25l` escape text on screen).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — `init` next-steps note is accurate and readable  ·  🔴 Critical
@@ -80,7 +80,7 @@ node packages/cli/dist/index.js init .dev/qa-playground --force
 **Expected:** The box titled `Next steps` contains, in order: `cd .dev/qa-playground`, `pnpm install`, `pnpm dev` (with dimmed `# astro dev on apps/web`), `pnpm --filter web run deploy` (dimmed `# wrangler deploy to Cloudflare`), `saasaloy add waitlist` (dimmed `# add your first feature`). The command text is cyan; the `#` comments are dimmed and vertically don't break the box border. When the target is `.` the `cd` line is omitted (verify separately by running `init .` in an empty scratch dir).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — `add` stub renders clack-styled "coming soon"  ·  🟡 Normal
@@ -220,13 +220,14 @@ node packages/cli/dist/index.js init .dev/qa-noinstall --force
 
 ### TC-13 — `pnpm install` failure is reported and does not break `init`  ·  🔴 Critical
 **Steps**
-1. Force an install failure. The simplest reproducible way is to make `pnpm` unresolvable for the run so `spawn` errors (simulates "pnpm not on PATH"):
+1. Force an install failure. The simplest reproducible way is to hide `pnpm` from the run while keeping `node` resolvable — shadow it with a stub earlier on `PATH` (simulates "pnpm not on PATH" / a broken install):
 
 ```sh
-PATH=/usr/bin node packages/cli/dist/index.js init .dev/qa-failinstall --force
+mkdir -p /tmp/nopnpm && printf '#!/bin/sh\nexit 1\n' > /tmp/nopnpm/pnpm && chmod +x /tmp/nopnpm/pnpm
+PATH="/tmp/nopnpm:$PATH" node packages/cli/dist/index.js init .dev/qa-failinstall --force
 ```
 
-(Adjust `PATH` so `pnpm` isn't found, or temporarily corrupt the scaffolded `package.json`/registry to make `pnpm install` exit non-zero.) Select **yes** at the install prompt.
+(Alternatively, temporarily corrupt the scaffolded `package.json`/registry so `pnpm install` exits non-zero. Do **not** clear `PATH` entirely — that hides `node` too and the command never starts.) Select **yes** at the install prompt.
 
 **Expected:** The loader stops with a yellow warning (`pnpm install did not finish`), followed by a `log.warn` telling the user to run `pnpm install` themselves and a `log.error` showing the **tail** of the failure (last few lines, not a full stack dump). Crucially, `init` **continues** — the project folder is still fully scaffolded, the **Next steps** note still prints (with the `pnpm install` line present, since install didn't succeed), and the command exits **0** (project creation is not treated as failed just because install didn't complete).
 **Actual:** _(tester fills in)_
