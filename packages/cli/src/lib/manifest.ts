@@ -2,14 +2,15 @@ import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathExists } from "./fs-utils.js";
 
-// `.saasaloy/manifest.json` tracks every file Saasaloy generated/owns, by content
-// hash, plus the canonical→link map for tool views. On update the tool re-hashes a
-// managed file: match → safe overwrite; drift → route to AI-merge. This replaces
-// in-file `// saasaloy:managed` markers (see build spec §2.9 / §3.2).
+// `.saasaloy/manifest.json` records every file a module applied — copied source
+// files and copied skill files — by owning module and content hash. On update the
+// tool re-hashes a managed file: match → safe overwrite; drift → route to AI-merge.
+// This replaces in-file `// saasaloy:managed` markers (see build spec §2.9 / §3.2).
+// Shape is validated by schemas/manifest.schema.json (see lib/schema.ts).
 
 export interface ManagedEntry {
-  /** Where the file came from: "agent-compile" or a module name. */
-  source: string;
+  /** Name of the module that applied this file. */
+  module: string;
   hash: string;
 }
 

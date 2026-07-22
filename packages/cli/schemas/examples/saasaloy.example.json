@@ -1,0 +1,11 @@
+{
+  "$schema": "../saasaloy.schema.json",
+  "aliases": {
+    "@web": "apps/web/src",
+    "@api": "apps/api/src",
+    "@admin": "apps/admin/src",
+    "@db": "packages/db/src",
+    "@ui": "packages/ui/src"
+  },
+  "installed": ["web"]
+}

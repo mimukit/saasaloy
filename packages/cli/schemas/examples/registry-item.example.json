@@ -1,0 +1,26 @@
+{
+  "$schema": "../registry-item.schema.json",
+  "name": "waitlist",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "database"],
+  "dependencies": ["zod"],
+  "files": [
+    {
+      "path": "files/api/routes/waitlist.ts",
+      "target": "@api/routes/waitlist.ts"
+    },
+    {
+      "path": "files/db/schema/waitlist.ts",
+      "target": "@db/schema/waitlist.ts"
+    },
+    {
+      "path": "files/web/components/WaitlistForm.tsx",
+      "target": "@web/components/WaitlistForm.tsx"
+    }
+  ],
+  "envVars": {},
+  "patches": {},
+  "agent": {
+    "skills": ["skills/waitlist"]
+  }
+}
