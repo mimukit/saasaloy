@@ -3,7 +3,7 @@
 _Generated 2026-07-22 · covers the working-tree change for issue #18: adopt `@clack/prompts` + `picocolors` across the CLI (`logger.ts`, `init`, `add`, `list`, `index.ts` help). Scope was narrowed — `init` + `logger` are fully polished; `add`/`list` are clack-styled stubs (no working picker/applier — that's Phase 1)._
 
 ## Summary
-The CLI's console output moved from a plain `console.log` shim to `@clack/prompts`' connected-rail components (`intro`/`spinner`/`note`/`outro`, `log.*`) with `picocolors` accents. "Working" means: a human runs each command in a real terminal and sees the polished rail UI — aligned box borders, a live spinner during scaffolding, colored accents — with no broken layout, no leftover ANSI garbage, and identical *behavior* (exit codes, files written, next steps) to before.
+The CLI's console output moved from a plain `console.log` shim to `@clack/prompts`' connected-rail components (`intro`/`spinner`/`note`/`outro`, `log.*`, and interactive `text`/`confirm` prompts) with `picocolors` accents. `init` also gained interactivity: it prompts for a missing project name and offers to run `pnpm install` in the freshly scaffolded folder. "Working" means: a human runs each command in a real terminal and sees the polished rail UI — aligned box borders, a live spinner during scaffolding and install, colored accents — with no broken layout, no leftover ANSI garbage, and identical *behavior* (exit codes, files written, next steps) to before, plus the new install flow that never breaks project creation even when `pnpm install` fails.
 
 Because this is a visual/UX change, nearly every case needs a **human eye in a real TTY** — piped/captured output strips color and spinner animation, so it can't be judged by script. The automated section below covers only the behavior-level checks (build, typecheck, exit codes).
 
@@ -38,6 +38,10 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-7 | Box borders align at narrow terminal width | 🟢 Low |
 | TC-8 | Colors legible in light + dark terminals; NO_COLOR respected | 🟢 Low |
 | TC-9 | `init` pre-flight errors (bad name / non-empty dir) still read clearly | 🟡 Normal |
+| TC-10 | `init` offers to run `pnpm install` after scaffolding | 🔴 Critical |
+| TC-11 | Accepting install runs `pnpm install` with a single-line loader | 🔴 Critical |
+| TC-12 | Declining install leaves `pnpm install` in the next-steps note | 🟡 Normal |
+| TC-13 | `pnpm install` failure is reported and does not break `init` | 🔴 Critical |
 
 ## Test cases
 
@@ -166,11 +170,76 @@ node packages/cli/dist/index.js init .dev/qa-playground
 - [ ] Pass
 - [ ] Fail
 
+### TC-10 — `init` offers to run `pnpm install` after scaffolding  ·  🔴 Critical
+**Steps**
+1. From the repo root, run into a fresh scratch target:
+
+```sh
+node packages/cli/dist/index.js init .dev/qa-install --force
+```
+
+2. Watch the prompt that appears right after the `Scaffolded …` step (before the next-steps note).
+
+**Expected:** A clack `select` prompt on the rail reading **Install dependencies now?**, with the two choices listed **one per line** — `Yes, run pnpm install` (the `pnpm install` accented cyan) and `No, I'll run it later` — the first selected by default. Use ↑/↓ to move between them; Enter selects. The prompt sits inside the same connected rail (no un-railed line). Hitting Ctrl-C at this prompt does **not** abort with an error — `init` treats a cancel like "no" and proceeds to the next-steps note (exit 0).
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
+### TC-11 — Accepting install runs `pnpm install` with a single-line loader  ·  🔴 Critical
+**Steps**
+1. Run TC-10 and select **yes** at the install prompt.
+2. Watch the line that follows while dependencies install, then read the next-steps note.
+3. After it finishes, confirm the deps landed:
+
+```sh
+ls .dev/qa-install/node_modules >/dev/null && echo INSTALLED
+```
+
+**Expected:** Only a **single animated loader line** shows — `Installing dependencies (pnpm install)` (the parenthetical dimmed). pnpm's own install output (progress bars, package lists, peer warnings) is **not** streamed to the screen — just the spinner. On success it resolves to `Installed dependencies (pnpm install)`. The install runs **inside the newly created folder** (`.dev/qa-install`), so `node_modules` appears there and `INSTALLED` prints. Because deps were just installed, the **Next steps** note **omits** the `pnpm install` line (it jumps `cd …` → `pnpm dev`). Exit code 0.
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
+### TC-12 — Declining install leaves `pnpm install` in the next-steps note  ·  🟡 Normal
+**Steps**
+1. Run `init` again into a fresh target and select **no** at the install prompt:
+
+```sh
+node packages/cli/dist/index.js init .dev/qa-noinstall --force
+```
+
+2. Read the **Next steps** note; confirm no install ran.
+
+**Expected:** No loader appears; nothing is installed (`.dev/qa-noinstall/node_modules` does not exist). The **Next steps** note **includes** the `pnpm install` line in its original position (after `cd …`, before `pnpm dev`), i.e. identical to the pre-feature output. Exit code 0. (A Ctrl-C at the prompt behaves the same as choosing "no" — see TC-10.)
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
+### TC-13 — `pnpm install` failure is reported and does not break `init`  ·  🔴 Critical
+**Steps**
+1. Force an install failure. The simplest reproducible way is to make `pnpm` unresolvable for the run so `spawn` errors (simulates "pnpm not on PATH"):
+
+```sh
+PATH=/usr/bin node packages/cli/dist/index.js init .dev/qa-failinstall --force
+```
+
+(Adjust `PATH` so `pnpm` isn't found, or temporarily corrupt the scaffolded `package.json`/registry to make `pnpm install` exit non-zero.) Select **yes** at the install prompt.
+
+**Expected:** The loader stops with a yellow warning (`pnpm install did not finish`), followed by a `log.warn` telling the user to run `pnpm install` themselves and a `log.error` showing the **tail** of the failure (last few lines, not a full stack dump). Crucially, `init` **continues** — the project folder is still fully scaffolded, the **Next steps** note still prints (with the `pnpm install` line present, since install didn't succeed), and the command exits **0** (project creation is not treated as failed just because install didn't complete).
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
 ## Regression checks
 - [ ] `init` still writes the same base tree (`apps/web`, `packages/ui`, `packages/config`) with the project name substituted — the UI change touched only presentation, not scaffolding.
 - [ ] Exit codes unchanged: `init` success = 0, `init` errors = 1, `add`/`list` = 0, unknown command = 1.
 - [ ] `logger.error` / `logger.step` call sites in `init.ts` still produce output (the logger interface is unchanged; only its implementation now delegates to clack).
 - [ ] No stray `console.log` debug lines or double-printed blocks.
+- [ ] Whether install is accepted, declined, cancelled, or fails, `init` always reaches the **Next steps** note + outro and exits 0 (only the presence of the `pnpm install` step differs).
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
@@ -198,5 +267,6 @@ FORCE_COLOR=1 node packages/cli/dist/index.js --help | od -c | grep 033
 ## Not covered / needs human judgment
 - **Visual polish** — box alignment, color legibility, spinner animation, and the cyan-background intro swatch can only be judged live in a TTY (captured output strips all of it). This is the core of TC-1–TC-8.
 - **Cross-terminal rendering** — behavior in specific emulators (iTerm2, Windows Terminal, VS Code integrated terminal, tmux) and their Unicode/box-drawing support isn't scripted.
-- **Ctrl-C / cancel UX** — the issue mentioned `isCancel`/`cancel` handling, but with `add`/`list` narrowed to non-interactive stubs there are no live prompts to cancel yet; this is deferred to the Phase 1 picker.
+- **Ctrl-C / cancel UX** — `init` now has two live prompts (project-name `text` when the arg is missing, and the install `confirm`); their cancel behavior is exercised by TC-10/TC-12 in a TTY but can't be scripted. `add`/`list` remain non-interactive stubs (no prompts to cancel).
+- **Live install prompt in a TTY** — the `confirm` toggle, the single-line install loader, and the accept/decline branches (TC-10–TC-13) need a real terminal; piped stdin closes before the prompt submits, so these can't be captured by script. The underlying `pnpm install`-in-target and error-handling logic is verifiable, but the interactive selection is human-only.
 - **`saasaloy add` picker & real module list** — intentionally out of scope for this change; TC-4/TC-5 verify only the styled stubs.
