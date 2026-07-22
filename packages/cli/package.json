@@ -23,5 +23,9 @@
   "devDependencies": {
     "@types/node": "26.1.1",
     "tsup": "8.5.1"
+  },
+  "dependencies": {
+    "@clack/prompts": "1.7.0",
+    "picocolors": "1.1.1"
   }
 }
