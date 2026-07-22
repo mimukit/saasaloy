@@ -39,7 +39,7 @@ function printHelp(): void {
 async function main(argv: string[]): Promise<number> {
   const [name, ...rest] = argv;
 
-  if (!name || name === "--help" || name === "-h") {
+  if (!name || name === "--help" || name === "-h" || name === "help") {
     printHelp();
     return 0;
   }
