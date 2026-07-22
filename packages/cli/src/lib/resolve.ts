@@ -1,9 +1,10 @@
-import type { LoadedModule } from "./registry.js";
-import { readModule } from "./registry.js";
+import type { LoadedModule, RegistrySource } from "./registry.js";
 
 // Recursive `dependsOn` resolution, topologically sorted so prerequisites are applied
 // before the modules that need them (build spec §2.7). A depth-first post-order walk
-// yields that order and catches dependency cycles along the way.
+// yields that order and catches dependency cycles along the way. Dependencies resolve
+// intra-repo: a bare `dependsOn` name is a sibling in the same registry source (ADR 0012;
+// cross-repo `owner/repo#module` is a follow-up, #26).
 
 export interface Graph {
   /** Topological order: every module appears after the modules it dependsOn; requested is last. */
@@ -12,7 +13,7 @@ export interface Graph {
   modules: Map<string, LoadedModule>;
 }
 
-export async function resolveGraph(registryDir: string, requested: string): Promise<Graph> {
+export async function resolveGraph(source: RegistrySource, requested: string): Promise<Graph> {
   const modules = new Map<string, LoadedModule>();
   const order: string[] = [];
   const done = new Set<string>();
@@ -27,7 +28,7 @@ export async function resolveGraph(registryDir: string, requested: string): Prom
     }
     onPath.add(name);
     stack.push(name);
-    const mod = await readModule(registryDir, name, requiredBy);
+    const mod = await source.readModule(name, requiredBy);
     modules.set(name, mod);
     for (const dep of mod.item.dependsOn ?? []) {
       await visit(dep, name);

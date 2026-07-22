@@ -1,0 +1,54 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/saasaloy-lock.schema.json",
+  "title": "saasaloy-lock.json — resolved module provenance",
+  "description": "Machine-owned lock at a generated project's root: for every installed module, the registry source it came from, the ref requested, and the exact commit SHA resolved — so a re-install reproduces identical bytes. The npm-style lock to saasaloy.json's intent (build spec §2.11; ADR 0012). Integrity is the commit SHA itself; there is no separate integrity field.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["lockfileVersion", "modules"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor validation."
+    },
+    "lockfileVersion": {
+      "const": 1,
+      "description": "Lock format version; bumped only on a breaking shape change."
+    },
+    "modules": {
+      "type": "object",
+      "description": "Module name → the source it was resolved from. Holds the full resolved graph (dependencies included), not just the top-level asks.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["source", "ref", "resolved"],
+        "properties": {
+          "source": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Registry source slug: `owner/repo` for a remote GitHub source, or `local` for a SAASALOY_REGISTRY_DIR checkout."
+          },
+          "ref": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The ref requested (branch/tag/SHA), or `local` for a local checkout."
+          },
+          "resolved": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The exact commit SHA the ref resolved to — the integrity anchor. `local` for a local checkout."
+          },
+          "dependsOn": {
+            "type": "array",
+            "description": "The module's declared dependencies, recorded so the resolved graph is self-describing.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
+          }
+        }
+      }
+    }
+  }
+}
