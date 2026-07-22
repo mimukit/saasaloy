@@ -1,24 +1,24 @@
 ---
-name: author-module
-description: Scaffold a new Saasaloy module (registry-item.json + files + agent fragment) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/billing/teams module", "author a new api/database/auth capability", "create a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
+name: create-module
+description: Scaffold a new Saasaloy module (registry-item.json + files + Claude skill) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/billing/teams module", "create a new api/database/auth capability", "author a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
 ---
 
-# author-module
+# create-module
 
 Guide for authoring a new module in the Saasaloy registry (`modules/<name>/`). A module is
 a shadcn-shaped **descriptor** plus the **files it drops** into a consumer project. This skill
 covers writing that descriptor and laying out its files so they honor the conventions that let
 granular modules compose without stepping on each other.
 
-**Ground truth:** `docs/plans/saasaloy-build-spec.md` — §2.7 (modules), §3.2 (manifest),
-§3.3 (descriptor), §2.13 (agent context). Read those sections if a decision here is unclear.
+**Ground truth:** `docs/plans/saasaloy-build-spec.md` — §2.7 (modules), §2.13 (agent context),
+§3.2 (manifest), §3.3 (descriptor). Read those sections if a decision here is unclear.
 
 **Current phase reality:** `saasaloy add` and `saasaloy list` are Phase-1 stubs — the local
 applier that *consumes* these descriptors isn't wired yet. So today this skill produces the
-authored artifact (descriptor + files + agent fragment) that the applier will read off disk.
+authored artifact (descriptor + files + skill folder) that the applier will read off disk.
 Author against the conventions below and the module will be ready the moment the applier lands.
-Everything the applier later does at `add` time — copy files, add deps, apply patches, drop
-agent fragments, then `sync` in the consumer — must be fully described by the descriptor.
+Everything the applier later does at `add` time — copy files, add deps, apply patches, copy the
+module's skill folder into `.claude/skills/` — must be fully described by the descriptor.
 
 ## Shape of a module
 
@@ -26,6 +26,7 @@ agent fragments, then `sync` in the consumer — must be fully described by the 
 modules/<name>/
   registry-item.json     # name, type, dependsOn[], dependencies[], files[], patches, agent{}
   files/                 # template files, copied to alias targets in the consumer project
+  skills/<name>/         # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/<name>/
 ```
 
 ## Step 1 — Pick the tier
@@ -62,8 +63,7 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
   "envVars": {},                              // env keys the module needs (documented for the user)
   "patches": {},                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context this module contributes (see Step 4)
-    "fragments": ["agent/30-waitlist.md"],
-    "skills": []
+    "skills": ["skills/waitlist"]             //   skill folder(s) copied into .claude/skills/ by `add`
   }
 }
 ```
@@ -75,7 +75,7 @@ Field notes:
 - **`dependsOn`** — capabilities that must exist first. The applier resolves these recursively,
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
-  fragment/README rather than in `dependsOn`.
+  skill/README rather than in `dependsOn`.
 - **`dependencies`** — real npm packages the dropped files import.
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
@@ -84,6 +84,8 @@ Field notes:
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
 - **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal.
+- **`agent.skills[]`** — skill folder(s) under this module (`skills/<name>`) copied into the
+  consumer's `.claude/skills/<name>/` by `add` (see Step 4).
 - **Capability modules additionally carry `scaffolds`** — the new workspace(s) they create
   (e.g. `api` scaffolds `apps/api`; `database` scaffolds `packages/db`).
 
@@ -107,23 +109,21 @@ file, stop — add or use a convention instead.
 
 ## Step 4 — Contribute agent context
 
-A module carries the AI guidance for the capability it adds, the same convention-based way it
-adds routes and schema: **by dropping files, never by editing a shared agent file.**
+A module carries the AI guidance for the capability it adds the same convention-based way it adds
+routes and schema: **by shipping a self-contained skill folder, never by editing a shared agent
+file.** Author `modules/<name>/skills/<name>/SKILL.md` and list it in `agent.skills[]`. At `add`
+time the applier **copies** that folder verbatim into the consumer's `.claude/skills/<name>/` and
+records it in `.saasaloy/manifest.json`, so `remove` deletes exactly what was copied.
 
-- **`agent.fragments[]`** — an ordered guidance fragment dropped into the consumer's `.agents/`
-  as `NN-<name>.md` (pick an `NN` prefix that orders it sensibly after the base `00-overview.md`).
-- **`agent.skills[]`** — optional skill folders dropped into the consumer's `.agents/skills/<name>/`.
+Module guidance is therefore **on-demand Claude skills** — the agent loads a module's runbook only
+when working on that module, keeping the always-in-context `AGENTS.md` lean. There is no `AGENTS.md`
+concatenation and no regeneration step: the consumer's `AGENTS.md`/`CLAUDE.md` are committed static
+files that no module touches. (This reversed an earlier canonical-`.agents/` + regeneration
+pipeline; see build-spec §2.13.)
 
-In the **consumer (generated/downstream) project**, `saasaloy add` drops these and then runs
-`saasaloy sync`, which re-derives the tool views from `.agents/`: concatenates `AGENTS.md`,
-rebuilds the one-line `CLAUDE.md` (`@AGENTS.md` import), and recreates the `.claude/skills`
-links per-OS. Those views are managed outputs tracked in the consumer's `.saasaloy/manifest.json`
-and are regenerated, not hand-edited. You author only the canonical `.agents/` fragment/skill.
-
-> Scope note: `saasaloy sync` regenerates views **in the projects Saasaloy generates**, not in
-> this CLI/registry repo. This repo carries its own `.agents/` and its `AGENTS.md`/`CLAUDE.md`
-> are maintained here directly — don't rely on running `sync` against this repo while authoring.
-> To exercise a module end-to-end, use the git-ignored `.dev/` playground (`pnpm play:*`).
+> Scope note: this applies to the projects Saasaloy **generates**. This CLI/registry repo maintains
+> its own `.agents/` skills and its `AGENTS.md`/`CLAUDE.md` directly — to exercise a module
+> end-to-end, use the git-ignored `.dev/` playground (`pnpm play:*`).
 
 ## Step 5 — Sanity-check against the update story
 
@@ -135,7 +135,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - Keep dropped files **self-contained wiring** the user won't need to hand-edit — that's exactly
   what makes copy-in updates land cleanly.
 - Don't emit sentinel comments (`// saasaloy:managed`) — tracking is the manifest's job.
-- A schema change implies a migration downstream; note it in your fragment.
+- A schema change implies a migration downstream; note it in your module's skill.
 
 ## Conventions to honor
 
@@ -143,9 +143,9 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   convention-based drop points instead: a route file into `apps/api/routes/`, a table into
   `packages/db/schema/`, a UI component into `apps/web`. Only genuinely structural edits
   (a D1 binding, a Better Auth plugin) use small, tested AST patches.
-- **Contribute agent context by dropping files**, not editing shared ones: an
-  `agent.fragments[]` fragment lands in `.agents/`, an `agent.skills[]` folder in
-  `.agents/skills/`. `saasaloy sync` re-derives the tool views in the consumer project.
+- **Contribute agent context by shipping a skill folder**, not editing shared ones: an
+  `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
+  never append to the committed `AGENTS.md`/`CLAUDE.md`.
 - Declare `dependsOn` so the applier can resolve and topologically sort prerequisites.
 
 ## Authoring checklist
@@ -156,5 +156,5 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] Each `files[]` target uses a `@alias` and lands in a convention folder where possible.
 - [ ] `patches` is empty unless a change is genuinely structural (with a note on why).
 - [ ] `envVars` lists any required keys; no secrets baked into files.
-- [ ] An `agent.fragments[]` fragment documents the module; skills dropped if useful.
+- [ ] `agent.skills[]` points at a `skills/<name>/SKILL.md` runbook for the module.
 - [ ] Files are self-contained wiring (clean copy-in updates; no sentinel comments).

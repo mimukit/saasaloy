@@ -1,8 +1,0 @@
-{
-  "source": ".agents",
-  "concat": [
-    { "path": "AGENTS.md", "style": "agents" },
-    { "path": "CLAUDE.md", "style": "import", "importFrom": "AGENTS.md" }
-  ],
-  "skills": [{ "dir": ".claude/skills" }]
-}
