@@ -6,6 +6,15 @@
 export type DiffLine = { kind: "context" | "del" | "add"; text: string };
 
 export function lineDiff(oldText: string, newText: string): DiffLine[] {
+  // An empty side is a pure creation/deletion. Special-cased because "".split("\n")
+  // is [""], which would inject a spurious blank del/add line whenever the other
+  // side has no empty line (e.g. a created file without a trailing newline).
+  if (oldText === "") {
+    return newText.split("\n").map((text): DiffLine => ({ kind: "add", text }));
+  }
+  if (newText === "") {
+    return oldText.split("\n").map((text): DiffLine => ({ kind: "del", text }));
+  }
   const a = oldText.split("\n");
   const b = newText.split("\n");
   const m = a.length;

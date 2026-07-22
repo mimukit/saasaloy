@@ -30,6 +30,8 @@ export interface AddDepsResult {
   added: DepChange[];
   /** Deps already present (left untouched). */
   skipped: string[];
+  /** Human-readable version disagreements — the kept version won, the other was ignored. */
+  conflicts: string[];
 }
 
 /** Compute which deps are new vs already declared, without touching disk. */
@@ -37,18 +39,31 @@ export function planDeps(pkg: PackageJson, deps: string[]): AddDepsResult {
   const existing = pkg.dependencies ?? {};
   const added: DepChange[] = [];
   const skipped: string[] = [];
-  const seen = new Set<string>();
+  const conflicts: string[] = [];
+  // First module to declare a dep wins (topological order); a later module pinning a
+  // different version is a real disagreement worth surfacing, not silently dropping.
+  const seen = new Map<string, string>();
   for (const spec of deps) {
     const { name, version } = parseDep(spec);
-    if (seen.has(name)) continue;
-    seen.add(name);
-    if (existing[name] !== undefined) {
+    const prior = seen.get(name);
+    if (prior !== undefined) {
+      if (prior !== version) {
+        conflicts.push(`${name}: keeping ${prior}, ignoring ${version}`);
+      }
+      continue;
+    }
+    seen.set(name, version);
+    const current = existing[name];
+    if (current !== undefined) {
+      if (version !== "latest" && current !== version) {
+        conflicts.push(`${name}: package.json already has ${current}, ignoring ${version}`);
+      }
       skipped.push(name);
     } else {
       added.push({ name, version });
     }
   }
-  return { added, skipped };
+  return { added, skipped, conflicts };
 }
 
 export interface PackageJson {

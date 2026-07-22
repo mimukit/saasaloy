@@ -19,8 +19,8 @@ import type { SaasaloyConfig } from "./schema.js";
 //   conflict  — exists but we never wrote it (untracked) → don't clobber
 export type FileAction = "create" | "overwrite" | "unchanged" | "drift" | "conflict";
 
-/** Actions that are safe to write; drift/conflict are held back for a merge. */
-export const WRITABLE: ReadonlySet<FileAction> = new Set<FileAction>([
+// Actions that are safe to write; drift/conflict are held back for a merge.
+const WRITABLE: ReadonlySet<FileAction> = new Set<FileAction>([
   "create",
   "overwrite",
   "unchanged",

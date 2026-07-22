@@ -1,6 +1,7 @@
 import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import {
+  type ApplyResult,
   buildPlan,
   executePlan,
   type FileAction,
@@ -14,6 +15,7 @@ import { findProjectRoot } from "../lib/project.js";
 import { findRegistryDir } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { wrapForNote } from "../lib/tui.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -26,16 +28,32 @@ interface Options {
   diff: boolean;
   yes: boolean;
   force: boolean;
+  /** Flags we don't know and extra positionals — reported, never silently ignored. */
+  unknown: string[];
 }
 
+const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y", "--force"]);
+const USAGE = "saasaloy add <module> [--dry-run] [--diff] [--yes] [--force]";
+
 function parseArgs(argv: string[]): Options {
-  const positional = argv.filter((arg) => !arg.startsWith("-"));
+  const positional: string[] = [];
+  const unknown: string[] = [];
+  for (const arg of argv) {
+    if (!arg.startsWith("-")) {
+      positional.push(arg);
+    } else if (!KNOWN_FLAGS.has(arg)) {
+      // A typo'd flag (`--forse`) silently running without force is worse than an error.
+      unknown.push(arg);
+    }
+  }
+  unknown.push(...positional.slice(1));
   return {
     name: positional[0],
     dryRun: argv.includes("--dry-run"),
     diff: argv.includes("--diff"),
     yes: argv.includes("--yes") || argv.includes("-y"),
     force: argv.includes("--force"),
+    unknown,
   };
 }
 
@@ -70,10 +88,16 @@ function renderDiff(file: PlannedFile): string {
 
 function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   if (prereqs.length > 0) {
-    note(`${pc.bold(requested)} requires: ${prereqs.map((p) => pc.cyan(p)).join(", ")}`, "Dependencies");
+    note(
+      wrapForNote(`${pc.bold(requested)} requires: ${prereqs.map((p) => pc.cyan(p)).join(", ")}`),
+      "Dependencies",
+    );
   }
   const willInstall = plan.install.map((m) => pc.cyan(m)).join(pc.dim(" → "));
   const lines = [`will install: ${willInstall}`];
+  if (plan.alreadyInstalled.length > 0) {
+    lines.push(pc.dim(`already installed (skipped): ${plan.alreadyInstalled.join(", ")}`));
+  }
 
   const writable = plan.files.filter((f) => f.action !== "drift" && f.action !== "conflict");
   const held = plan.files.filter((f) => f.action === "drift" || f.action === "conflict");
@@ -86,11 +110,11 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   if (plan.dependencies.length > 0) {
     lines.push(pc.dim(`deps: ${plan.dependencies.join(", ")}`));
   }
-  note(lines.join("\n"), "Plan");
+  note(wrapForNote(lines.join("\n")), "Plan");
 
   if (Object.keys(plan.envVars).length > 0) {
     const envLines = Object.entries(plan.envVars).map(([k, v]) => `${pc.cyan(k)} ${pc.dim(`— ${v}`)}`);
-    note(envLines.join("\n"), "Env vars to set");
+    note(wrapForNote(envLines.join("\n")), "Env vars to set");
   }
   if (plan.deferredPatches.length > 0 || plan.deferredScaffolds.length > 0) {
     const both = [...new Set([...plan.deferredPatches, ...plan.deferredScaffolds])];
@@ -105,6 +129,10 @@ export async function runAdd(argv: string[]): Promise<number> {
   const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy add ")));
 
+  if (opts.unknown.length > 0) {
+    cancel(`Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`);
+    return 1;
+  }
   if (!opts.name) {
     cancel("Name a module to add, e.g. `saasaloy add waitlist`.");
     return 1;
@@ -131,7 +159,10 @@ export async function runAdd(argv: string[]): Promise<number> {
     const install = graph.order.filter(
       (n) => !config.installed.includes(n) || (opts.force && n === requested),
     );
-    const alreadyInstalled = graph.order.filter((n) => config.installed.includes(n));
+    // Installed and not being (re-)applied — a forced module belongs to `install`, not here.
+    const alreadyInstalled = graph.order.filter(
+      (n) => config.installed.includes(n) && !install.includes(n),
+    );
 
     if (install.length === 0) {
       note(`${pc.cyan(requested)} and its dependencies are already installed.`, "Nothing to do");
@@ -179,15 +210,31 @@ export async function runAdd(argv: string[]): Promise<number> {
     // Merge npm deps into the project root package.json (best-effort — never blocks the apply).
     const pkg = await readRootPackageJson(root);
     let depsAdded: string[] = [];
-    if (pkg && plan.dependencies.length > 0) {
-      const { added } = planDeps(pkg, plan.dependencies);
-      await writeDeps(root, pkg, added);
-      depsAdded = added.map((d) => d.name);
+    if (plan.dependencies.length > 0) {
+      if (pkg) {
+        const { added, conflicts } = planDeps(pkg, plan.dependencies);
+        await writeDeps(root, pkg, added);
+        depsAdded = added.map((d) => d.name);
+        for (const conflict of conflicts) {
+          log.warn(`Dependency version conflict — ${conflict}.`);
+        }
+      } else {
+        // Best-effort means "don't block", not "fail silently".
+        log.warn(
+          `No package.json at the project root — add ${plan.dependencies.join(", ")} yourself.`,
+        );
+      }
     }
 
-    const result = await executePlan(plan, root, config, manifest);
-    await saveManifest(root, manifest);
-    await saveConfig(root, config);
+    let result: ApplyResult;
+    try {
+      result = await executePlan(plan, root, config, manifest);
+    } finally {
+      // Record whatever actually landed even if a mid-plan write failed — a written
+      // file the manifest doesn't know about would classify as a conflict next run.
+      await saveManifest(root, manifest);
+      await saveConfig(root, config);
+    }
 
     for (const file of result.written) {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
@@ -195,13 +242,17 @@ export async function runAdd(argv: string[]): Promise<number> {
     if (result.heldBack.length > 0) {
       const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");
       note(
-        `${merges}\n\n${pc.dim("These were left untouched. Hand them to an agent with `--diff` to merge.")}`,
+        wrapForNote(
+          `${merges}\n\n${pc.dim("These were left untouched. Hand them to an agent with `--diff` to merge.")}`,
+        ),
         "Needs merge",
       );
     }
     if (depsAdded.length > 0) {
       note(
-        `${depsAdded.map((d) => pc.cyan(d)).join(", ")}\n\n${pc.dim("Run `pnpm install` to fetch them.")}`,
+        wrapForNote(
+          `${depsAdded.map((d) => pc.cyan(d)).join(", ")}\n\n${pc.dim("Run `pnpm install` to fetch them.")}`,
+        ),
         "Dependencies added",
       );
     }
