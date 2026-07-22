@@ -1,0 +1,102 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "title": "registry-item.json — module descriptor",
+  "description": "shadcn-shaped descriptor authored in the CLI/registry repo. The applier reads it off disk to resolve dependencies, apply files + npm deps + patches, and copy the module's skill folder(s) into .claude/skills/ (build spec §3.3).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["name", "type"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor validation."
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "Module name (lowercase, digits, hyphens). Unique within the registry."
+    },
+    "type": {
+      "type": "string",
+      "enum": ["saasaloy:capability", "saasaloy:feature"],
+      "description": "`saasaloy:capability` scaffolds an app/package and establishes extension points; `saasaloy:feature` extends capabilities by dropping files into their conventions."
+    },
+    "dependsOn": {
+      "type": "array",
+      "description": "Modules this one requires. Resolved recursively and topologically sorted behind a confirmation prompt.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
+    "dependencies": {
+      "type": "array",
+      "description": "npm packages to install (name or name@version).",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
+    "files": {
+      "type": "array",
+      "description": "Files to copy into the project. `path` is relative to the module folder; `target` resolves through the project's alias map.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "target"],
+        "properties": {
+          "path": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Source path relative to the module folder (e.g. files/api/routes/waitlist.ts)."
+          },
+          "target": {
+            "type": "string",
+            "pattern": "^@[a-z0-9][a-z0-9-]*/.+",
+            "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts)."
+          }
+        }
+      }
+    },
+    "envVars": {
+      "type": "object",
+      "description": "Environment variables the module needs: NAME → human description (or default/placeholder).",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "patches": {
+      "type": "object",
+      "description": "Declarative + AST config patches (wrangler.jsonc bindings, Better Auth plugin-array insertions, key merges). The detailed patch shape is defined by the patch engine (issue #7); an empty object means no patches.",
+      "additionalProperties": true
+    },
+    "scaffolds": {
+      "type": "array",
+      "description": "New workspaces a capability module creates (apps/packages). Shape is refined when the applier's scaffolding is built.",
+      "items": {
+        "type": "object"
+      }
+    },
+    "agent": {
+      "type": "object",
+      "description": "AI context contributed by this module. A module ships skill folder(s) that `add` copies into .claude/skills/ (recorded in the manifest for a clean `remove`); it never edits the committed AGENTS.md/CLAUDE.md.",
+      "additionalProperties": false,
+      "properties": {
+        "skills": {
+          "type": "array",
+          "description": "Skill folder(s) relative to the module folder, copied into .claude/skills/.",
+          "uniqueItems": true,
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

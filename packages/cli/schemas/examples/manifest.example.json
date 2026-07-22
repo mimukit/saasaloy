@@ -1,0 +1,13 @@
+{
+  "$schema": "../manifest.schema.json",
+  "managed": {
+    "apps/api/src/lib/auth.ts": {
+      "module": "auth",
+      "hash": "c3d4a1b2e5f60718293a4b5c6d7e8f90112233445566778899aabbccddeeff00"
+    },
+    ".claude/skills/test-webhooks/SKILL.md": {
+      "module": "billing",
+      "hash": "e5f6a7b8c9d0e1f20314253647586970819293a4b5c6d7e8f90a1b2c3d4e5f60"
+    }
+  }
+}

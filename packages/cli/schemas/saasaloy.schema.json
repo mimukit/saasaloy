@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/saasaloy.schema.json",
+  "title": "saasaloy.json — consumer manifest",
+  "description": "Alias map + installed-module list that lives at a generated project's root. Resolves module file targets and drives dependsOn resolution (build spec §3.2).",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["aliases", "installed"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor validation."
+    },
+    "aliases": {
+      "type": "object",
+      "description": "Alias → path-prefix map. Keys are `@`-prefixed aliases (e.g. `@api`); values are project-relative directories a module's file targets resolve against.",
+      "propertyNames": {
+        "pattern": "^@[a-z0-9][a-z0-9-]*$"
+      },
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1,
+        "description": "Project-relative path prefix (POSIX separators, no leading slash)."
+      }
+    },
+    "installed": {
+      "type": "array",
+      "description": "Modules present in this project. Grows as `saasaloy add` runs; drives dependsOn resolution.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$",
+        "description": "Module name (lowercase, digits, hyphens)."
+      }
+    }
+  }
+}

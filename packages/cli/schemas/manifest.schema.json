@@ -1,0 +1,44 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/manifest.schema.json",
+  "title": ".saasaloy/manifest.json — managed-file tracking",
+  "description": "Records every file a module applied — copied source files and copied skill files — with the owning module and a content hash, so update/remove know exactly what to undo. Replaces in-file `// saasaloy:managed` markers (build spec §2.9 / §3.2). The base writes no manifest; it is created by the first `saasaloy add`.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["managed"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "Optional pointer to this schema for editor validation."
+    },
+    "managed": {
+      "type": "object",
+      "description": "Project-relative file path → the module that owns it and a content hash. On update the tool re-hashes the file: match → safe overwrite; drift → route to AI-merge.",
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "hash"],
+        "properties": {
+          "module": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Name of the module that applied this file."
+          },
+          "hash": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "sha256 hex digest of the file's content as written."
+          }
+        }
+      }
+    },
+    "links": {
+      "type": "object",
+      "description": "Optional link map (source path → link path). Present for forward compatibility; base/module applies do not populate it.",
+      "additionalProperties": {
+        "type": "string",
+        "minLength": 1
+      }
+    }
+  }
+}
