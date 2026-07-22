@@ -1,7 +1,8 @@
+import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cancel, intro, isCancel, note, outro, spinner, text } from "@clack/prompts";
+import { cancel, intro, isCancel, log, note, outro, select, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
 import { pathExists } from "../lib/fs-utils.js";
 import { copyTemplate } from "../lib/scaffold.js";
@@ -16,6 +17,33 @@ const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url)
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
+
+// Run `pnpm install` in the scaffolded project. Output is swallowed so only the
+// caller's spinner shows; stderr is retained so a failure can be surfaced. Never
+// throws — failures come back as { ok: false } so init can carry on regardless.
+function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }> {
+  return new Promise((resolvePromise) => {
+    const child = spawn("pnpm", ["install"], { cwd, stdio: ["ignore", "ignore", "pipe"] });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      // e.g. pnpm not on PATH.
+      resolvePromise({ ok: false, message: err.message });
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise({ ok: true });
+      } else {
+        resolvePromise({
+          ok: false,
+          message: stderr.trim() || `pnpm install exited with code ${code ?? "unknown"}`,
+        });
+      }
+    });
+  });
+}
 
 export async function runInit(argv: string[]): Promise<number> {
   const positional = argv.filter((arg) => !arg.startsWith("-"));
@@ -71,18 +99,45 @@ export async function runInit(argv: string[]): Promise<number> {
   await copyTemplate(TEMPLATE_DIR, target, { PROJECT_NAME: projectName });
   s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/config)")}`);
 
+  // Offer to install now; on decline (or cancel) fall back to the printed steps.
+  // `select` (not `confirm`) so each choice renders on its own line.
+  let installed = false;
+  const wantsInstall = await select({
+    message: "Install dependencies now?",
+    options: [
+      { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
+      { value: false, label: "No, I'll run it later" },
+    ],
+    initialValue: true,
+  });
+  if (!isCancel(wantsInstall) && wantsInstall) {
+    const install = spinner();
+    install.start(`Installing dependencies ${pc.dim("(pnpm install)")}`);
+    const result = await runPnpmInstall(target);
+    if (result.ok) {
+      installed = true;
+      install.stop(`Installed dependencies ${pc.dim("(pnpm install)")}`);
+    } else {
+      // Don't break the flow — report and let the user finish it by hand.
+      install.stop(pc.yellow("pnpm install did not finish"), 1);
+      log.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
+      if (result.message) {
+        // Keep it to the tail so the rail output stays readable.
+        log.error(result.message.split("\n").slice(-5).join("\n"));
+      }
+    }
+  }
+
   const steps = [
     nameArg !== "." ? `cd ${nameArg}` : null,
-    "pnpm install",
-    `pnpm dev                     ${pc.dim("# astro dev on apps/web")}`,
-    `pnpm --filter web run deploy ${pc.dim("# wrangler deploy to Cloudflare")}`,
-    `saasaloy add waitlist        ${pc.dim("# add your first feature")}`,
+    installed ? null : "pnpm install",
+    `pnpm dev                     ${pc.dim("# run dev servers")}`,
   ]
     .filter((line): line is string => line !== null)
     .map((line) => pc.cyan(line))
     .join("\n");
 
   note(steps, "Next steps");
-  outro(pc.green(`created ${projectName}`));
+  outro(pc.green(`🎉 Created ${projectName} successfully.`));
   return 0;
 }
