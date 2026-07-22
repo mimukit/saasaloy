@@ -19,18 +19,65 @@ const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url)
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
-// Run `pnpm install` in the scaffolded project. Output is swallowed so only the
-// caller's spinner shows; stderr is retained so a failure can be surfaced. Never
-// throws — failures come back as { ok: false } so init can carry on regardless.
+// pnpm colorizes its own output; those embedded SGR codes (esp. resets) cancel any
+// color we wrap around the text, leaving only the first line tinted. Strip them so
+// we can recolor the whole block uniformly.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes.
+const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+function stripAnsi(text: string): string {
+  return text.replace(ANSI_PATTERN, "");
+}
+
+// Hard-wrap text to the terminal width so a `note` box can't overflow the rail.
+// clack's box adds a border + padding (~6 cols), so we wrap a bit narrower. Words
+// longer than the width (URLs, hashes) are split so nothing runs off the edge.
+function wrapForNote(text: string): string {
+  const width = Math.max(24, (process.stdout.columns ?? 80) - 6);
+  const out: string[] = [];
+  for (const line of text.split("\n")) {
+    let current = "";
+    for (const word of line.split(" ")) {
+      let chunk = word;
+      // Break a single over-long word across lines.
+      while (chunk.length > width) {
+        if (current) {
+          out.push(current);
+          current = "";
+        }
+        out.push(chunk.slice(0, width));
+        chunk = chunk.slice(width);
+      }
+      const candidate = current ? `${current} ${chunk}` : chunk;
+      if (candidate.length > width) {
+        out.push(current);
+        current = chunk;
+      } else {
+        current = candidate;
+      }
+    }
+    out.push(current);
+  }
+  return out.join("\n");
+}
+
+// Run `pnpm install` in the scaffolded project. Output is buffered (not streamed)
+// so only the caller's spinner shows; both streams are captured so a failure can
+// report *why*. pnpm writes its `ERR_PNPM_*` diagnostics to stdout, not stderr,
+// so we keep both. Never throws — failures come back as { ok: false } so init
+// can carry on regardless.
 function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }> {
   return new Promise((resolvePromise) => {
     // On Windows pnpm is `pnpm.cmd`, which bare spawn won't resolve — go via the shell there.
     const child = spawn("pnpm", ["install"], {
       cwd,
-      stdio: ["ignore", "ignore", "pipe"],
+      stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32",
     });
+    let stdout = "";
     let stderr = "";
+    child.stdout?.on("data", (chunk) => {
+      stdout += chunk.toString();
+    });
     child.stderr?.on("data", (chunk) => {
       stderr += chunk.toString();
     });
@@ -42,9 +89,11 @@ function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }>
       if (code === 0) {
         resolvePromise({ ok: true });
       } else {
+        // Prefer pnpm's own diagnostics (stderr, then stdout); fall back to the code.
+        const details = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
         resolvePromise({
           ok: false,
-          message: stderr.trim() || `pnpm install exited with code ${code ?? "unknown"}`,
+          message: details || `pnpm install exited with code ${code ?? "unknown"}`,
         });
       }
     });
@@ -128,8 +177,18 @@ export async function runInit(argv: string[]): Promise<number> {
       install.stop(pc.yellow("pnpm install did not finish"));
       logger.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
       if (result.message) {
-        // Keep it to the tail so the rail output stays readable.
-        logger.error(result.message.split("\n").slice(-5).join("\n"));
+        // Show pnpm's own diagnostics inside a box, tail-trimmed and soft-wrapped to
+        // the terminal width so a long line (e.g. a registry URL) can't break the rail.
+        const lines = stripAnsi(result.message)
+          .split("\n")
+          .filter((line) => line.trim() !== "");
+        // Color each line individually: clack's `note` splits on \n and prefixes each
+        // line, so a single wrapping color would only tint the first one.
+        const body = wrapForNote(lines.slice(-12).join("\n"))
+          .split("\n")
+          .map((line) => pc.dim(pc.red(line)))
+          .join("\n");
+        note(body, "pnpm install output");
       }
     }
   }
