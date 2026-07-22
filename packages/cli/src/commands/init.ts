@@ -7,6 +7,7 @@ import pc from "picocolors";
 import { pathExists } from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
 import { copyTemplate } from "../lib/scaffold.js";
+import { stripAnsi, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
 // + @repo/config) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
@@ -18,47 +19,6 @@ const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url)
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-
-// pnpm colorizes its own output; those embedded SGR codes (esp. resets) cancel any
-// color we wrap around the text, leaving only the first line tinted. Strip them so
-// we can recolor the whole block uniformly.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes.
-const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
-function stripAnsi(text: string): string {
-  return text.replace(ANSI_PATTERN, "");
-}
-
-// Hard-wrap text to the terminal width so a `note` box can't overflow the rail.
-// clack's box adds a border + padding (~6 cols), so we wrap a bit narrower. Words
-// longer than the width (URLs, hashes) are split so nothing runs off the edge.
-function wrapForNote(text: string): string {
-  const width = Math.max(24, (process.stdout.columns ?? 80) - 6);
-  const out: string[] = [];
-  for (const line of text.split("\n")) {
-    let current = "";
-    for (const word of line.split(" ")) {
-      let chunk = word;
-      // Break a single over-long word across lines.
-      while (chunk.length > width) {
-        if (current) {
-          out.push(current);
-          current = "";
-        }
-        out.push(chunk.slice(0, width));
-        chunk = chunk.slice(width);
-      }
-      const candidate = current ? `${current} ${chunk}` : chunk;
-      if (candidate.length > width) {
-        out.push(current);
-        current = chunk;
-      } else {
-        current = candidate;
-      }
-    }
-    out.push(current);
-  }
-  return out.join("\n");
-}
 
 // Run `pnpm install` in the scaffolded project. Output is buffered (not streamed)
 // so only the caller's spinner shows; both streams are captured so a failure can
