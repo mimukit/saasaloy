@@ -94,7 +94,7 @@ node packages/cli/dist/index.js add
 **Expected:** A rail with intro ` saasaloy add `, a boxed **Coming soon** note explaining the module applier is not built yet (Phase 1) and that an interactive picker will land once the `modules/` registry has descriptors, and an outro `nothing to add yet` (dimmed). No crash, no "not implemented" stack trace. (This is intentionally a stub — a working multiselect picker is deferred to Phase 1.)
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — `list` stub renders clack-styled empty state  ·  🟡 Normal
@@ -108,7 +108,7 @@ node packages/cli/dist/index.js list
 **Expected:** A rail with intro ` saasaloy list `, a boxed **Registry** note reading "No modules available yet (Phase 1)" and naming `api · database · waitlist` as the first modules, and an outro `0 modules` (dimmed). The `modules/` token is accented cyan.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — `--help` and unknown-command output are colored & aligned  ·  🟡 Normal
@@ -123,7 +123,7 @@ node packages/cli/dist/index.js bogus
 **Expected:** `--help` shows a bold `saasaloy` title with a dimmed tagline, a `Usage:` line with `<command>` in cyan, and a `Commands:` list where each command name (`init`/`add`/`list`) is cyan and its description is dimmed, columns aligned. `bogus` prints a red `Unknown command:` prefix followed by `bogus`, then the same help block. (Help/errors deliberately stay plain `console.log` + picocolors, not the clack rail — arg parsing is still native.)
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Box borders align at narrow terminal width  ·  🟢 Low
@@ -134,7 +134,7 @@ node packages/cli/dist/index.js bogus
 **Expected:** The note boxes and rail render without the right border wrapping to a second line or misaligning; long lines (e.g. the deploy comment) either fit or degrade gracefully. No corrupted box-drawing characters.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — Colors legible in light + dark terminals; NO_COLOR respected  ·  🟢 Low
@@ -149,7 +149,7 @@ NO_COLOR=1 node packages/cli/dist/index.js --help
 **Expected:** Accents are readable on both backgrounds (no dark-on-dark or invisible dim text). With `NO_COLOR=1`, output is plain text with no ANSI color codes but the same structure/content (picocolors honors `NO_COLOR`).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-9 — `init` pre-flight errors still read clearly  ·  🟡 Normal
@@ -167,7 +167,7 @@ node packages/cli/dist/index.js init .dev/qa-playground
 **Expected:** Each prints a clack `log.error` line (red rail marker) with a clear message — missing name → usage hint; `Bad_Name` → invalid-name guidance about lowercase/digits/hyphens; existing non-empty dir → "not empty" with the `--force` hint. Each exits non-zero (behavior unchanged from before the UI work). Messages are legible, not swallowed by the rail.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-10 — `init` offers to run `pnpm install` after scaffolding  ·  🔴 Critical
@@ -183,7 +183,7 @@ node packages/cli/dist/index.js init .dev/qa-install --force
 **Expected:** A clack `select` prompt on the rail reading **Install dependencies now?**, with the two choices listed **one per line** — `Yes, run pnpm install` (the `pnpm install` accented cyan) and `No, I'll run it later` — the first selected by default. Use ↑/↓ to move between them; Enter selects. The prompt sits inside the same connected rail (no un-railed line). Hitting Ctrl-C at this prompt does **not** abort with an error — `init` treats a cancel like "no" and proceeds to the next-steps note (exit 0).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-11 — Accepting install runs `pnpm install` with a single-line loader  ·  🔴 Critical
@@ -199,7 +199,7 @@ ls .dev/qa-install/node_modules >/dev/null && echo INSTALLED
 **Expected:** Only a **single animated loader line** shows — `Installing dependencies (pnpm install)` (the parenthetical dimmed). pnpm's own install output (progress bars, package lists, peer warnings) is **not** streamed to the screen — just the spinner. On success it resolves to `Installed dependencies (pnpm install)`. The install runs **inside the newly created folder** (`.dev/qa-install`), so `node_modules` appears there and `INSTALLED` prints. Because deps were just installed, the **Next steps** note **omits** the `pnpm install` line (it jumps `cd …` → `pnpm dev`). Exit code 0.
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-12 — Declining install leaves `pnpm install` in the next-steps note  ·  🟡 Normal
@@ -215,7 +215,7 @@ node packages/cli/dist/index.js init .dev/qa-noinstall --force
 **Expected:** No loader appears; nothing is installed (`.dev/qa-noinstall/node_modules` does not exist). The **Next steps** note **includes** the `pnpm install` line in its original position (after `cd …`, before `pnpm dev`), i.e. identical to the pre-feature output. Exit code 0. (A Ctrl-C at the prompt behaves the same as choosing "no" — see TC-10.)
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-13 — `pnpm install` failure is reported and does not break `init`  ·  🔴 Critical
@@ -232,15 +232,15 @@ PATH="/tmp/nopnpm:$PATH" node packages/cli/dist/index.js init .dev/qa-failinstal
 **Expected:** The loader stops with a yellow warning (`pnpm install did not finish`), followed by a `log.warn` telling the user to run `pnpm install` themselves and a `log.error` showing the **tail** of the failure (last few lines, not a full stack dump). Crucially, `init` **continues** — the project folder is still fully scaffolded, the **Next steps** note still prints (with the `pnpm install` line present, since install didn't succeed), and the command exits **0** (project creation is not treated as failed just because install didn't complete).
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `init` still writes the same base tree (`apps/web`, `packages/ui`, `packages/config`) with the project name substituted — the UI change touched only presentation, not scaffolding.
-- [ ] Exit codes unchanged: `init` success = 0, `init` errors = 1, `add`/`list` = 0, unknown command = 1.
-- [ ] `logger.error` / `logger.step` call sites in `init.ts` still produce output (the logger interface is unchanged; only its implementation now delegates to clack).
-- [ ] No stray `console.log` debug lines or double-printed blocks.
-- [ ] Whether install is accepted, declined, cancelled, or fails, `init` always reaches the **Next steps** note + outro and exits 0 (only the presence of the `pnpm install` step differs).
+- [x] `init` still writes the same base tree (`apps/web`, `packages/ui`, `packages/config`) with the project name substituted — the UI change touched only presentation, not scaffolding.
+- [x] Exit codes unchanged: `init` success = 0, `init` errors = 1, `add`/`list` = 0, unknown command = 1.
+- [x] `logger.error` / `logger.step` call sites in `init.ts` still produce output (the logger interface is unchanged; only its implementation now delegates to clack).
+- [x] No stray `console.log` debug lines or double-printed blocks.
+- [x] Whether install is accepted, declined, cancelled, or fails, `init` always reaches the **Next steps** note + outro and exits 0 (only the presence of the `pnpm install` step differs).
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
