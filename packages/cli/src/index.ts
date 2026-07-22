@@ -2,6 +2,7 @@
 // saasaloy CLI entrypoint. Thin dispatcher; each command lives in commands/.
 // Roadmap (docs/plans/saasaloy-build-spec.md): Phase 0 `init`, Phase 1 `add`/`list`.
 
+import pc from "picocolors";
 import { runAdd } from "./commands/add.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
@@ -27,11 +28,11 @@ const COMMANDS: Record<string, Command> = {
 };
 
 function printHelp(): void {
-  console.log("saasaloy — composable SaaS accelerator for Cloudflare\n");
-  console.log("Usage: saasaloy <command> [options]\n");
-  console.log("Commands:");
+  console.log(`${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`);
+  console.log(`${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`);
+  console.log(pc.bold("Commands:"));
   for (const [name, command] of Object.entries(COMMANDS)) {
-    console.log(`  ${name.padEnd(6)} ${command.describe}`);
+    console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
   }
 }
 
@@ -45,7 +46,7 @@ async function main(argv: string[]): Promise<number> {
 
   const command = COMMANDS[name];
   if (!command) {
-    console.error(`Unknown command: ${name}\n`);
+    console.error(`${pc.red("Unknown command:")} ${name}\n`);
     printHelp();
     return 1;
   }
