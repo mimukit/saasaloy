@@ -124,10 +124,21 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
     const envLines = Object.entries(plan.envVars).map(([k, v]) => `${pc.cyan(k)} ${pc.dim(`— ${v}`)}`);
     note(wrapForNote(envLines.join("\n")), "Env vars to set");
   }
-  if (plan.deferredPatches.length > 0 || plan.deferredScaffolds.length > 0) {
-    const both = [...new Set([...plan.deferredPatches, ...plan.deferredScaffolds])];
+  if (Object.keys(plan.aliases).length > 0) {
+    const aliasLines = Object.entries(plan.aliases).map(([a, p]) => `${pc.cyan(a)} ${pc.dim(`→ ${p}`)}`);
+    note(
+      wrapForNote(
+        `${aliasLines.join("\n")}\n\n${pc.dim("New workspace(s) — run `pnpm install` to link them.")}`,
+      ),
+      "Aliases registered",
+    );
+  }
+  for (const conflict of plan.aliasConflicts) {
+    log.warn(`Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`);
+  }
+  if (plan.deferredPatches.length > 0) {
     log.warn(
-      `Config patches/scaffolds for ${both.join(", ")} are not applied by this engine yet ` +
+      `Config patches for ${plan.deferredPatches.join(", ")} are not applied by this engine yet ` +
         `${pc.dim("(patch engine — issue #7)")}.`,
     );
   }

@@ -53,10 +53,12 @@ export interface Plan {
   dependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
   envVars: Record<string, string>;
+  /** Aliases the installed scaffolds register into saasaloy.json (applied by executePlan). */
+  aliases: Record<string, string>;
+  /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
+  aliasConflicts: string[];
   /** Modules declaring non-empty `patches` — deferred to the patch engine (issue #7). */
   deferredPatches: string[];
-  /** Modules declaring `scaffolds` — deferred (capability scaffolding, issues #8/#9). */
-  deferredScaffolds: string[];
 }
 
 // Recursively list files under a directory as paths relative to it (POSIX-joined).
@@ -136,7 +138,28 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const dependencies: string[] = [];
   const envVars: Record<string, string> = {};
   const deferredPatches: string[] = [];
-  const deferredScaffolds: string[] = [];
+
+  // Collect the aliases every scaffold in this run registers up front, so a feature's
+  // files[] can resolve against a capability's brand-new alias even when both install in
+  // the same run. Topo order already lands the capability first; this makes resolution
+  // order-independent and keeps the target-resolving view (below) complete (ADR 0013).
+  const aliases: Record<string, string> = {};
+  for (const name of install) {
+    for (const scaffold of modules.get(name)?.item.scaffolds ?? []) {
+      for (const [alias, prefix] of Object.entries(scaffold.aliases ?? {})) {
+        aliases[alias] = prefix;
+      }
+    }
+  }
+  const aliasConflicts: string[] = [];
+  for (const [alias, prefix] of Object.entries(aliases)) {
+    const existing = config.aliases[alias];
+    if (existing !== undefined && existing !== prefix) {
+      aliasConflicts.push(`${alias} → ${existing} redefined as ${prefix}`);
+    }
+  }
+  // Scaffold aliases win over the on-disk map when resolving this run's file targets.
+  const aliasView = { ...config.aliases, ...aliases };
 
   for (const name of install) {
     const mod = modules.get(name);
@@ -144,8 +167,19 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     const { item } = mod;
 
     for (const file of item.files ?? []) {
-      const target = resolveTarget(config.aliases, file.target);
+      const target = resolveTarget(aliasView, file.target);
       files.push(await planModuleFile(mod, file.path, target, root, manifest, false));
+    }
+
+    // A capability's scaffolds[] births a whole workspace: each file's target is
+    // relative to the workspace root, so join it onto the workspace dir to get the
+    // project-relative path. From there it's an ordinary managed file — classified and
+    // recorded like any other, so create/drift/conflict and `remove` all come for free.
+    for (const scaffold of item.scaffolds ?? []) {
+      for (const file of scaffold.files) {
+        const target = posix.join(scaffold.workspace, file.target);
+        files.push(await planModuleFile(mod, file.path, target, root, manifest, false));
+      }
     }
 
     // `agent.skills` folders are copied into .claude/skills/<folder-name>/… and every
@@ -163,7 +197,6 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const dep of item.dependencies ?? []) dependencies.push(dep);
     for (const [key, value] of Object.entries(item.envVars ?? {})) envVars[key] = value;
     if (item.patches && Object.keys(item.patches).length > 0) deferredPatches.push(name);
-    if (item.scaffolds && item.scaffolds.length > 0) deferredScaffolds.push(name);
   }
 
   return {
@@ -172,8 +205,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     files,
     dependencies,
     envVars,
+    aliases,
+    aliasConflicts,
     deferredPatches,
-    deferredScaffolds,
   };
 }
 
@@ -204,6 +238,13 @@ export async function executePlan(
     } else {
       heldBack.push(file);
     }
+  }
+
+  // Register the aliases the scaffolds declared so the first feature targeting them
+  // resolves against a real path (ADR 0013). Merge is idempotent on re-apply; a conflicting
+  // redefinition was surfaced at plan time (plan.aliasConflicts) — last write wins here.
+  for (const [alias, prefix] of Object.entries(plan.aliases)) {
+    config.aliases[alias] = prefix;
   }
 
   // A module counts as installed once its clean files have landed. Preserve insertion

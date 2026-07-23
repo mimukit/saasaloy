@@ -77,9 +77,53 @@
     },
     "scaffolds": {
       "type": "array",
-      "description": "New workspaces a capability module creates (apps/packages). Shape is refined when the applier's scaffolding is built.",
+      "description": "New workspaces a capability module creates (apps/packages). Each entry births one workspace: copies its files to workspace-root-relative targets and registers the aliases it declares into saasaloy.json (ADR 0013).",
       "items": {
-        "type": "object"
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["workspace", "files"],
+        "properties": {
+          "workspace": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/@]",
+            "description": "New workspace directory, project-relative POSIX (e.g. apps/api). No leading slash or @alias."
+          },
+          "aliases": {
+            "type": "object",
+            "description": "Alias → path-prefix map this scaffold registers into saasaloy.json (e.g. { \"@api\": \"apps/api/src\" }).",
+            "propertyNames": {
+              "pattern": "^@[a-z0-9][a-z0-9-]*$"
+            },
+            "additionalProperties": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Project-relative path prefix (POSIX separators, no leading slash)."
+            }
+          },
+          "files": {
+            "type": "array",
+            "description": "Files copied into the workspace. `path` is relative to the module folder; `target` is relative to the workspace root (no @alias — the alias root doesn't exist yet).",
+            "items": {
+              "type": "object",
+              "additionalProperties": false,
+              "required": ["path", "target"],
+              "properties": {
+                "path": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Source path relative to the module folder (e.g. files/src/index.ts)."
+                },
+                "target": {
+                  "type": "string",
+                  "minLength": 1,
+                  "pattern": "^[^/@]",
+                  "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias."
+                }
+              }
+            }
+          }
+        }
       }
     },
     "agent": {

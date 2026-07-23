@@ -104,6 +104,18 @@ export interface RegistryFile {
   target: string;
 }
 
+// A new workspace a capability births. Its `files[].target`s are workspace-root-relative
+// (no `@alias` — the alias root doesn't exist until this scaffold lands), and it declares
+// the aliases the applier registers into saasaloy.json (ADR 0013).
+export interface RegistryScaffold {
+  /** New workspace directory, project-relative POSIX (e.g. `apps/api`). */
+  workspace: string;
+  /** Aliases this scaffold registers into saasaloy.json (e.g. `{ "@api": "apps/api/src" }`). */
+  aliases?: Record<string, string>;
+  /** Files copied into the workspace; each `target` is relative to `workspace`. */
+  files: RegistryFile[];
+}
+
 export interface RegistryAgent {
   skills?: string[];
 }
@@ -116,7 +128,7 @@ export interface RegistryItem {
   files?: RegistryFile[];
   envVars?: Record<string, string>;
   patches?: Record<string, unknown>;
-  scaffolds?: Record<string, unknown>[];
+  scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;
 }
 
