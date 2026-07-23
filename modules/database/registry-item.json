@@ -1,0 +1,40 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "database",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "d1_databases",
+      "entry": {
+        "binding": "DB",
+        "database_name": "app-db",
+        "database_id": "local",
+        "migrations_dir": "../../packages/db/migrations"
+      }
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/db",
+      "aliases": { "@db": "packages/db/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
+        { "path": "files/src/client.ts", "target": "src/client.ts" },
+        { "path": "files/src/schema.ts", "target": "src/schema.ts" },
+        { "path": "files/src/schema/.gitkeep", "target": "src/schema/.gitkeep" },
+        { "path": "files/src/repositories/.gitkeep", "target": "src/repositories/.gitkeep" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-database"]
+  }
+}
