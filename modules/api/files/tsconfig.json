@@ -1,0 +1,7 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["@cloudflare/workers-types", "vite/client"]
+  },
+  "include": ["src", "vite.config.ts"]
+}

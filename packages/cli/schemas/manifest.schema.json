@@ -34,7 +34,7 @@
     },
     "links": {
       "type": "object",
-      "description": "Optional link map (source path → link path). Present for forward compatibility; base/module applies do not populate it.",
+      "description": "Symlink map (source path → link path): a module's skill files live under .agents/skills/<name>/ and `add` points a .claude/skills/<name> symlink at them, recorded here so `remove` can undo both (ADR 0015).",
       "additionalProperties": {
         "type": "string",
         "minLength": 1

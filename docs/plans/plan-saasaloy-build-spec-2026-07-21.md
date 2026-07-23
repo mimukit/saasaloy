@@ -195,7 +195,7 @@ On update, the tool hashes a managed file: match → clean overwrite; drift → 
   "envVars": {},
   "patches": {},                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context contributed by this module
-    "skills": ["skills/waitlist"]             //   skill folder(s) copied into .claude/skills/ by `add`
+    "skills": ["skills/saasaloy-waitlist"]    //   saasaloy-prefixed; copied into .claude/skills/ by `add`
   }
 }
 ```

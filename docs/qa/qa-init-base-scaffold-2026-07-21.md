@@ -3,7 +3,7 @@
 _Generated 2026-07-21 · covers commits `52db5ba` (extract syncProject) → `875bd91` (init command) → `411ec03` (base template): the end-to-end slice `saasaloy init` → generated base project → `sync` → `build` → Cloudflare deploy config._
 
 ## Summary
-`saasaloy init <name>` scaffolds a near-inert Cloudflare-native base — an Astro marketing site (`apps/web`), stub `@repo/ui`, `@repo/config`, a pnpm 11 + Turborepo workspace, the `.agents/` agent layer, and a `wrangler.jsonc` for static-assets deploy — with the project name substituted throughout, then runs `sync` to generate the agent views. "Working" means: a human runs `init`, then `pnpm install && pnpm dev`, sees the landing page with their project name, navigates it, and can deploy it green to Cloudflare — all without touching the wiring.
+`saasaloy init <name>` scaffolds a near-inert Cloudflare-native base — an Astro marketing site (`apps/web`), stub `@repo/ui`, `@repo/tsconfig` (shared base tsconfig), a pnpm 11 + Turborepo workspace, the `.agents/` agent layer, and a `wrangler.jsonc` for static-assets deploy — with the project name substituted throughout, then runs `sync` to generate the agent views. "Working" means: a human runs `init`, then `pnpm install && pnpm dev`, sees the landing page with their project name, navigates it, and can deploy it green to Cloudflare — all without touching the wiring.
 
 ## Preconditions
 - Node ≥ 24, pnpm 11 (corepack will fetch the pinned version), macOS/Linux/Windows.
@@ -172,7 +172,7 @@ pnpm --filter web exec wrangler deploy --dry-run
 - ✅ Scaffold → 22 files written; `_gitignore` correctly emitted as `.gitignore`.
 - ✅ Token substitution → root pkg `qa-app`, `wrangler.name` = `qa-app-web`, `@repo/ui` `siteName` = `qa-app`; `grep "{{"` found **no** unreplaced tokens.
 - ✅ Committed agent views → `AGENTS.md` (begins `# qa-app — agent overview`) and one-line `CLAUDE.md` (`@AGENTS.md`) are copied straight from `templates/base` with the name substituted. No `sync`, no `.saasaloy/manifest.json` — nothing is generated.
-- ✅ Generated `.gitignore` → `git check-ignore AGENTS.md CLAUDE.md` reports them NOT ignored (they are committed files now, always present for agent tools and clones).
+- ✅ Generated `.gitignore` → `git check-ignore AGENTS.md CLAUDE.md` reports them NOT ignored (they are committed files now, always present for agent tools and clones). `.claude/skills/` **is** ignored — module skill links are regenerated per-machine by `add`, with the real skill files committed under `.agents/skills/` (ADR 0015).
 - ✅ init edge cases → no-arg, `Bad_Name` (uppercase/underscore), and non-empty-dir each exit 1 with a clear message.
 - ✅ `pnpm install` → clean; pre-approved build scripts (esbuild, workerd, sharp) ran with no prompts.
 - ✅ `pnpm build` → Astro built 3 pages (`/`, `/terms`, `/privacy`) into `apps/web/dist`.
@@ -184,5 +184,5 @@ pnpm --filter web exec wrangler deploy --dry-run
 - **Real authenticated Cloudflare deploy** (TC-2) — needs an account/credentials; the agent could only `--dry-run`.
 - **Browser rendering, HMR, dark mode, responsive** (TC-1, TC-3–TC-5, TC-7) — require a human eye and a running browser.
 - **Claude Code loading generated agent context** (TC-6) — needs the tool.
-- **Windows** — the `_gitignore` rename and scaffold were verified on macOS only; symlink/junction behavior for skills is untested (base ships no skills, so `.claude/skills` is empty here).
+- **Windows** — the `_gitignore` rename and scaffold were verified on macOS only; the base ships no skills, so `.claude/skills` is absent after `init` (it's git-ignored and first created by `saasaloy add` — junction/symlink behavior is covered in the api module's QA, ADR 0015).
 - **`saasaloy add` / modules** — not built yet (Phase 1); this slice ends at the base.

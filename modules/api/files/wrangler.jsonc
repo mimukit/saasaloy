@@ -1,0 +1,9 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "api",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-07-21"
+  // No bindings in the base `api` module. Capabilities and features that need a
+  // D1 database, R2 bucket, KV namespace, or Queue patch this file to add their own
+  // binding (via the jsonc-parser patch engine) — see the `saasaloy-api` skill.
+}
