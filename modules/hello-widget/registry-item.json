@@ -1,0 +1,17 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "hello-widget",
+  "type": "saasaloy:feature",
+  "dependsOn": ["hello"],
+  "dependencies": ["zod", "nanoid@5.0.7"],
+  "files": [
+    { "path": "files/web/hello.ts", "target": "@web/hello.ts" },
+    { "path": "files/web/components/HelloWidget.tsx", "target": "@web/components/HelloWidget.tsx" }
+  ],
+  "envVars": {
+    "HELLO_GREETING": "Greeting the widget renders (defaults to \"Hello\")"
+  },
+  "agent": {
+    "skills": ["skills/hello-widget"]
+  }
+}

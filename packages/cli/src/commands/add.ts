@@ -1,4 +1,4 @@
-import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
+import { cancel, confirm, intro, isCancel, log, note, outro, select } from "@clack/prompts";
 import pc from "picocolors";
 import {
   type ApplyResult,
@@ -9,10 +9,18 @@ import {
   type PlannedFile,
 } from "../lib/applier.js";
 import { lineDiff } from "../lib/diff.js";
+import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
-import { findRegistryDir } from "../lib/registry.js";
+import {
+  createRegistrySource,
+  DEFAULT_OWNER,
+  DEFAULT_REPO,
+  parseCoordinate,
+  REGISTRY_ENV,
+  type RegistrySource,
+} from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { wrapForNote } from "../lib/tui.js";
@@ -33,7 +41,7 @@ interface Options {
 }
 
 const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y", "--force"]);
-const USAGE = "saasaloy add <module> [--dry-run] [--diff] [--yes] [--force]";
+const USAGE = "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]";
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -133,11 +141,14 @@ export async function runAdd(argv: string[]): Promise<number> {
     cancel(`Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`);
     return 1;
   }
-  if (!opts.name) {
-    cancel("Name a module to add, e.g. `saasaloy add waitlist`.");
+
+  let coord: ReturnType<typeof parseCoordinate>;
+  try {
+    coord = parseCoordinate(opts.name);
+  } catch (error) {
+    cancel(error instanceof Error ? error.message : String(error));
     return 1;
   }
-  const requested = opts.name;
 
   let root: string;
   let config: Awaited<ReturnType<typeof loadConfig>>;
@@ -151,9 +162,47 @@ export async function runAdd(argv: string[]): Promise<number> {
 
   let plan: Plan;
   let prereqs: string[];
+  let source: RegistrySource | undefined;
   try {
-    const registryDir = await findRegistryDir();
-    const graph = await resolveGraph(registryDir, requested);
+    // Load the lock up front so a named remote add can pin to the SHA it recorded — a
+    // re-install then reproduces identical bytes (ADR 0012). Explicit `@ref` or the
+    // `update` flow (#17) are the sanctioned ways to move off the lock.
+    const lock = await loadLock(root);
+    if (!process.env[REGISTRY_ENV] && coord.module && !coord.ref) {
+      const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
+      const pinned = lock.modules[coord.module];
+      if (pinned && pinned.source === slug && pinned.resolved !== "local") {
+        coord = { ...coord, ref: pinned.resolved };
+      }
+    }
+
+    source = createRegistrySource(coord);
+    if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
+      log.warn(
+        `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`,
+      );
+    }
+
+    // No module named (bare `add`, or `owner/repo` with no module) → pick from the source.
+    let requested = coord.module;
+    if (!requested) {
+      const available = await source.listModules();
+      if (available.length === 0) {
+        cancel(`No modules found in ${source.label}.`);
+        return 1;
+      }
+      const picked = await select({
+        message: `Pick a module to add ${pc.dim(`(from ${source.label})`)}`,
+        options: available.map((n) => ({ value: n, label: n })),
+      });
+      if (isCancel(picked)) {
+        cancel("add cancelled");
+        return 1;
+      }
+      requested = picked as string;
+    }
+
+    const graph = await resolveGraph(source, requested);
     prereqs = graph.order.filter((n) => n !== requested);
 
     const install = graph.order.filter(
@@ -236,6 +285,12 @@ export async function runAdd(argv: string[]): Promise<number> {
       await saveConfig(root, config);
     }
 
+    // Pin what was actually applied in the lockfile: source + ref + commit SHA per module
+    // (ADR 0012). Only the freshly-installed modules — an already-installed dep keeps the
+    // SHA it was fetched at, so the lock never misstates on-disk provenance.
+    upsertLock(lock, source.provenance(), plan.install, graph);
+    await saveLock(root, lock);
+
     for (const file of result.written) {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
     }
@@ -266,5 +321,8 @@ export async function runAdd(argv: string[]): Promise<number> {
   } catch (error) {
     cancel(error instanceof Error ? error.message : String(error));
     return 1;
+  } finally {
+    // A remote source extracts each module to a temp dir; drop them once applied.
+    await source?.cleanup?.();
   }
 }

@@ -26,6 +26,9 @@ importers:
       diff:
         specifier: 9.0.0
         version: 9.0.0
+      giget:
+        specifier: 3.3.0
+        version: 3.3.0
       jsonc-parser:
         specifier: 3.3.1
         version: 3.3.1
@@ -803,6 +806,10 @@ packages:
     resolution: {integrity: sha512-5xoDfX+fL7faATnagmWPpbFtwh/R77WmMMqqHGS65C3vvB0YHrgF+B1YmZ3441tMj5n63k0212XNoJwzlhffQw==}
     engines: {node: ^8.16.0 || ^10.6.0 || >=11.0.0}
     os: [darwin]
+
+  giget@3.3.0:
+    resolution: {integrity: sha512-gzi2D96p+AMfDcmJHGDj3KJ9NRiwvlFAU5yfa3ROwWZmFUjX4P43x3BcyRaOMMLto1vUo7C+86+MFhYTl6Ryiw==}
+    hasBin: true
 
   joycon@3.1.1:
     resolution: {integrity: sha512-34wB/Y7MW7bzjKRjUKTa46I2Z7eV62Rkhva+KkopW7Qvv/OSWBqvkSY7vusOPrNuZcUG3tApvdVgNB8POj3SPw==}
@@ -1685,6 +1692,8 @@ snapshots:
 
   fsevents@2.3.3:
     optional: true
+
+  giget@3.3.0: {}
 
   joycon@3.1.1: {}
 
