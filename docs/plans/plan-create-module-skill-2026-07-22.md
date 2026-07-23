@@ -17,7 +17,7 @@ new Saasaloy module is written against. Two problems have accumulated:
    ships as a **Claude skill folder copied into `.claude/skills/`** by `saasaloy add`, tracked in
    the manifest. The skill still tells authors to do the thing that no longer exists.
 
-`docs/plans/plan-phase-3-modules.md` already flags this drift as an open question (lines 31, 89–92)
+`docs/plans/plan-phase-3-modules-2026-07-22.md` already flags this drift as an open question (lines 31, 89–92)
 and blocks on it: Phase-3 modules can't be authored cleanly against a stale runbook. Success =
 the skill is renamed, fires correctly under the new name, and its every instruction matches the
 current static-`AGENTS.md` + copied-skills reality — with no `.agents/` fragment / `sync` residue
@@ -31,7 +31,7 @@ Hardened via grillkit — the plan's original open questions were all resolved b
 | Decision | Resolution |
 |----------|-----------|
 | New skill name | `create-module` — hard rename, no alias/redirect kept. |
-| Rename blast radius | References exist **only** in `SKILL.md` (self), build-spec (~120, ~249), and `plan-phase-3-modules.md`. **README and `saasaloy.agent.json` do *not* reference the skill** — earlier draft overstated the targets. Grep `author-module` after: zero hits. |
+| Rename blast radius | References exist **only** in `SKILL.md` (self), build-spec (~120, ~249), and `plan-phase-3-modules-2026-07-22.md`. **README and `saasaloy.agent.json` do *not* reference the skill** — earlier draft overstated the targets. Grep `author-module` after: zero hits. |
 | Skill's two homes | Canonical file is `.agents/skills/create-module/SKILL.md`; `.claude/skills/create-module` is a **symlink** to it (how the harness discovers it). **Both ends rename**; arrangement kept, not re-architected. Old dir + old symlink → manual `rm` (owner). |
 | Ground-truth agent model | Build-spec §2.13/§3.3 reversal: static committed `AGENTS.md`/`CLAUDE.md`; module guidance = a Claude **skill folder copied into `.claude/skills/`** by `add`, manifest-tracked. **No `.agents/` fragments, no `saasaloy sync`.** |
 | Descriptor `agent` field | **Already settled by build-spec §3.3** — `"agent": { "skills": ["skills/<name>"] }`. A module ships `modules/<name>/skills/<name>/SKILL.md`, copied verbatim to `.claude/skills/<name>/`. Drop `agent.fragments[]` entirely; the skill just needs to match §3.3 (not "decide" it). |
@@ -50,8 +50,8 @@ Hardened via grillkit — the plan's original open questions were all resolved b
   the orphaned `saasaloy.agent.json`.
 - Update `SKILL.md` frontmatter `name: author-module` → `create-module` and the `# author-module`
   heading → `# create-module`.
-- Update external references: `docs/plans/saasaloy-build-spec.md` (~120, ~249) and
-  `docs/plans/plan-phase-3-modules.md` (~18, ~31, ~90, ~92, ~93, ~116). Grep `author-module`
+- Update external references: `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` (~120, ~249) and
+  `docs/plans/plan-phase-3-modules-2026-07-22.md` (~18, ~31, ~90, ~92, ~93, ~116). Grep `author-module`
   after — zero hits expected.
 
 ### Phase 2 — Fix the stale agent-context model (core cleanup)
@@ -105,7 +105,7 @@ text and build-spec §3.3.
   symlink arrangement is kept; only the names change.
 - **Implementing the applier** — wiring `saasaloy add`'s file/skill copy is separate work; this plan
   only makes the skill describe the agreed §3.3 contract.
-- **The Phase-3 module roadmap** — `plan-phase-3-modules.md` owns which modules get built; this plan
+- **The Phase-3 module roadmap** — `plan-phase-3-modules-2026-07-22.md` owns which modules get built; this plan
   only unblocks its stale-runbook open question.
 - **Deleting files directly** — the old `author-module/` directory, its `.claude/skills` symlink, and
   `saasaloy.agent.json` are handed to the owner as manual `rm`s, per repo policy.

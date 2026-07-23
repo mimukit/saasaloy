@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // saasaloy CLI entrypoint. Thin dispatcher; each command lives in commands/.
-// Roadmap (docs/plans/saasaloy-build-spec.md): Phase 0 `init`, Phase 1 `add`/`list`.
+// Roadmap (docs/plans/plan-saasaloy-build-spec-2026-07-21.md): Phase 0 `init`, Phase 1 `add`/`list`.
 
 import pc from "picocolors";
 import { runAdd } from "./commands/add.js";

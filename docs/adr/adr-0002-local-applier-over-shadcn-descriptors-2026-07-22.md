@@ -1,6 +1,6 @@
 # 0002 — Local applier over shadcn-shaped descriptors
 
-`saasaloy add <module>` is a **local applier**, not an HTTP registry service. Modules live in the CLI's own repo as shadcn-style `registry-item.json`-shaped descriptors; the applier reads a descriptor off disk, resolves file targets through the `saasaloy.json` alias map, topo-sorts prerequisites, and applies files + npm deps + patches. Everything the full shadcn model adds (HTTP transport, cross-registry resolution, per-registry auth) exists to serve other users and is deferred. See build-spec [§2.4](../plans/saasaloy-build-spec.md) and [§2.11](../plans/saasaloy-build-spec.md).
+`saasaloy add <module>` is a **local applier**, not an HTTP registry service. Modules live in the CLI's own repo as shadcn-style `registry-item.json`-shaped descriptors; the applier reads a descriptor off disk, resolves file targets through the `saasaloy.json` alias map, topo-sorts prerequisites, and applies files + npm deps + patches. Everything the full shadcn model adds (HTTP transport, cross-registry resolution, per-registry auth) exists to serve other users and is deferred. See build-spec [§2.4](../plans/plan-saasaloy-build-spec-2026-07-21.md) and [§2.11](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
 accepted

@@ -3,7 +3,7 @@
 `saasaloy add <module>` fetches modules from a GitHub repo at install time (default source `mimukit/saasaloy`, path `modules/<name>/`) instead of reading a copy bundled into the published npm package. This brings the remote registry forward from "a later phase" (build-spec §2.11, ADR 0002) to now, and adopts skills.sh's model — **the repo *is* the registry**: no build step, no committed index, no central submission. The applier design from ADR 0002 is unchanged; only the *sourcing* of descriptors moves from disk-read to remote fetch.
 
 ## Status
-accepted — amends [ADR 0002](0002-local-applier-over-shadcn-descriptors.md) (collapses its deferred `readFile → fetch` graduation into now, and revises its "pin to tags, never `main`" consequence — see Consequences).
+accepted — amends [ADR 0002](adr-0002-local-applier-over-shadcn-descriptors-2026-07-22.md) (collapses its deferred `readFile → fetch` graduation into now, and revises its "pin to tags, never `main`" consequence — see Consequences).
 
 ## Considered Options
 - **Bundle `modules/` into the npm tarball** (the original framing of #23) — rejected: forces relocating/copying the registry into `packages/cli`, ships a stale snapshot, and still leaves the "real" remote registry as unbuilt future work. Two mechanisms to maintain instead of one.
@@ -20,4 +20,4 @@ accepted — amends [ADR 0002](0002-local-applier-over-shadcn-descriptors.md) (c
 - Anyone can publish a registry by pushing a `modules/<name>/` repo — no submission, consumed via `saasaloy add owner/repo/name`.
 
 ## References
-Plan: `docs/plans/plan-remote-module-registry.md`. Issues: #23 (this), #26 (cross-repo deps), #27 (`remove`), #17 (update flow, amended).
+Plan: `docs/plans/plan-remote-module-registry-2026-07-23.md`. Issues: #23 (this), #26 (cross-repo deps), #27 (`remove`), #17 (update flow, amended).

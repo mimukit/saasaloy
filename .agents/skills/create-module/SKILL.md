@@ -10,7 +10,7 @@ a shadcn-shaped **descriptor** plus the **files it drops** into a consumer proje
 covers writing that descriptor and laying out its files so they honor the conventions that let
 granular modules compose without stepping on each other.
 
-**Ground truth:** `docs/plans/saasaloy-build-spec.md` — §2.7 (modules), §2.13 (agent context),
+**Ground truth:** `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` — §2.7 (modules), §2.13 (agent context),
 §3.2 (manifest), §3.3 (descriptor). Read those sections if a decision here is unclear.
 
 **Current phase reality:** `saasaloy add` and `saasaloy list` are Phase-1 stubs — the local

@@ -1,6 +1,6 @@
 # 0007 — AI-agent-native: static `AGENTS.md` + copied Claude skills
 
-Every generated project is agent-native. Fixed common rules ship as a committed static `AGENTS.md` (plus a one-line `CLAUDE.md` = `@AGENTS.md`) copied verbatim from `templates/base` at `init` — plain committed files, present the instant `init` finishes and surviving a `git clone`. Module-specific guidance ships as a **Claude skill folder** that `saasaloy add` **copies** into `.claude/skills/<name>/` and records in the manifest; a module never appends to a shared agent file. See build-spec [§2.13](../plans/saasaloy-build-spec.md), [§3.3](../plans/saasaloy-build-spec.md).
+Every generated project is agent-native. Fixed common rules ship as a committed static `AGENTS.md` (plus a one-line `CLAUDE.md` = `@AGENTS.md`) copied verbatim from `templates/base` at `init` — plain committed files, present the instant `init` finishes and surviving a `git clone`. Module-specific guidance ships as a **Claude skill folder** that `saasaloy add` **copies** into `.claude/skills/<name>/` and records in the manifest; a module never appends to a shared agent file. See build-spec [§2.13](../plans/plan-saasaloy-build-spec-2026-07-21.md), [§3.3](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
 accepted — supersedes the canonical `.agents/` → `saasaloy sync` pipeline

@@ -33,7 +33,7 @@ The Phase-3 prioritization axis: a capability's rank equals how many downstream 
 ## Registry & applier
 
 ### Applier
-The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default (the `readFile → fetch` swap has landed — [ADR 0012](docs/adr/0012-remote-first-registry-repo-is-the-registry.md)); a local checkout is a dev/offline override.
+The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default (the `readFile → fetch` swap has landed — [ADR 0012](docs/adr/adr-0012-remote-first-registry-repo-is-the-registry-2026-07-23.md)); a local checkout is a dev/offline override.
 _Avoid: registry (the applier is the engine; the "registry" is a [registry source](#registry-source))._
 
 ### Registry source

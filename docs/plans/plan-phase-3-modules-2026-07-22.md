@@ -2,7 +2,7 @@
 
 ## Context
 
-Phases 0–2 of `docs/plans/saasaloy-build-spec.md` deliver the base, the local applier, the
+Phases 0–2 of `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` deliver the base, the local applier, the
 `api`/`database`/`auth`/`admin`/`email` capabilities, and the `waitlist`/`billing`/`teams`
 features. That set proves the machinery end-to-end but leaves the registry thin: every capability
 so far is **request-scoped** (a route handler, a table, a cookie). The primitives a real SaaS

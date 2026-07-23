@@ -1,6 +1,6 @@
 # 0005 — Two-tier, granular, convention-based modules
 
-Modules are granular and split into two tiers: **capability modules** (`api`, `database`, `auth`, `admin`, `email`, …) scaffold an app/package and establish convention-based extension points; **feature modules** (`waitlist`, `billing`, `teams`, …) extend those capabilities by dropping files into their conventions and declaring `dependsOn`. Granularity is required because real MVP stages need different subsets — a landing page's first feature might be a waitlist needing `api` + `database` but explicitly not auth or admin. See build-spec [§2.7](../plans/saasaloy-build-spec.md).
+Modules are granular and split into two tiers: **capability modules** (`api`, `database`, `auth`, `admin`, `email`, …) scaffold an app/package and establish convention-based extension points; **feature modules** (`waitlist`, `billing`, `teams`, …) extend those capabilities by dropping files into their conventions and declaring `dependsOn`. Granularity is required because real MVP stages need different subsets — a landing page's first feature might be a waitlist needing `api` + `database` but explicitly not auth or admin. See build-spec [§2.7](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
 accepted

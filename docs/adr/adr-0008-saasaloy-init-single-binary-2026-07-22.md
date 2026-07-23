@@ -1,6 +1,6 @@
 # 0008 — `saasaloy init` single binary
 
-The CLI entry point is one binary with one mental model — `init` / `add` / `list` — not a separate `create-saasaloy` package. `npx saasaloy init my-app` bootstraps from a clean machine exactly like a `create-*` package would, consistent with shadcn (`npx shadcn init`, not `create-shadcn`). See build-spec [§2.10](../plans/saasaloy-build-spec.md).
+The CLI entry point is one binary with one mental model — `init` / `add` / `list` — not a separate `create-saasaloy` package. `npx saasaloy init my-app` bootstraps from a clean machine exactly like a `create-*` package would, consistent with shadcn (`npx shadcn init`, not `create-shadcn`). See build-spec [§2.10](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
 accepted — supersedes `create-saasaloy`

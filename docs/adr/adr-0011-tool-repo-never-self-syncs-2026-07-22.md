@@ -7,7 +7,7 @@ accepted
 
 ## Considered Options
 - Leave the repo's agent views git-ignored and regenerate them with a root `sync` script — rejected: it implies `sync` runs here, a footgun where `pnpm sync` regenerates views in the repo root; the root `sync` script was removed and the docs are tracked directly.
-- Unify hosting so the repo also *copies* its dev skill (matching the module model) — rejected as out-of-scope re-architecture. The symlink-vs-copy asymmetry is intentional: the repo is the source of truth for its own skill, whereas a generated project must own a detached copy ([ADR-0007](0007-agent-native-static-agents-md-copied-skills.md)).
+- Unify hosting so the repo also *copies* its dev skill (matching the module model) — rejected as out-of-scope re-architecture. The symlink-vs-copy asymmetry is intentional: the repo is the source of truth for its own skill, whereas a generated project must own a detached copy ([ADR-0007](adr-0007-agent-native-static-agents-md-copied-skills-2026-07-22.md)).
 
 ## Consequences
 - An intentional asymmetry that looks like a contradiction from the code alone: modules copy, this repo symlinks.

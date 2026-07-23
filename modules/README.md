@@ -13,7 +13,7 @@ modules/
     files/                 # template files, copied to alias targets in the consumer project
 ```
 
-See `docs/plans/saasaloy-build-spec.md` §3.3 for the descriptor shape. Modules land in
+See `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in
 Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `billing`, …); this
 directory is intentionally empty until those real modules land.
 

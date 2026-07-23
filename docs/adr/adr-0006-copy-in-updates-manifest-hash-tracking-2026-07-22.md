@@ -1,6 +1,6 @@
 # 0006 — Copy-in updates with manifest hash tracking
 
-Existing projects receive module fixes via **copy-in + `--diff`**, not versioned packages, and managed-file status is tracked in a central `.saasaloy/manifest.json` (each managed file + a content hash + owning module) rather than in-file markers. On update the tool hashes the file: match → safe clean overwrite; drift (hand-edited) → routed to the AI-merge path instead of clobbered. The churny wiring is exactly what you don't hand-edit, so updates are usually clean overwrites of files you never touched. See build-spec [§2.9](../plans/saasaloy-build-spec.md).
+Existing projects receive module fixes via **copy-in + `--diff`**, not versioned packages, and managed-file status is tracked in a central `.saasaloy/manifest.json` (each managed file + a content hash + owning module) rather than in-file markers. On update the tool hashes the file: match → safe clean overwrite; drift (hand-edited) → routed to the AI-merge path instead of clobbered. The churny wiring is exactly what you don't hand-edit, so updates are usually clean overwrites of files you never touched. See build-spec [§2.9](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
 accepted — supersedes the `// saasaloy:managed` in-file marker idea
