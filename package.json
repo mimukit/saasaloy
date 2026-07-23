@@ -17,12 +17,10 @@
     "typecheck": "turbo run typecheck",
     "test": "turbo run test",
     "cli": "node packages/cli/dist/index.js",
-    "cli:link": "pnpm --filter saasaloy build && pnpm add --global ./packages/cli",
-    "cli:unlink": "pnpm rm --global saasaloy",
     "cli:dev": "pnpm --filter saasaloy dev",
-    "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force && pnpm -C .dev/playground install",
-    "play:sync": "node packages/cli/dist/index.js init .dev/playground --force",
-    "play:dev": "pnpm -C .dev/playground dev",
+    "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force --no-install && cp scripts/saasaloy-shim.sh .dev/playground/saasaloy && chmod +x .dev/playground/saasaloy",
+    "play:destroy": "rm -rf .dev/playground",
+    "play:reset": "pnpm run play:destroy && pnpm run play:init",
     "play:watch": "node scripts/watch-template.mjs"
   },
   "devDependencies": {
