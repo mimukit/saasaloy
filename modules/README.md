@@ -14,8 +14,8 @@ modules/
 ```
 
 See `docs/plans/saasaloy-build-spec.md` §3.3 for the descriptor shape. Modules land in
-Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `billing`, …).
+Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `billing`, …); this
+directory is intentionally empty until those real modules land.
 
-`hello/` and `hello-widget/` are the committed worked examples: `saasaloy add hello-widget`
-fetches them from this repo to exercise the applier end to end — `dependsOn` resolution,
-file drops, an npm dep, an env var, and a copied skill folder.
+Tests create disposable registry fixtures. CLI development and manual QA use throwaway
+registries under `.dev/`, so example modules do not need to live in the default registry.

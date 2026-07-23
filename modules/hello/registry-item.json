@@ -1,8 +1,0 @@
-{
-  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
-  "name": "hello",
-  "type": "saasaloy:capability",
-  "files": [
-    { "path": "files/ui/hello.ts", "target": "@ui/hello.ts" }
-  ]
-}

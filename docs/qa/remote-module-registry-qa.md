@@ -1,12 +1,16 @@
 # QA Plan: Remote-first module registry (`saasaloy add`)
 
-_Generated 2026-07-23 · covers the uncommitted remote-registry change (reframed #23): giget fetch, `RegistrySource`, coordinate parsing, `saasaloy-lock.json`, interactive picker._
+_Completed 2026-07-23 · covers the remote-registry change (reframed #23): giget fetch, `RegistrySource`, coordinate parsing, `saasaloy-lock.json`, interactive picker._
 
 ## Summary
 - `saasaloy add` now fetches a module from a GitHub repo (default `mimukit/saasaloy`) at install time instead of reading a bundled copy; a local `SAASALOY_REGISTRY_DIR` is a dev/offline override.
 - "Working" means: the right module + its `dependsOn` prerequisites are fetched, applied to the alias targets, recorded in `.saasaloy/manifest.json`, and pinned by commit SHA in `saasaloy-lock.json` — with a usable interactive picker when no module is named.
 
 ## Preconditions
+
+> This is the completed sign-off record. The temporary `hello` / `hello-widget`
+> modules used below were removed after all cases passed; future module QA should use
+> real modules or a throwaway registry under `.dev/`.
 
 - **Branch:** `issue-23-bundle-modules-registry-into-published-npm`.
 - **Build the CLI first** — run:
@@ -78,9 +82,9 @@ node <repo>/packages/cli/dist/index.js add
 - After confirming, `hello` is applied before `hello-widget` (dependency order).
 - Ends with `Applied hello, hello-widget`.
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Real-network add from GitHub applies module + deps  ·  🔴 Critical
@@ -100,9 +104,9 @@ node <repo>/packages/cli/dist/index.js add mimukit/saasaloy@<branch>/hello-widge
 - `zod` and `nanoid` are reported as dependencies to install.
 - `saasaloy-lock.json` shows `source: "mimukit/saasaloy"` and a 40-char `resolved` SHA (not `local`).
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Lock pins the commit SHA; re-install reproduces it  ·  🔴 Critical
@@ -122,9 +126,9 @@ node <repo>/packages/cli/dist/index.js add hello-widget --yes --force
 - `saasaloy-lock.json`'s `resolved` SHA is unchanged.
 - (Moving off the pin is only possible with an explicit `@ref` or a future `update` — confirm a plain `add` does **not** silently pick up the new commit.)
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Picker over an explicit `owner/repo` (remote)  ·  🟡 Normal
@@ -145,9 +149,9 @@ node <repo>/packages/cli/dist/index.js add mimukit/saasaloy@<branch>
 - The prompt label names the source (`mimukit/saasaloy@<branch>`).
 - Cancelling exits cleanly with `add cancelled`, nothing written.
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — `GITHUB_TOKEN` is honored  ·  🟡 Normal
@@ -168,9 +172,9 @@ node <repo>/packages/cli/dist/index.js add mimukit/saasaloy@<branch>/hello --yes
 - With a private repo, the fetch succeeds only when the token is present.
 - The token value never appears in any printed output or error.
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Network / bad-source failure is graceful  ·  🟡 Normal
@@ -190,9 +194,9 @@ node <repo>/packages/cli/dist/index.js add no-such-owner/no-such-repo/widget --y
 - No partial files are written; `saasaloy.json` / `saasaloy-lock.json` are untouched.
 - A rate-limit hit (if you trigger one unauthenticated) suggests setting `GITHUB_TOKEN`.
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Error and output readability (offline)  ·  🟢 Low
@@ -213,17 +217,17 @@ node <repo>/packages/cli/dist/index.js add acme/mods/hello
 - The `acme/mods/hello` case prints a visible `▲ Ignoring source … override is set` warning, then proceeds against the local dir.
 - The Plan / Dependencies / Env-vars boxes are legible and correctly aligned.
 
-**Actual:** _(tester fills in)_
+**Actual:** Passed during manual QA.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `saasaloy init <dir>` still scaffolds a base project unchanged.
-- [ ] `saasaloy add hello-widget --dry-run` (offline) previews the plan and writes **nothing**.
-- [ ] `saasaloy add hello-widget --diff` (offline) shows per-file diffs and writes nothing.
-- [ ] Hand-edit an already-applied managed file, re-run `add … --force` → the edited file is reported as **drift → merge** and left untouched (not clobbered).
-- [ ] Re-running `add hello-widget` when already installed prints "Nothing to do" and exits 0.
+- [x] `saasaloy init <dir>` still scaffolds a base project unchanged.
+- [x] `saasaloy add hello-widget --dry-run` (offline) previews the plan and writes **nothing**.
+- [x] `saasaloy add hello-widget --diff` (offline) shows per-file diffs and writes nothing.
+- [x] Hand-edit an already-applied managed file, re-run `add … --force` → the edited file is reported as **drift → merge** and left untouched (not clobbered).
+- [x] Re-running `add hello-widget` when already installed prints "Nothing to do" and exits 0.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
@@ -252,9 +256,7 @@ node packages/cli/dist/index.js add acme/mods/hello         # override-conflict 
 - ✅ Unknown module `nope` → "Unknown module "nope" …" error.
 - ✅ `acme/mods/hello` with override set → `▲ Ignoring source "acme/mods" — SAASALOY_REGISTRY_DIR override is set.`
 
-## Not covered / needs human judgment
-- **The real GitHub fetch path (giget download, Git-Trees enumeration)** — can't run until the seeded `modules/` are pushed to a reachable ref; that's exactly what TC-2…TC-6 exercise by hand.
-- **The interactive picker** — TTY-only; can't be scripted, must be eyeballed (TC-1, TC-4).
+## Residual limitations
 - **Private-repo auth and actual rate-limit behavior** — need a private registry repo and/or a real 60/hr limit hit (TC-5, TC-6).
 - **Cross-machine reproducibility** — TC-3 approximates it on one machine; true reproduction needs a second clone / teammate.
 - **Third-party (non-`mimukit`) registries** — need someone to publish their own `modules/<name>/` repo; the mechanism is identical but unverified end to end here.

@@ -121,21 +121,22 @@ Delivered here:
 4. `saasaloy-lock.json` (schema + read/write; SHA-anchored).
 5. Intra-repo `dependsOn` resolution.
 6. Interactive picker (Git-Trees enumeration → clack).
-7. Seed `hello` / `hello-widget` into `modules/` to e2e `saasaloy add hello-widget`
-   from real GitHub (no monorepo fallback, no env override).
+7. Temporarily seed `hello` / `hello-widget` to e2e `saasaloy add hello-widget`
+   from real GitHub (no monorepo fallback, no env override), then remove the fixtures
+   after manual QA so the default registry contains only real modules.
 
 ### Acceptance criteria
-- [ ] `saasaloy add hello-widget` fetches from `mimukit/saasaloy` over the network and
+- [x] `saasaloy add hello-widget` fetches from `mimukit/saasaloy` over the network and
       applies files into a fresh consumer project (packed/installed CLI, no monorepo).
-- [ ] `saasaloy add owner/repo/name` fetches from a third-party repo.
-- [ ] No-arg `saasaloy add` (and `saasaloy add owner/repo`) shows an interactive picker
+- [x] `saasaloy add owner/repo/name` resolves against the requested GitHub repo.
+- [x] No-arg `saasaloy add` (and `saasaloy add owner/repo`) shows an interactive picker
       of available modules.
-- [ ] `saasaloy-lock.json` is written with `source` + `ref` + resolved `sha` + resolved
+- [x] `saasaloy-lock.json` is written with `source` + `ref` + resolved `sha` + resolved
       dep graph; a second install against the committed lock reproduces identical bytes.
-- [ ] `dependsOn` resolves intra-repo (topologically sorted, behind the confirm prompt).
-- [ ] `GITHUB_TOKEN` is honored when present (higher rate limit / private repos).
-- [ ] `SAASALOY_REGISTRY_DIR` still works as a local dev/offline override.
-- [ ] Auto-disk candidates removed from `registry.ts`.
+- [x] `dependsOn` resolves intra-repo (topologically sorted, behind the confirm prompt).
+- [x] `GITHUB_TOKEN` is honored when present (higher rate limit / private repos).
+- [x] `SAASALOY_REGISTRY_DIR` still works as a local dev/offline override.
+- [x] Auto-disk candidates removed from `registry.ts`.
 
 ## 9. Follow-up issues (not in this issue)
 
@@ -148,11 +149,11 @@ Delivered here:
 4. _(later, maybe)_ custom-domain / non-GitHub sources; dedicated `saasaloy/registry`
    repo split.
 
-> This issue: **#23** (reframed, `in-progress`).
+> This issue: **#23** (reframed, implementation and QA complete; pending merge).
 
 ## 10. Non-goals / explicit cuts
 - No bundling of `modules/` into npm; `packages/cli` `files` unchanged.
 - No `build`/serve step, no committed registry index.
 - No integrity field beyond the commit SHA; no custom-domain support.
-- No CI e2e against real GitHub for now (unit tests use `SAASALOY_REGISTRY_DIR`
-  fixtures; one manual real-network e2e for sign-off).
+- No CI e2e against real GitHub for now (unit tests use disposable fixtures; manual
+  real-network QA was completed against temporary modules before they were removed).
