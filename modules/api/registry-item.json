@@ -1,0 +1,27 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "api",
+  "type": "saasaloy:capability",
+  "dependsOn": [],
+  "dependencies": [],
+  "envVars": {},
+  "patches": {},
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "apps/api",
+      "aliases": { "@api": "apps/api/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
+        { "path": "files/vite.config.ts", "target": "vite.config.ts" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/routes/health.ts", "target": "src/routes/health.ts" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-api"]
+  }
+}
