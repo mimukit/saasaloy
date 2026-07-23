@@ -21,6 +21,6 @@
   "envVars": {},
   "patches": {},
   "agent": {
-    "skills": ["skills/waitlist"]
+    "skills": ["skills/saasaloy-waitlist"]
   }
 }

@@ -26,7 +26,7 @@ module's skill folder into `.claude/skills/` — must be fully described by the 
 modules/<name>/
   registry-item.json     # name, type, dependsOn[], dependencies[], files[], patches, agent{}
   files/                 # template files, copied to alias targets in the consumer project
-  skills/<name>/         # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/<name>/
+  skills/saasaloy-<name>/  # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/saasaloy-<name>/
 ```
 
 ## Step 1 — Pick the tier
@@ -63,7 +63,7 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
   "envVars": {},                              // env keys the module needs (documented for the user)
   "patches": {},                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context this module contributes (see Step 4)
-    "skills": ["skills/waitlist"]             //   skill folder(s) copied into .claude/skills/ by `add`
+    "skills": ["skills/saasaloy-waitlist"]    //   skill folder(s) copied into .claude/skills/ by `add`
   }
 }
 ```
@@ -76,7 +76,11 @@ Field notes:
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
   skill/README rather than in `dependsOn`.
-- **`dependencies`** — real npm packages the dropped files import.
+- **`dependencies`** — npm packages (distinct from `dependsOn`, which is *inter-module*). **One
+  source of truth per workspace:** a **capability** owns the `package.json` it scaffolds, so it
+  declares its deps *there* and leaves descriptor `dependencies[]` **empty**; a **feature** owns no
+  `package.json`, so it lists npm deps in `dependencies[]` and the applier merges them into the
+  target workspace's `package.json`. Never declare the same dep in both places.
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
   `@web`→`apps/web/src`, `@api`→`apps/api/src`, `@admin`→`apps/admin/src`, `@db`→`packages/db/src`,
@@ -84,10 +88,31 @@ Field notes:
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
 - **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal.
-- **`agent.skills[]`** — skill folder(s) under this module (`skills/<name>`) copied into the
-  consumer's `.claude/skills/<name>/` by `add` (see Step 4).
+- **`agent.skills[]`** — skill folder(s) under this module (`skills/saasaloy-<name>`) copied into
+  the consumer's `.claude/skills/saasaloy-<name>/` by `add` (see Step 4). Module skills are
+  **always `saasaloy-`-prefixed** so they can't collide with the user's own installed skills.
 - **Capability modules additionally carry `scaffolds`** — the new workspace(s) they create
-  (e.g. `api` scaffolds `apps/api`; `database` scaffolds `packages/db`).
+  (e.g. `api` scaffolds `apps/api`; `database` scaffolds `packages/db`). Each entry describes a
+  full workspace with **workspace-root-relative** targets (not `@alias`-prefixed — the alias root
+  doesn't exist yet) and **declares the alias it registers** into the consumer's `saasaloy.json`:
+
+  ```jsonc
+  "scaffolds": [{
+    "workspace": "apps/api",
+    "aliases": { "@api": "apps/api/src" },   // applier writes this into saasaloy.json
+    "files": [
+      { "path": "files/package.json",        "target": "package.json"        },
+      { "path": "files/wrangler.jsonc",       "target": "wrangler.jsonc"       },
+      { "path": "files/src/index.ts",         "target": "src/index.ts"         },
+      { "path": "files/src/routes/health.ts", "target": "src/routes/health.ts" }
+    ]
+  }]
+  ```
+
+  Split of concern: **`scaffolds[]` births a whole workspace** (root-relative paths, incl. its
+  `package.json` and config) — **`files[]` drops into an existing convention** (alias-relative,
+  what *features* use). A capability's own initial files (the entry, its first route) ship **in the
+  scaffold**, so a capability's `files[]` is typically empty.
 
 ## Step 3 — Lay out `files/` along the conventions
 
@@ -111,9 +136,18 @@ file, stop — add or use a convention instead.
 
 A module carries the AI guidance for the capability it adds the same convention-based way it adds
 routes and schema: **by shipping a self-contained skill folder, never by editing a shared agent
-file.** Author `modules/<name>/skills/<name>/SKILL.md` and list it in `agent.skills[]`. At `add`
-time the applier **copies** that folder verbatim into the consumer's `.claude/skills/<name>/` and
-records it in `.saasaloy/manifest.json`, so `remove` deletes exactly what was copied.
+file.** Author `modules/<name>/skills/saasaloy-<name>/SKILL.md` and list it in `agent.skills[]`. At
+`add` time the applier **copies** that folder verbatim into the consumer's
+`.claude/skills/saasaloy-<name>/` and records it in `.saasaloy/manifest.json`, so `remove` deletes
+exactly what was copied.
+
+**Skill names are always `saasaloy-`-prefixed.** A module's skill folder, and the `name:` in its
+`SKILL.md` frontmatter, both take the form `saasaloy-<module>` (the `api` module ships
+`skills/saasaloy-api/` with `name: saasaloy-api`). The prefix namespaces every module skill so it
+lands in the consumer's `.claude/skills/` without colliding with a user's own installed skills — a
+generated project may have dozens of module skills alongside the user's, and a bare `api` or
+`billing` is exactly the kind of name a user might already have. Keep the folder name and the
+frontmatter `name` identical and prefixed. (See ADR 0014.)
 
 Module guidance is therefore **on-demand Claude skills** — the agent loads a module's runbook only
 when working on that module, keeping the always-in-context `AGENTS.md` lean. There is no `AGENTS.md`
@@ -146,6 +180,8 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - **Contribute agent context by shipping a skill folder**, not editing shared ones: an
   `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
   never append to the committed `AGENTS.md`/`CLAUDE.md`.
+- **Name every module skill `saasaloy-<module>`** — folder and frontmatter `name` alike — so it
+  can't collide with a user's own installed skills (ADR 0014).
 - Declare `dependsOn` so the applier can resolve and topologically sort prerequisites.
 
 ## Authoring checklist
@@ -156,5 +192,6 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] Each `files[]` target uses a `@alias` and lands in a convention folder where possible.
 - [ ] `patches` is empty unless a change is genuinely structural (with a note on why).
 - [ ] `envVars` lists any required keys; no secrets baked into files.
-- [ ] `agent.skills[]` points at a `skills/<name>/SKILL.md` runbook for the module.
+- [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
+      `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
 - [ ] Files are self-contained wiring (clean copy-in updates; no sentinel comments).

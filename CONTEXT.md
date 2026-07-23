@@ -50,7 +50,7 @@ How a module is addressed on the `saasaloy add` command line: `name` (default re
 A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsOn[]`, `dependencies[]` (npm), `patches`, and an `agent` block.
 
 ### Descriptor `agent` block
-The descriptor field pinning the skill folder(s) a module ships: `{ "skills": ["skills/<name>"] }`.
+The descriptor field pinning the skill folder(s) a module ships: `{ "skills": ["skills/saasaloy-<name>"] }`.
 
 ### `saasaloy.json`
 The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution).
@@ -84,8 +84,8 @@ A generated project that ships its agent context committed, so any agent tool op
 Committed **static** base files carrying the fixed common project rules; `CLAUDE.md` is a one-line `@AGENTS.md` import. Neither is generated.
 
 ### Module skill (skill folder)
-A module's on-demand guidance, shipped as a Claude skill folder (`skills/<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/<name>/` and records in the manifest.
-_Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`._
+A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
+_Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
 
 ## The two repos
 
