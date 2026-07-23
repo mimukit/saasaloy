@@ -10,7 +10,7 @@ import { copyTemplate } from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
-// + @repo/config) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
+// + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
 // (fixed common rules); nothing is generated. Churny modules (api, database, auth,
 // admin, features) are added later via `saasaloy add`, which copies their skills in.
 
@@ -115,7 +115,7 @@ export async function runInit(argv: string[]): Promise<number> {
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   await copyTemplate(TEMPLATE_DIR, target, { PROJECT_NAME: projectName });
-  s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/config)")}`);
+  s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`);
 
   // Offer to install now; on decline (or cancel) fall back to the printed steps.
   // `select` (not `confirm`) so each choice renders on its own line.
