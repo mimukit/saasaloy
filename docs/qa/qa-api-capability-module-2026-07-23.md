@@ -20,10 +20,10 @@ pnpm cli:dev            # terminal 1: rebuild the CLI on change — leave runnin
 pnpm play:init          # scaffold .dev/playground + drop the ./saasaloy shim (no install)
 cd .dev/playground
 ./saasaloy list         # api should appear (proves descriptor loads from local modules/)
-./saasaloy add api -y   # scaffolds apps/api + applies the saasaloy-api skill into .claude/skills/
+./saasaloy add api -y   # scaffolds apps/api + installs the saasaloy-api skill into .agents/skills/ (+ .claude/skills symlink)
 ```
 
-This stands up the whole `apps/api` workspace: `add api` copies the six scaffold files, registers `@api → apps/api/src` into `saasaloy.json`, and records everything in `.saasaloy/manifest.json` (scaffold applier — issue #8). `api` declares no `patches`, so no deferral notice appears. The scaffolded `package.json`/`tsconfig.json` extend `@repo/tsconfig`, which the base template now ships (`packages/tsconfig`), so the workspace installs and boots directly — no throwaway harness needed.
+This stands up the whole `apps/api` workspace: `add api` copies the six scaffold files, installs the `saasaloy-api` skill as real files under `.agents/skills/saasaloy-api/` with a `.claude/skills/saasaloy-api` symlink pointing at them (ADR 0015), registers `@api → apps/api/src` into `saasaloy.json`, and records everything — files in `managed`, the symlink in `links` — in `.saasaloy/manifest.json` (scaffold applier — issue #8). `api` declares no `patches`, so no deferral notice appears. The scaffolded `package.json`/`tsconfig.json` extend `@repo/tsconfig`, which the base template now ships (`packages/tsconfig`), so the workspace installs and boots directly — no throwaway harness needed.
 
 ### Stand up the `apps/api` runtime (worker DoD — TC-1/TC-2/TC-3)
 
@@ -68,7 +68,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — A dropped `routes/*.ts` auto-registers with no entry edit  ·  🔴 Critical
@@ -90,7 +90,7 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — The mount-relative path rule behaves as the runbook claims  ·  🟡 Normal
@@ -106,7 +106,7 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — `saasaloy-api` skill runbook is followable by a developer  ·  🟡 Normal
@@ -121,7 +121,7 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — ADR 0013 + ADR 0014 read coherently to a reviewer  ·  🟡 Normal
@@ -137,7 +137,7 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — `create-module` guidance is self-consistent after the edits  ·  🟢 Low
@@ -152,14 +152,14 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] CLI test suite still passes (see Automated verification — 49 tests).
-- [ ] `registry-item.json` still validates against `registry-item.schema.json` (see Automated verification).
-- [ ] The build-spec §3.3 and schema `registry-item.example.json` examples still parse and now show the `saasaloy-`-prefixed skill path.
-- [ ] No unrelated files changed — the diff is confined to the `api` module, its docs, and the convention docs.
+- [x] CLI test suite still passes (see Automated verification — 49 tests).
+- [x] `registry-item.json` still validates against `registry-item.schema.json` (see Automated verification).
+- [x] The build-spec §3.3 and schema `registry-item.example.json` examples still parse and now show the `saasaloy-`-prefixed skill path.
+- [x] No unrelated files changed — the diff is confined to the `api` module, its docs, and the convention docs.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
@@ -184,6 +184,7 @@ fetch /health ; (drop routes/ping.ts) ; fetch /ping
 - ✅ Schema validation → `registry-item.json` **VALID** against the tightened `scaffolds` schema; `agent.skills = ["skills/saasaloy-api"]`, `dependsOn = []`.
 - ✅ Shipped skill frontmatter → `name: saasaloy-api` (folder `skills/saasaloy-api/` matches).
 - ✅ **Scaffold applier** → `./saasaloy add api -y` created `apps/api/{package.json,tsconfig.json,wrangler.jsonc,vite.config.ts,src/index.ts,src/routes/health.ts}`, registered `@api → apps/api/src` in `saasaloy.json`, and recorded all seven files (incl. the skill) in `.saasaloy/manifest.json`. A second `add api` (no `--force`) correctly no-ops.
+- ✅ **Skill linking (ADR 0015)** → the `saasaloy-api` skill installed as a real file at `.agents/skills/saasaloy-api/SKILL.md` (git-tracked) with a `.claude/skills/saasaloy-api → ../../.agents/skills/saasaloy-api` symlink (git-ignored via the base `_gitignore`) resolving back to it; `manifest.links` records `.agents/skills/saasaloy-api → .claude/skills/saasaloy-api`. A re-add sees the existing link (`exists`) and re-creates nothing.
 - ✅ Real install + boot → the base now ships `@repo/tsconfig`, so `pnpm install` resolved the scaffolded workspace and `vite dev` came up on the real `workerd` runtime (vite v8.1.5). No `.dev/` harness needed.
 - ✅ **DoD criterion 1** → `GET /health → 200 {"status":"ok"}` on `workerd`.
 - ✅ **DoD criterion 2** → dropped `src/routes/ping.ts` with no edit to `src/index.ts` → `GET /ping → 200 {"pong":true}`; `GET /health` still `200 {"status":"ok"}`. Auto-registration proven end-to-end from a real `add`.
@@ -193,4 +194,5 @@ fetch /health ; (drop routes/ping.ts) ; fetch /ping
 - **Real edge `wrangler deploy`** — deliberately out of scope; deployment is the future `infra` capability's job (issue #29). The DoD is local `workerd` only.
 - **End-to-end `add` → `pnpm install` → boot** — now **covered** (see Automated verification): the scaffold applier lands `apps/api`, the base ships the `@repo/tsconfig` it extends, `pnpm install` discovers the new workspace via the `apps/*` glob (so `patches` stays empty), and the Worker boots green on `workerd`. Retained here only as a note that a tester can reproduce it from `.dev/playground`.
 - **Prose quality / reviewer legibility** of the runbook and ADRs (TC-4/5/6) — inherently a human read; the agent can confirm consistency of paths and names but not whether the guidance actually *teaches*.
-- **`.claude/skills/` collision avoidance in a real consumer** — ADR 0014's core motivation (a `saasaloy-api` skill not clobbering a user's own `api` skill) can only be fully observed once the applier copies skills into a real project.
+- **Skill collision avoidance in a real consumer** — ADR 0014's core motivation (a `saasaloy-api` skill not clobbering a user's own `api` skill) is now enforced two ways: the `saasaloy-`-prefixed `.agents/skills/` folder name, and a `conflict` hold-back when a non-symlink already occupies `.claude/skills/<name>`. The unit tests cover the conflict path; a real multi-skill consumer with a pre-existing user skill of the same name is still worth a human pass.
+- **Windows junction behavior** — `createDirLink` uses a junction on Windows (verified only by code path, not on a Windows host); the POSIX relative-symlink path is exercised by the playground QA and unit tests on macOS.

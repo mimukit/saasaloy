@@ -11,7 +11,7 @@ modules/
   <name>/
     registry-item.json     # name, type, dependsOn[], dependencies[], files[], patches, scaffolds[], agent{}
     files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
-    skills/saasaloy-<name>/  # Claude skill folder, copied verbatim into the consumer's .claude/skills/saasaloy-<name>/
+    skills/saasaloy-<name>/  # skill folder, installed to the consumer's .agents/skills/saasaloy-<name>/ (+ a .claude/skills symlink)
 ```
 
 See `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in

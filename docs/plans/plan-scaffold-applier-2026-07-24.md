@@ -36,6 +36,7 @@ classify → execute → manifest machinery (`buildPlan`/`executePlan` in `packa
 | Schema tightening | Tighten `registry-item.schema.json` `scaffolds.items` from bare `{ "type": "object" }` to `{ required: [workspace, files], workspace, aliases, files }` — the shape ADR 0013 committed to. `aliases` mirrors `saasaloy.schema.json` (`@`-prefixed keys → POSIX rel paths); scaffold `files[].target` forbids leading `/` and `@`. |
 | Alias conflict | Merge (last-write-wins). If a scaffold alias would **redefine an existing alias to a different path**, `log.warn` it rather than fail — surfaced, not silent. |
 | `remove` | **Out of scope** — no `remove` command exists yet. Manifest recording is the enabler; the command is separate work. |
+| Skill hosting *(added 2026-07-24, ADR 0015)* | `agent.skills` folders install as **real files under `.agents/skills/<name>/`** (cross-agent canonical, git-tracked) with a per-folder **`.claude/skills/<name>` symlink** (junction on Windows) pointing at them for Claude Code — not copied into `.claude/skills/`. The symlink is git-ignored and regenerated per-machine; `executePlan` creates it and records `source → link` in `manifest.links`. A pre-existing non-symlink there is a held-back `conflict`. Reverses ADR 0007's copy-and-don't-symlink call. |
 
 ## Approach
 
