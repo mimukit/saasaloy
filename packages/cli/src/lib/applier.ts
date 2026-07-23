@@ -1,6 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
-import { hashContent, pathExists } from "./fs-utils.js";
+import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
 import type { Manifest } from "./manifest.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
@@ -43,12 +43,35 @@ export interface PlannedFile {
   isSkill: boolean;
 }
 
+// How a skill's `.claude/skills/<name>` symlink relates to what's already on disk:
+//   create   — nothing there, we'll make the link
+//   exists   — the correct link is already present (idempotent re-add)
+//   conflict — a real dir/file or a link elsewhere sits there → don't clobber
+export type LinkAction = "create" | "exists" | "conflict";
+
+// A `.claude/skills/<name>` symlink pointing at the real, committed `.agents/skills/<name>`
+// folder, so Claude Code discovers the skill while every other agent reads the files directly.
+export interface PlannedLink {
+  module: string;
+  /** Project-relative POSIX path of the symlink (under `.claude/skills`). */
+  path: string;
+  /** Absolute path of the symlink. */
+  pathAbs: string;
+  /** Project-relative POSIX path the link points at (under `.agents/skills`). */
+  target: string;
+  /** Absolute path of the link target. */
+  targetAbs: string;
+  action: LinkAction;
+}
+
 export interface Plan {
   /** Modules being applied, in topological order. */
   install: string[];
   /** Requested modules already installed (skipped). */
   alreadyInstalled: string[];
   files: PlannedFile[];
+  /** `.claude/skills/<name>` symlinks the installed skills register (created by executePlan). */
+  links: PlannedLink[];
   /** Union of npm deps declared across the installed modules. */
   dependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
@@ -135,6 +158,7 @@ export interface BuildPlanArgs {
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const { root, install, alreadyInstalled, modules, config, manifest } = args;
   const files: PlannedFile[] = [];
+  const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const envVars: Record<string, string> = {};
   const deferredPatches: string[] = [];
@@ -182,16 +206,31 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       }
     }
 
-    // `agent.skills` folders are copied into .claude/skills/<folder-name>/… and every
-    // file recorded in the manifest, so `remove` can undo them (build spec §2.13, §3.3).
+    // `agent.skills` folders land as real, committed files under `.agents/skills/<folder>/…`
+    // (readable by every AI agent, not just Claude Code) — each recorded in the manifest so
+    // `remove` can undo it. A `.claude/skills/<folder>` symlink then points back at them so
+    // Claude Code still discovers the skill (ADR 0015).
     for (const skillRel of item.agent?.skills ?? []) {
       const skillDir = join(mod.dir, skillRel);
       const folderName = posix.basename(skillRel);
       const skillFiles = await listFilesRelative(skillDir);
       for (const rel of skillFiles) {
-        const target = posix.join(".claude/skills", folderName, rel);
+        const target = posix.join(".agents/skills", folderName, rel);
         files.push(await planModuleFile(mod, posix.join(skillRel, rel), target, root, manifest, true));
       }
+      const linkPath = posix.join(".claude/skills", folderName);
+      const linkTarget = posix.join(".agents/skills", folderName);
+      const pathAbs = join(root, ...linkPath.split("/"));
+      const targetAbs = join(root, ...linkTarget.split("/"));
+      const state = await classifyLink(pathAbs, targetAbs);
+      links.push({
+        module: name,
+        path: linkPath,
+        pathAbs,
+        target: linkTarget,
+        targetAbs,
+        action: state === "missing" ? "create" : state === "correct" ? "exists" : "conflict",
+      });
     }
 
     for (const dep of item.dependencies ?? []) dependencies.push(dep);
@@ -203,6 +242,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     install,
     alreadyInstalled,
     files,
+    links,
     dependencies,
     envVars,
     aliases,
@@ -215,6 +255,10 @@ export interface ApplyResult {
   written: PlannedFile[];
   /** drift + conflict files, held back for the merge path. */
   heldBack: PlannedFile[];
+  /** `.claude/skills` symlinks created or already correct, recorded in the manifest. */
+  links: PlannedLink[];
+  /** Symlinks left untouched because something else already occupies their path. */
+  linkConflicts: PlannedLink[];
 }
 
 // Write the safe files, record each in the manifest with its content hash, and mark
@@ -228,6 +272,8 @@ export async function executePlan(
 ): Promise<ApplyResult> {
   const written: PlannedFile[] = [];
   const heldBack: PlannedFile[] = [];
+  const links: PlannedLink[] = [];
+  const linkConflicts: PlannedLink[] = [];
 
   for (const file of plan.files) {
     if (WRITABLE.has(file.action)) {
@@ -238,6 +284,21 @@ export async function executePlan(
     } else {
       heldBack.push(file);
     }
+  }
+
+  // Point `.claude/skills/<name>` at the real `.agents/skills/<name>` folder written above so
+  // Claude Code discovers the skill. The native link (junction on Windows, symlink elsewhere) is
+  // regenerated per-machine and git-ignored; the manifest tracks source→link for a clean `remove`.
+  for (const link of plan.links) {
+    if (link.action === "conflict") {
+      linkConflicts.push(link);
+      continue;
+    }
+    if (link.action === "create") {
+      await createDirLink(link.pathAbs, link.targetAbs);
+    }
+    manifest.links[link.target] = link.path;
+    links.push(link);
   }
 
   // Register the aliases the scaffolds declared so the first feature targeting them
@@ -253,5 +314,5 @@ export async function executePlan(
     if (!config.installed.includes(name)) config.installed.push(name);
   }
 
-  return { written, heldBack };
+  return { written, heldBack, links, linkConflicts };
 }

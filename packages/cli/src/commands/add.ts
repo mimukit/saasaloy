@@ -136,6 +136,24 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   for (const conflict of plan.aliasConflicts) {
     log.warn(`Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`);
   }
+  const newLinks = plan.links.filter((l) => l.action !== "conflict");
+  if (newLinks.length > 0) {
+    const linkLines = newLinks.map((l) => `${pc.cyan(l.path)} ${pc.dim(`→ ${l.target}`)}`);
+    note(
+      wrapForNote(
+        `${linkLines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`,
+      ),
+      "Skill links",
+    );
+  }
+  for (const link of plan.links) {
+    if (link.action === "conflict") {
+      log.warn(
+        `Skill link ${pc.cyan(link.path)} already exists and isn't ours — ` +
+          `left untouched ${pc.dim("(remove it to let `add` link the skill)")}.`,
+      );
+    }
+  }
   if (plan.deferredPatches.length > 0) {
     log.warn(
       `Config patches for ${plan.deferredPatches.join(", ")} are not applied by this engine yet ` +
@@ -304,6 +322,13 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     for (const file of result.written) {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
+    }
+    for (const link of result.links) {
+      const label = link.action === "create" ? pc.green("link") : pc.dim("link");
+      log.step(`${label}  ${link.path} ${pc.dim(`→ ${link.target}`)}`);
+    }
+    for (const link of result.linkConflicts) {
+      log.warn(`Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`);
     }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");

@@ -1,6 +1,6 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readlink, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { dirname, join } from "node:path";
+import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildPlan, executePlan, type Plan } from "./applier.js";
 import { pathExists } from "./fs-utils.js";
@@ -182,6 +182,106 @@ describe("executePlan — scaffolds", () => {
     expect(result.heldBack.map((f) => f.target)).toContain("apps/api/package.json");
     // The conflicting file is not recorded as managed.
     expect(manifest.managed["apps/api/package.json"]).toBeUndefined();
+  });
+});
+
+// A module shipping a Claude skill folder via agent.skills — the `api` runbook shape.
+async function skillModule(name = "api"): Promise<LoadedModule> {
+  const folder = `saasaloy-${name}`;
+  return writeModule(
+    name,
+    {
+      type: "saasaloy:capability",
+      agent: { skills: [`skills/${folder}`] },
+    },
+    {
+      [`skills/${folder}/SKILL.md`]: "# runbook\n",
+      [`skills/${folder}/reference.md`]: "notes\n",
+    },
+  );
+}
+
+describe("buildPlan — skill links", () => {
+  it("plans skill files under .agents/skills, not .claude/skills", async () => {
+    const p = await plan({ install: ["api"], modules: [await skillModule()] });
+    const skillTargets = p.files.filter((f) => f.isSkill).map((f) => f.target).sort();
+    expect(skillTargets).toEqual([
+      ".agents/skills/saasaloy-api/SKILL.md",
+      ".agents/skills/saasaloy-api/reference.md",
+    ]);
+    expect(p.files.some((f) => f.target.startsWith(".claude/skills"))).toBe(false);
+  });
+
+  it("plans a .claude/skills → .agents/skills symlink per skill folder", async () => {
+    const p = await plan({ install: ["api"], modules: [await skillModule()] });
+    expect(p.links).toHaveLength(1);
+    expect(p.links[0]).toMatchObject({
+      module: "api",
+      path: ".claude/skills/saasaloy-api",
+      target: ".agents/skills/saasaloy-api",
+      action: "create",
+    });
+  });
+});
+
+describe("executePlan — skill links", () => {
+  it("writes real skill files and a symlink pointing at them, recorded in manifest.links", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({ install: ["api"], modules: [await skillModule()], config, manifest });
+
+    const result = await executePlan(p, root, config, manifest);
+
+    // Real committed files under .agents/skills.
+    expect(await readFile(join(root, ".agents/skills/saasaloy-api/SKILL.md"), "utf8")).toBe(
+      "# runbook\n",
+    );
+    // A symlink at .claude/skills/saasaloy-api resolving to the .agents copy.
+    const linkAbs = join(root, ".claude/skills/saasaloy-api");
+    expect((await lstat(linkAbs)).isSymbolicLink()).toBe(true);
+    const dest = await readlink(linkAbs);
+    expect(resolve(dirname(linkAbs), dest)).toBe(resolve(join(root, ".agents/skills/saasaloy-api")));
+    // Recorded source → link for a clean remove.
+    expect(manifest.links[".agents/skills/saasaloy-api"]).toBe(".claude/skills/saasaloy-api");
+    expect(result.links).toHaveLength(1);
+    expect(result.linkConflicts).toHaveLength(0);
+  });
+
+  it("is idempotent — a re-add sees the existing link and re-creates nothing", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mod = await skillModule();
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+
+    // Second pass over the same tree: the link already resolves correctly.
+    const second = await plan({ install: ["api"], modules: [mod], config, manifest });
+    expect(second.links[0]?.action).toBe("exists");
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.linkConflicts).toHaveLength(0);
+    expect((await lstat(join(root, ".claude/skills/saasaloy-api"))).isSymbolicLink()).toBe(true);
+  });
+
+  it("holds back a .claude/skills path already occupied by something else", async () => {
+    // A real directory (not our symlink) sits where the link would go.
+    const occupied = join(root, ".claude/skills/saasaloy-api");
+    await mkdir(occupied, { recursive: true });
+    await writeFile(join(occupied, "SKILL.md"), "hand-written\n", "utf8");
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({ install: ["api"], modules: [await skillModule()], config, manifest });
+    expect(p.links[0]?.action).toBe("conflict");
+
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.linkConflicts.map((l) => l.path)).toContain(".claude/skills/saasaloy-api");
+    // The hand-written dir is left intact and nothing is recorded for it.
+    expect((await lstat(occupied)).isDirectory()).toBe(true);
+    expect(manifest.links[".agents/skills/saasaloy-api"]).toBeUndefined();
   });
 });
 
