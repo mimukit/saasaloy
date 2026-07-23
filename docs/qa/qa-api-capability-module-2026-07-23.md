@@ -7,10 +7,28 @@ _Generated 2026-07-23 · covers the uncommitted `api` capability module + the th
 - "Working" means: the scaffold boots on the real `workerd` runtime locally, `GET /health` is green, a dropped `routes/*.ts` auto-registers with no entry edit — and the descriptor + convention docs are internally consistent and reviewer-legible.
 
 ## Preconditions
-- Branch: `issue-8-api-capability-module`, changes **uncommitted** in the working tree.
+- Branch: `issue-8-api-capability-module` (the `api` module is committed; QA runs against this worktree).
 - Node + `corepack` available; `pnpm 11` via corepack (repo convention — do not use a global `pnpm`).
 - Workspace deps installed at repo root (`corepack pnpm install`), so `ajv` and the CLI build resolve.
-- The applier (`saasaloy add`) is a Phase-1 stub, so the module cannot be exercised through a real `add`. Manual runtime QA uses a throwaway harness under the git-ignored `.dev/` (per AGENTS.md), copying `modules/api/files/` and stubbing only the not-yet-existing `@repo/tsconfig` base.
+
+### Exercise the module through a real local `add` (descriptor + skill)
+
+Use the worktree-safe playground (see `CONTRIBUTING.md` → _Manual QA_). It runs **this** worktree's freshly-built CLI against **this** worktree's `modules/` via `SAASALOY_REGISTRY_DIR`, so `list`/`add` resolve the uncommitted-or-local `api` descriptor with no publish step:
+
+```sh
+pnpm cli:dev            # terminal 1: rebuild the CLI on change — leave running
+pnpm play:init          # scaffold .dev/playground + drop the ./saasaloy shim (no install)
+cd .dev/playground
+./saasaloy list         # api should appear (proves descriptor loads from local modules/)
+./saasaloy add api -y   # applies the saasaloy-api skill into .claude/skills/
+```
+
+This covers the descriptor-resolution and skill-application path (relevant to TC-4/TC-5). It does **not** stand up the worker: the applier does not yet apply `scaffolds[]`/patches (issue #7), so `add api` copies the skill but not the `apps/api` scaffold — expect the "Config patches/scaffolds for api are not applied by this engine yet" notice.
+
+### Stand up the `apps/api` runtime (worker DoD — TC-1/TC-2/TC-3)
+
+Because scaffolds aren't applied by `add` yet, the worker DoD is verified with a throwaway harness under the git-ignored `.dev/` (per AGENTS.md) that copies `modules/api/files/` directly and stubs only the not-yet-existing `@repo/tsconfig` base.
+
 - Build the harness (one time, from repo root):
 
 ```sh
