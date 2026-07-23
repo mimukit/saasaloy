@@ -13,19 +13,33 @@ granular modules compose without stepping on each other.
 **Ground truth:** `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` — §2.7 (modules), §2.13 (agent context),
 §3.2 (manifest), §3.3 (descriptor). Read those sections if a decision here is unclear.
 
-**Current phase reality:** `saasaloy add` and `saasaloy list` are Phase-1 stubs — the local
-applier that *consumes* these descriptors isn't wired yet. So today this skill produces the
-authored artifact (descriptor + files + skill folder) that the applier will read off disk.
-Author against the conventions below and the module will be ready the moment the applier lands.
-Everything the applier later does at `add` time — copy files, add deps, apply patches, copy the
-module's skill folder into `.claude/skills/` — must be fully described by the descriptor.
+**Applier coverage today:** `saasaloy list` queries the registry and `saasaloy add` runs the
+local applier (`buildPlan`/`executePlan`) — neither is a stub any more. But the applier only
+honors part of the descriptor so far; the rest is recognized and *deferred* (reported, not
+applied). Author the full descriptor regardless — the deferred fields are read and warned about
+today, and will apply the moment their engines land, with no descriptor changes needed.
+
+| Field | Applied at `add` time? |
+| --- | --- |
+| `files[]` | ✅ copied to their `@alias` targets |
+| `agent.skills[]` | ✅ copied into `.claude/skills/saasaloy-<name>/` (recorded in the manifest) |
+| `dependencies[]` | ✅ merged into the root `package.json` (you run `pnpm install`) |
+| `dependsOn[]` | ✅ resolved recursively + topologically sorted |
+| `envVars` | ✅ reported to the user (never written to files) |
+| `scaffolds[]` | ⏳ deferred — capability scaffolding engine (issues #8/#9) |
+| `patches` | ⏳ deferred — config patch engine (issue #7) |
+
+Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like
+`api`) has *nothing* land on disk from `add` today except its skill — its workspace files wait on
+the scaffold engine. Exercise such a module through the `.dev/` playground and expect the deferred
+warning. Everything the applier does at `add` time must still be fully described by the descriptor.
 
 ## Shape of a module
 
 ```
 modules/<name>/
-  registry-item.json     # name, type, dependsOn[], dependencies[], files[], patches, agent{}
-  files/                 # template files, copied to alias targets in the consumer project
+  registry-item.json     # name, type, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
+  files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
   skills/saasaloy-<name>/  # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/saasaloy-<name>/
 ```
 
