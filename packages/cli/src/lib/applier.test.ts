@@ -316,3 +316,167 @@ describe("registry-item schema — tightened scaffolds", () => {
     expect(result.valid).toBe(false);
   });
 });
+
+// --- Config patches: applied (not deferred), array-shaped, idempotent (ADR 0019). ---
+
+// api variant that ships a real wrangler.jsonc scaffold file for `database` to patch.
+async function apiWithWrangler(): Promise<LoadedModule> {
+  return writeModule(
+    "api",
+    {
+      type: "saasaloy:capability",
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          aliases: { "@api": "apps/api/src" },
+          files: [{ path: "files/wrangler.jsonc", target: "wrangler.jsonc" }],
+        },
+      ],
+    },
+    { "files/wrangler.jsonc": '{\n  "name": "api"\n}\n' },
+  );
+}
+
+// A `database`-shaped capability: it patches the D1 binding into api's wrangler.jsonc.
+async function dbCapability(): Promise<LoadedModule> {
+  return writeModule(
+    "database",
+    {
+      type: "saasaloy:capability",
+      dependsOn: ["api"],
+      patches: [
+        {
+          file: "apps/api/wrangler.jsonc",
+          kind: "wrangler-binding",
+          bindingType: "d1_databases",
+          entry: {
+            binding: "DB",
+            database_name: "app-db",
+            database_id: "local",
+            migrations_dir: "../../packages/db/migrations",
+          },
+        },
+      ],
+      scaffolds: [
+        {
+          workspace: "packages/db",
+          aliases: { "@db": "packages/db/src" },
+          files: [{ path: "files/client.ts", target: "src/client.ts" }],
+        },
+      ],
+    },
+    { "files/client.ts": "export const x = 1;\n" },
+  );
+}
+
+describe("buildPlan — config patches", () => {
+  it("plans a patch against a same-run scaffolded file (not yet on disk)", async () => {
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWithWrangler(), await dbCapability()],
+    });
+    expect(p.patches).toHaveLength(1);
+    const patch = p.patches[0];
+    expect(patch).toMatchObject({ module: "database", file: "apps/api/wrangler.jsonc", action: "apply" });
+    expect(patch?.diff).toContain("d1_databases");
+  });
+
+  it("marks a patch unchanged when the binding is already present (idempotent)", async () => {
+    const existing = join(root, "apps", "api", "wrangler.jsonc");
+    await mkdir(dirname(existing), { recursive: true });
+    await writeFile(existing, '{\n  "d1_databases": [{ "binding": "DB" }]\n}\n', "utf8");
+    const p = await plan({ install: ["database"], modules: [await dbCapability()] });
+    expect(p.patches[0]?.action).toBe("unchanged");
+  });
+
+  it("marks a patch missing when the target is neither planned nor on disk", async () => {
+    const p = await plan({ install: ["database"], modules: [await dbCapability()] });
+    expect(p.patches[0]?.action).toBe("missing");
+  });
+});
+
+describe("executePlan — config patches", () => {
+  it("writes the binding into the scaffolded file and does not track it as managed", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWithWrangler(), await dbCapability()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+
+    const wrangler = await readFile(join(root, "apps", "api", "wrangler.jsonc"), "utf8");
+    expect(wrangler).toContain("d1_databases");
+    expect(wrangler).toContain('"binding": "DB"');
+    // The patched file stays owned by whoever scaffolded it — the patch doesn't retrack it (ADR 0019).
+    expect(manifest.managed["apps/api/wrangler.jsonc"]?.module).toBe("api");
+    expect(result.patched.map((x) => x.file)).toContain("apps/api/wrangler.jsonc");
+    expect(result.patchConflicts).toHaveLength(0);
+  });
+
+  it("is idempotent — a second apply changes nothing", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiWithWrangler(), await dbCapability()];
+    await executePlan(
+      await plan({ install: ["api", "database"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+    const before = await readFile(join(root, "apps", "api", "wrangler.jsonc"), "utf8");
+
+    const second = await plan({ install: ["api", "database"], modules: mods, config, manifest });
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.patched).toHaveLength(0);
+    expect(await readFile(join(root, "apps", "api", "wrangler.jsonc"), "utf8")).toBe(before);
+  });
+
+  it("reports a conflict when the patch target is missing", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({ install: ["database"], modules: [await dbCapability()], config, manifest });
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.patchConflicts.map((x) => x.file)).toContain("apps/api/wrangler.jsonc");
+    expect(result.patched).toHaveLength(0);
+  });
+});
+
+describe("registry-item schema — config patches", () => {
+  it("accepts a patches array of a wrangler-binding op", async () => {
+    const result = await validateRegistryItem({
+      name: "database",
+      type: "saasaloy:capability",
+      patches: [
+        {
+          file: "apps/api/wrangler.jsonc",
+          kind: "wrangler-binding",
+          bindingType: "d1_databases",
+          entry: { binding: "DB" },
+        },
+      ],
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a patch op missing its file", async () => {
+    const result = await validateRegistryItem({
+      name: "database",
+      type: "saasaloy:capability",
+      patches: [{ kind: "wrangler-binding", bindingType: "d1_databases", entry: { binding: "DB" } }],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects the legacy object-shaped patches", async () => {
+    const result = await validateRegistryItem({
+      name: "api",
+      type: "saasaloy:capability",
+      patches: {},
+    });
+    expect(result.valid).toBe(false);
+  });
+});

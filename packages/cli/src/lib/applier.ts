@@ -2,9 +2,10 @@ import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
 import type { Manifest } from "./manifest.js";
+import { applyPatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
-import type { SaasaloyConfig } from "./schema.js";
+import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy add`: turn the modules-to-install into a plan of
 // concrete file writes, classify each against the manifest's content hashes, then
@@ -49,6 +50,30 @@ export interface PlannedFile {
 //   conflict — a real dir/file or a link elsewhere sits there → don't clobber
 export type LinkAction = "create" | "exists" | "conflict";
 
+// How a planned config patch relates to its target file:
+//   apply     — target resolvable and the patch changes it → write the result
+//   unchanged — the patch is already present (idempotent no-op) → skip the write
+//   missing   — no target file (not scaffolded this run, not on disk) → can't patch
+export type PatchAction = "apply" | "unchanged" | "missing";
+
+// A structural config patch bound to a concrete target file (ADR 0019). Unlike a
+// PlannedFile it is never manifest-tracked — a patch mutates a file another module
+// owns, so it isn't a clean managed copy; clean reverse-patching on `remove` is #27.
+export interface PlannedPatch {
+  module: string;
+  /** Project-relative POSIX path of the file being patched. */
+  file: string;
+  /** Absolute path of the target file. */
+  fileAbs: string;
+  /** The op as authored (kind + payload + file) — re-applied at execute time. */
+  patch: RegistryPatch;
+  action: PatchAction;
+  /** Unified diff of the would-be change; `""` when unchanged or missing. */
+  diff: string;
+  /** The would-be content after the patch; undefined when the target is missing. */
+  content?: string;
+}
+
 // A `.claude/skills/<name>` symlink pointing at the real, committed `.agents/skills/<name>`
 // folder, so Claude Code discovers the skill while every other agent reads the files directly.
 export interface PlannedLink {
@@ -80,8 +105,8 @@ export interface Plan {
   aliases: Record<string, string>;
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
   aliasConflicts: string[];
-  /** Modules declaring non-empty `patches` — deferred to the patch engine (issue #7). */
-  deferredPatches: string[];
+  /** Structural config patches to apply (previewed against the would-be on-disk state). */
+  patches: PlannedPatch[];
 }
 
 // Recursively list files under a directory as paths relative to it (POSIX-joined).
@@ -161,7 +186,6 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const envVars: Record<string, string> = {};
-  const deferredPatches: string[] = [];
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
   // files[] can resolve against a capability's brand-new alias even when both install in
@@ -235,7 +259,43 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
 
     for (const dep of item.dependencies ?? []) dependencies.push(dep);
     for (const [key, value] of Object.entries(item.envVars ?? {})) envVars[key] = value;
-    if (item.patches && Object.keys(item.patches).length > 0) deferredPatches.push(name);
+  }
+
+  // Plan patches after every file is collected, so an op targeting a file another module
+  // scaffolds this same run previews against that file's *would-be* content, not disk. The
+  // engine is pure, so we can compute the diff up front for `--dry-run`/`--diff`; executePlan
+  // re-applies against fresh disk state (below) — the source of truth for the actual write.
+  const patches: PlannedPatch[] = [];
+  for (const name of install) {
+    for (const op of modules.get(name)?.item.patches ?? []) {
+      const fileAbs = join(root, ...op.file.split("/"));
+      // A writable planned file lands on disk before the patch runs, so preview against it.
+      // Otherwise fall back to disk (a held-back file keeps its content; or `api` from a
+      // prior run). Only genuinely-absent targets are `missing`.
+      const planned = files.find((f) => f.target === op.file);
+      let source: string | undefined;
+      if (planned && WRITABLE.has(planned.action)) {
+        source = planned.content;
+      } else if (await pathExists(fileAbs)) {
+        source = await readFile(fileAbs, "utf8");
+      } else {
+        source = planned?.content;
+      }
+      if (source === undefined) {
+        patches.push({ module: name, file: op.file, fileAbs, patch: op, action: "missing", diff: "" });
+        continue;
+      }
+      const { content, changed, diff } = applyPatch(source, op, op.file);
+      patches.push({
+        module: name,
+        file: op.file,
+        fileAbs,
+        patch: op,
+        action: changed ? "apply" : "unchanged",
+        diff,
+        content,
+      });
+    }
   }
 
   return {
@@ -247,7 +307,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     envVars,
     aliases,
     aliasConflicts,
-    deferredPatches,
+    patches,
   };
 }
 
@@ -259,6 +319,10 @@ export interface ApplyResult {
   links: PlannedLink[];
   /** Symlinks left untouched because something else already occupies their path. */
   linkConflicts: PlannedLink[];
+  /** Config patches that actually changed their target file. */
+  patched: PlannedPatch[];
+  /** Patches whose target file was absent — reported, not applied. */
+  patchConflicts: PlannedPatch[];
 }
 
 // Write the safe files, record each in the manifest with its content hash, and mark
@@ -274,6 +338,8 @@ export async function executePlan(
   const heldBack: PlannedFile[] = [];
   const links: PlannedLink[] = [];
   const linkConflicts: PlannedLink[] = [];
+  const patched: PlannedPatch[] = [];
+  const patchConflicts: PlannedPatch[] = [];
 
   for (const file of plan.files) {
     if (WRITABLE.has(file.action)) {
@@ -283,6 +349,24 @@ export async function executePlan(
       written.push(file);
     } else {
       heldBack.push(file);
+    }
+  }
+
+  // Apply structural patches after the file writes, so an op targeting a freshly-scaffolded
+  // file (e.g. `database`'s D1 binding into api's just-written wrangler.jsonc) reads the real
+  // content. Re-read disk here rather than trusting the plan's preview — the file may have been
+  // held back as drift/conflict. The engine is idempotent, so a re-apply is a clean no-op, and a
+  // patched file is deliberately *not* re-tracked in the manifest (it's another module's copy).
+  for (const p of plan.patches) {
+    if (!(await pathExists(p.fileAbs))) {
+      patchConflicts.push(p);
+      continue;
+    }
+    const source = await readFile(p.fileAbs, "utf8");
+    const { content, changed } = applyPatch(source, p.patch, p.file);
+    if (changed) {
+      await writeFile(p.fileAbs, content, "utf8");
+      patched.push(p);
     }
   }
 
@@ -314,5 +398,5 @@ export async function executePlan(
     if (!config.installed.includes(name)) config.installed.push(name);
   }
 
-  return { written, heldBack, links, linkConflicts };
+  return { written, heldBack, links, linkConflicts, patched, patchConflicts };
 }
