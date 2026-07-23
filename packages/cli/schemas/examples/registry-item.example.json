@@ -3,7 +3,7 @@
   "name": "waitlist",
   "type": "saasaloy:feature",
   "dependsOn": ["api", "database"],
-  "dependencies": ["zod"],
+  "dependencies": ["zod@4.0.5"],
   "files": [
     {
       "path": "files/api/routes/waitlist.ts",
