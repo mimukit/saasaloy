@@ -183,6 +183,6 @@ pnpm --filter web exec wrangler deploy --dry-run
 ## Not covered / needs human judgment
 - **Real authenticated Cloudflare deploy** (TC-2) — needs an account/credentials; the agent could only `--dry-run`.
 - **Browser rendering, HMR, dark mode, responsive** (TC-1, TC-3–TC-5, TC-7) — require a human eye and a running browser.
-- **Claude Code loading generated agent context** (TC-6) — needs the tool; the pipeline itself is machine-verified in `agent-view-sync-qa.md`.
-- **Windows** — the `_gitignore` rename and scaffold were verified on macOS only; symlink/junction behavior for skills is covered in `agent-view-sync-qa.md` (base ships no skills, so `.claude/skills` is empty here).
+- **Claude Code loading generated agent context** (TC-6) — needs the tool.
+- **Windows** — the `_gitignore` rename and scaffold were verified on macOS only; symlink/junction behavior for skills is untested (base ships no skills, so `.claude/skills` is empty here).
 - **`saasaloy add` / modules** — not built yet (Phase 1); this slice ends at the base.
