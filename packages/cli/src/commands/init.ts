@@ -63,6 +63,9 @@ function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }>
 export async function runInit(argv: string[]): Promise<number> {
   const positional = argv.filter((arg) => !arg.startsWith("-"));
   const force = argv.includes("--force");
+  // Skip the install prompt entirely and never run pnpm install — for scripted/CI
+  // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
+  const noInstall = argv.includes("--no-install");
   let nameArg = positional[0];
 
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
@@ -117,14 +120,16 @@ export async function runInit(argv: string[]): Promise<number> {
   // Offer to install now; on decline (or cancel) fall back to the printed steps.
   // `select` (not `confirm`) so each choice renders on its own line.
   let installed = false;
-  const wantsInstall = await select({
-    message: "Install dependencies now?",
-    options: [
-      { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
-      { value: false, label: "No, I'll run it later" },
-    ],
-    initialValue: true,
-  });
+  const wantsInstall = noInstall
+    ? false
+    : await select({
+        message: "Install dependencies now?",
+        options: [
+          { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
+          { value: false, label: "No, I'll run it later" },
+        ],
+        initialValue: true,
+      });
   if (!isCancel(wantsInstall) && wantsInstall) {
     const install = spinner();
     install.start(`Installing dependencies ${pc.dim("(pnpm install)")}`);
