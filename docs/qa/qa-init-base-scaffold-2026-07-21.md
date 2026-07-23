@@ -3,7 +3,7 @@
 _Generated 2026-07-21 · covers commits `52db5ba` (extract syncProject) → `875bd91` (init command) → `411ec03` (base template): the end-to-end slice `saasaloy init` → generated base project → `sync` → `build` → Cloudflare deploy config._
 
 ## Summary
-`saasaloy init <name>` scaffolds a near-inert Cloudflare-native base — an Astro marketing site (`apps/web`), stub `@repo/ui`, `@repo/config`, a pnpm 11 + Turborepo workspace, the `.agents/` agent layer, and a `wrangler.jsonc` for static-assets deploy — with the project name substituted throughout, then runs `sync` to generate the agent views. "Working" means: a human runs `init`, then `pnpm install && pnpm dev`, sees the landing page with their project name, navigates it, and can deploy it green to Cloudflare — all without touching the wiring.
+`saasaloy init <name>` scaffolds a near-inert Cloudflare-native base — an Astro marketing site (`apps/web`), stub `@repo/ui`, `@repo/tsconfig` (shared base tsconfig), a pnpm 11 + Turborepo workspace, the `.agents/` agent layer, and a `wrangler.jsonc` for static-assets deploy — with the project name substituted throughout, then runs `sync` to generate the agent views. "Working" means: a human runs `init`, then `pnpm install && pnpm dev`, sees the landing page with their project name, navigates it, and can deploy it green to Cloudflare — all without touching the wiring.
 
 ## Preconditions
 - Node ≥ 24, pnpm 11 (corepack will fetch the pinned version), macOS/Linux/Windows.

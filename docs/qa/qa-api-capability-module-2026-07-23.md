@@ -20,28 +20,26 @@ pnpm cli:dev            # terminal 1: rebuild the CLI on change — leave runnin
 pnpm play:init          # scaffold .dev/playground + drop the ./saasaloy shim (no install)
 cd .dev/playground
 ./saasaloy list         # api should appear (proves descriptor loads from local modules/)
-./saasaloy add api -y   # applies the saasaloy-api skill into .claude/skills/
+./saasaloy add api -y   # scaffolds apps/api + applies the saasaloy-api skill into .claude/skills/
 ```
 
-This covers the descriptor-resolution and skill-application path (relevant to TC-4/TC-5). It does **not** stand up the worker: the applier does not yet apply `scaffolds[]`/patches (issue #7), so `add api` copies the skill but not the `apps/api` scaffold — expect the "Config patches/scaffolds for api are not applied by this engine yet" notice.
+This stands up the whole `apps/api` workspace: `add api` copies the six scaffold files, registers `@api → apps/api/src` into `saasaloy.json`, and records everything in `.saasaloy/manifest.json` (scaffold applier — issue #8). `api` declares no `patches`, so no deferral notice appears. The scaffolded `package.json`/`tsconfig.json` extend `@repo/tsconfig`, which the base template now ships (`packages/tsconfig`), so the workspace installs and boots directly — no throwaway harness needed.
 
 ### Stand up the `apps/api` runtime (worker DoD — TC-1/TC-2/TC-3)
 
-Because scaffolds aren't applied by `add` yet, the worker DoD is verified with a throwaway harness under the git-ignored `.dev/` (per AGENTS.md) that copies `modules/api/files/` directly and stubs only the not-yet-existing `@repo/tsconfig` base.
-
-- Build the harness (one time, from repo root):
+Because `add api` scaffolds a real, installable `apps/api` and the base ships the `@repo/tsconfig` package it extends, the worker boots straight from the playground. From `.dev/playground` (after the `add api` above):
 
 ```sh
-mkdir -p .dev/api-dod && cp -R modules/api/files/. .dev/api-dod/
-node -e 'const fs=require("fs");const p=JSON.parse(fs.readFileSync(".dev/api-dod/package.json"));p.name="api-dod-harness";delete p.devDependencies["@repo/tsconfig"];fs.writeFileSync(".dev/api-dod/package.json",JSON.stringify(p,null,2)+"\n");fs.writeFileSync(".dev/api-dod/tsconfig.json",JSON.stringify({compilerOptions:{target:"ESNext",module:"ESNext",moduleResolution:"bundler",strict:true,skipLibCheck:true,types:["@cloudflare/workers-types","vite/client"]},include:["src","vite.config.ts"]},null,2)+"\n");'
-cd .dev/api-dod && corepack pnpm install --ignore-workspace --config.minimumReleaseAge=0 && corepack pnpm rebuild workerd esbuild
+# The scaffolded api pins very recent Cloudflare deps (workerd, wrangler, workers-types);
+# override the 3-day supply-chain cooldown for this throwaway QA install.
+corepack pnpm install --config.minimumReleaseAge=0
+
+# `pnpm dev` re-runs pnpm's supply-chain pre-check (which those recent deps trip), so launch
+# vite directly to skip it and boot the Worker on the real workerd runtime:
+cd apps/api && node_modules/.bin/vite dev
 ```
 
-- Launch the Worker locally (note the port it prints — it uses 5173, or the next free port such as 5174):
-
-```sh
-cd .dev/api-dod && corepack pnpm dev
-```
+Note the port it prints (5173, or the next free port such as 5175).
 
 ## Test cases at a glance
 
@@ -60,7 +58,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 ### TC-1 — `GET /health` is green in a browser on real `workerd`  ·  🔴 Critical
 **Steps**
-1. With the Worker running (see Preconditions), open the printed URL in a browser, e.g. `http://localhost:5174/health`.
+1. With the Worker running (see Preconditions), open the printed URL in a browser, e.g. `http://localhost:5175/health`.
 2. Observe the response body and status.
 
 **Expected**
@@ -76,13 +74,13 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 ### TC-2 — A dropped `routes/*.ts` auto-registers with no entry edit  ·  🔴 Critical
 **Steps**
 1. Keep the Worker running. Do **not** edit `src/index.ts`.
-2. Create a new file `.dev/api-dod/src/routes/ping.ts` with a Hono sub-app that returns `{"pong":true}` at `/`:
+2. Create a new file `.dev/playground/apps/api/src/routes/ping.ts` with a Hono sub-app that returns `{"pong":true}` at `/`:
 
 ```sh
-printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c) => c.json({ pong: true }));\nexport default ping;\n' > .dev/api-dod/src/routes/ping.ts
+printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c) => c.json({ pong: true }));\nexport default ping;\n' > .dev/playground/apps/api/src/routes/ping.ts
 ```
 
-3. In the browser, load `http://localhost:5174/ping` (adjust the port to match).
+3. In the browser, load `http://localhost:5175/ping` (adjust the port to match).
 4. Confirm you never touched `src/index.ts` (its file mtime / editor tab is unchanged).
 
 **Expected**
@@ -97,9 +95,9 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 
 ### TC-3 — The mount-relative path rule behaves as the runbook claims  ·  🟡 Normal
 **Steps**
-1. Edit `.dev/api-dod/src/routes/ping.ts` and change the handler path from `"/"` to `"/ping"` (the mistake the runbook warns about).
-2. Reload `http://localhost:5174/ping` in the browser.
-3. Then load `http://localhost:5174/ping/ping`.
+1. Edit `.dev/playground/apps/api/src/routes/ping.ts` and change the handler path from `"/"` to `"/ping"` (the mistake the runbook warns about).
+2. Reload `http://localhost:5175/ping` in the browser.
+3. Then load `http://localhost:5175/ping/ping`.
 
 **Expected**
 - `GET /ping` now returns 404 (the handler no longer matches the mount root).
@@ -158,7 +156,7 @@ printf 'import { Hono } from "hono";\nconst ping = new Hono();\nping.get("/", (c
 - [ ] Fail
 
 ## Regression checks
-- [ ] CLI test suite still passes (see Automated verification — 39 tests).
+- [ ] CLI test suite still passes (see Automated verification — 49 tests).
 - [ ] `registry-item.json` still validates against `registry-item.schema.json` (see Automated verification).
 - [ ] The build-spec §3.3 and schema `registry-item.example.json` examples still parse and now show the `saasaloy-`-prefixed skill path.
 - [ ] No unrelated files changed — the diff is confined to the `api` module, its docs, and the convention docs.
@@ -169,28 +167,30 @@ _Checks the agent ran itself — no action needed from the tester; listed here f
 Commands run (grouped where related):
 
 ```sh
-corepack pnpm -r test
+pnpm --filter saasaloy test   # applier + schema unit tests
 node -e '/* ajv 2020 compile of registry-item.schema.json against modules/api/registry-item.json */'
 grep -m1 "^name:" modules/api/skills/saasaloy-api/SKILL.md
 grep compatibility_date modules/api/files/wrangler.jsonc
-# .dev/api-dod harness on real workerd:
-corepack pnpm install --ignore-workspace --config.minimumReleaseAge=0 && corepack pnpm rebuild workerd esbuild
-corepack pnpm dev   # → vite dev on workerd
+# real end-to-end add → install → boot in .dev/playground:
+pnpm run play:reset
+(cd .dev/playground && SAASALOY_REGISTRY_DIR=…/modules ./saasaloy add api -y)
+(cd .dev/playground && corepack pnpm install --config.minimumReleaseAge=0)
+(cd .dev/playground/apps/api && node_modules/.bin/vite dev)   # → workerd runtime
 # probes via node fetch:
-fetch /health ; (drop routes/ping.ts) ; fetch /ping ; fetch /health
+fetch /health ; (drop routes/ping.ts) ; fetch /ping
 ```
 
-- ✅ `corepack pnpm -r test` → **6 files, 39 tests, all passed**.
-- ✅ Schema validation → `registry-item.json` **VALID**; `agent.skills = ["skills/saasaloy-api"]`, `dependsOn = []`.
+- ✅ `pnpm --filter saasaloy test` → **7 files, 49 tests, all passed** (10 new in `applier.test.ts` cover scaffold planning, alias registration, same-run alias resolution, and conflict hold-back).
+- ✅ Schema validation → `registry-item.json` **VALID** against the tightened `scaffolds` schema; `agent.skills = ["skills/saasaloy-api"]`, `dependsOn = []`.
 - ✅ Shipped skill frontmatter → `name: saasaloy-api` (folder `skills/saasaloy-api/` matches).
-- ✅ `compatibility_date` → `2026-07-21`, matching the runtime embedded in the pinned `wrangler@4.113.0` (`workerd@1.20260721.1`); harness booted cleanly, confirming the date is not ahead of the runtime.
-- ✅ Harness install + `workerd` binary fetch → succeeded; `vite dev` came up on the real `workerd` runtime (v8.1.5).
+- ✅ **Scaffold applier** → `./saasaloy add api -y` created `apps/api/{package.json,tsconfig.json,wrangler.jsonc,vite.config.ts,src/index.ts,src/routes/health.ts}`, registered `@api → apps/api/src` in `saasaloy.json`, and recorded all seven files (incl. the skill) in `.saasaloy/manifest.json`. A second `add api` (no `--force`) correctly no-ops.
+- ✅ Real install + boot → the base now ships `@repo/tsconfig`, so `pnpm install` resolved the scaffolded workspace and `vite dev` came up on the real `workerd` runtime (vite v8.1.5). No `.dev/` harness needed.
 - ✅ **DoD criterion 1** → `GET /health → 200 {"status":"ok"}` on `workerd`.
-- ✅ **DoD criterion 2** → dropped `src/routes/ping.ts` with no edit to `src/index.ts` → `GET /ping → 200 {"pong":true}`; `GET /health` still `200 {"status":"ok"}`. Auto-registration proven.
+- ✅ **DoD criterion 2** → dropped `src/routes/ping.ts` with no edit to `src/index.ts` → `GET /ping → 200 {"pong":true}`; `GET /health` still `200 {"status":"ok"}`. Auto-registration proven end-to-end from a real `add`.
 - ✅ Stale-reference scan → the only remaining bare `skills/api` string is inside ADR 0014, which intentionally documents the `skills/api/ → skills/saasaloy-api/` rename.
 
 ## Not covered / needs human judgment
 - **Real edge `wrangler deploy`** — deliberately out of scope; deployment is the future `infra` capability's job (issue #29). The DoD is local `workerd` only.
-- **Real `saasaloy add` run** — the applier is a Phase-1 stub and no `templates/base` exists in-repo, so the module is validated against conventions and via the `.dev/` harness, not an end-to-end install. The `@repo/tsconfig` extends and the `pnpm-workspace.yaml` `apps/*` glob (which keeps `patches` empty) are assumptions that only resolve once the base template lands.
+- **End-to-end `add` → `pnpm install` → boot** — now **covered** (see Automated verification): the scaffold applier lands `apps/api`, the base ships the `@repo/tsconfig` it extends, `pnpm install` discovers the new workspace via the `apps/*` glob (so `patches` stays empty), and the Worker boots green on `workerd`. Retained here only as a note that a tester can reproduce it from `.dev/playground`.
 - **Prose quality / reviewer legibility** of the runbook and ADRs (TC-4/5/6) — inherently a human read; the agent can confirm consistency of paths and names but not whether the guidance actually *teaches*.
 - **`.claude/skills/` collision avoidance in a real consumer** — ADR 0014's core motivation (a `saasaloy-api` skill not clobbering a user's own `api` skill) can only be fully observed once the applier copies skills into a real project.
