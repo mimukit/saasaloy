@@ -1,0 +1,22 @@
+{
+  "name": "@repo/db",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "db:generate": "drizzle-kit generate",
+    "db:migrate:local": "wrangler d1 migrations apply DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state",
+    "db:migrate:prod": "wrangler d1 migrations apply DB --remote --config ../../apps/api/wrangler.jsonc",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "drizzle-orm": "0.44.5"
+  },
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260723.1",
+    "@repo/tsconfig": "workspace:*",
+    "drizzle-kit": "0.31.5",
+    "typescript": "7.0.2",
+    "vite": "8.1.5",
+    "wrangler": "4.113.0"
+  }
+}

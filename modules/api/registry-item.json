@@ -5,7 +5,7 @@
   "dependsOn": [],
   "dependencies": [],
   "envVars": {},
-  "patches": {},
+  "patches": [],
   "files": [],
   "scaffolds": [
     {
