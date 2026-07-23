@@ -23,7 +23,8 @@ today, and will apply the moment their engines land, with no descriptor changes 
 | --- | --- |
 | `files[]` | ✅ copied to their `@alias` targets |
 | `agent.skills[]` | ✅ copied into `.claude/skills/saasaloy-<name>/` (recorded in the manifest) |
-| `dependencies[]` | ✅ merged into the root `package.json` (you run `pnpm install`) |
+| `dependencies[]` | ✅ merged into the consumer's `dependencies` (you run `pnpm install`) |
+| `devDependencies[]` | ✅ merged into the consumer's `devDependencies` (`@types/*`, build tooling) |
 | `dependsOn[]` | ✅ resolved recursively + topologically sorted |
 | `envVars` | ✅ reported to the user (never written to files) |
 | `scaffolds[]` | ⏳ deferred — capability scaffolding engine (issues #8/#9) |
@@ -68,7 +69,8 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
   "name": "waitlist",
   "type": "saasaloy:feature",                 // or "saasaloy:capability"
   "dependsOn": ["api", "database"],           // capabilities this needs; resolved recursively
-  "dependencies": ["zod"],                    // npm deps added to the consumer
+  "dependencies": ["zod@4.0.5"],              // consumer `dependencies` — exact-pinned name@version
+  "devDependencies": ["@types/node@26.1.1"],  // optional — consumer `devDependencies` (@types/*, tooling)
   "files": [
     { "path": "files/api/routes/waitlist.ts",          "target": "@api/routes/waitlist.ts" },
     { "path": "files/db/schema/waitlist.ts",           "target": "@db/schema/waitlist.ts" },
@@ -90,11 +92,16 @@ Field notes:
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
   skill/README rather than in `dependsOn`.
-- **`dependencies`** — npm packages (distinct from `dependsOn`, which is *inter-module*). **One
-  source of truth per workspace:** a **capability** owns the `package.json` it scaffolds, so it
-  declares its deps *there* and leaves descriptor `dependencies[]` **empty**; a **feature** owns no
-  `package.json`, so it lists npm deps in `dependencies[]` and the applier merges them into the
-  target workspace's `package.json`. Never declare the same dep in both places.
+- **`dependencies` / `devDependencies`** — npm packages (distinct from `dependsOn`, which is
+  *inter-module*), merged into the consumer's `dependencies` / `devDependencies` respectively —
+  put `@types/*` and build tooling in `devDependencies[]`. **Both are exact-pinned `name@version`**
+  (`zod@4.0.5`); the schema rejects bare names and ranges. Author a version by hand or leave the
+  entry out and run `pnpm deps:update` to fill/refresh it (it also enforces the 3-day cooldown). A
+  name declared in both buckets lands in `dependencies` only. **One source of truth per workspace:**
+  a **capability** owns the `package.json` it scaffolds, so it declares its deps *there* and leaves
+  the descriptor buckets **empty**; a **feature** owns no `package.json`, so it lists npm deps here
+  and the applier merges them into the target workspace's `package.json`. Never declare the same dep
+  in both places.
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
   `@web`→`apps/web/src`, `@api`→`apps/api/src`, `@admin`→`apps/admin/src`, `@db`→`packages/db/src`,
@@ -202,7 +209,8 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 
 - [ ] `modules/<name>/registry-item.json` present, `name` matches the directory.
 - [ ] `type` is `saasaloy:capability` or `saasaloy:feature` (capabilities carry `scaffolds`).
-- [ ] Every needed capability is in `dependsOn`; every npm import is in `dependencies`.
+- [ ] Every needed capability is in `dependsOn`; every npm import is exact-pinned in
+      `dependencies`/`devDependencies` (`name@version`; `pnpm deps:update` fills versions).
 - [ ] Each `files[]` target uses a `@alias` and lands in a convention folder where possible.
 - [ ] `patches` is empty unless a change is genuinely structural (with a note on why).
 - [ ] `envVars` lists any required keys; no secrets baked into files.

@@ -316,3 +316,60 @@ describe("registry-item schema — tightened scaffolds", () => {
     expect(result.valid).toBe(false);
   });
 });
+
+describe("buildPlan — dep buckets", () => {
+  it("aggregates dependencies and devDependencies into parallel plan arrays", async () => {
+    const mod = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        dependencies: ["zod@4.0.5"],
+        devDependencies: ["@types/node@26.1.1"],
+      },
+      {},
+    );
+    const p = await plan({ install: ["waitlist"], modules: [mod] });
+    expect(p.dependencies).toEqual(["zod@4.0.5"]);
+    expect(p.devDependencies).toEqual(["@types/node@26.1.1"]);
+  });
+});
+
+describe("registry-item schema — pinned deps", () => {
+  it("accepts exact-pinned dependencies (plain and scoped)", async () => {
+    const result = await validateRegistryItem({
+      name: "waitlist",
+      type: "saasaloy:feature",
+      dependencies: ["zod@4.0.5"],
+      devDependencies: ["@types/node@26.1.1"],
+    });
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a bare (un-pinned) dependency", async () => {
+    const result = await validateRegistryItem({
+      name: "waitlist",
+      type: "saasaloy:feature",
+      dependencies: ["zod"],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a floating-range dependency", async () => {
+    const result = await validateRegistryItem({
+      name: "waitlist",
+      type: "saasaloy:feature",
+      dependencies: ["zod@^4.0.5"],
+    });
+    expect(result.valid).toBe(false);
+  });
+
+  it("rejects a bare devDependency", async () => {
+    const result = await validateRegistryItem({
+      name: "waitlist",
+      type: "saasaloy:feature",
+      devDependencies: ["@types/node"],
+    });
+    expect(result.valid).toBe(false);
+  });
+});

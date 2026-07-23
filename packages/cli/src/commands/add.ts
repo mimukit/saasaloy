@@ -118,6 +118,9 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   if (plan.dependencies.length > 0) {
     lines.push(pc.dim(`deps: ${plan.dependencies.join(", ")}`));
   }
+  if (plan.devDependencies.length > 0) {
+    lines.push(pc.dim(`devDeps: ${plan.devDependencies.join(", ")}`));
+  }
   note(wrapForNote(lines.join("\n")), "Plan");
 
   if (Object.keys(plan.envVars).length > 0) {
@@ -288,19 +291,22 @@ export async function runAdd(argv: string[]): Promise<number> {
     // Merge npm deps into the project root package.json (best-effort — never blocks the apply).
     const pkg = await readRootPackageJson(root);
     let depsAdded: string[] = [];
-    if (plan.dependencies.length > 0) {
+    const allDeps = [...plan.dependencies, ...plan.devDependencies];
+    if (allDeps.length > 0) {
       if (pkg) {
-        const { added, conflicts } = planDeps(pkg, plan.dependencies);
-        await writeDeps(root, pkg, added);
-        depsAdded = added.map((d) => d.name);
+        const { added, devAdded, conflicts } = planDeps(
+          pkg,
+          plan.dependencies,
+          plan.devDependencies,
+        );
+        await writeDeps(root, pkg, added, devAdded);
+        depsAdded = [...added, ...devAdded].map((d) => d.name);
         for (const conflict of conflicts) {
           log.warn(`Dependency version conflict — ${conflict}.`);
         }
       } else {
         // Best-effort means "don't block", not "fail silently".
-        log.warn(
-          `No package.json at the project root — add ${plan.dependencies.join(", ")} yourself.`,
-        );
+        log.warn(`No package.json at the project root — add ${allDeps.join(", ")} yourself.`);
       }
     }
 

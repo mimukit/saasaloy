@@ -21,7 +21,10 @@
     "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force --no-install && cp scripts/saasaloy-shim.sh .dev/playground/saasaloy && chmod +x .dev/playground/saasaloy",
     "play:destroy": "rm -rf .dev/playground",
     "play:reset": "pnpm run play:destroy && pnpm run play:init",
-    "play:watch": "node scripts/watch-template.mjs"
+    "play:watch": "node scripts/watch-template.mjs",
+    "deps:check": "node scripts/update-deps.mjs --check",
+    "deps:update": "node scripts/update-deps.mjs",
+    "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && pnpm -C .dev/playground typecheck"
   },
   "devDependencies": {
     "turbo": "2.10.5",

@@ -72,3 +72,43 @@ pnpm play:destroy       # remove .dev/playground entirely
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
 
+## Updating dependencies
+
+Saasaloy ships dependency versions to downstream projects from two sets of files that
+**pnpm's own tooling can't see** — the base template (`packages/cli/templates/base/**/package.json`)
+and the module descriptors (`modules/*/registry-item.json` `dependencies[]` / `devDependencies[]`).
+They aren't pnpm workspace members, so `pnpm outdated` / `pnpm update` never touch them, and because
+we pin **exact** versions there's nothing for pnpm's install-time `minimumReleaseAge` cooldown to
+resolve either. A dedicated maintainer command owns these files:
+
+```sh
+pnpm deps:check     # read-only drift report (exits non-zero when deps:update would change something)
+pnpm deps:update    # rewrite template + descriptor deps to the resolved exact versions
+pnpm deps:verify    # re-scaffold .dev/playground, install, build + typecheck the generated project
+```
+
+The recommended flow is **`deps:check` → `deps:update` → `deps:verify`**, then review the diff and
+commit. `deps:update` only edits the working tree — it never commits.
+
+**Resolution policy** (see [ADR 0016](docs/adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
+per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores
+`dist-tags`** (never trusts `latest`), caps at the **highest eligible version within the current
+major**, and requires the publish time to clear `minimumReleaseAge` (read from `pnpm-workspace.yaml`).
+Everything is pinned **exact**. Each manifest resolves independently; a shared dep whose major
+diverges from the repo's own pin is printed as an informational note.
+
+- `--allow-major` — cross a major (surfaced as `major-available` until you opt in). Majors are where
+  the template breaks (`astro 5→6`, `wrangler 4→5`), so each is blessed deliberately.
+- `--allow-fresh` — override the cooldown for a knowing security-fix bump (the audited path;
+  replaces `minimumReleaseAgeExclude`).
+- `--dry-run` — print the diff without writing.
+
+**Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
+repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
+
+| Script | What it does |
+| --- | --- |
+| `pnpm deps:check` | report drift; non-zero exit iff a default `deps:update` would change something |
+| `pnpm deps:update` | rewrite template + descriptor deps to exact (`--allow-major`, `--allow-fresh`, `--dry-run`) |
+| `pnpm deps:verify` | `play:init` → install → build → typecheck the generated project (post-update gate) |
+
