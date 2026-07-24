@@ -59,7 +59,7 @@ pnpm --filter @repo/db typecheck
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Drop a table → `db:generate` emits reviewable SQL  ·  🔴 Critical
@@ -89,7 +89,7 @@ pnpm --filter @repo/db db:generate
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — `db:migrate:local` + route round-trips a row via `c.env.DB`  ·  🔴 Critical
@@ -116,7 +116,7 @@ curl http://localhost:5173/waitlist
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Barrel auto-exports a second dropped table (no edits)  ·  🟡 Normal
@@ -136,7 +136,7 @@ pnpm --filter @repo/db db:generate
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Re-add `database` does not clobber the patched binding  ·  🟡 Normal
@@ -155,7 +155,7 @@ pnpm --filter @repo/db db:generate
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Version pins resolve under the release-age cooldown  ·  🟡 Normal
@@ -168,7 +168,7 @@ pnpm --filter @repo/db db:generate
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Repository pattern typechecks against a directly-imported table  ·  🟡 Normal
@@ -195,7 +195,7 @@ pnpm --filter @repo/db typecheck
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — Remote flow reads correctly  ·  🟢 Low
@@ -209,13 +209,13 @@ pnpm --filter @repo/db typecheck
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `./saasaloy add api` alone still scaffolds `apps/api` and its `routes/health.ts` (the `database` change didn't disturb the api capability).
-- [ ] `apps/api` still builds/serves the `/health` route after the wrangler.jsonc patch.
-- [ ] Skill symlinks for **both** `saasaloy-api` and `saasaloy-database` are created under `.claude/skills/` pointing into `.agents/skills/`.
+- [x] `./saasaloy add api` alone still scaffolds `apps/api` and its `routes/health.ts` (the `database` change didn't disturb the api capability).
+- [x] `apps/api` still builds/serves the `/health` route after the wrangler.jsonc patch.
+- [x] Skill symlinks for **both** `saasaloy-api` and `saasaloy-database` are created under `.claude/skills/` pointing into `.agents/skills/`.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
