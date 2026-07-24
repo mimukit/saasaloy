@@ -269,7 +269,7 @@ node scripts/update-deps.mjs --yes | cat                  # piped/non-TTY apply:
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
