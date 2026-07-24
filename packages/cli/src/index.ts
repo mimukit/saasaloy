@@ -6,6 +6,7 @@ import pc from "picocolors";
 import { runAdd } from "./commands/add.js";
 import { runInit } from "./commands/init.js";
 import { runList } from "./commands/list.js";
+import { runRemove } from "./commands/remove.js";
 
 interface Command {
   describe: string;
@@ -20,6 +21,10 @@ const COMMANDS: Record<string, Command> = {
   add: {
     describe: "apply a module into the current project (resolves dependsOn)",
     run: runAdd,
+  },
+  remove: {
+    describe: "undo a module's applied files via the manifest (offline)",
+    run: runRemove,
   },
   list: {
     describe: "list available modules",
