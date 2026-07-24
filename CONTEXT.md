@@ -15,7 +15,7 @@ The near-inert scaffold `saasaloy init` produces: `apps/web` (Astro) + `packages
 A unit of capability or feature installed by `saasaloy add`.
 
 ### Capability module
-A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, and the Phase-3 set (`queue`, `storage`, `cron`, `kv`, `realtime`, `ai`, `observability`, `ratelimit`).
+A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, and the Phase-3 set (`queue`, `storage`, `cron`, `kv`, `realtime`, `ai`, `observability`, `ratelimit`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …

@@ -51,7 +51,10 @@ authoring first; it drives everything else.
 
 - **Capability module** — `api`, `database`, `email`, `auth`, `admin`. Scaffolds a new app or
   package **and establishes a convention-based extension point** other modules drop into.
-  Carries `scaffolds` (new workspaces) and usually the structural `patches`.
+  Carries `scaffolds` (new workspaces) and usually the structural `patches`. A capability built
+  on a vendor SDK (`database` → `drizzle-orm`, `auth` → `better-auth`) **encapsulates it**: the
+  scaffolded workspace owns the npm dep and exports project-facing utilities; no other workspace
+  imports the vendor package directly (ADR 0020).
 - **Feature module** — `waitlist`, `billing`, `teams`, … Extends existing capabilities *purely
   by dropping files into their conventions*, and declares `dependsOn` for the capabilities it
   needs. A feature rarely needs `patches` at all.
@@ -101,7 +104,9 @@ Field notes:
   a **capability** owns the `package.json` it scaffolds, so it declares its deps *there* and leaves
   the descriptor buckets **empty**; a **feature** owns no `package.json`, so it lists npm deps here
   and the applier merges them into the target workspace's `package.json`. Never declare the same dep
-  in both places.
+  in both places. A feature extending a capability's vendor SDK (e.g. `billing` adding
+  `@better-auth/stripe`) targets the capability's workspace, so the plugin dep merges into *that*
+  workspace's `package.json` — vendor packages stay inside the capability that owns them (ADR 0020).
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
   `@web`→`apps/web/src`, `@api`→`apps/api/src`, `@admin`→`apps/admin/src`, `@db`→`packages/db/src`,
