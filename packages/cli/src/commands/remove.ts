@@ -60,6 +60,14 @@ const FILE_ACTION_LABEL: Record<FileRemoveAction, string> = {
   missing: pc.dim("missing → untrack"),
 };
 
+// Under --yes the confirm loop never runs (see the `if (!opts.yes)` gate below), so a
+// drifted file always survives untracked rather than pausing for a prompt — label it
+// accordingly instead of implying a confirmation that won't happen.
+function fileActionLabel(action: FileRemoveAction, yes: boolean): string {
+  if (action === "drift" && yes) return pc.yellow("drift → kept (untracked)");
+  return FILE_ACTION_LABEL[action];
+}
+
 const LINK_ACTION_LABEL: Record<LinkRemoveAction, string> = {
   remove: pc.red("unlink"),
   missing: pc.dim("missing"),
@@ -79,18 +87,17 @@ function renderDeleteDiff(file: PlannedRemoveFile): string {
   return shown.join("\n");
 }
 
-function summarizeRemovePlan(plan: RemovePlan, name: string): void {
+function summarizeRemovePlan(plan: RemovePlan, name: string, yes: boolean): void {
   const lines = [`will remove: ${pc.cyan(name)}`, ""];
   for (const file of plan.files) {
-    lines.push(`  ${FILE_ACTION_LABEL[file.action]}  ${file.target}`);
+    lines.push(`  ${fileActionLabel(file.action, yes)}  ${file.target}`);
   }
   const toDelete = plan.files.filter((f) => f.action === "delete").length;
   const drifted = plan.files.filter((f) => f.action === "drift").length;
   const missing = plan.files.filter((f) => f.action === "missing").length;
   lines.push("");
-  lines.push(
-    pc.dim(`${toDelete} file(s) to delete, ${drifted} drifted (need confirmation), ${missing} already missing`),
-  );
+  const driftNote = yes ? "kept untracked" : "need confirmation";
+  lines.push(pc.dim(`${toDelete} file(s) to delete, ${drifted} drifted (${driftNote}), ${missing} already missing`));
   note(wrapForNote(lines.join("\n")), "Plan");
 
   const ownedLinks = plan.links.filter((l) => l.action !== "missing");
@@ -98,13 +105,8 @@ function summarizeRemovePlan(plan: RemovePlan, name: string): void {
     const linkLines = ownedLinks.map((l) => `${LINK_ACTION_LABEL[l.action]}  ${l.path}`);
     note(wrapForNote(linkLines.join("\n")), "Skill links");
   }
-  for (const link of plan.links) {
-    if (link.action === "conflict") {
-      log.warn(
-        `Skill link ${pc.cyan(link.path)} isn't ours to remove — left untouched ${pc.dim("(something else occupies it)")}.`,
-      );
-    }
-  }
+  // Conflicted skill links are warned about once, post-execute (see `result.linkConflicts`
+  // below) — that reflects what actually happened, so we don't also warn here from the plan.
 
   // A dependents refusal (without --force) returns before this is ever called, so
   // reaching here with dependents means --force is overriding it.
@@ -181,12 +183,12 @@ export async function runRemove(argv: string[]): Promise<number> {
       return 1;
     }
 
-    summarizeRemovePlan(plan, name);
+    summarizeRemovePlan(plan, name, opts.yes);
 
     if (opts.diff) {
       for (const file of plan.files) {
         if (file.action === "missing") continue;
-        note(renderDeleteDiff(file), `${FILE_ACTION_LABEL[file.action]}  ${file.target}`);
+        note(renderDeleteDiff(file), `${fileActionLabel(file.action, opts.yes)}  ${file.target}`);
       }
     }
 
