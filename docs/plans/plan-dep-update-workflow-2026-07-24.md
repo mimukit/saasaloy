@@ -27,6 +27,7 @@ The maintainer has no way to know when these drift behind the npm registry, and 
 | **Scope boundary** | The workflow covers only the "invisible" files. The scanner discovers **three** manifest classes: base template package.jsons, `modules/*/registry-item.json` descriptors, and scaffolded `modules/*/files/**/package.json` (no-op until `create-module` ships one, but wired now). The tool repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated`/`pnpm update` — not re-implemented here. |
 | **Verify** | Reuses existing `play:*` scripts rather than new infra: after a bump, re-scaffold `.dev/playground`, **install** (`play:init` runs `--no-install`), then build/typecheck the *generated* project. Optional local gate (honoring the "local, not a CI/bot gate" choice) because a bad bump breaks consumers' apps, not this repo's build. |
 | **`deps:check` exit code** | Non-zero **only on what a default `deps:update` would change**: `outdated` (within major), `range→exact`, `bare→pinned`. Exit **zero** (still reported) on `major-available` (needs `--allow-major`) and `within-cooldown` (transient, clears itself) — so a pre-push gate goes red exactly when plain `deps:update` would produce a diff, and never flakily. |
+| **Output/DX stack** (Phase 7) | Reuse the CLI's `@clack/prompts` + `picocolors` (already lockfile deps via `packages/cli`) instead of raw `console.log`; add both as root `devDependencies`. Deliberately **drops the "zero-dep" constraint for this one maintainer script** — it's never shipped downstream and already assumes a pnpm install. Replicates `npm-check-updates` DX: semver-colored diffs, semver-grouped report, spinner, and an interactive `-i` multiselect. Presentation only — resolver/write logic unchanged. |
 
 ## Approach
 
@@ -82,6 +83,20 @@ Prove a bump doesn't break a generated project before it reaches consumers.
 - Add a short "Updating dependencies" section to `CONTRIBUTING.md` / `AGENTS.md` describing `deps:check` → `deps:update` → `deps:verify` and the exact-pin + cooldown + within-major rules (plus the `--allow-major` / `--allow-fresh` escape hatches).
 - Note the scope boundary (workspace deps use `pnpm outdated`; these commands own template + descriptors).
 
+### Phase 7 — Interactive DX & output polish (npm-check-updates parity)
+The script works (Phases 3–4) but its output is a flat `console.log` dump. This phase brings the report and update flow up to the DX bar set by [`npm-check-updates`](https://github.com/raineorshine/npm-check-updates) (`-i`), reusing the CLI's existing `@clack/prompts` + `picocolors` stack. **Presentation-layer only — the resolver, status decision, discovery, and `writeUpdates` logic from Phases 3–4 are untouched.** (Researched 2026-07-24; see `docs/research/` if saved.)
+
+- **Adopt `@clack/prompts` + `picocolors`** — add both as **root `devDependencies`** (already in the lockfile via `packages/cli`; `@clack/prompts` 1.7.0, `picocolors` 1.1.1). This drops the file's literal "zero-dep" header comment; justified because it's a maintainer-only script run via `pnpm deps:*` (never shipped downstream), and the pnpm install it already relies on makes both deps present.
+- **Semver-colored diffs** (ncu's scheme): color the `→ target` token **red = major**, **cyan = minor**, **green = patch** by comparing `parseStable(cur)` vs `target`. Dim the unchanged version prefix so only the changed segment stands out. Status tags keep their own accents (`within-cooldown` dim/yellow, `major-available` red, `range→exact`/`bare→pinned` cyan).
+- **Grouped output** (ncu's default `group` format): bucket rows under **Patch / Minor / Major** (plus a `range→exact` / `bare→pinned` migration group) instead of the flat per-file dump; render each group with clack `note()`. Reuse `stripAnsi` / `wrapForNote` from `packages/cli/src/lib/tui.ts` — duplicate the two tiny helpers into the script rather than importing across the package boundary from a root `.mjs`.
+- **Spinner** during the registry fan-out: wrap the `resolveVersion` loop in clack `spinner()` (`start`/`stop`) so the network wait shows progress instead of silence.
+- **Interactive mode** — new `-i` / `--interactive` flag. After the grouped report, if there are actionable rows, prompt a clack `multiselect` of them → filter `rows` to the picked set → hand to the **unchanged** `writeUpdates()`. Clack parity notes:
+  - **No native "toggle-all"** (ncu's `a` key). Invert the default instead: `initialValues` = **all actionable rows** (opt-out — "update everything, deselect exceptions"), which fits this workflow better than ncu's opt-in. *(Open question below — confirm opt-out vs opt-in.)*
+  - `required: false` so an empty selection cleanly means "update nothing."
+  - `maxItems` to scroll long lists.
+- **Banner**: wrap the run in `intro(pc.bgCyan(pc.black(" deps:update ")))` / `outro(...)`, matching `packages/cli/src/commands/list.ts`.
+- **Guard non-interactive paths**: never prompt under `--check`, and gate `-i` on `process.stdout.isTTY` so CI/non-TTY runs fall through to the existing report. `--check` output stays byte-compatible enough for a pre-push gate; colors auto-disable when not a TTY (picocolors default).
+
 ## Resolved questions
 
 All open questions were settled during a grill session (2026-07-24):
@@ -92,6 +107,11 @@ All open questions were settled during a grill session (2026-07-24):
 - **Scaffolded workspace manifests** → **in scope now** as a third discovery glob (`modules/*/files/**/package.json`); a no-op until `create-module` ships one, but wired.
 - **`@types/*` / peer deps** → add descriptor **`devDependencies[]`** now (applier feature, Phase 2), routed to the consumer's `devDependencies`, exact-pinned like everything else. **Defer `peerDependencies[]`** until a real peer forces the exact-vs-range decision.
 - **Prerelease / `dist-tag` handling** → resolver enumerates the `versions` map, **drops prereleases, and ignores `dist-tags` entirely** (never trusts `latest`).
+
+### Open (Phase 7 DX)
+
+- **Interactive default — opt-out vs opt-in.** Plan currently favors **opt-out** (`multiselect` pre-selects all actionable rows; maintainer deselects), inverting ncu's opt-in `a`-toggle-all because clack has no native toggle-all and "update all drift" is the intended default. Confirm before building.
+- **`major-available` coloring** — those rows are informational (only written under `--allow-major`); decide whether they render red (severity) or dim (not-actioned-by-default).
 
 ## Non-goals
 
