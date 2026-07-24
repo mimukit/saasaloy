@@ -2,6 +2,11 @@
   "name": "@repo/db",
   "private": true,
   "type": "module",
+  "exports": {
+    "./client": "./src/client.ts",
+    "./schema/*": "./src/schema/*.ts",
+    "./repositories/*": "./src/repositories/*.ts"
+  },
   "scripts": {
     "db:generate": "drizzle-kit generate",
     "db:migrate:local": "wrangler d1 migrations apply DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state",
