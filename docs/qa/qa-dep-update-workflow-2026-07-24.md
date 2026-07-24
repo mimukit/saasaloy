@@ -101,6 +101,7 @@ git checkout -- packages/cli/templates modules
 ```
 
 **Expected**
+- After you press Enter (and before the confirm), a bright **Selected N updates** box lists the chosen bumps in bold, solid colors — a legible recap of what's about to be written.
 - Every rewritten value is an **exact** version (no `^`/`~`/ranges remain in touched entries).
 - `workspace:*`, `@repo/*`, `{{PROJECT_NAME}}`, and `engines`/`packageManager` are **untouched**.
 - Key order and formatting (2-space, trailing newline) are preserved — the diff shows only the version strings changing.
@@ -109,7 +110,7 @@ git checkout -- packages/cli/templates modules
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Majors cross only on purpose — via the picker's Major group or `--allow-major`  ·  🟡 Normal
@@ -140,7 +141,7 @@ node scripts/update-deps.mjs --dry-run --allow-major   # majors now crossed
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — `--allow-fresh` overrides the cooldown for a within-cooldown dep  ·  🟡 Normal
@@ -161,7 +162,7 @@ node scripts/update-deps.mjs --dry-run --allow-fresh
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — `saasaloy add` shows `devDeps` and lands them in `devDependencies`  ·  🟡 Normal
@@ -201,7 +202,7 @@ git checkout -- modules/api/registry-item.json
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — create-module guidance reads correctly for a descriptor author  ·  🟢 Low
@@ -222,21 +223,23 @@ Docs UX — an author following the skill should end up with a valid pinned desc
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Interactive `deps:update` — select + confirm, majors opt-in, cancel is safe  ·  🔴 Critical
 This is the headline of the merge: `deps:update` in a TTY is now a grouped picker (within-major bumps pre-checked, majors unchecked) followed by a confirm, and nothing is written until you say Yes. Only a human can drive it, so this is the core manual case.
 
+> ⟳ **Re-test needed** (flow changed by the 2026-07-24 feedback pass): `--dry-run` is now **print-only** — it never opens the picker — so explore the picker with a **real** run and lean on the safe-exit paths (cancel / decline / select-none all write nothing). There is also a new **Selected N updates** summary box between the picker and the confirm.
+
 **Steps**
-1. Launch a dry-run in a real (TTY) terminal so you can learn the controls without writing. Add `--allow-fresh` so there are pre-checked within-major rows to see today (otherwise only the unchecked **Major** group appears):
+1. Launch a **real** run in a TTY (the safe-exit paths below write nothing, so you can learn the controls without touching files). Add `--allow-fresh` so there are pre-checked within-major rows to see today (otherwise only the unchecked **Major** group appears):
 
 ```sh
-node scripts/update-deps.mjs --dry-run --allow-fresh
+node scripts/update-deps.mjs --allow-fresh
 ```
 
 2. Confirm the group picker appears (`Select updates to apply`) with the bump groups (**Patch / Minor / Pin / migrate to exact**) rows **pre-checked**, and any **Major — crosses a major…** group present but **unchecked**. Each row reads `name [dev]  current → target`, with the manifest path as the hint.
-3. **Deselect one** pre-checked bump (Space), leave the rest, Enter. At `Apply N updates?` choose **Yes**. Read the `would update` step lines + outro count.
+3. **Deselect one** pre-checked bump (Space), leave the rest, Enter. A bright **Selected N updates** box lists exactly what you chose in **bold, solid colors** (name bold-cyan, target colored by bump level, majors bold-red) — no dim. Confirm it's clearly legible and matches your selection. At `Apply N updates?` choose **No** to keep exploring safely, or **Yes** to write (then revert with `git checkout -- packages/cli/templates modules`).
 4. Exercise the safe-exit paths (each must leave the tree untouched, exit 0):
    - Re-run, press **Esc / Ctrl-C** at the picker → `Update cancelled — no files changed.`
    - Re-run, accept the selection, then choose **No** at the confirm → `Update cancelled — no files changed.`
@@ -249,18 +252,20 @@ git --no-pager diff packages/cli/templates modules
 git checkout -- packages/cli/templates modules
 ```
 
-6. Confirm the non-interactive escapes:
+6. Confirm the print-only and non-interactive escapes:
 
 ```sh
-node scripts/update-deps.mjs --dry-run --yes              # no prompt; applies all eligible (majors excluded)
-node scripts/update-deps.mjs --dry-run --yes | cat        # piped/non-TTY: prints the Non-TTY notice, no hang
+node scripts/update-deps.mjs --dry-run                    # print-only: report + "would update" preview, NO picker, writes nothing
+node scripts/update-deps.mjs --yes | cat                  # piped/non-TTY apply: all eligible (majors excluded), prints the Non-TTY notice, no hang
 ```
 
 **Expected**
 - The picker pre-checks only within-major (and, with `--allow-fresh`, cooldown) bumps; the **Major** group is always present-but-unchecked. Deselecting the group or a row removes exactly those from the write.
+- After you press Enter, a **Selected N updates** note lists the chosen bumps in **bold, fully-colored** text (not dimmed) — readable at a glance, distinct from clack's dim echo of the raw multiselect submission.
 - The dep you deselected is **absent** from the `would update` / `updated` step lines and the outro count; kept rows are present. A real run's diff touches exactly the kept deps.
 - **Cancel at the picker, No at the confirm, and empty selection all write nothing and exit 0** — with the messages above.
-- `--yes` skips both prompts and applies every eligible bump (majors only if `--allow-major` is also passed). A non-TTY pipe behaves like `--yes` and prints `Non-TTY — applying all eligible updates (pass -y in a TTY to skip the picker).` instead of hanging.
+- `--dry-run` never prompts: it prints the report and the default "would update" list (primaries; add `--allow-major` for majors) and writes nothing.
+- `--yes` (or a non-TTY pipe) skips both prompts and applies every eligible bump (majors only if `--allow-major` is also passed). A pipe prints `Non-TTY — applying all eligible updates (pass -y in a TTY to skip the picker).` instead of hanging.
 
 **Actual:** _(tester fills in)_
 
@@ -268,36 +273,32 @@ node scripts/update-deps.mjs --dry-run --yes | cat        # piped/non-TTY: print
 - [ ] Fail
 
 ## Regression checks
-- [ ] `saasaloy add` for a module with only `dependencies[]` (no dev bucket) still lands them in `dependencies` exactly as before.
-- [ ] A descriptor with **no** dep buckets applies with no dep-related output and no crash.
-- [ ] Existing schema validation for `scaffolds[]` / `files[]` still passes (unchanged by this work).
-- [ ] `pnpm play:init` / `pnpm play:reset` still scaffold a buildable playground.
+- [x] `saasaloy add` for a module with only `dependencies[]` (no dev bucket) still lands them in `dependencies` exactly as before.
+- [x] A descriptor with **no** dep buckets applies with no dep-related output and no crash.
+- [x] Existing schema validation for `scaffolds[]` / `files[]` still passes (unchanged by this work).
+- [x] `pnpm play:init` / `pnpm play:reset` still scaffold a buildable playground.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
 
-Commands run:
+**2026-07-24 feedback iteration** (post-manual-QA): three changes to `scripts/update-deps.mjs` —
+(1) registry resolution now runs in **parallel** (bounded concurrency 12; the in-flight packument
+promise is cached so duplicate deps share one fetch), (2) `--dry-run` is now **print-only** — it
+prints the report + "would update" preview and never opens the picker, and (3) a bright **Selected
+N updates** summary (bold, solid colors) is shown between the picker and the confirm so the final
+selection is legible rather than dimmed. Commands run this iteration:
 
 ```sh
-cd packages/cli && pnpm exec vitest run                  # descriptor/applier half (unchanged this iteration)
-pnpm run typecheck
-pnpm run build
-node --check scripts/update-deps.mjs                      # merged-flow rewrite parses
-pnpm run deps:check                                       # CI gate: exit code reflects actionable drift
-node scripts/update-deps.mjs --dry-run                    # non-TTY: applies eligible, majors opt-in
-node scripts/update-deps.mjs --dry-run --allow-major      # majors crossed on purpose
-node scripts/update-deps.mjs --dry-run --yes | cat        # non-TTY notice, no hang
-pnpm run deps:verify
+node --check scripts/update-deps.mjs                      # parallel resolver + print-only dry-run + selection summary parse clean
+node scripts/update-deps.mjs --dry-run --allow-major      # print-only preview, no picker, majors crossed
 ```
 
-- ↩︎ `vitest` / `typecheck` / `build` → **not re-run this iteration**; the merged-flow work lives entirely in the root `scripts/update-deps.mjs`, which no TS test/build touches. They passed in the prior iteration (8 files / 65 tests) and are unaffected — worth one more run before final sign-off.
-- ✅ `node --check` → the rewritten scanner (merged interactive flow, `groupMultiselect` + `confirm`, `--yes`, per-dep major candidates) parses clean; grep confirms no stale refs to the removed `-i`/`multiselect`/`shouldWriteRow`.
-- ✅ `deps:check` → **exit 0 today** with an `up to date` outro: the templates are already exact-pinned, so the only drift is `2 major-available` + `8 within-cooldown` — neither is actionable, so the gate does not fire. (It still exits **1** whenever an actionable `outdated`/`range→exact`/`bare→pinned` row exists.)
-- ✅ `deps:update --dry-run` (non-TTY) → `Nothing to update`: no actionable within-major bumps and majors require opt-in; prints the `Non-TTY — applying all eligible…` notice.
-- ✅ `deps:update --dry-run --allow-major` (non-TTY) → **would update 2**: `astro 5.18.2 → 7.1.3` and `typescript 5.9.3 → 7.0.2` (majors crossed, red), policy line tagged `· --allow-major`.
-- ✅ Report structure → the dedicated **Major available — crosses a major** box lists `astro`/`typescript` at their highest major even though neither is an actionable within-major bump; `within-cooldown` and `Notes` (typescript major divergence) render as before.
-- ⏳ **Interactive picker + confirm** (TC-2/3/7) → not machine-run: `groupMultiselect`/`confirm` need a TTY. Left for manual QA.
-- ↩︎ `deps:verify` → **not re-run this iteration** (independent of the scanner UI; passed end-to-end previously). Re-run after any real `deps:update` bless.
+- ✅ `node --check` → parses clean after the feedback edits (`mapWithConcurrency`, promise-cached `fetchPackument`, `selectionLine`, dry-run print-only branch).
+- ✅ `deps:update --dry-run --allow-major` (non-TTY) → **print-only, no picker**, `would update 6` against the current template state (`astro → 7.1.3` + `typescript → 7.0.2` majors in red, `wrangler`/`turbo` range→exact, `drizzle-orm`/`drizzle-kit` outdated); policy line tagged `· --allow-major`; resolution visibly overlapped (spinner ticks fast, ~44% CPU on wall-clock).
+- ⏳ **Interactive picker + confirm + the new "Selected N updates" summary** (TC-2/TC-7) → not machine-run: `groupMultiselect`/`confirm` need a TTY. Left for manual re-test.
+- ↩︎ `vitest` / `typecheck` / `build` / `deps:verify` → **not re-run this iteration**; the change lives entirely in the root `scripts/update-deps.mjs`, which no TS test/build touches. Worth one run before final sign-off.
+
+> _Prior iteration (merged flow):_ `node --check` clean; `deps:check` gate exit code reflects actionable drift; the dedicated **Major available — crosses a major** report box and `Notes` (typescript major divergence) render as designed. Those checks are unchanged by this feedback pass.
 
 ## Not covered / needs human judgment
 - Whether a specific resolved version is **safe to ship** to downstream projects — the tool proposes; the maintainer blesses (TC-2/TC-3).
