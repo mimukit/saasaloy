@@ -39,6 +39,42 @@
         "type": "string",
         "minLength": 1
       }
+    },
+    "patches": {
+      "type": "array",
+      "description": "Structural config patches actually applied to disk, so `remove` can warn which files it can't clean up on its own (reversal is a follow-up issue). Deduped on re-apply (structural equality) so `--force` stays idempotent.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["module", "file", "patch"],
+        "properties": {
+          "module": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Name of the module that applied this patch."
+          },
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Project-relative POSIX path of the file that was patched."
+          },
+          "patch": {
+            "type": "object",
+            "required": ["file", "kind"],
+            "properties": {
+              "file": {
+                "type": "string",
+                "minLength": 1
+              },
+              "kind": {
+                "type": "string",
+                "enum": ["wrangler-binding", "plugin-array"]
+              }
+            },
+            "description": "The op as authored (kind + payload + file), re-applicable at execute time."
+          }
+        }
+      }
     }
   }
 }

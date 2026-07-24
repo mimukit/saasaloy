@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
-import type { Manifest } from "./manifest.js";
+import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
@@ -57,8 +57,10 @@ export type LinkAction = "create" | "exists" | "conflict";
 export type PatchAction = "apply" | "unchanged" | "missing";
 
 // A structural config patch bound to a concrete target file (ADR 0019). Unlike a
-// PlannedFile it is never manifest-tracked — a patch mutates a file another module
-// owns, so it isn't a clean managed copy; clean reverse-patching on `remove` is #27.
+// PlannedFile it is never manifest-tracked as a managed file — a patch mutates a
+// file another module owns, so it isn't a clean managed copy. `executePlan` records
+// each applied patch in `manifest.patches` so `remove` can warn about it; clean
+// reverse-patching is the follow-up issue.
 export interface PlannedPatch {
   module: string;
   /** Project-relative POSIX path of the file being patched. */
@@ -124,6 +126,13 @@ async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
     }
   }
   return out;
+}
+
+// Structural equality on the (module, file, patch) triple — good enough since both
+// sides are parsed from the same registry-item.json descriptor, so key order is
+// stable across a `--force` re-apply.
+function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
+  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
 }
 
 async function classify(
@@ -372,6 +381,12 @@ export async function executePlan(
     if (changed) {
       await writeFile(p.fileAbs, content, "utf8");
       patched.push(p);
+      // Record for `remove` (which can't reverse it, only warn) — deduped so a
+      // `--force` re-apply that lands the same op again doesn't duplicate the entry.
+      const entry: ManifestPatch = { module: p.module, file: p.file, patch: p.patch };
+      if (!manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
+        manifest.patches.push(entry);
+      }
     }
   }
 
