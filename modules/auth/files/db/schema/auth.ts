@@ -43,6 +43,7 @@ export const session = sqliteTable(
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     updatedAt: timestampMs("updated_at")
       .notNull()
+      .default(createdAtDefault)
       .$onUpdate(() => new Date()),
     ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
@@ -72,6 +73,7 @@ export const account = sqliteTable(
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     updatedAt: timestampMs("updated_at")
       .notNull()
+      .default(createdAtDefault)
       .$onUpdate(() => new Date()),
   },
   (table) => [index("account_user_id_idx").on(table.userId)],
