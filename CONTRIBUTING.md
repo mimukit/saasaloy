@@ -108,7 +108,8 @@ dep whose major diverges from the repo's own pin is printed as an informational 
   replaces `minimumReleaseAgeExclude`). Held-back deps then arrive pre-checked.
 - `--yes` / `-y` — skip the picker and confirm; apply all eligible bumps (majors only with
   `--allow-major`). A non-TTY pipe behaves the same. For CI writes / automation.
-- `--dry-run` — go through the flow but write nothing.
+- `--dry-run` — **print-only preview**: prints the report and the "would update" list a
+  default apply would make, then stops. It never opens the picker and never writes.
 
 **Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
 repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
