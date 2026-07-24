@@ -14,6 +14,8 @@
 //                       the prompts and applies every eligible bump.
 //   pnpm deps:check   → read-only drift report that exits non-zero on actionable drift
 //                       (this script with --check) — the CI gate, not the daily command.
+//   --dry-run         → print the report and the "would update" preview, then stop. Never
+//                       opens the picker and never writes — a pure preview of a default apply.
 //
 // Node 24: node:fs + global fetch for the resolver. The terminal UI reuses the CLI's
 // own stack — @clack/prompts + picocolors (root devDependencies) — for a grouped,
@@ -511,6 +513,22 @@ function candidateLabel(c) {
   return `${pc.cyan(c.row.dep.name)}${dev}  ${cur} ${pc.dim("→")} ${tgt}`;
 }
 
+// Post-selection summary line: solid, bold coloring with NO dimmed segments, so the "here's
+// what you're about to apply" list stays clearly legible (unlike the diff-style dimming of
+// the report/picker rows, which clack additionally dims when it echoes the submission).
+function selectionLine(c) {
+  const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const cur = c.row.dep.spec === "" ? "(bare)" : c.row.dep.spec;
+  const file = pc.dim(relative(root, c.row.manifest.file));
+  const color =
+    c.kind === "major"
+      ? pc.red
+      : semverDelta(c.row.dep.spec, c.target) === "patch"
+        ? pc.green
+        : pc.cyan;
+  return `${pc.bold(pc.cyan(c.row.dep.name))}${dev}  ${cur} → ${pc.bold(color(c.target))}  ${file}`;
+}
+
 // The interactive group-picker + confirm. Returns the chosen candidates, or null when
 // the maintainer cancelled, declined the confirm, or selected nothing (no files touched).
 async function pickInteractive(candidates) {
@@ -548,6 +566,10 @@ async function pickInteractive(candidates) {
     return null;
   }
   const chosen = picked.map((i) => candidates[i]);
+  note(
+    wrapForNote(chosen.map(selectionLine).join("\n")),
+    pc.cyan(pc.bold(`Selected ${chosen.length} update${chosen.length === 1 ? "" : "s"}`)),
+  );
   const ok = await confirm({
     message: `Apply ${chosen.length} update${chosen.length === 1 ? "" : "s"}?`,
   });
@@ -634,7 +656,12 @@ async function main() {
   }
 
   let toWrite;
-  if (process.stdout.isTTY && !flags.yes) {
+  if (flags.dryRun) {
+    // Preview only: never prompt. Show exactly what a default apply would change (every
+    // primary bump, plus majors only with --allow-major); writeUpdates prints the
+    // "would update" lines and writes nothing.
+    toWrite = candidates.filter((c) => c.kind === "primary" || flags.allowMajor);
+  } else if (process.stdout.isTTY && !flags.yes) {
     // TTY: always pick + confirm. Primaries pre-checked; majors listed, unchecked.
     toWrite = await pickInteractive(candidates);
     if (toWrite === null) return; // cancelled, declined, or nothing selected
