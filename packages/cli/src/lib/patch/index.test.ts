@@ -7,6 +7,12 @@ const WRANGLER = `{
 }
 `;
 
+const API_PACKAGE_JSON = `{
+  "name": "@repo/api",
+  "dependencies": {}
+}
+`;
+
 const AUTH = `import { betterAuth } from "better-auth";
 
 export const auth = betterAuth({
@@ -18,6 +24,13 @@ const BINDING_PATCH: Patch = {
   kind: "wrangler-binding",
   bindingType: "d1_databases",
   entry: { binding: "DB", database_name: "app-db", database_id: "abc" },
+};
+
+const DEPENDENCY_PATCH: Patch = {
+  kind: "package-json-dependency",
+  section: "dependencies",
+  name: "@repo/db",
+  range: "workspace:*",
 };
 
 const PLUGIN_PATCH: Patch = {
@@ -34,6 +47,14 @@ describe("applyPatch", () => {
     expect(result.changed).toBe(true);
     expect(result.content).toContain("DB");
     expect(result.diff).toContain("wrangler.jsonc");
+    expect(result.diff).toContain("+");
+  });
+
+  it("applies a package-json-dependency patch, reporting changed=true and a diff", () => {
+    const result = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
+    expect(result.changed).toBe(true);
+    expect(result.content).toContain("@repo/db");
+    expect(result.diff).toContain("package.json");
     expect(result.diff).toContain("+");
   });
 
@@ -55,6 +76,13 @@ describe("applyPatch", () => {
   it("re-running a plugin-array patch is likewise a clean no-op", () => {
     const first = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
     const again = applyPatch(first.content, PLUGIN_PATCH, "auth.ts");
+    expect(again.changed).toBe(false);
+    expect(again.diff).toBe("");
+  });
+
+  it("re-running a package-json-dependency patch is likewise a clean no-op", () => {
+    const first = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
+    const again = applyPatch(first.content, DEPENDENCY_PATCH, "package.json");
     expect(again.changed).toBe(false);
     expect(again.diff).toBe("");
   });
