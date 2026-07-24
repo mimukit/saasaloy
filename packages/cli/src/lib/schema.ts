@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import AjvDefault from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { pathExists } from "./fs-utils.js";
+import type { Patch } from "./patch/index.js";
 
 // ajv is CJS (`module.exports = Ajv2020`); under NodeNext the default import is typed
 // as the module namespace, so re-point it to the class it actually is at runtime.
@@ -120,6 +121,11 @@ export interface RegistryAgent {
   skills?: string[];
 }
 
+// A structural config patch as authored in registry-item.json: an engine `Patch`
+// (kind + payload) plus the project-relative `file` it targets. Serialized as a flat
+// array so one module can patch several files, each op self-describing (ADR 0019).
+export type RegistryPatch = { file: string } & Patch;
+
 export interface RegistryItem {
   name: string;
   type: "saasaloy:capability" | "saasaloy:feature";
@@ -127,7 +133,7 @@ export interface RegistryItem {
   dependencies?: string[];
   files?: RegistryFile[];
   envVars?: Record<string, string>;
-  patches?: Record<string, unknown>;
+  patches?: RegistryPatch[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;
 }

@@ -154,11 +154,18 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
       );
     }
   }
-  if (plan.deferredPatches.length > 0) {
-    log.warn(
-      `Config patches for ${plan.deferredPatches.join(", ")} are not applied by this engine yet ` +
-        `${pc.dim("(patch engine — issue #7)")}.`,
-    );
+  const applyPatches = plan.patches.filter((p) => p.action === "apply");
+  if (applyPatches.length > 0) {
+    const patchLines = applyPatches.map((p) => `${pc.cyan(p.file)} ${pc.dim(`— ${p.patch.kind}`)}`);
+    note(wrapForNote(patchLines.join("\n")), "Config patches");
+  }
+  for (const p of plan.patches) {
+    if (p.action === "missing") {
+      log.warn(
+        `Config patch target ${pc.cyan(p.file)} is missing — ${p.patch.kind} not applied ` +
+          `${pc.dim(`(is ${p.module}'s prerequisite installed?)`)}.`,
+      );
+    }
   }
 }
 
@@ -265,6 +272,10 @@ export async function runAdd(argv: string[]): Promise<number> {
         if (file.action === "unchanged") continue;
         note(renderDiff(file), `${ACTION_LABEL[file.action]}  ${file.target}`);
       }
+      for (const p of plan.patches) {
+        if (p.action !== "apply") continue;
+        note(p.diff, `${pc.green("patch")}  ${p.file}`);
+      }
     }
 
     // --dry-run and --diff both preview only; nothing is written.
@@ -329,6 +340,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     for (const link of result.linkConflicts) {
       log.warn(`Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`);
+    }
+    for (const p of result.patched) {
+      log.step(`${pc.green("patch")}  ${p.file} ${pc.dim(`— ${p.patch.kind}`)}`);
+    }
+    for (const p of result.patchConflicts) {
+      log.warn(`Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`);
     }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");

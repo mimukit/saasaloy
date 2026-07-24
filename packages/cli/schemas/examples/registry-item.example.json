@@ -19,7 +19,7 @@
     }
   ],
   "envVars": {},
-  "patches": {},
+  "patches": [],
   "agent": {
     "skills": ["skills/saasaloy-waitlist"]
   }

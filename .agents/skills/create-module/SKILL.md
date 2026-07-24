@@ -14,25 +14,25 @@ granular modules compose without stepping on each other.
 §3.2 (manifest), §3.3 (descriptor). Read those sections if a decision here is unclear.
 
 **Applier coverage today:** `saasaloy list` queries the registry and `saasaloy add` runs the
-local applier (`buildPlan`/`executePlan`) — neither is a stub any more. But the applier only
-honors part of the descriptor so far; the rest is recognized and *deferred* (reported, not
-applied). Author the full descriptor regardless — the deferred fields are read and warned about
-today, and will apply the moment their engines land, with no descriptor changes needed.
+local applier (`buildPlan`/`executePlan`) — neither is a stub any more. Every descriptor field is
+now honored at `add` time; author the full descriptor and it all applies.
 
 | Field | Applied at `add` time? |
 | --- | --- |
 | `files[]` | ✅ copied to their `@alias` targets |
-| `agent.skills[]` | ✅ copied into `.claude/skills/saasaloy-<name>/` (recorded in the manifest) |
+| `agent.skills[]` | ✅ files land in `.agents/skills/saasaloy-<name>/`, with a `.claude/skills/` symlink (both recorded in the manifest) (ADR 0015) |
 | `dependencies[]` | ✅ merged into the root `package.json` (you run `pnpm install`) |
 | `dependsOn[]` | ✅ resolved recursively + topologically sorted |
 | `envVars` | ✅ reported to the user (never written to files) |
-| `scaffolds[]` | ⏳ deferred — capability scaffolding engine (issues #8/#9) |
-| `patches` | ⏳ deferred — config patch engine (issue #7) |
+| `scaffolds[]` | ✅ births the workspace (root-relative files + registers its aliases into `saasaloy.json`) (ADR 0013) |
+| `patches` | ✅ applied by the config-patch engine — read file → codemod → write, idempotent (ADR 0019) |
 
 Consequence to know while authoring: a **capability** whose files all live in `scaffolds[]` (like
-`api`) has *nothing* land on disk from `add` today except its skill — its workspace files wait on
-the scaffold engine. Exercise such a module through the `.dev/` playground and expect the deferred
-warning. Everything the applier does at `add` time must still be fully described by the descriptor.
+`api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any
+`patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise
+such a module through the `.dev/` playground to see it end to end. A patch mutates a file another
+module owns, so patched files are **not** manifest-tracked as clean copies (reverse-patching on
+`remove` is #27); everything else the applier does is fully described by the descriptor.
 
 ## Shape of a module
 
@@ -75,7 +75,7 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
     { "path": "files/web/components/WaitlistForm.tsx",  "target": "@web/components/WaitlistForm.tsx" }
   ],
   "envVars": {},                              // env keys the module needs (documented for the user)
-  "patches": {},                              // waitlist needs none — pure file-drop via conventions
+  "patches": [],                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context this module contributes (see Step 4)
     "skills": ["skills/saasaloy-waitlist"]    //   skill folder(s) copied into .claude/skills/ by `add`
   }

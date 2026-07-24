@@ -71,9 +71,25 @@
       }
     },
     "patches": {
-      "type": "object",
-      "description": "Declarative + AST config patches (wrangler.jsonc bindings, Better Auth plugin-array insertions, key merges). The detailed patch shape is defined by the patch engine (issue #7); an empty object means no patches.",
-      "additionalProperties": true
+      "type": "array",
+      "description": "Structural config patches applied at `add` time by the patch engine (issue #7). A flat array where each op names its own target `file` and codemod `kind` (wrangler.jsonc bindings, Better Auth plugin-array insertions); kind-specific payload fields are defined by the engine. An empty array means no patches (ADR 0019).",
+      "items": {
+        "type": "object",
+        "required": ["file", "kind"],
+        "properties": {
+          "file": {
+            "type": "string",
+            "minLength": 1,
+            "pattern": "^[^/@]",
+            "description": "Project-relative POSIX path of the file to patch (e.g. apps/api/wrangler.jsonc). No leading slash or @alias."
+          },
+          "kind": {
+            "type": "string",
+            "enum": ["wrangler-binding", "plugin-array"],
+            "description": "Which codemod applies this patch — `wrangler-binding` upserts a jsonc binding array; `plugin-array` inserts into a TS module plugin array."
+          }
+        }
+      }
     },
     "scaffolds": {
       "type": "array",

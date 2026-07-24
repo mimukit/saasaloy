@@ -193,7 +193,7 @@ On update, the tool hashes a managed file: match → clean overwrite; drift → 
     { "path": "files/web/components/WaitlistForm.tsx", "target": "@web/components/WaitlistForm.tsx" }
   ],
   "envVars": {},
-  "patches": {},                              // waitlist needs none — pure file-drop via conventions
+  "patches": [],                              // waitlist needs none — pure file-drop via conventions
   "agent": {                                  // AI context contributed by this module
     "skills": ["skills/saasaloy-waitlist"]    //   saasaloy-prefixed; copied into .claude/skills/ by `add`
   }
@@ -204,7 +204,7 @@ Capability modules additionally carry `scaffolds` (new workspaces) and the struc
 
 ### 3.4 Config-patch strategy
 
-Declarative merges for the 90% (env vars, schema additions via barrel, simple key merges). Small, well-tested AST codemods for the ~10% structural edits: **`magicast`** for TS/JS module edits (pushing `stripe()` into Better Auth's plugin array, config arrays) and **`jsonc-parser`** for `wrangler.jsonc` binding/route edits. Every patch is `--dry-run`/`--diff`-able.
+Declarative merges for the 90% (env vars, schema additions via barrel, simple key merges). Small, well-tested AST codemods for the ~10% structural edits: **`magicast`** for TS/JS module edits (pushing `stripe()` into Better Auth's plugin array, config arrays) and **`jsonc-parser`** for `wrangler.jsonc` binding/route edits. Every patch is `--dry-run`/`--diff`-able. A descriptor's `patches` is a **flat array** where each op names its own target `file` plus a codemod `kind` (`wrangler-binding`, `plugin-array`) and its payload; the applier **applies** them at `add` time (read file → codemod → write), idempotently (ADR 0019). Because a patch mutates a file another module owns, patched files aren't manifest-tracked as clean copies — reverse-patching on `remove` is a separate concern (#27).
 
 ---
 
