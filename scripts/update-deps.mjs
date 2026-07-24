@@ -9,7 +9,10 @@
 //   pnpm deps:check   → read-only drift report (this script with --check)
 //   pnpm deps:update  → rewrite to the resolved exact versions (no --check)
 //
-// Zero-dep, Node 24: node:fs + global fetch, matching scripts/watch-template.mjs.
+// Node 24: node:fs + global fetch for the resolver. The terminal UI reuses the CLI's
+// own stack — @clack/prompts + picocolors (root devDependencies) — for a grouped,
+// semver-colored report and an interactive `-i` picker. Maintainer-only; never shipped
+// to consumers, so the dep cost stays off the published surface (ADR 0016 / plan Phase 7).
 //
 // Resolver policy (ADR 0016): per package, enumerate the npm `versions` map, DROP
 // prereleases, IGNORE dist-tags (never trust `latest`), cap at the highest eligible
@@ -21,6 +24,17 @@
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, resolve, relative } from "node:path";
+import {
+  intro,
+  outro,
+  note,
+  log,
+  spinner,
+  multiselect,
+  isCancel,
+  cancel,
+} from "@clack/prompts";
+import pc from "picocolors";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 
@@ -31,12 +45,22 @@ const flags = {
   allowMajor: argv.includes("--allow-major"),
   allowFresh: argv.includes("--allow-fresh"),
   dryRun: argv.includes("--dry-run"),
+  interactive: argv.includes("-i") || argv.includes("--interactive"),
 };
-const KNOWN = new Set(["--check", "--allow-major", "--allow-fresh", "--dry-run"]);
+const KNOWN = new Set([
+  "--check",
+  "--allow-major",
+  "--allow-fresh",
+  "--dry-run",
+  "-i",
+  "--interactive",
+]);
 const unknown = argv.filter((a) => a.startsWith("-") && !KNOWN.has(a));
 if (unknown.length > 0) {
   console.error(`Unknown flag(s): ${unknown.join(", ")}`);
-  console.error("usage: update-deps.mjs [--check] [--allow-major] [--allow-fresh] [--dry-run]");
+  console.error(
+    "usage: update-deps.mjs [--check] [--allow-major] [--allow-fresh] [--dry-run] [-i|--interactive]",
+  );
   process.exit(2);
 }
 
@@ -287,126 +311,293 @@ const STATUS_LABEL = {
   unresolved: "unresolved (registry error)",
 };
 
+// --- Terminal presentation (clack + picocolors) ------------------------------
+// stripAnsi / wrapForNote are duplicated from packages/cli/src/lib/tui.ts rather
+// than imported: this is a standalone root .mjs, and reaching across the package
+// boundary into the CLI's TS source would drag in a build step. They're tiny.
+// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes.
+const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+function stripAnsi(text) {
+  return text.replace(ANSI_PATTERN, "");
+}
+
+// Hard-wrap to the terminal width so a clack `note` box can't overflow the rail.
+// Widths are measured on the ANSI-stripped text so colored words wrap by their
+// visible length; words carrying ANSI codes are left whole (a raw slice could cut
+// mid-escape).
+function wrapForNote(text) {
+  const width = Math.max(24, (process.stdout.columns ?? 80) - 6);
+  const out = [];
+  for (const line of text.split("\n")) {
+    let current = "";
+    for (const word of line.split(" ")) {
+      let chunk = word;
+      while (stripAnsi(chunk).length > width && !chunk.includes("")) {
+        if (current) {
+          out.push(current);
+          current = "";
+        }
+        out.push(chunk.slice(0, width));
+        chunk = chunk.slice(width);
+      }
+      const candidate = current ? `${current} ${chunk}` : chunk;
+      if (stripAnsi(candidate).length > width) {
+        out.push(current);
+        current = chunk;
+      } else {
+        current = candidate;
+      }
+    }
+    out.push(current);
+  }
+  return out.join("\n");
+}
+
+// Semver bump level between two stable versions (null when either isn't a triple).
+function semverDelta(cur, target) {
+  const a = parseStable(cur);
+  const b = parseStable(target);
+  if (!a || !b) return null;
+  if (b[0] !== a[0]) return "major";
+  if (b[1] !== a[1]) return "minor";
+  if (b[2] !== a[2]) return "patch";
+  return "none";
+}
+
+const DELTA_COLOR = { major: pc.red, minor: pc.cyan, patch: pc.green };
+
+// Color the target version by its bump level vs the current pin — npm-check-updates'
+// scheme (red major / cyan minor / green patch) — dimming the unchanged leading
+// segments so only the part that moved stands out. A non-exact current spec (range,
+// bare) has no triple to diff, so the whole exact target reads cyan (a migration).
+function colorTarget(cur, target) {
+  const delta = semverDelta(cur, target);
+  if (!delta || delta === "none") return pc.cyan(target);
+  const b = parseStable(target);
+  const first = delta === "major" ? 0 : delta === "minor" ? 1 : 2;
+  const head = b.slice(0, first).join(".");
+  const tail = b.slice(first).join(".");
+  return (head ? pc.dim(`${head}.`) : "") + DELTA_COLOR[delta](tail);
+}
+
+// Which report group a row renders under. Actionable `outdated` rows split by bump
+// level; migrations, held-back, and errors get their own groups; up-to-date is hidden.
+function groupKey(row) {
+  switch (row.status) {
+    case "outdated": {
+      const d = semverDelta(row.dep.spec, row.resolved?.target);
+      return d === "major" ? "major" : d === "minor" ? "minor" : "patch";
+    }
+    case "range→exact":
+    case "bare→pinned":
+      return "migration";
+    case "major-available":
+      return "major-available";
+    case "within-cooldown":
+      return "cooldown";
+    case "unresolved":
+      return "unresolved";
+    default:
+      return "up-to-date";
+  }
+}
+
+// Display order + title color for each group.
+const GROUPS = [
+  ["major", pc.red, "Major"],
+  ["minor", pc.cyan, "Minor"],
+  ["patch", pc.green, "Patch"],
+  ["migration", pc.cyan, "Pin / migrate to exact"],
+  ["major-available", pc.red, "Major available — needs --allow-major"],
+  ["cooldown", pc.yellow, "Within cooldown — held back"],
+  ["unresolved", pc.red, "Unresolved — registry error"],
+];
+
+function renderRow(row) {
+  const dev = row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const file = pc.dim(relative(root, row.manifest.file));
+  const name = pc.cyan(row.dep.name);
+  if (row.status === "unresolved") {
+    return `${name}${dev}  ${pc.red("registry error")}${row.error ? pc.dim(` — ${row.error}`) : ""}  ${file}`;
+  }
+  const cur = row.dep.spec === "" ? pc.dim("(bare)") : row.dep.spec;
+  // For within-cooldown / major-available, point the arrow at the version being held
+  // back so the row reads as "waiting on this", not a phantom downgrade.
+  let colored;
+  if (row.status === "within-cooldown") {
+    colored = pc.yellow(row.resolved?.highestWithinMajor ?? "—");
+  } else if (row.status === "major-available") {
+    colored = pc.red(row.resolved?.highestOverall ?? "—");
+  } else {
+    colored = colorTarget(row.dep.spec, row.resolved?.target ?? "—");
+  }
+  return `${name}${dev}  ${cur} ${pc.dim("→")} ${colored}  ${file}`;
+}
+
+// A row deps:update would rewrite under the current flags: actionable always;
+// major-available only with --allow-major; within-cooldown only with --allow-fresh
+// (both already fold their held-back version into `target` via the resolver flags).
+// Shared by the interactive picker and the write pass so they never diverge.
+function shouldWriteRow(row) {
+  const target = row.resolved?.target;
+  if (!target || target === row.dep.spec) return false;
+  return (
+    ACTIONABLE.has(row.status) ||
+    (row.status === "major-available" && flags.allowMajor) ||
+    (row.status === "within-cooldown" && flags.allowFresh)
+  );
+}
+
 async function main() {
   const minMinutes = await readMinReleaseMinutes();
   const manifests = await discoverManifests();
   const repoPins = await readRepoPins();
 
-  const rows = []; // { manifest, dep, resolved, status }
-  const notes = [];
+  intro(pc.bgCyan(pc.black(flags.check ? " deps:check " : " deps:update ")));
+  const days = (minMinutes / 60 / 24).toFixed(0);
+  log.info(
+    pc.dim(
+      `exact pins · within-major · ${minMinutes}min (${days}d) cooldown` +
+        `${flags.allowMajor ? " · --allow-major" : ""}${flags.allowFresh ? " · --allow-fresh" : ""}`,
+    ),
+  );
 
+  // Flatten every scannable dep across manifests, then resolve with a progress spinner.
+  const jobs = [];
   for (const manifest of manifests) {
     const { json, deps } = await readManifestDeps(manifest);
     manifest._json = json; // stash the parsed doc for the write pass
-    for (const dep of deps) {
-      let resolved;
-      try {
-        resolved = await resolveVersion(dep.name, specMajor(dep.spec), minMinutes);
-      } catch (err) {
-        rows.push({ manifest, dep, resolved: null, status: "unresolved", error: err.message });
-        continue;
-      }
-      const status = decideStatus(dep, resolved);
-      rows.push({ manifest, dep, resolved, status });
+    for (const dep of deps) jobs.push({ manifest, dep });
+  }
+
+  const rows = []; // { manifest, dep, resolved, status }
+  const notes = [];
+  const s = spinner();
+  s.start(`Resolving ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
+  let done = 0;
+  for (const { manifest, dep } of jobs) {
+    try {
+      const resolved = await resolveVersion(dep.name, specMajor(dep.spec), minMinutes);
+      rows.push({ manifest, dep, resolved, status: decideStatus(dep, resolved) });
 
       // Informational: a shared dep whose major diverges from the repo's own pin.
       const repoSpec = repoPins.get(dep.name);
-      if (repoSpec && specMajor(repoSpec) !== null && specMajor(dep.spec) !== null) {
-        if (specMajor(repoSpec) !== specMajor(dep.spec)) {
-          notes.push(
-            `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`,
-          );
-        }
+      if (
+        repoSpec &&
+        specMajor(repoSpec) !== null &&
+        specMajor(dep.spec) !== null &&
+        specMajor(repoSpec) !== specMajor(dep.spec)
+      ) {
+        notes.push(
+          `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`,
+        );
       }
+    } catch (err) {
+      rows.push({ manifest, dep, resolved: null, status: "unresolved", error: err.message });
     }
+    s.message(`Resolved ${++done}/${jobs.length} — ${dep.name}`);
   }
+  s.stop(`Resolved ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
 
-  printReport(rows, notes, minMinutes);
-
-  const actionable = rows.filter((r) => ACTIONABLE.has(r.status));
+  printReport(rows, notes);
 
   if (flags.check) {
     // Exit non-zero only on what a default deps:update would change.
-    process.exit(actionable.length > 0 ? 1 : 0);
+    const pending = rows.filter((r) => ACTIONABLE.has(r.status)).length;
+    outro(
+      pending > 0
+        ? pc.yellow(`${pending} pending — run ${pc.bold("pnpm deps:update")}`)
+        : pc.green("up to date"),
+    );
+    process.exit(pending > 0 ? 1 : 0);
   }
 
-  await writeUpdates(manifests, rows);
+  // Interactive picker (opt-out: every eligible row starts selected; deselect to skip).
+  const writable = rows.filter(shouldWriteRow);
+  let selected = null;
+  if (flags.interactive && writable.length > 0) {
+    if (!process.stdout.isTTY) {
+      log.warn("Not a TTY — ignoring -i and updating all eligible dependencies.");
+    } else {
+      const options = writable.map((row, i) => ({
+        value: i,
+        label: `${pc.cyan(row.dep.name)}${row.dep.bucket === "devDependencies" ? pc.dim(" dev") : ""}  ${
+          row.dep.spec === "" ? pc.dim("(bare)") : row.dep.spec
+        } ${pc.dim("→")} ${colorTarget(row.dep.spec, row.resolved.target)}`,
+        hint: relative(root, row.manifest.file),
+      }));
+      const picked = await multiselect({
+        message: `Select dependencies to update (${writable.length} eligible)`,
+        options,
+        initialValues: options.map((o) => o.value),
+        required: false,
+      });
+      if (isCancel(picked)) {
+        cancel("Update cancelled — no files changed.");
+        process.exit(0);
+      }
+      selected = new Set(picked.map((i) => writable[i]));
+    }
+  }
+
+  await writeUpdates(manifests, rows, selected);
 }
 
-function printReport(rows, notes, minMinutes) {
-  const days = (minMinutes / 60 / 24).toFixed(0);
-  console.log(
-    `\nDependency drift — exact pins, within-major, ${minMinutes}min (${days}d) cooldown` +
-      `${flags.allowMajor ? " [--allow-major]" : ""}${flags.allowFresh ? " [--allow-fresh]" : ""}\n`,
-  );
-
-  const byFile = new Map();
+function printReport(rows, notes) {
+  const buckets = new Map();
   for (const row of rows) {
-    const key = relative(root, row.manifest.file);
-    if (!byFile.has(key)) byFile.set(key, []);
-    byFile.get(key).push(row);
+    const key = groupKey(row);
+    if (key === "up-to-date") continue;
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(row);
   }
 
-  for (const [file, fileRows] of byFile) {
-    console.log(file);
-    for (const row of fileRows) {
-      const cur = row.dep.spec === "" ? "(bare)" : row.dep.spec;
-      // For within-cooldown / major-available, point the arrow at the version being
-      // held back so the report reads as "waiting on this", not a phantom downgrade.
-      const latest =
-        row.status === "within-cooldown"
-          ? (row.resolved?.highestWithinMajor ?? "—")
-          : row.status === "major-available"
-            ? (row.resolved?.highestOverall ?? "—")
-            : (row.resolved?.target ?? "—");
-      const label = STATUS_LABEL[row.status] ?? row.status;
-      const bucketTag = row.dep.bucket === "devDependencies" ? " (dev)" : "";
-      console.log(
-        `  ${row.dep.name}${bucketTag}  ${cur} → ${latest}  [${label}]` +
-          `${row.error ? ` ${row.error}` : ""}`,
-      );
-    }
-    console.log("");
+  let shown = 0;
+  for (const [key, color, title] of GROUPS) {
+    const groupRows = buckets.get(key);
+    if (!groupRows || groupRows.length === 0) continue;
+    shown += groupRows.length;
+    note(wrapForNote(groupRows.map(renderRow).join("\n")), color(`${title} ${pc.dim(`(${groupRows.length})`)}`));
   }
 
-  for (const note of notes) console.log(`note: ${note}`);
-  if (notes.length) console.log("");
+  if (notes.length) {
+    note(wrapForNote(notes.map((n) => pc.dim(`• ${n}`)).join("\n")), pc.dim("Notes"));
+  }
 
+  if (rows.length === 0) {
+    log.warn("No dependencies found to scan.");
+    return;
+  }
   const counts = {};
   for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
   const summary = Object.entries(counts)
-    .map(([s, n]) => `${n} ${STATUS_LABEL[s] ?? s}`)
-    .join(", ");
-  console.log(summary || "no dependencies found");
+    .map(([st, n]) => `${n} ${STATUS_LABEL[st] ?? st}`)
+    .join(pc.dim(" · "));
+  log.info(summary);
+  if (shown === 0) log.success("All scanned dependencies are up to date.");
 }
 
 // Rewrite each manifest's deps to the resolved exact version, preserving key order and
-// JSON formatting (2-space, trailing newline). Only rows deps:update should act on are
-// written: actionable always; major-available only with --allow-major; within-cooldown
-// only with --allow-fresh (both already fold into `target` via the resolver flags).
-async function writeUpdates(manifests, rows) {
+// JSON formatting (2-space, trailing newline). `selected`, when non-null, is the subset
+// the interactive picker kept; otherwise every eligible row (shouldWriteRow) is written.
+async function writeUpdates(manifests, rows, selected) {
+  let writable = rows.filter(shouldWriteRow);
+  if (selected) writable = writable.filter((r) => selected.has(r));
+
   const rowsByFile = new Map();
-  for (const row of rows) {
+  for (const row of writable) {
     if (!rowsByFile.has(row.manifest.file)) rowsByFile.set(row.manifest.file, []);
     rowsByFile.get(row.manifest.file).push(row);
   }
 
   let changed = 0;
   for (const manifest of manifests) {
-    const fileRows = rowsByFile.get(manifest.file) ?? [];
+    const fileRows = rowsByFile.get(manifest.file);
+    if (!fileRows || fileRows.length === 0) continue;
     const json = manifest._json;
-    let dirty = false;
 
     for (const row of fileRows) {
-      const target = row.resolved?.target;
-      if (!target) continue;
-      const shouldWrite =
-        ACTIONABLE.has(row.status) ||
-        (row.status === "major-available" && flags.allowMajor) ||
-        (row.status === "within-cooldown" && flags.allowFresh);
-      if (!shouldWrite) continue;
-      if (target === row.dep.spec) continue; // already pinned there
-
+      const target = row.resolved.target;
       if (manifest.kind === "package-json") {
         json[row.dep.bucket][row.dep.name] = target;
       } else {
@@ -417,22 +608,25 @@ async function writeUpdates(manifests, rows) {
         });
         if (idx !== -1) arr[idx] = `${row.dep.name}@${target}`;
       }
-      dirty = true;
       changed++;
-      console.log(
-        `${flags.dryRun ? "would update" : "updated"} ${relative(root, manifest.file)}: ` +
-          `${row.dep.name} ${row.dep.spec || "(bare)"} → ${target}`,
+      log.step(
+        `${pc.dim(relative(root, manifest.file))}  ${pc.cyan(row.dep.name)} ` +
+          `${row.dep.spec || pc.dim("(bare)")} ${pc.dim("→")} ${colorTarget(row.dep.spec, target)}`,
       );
     }
 
-    if (dirty && !flags.dryRun) {
+    if (!flags.dryRun) {
       await writeFile(manifest.file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
     }
   }
 
-  console.log(
-    `\n${flags.dryRun ? "dry run — " : ""}${changed} ${changed === 1 ? "dependency" : "dependencies"} ` +
-      `${flags.dryRun ? "would be updated" : "updated"}.`,
+  const verb = flags.dryRun ? "would update" : "updated";
+  outro(
+    changed === 0
+      ? pc.dim("Nothing to update.")
+      : `${flags.dryRun ? pc.yellow("dry run — ") : ""}${verb} ${pc.bold(String(changed))} ${
+          changed === 1 ? "dependency" : "dependencies"
+        }.`,
   );
 }
 

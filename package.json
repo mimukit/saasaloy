@@ -27,6 +27,8 @@
     "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && pnpm -C .dev/playground typecheck"
   },
   "devDependencies": {
+    "@clack/prompts": "1.7.0",
+    "picocolors": "1.1.1",
     "turbo": "2.10.5",
     "typescript": "7.0.2"
   }
