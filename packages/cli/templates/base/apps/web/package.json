@@ -11,9 +11,15 @@
   },
   "dependencies": {
     "astro": "^5",
+    "@astrojs/react": "^5",
+    "react": "^19",
+    "react-dom": "^19",
     "@repo/ui": "workspace:*"
   },
   "devDependencies": {
+    "@types/node": "^24",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
     "wrangler": "^4"
   }
 }
