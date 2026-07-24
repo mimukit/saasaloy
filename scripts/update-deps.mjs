@@ -135,18 +135,38 @@ async function readMinReleaseMinutes() {
 }
 
 // --- npm registry resolution -------------------------------------------------
+// Cache the in-flight PROMISE (not just the resolved value): with parallel resolution the
+// same package can be requested by several manifests at once, and caching the promise means
+// they share a single fetch instead of racing duplicates.
 const registryCache = new Map();
 
-async function fetchPackument(name) {
-  if (registryCache.has(name)) return registryCache.get(name);
-  const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
-  const res = await fetch(url);
-  if (!res.ok) {
-    throw new Error(`registry ${res.status} for ${name}`);
-  }
-  const json = await res.json();
-  registryCache.set(name, json);
-  return json;
+function fetchPackument(name) {
+  const cached = registryCache.get(name);
+  if (cached) return cached;
+  const p = (async () => {
+    const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`registry ${res.status} for ${name}`);
+    return res.json();
+  })();
+  registryCache.set(name, p);
+  return p;
+}
+
+// Run an async fn over items with bounded concurrency, preserving input order in the
+// results array. Resolves the whole dependency set far faster than a serial loop while
+// keeping npm from seeing a burst of hundreds of simultaneous requests.
+async function mapWithConcurrency(items, limit, fn) {
+  const results = new Array(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
 }
 
 // Resolve the versions deps:update could pin for one dep, plus the context the report
@@ -552,7 +572,8 @@ async function main() {
     ),
   );
 
-  // Flatten every scannable dep across manifests, then resolve with a progress spinner.
+  // Flatten every scannable dep across manifests, then resolve them in parallel (bounded)
+  // behind a progress spinner.
   const jobs = [];
   for (const manifest of manifests) {
     const { json, deps } = await readManifestDeps(manifest);
@@ -560,34 +581,38 @@ async function main() {
     for (const dep of deps) jobs.push({ manifest, dep });
   }
 
-  const rows = []; // { manifest, dep, resolved, status }
-  const notes = [];
   const s = spinner();
   s.start(`Resolving ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
   let done = 0;
-  for (const { manifest, dep } of jobs) {
+  const rows = await mapWithConcurrency(jobs, 12, async ({ manifest, dep }) => {
+    let row;
     try {
       const resolved = await resolveVersion(dep.name, specMajor(dep.spec), minMinutes);
-      rows.push({ manifest, dep, resolved, status: decideStatus(dep, resolved) });
-
-      // Informational: a shared dep whose major diverges from the repo's own pin.
-      const repoSpec = repoPins.get(dep.name);
-      if (
-        repoSpec &&
-        specMajor(repoSpec) !== null &&
-        specMajor(dep.spec) !== null &&
-        specMajor(repoSpec) !== specMajor(dep.spec)
-      ) {
-        notes.push(
-          `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`,
-        );
-      }
+      row = { manifest, dep, resolved, status: decideStatus(dep, resolved) };
     } catch (err) {
-      rows.push({ manifest, dep, resolved: null, status: "unresolved", error: err.message });
+      row = { manifest, dep, resolved: null, status: "unresolved", error: err.message };
     }
     s.message(`Resolved ${++done}/${jobs.length} — ${dep.name}`);
-  }
+    return row;
+  });
   s.stop(`Resolved ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
+
+  // Informational: a shared dep whose major diverges from the repo's own pin. Built after
+  // resolution so the note order stays stable regardless of parallel completion order.
+  const notes = [];
+  for (const { dep } of rows.filter((r) => r.resolved)) {
+    const repoSpec = repoPins.get(dep.name);
+    if (
+      repoSpec &&
+      specMajor(repoSpec) !== null &&
+      specMajor(dep.spec) !== null &&
+      specMajor(repoSpec) !== specMajor(dep.spec)
+    ) {
+      notes.push(
+        `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`,
+      );
+    }
+  }
 
   printReport(rows, notes);
 
