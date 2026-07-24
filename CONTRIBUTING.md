@@ -72,3 +72,51 @@ pnpm play:destroy       # remove .dev/playground entirely
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
 
+## Updating dependencies
+
+Saasaloy ships dependency versions to downstream projects from two sets of files that
+**pnpm's own tooling can't see** — the base template (`packages/cli/templates/base/**/package.json`)
+and the module descriptors (`modules/*/registry-item.json` `dependencies[]` / `devDependencies[]`).
+They aren't pnpm workspace members, so `pnpm outdated` / `pnpm update` never touch them, and because
+we pin **exact** versions there's nothing for pnpm's install-time `minimumReleaseAge` cooldown to
+resolve either. A dedicated maintainer command owns these files:
+
+```sh
+pnpm deps:update    # interactive: grouped report → pick which bumps → confirm → write exact versions
+pnpm deps:verify    # re-scaffold .dev/playground, install, build + typecheck the generated project
+pnpm deps:check     # read-only CI gate: report drift, exit non-zero when deps:update would change something
+```
+
+`deps:update` is the day-to-day command. In a terminal it shows a semver-grouped, color-coded report
+(cross-major bumps like `astro 5 → 7` get their own section), then a **group picker**: within-major
+bumps come **pre-checked**, majors are listed **unchecked**, and you tick the ones you want. After a
+confirm it writes the selected **exact** pins and stops — it never commits. The recommended flow is
+**`deps:update` → review the diff → `deps:verify` → commit**. `deps:check` is the read-only gate for
+CI/pre-push hooks, not the interactive path.
+
+**Resolution policy** (see [ADR 0016](docs/adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
+per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores
+`dist-tags`** (never trusts `latest`), caps the pre-checked default at the **highest eligible version
+within the current major**, and requires the publish time to clear `minimumReleaseAge` (read from
+`pnpm-workspace.yaml`). Everything is pinned **exact**. Each manifest resolves independently; a shared
+dep whose major diverges from the repo's own pin is printed as an informational note.
+
+- **Majors** — never applied by default. Cross one **deliberately**: tick it in the picker's **Major**
+  group, or pass `--allow-major` for a non-interactive run. Majors are where the template breaks
+  (`astro 5→6`, `wrangler 4→5`), so each is blessed by hand.
+- `--allow-fresh` — override the cooldown for a knowing security-fix bump (the audited path;
+  replaces `minimumReleaseAgeExclude`). Held-back deps then arrive pre-checked.
+- `--yes` / `-y` — skip the picker and confirm; apply all eligible bumps (majors only with
+  `--allow-major`). A non-TTY pipe behaves the same. For CI writes / automation.
+- `--dry-run` — **print-only preview**: prints the report and the "would update" list a
+  default apply would make, then stops. It never opens the picker and never writes.
+
+**Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
+repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
+
+| Script | What it does |
+| --- | --- |
+| `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--allow-fresh`, `--dry-run`) |
+| `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
+| `pnpm deps:verify` | `play:init` → install → build → typecheck the generated project (post-update gate) |
+

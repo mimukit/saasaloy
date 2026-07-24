@@ -186,7 +186,8 @@ On update, the tool hashes a managed file: match → clean overwrite; drift → 
   "name": "waitlist",
   "type": "saasaloy:feature",
   "dependsOn": ["api", "database"],          // optional: "email"
-  "dependencies": ["zod"],
+  "dependencies": ["zod@4.0.5"],             // exact-pinned name@version (bare/range rejected)
+  "devDependencies": ["@types/node@26.1.1"], // optional: routed to consumer devDependencies
   "files": [
     { "path": "files/api/routes/waitlist.ts",   "target": "@api/routes/waitlist.ts" },
     { "path": "files/db/schema/waitlist.ts",    "target": "@db/schema/waitlist.ts" },

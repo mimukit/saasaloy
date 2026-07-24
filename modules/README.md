@@ -9,7 +9,7 @@ A module is a shadcn-shaped descriptor plus the files it drops in:
 ```
 modules/
   <name>/
-    registry-item.json     # name, type, dependsOn[], dependencies[], files[], patches, scaffolds[], agent{}
+    registry-item.json     # name, type, dependsOn[], dependencies[], devDependencies[], files[], patches, scaffolds[], agent{}
     files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
     skills/saasaloy-<name>/  # skill folder, installed to the consumer's .agents/skills/saasaloy-<name>/ (+ a .claude/skills symlink)
 ```

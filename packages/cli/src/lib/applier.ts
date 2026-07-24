@@ -97,8 +97,10 @@ export interface Plan {
   files: PlannedFile[];
   /** `.claude/skills/<name>` symlinks the installed skills register (created by executePlan). */
   links: PlannedLink[];
-  /** Union of npm deps declared across the installed modules. */
+  /** Union of npm `dependencies[]` declared across the installed modules. */
   dependencies: string[];
+  /** Union of npm `devDependencies[]` declared across the installed modules. */
+  devDependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
   envVars: Record<string, string>;
   /** Aliases the installed scaffolds register into saasaloy.json (applied by executePlan). */
@@ -185,6 +187,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const files: PlannedFile[] = [];
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
+  const devDependencies: string[] = [];
   const envVars: Record<string, string> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
@@ -258,6 +261,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     }
 
     for (const dep of item.dependencies ?? []) dependencies.push(dep);
+    for (const dep of item.devDependencies ?? []) devDependencies.push(dep);
     for (const [key, value] of Object.entries(item.envVars ?? {})) envVars[key] = value;
   }
 
@@ -304,6 +308,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     files,
     links,
     dependencies,
+    devDependencies,
     envVars,
     aliases,
     aliasConflicts,

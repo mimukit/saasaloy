@@ -32,11 +32,20 @@
     },
     "dependencies": {
       "type": "array",
-      "description": "npm packages to install (name or name@version).",
+      "description": "npm packages merged into the consumer's `dependencies`. Each must be exact-pinned `name@version` (e.g. zod@4.0.5) — bare names and ranges are rejected; `pnpm deps:update` fills/refreshes the versions.",
       "uniqueItems": true,
       "items": {
         "type": "string",
-        "minLength": 1
+        "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
+      }
+    },
+    "devDependencies": {
+      "type": "array",
+      "description": "npm packages merged into the consumer's `devDependencies` (e.g. @types/*, build tooling). Same exact-pinned `name@version` form as `dependencies`. A name declared in both buckets lands in `dependencies` only.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^(@[a-z0-9][a-z0-9._-]*/)?[a-z0-9][a-z0-9._-]*@\\d+\\.\\d+\\.\\d+(-[0-9A-Za-z.-]+)?(\\+[0-9A-Za-z.-]+)?$"
       }
     },
     "files": {
