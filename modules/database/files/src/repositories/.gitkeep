@@ -1,0 +1,4 @@
+# The repository layer lives here — thin functions that take a `db` and own the raw
+# queries for one table, so SQL doesn't sprawl through route code. Unlike schema/,
+# repositories are NOT auto-registered: a route imports the one it needs directly
+# (e.g. `import { listWaitlist } from "@db/repositories/waitlist"`). Empty in base.

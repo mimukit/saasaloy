@@ -1,0 +1,3 @@
+# Feature table files live here. Drop `src/schema/<name>.ts` exporting Drizzle
+# tables; the runtime barrel (src/schema.ts) and drizzle-kit both pick it up
+# automatically — no edit anywhere else. This folder is empty in the base module.
