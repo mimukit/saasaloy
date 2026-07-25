@@ -2,13 +2,35 @@ import { spawn } from "node:child_process";
 import { readFile } from "node:fs/promises";
 import type { DiscoveredService } from "./discover.js";
 
+// infra's own deploy credentials (see the saasaloy-infra skill's "Credentials setup").
+// Users commonly keep these in the same `infra/.env` that also holds Worker secrets
+// (direnv, `source .env`, etc.) — never push them to a Worker's secret store, or every
+// deployed service would receive the Cloudflare API token / account id / Pulumi
+// passphrase that's meant to stay with the deploy tooling only. `PULUMI_*` and
+// `CLOUDFLARE_*` are blocked wholesale (reserved prefixes for this tool and its
+// provider) so a future infra-only env var doesn't need a denylist update to stay safe.
+const INFRA_CREDENTIAL_KEYS = new Set([
+  "CLOUDFLARE_API_TOKEN",
+  "CLOUDFLARE_DEFAULT_ACCOUNT_ID",
+  "PULUMI_CONFIG_PASSPHRASE",
+]);
+const INFRA_CREDENTIAL_PREFIXES = ["PULUMI_", "CLOUDFLARE_"];
+
+function isInfraCredential(key: string): boolean {
+  return (
+    INFRA_CREDENTIAL_KEYS.has(key) || INFRA_CREDENTIAL_PREFIXES.some((prefix) => key.startsWith(prefix))
+  );
+}
+
 /**
  * Push Worker secrets from a `.env` file straight through to Cloudflare via `wrangler
  * secret put`, entirely outside Pulumi (ADR 0021: secrets never enter Pulumi
  * config/state, since state is committed in-repo). A key already declared as a plain
  * `vars` binding in the service's wrangler.jsonc is skipped — that one is non-secret
- * and already flows through `translate.ts`'s bindings; anything else in `.env` is
- * treated as a secret for that service.
+ * and already flows through `translate.ts`'s bindings. A key that matches
+ * `isInfraCredential` (infra's own deploy credentials, e.g. CLOUDFLARE_API_TOKEN) is
+ * also skipped, unconditionally — those belong to the deploy tooling, never to a
+ * deployed Worker. Everything else in `.env` is treated as a secret for that service.
  */
 export async function pushSecrets(service: DiscoveredService, envPath = ".env"): Promise<void> {
   const source = await readFile(envPath, "utf8").catch(() => null);
@@ -18,7 +40,9 @@ export async function pushSecrets(service: DiscoveredService, envPath = ".env"):
   }
 
   const varKeys = new Set(Object.keys(service.config.vars ?? {}));
-  const entries = parseEnv(source).filter(([key]) => !varKeys.has(key));
+  const entries = parseEnv(source).filter(
+    ([key]) => !varKeys.has(key) && !isInfraCredential(key),
+  );
 
   for (const [key, value] of entries) {
     console.log(`infra: pushing secret ${key} for ${service.name}...`);
