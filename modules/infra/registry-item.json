@@ -1,0 +1,31 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "infra",
+  "type": "saasaloy:capability",
+  "dependsOn": [],
+  "dependencies": [],
+  "envVars": {
+    "CLOUDFLARE_API_TOKEN": "Cloudflare API token (Workers Scripts + D1 edit) the Pulumi provider and wrangler use to deploy.",
+    "CLOUDFLARE_DEFAULT_ACCOUNT_ID": "Cloudflare account id resources are provisioned into.",
+    "PULUMI_CONFIG_PASSPHRASE": "Passphrase for Pulumi's local state encryption; a fixed dev value is fine since no secrets enter state."
+  },
+  "patches": [],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "infra",
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/Pulumi.yaml", "target": "Pulumi.yaml" },
+        { "path": "files/index.ts", "target": "index.ts" },
+        { "path": "files/src/discover.ts", "target": "src/discover.ts" },
+        { "path": "files/src/translate.ts", "target": "src/translate.ts" },
+        { "path": "files/src/secrets.ts", "target": "src/secrets.ts" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-infra"]
+  }
+}
