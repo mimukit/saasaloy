@@ -5,8 +5,6 @@ packages:
 
 # Pin exact versions so manifest and lockfile agree.
 saveExact: true
-# Supply-chain cooldown (minutes): don't install versions younger than 3 days.
-minimumReleaseAge: 4320
 # Fail installs when Node/pnpm don't satisfy `engines`.
 engineStrict: true
 # Collapse duplicate peer installs across the monorepo.
