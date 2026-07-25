@@ -1,0 +1,22 @@
+{
+  "name": "@repo/infra",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "preview": "pulumi preview",
+    "deploy": "pulumi up",
+    "destroy": "pulumi destroy",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@pulumi/cloudflare": "6.18.0",
+    "@pulumi/pulumi": "3.254.0",
+    "jsonc-parser": "3.3.1"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@types/node": "26.1.1",
+    "typescript": "7.0.2",
+    "wrangler": "4.113.0"
+  }
+}

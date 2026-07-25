@@ -2,6 +2,10 @@
 packages:
   - "apps/*"
   - "packages/*"
+  # `infra` (the deploy capability, ADR 0021) scaffolds at the repo root, a sibling of
+  # apps/ and packages/, not inside either — it isn't an app and it isn't a shared
+  # package, so it needs its own literal entry rather than fitting one of the globs.
+  - "infra"
 
 # Pin exact versions so manifest and lockfile agree.
 saveExact: true
@@ -17,3 +21,5 @@ allowBuilds:
   esbuild: true
   workerd: true
   sharp: true
+  # @pulumi/pulumi's gRPC transport (infra capability, ADR 0021) needs this postinstall.
+  protobufjs: true
