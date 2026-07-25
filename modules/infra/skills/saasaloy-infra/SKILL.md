@@ -80,6 +80,14 @@ via `wrangler secret put` (stdin, never a CLI arg), skipping any key already dec
 a plain `vars` binding (those are non-secret and already flow through `translate.ts`).
 `index.ts` calls this after deploying each service — nothing extra to run by hand.
 
+**infra's own deploy credentials are never pushed as Worker secrets.** It's common to
+keep `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_DEFAULT_ACCOUNT_ID`, and
+`PULUMI_CONFIG_PASSPHRASE` (see "Credentials setup" above) in the same `infra/.env` that
+also holds Worker secrets. `src/secrets.ts` denylists those three keys, plus any key
+starting with `PULUMI_` or `CLOUDFLARE_` (reserved prefixes for this tool and its
+provider), so they can never leak into a deployed Worker's secret store — no matter which
+`.env` they're kept in.
+
 ## Scope: Cloudflare only, v1
 
 `infra` deploys to Cloudflare exclusively. The IaC engine (Pulumi) was chosen for future
