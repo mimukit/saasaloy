@@ -105,6 +105,12 @@ async function buildService(dir: string): Promise<void> {
 // provider ever can't take this shape directly, shell out to `wrangler deploy --config
 // dist/<name>/wrangler.json` instead (the ADR 0021 escape hatch) and keep this
 // function's contract (content + contentSha256) as the seam.
+// Known v1 limitation: this reads only `manifest.main`, i.e. a single entry file. A
+// code-split build (dynamic `import()`, multiple output chunks) would upload just the
+// entry chunk and silently drop the rest — see the plan's open question on multi-file
+// bundles. Every shipped capability today builds to a single-file Worker via
+// @cloudflare/vite-plugin, so this holds for v1; revisit if/when a capability's build
+// starts code-splitting.
 async function readBundle(
   dir: string,
   config: WranglerConfig,
