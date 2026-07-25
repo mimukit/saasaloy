@@ -1,7 +1,7 @@
 import { readFile, readdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { parse } from "jsonc-parser";
+import { parse, printParseErrorCode, type ParseError } from "jsonc-parser";
 
 // Repo root is two levels up from `infra/src/` (`infra/` sits at the repo root, a
 // sibling of `apps/` and `packages/` — see `modules/infra/registry-item.json`'s
@@ -58,7 +58,19 @@ export async function discoverServices(): Promise<DiscoveredService[]> {
       const source = await readFile(configPath, "utf8").catch(() => null);
       if (source === null) continue; // no wrangler.jsonc — not a deployable service
 
-      const config = parse(source) as WranglerConfig | undefined;
+      // jsonc-parser's `parse` is lenient by default — on malformed input it returns a
+      // best-effort partial object rather than `undefined`, so checking the return value
+      // alone would silently ship a truncated config. Pass an `errors` array to catch
+      // that: a non-empty array means the input didn't fully parse, even though `parse`
+      // still returned something.
+      const errors: ParseError[] = [];
+      const config = parse(source, errors) as WranglerConfig | undefined;
+      const [first] = errors;
+      if (first) {
+        throw new Error(
+          `infra: ${configPath} is not valid JSON(C) — ${printParseErrorCode(first.error)} at offset ${first.offset} — fix it before deploying.`,
+        );
+      }
       if (!config || typeof config !== "object") {
         throw new Error(`infra: ${configPath} is not valid JSON(C) — fix it before deploying.`);
       }
