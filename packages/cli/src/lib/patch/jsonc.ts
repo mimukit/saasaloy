@@ -67,7 +67,9 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 // Match the document's own indentation so inserted lines don't stand out. wrangler
 // configs are conventionally 2-space, but respect tabs if that's what the file uses.
-function inferFormatting(source: string): FormattingOptions {
+// Exported for pkg-json.ts, the other jsonc-parser codemod — same document-formatting
+// concern, different top-level shape (package.json dependency maps vs. binding arrays).
+export function inferFormatting(source: string): FormattingOptions {
   const usesTabs = /^\t/m.test(source);
   const spaceIndent = source.match(/^( +)\S/m)?.[1];
   return {

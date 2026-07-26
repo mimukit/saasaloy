@@ -1,5 +1,18 @@
 ---
+import type { AstroComponentFactory } from "astro/runtime/server/index.js";
 import { siteName } from "@repo/ui";
+
+// File-based landing-page sections. Every module in ../sections default-exports an
+// Astro component; dropping `sections/<name>.astro` puts it on the landing page with
+// no edit here — the same file-drop convention as api's routes/ and db's schema/ globs.
+// Sorted filename order gives deterministic placement; empty-safe (the base ships none).
+const sectionModules = import.meta.glob<{ default: AstroComponentFactory }>(
+  "../sections/*.astro",
+  { eager: true },
+);
+const sections = Object.keys(sectionModules)
+  .sort()
+  .map((key) => sectionModules[key].default);
 ---
 
 <!doctype html>
@@ -33,6 +46,7 @@ import { siteName } from "@repo/ui";
       <h1>{siteName}</h1>
       <p>A Cloudflare-native SaaS, scaffolded with Saasaloy.</p>
       <p>Add features with <code>saasaloy add &lt;module&gt;</code>.</p>
+      {sections.map((Section) => <Section />)}
       <nav>
         <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
       </nav>
