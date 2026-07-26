@@ -9,7 +9,7 @@ import { z } from "zod";
 // mounts at `/waitlist`, so `post("/")` serves `POST /waitlist`.
 const waitlist = new Hono<{ Bindings: DbBindings }>();
 
-// web and api are separate origins in dev (:4321 vs :5173) and in prod — CORS is
+// web and api are separate origins in dev (:3000 vs :4000) and in prod — CORS is
 // mounted here, route-level, rather than touching the shared api entry.
 waitlist.use("*", cors());
 

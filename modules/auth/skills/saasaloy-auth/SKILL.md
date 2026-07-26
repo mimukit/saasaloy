@@ -42,7 +42,7 @@ the feature's own files.
 | Var | What | Prod | Local |
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Falls back to Better Auth's dev default (console warning) |
-| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:8787` (or your `wrangler dev` port) |
+| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) |
 | `COOKIE_DOMAIN` | Explicit cookie domain | `.x.com` (cross-subdomain) | Leave unset (host-only) |
 
 Local dev is **keyless** — every var above has a safe default, so `wrangler dev` works with zero

@@ -9,11 +9,14 @@ export type Bindings = {
   CORS_ORIGINS?: string;
 };
 
-// Local dev origins for `apps/web` (Astro) and `apps/admin` (TanStack Router/Vite) —
-// the keyless dev fallback so `wrangler dev`/`vite dev` works with zero config. Prod
-// sets `CORS_ORIGINS` (comma-separated) explicitly; a misconfigured prod value fails
-// visibly (CORS rejects the real origin) rather than silently falling back.
-const DEV_ORIGINS = ["http://localhost:4321", "http://localhost:5173"];
+// Local dev origins for `apps/web` (Astro, :3000) and `apps/admin` (TanStack
+// Router/Vite, :3001) — the keyless dev fallback so `wrangler dev`/`vite dev` works
+// with zero config. Frontends get 3xxx, backends 4xxx (api is :4000); every dev server
+// pins its port with `strictPort`, so these stay true instead of drifting to the next
+// free port. Prod sets `CORS_ORIGINS` (comma-separated) explicitly; a misconfigured
+// prod value fails visibly (CORS rejects the real origin) rather than silently
+// falling back.
+const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
 
 const app = new Hono<{ Bindings: Bindings }>();
 

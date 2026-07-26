@@ -34,9 +34,10 @@ pnpm --filter @repo/db db:migrate:local  # applies it to local D1
 
 ## `PUBLIC_API_URL`
 
-`WaitlistForm.tsx` posts to `${import.meta.env.PUBLIC_API_URL ?? "http://localhost:5173"}/waitlist`.
-The fallback matches the api Worker's local `vite dev` port, so a fresh project needs **no env
-var in dev**. Set `PUBLIC_API_URL` at web build time once the api Worker has a real (non-localhost)
+`WaitlistForm.tsx` posts to `${import.meta.env.PUBLIC_API_URL ?? "http://localhost:4000"}/waitlist`.
+The fallback matches the api Worker's pinned local dev port — `:4000`, fixed with `strictPort`
+in `vite.config.ts` and `dev.port` in `wrangler.jsonc` so it can't drift — so a fresh project
+needs **no env var in dev**. Set `PUBLIC_API_URL` at web build time once the api Worker has a real (non-localhost)
 URL — e.g. its deployed `*.workers.dev` address or a custom domain.
 
 `waitlist-env.d.ts` augments Astro/Vite's `ImportMetaEnv` with `PUBLIC_API_URL` so the read
@@ -53,7 +54,7 @@ channel, and keeps the form's UI simple (no special-cased duplicate error state)
 
 ## CORS
 
-`web` and `api` are separate origins in dev (`:4321` vs `:5173`) and in prod. The route mounts
+`web` and `api` are separate origins in dev (`:3000` vs `:4000`) and in prod. The route mounts
 Hono's built-in `hono/cors` itself (`waitlist.use("*", cors())`) — no new dependency, no edit to
 api's shared entry.
 

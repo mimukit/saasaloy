@@ -1,8 +1,9 @@
 import { useState, type FormEvent } from "react";
 
-// Falls back to the api Worker's local dev port (`vite dev`'s default) when
-// PUBLIC_API_URL isn't set — see the saasaloy-waitlist skill for the production value.
-const API_BASE = import.meta.env.PUBLIC_API_URL ?? "http://localhost:5173";
+// Falls back to the api Worker's pinned local dev port (:4000, fixed in both
+// vite.config.ts and wrangler.jsonc) when PUBLIC_API_URL isn't set — see the
+// saasaloy-waitlist skill for the production value.
+const API_BASE = import.meta.env.PUBLIC_API_URL ?? "http://localhost:4000";
 
 type Status = "idle" | "submitting" | "success" | "error";
 

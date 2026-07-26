@@ -65,11 +65,42 @@ pure file-drop into `routes/`.
 
 ```sh
 pnpm --filter @repo/api dev       # vite dev → serves on workerd, hot-reloads routes
-curl http://localhost:5173/health # → {"status":"ok"}
+curl http://localhost:4000/health # → {"status":"ok"}
 ```
 
 `vite dev` runs the actual Workers runtime, so local behavior matches the edge closely. Add a
 route file and it appears on the next request with no restart of the config.
+
+## Ports are fixed, on purpose
+
+| Service | Port | Pinned in |
+|---|---|---|
+| `apps/web` (Astro) | **3000** | `astro.config.mjs` (`server.port` + `vite.server.strictPort`) |
+| `apps/admin` (future) | **3001** | reserved in `DEV_ORIGINS` |
+| `apps/api` (Worker) | **4000** | `vite.config.ts` (`server.port` + `strictPort`) and `wrangler.jsonc` (`dev.port`) |
+
+Frontends take 3xxx, backends 4xxx. These aren't cosmetic: `DEV_ORIGINS` in `src/index.ts` (and
+`auth`'s `trustedOrigins`, and `waitlist`'s `PUBLIC_API_URL` fallback) hardcode them as the
+keyless dev fallback, so a drifting port turns into a CORS rejection that looks like a code bug.
+`strictPort` makes a busy port fail loudly instead of quietly shifting to the next one.
+
+Because `wrangler.jsonc` pins the same `4000`, `wrangler dev` is a drop-in swap for the Vite loop.
+
+## CORS lives here, in the spine
+
+`src/index.ts` mounts credentialed `hono/cors` for the whole app: the `origin` callback reflects
+the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or, when that's unset, in
+`DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are incompatible.
+
+**Test CORS against `wrangler dev`, not `vite dev`.** Vite's dev server adds its own
+`Access-Control-Allow-Origin` for *every* loopback origin (Vite 8's default `server.cors.origin`
+is a localhost regex), so under `vite dev` a disallowed `http://localhost:9999` still looks
+allowed. The Worker itself withholds the header correctly — Vite's middleware is masking it.
+
+```sh
+curl -i -H 'Origin: http://localhost:3000' http://localhost:4000/health # → header reflected
+curl -i -H 'Origin: http://localhost:9999' http://localhost:4000/health # → no ACAO header
+```
 
 ## Deploy
 

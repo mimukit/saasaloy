@@ -5,7 +5,7 @@
   "dependsOn": ["api", "database"],
   "dependencies": [],
   "envVars": {
-    "PUBLIC_API_URL": "Base URL of the api Worker the form posts to (defaults to http://localhost:5173 in dev)."
+    "PUBLIC_API_URL": "Base URL of the api Worker the form posts to (defaults to http://localhost:4000 in dev)."
   },
   "patches": [],
   "files": [
