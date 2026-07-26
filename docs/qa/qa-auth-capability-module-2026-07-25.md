@@ -1,42 +1,96 @@
 # QA Plan: `auth` capability module
 
-_Generated 2026-07-25 · re-verified 2026-07-26 after rebasing onto `origin/main` · covers the 5 commits on `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
+_Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases moved to automated `curl` verification; dev ports pinned to web :3000 / api :4000) · covers `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
 
 ## Summary
 - `saasaloy add auth` scaffolds `packages/auth` (Better Auth, DB-backed httpOnly session cookies), wires `@repo/auth` into `apps/api`, drops a thin `routes/auth.ts` + a hand-authored Drizzle schema snapshot into `packages/db`, adds `nodejs_compat` to `apps/api/wrangler.jsonc`, and moves credentialed CORS into `modules/api`'s spine.
-- "Working" means: the scaffold lands and resolves its deps correctly; a keyless local sign-up/sign-in sets an httpOnly cookie that a credentialed cross-origin call from an allowed localhost origin can use; deleting the session row in D1 revokes it (401); and a future `billing`/`teams`-style plugin-array patch lands on the real `packages/auth/src/auth.ts` with zero codemod changes.
+- "Working" means: the scaffold lands and resolves its deps correctly; a keyless local sign-up/sign-in sets an httpOnly cookie that a credentialed cross-origin call from an allowed localhost origin can use; deleting the session row in D1 revokes it; and a future `billing`/`teams`-style plugin-array patch lands on the real `packages/auth/src/auth.ts` with zero codemod changes.
+
+**What changed in this update**
+
+1. The agent brought up a live Worker (both `vite dev` and `wrangler dev`) with a migrated local D1 and drove the whole auth surface over `curl`. Sign-up, sign-in, session read, revocation, sign-out, CORS reflection, preflight, origin rejection, and both cookie-domain branches are now **automated** — see [Automated verification](#automated-verification-by-ai-agent). What's left as manual cases is only what a browser must judge.
+2. **Dev ports are now pinned** so CORS is predictable. Frontends take 3xxx, backends 4xxx:
+
+   | Service | Port | Pinned in |
+   |---|---|---|
+   | `apps/web` (Astro) | **3000** | `astro.config.mjs` — `server.port` + `vite.server.strictPort` |
+   | `apps/admin` (future) | **3001** | reserved in `DEV_ORIGINS`; no app yet |
+   | `apps/api` (Worker) | **4000** | `vite.config.ts` — `server.port` + `strictPort`; `wrangler.jsonc` — `dev.port` |
+
+   `DEV_ORIGINS` in both `modules/api/files/src/index.ts` and `modules/auth/files/src/auth.ts` is now `["http://localhost:3000", "http://localhost:3001"]`. `strictPort` everywhere means a busy port is a startup error, not a silent shift to the next one — the old 5173→5174 drift was exactly what made CORS unreproducible.
 
 ## Preconditions
+
 - Branch `issue-12-auth-capability-module`, worktree at `/Users/mukit/orca/workspaces/saasaloy/issue-12-auth-capability-module`.
 - Use `.dev/playground` per `AGENTS.md` / `CONTRIBUTING.md` — never a global CLI link.
-- The agent already ran `add auth` once into `.dev/playground` for the automated checks below (see **Automated verification**). Reset first so you start from a clean, unlinked workspace:
+
+Reset to a clean, unlinked workspace:
 
 ```sh
 pnpm run play:reset
 ```
 
-- Scaffold + apply auth (and its `api`/`database` deps) fresh:
+Scaffold + apply auth (pulls in its `api`/`database` deps):
 
 ```sh
-cd .dev/playground
-./saasaloy add auth --yes
+cd .dev/playground && ./saasaloy add auth --yes
 ```
 
-- Install deps, then a real Cloudflare dev loop (D1 + Workers) for the manual cases:
+Install:
 
 ```sh
-pnpm install
+cd .dev/playground && pnpm install
 ```
 
-- Apply the D1 migration for the dropped auth schema, then start the Worker:
+Generate + apply the D1 migration for the dropped auth schema:
 
 ```sh
-pnpm --filter @repo/db db:generate
-pnpm --filter @repo/db db:migrate:local
-pnpm --filter @repo/api dev
+cd .dev/playground && pnpm --filter @repo/db db:generate && pnpm --filter @repo/db db:migrate:local
 ```
 
-- For the cross-origin cases, also run a second local origin to call from — e.g. `apps/web` (Astro, `http://localhost:4321`) or any static page served on one of the two dev-fallback origins baked into both `modules/api` and `packages/auth`: `http://localhost:4321`, `http://localhost:5173`.
+### Two ways to run the Worker — same port, different CORS behavior
+
+Both serve the api on **`http://localhost:4000`**, so they're interchangeable for everything except CORS:
+
+- `pnpm --filter @repo/api dev` runs **Vite** (`@cloudflare/vite-plugin`) on the real `workerd` runtime. Vite's own dev middleware adds `Access-Control-Allow-Origin` for *any* loopback origin (Vite 8's default `server.cors.origin` is `/^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/`), so a *disallowed localhost* origin still looks allowed. Use this for the browser cases — it's the normal dev loop — but never conclude anything about the allowlist from it.
+- `wrangler dev` runs the built Worker with **no Vite middleware**. This is the honest environment for CORS checks.
+
+Start the Vite loop:
+
+```sh
+cd .dev/playground && pnpm --filter @repo/api dev
+```
+
+Or the Worker-only run — no `--port` flag needed, `dev.port` in `wrangler.jsonc` supplies 4000:
+
+```sh
+cd .dev/playground && pnpm --filter @repo/api build && cd apps/api && pnpm exec wrangler dev --persist-to ./.wrangler/state
+```
+
+Either way, export the base URL the rest of this document refers to:
+
+```sh
+export BASE_URL=http://localhost:4000
+```
+
+If a dev server refuses to start with "port already in use", that's `strictPort` doing its job — free the port rather than working around it, or the allowlist stops matching.
+
+### Auth token / cookie
+
+There is no bearer token — auth is an **httpOnly session cookie**. For `curl`, capture it with a cookie jar (`-c jar.txt` to save, `-b jar.txt` to send). No secret is needed: with `BETTER_AUTH_SECRET` unset, Better Auth falls back to its dev default and logs a warning.
+
+### Two `curl` gotchas the agent hit
+
+- **Every POST needs an `Origin` header** from a trusted origin. Better Auth's CSRF check rejects a missing one with `403 MISSING_OR_NULL_ORIGIN`.
+- **`/auth/sign-out` needs a body**: `-H 'Content-Type: application/json' -d '{}'`. Without the header it's `415`; with the header but no body it's `400 Invalid JSON in request body`.
+
+### Second origin for the browser cases
+
+The calling origin is `apps/web` on **`http://localhost:3000`** — one of the two dev-fallback origins baked into both `modules/api` and `packages/auth`:
+
+```sh
+cd .dev/playground && pnpm --filter @repo/web dev
+```
 
 ## Test cases at a glance
 
@@ -44,133 +98,139 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 | # | Test case | Priority |
 |------|-----------|----------|
-| TC-1 | Keyless sign-up sets an httpOnly session cookie | 🔴 Critical |
-| TC-2 | Credentialed cross-origin call from an allowed localhost origin succeeds | 🔴 Critical |
-| TC-3 | Revocation: deleting the session row makes the next authed call 401 | 🔴 Critical |
-| TC-4 | A disallowed origin is rejected, not silently allowed | 🟡 Normal |
-| TC-5 | Explicit `COOKIE_DOMAIN` produces a real cross-subdomain `Set-Cookie` | 🟡 Normal |
-| TC-6 | `api.`-prefixed `BETTER_AUTH_URL` derives the apex cookie domain end-to-end | 🟡 Normal |
-| TC-7 | Sign-in (returning user) also sets a fresh session cookie | 🟢 Low |
+| TC-1 | Browser sends the session cookie on a credentialed cross-origin fetch | 🔴 Critical |
+| TC-2 | Browser blocks a response to a disallowed origin | 🔴 Critical |
+| TC-3 | `@repo/auth/client` works from a real page bundle | 🟡 Normal |
+| TC-4 | Session survives a page reload; sign-out clears it in the browser | 🟡 Normal |
+| TC-5 | Keyless dev experience is not alarming | 🟢 Low |
+
+Everything else — sign-up, sign-in, get-session, list-sessions, revocation, sign-out, preflight, origin rejection, both cookie-domain branches, and the negative/validation cases — is covered in [Automated verification](#automated-verification-by-ai-agent) and needs nothing from you.
 
 ## Test cases
 
-### TC-1 — Keyless sign-up sets an httpOnly session cookie  ·  🔴 Critical
+### TC-1 — Browser sends the session cookie on a credentialed cross-origin fetch  ·  🔴 Critical
+
+Only a browser can prove this: `curl -b jar.txt` sends the cookie because it's told to, whereas a browser applies `SameSite=Lax`, the port-is-not-part-of-same-site rule, and its own CORS gate.
+
 **Steps**
-1. With the Worker running (`pnpm --filter @repo/api dev`) and no `BETTER_AUTH_SECRET` set (keyless dev default), sign up a new user from a browser or client using `@repo/auth/client`:
+1. Start the api Vite loop (serves on `:4000`).
+2. Start `apps/web` and open `http://localhost:3000` in a browser.
+3. In DevTools console, sign up:
+
+```js
+await fetch("http://localhost:4000/auth/sign-up/email", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email: "browser1@example.com", password: "password123", name: "Browser One" }) }).then(r => r.json())
+```
+
+4. Then read the session back from that same page:
+
+```js
+await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }).then(r => r.json())
+```
+
+**Expected**
+- Step 3 returns a `token` + `user` object, no CORS error in the console.
+- DevTools → Application → Cookies shows `better-auth.session_token` for the API origin, flagged `HttpOnly`, with an empty `Domain` column (host-only).
+- The cookie is **not** readable from `document.cookie` in the console.
+- Step 4 returns a `session` + `user` object — the browser attached the cookie cross-origin.
+- Network tab shows `access-control-allow-origin: http://localhost:3000` (the literal origin, never `*`) and `access-control-allow-credentials: true` on both responses.
+
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
+### TC-2 — Browser blocks a response to a disallowed origin  ·  🔴 Critical
+
+The Worker still *computes* a response for a disallowed origin — it just withholds the `Access-Control-Allow-Origin` header, and the **browser** is what refuses to hand the body to the page. `curl` always sees the body, so only a browser can confirm the block.
+
+**Steps**
+1. Run the **Worker-only** server (see Preconditions — under `vite dev` this test is meaningless, Vite reflects every localhost origin):
+
+```sh
+cd .dev/playground && pnpm --filter @repo/api build && cd apps/api && pnpm exec wrangler dev --persist-to ./.wrangler/state
+```
+
+2. Serve any page on a loopback port that is **not** `3000` or `3001` — e.g. `http://localhost:9999`:
+
+```sh
+cd .dev/playground && pnpm exec http-server -p 9999
+```
+
+3. From that page's DevTools console:
+
+```js
+await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }).then(r => r.json())
+```
+
+**Expected**
+- The `fetch` **rejects** with a CORS error in the console (wording is browser-specific, e.g. "No 'Access-Control-Allow-Origin' header is present").
+- Network tab shows the request completing at the transport level (200) but no `Access-Control-Allow-Origin` header.
+- No session JSON reaches the page — nothing is logged from the `.then`.
+
+**Actual:** _(tester fills in)_
+
+- [ ] Pass
+- [ ] Fail
+
+### TC-3 — `@repo/auth/client` works from a real page bundle  ·  🟡 Normal
+
+The agent exercised the HTTP surface directly; nothing has yet imported `createClient` into a bundled page.
+
+**Steps**
+1. In `apps/web`, add a page (or a `<script>` island) that imports the client:
 
 ```ts
 import { createClient } from "@repo/auth/client";
-const client = createClient("http://localhost:8787"); // your wrangler dev port
-await client.signUp.email({ email: "a@b.com", password: "password123", name: "A" });
+const client = createClient("http://localhost:4000"); // the api Worker's pinned dev port
+await client.signUp.email({ email: "client1@example.com", password: "password123", name: "Client One" });
+const session = await client.getSession();
+console.log(session);
 ```
 
-2. Inspect the response's `Set-Cookie` header (browser DevTools → Network → the `/auth/sign-up/email` request, or `curl -i`).
+2. Load the page at `http://localhost:3000` with the api's Vite loop running.
 
 **Expected**
-- A `Set-Cookie` header is present with `HttpOnly` set.
-- No `Domain` attribute (host-only) — `BETTER_AUTH_URL` is unset or `localhost`, so `deriveCookieDomain` returns `undefined`.
-- The console prints Better Auth's dev-secret warning (no `BETTER_AUTH_SECRET` set) but sign-up still succeeds.
+- The page builds — `@repo/auth/client` resolves from `apps/web` with no bundler error about `better-auth/client`.
+- `signUp.email` succeeds and a session cookie appears for the API origin.
+- `getSession()` returns the session (the client's `credentials: "include"` default is doing its job).
+- No `cloudflare:workers` import leaks into the browser bundle (no console error about an unresolvable Node/Workers builtin).
 
 **Actual:** _(tester fills in)_
 
 - [ ] Pass
 - [ ] Fail
 
-### TC-2 — Credentialed cross-origin call from an allowed localhost origin succeeds  ·  🔴 Critical
+### TC-4 — Session survives a page reload; sign-out clears it in the browser  ·  🟡 Normal
 **Steps**
-1. From a page served on `http://localhost:4321` (or `:5173`) — a different origin/port than the API Worker — call a session-protected route with credentials:
+1. With the TC-1 session live, hard-reload `http://localhost:3000`.
+2. Re-run the `get-session` fetch from TC-1 step 4.
+3. Sign out:
 
-```ts
-fetch("http://localhost:8787/auth/get-session", { credentials: "include" });
+```js
+await fetch("http://localhost:4000/auth/sign-out", { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: "{}" }).then(r => r.json())
 ```
 
-2. Confirm the cookie set in TC-1 rides along and the call succeeds.
+4. Re-run the `get-session` fetch once more.
 
 **Expected**
-- The browser sends the cookie cross-origin (no CORS error in the console).
-- The response's `Access-Control-Allow-Origin` header echoes back `http://localhost:4321` (or `:5173`) exactly — never `*`.
-- `Access-Control-Allow-Credentials: true` is present.
-- The call returns the active session (200), not a CORS rejection.
+- After reload, `get-session` still returns the session — the cookie is persistent (`Max-Age=604800`), not session-scoped.
+- After sign-out, DevTools → Application → Cookies shows `better-auth.session_token` **gone** for the API origin.
+- The final `get-session` returns `null` (HTTP 200 — see the note in Automated verification; `null` is the "logged out" signal, not a 401).
 
 **Actual:** _(tester fills in)_
 
 - [ ] Pass
 - [ ] Fail
 
-### TC-3 — Revocation: deleting the session row makes the next authed call 401  ·  🔴 Critical
+### TC-5 — Keyless dev experience is not alarming  ·  🟢 Low
 **Steps**
-1. With a valid session cookie from TC-1, confirm an authed call succeeds first (e.g. `GET /auth/get-session` or any route using `getSession`).
-2. Find and delete the session row in local D1:
-
-```sh
-pnpm --filter @repo/db exec wrangler d1 execute app-db --local --config ../../apps/api/wrangler.jsonc --command "select id from session"
-pnpm --filter @repo/db exec wrangler d1 execute app-db --local --config ../../apps/api/wrangler.jsonc --command "delete from session where id = '<id-from-above>'"
-```
-
-3. Repeat the same authed call with the same (now-stale) cookie.
+1. With no `BETTER_AUTH_SECRET` and no `BETTER_AUTH_URL` set, start the Worker and watch the terminal on first request.
+2. Read the `Env vars to set` panel `saasaloy add auth` printed during scaffold.
 
 **Expected**
-- Step 1's call succeeds (200 / valid session payload).
-- After the delete, the same cookie yields `401` — `getSession` returns `null` and the route (or Better Auth's own `get-session` endpoint) reports unauthenticated.
-- No server error/crash — a missing session row is a normal "logged out" state, not an exception.
-
-**Actual:** _(tester fills in)_
-
-- [ ] Pass
-- [ ] Fail
-
-### TC-4 — A disallowed origin is rejected, not silently allowed  ·  🟡 Normal
-**Steps**
-1. From a page served on an origin **not** in `CORS_ORIGINS` / the dev fallback (e.g. `http://localhost:9999`), repeat TC-2's credentialed fetch against the running Worker.
-
-**Expected**
-- The browser blocks the response as a CORS failure (no `Access-Control-Allow-Origin` header echoing that origin).
-- The Worker does not set the cookie for / does not leak session data to this origin.
-- This confirms the allowlist is enforced live, not just in the pure-function check the agent already ran (see Automated verification).
-
-**Actual:** _(tester fills in)_
-
-- [ ] Pass
-- [ ] Fail
-
-### TC-5 — Explicit `COOKIE_DOMAIN` produces a real cross-subdomain `Set-Cookie`  ·  🟡 Normal
-**Steps**
-1. Set `COOKIE_DOMAIN=.example.test` and `BETTER_AUTH_URL=https://api.example.test` as Worker vars (e.g. in `.dev.vars` or `wrangler dev --var`), restart the Worker.
-2. Repeat TC-1's sign-up and inspect `Set-Cookie`.
-
-**Expected**
-- `Set-Cookie` includes `Domain=.example.test`.
-- Better Auth's `advanced.crossSubDomainCookies.enabled: true` path is active — i.e. the explicit `COOKIE_DOMAIN` wins over derivation, matching `deriveCookieDomain`'s documented rule #1.
-
-**Actual:** _(tester fills in)_
-
-- [ ] Pass
-- [ ] Fail
-
-### TC-6 — `api.`-prefixed `BETTER_AUTH_URL` derives the apex cookie domain end-to-end  ·  🟡 Normal
-**Steps**
-1. Unset `COOKIE_DOMAIN`, set `BETTER_AUTH_URL=https://api.example.test` only, restart the Worker.
-2. Repeat TC-1's sign-up and inspect `Set-Cookie`.
-
-**Expected**
-- `Set-Cookie` includes `Domain=.example.test` (derived: `api.` stripped, leading dot added) — matching the agent's pure-function verification of `deriveCookieDomain`, now confirmed through Better Auth's actual cookie-writing path.
-
-**Actual:** _(tester fills in)_
-
-- [ ] Pass
-- [ ] Fail
-
-### TC-7 — Sign-in (returning user) also sets a fresh session cookie  ·  🟢 Low
-**Steps**
-1. Using the user created in TC-1, sign out (clear cookies) and sign in again:
-
-```ts
-await client.signIn.email({ email: "a@b.com", password: "password123" });
-```
-
-**Expected**
-- A new `Set-Cookie` is issued (new session row in `session` table).
-- Same httpOnly / domain behavior as TC-1's sign-up.
+- Better Auth's warnings appear but read as guidance, not failure — sign-up still works.
+- Judge as a human: is it obvious from the scaffold output which of `CORS_ORIGINS` / `BETTER_AUTH_SECRET` / `BETTER_AUTH_URL` / `COOKIE_DOMAIN` are required before deploying, versus optional in dev?
+- Nothing in the console leaks a secret or a session token.
 
 **Actual:** _(tester fills in)_
 
@@ -178,16 +238,18 @@ await client.signIn.email({ email: "a@b.com", password: "password123" });
 - [ ] Fail
 
 ## Regression checks
+- [ ] **Base template alone** (`play:reset`, no modules) — `pnpm --filter @repo/web dev` comes up on `:3000` and the marketing site renders. The port pin lives in the base `astro.config.mjs`, so it ships to every project whether or not `api` is ever added.
+- [ ] **Two projects at once** — scaffold a second playground and start its web app while the first is running. Expect a loud `Port 3000 is already in use`, not a silent move to 3001 (which would collide with the reserved admin origin).
 - [ ] `./saasaloy add api` alone (no auth) still scaffolds and serves `/health` — the new CORS middleware doesn't break the base api capability.
 - [ ] `./saasaloy add database` alone still generates/migrates/round-trips a row — auth's schema drop doesn't disturb database's existing barrel.
 - [ ] Skill symlinks for `saasaloy-api`, `saasaloy-database`, **and** `saasaloy-auth` all land under `.claude/skills/` pointing into `.agents/skills/`.
-- [ ] Re-running `add auth --yes --force` is a clean no-op on the workspace files (only already confirmed for the two patches by the agent — spot check the scaffolded files too).
+- [ ] Re-running `add auth --yes --force` is a clean no-op on the workspace files (only already confirmed for the patches by the agent — spot check the scaffolded files too).
 - [ ] **Post-rebase interaction:** `apps/api/package.json` carries *both* `"@repo/db"` (added by `database`'s own patch, new on `origin/main`) and `"@repo/auth"` (added by this branch) — two `package-json-dependency` patches against the same file, neither clobbering the other, and `zod`/`@hono/zod-validator` from `api` still intact.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
 
-Commands run:
+### Build, scaffold, and static checks
 
 ```sh
 npx turbo run test --force
@@ -195,10 +257,6 @@ npx turbo run test --force
 
 ```sh
 npx turbo run typecheck
-```
-
-```sh
-pnpm run play:reset
 ```
 
 ```sh
@@ -225,34 +283,231 @@ cd .dev/playground && pnpm run typecheck
 cd .dev/playground && pnpm run build
 ```
 
-- ✅ `npx turbo run test --force` (fresh, no cache) → **82 tests passed** across 9 files, including the extended `jsonc.test.ts` coverage for the bare-string `compatibility_flags` entry. Note: the `package-json-dependency` patch kind is **no longer part of this branch** — `origin/main` landed the same capability independently as `src/lib/patch/pkg-json.ts` (with a richer `section`/`name`/`range` payload covering all four dependency maps), so the rebase dropped this branch's duplicate `package-json.ts` and re-pointed `auth`'s patch at main's implementation. What this branch still contributes to the patch engine is the `wrangler-binding` widening to accept a bare-string entry (needed for `compatibility_flags`).
+- ✅ `npx turbo run test --force` (fresh, no cache) → **82 tests passed** across 9 files, including the extended `jsonc.test.ts` coverage for the bare-string `compatibility_flags` entry. Note: the `package-json-dependency` patch kind is **no longer part of this branch** — `origin/main` landed the same capability independently as `src/lib/patch/pkg-json.ts`, so the rebase dropped this branch's duplicate and re-pointed `auth`'s patch at main's implementation. What this branch still contributes to the patch engine is the `wrangler-binding` widening to accept a bare-string entry.
 - ✅ `npx turbo run typecheck` → clean (`tsc --noEmit`).
-- ✅ **AC-1 (resolution + scaffold + env checklist):** `add auth --dry-run --yes` in a fresh playground → plan correctly ordered `api → database → auth`, listed all 23 files (`packages/auth/{package.json,tsconfig.json,src/{auth,server,client}.ts}`, `apps/api/src/routes/auth.ts`, `packages/db/src/schema/auth.ts`, 3 SKILL.md files), registered the `@auth → packages/auth/src` alias, and printed the **Env vars to set** panel with all four vars (`CORS_ORIGINS`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `COOKIE_DOMAIN`) and their descriptions.
-- ✅ `add auth --yes` (real apply, re-run post-rebase) → applied all 23 files plus **4** patches; verified on disk:
-  - `apps/api/package.json` gained `"@repo/auth": "workspace:*"` in `dependencies` (review item confirmed — real `add auth`, not just a unit test), alongside the `"@repo/db": "workspace:*"` entry `database`'s own patch now adds (new on `origin/main`) and the `zod`/`@hono/zod-validator` deps `api` now ships. The two `package-json-dependency` patches against the same file compose cleanly — hence 4 patches, up from 3 pre-rebase.
-  - `apps/api/wrangler.jsonc` gained `"compatibility_flags": ["nodejs_compat"]`, with the existing `d1_databases` binding and file comment left intact (review item confirmed).
-  - `apps/api/src/routes/auth.ts` is the documented thin forward (`auth.handler(c.req.raw)`, no `better-auth` import).
-  - `packages/db/src/schema/auth.ts` landed with `user`/`session`/`account`/`verification` tables, including the `updatedAt` default fix from commit `30fbaf3`.
-- ✅ `add auth --yes --force` (re-apply) → **idempotent**: `apps/api/package.json`'s `dependencies` block still has exactly one `@repo/auth` entry, `wrangler.jsonc`'s `compatibility_flags` still has exactly one `nodejs_compat` entry (`grep -c` → 1), all scaffold files reported `unchanged`.
-- ✅ **AC-4 (plugin-array patch against a dry-run fixture):** ran `insertIntoPluginArray` from `packages/cli/src/lib/patch/ts-module.ts` directly against the **real scaffolded** `packages/auth/src/auth.ts` (not the synthetic unit-test fixture) with a `billing`-shaped patch (`{ exportName: "auth", arrayProp: "plugins", call: "stripe", import: { name: "stripe", from: "@better-auth/stripe" } }`) → output added `import { stripe } from "@better-auth/stripe";` and changed `plugins: []` to `plugins: [stripe()]`, leaving every other line (including the `cookieDomain`/`trustedOrigins` logic and comments) byte-identical. Confirms the codemod works against the module's actual shape, with zero codemod changes needed.
-- ✅ **Cookie-domain derivation** (review item): extracted `deriveCookieDomain`'s logic and ran it against all four documented cases:
-  - `BETTER_AUTH_URL=http://localhost:8787` → `undefined` (host-only) ✅
-  - `BETTER_AUTH_URL=http://127.0.0.1:8787` → `undefined` (host-only) ✅
-  - `BETTER_AUTH_URL=https://api.example.com` → `.example.com` (apex, `api.`-prefix stripped) ✅
-  - `BETTER_AUTH_URL=https://app.example.com` (unrecognized shape) → `undefined` (conservative host-only fallback) ✅
-  - `COOKIE_DOMAIN=.x.com` set alongside `BETTER_AUTH_URL=https://api.x.com` → `.x.com` (explicit wins) ✅
-- ✅ **Credentialed CORS origin reflection** (review item): extracted the `cors()` middleware's `origin` callback logic and confirmed:
-  - An allowed dev-fallback origin (`http://localhost:4321`) is reflected back verbatim (not `*`).
-  - A configured `CORS_ORIGINS` list reflects an exact match and rejects (`null`) a non-match.
-  - A missing `Origin` header returns `null` (no reflection).
-  - Source-level check (`grep`) confirms `credentials: true` is set and no literal `"*"` origin string exists in `modules/api/files/src/index.ts`.
-- ✅ `pnpm install` in `.dev/playground` → **now succeeds** (414 packages, ~11s). The pre-rebase run was blocked by `ERR_PNPM_NO_MATURE_MATCHING_VERSION` on the repo's 3-day `minimumReleaseAge` cooldown; `origin/main` has since dropped `minimumReleaseAge` from the base template workspace, so that gate is gone and the old TC-7 covering it was removed from this plan.
-- ✅ `pnpm run typecheck` **inside `.dev/playground`** (the integration check that matters most for the rebase) → clean across `@repo/api`, `@repo/auth`, and `@repo/db`. This is what proves `auth` still compiles against `origin/main`'s `@repo/db` exports map: this branch originally added its own `"." + "./client"` exports to `modules/database/files/package.json`, main landed a different `"./client" + "./schema/*" + "./repositories/*"` map, and the rebase dropped this branch's version in favor of main's — `packages/auth/src/auth.ts` imports `@repo/db/client`, which main's map covers.
-- ✅ `pnpm run build` in `.dev/playground` → both build tasks succeed end-to-end.
-- ⚠️ **Still not exercised: a live Worker.** `wrangler dev` + local D1 migrations + real sign-up/session/CORS traffic were not brought up in this pass (the browser-based cross-origin cases need a human at a browser regardless). TC-1 through TC-6 and TC-7 all require a live Worker and are left for the human tester.
+- ✅ **AC-1 (resolution + scaffold + env checklist):** `add auth --dry-run --yes` → plan ordered `api → database → auth`, listed all 23 files, registered the `@auth → packages/auth/src` alias, and printed the **Env vars to set** panel with all four vars.
+- ✅ `add auth --yes` → applied all 23 files plus **4** patches; verified on disk: `apps/api/package.json` gained `"@repo/auth": "workspace:*"` alongside `"@repo/db"`; `wrangler.jsonc` gained `"compatibility_flags": ["nodejs_compat"]` with the `d1_databases` binding and file comment intact; `routes/auth.ts` is the documented thin forward; `packages/db/src/schema/auth.ts` landed with the `updatedAt` default fix.
+- ✅ `add auth --yes --force` → **idempotent**: exactly one `@repo/auth` entry, exactly one `nodejs_compat` entry, all scaffold files `unchanged`.
+- ✅ **AC-4 (plugin-array patch):** ran `insertIntoPluginArray` against the **real scaffolded** `packages/auth/src/auth.ts` with a `billing`-shaped patch → added the import and changed `plugins: []` to `plugins: [stripe()]`, every other line byte-identical.
+- ✅ `pnpm install` in `.dev/playground` → 414 packages, ~11s.
+- ✅ `pnpm run typecheck` inside `.dev/playground` → clean across `@repo/api`, `@repo/auth`, `@repo/db` — proves `auth` compiles against `origin/main`'s `@repo/db` exports map (`@repo/db/client`).
+- ✅ `pnpm run build` in `.dev/playground` → both build tasks succeed.
+
+### Live Worker — D1 migration and startup
+
+```sh
+cd .dev/playground && pnpm --filter @repo/db db:migrate:local
+```
+
+```sh
+cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "select name from sqlite_master where type='table'"
+```
+
+- ✅ Migration `0000_lethal_newton_destine.sql` creates `account`, `session`, `user`, `verification` — the four Better Auth tables, from the hand-authored schema snapshot.
+- ✅ `vite dev` and `wrangler dev` both boot the Worker with `nodejs_compat` and reach D1 (`apps/api/.wrangler/state`, the same persist path `db:migrate:local` writes to).
+- ℹ️ **Fixed since the previous draft:** `pnpm --filter @repo/api dev` runs `vite dev`, which used to serve on Vite's default 5173 — and silently moved to 5174 when 5173 was taken. That drift is what made CORS unreproducible. Both dev paths are now pinned to `:4000`; see the port section below.
+
+### Pinned dev ports
+
+```sh
+cd .dev/playground && pnpm --filter @repo/api dev
+```
+
+```sh
+cd .dev/playground && pnpm --filter @repo/web dev
+```
+
+```sh
+cd .dev/playground/apps/api && pnpm exec wrangler dev --persist-to ./.wrangler/state
+```
+
+- ✅ **api on `:4000` under `vite dev`** — `server: { port: 4000, strictPort: true }` in `vite.config.ts`. Log line: `➜  Local:   http://localhost:4000/`.
+- ✅ **api on `:4000` under `wrangler dev`, with no `--port` flag** — `dev.port` in `wrangler.jsonc` is picked up: `Ready on http://localhost:4000`. The two dev paths are now genuinely interchangeable.
+- ✅ **web on `:3000`** — `server: { port: 3000 }` plus `vite: { server: { strictPort: true } }` in `astro.config.mjs`. Astro honors the nested Vite `strictPort` (confirmed below); page returns `200`.
+- ✅ **`strictPort` fails loudly on both.** Starting a second api dev while 4000 was held → `vite dev` exits non-zero with `Port 4000 is already in use`, no silent shift. Same for web on 3000. This is the behavior that makes the allowlist trustworthy.
+- ✅ **The `dev.port` key composes with the patch engine** — after `add auth` applied its `wrangler-binding` patches, `apps/api/wrangler.jsonc` carries `dev.port`, `d1_databases`, *and* `compatibility_flags`, with both file comments intact.
+- ✅ **New allowlist is exactly `{3000, 3001}`**, verified against `wrangler dev` (no Vite middleware to mask it):
+  - `Origin: http://localhost:3000` → reflected.
+  - `Origin: http://localhost:3001` (reserved for the future `apps/admin`) → reflected.
+  - `Origin: http://localhost:9999` → no `Access-Control-Allow-Origin`.
+  - `Origin: http://localhost:4321` and `http://localhost:5173` (the *old* dev origins) → no `Access-Control-Allow-Origin`. The change actually took; nothing is still trusting the old ports.
+  - `POST /auth/sign-in/email` with `Origin: http://localhost:3001` → `200`; with `Origin: http://localhost:5173` → `403 INVALID_ORIGIN`.
+- ✅ **End-to-end on the new ports** — `add auth` + `add waitlist` into a fresh playground, then from `Origin: http://localhost:3000`: sign-up → `200` + httpOnly `Set-Cookie`; `POST /waitlist` → `200 {"ok":true}` (waitlist's `PUBLIC_API_URL` fallback now points at `:4000`); `GET /health` → `200` with the origin reflected.
+- ✅ `npx turbo run test typecheck --force` after the port change → **82 tests passed**, typecheck clean. Playground `typecheck` + `build` also clean.
+
+### Live Worker — sign-up, session, sign-out
+
+All calls below ran against `wrangler dev` on `$BASE_URL=http://localhost:4000`.
+
+```sh
+curl -i -s -c jar.txt -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-w1@example.com","password":"password123","name":"QA W1"}'
+```
+
+```sh
+curl -s -b jar.txt -H 'Origin: http://localhost:3000' -w '\n%{http_code}\n' "$BASE_URL/auth/get-session"
+```
+
+```sh
+curl -s -b jar.txt -H 'Origin: http://localhost:3000' -w '\n%{http_code}\n' "$BASE_URL/auth/list-sessions"
+```
+
+```sh
+curl -i -s -c jar4.txt -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-w1@example.com","password":"password123"}'
+```
+
+```sh
+curl -i -s -b jar.txt -X POST "$BASE_URL/auth/sign-out" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{}'
+```
+
+- ✅ **Sign-up** → `200`, body carries `token` + `user`, and:
+
+  ```
+  Set-Cookie: better-auth.session_token=IVIfY1vR…; Max-Age=604800; Path=/; HttpOnly; SameSite=Lax
+  ```
+
+  `HttpOnly` set, **no `Domain` attribute** (host-only) — exactly what `deriveCookieDomain()` returns when `BETTER_AUTH_URL` is unset. Better Auth's dev-secret warning prints; sign-up succeeds anyway.
+- ✅ **`get-session` with the cookie** → `200` with the full `session` + `user` payload (`userId` matches the signed-up user, `expiresAt` 7 days out).
+- ✅ **`list-sessions` with the cookie** → `200` with a one-element array.
+- ✅ **Sign-in (returning user)** → `200` and a **fresh** `Set-Cookie` with a new token, same `HttpOnly` / `SameSite=Lax` / no-`Domain` shape as sign-up.
+- ✅ **Sign-out** → `200`, and clears all three cookies:
+
+  ```
+  Set-Cookie: better-auth.session_token=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax
+  Set-Cookie: better-auth.session_data=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax
+  Set-Cookie: better-auth.dont_remember=; Max-Age=0; Path=/; HttpOnly; SameSite=Lax
+  ```
+
+  Re-using the signed-out cookie against `list-sessions` → `401 UNAUTHORIZED`.
+
+### Live Worker — revocation by deleting the session row
+
+```sh
+cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "select id, user_id, token from session"
+```
+
+```sh
+cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "delete from session where id = 'qi9jBUCB1zDSM34lYbnh7ow08gEzGhBk'"
+```
+
+```sh
+curl -s -b jar.txt -H 'Origin: http://localhost:3000' -w '\n%{http_code}\n' "$BASE_URL/auth/list-sessions"
+```
+
+```sh
+curl -i -s -b jar.txt -H 'Origin: http://localhost:3000' "$BASE_URL/auth/get-session"
+```
+
+- ✅ Session rows are readable in local D1 while the Worker holds the database — columns are **snake_case** (`user_id`, not `userId`; the old plan's query would have errored).
+- ✅ After deleting the row, the same cookie against `list-sessions` → **`401`** `{"message":"Unauthorized","code":"UNAUTHORIZED"}`. Revocation works.
+- ✅ `get-session` with the revoked cookie → **`200` with body `null`**, plus the three `Max-Age=0` cookie-clearing headers. No 500, no crash.
+- ⚠️ **Correction to the previous draft:** the old TC-3 expected `401` from `/auth/get-session`. Better Auth's `get-session` is deliberately non-throwing — it answers `200 null`. Use a genuinely protected endpoint (`/auth/list-sessions`, or a route built on the `getSession(...) → 401` recipe in `packages/auth/src/server.ts`) when you want to see the 401.
+
+### Live Worker — CORS and origin enforcement
+
+```sh
+curl -i -s -H 'Origin: http://localhost:3000' "$BASE_URL/health"
+```
+
+```sh
+curl -i -s -H 'Origin: http://localhost:9999' "$BASE_URL/health"
+```
+
+```sh
+curl -i -s "$BASE_URL/health"
+```
+
+```sh
+curl -i -s -X OPTIONS "$BASE_URL/auth/sign-in/email" -H 'Origin: http://localhost:3000' -H 'Access-Control-Request-Method: POST' -H 'Access-Control-Request-Headers: content-type'
+```
+
+```sh
+curl -i -s -X OPTIONS "$BASE_URL/auth/sign-in/email" -H 'Origin: http://localhost:9999' -H 'Access-Control-Request-Method: POST'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/json' -H 'Origin: http://evil.example.com' -d '{"email":"qa-w1@example.com","password":"password123"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/json' -d '{"email":"qa-w1@example.com","password":"password123"}' -w '\n%{http_code}\n'
+```
+
+- ✅ **Allowed dev-fallback origin** (`http://localhost:3000`) → `Access-Control-Allow-Origin: http://localhost:3000` reflected verbatim, plus `access-control-allow-credentials: true` and `vary: Origin`. Never `*`.
+- ✅ **Disallowed origin under `wrangler dev`** (`http://localhost:9999`) → **no** `Access-Control-Allow-Origin` header at all. The allowlist is enforced live, not just in the pure-function check.
+- ✅ **No `Origin` header** → no `Access-Control-Allow-Origin` (the callback returns `null`).
+- ✅ **Preflight from an allowed origin** → `204` with `Access-Control-Allow-Origin`, `Access-Control-Allow-Credentials: true`, `Access-Control-Allow-Headers: content-type`, and the method list.
+- ✅ **Preflight from a disallowed origin** → `204` with the method list but **no** `Access-Control-Allow-Origin`, so the browser rejects the preflight.
+- ✅ **POST from an untrusted origin** → `403` `{"message":"Invalid origin","code":"INVALID_ORIGIN"}` — Better Auth's `trustedOrigins` (fed from the same `CORS_ORIGINS` var) blocks state-changing calls independently of the CORS header layer. Defense in depth.
+- ✅ **POST with no `Origin` header** → `403` `{"message":"Missing or null Origin","code":"MISSING_OR_NULL_ORIGIN"}`.
+- ⚠️ **Sharp edge worth knowing:** the same disallowed-origin request through **`vite dev`** comes back *with* `Access-Control-Allow-Origin: http://localhost:9999`. That header is added by **Vite's** dev middleware, not the Worker — Vite 8's default `server.cors.origin` is `/^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/` (`vite/dist/node/chunks/node.js:689`), which reflects every loopback origin. Confirmed by running the identical request against `wrangler dev`, where the header is absent, and by using a non-loopback origin (`http://evil.example.com`), which `vite dev` also correctly refuses. **Never test the CORS allowlist with a localhost origin under `vite dev`.**
+
+### Live Worker — cookie-domain derivation, end to end
+
+_These two ran through `vite dev` (restarted between each so `.dev.vars` is re-read). They predate the port pin, so the agent hit them on Vite's old 5173; the URLs are rewritten to `$BASE_URL` since the behavior is port-independent._
+
+With `apps/api/.dev.vars` set to `BETTER_AUTH_URL="https://api.example.test"`:
+
+```sh
+curl -i -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-domain@example.com","password":"password123","name":"QA Domain"}'
+```
+
+With `apps/api/.dev.vars` set to both `BETTER_AUTH_URL="https://api.example.test"` and `COOKIE_DOMAIN=".override.test"`:
+
+```sh
+curl -i -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-override@example.com","password":"password123","name":"QA Override"}'
+```
+
+- ✅ **Derived apex domain** (`BETTER_AUTH_URL=https://api.example.test`, no `COOKIE_DOMAIN`) →
+
+  ```
+  Set-Cookie: __Secure-better-auth.session_token=…; Max-Age=604800; Domain=.example.test; Path=/; HttpOnly; Secure; SameSite=Lax
+  ```
+
+  `api.` stripped, leading dot added — `deriveCookieDomain`'s rule #2 confirmed through Better Auth's real cookie-writing path, including the `__Secure-` prefix and `Secure` flag it adds for an https base URL.
+- ✅ **Explicit `COOKIE_DOMAIN` wins** → `Domain=.override.test` (not `.example.test`), confirming rule #1.
+- ✅ **Host-only default** (neither var set) → no `Domain` attribute, unprefixed cookie name, no `Secure` — see the sign-up check above.
+- ✅ **Pure-function coverage** of the remaining branches: `http://localhost:4000` → `undefined`; `http://127.0.0.1:4000` → `undefined`; `https://app.example.com` (unrecognized shape) → `undefined` (conservative host-only fallback).
+
+### Live Worker — negative and validation cases
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-w1@example.com","password":"wrongpassword"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"nobody@example.com","password":"password123"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa-w1@example.com","password":"password123","name":"Dupe"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"qa9@example.com","password":"abc","name":"Short"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/json' -H 'Origin: http://localhost:3000' -d '{"email":"not-an-email","password":"password123","name":"Bad"}' -w '\n%{http_code}\n'
+```
+
+```sh
+curl -s -H 'Origin: http://localhost:3000' -w '\n%{http_code}\n' "$BASE_URL/auth/get-session"
+```
+
+- ✅ **Wrong password** → `401` `INVALID_EMAIL_OR_PASSWORD`.
+- ✅ **Unknown email** → `401` `INVALID_EMAIL_OR_PASSWORD` — byte-identical to the wrong-password response, so the endpoint doesn't leak which accounts exist.
+- ✅ **Duplicate sign-up** → `422` `USER_ALREADY_EXISTS_USE_ANOTHER_EMAIL`; no second `user` row created.
+- ✅ **Password too short** (`abc`) → `400` `PASSWORD_TOO_SHORT`.
+- ✅ **Malformed email** → `400` `[body.email] Invalid input` / `VALIDATION_ERROR`.
+- ✅ **No cookie at all** → `200 null` from `get-session`; `401` from `list-sessions`.
+- ✅ No response body or log line in any of the above leaked a password hash, session token belonging to another user, or the dev secret.
 
 ## Not covered / needs human judgment
-- **Any live-server behavior** — actual sign-up/sign-in cookie issuance, cross-origin credentialed fetch, session revocation, and the two cookie-domain end-to-end cases (TC-1 through TC-7) — all need a running `wrangler dev` Worker + migrated local D1, which the agent did not bring up in this pass. The agent verified the underlying pure logic (`deriveCookieDomain`, the CORS `origin` callback) in isolation and confirmed the whole playground installs, typechecks, and builds, which is strong evidence but not a substitute for observing the real `Set-Cookie` / `Access-Control-Allow-Origin` headers Better Auth and Hono's `cors()` middleware actually emit.
-- **A real `add billing`-style consumer** — no `billing`/`teams` module exists yet in this repo to exercise the plugin-array patch through an actual `saasaloy add` call end-to-end; the agent instead ran the codemod directly against the real scaffolded `auth.ts` with a `billing`-shaped patch spec, which exercises the same code path the future module's `patches[]` entry would trigger.
-- **Social OAuth / email verification** — deliberately not wired in this module (documented in the `saasaloy-auth` skill); nothing to test here.
-- **Version-pin currency** for `better-auth` and friends — chosen at build time without a live registry check. The pins install cleanly, but nothing here confirms they are the best current choice; `pnpm deps:check` is the gate for that.
+- **Real browser cookie-jar and CORS enforcement** — TC-1 through TC-4. `curl` proves the Worker emits the right headers and honors the cookie; only a browser proves it *applies* `SameSite=Lax`, keeps the cookie out of `document.cookie`, and actually withholds a cross-origin body from the page.
+- **`@repo/auth/client` in a bundle** — the agent drove the HTTP surface directly, never through `createAuthClient`; bundler resolution and the absence of a `cloudflare:workers` leak into browser code are untested (TC-3).
+- **HTTPS / production cookie behavior** — the `__Secure-` prefixed, `Secure` cookie was observed being *emitted*, but no browser accepted it over a real TLS origin, and no cross-subdomain session was exercised on a live domain.
+- **The reserved `:3001` admin origin** — `apps/admin` doesn't exist yet, so 3001 is trusted by the allowlist with nothing serving on it. Whenever the `admin` module lands, its dev server must pin 3001 the same way, or the entry becomes dead weight.
+- **A real `add billing`-style consumer** — no `billing`/`teams` module exists yet to drive the plugin-array patch through an actual `saasaloy add`; the agent ran the codemod directly against the real scaffolded `auth.ts` instead.
+- **Social OAuth / email verification** — deliberately not wired in this module (documented in the `saasaloy-auth` skill); nothing to test.
+- **Concurrency and volume** — no double-submit, simultaneous sign-in, or many-sessions-per-user load was exercised.
+- **Version-pin currency** for `better-auth` and friends — the pins install cleanly, but nothing here confirms they are the best current choice; `pnpm deps:check` is the gate.
