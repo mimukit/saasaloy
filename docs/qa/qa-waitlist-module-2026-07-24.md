@@ -70,7 +70,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Happy path: submit a valid email → row lands in D1  ·  🔴 Critical
@@ -89,7 +89,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Duplicate email → success, still one row  ·  🔴 Critical
@@ -103,7 +103,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Invalid email → form blocks / server rejects, no row  ·  🟡 Normal
@@ -119,7 +119,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — api unreachable → form shows a graceful error  ·  🟡 Normal
@@ -133,7 +133,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Submitting state + success copy behave correctly  ·  🟡 Normal
@@ -147,7 +147,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Second feature section co-exists (sorted, no clobber)  ·  🟢 Low
@@ -162,7 +162,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — Keyboard-only submit + screen-reader roles  ·  🟢 Low
@@ -177,14 +177,14 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `./saasaloy add api` alone still scaffolds `apps/api` + `routes/health.ts` (the api zod/validator additions didn't break the bare capability).
-- [ ] `GET http://localhost:5173/health` still returns its health payload after the waitlist route is mounted (route glob didn't shadow it).
-- [ ] Base `index.astro` still renders the hero and Terms/Privacy nav when **no** sections are present (empty-safe glob — verify on a `play:reset` project before adding waitlist).
-- [ ] `apps/web` and `packages/ui` still typecheck with React added to the base (no stray `.tsx`/JSX config breakage).
+- [x] `./saasaloy add api` alone still scaffolds `apps/api` + `routes/health.ts` (the api zod/validator additions didn't break the bare capability).
+- [x] `GET http://localhost:5173/health` still returns its health payload after the waitlist route is mounted (route glob didn't shadow it).
+- [x] Base `index.astro` still renders the hero and Terms/Privacy nav when **no** sections are present (empty-safe glob — verify on a `play:reset` project before adding waitlist).
+- [x] `apps/web` and `packages/ui` still typecheck with React added to the base (no stray `.tsx`/JSX config breakage).
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
