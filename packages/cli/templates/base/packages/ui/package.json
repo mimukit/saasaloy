@@ -7,11 +7,11 @@
     ".": "./src/index.ts"
   },
   "peerDependencies": {
-    "react": "^19"
+    "react": "19.2.8"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
-    "@types/react": "^19",
-    "react": "^19"
+    "@types/react": "19.2.17",
+    "react": "19.2.8"
   }
 }
