@@ -1,6 +1,7 @@
 # Plan — UI blocks in `packages/ui`
 
 Grilled: 2026-08-01
+Tracked: [#40](https://github.com/mimukit/saasaloy/issues/40) (epic)
 
 ## Context
 
@@ -70,7 +71,7 @@ Every phase below ends there.
 
 ---
 
-### Phase 0 — Astro 5 → 7 in the base
+### Phase 0 — Astro 5 → 7 in the base (#41)
 
 The base is two majors behind by design, not neglect: [ADR 0016](../adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)'s resolver caps within the current major, so majors only move on a deliberate `--allow-major`.
 
@@ -94,7 +95,7 @@ Steps:
 
 **Gate:** `pnpm deps:verify` green; playground `astro dev` serves all three pages.
 
-### Phase 1 — Tailwind 4 foundation + theme
+### Phase 1 — Tailwind 4 foundation + theme (#42)
 
 1. `apps/web`: add `tailwindcss@4.3.3` + `@tailwindcss/vite@4.3.3`; register the plugin in `astro.config.mjs`'s `vite.plugins`. Do **not** use `@astrojs/tailwind` — it is EOL and never supported Tailwind 4.
 2. Create `packages/ui/src/styles/globals.css`: the Tailwind/`tw-animate-css`/`shadcn/tailwind.css` imports, the corrected `@source` globs above, `@custom-variant dark`, and the OKLCH `:root` / `.dark` token sets (`baseColor: neutral`, `cssVariables: true`).
@@ -106,7 +107,7 @@ Steps:
 
 **Gate:** `pnpm deps:verify` green **and** the smoke test passes.
 
-### Phase 2 — `components.json` + vendored primitives
+### Phase 2 — `components.json` + vendored primitives (#42)
 
 1. Add `packages/ui/components.json` **only** (no app-side file until `admin` exists) — `style: "base-nova"`, `baseColor: "neutral"`, `cssVariables: true`, `rsc: false`, `iconLibrary: "lucide"`, blank `tailwind.config` (required for v4), aliases routing `ui`/`utils` at `@repo/ui`.
 2. Vendor the primitives the blocks need into `packages/ui/src/components/`: `button`, `input`, `label`, `card`, `badge`, `accordion`, `separator`.
@@ -115,7 +116,7 @@ Steps:
 
 **Gate:** `pnpm deps:verify` green.
 
-### Phase 3 — The blocks
+### Phase 3 — The blocks (#43)
 
 Build `packages/ui/src/blocks/`: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`, `cta`, `footer`.
 
@@ -126,18 +127,18 @@ Build `packages/ui/src/blocks/`: `navbar`, `hero`, `feature-grid`, `pricing-tabl
 
 **Gate:** `pnpm deps:verify` green.
 
-### Phase 4 — Compose the landing page
+### Phase 4 — Compose the landing page (#43)
 
 1. Rewrite `index.astro` to compose blocks, **keeping the `sections/*.astro` glob** intact.
 2. Static-render by default. Hydrate only what needs it: navbar mobile menu, pricing toggle, FAQ accordion — `client:visible` / `client:idle`, never a blanket `client:load`.
 
 **Gate:** playground page loads; confirm the JS payload for static blocks is ~zero.
 
-### Phase 5 — Downstream reconciliation
+### Phase 5 — Downstream reconciliation (#44)
 
 Restyle the `waitlist` module (`modules/waitlist/files/web/`) — `WaitlistForm.tsx` and `waitlist.astro` — against `@repo/ui` primitives. Its raw HTML will look broken beside styled blocks. Re-run `docs/qa/qa-waitlist-module-2026-07-24.md`.
 
-### Phase 6 — Docs & governance
+### Phase 6 — Docs & governance (#43)
 
 1. **New ADR** superseding ADR 0003's "no Tailwind" clause. It records: the base-template choice; the `base-nova` bet **and its escape hatch** (template can swap families; initted projects insulated); the **narrowed inert thesis** (base stays inert on functional surfaces — presentation deps rot aesthetically, not dangerously); the **one-time-gift consequence** (base files unmanaged, no update path, by design); and the decision to keep `shadcn` as a live runtime dep.
 2. `CONTEXT.md`: update the **Base** definition; add a **Block** term.
