@@ -1,6 +1,6 @@
 # QA Plan: `auth` capability module
 
-_Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases moved to automated `curl` verification; dev ports pinned to web :3000 / api :4000) · covers `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
+_Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases moved to automated `curl` verification; dev ports pinned to web :3000 / api :4000) · updated 2026-08-03 (TC-1 browser failure root-caused and fixed — `server.cors: false`) · covers `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
 
 ## Summary
 - `saasaloy add auth` scaffolds `packages/auth` (Better Auth, DB-backed httpOnly session cookies), wires `@repo/auth` into `apps/api`, drops a thin `routes/auth.ts` + a hand-authored Drizzle schema snapshot into `packages/db`, adds `nodejs_compat` to `apps/api/wrangler.jsonc`, and moves credentialed CORS into `modules/api`'s spine.
@@ -48,12 +48,14 @@ Generate + apply the D1 migration for the dropped auth schema:
 cd .dev/playground && pnpm --filter @repo/db db:generate && pnpm --filter @repo/db db:migrate:local
 ```
 
-### Two ways to run the Worker — same port, different CORS behavior
+### Two ways to run the Worker — same port, same CORS behavior
 
-Both serve the api on **`http://localhost:4000`**, so they're interchangeable for everything except CORS:
+Both serve the api on **`http://localhost:4000`** and are now fully interchangeable, including for CORS:
 
-- `pnpm --filter @repo/api dev` runs **Vite** (`@cloudflare/vite-plugin`) on the real `workerd` runtime. Vite's own dev middleware adds `Access-Control-Allow-Origin` for *any* loopback origin (Vite 8's default `server.cors.origin` is `/^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/`), so a *disallowed localhost* origin still looks allowed. Use this for the browser cases — it's the normal dev loop — but never conclude anything about the allowlist from it.
-- `wrangler dev` runs the built Worker with **no Vite middleware**. This is the honest environment for CORS checks.
+- `pnpm --filter @repo/api dev` runs **Vite** (`@cloudflare/vite-plugin`) on the real `workerd` runtime.
+- `wrangler dev` runs the built Worker with no Vite middleware.
+
+`apps/api/vite.config.ts` sets `server.cors: false`, so Vite's own dev CORS middleware is off and the Worker's `hono/cors` is the only thing answering. See the [fix note](#fix-vite-devs-cors-middleware-broke-credentialed-requests) for what that middleware used to do.
 
 Start the Vite loop:
 
@@ -134,7 +136,7 @@ await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }
 - Step 4 returns a `session` + `user` object — the browser attached the cookie cross-origin.
 - Network tab shows `access-control-allow-origin: http://localhost:3000` (the literal origin, never `*`) and `access-control-allow-credentials: true` on both responses.
 
-**Actual:** _(tester fills in)_
+**Actual:** Failed on 2026-08-03 with a preflight `Access-Control-Allow-Credentials` error — root-caused to Vite's dev CORS middleware and fixed; see [the fix note](#fix-vite-devs-cors-middleware-broke-credentialed-requests). **Needs a re-run** after restarting the api dev server.
 
 - [ ] Pass
 - [ ] Fail
@@ -144,7 +146,7 @@ await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }
 The Worker still *computes* a response for a disallowed origin — it just withholds the `Access-Control-Allow-Origin` header, and the **browser** is what refuses to hand the body to the page. `curl` always sees the body, so only a browser can confirm the block.
 
 **Steps**
-1. Run the **Worker-only** server (see Preconditions — under `vite dev` this test is meaningless, Vite reflects every localhost origin):
+1. Run either server — with `server.cors: false` in `vite.config.ts`, `vite dev` now enforces the allowlist as honestly as `wrangler dev`. The Worker-only run remains the belt-and-braces choice:
 
 ```sh
 cd .dev/playground && pnpm --filter @repo/api build && cd apps/api && pnpm exec wrangler dev --persist-to ./.wrangler/state
@@ -439,7 +441,33 @@ curl -s -X POST "$BASE_URL/auth/sign-in/email" -H 'Content-Type: application/jso
 - ✅ **Preflight from a disallowed origin** → `204` with the method list but **no** `Access-Control-Allow-Origin`, so the browser rejects the preflight.
 - ✅ **POST from an untrusted origin** → `403` `{"message":"Invalid origin","code":"INVALID_ORIGIN"}` — Better Auth's `trustedOrigins` (fed from the same `CORS_ORIGINS` var) blocks state-changing calls independently of the CORS header layer. Defense in depth.
 - ✅ **POST with no `Origin` header** → `403` `{"message":"Missing or null Origin","code":"MISSING_OR_NULL_ORIGIN"}`.
-- ⚠️ **Sharp edge worth knowing:** the same disallowed-origin request through **`vite dev`** comes back *with* `Access-Control-Allow-Origin: http://localhost:9999`. That header is added by **Vite's** dev middleware, not the Worker — Vite 8's default `server.cors.origin` is `/^https?:\/\/(?:(?:[^:]+\.)?localhost|127\.0\.0\.1|\[::1\])(?::\d+)?$/` (`vite/dist/node/chunks/node.js:689`), which reflects every loopback origin. Confirmed by running the identical request against `wrangler dev`, where the header is absent, and by using a non-loopback origin (`http://evil.example.com`), which `vite dev` also correctly refuses. **Never test the CORS allowlist with a localhost origin under `vite dev`.**
+### Fix: `vite dev`'s CORS middleware broke credentialed requests
+
+_Added 2026-08-03, after TC-1 failed in a real browser._
+
+TC-1 failed with:
+
+```
+Access to fetch at 'http://localhost:4000/auth/sign-up/email' from origin 'http://localhost:3000'
+has been blocked by CORS policy: Response to preflight request doesn't pass access control check:
+The value of the 'Access-Control-Allow-Credentials' header in the response is '' which must be
+'true' when the request's credentials mode is 'include'.
+```
+
+**Root cause.** Vite's dev CORS middleware **terminates every `OPTIONS` preflight itself** — it writes headers and calls `res.end()` without `next()`, so the request never reaches the Worker (`vite/dist/node/chunks/node.js:7166-7182`). Its `configureCredentials` only emits `Access-Control-Allow-Credentials` when `credentials === true`, and Vite's defaults leave that unset. So under `vite dev` the preflight came back with a reflected origin but no credentials header, and the browser refused the `credentials: "include"` fetch. `curl` never caught it because the earlier automated preflight checks all ran against `wrangler dev`.
+
+This is the same middleware behind the old "sharp edge" note — it also reflected *every* loopback origin (`server.cors.origin` defaults to a loopback regex), which is why a disallowed localhost origin used to look allowed.
+
+**Fix.** `server.cors: false` in `modules/api/files/vite.config.ts` disables the middleware entirely (`if (cors !== false) middlewares.use(...)`, `node.js:26012`), leaving the Worker's `hono/cors` as the only responder.
+
+**Verified** against `vite dev` after the change:
+
+- Preflight from `http://localhost:3000` → `204` with `access-control-allow-credentials: true` and `access-control-allow-origin: http://localhost:3000`.
+- Preflight from `http://localhost:9999` → `204` with **no** `access-control-allow-origin`. The allowlist is now enforced under `vite dev` too.
+- `POST /auth/sign-up/email` from `http://localhost:3000` → `200` with the httpOnly `Set-Cookie` and both CORS headers; `GET /auth/get-session` with that cookie → `200`.
+- `GET /health` from `http://localhost:9999` → no `access-control-allow-origin`.
+
+⚠️ The old advice "never test the CORS allowlist under `vite dev`" **no longer applies** — but re-running TC-1/TC-2 requires restarting the api dev server so the new `vite.config.ts` is picked up.
 
 ### Live Worker — cookie-domain derivation, end to end
 
