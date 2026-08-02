@@ -52,7 +52,9 @@ config. Misconfigured prod fails **visibly** (CORS rejects the real origin) rath
 
 1. `COOKIE_DOMAIN` set → used verbatim, `advanced.crossSubDomainCookies.enabled: true`.
 2. Unset, `BETTER_AUTH_URL` host is `localhost`/`127.0.0.1` → host-only cookie (no `Domain` attr).
-3. Unset, host starts `api.` → strips to the apex (`api.x.com` → `.x.com`), cross-subdomain.
+3. Unset, host starts `api.` **and the remainder still contains a dot** → strips to the apex
+   (`api.x.com` → `.x.com`), cross-subdomain. A host like `api.dev`, whose apex would strip to a
+   bare TLD, falls through to rule 4 instead — browsers reject a TLD-only cookie domain outright.
 4. Unset, anything else → **host-only** (conservative — never guess a domain shape that isn't one
    of the two recognized shapes; a wrong guess breaks login silently, host-only always works).
 

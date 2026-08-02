@@ -50,7 +50,16 @@ function deriveCookieDomain(): string | undefined {
   }
 
   if (hostname === "localhost" || hostname === "127.0.0.1") return undefined; // host-only
-  if (hostname.startsWith("api.")) return `.${hostname.slice("api.".length)}`;
+  if (hostname.startsWith("api.")) {
+    const apex = hostname.slice("api.".length);
+    // The apex must still have a dot in it. Without this guard a host whose own apex
+    // starts with `api.` — `api.dev`, `api.io` — strips to a bare TLD (`.dev`, `.io`),
+    // which browsers reject outright, and login breaks silently: the exact failure this
+    // whole function exists to avoid. (A two-label check won't catch a registry suffix
+    // like `api.co.uk`; a real public-suffix list is more than a scaffold should carry,
+    // and nobody hosts an API on the apex of a public suffix.)
+    if (apex.includes(".")) return `.${apex}`;
+  }
   return undefined; // conservative: never guess a domain shape we don't recognize
 }
 
