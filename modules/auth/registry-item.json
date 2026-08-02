@@ -1,0 +1,47 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "auth",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api", "database"],
+  "dependencies": [],
+  "envVars": {
+    "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Falls back to Better Auth's dev default locally (console warning); required in prod.",
+    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com). Used as the auth baseURL and to derive the cookie domain.",
+    "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
+  },
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/auth",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "compatibility_flags",
+      "entry": "nodejs_compat"
+    }
+  ],
+  "files": [
+    { "path": "files/api/routes/auth.ts", "target": "@api/routes/auth.ts" },
+    { "path": "files/db/schema/auth.ts", "target": "@db/schema/auth.ts" }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/auth",
+      "aliases": { "@auth": "packages/auth/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/auth.ts", "target": "src/auth.ts" },
+        { "path": "files/src/server.ts", "target": "src/server.ts" },
+        { "path": "files/src/client.ts", "target": "src/client.ts" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-auth"]
+  }
+}

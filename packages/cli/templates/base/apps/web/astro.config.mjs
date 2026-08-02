@@ -13,7 +13,14 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: "https://example.com",
   integrations: [react()],
+  // Fixed dev port. Every cross-origin consumer in this repo — the api Worker's CORS
+  // allowlist, auth's `trustedOrigins`, the waitlist form's `PUBLIC_API_URL` fallback —
+  // hardcodes the localhost dev origins, so the port cannot be allowed to drift.
+  // `strictPort` makes a busy port a loud failure instead of a silent +1 that turns
+  // into a mystery CORS rejection. web is 3000, api is 4000 (see apps/api).
+  server: { port: 3000 },
   vite: {
+    server: { strictPort: true },
     resolve: {
       // `@web` mirrors saasaloy.json's alias of the same name (apps/web/src) — that
       // alias only drives the CLI's file-placement when a module's files[] target

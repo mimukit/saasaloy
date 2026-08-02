@@ -4,7 +4,9 @@
   "type": "saasaloy:capability",
   "dependsOn": [],
   "dependencies": [],
-  "envVars": {},
+  "envVars": {
+    "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to localhost dev origins when unset."
+  },
   "patches": [],
   "files": [],
   "scaffolds": [

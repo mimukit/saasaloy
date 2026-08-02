@@ -2,17 +2,16 @@ import { zValidator } from "@hono/zod-validator";
 import { getDb, type DbBindings } from "@repo/db/client";
 import { waitlist as waitlistTable } from "@repo/db/schema/waitlist";
 import { Hono } from "hono";
-import { cors } from "hono/cors";
 import { z } from "zod";
 
 // Route module contract: default-export a Hono sub-app named after the file. This one
 // mounts at `/waitlist`, so `post("/")` serves `POST /waitlist`.
 const waitlist = new Hono<{ Bindings: DbBindings }>();
 
-// web and api are separate origins in dev (:4321 vs :5173) and in prod — CORS is
-// mounted here, route-level, rather than touching the shared api entry.
-waitlist.use("*", cors());
-
+// No CORS here. web and api are separate origins in dev (:3000 vs :4000) and in prod,
+// but `modules/api`'s spine already applies the credentialed `CORS_ORIGINS` allowlist to
+// `*` before this sub-app is mounted. A route-level `cors()` would run as an inner
+// middleware and overwrite those headers with its own permissive defaults.
 const submitSchema = z.object({ email: z.email() });
 
 waitlist.post("/", zValidator("json", submitSchema), async (c) => {
