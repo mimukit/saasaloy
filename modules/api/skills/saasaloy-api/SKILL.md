@@ -92,10 +92,14 @@ Because `wrangler.jsonc` pins the same `4000`, `wrangler dev` is a drop-in swap 
 the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or, when that's unset, in
 `DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are incompatible.
 
-**Test CORS against `wrangler dev`, not `vite dev`.** Vite's dev server adds its own
-`Access-Control-Allow-Origin` for *every* loopback origin (Vite 8's default `server.cors.origin`
-is a localhost regex), so under `vite dev` a disallowed `http://localhost:9999` still looks
-allowed. The Worker itself withholds the header correctly — Vite's middleware is masking it.
+**Keep `server.cors: false` in `vite.config.ts`.** Vite's own dev CORS middleware otherwise
+intercepts CORS in two ways that both mislead: it reflects `Access-Control-Allow-Origin` for
+*every* loopback origin (Vite 8's default `server.cors.origin` is a localhost regex), so a
+disallowed `http://localhost:9999` looks allowed; and it **terminates every `OPTIONS` preflight
+itself** without emitting `Access-Control-Allow-Credentials`, which breaks any
+`credentials: "include"` fetch under `vite dev` while the identical request works under
+`wrangler dev`. With the middleware off, `hono/cors` is the only responder and both dev paths
+agree.
 
 ```sh
 curl -i -H 'Origin: http://localhost:3000' http://localhost:4000/health # → header reflected

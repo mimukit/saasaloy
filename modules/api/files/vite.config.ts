@@ -12,5 +12,13 @@ export default defineConfig({
   // Vite's default is to silently take the next free port, and a shifted api port
   // shows up as an unexplained CORS failure rather than an obvious "port in use".
   // web is 3000 (see apps/web), api is 4000.
-  server: { port: 4000, strictPort: true },
+  //
+  // `cors: false` turns Vite's own dev CORS middleware off so the Worker's
+  // `hono/cors` is the only thing answering. Vite's middleware terminates every
+  // OPTIONS preflight itself and never emits `Access-Control-Allow-Credentials`,
+  // which breaks any `credentials: "include"` fetch under `vite dev` even though
+  // the same request works under `wrangler dev`. It also reflects every loopback
+  // origin, so the allowlist looked wider than it is. Off, both dev paths behave
+  // identically.
+  server: { port: 4000, strictPort: true, cors: false },
 });
