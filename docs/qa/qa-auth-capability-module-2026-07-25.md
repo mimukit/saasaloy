@@ -1,6 +1,6 @@
 # QA Plan: `auth` capability module
 
-_Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases moved to automated `curl` verification; dev ports pinned to web :3000 / api :4000) · updated 2026-08-03 (TC-1 browser failure root-caused and fixed — `server.cors: false`) · covers `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
+_Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases moved to automated `curl` verification; dev ports pinned to web :3000 / api :4000) · updated 2026-08-03 (TC-1 browser failure root-caused and fixed — `server.cors: false`; then review findings applied — clean-env precondition stated, revocation query made reproducible, author-specific path removed) · covers `issue-12-auth-capability-module` vs `origin/main` (issue #12)_
 
 ## Summary
 - `saasaloy add auth` scaffolds `packages/auth` (Better Auth, DB-backed httpOnly session cookies), wires `@repo/auth` into `apps/api`, drops a thin `routes/auth.ts` + a hand-authored Drizzle schema snapshot into `packages/db`, adds `nodejs_compat` to `apps/api/wrangler.jsonc`, and moves credentialed CORS into `modules/api`'s spine.
@@ -21,8 +21,13 @@ _Generated 2026-07-25 · updated 2026-07-26 (live Worker brought up, most cases 
 
 ## Preconditions
 
-- Branch `issue-12-auth-capability-module`, worktree at `/Users/mukit/orca/workspaces/saasaloy/issue-12-auth-capability-module`.
+- Branch `issue-12-auth-capability-module`, checked out in a worktree of this repo. Every path
+  below is relative to that worktree's root.
 - Use `.dev/playground` per `AGENTS.md` / `CONTRIBUTING.md` — never a global CLI link.
+- **Start from a clean env.** Unless a case says otherwise, `apps/api/.dev.vars` should be absent
+  or empty — no `CORS_ORIGINS`, `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, or `COOKIE_DOMAIN`. A
+  leftover `CORS_ORIGINS` from an earlier case replaces the dev fallback allowlist wholesale and
+  silently invalidates every origin expectation in this document.
 
 Reset to a clean, unlinked workspace:
 
@@ -328,7 +333,7 @@ cd .dev/playground/apps/api && pnpm exec wrangler dev --persist-to ./.wrangler/s
 - ✅ **web on `:3000`** — `server: { port: 3000 }` plus `vite: { server: { strictPort: true } }` in `astro.config.mjs`. Astro honors the nested Vite `strictPort` (confirmed below); page returns `200`.
 - ✅ **`strictPort` fails loudly on both.** Starting a second api dev while 4000 was held → `vite dev` exits non-zero with `Port 4000 is already in use`, no silent shift. Same for web on 3000. This is the behavior that makes the allowlist trustworthy.
 - ✅ **The `dev.port` key composes with the patch engine** — after `add auth` applied its `wrangler-binding` patches, `apps/api/wrangler.jsonc` carries `dev.port`, `d1_databases`, *and* `compatibility_flags`, with both file comments intact.
-- ✅ **New allowlist is exactly `{3000, 3001}`**, verified against `wrangler dev` (no Vite middleware to mask it):
+- ✅ **New allowlist is exactly `{3000, 3001}`**, verified against `wrangler dev` (no Vite middleware to mask it). These results hold only with `CORS_ORIGINS` **unset or empty**, which is what puts the Worker on the `DEV_ORIGINS` fallback; any configured value replaces the list entirely and changes every line below:
   - `Origin: http://localhost:3000` → reflected.
   - `Origin: http://localhost:3001` (reserved for the future `apps/admin`) → reflected.
   - `Origin: http://localhost:9999` → no `Access-Control-Allow-Origin`.
@@ -387,9 +392,16 @@ curl -i -s -b jar.txt -X POST "$BASE_URL/auth/sign-out" -H 'Content-Type: applic
 cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "select id, user_id, token from session"
 ```
 
+Delete by **user**, not by a session id copied from an earlier run — every migration and sign-up
+mints fresh ids, so a hardcoded one deletes zero rows and the revocation is never exercised:
+
 ```sh
-cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "delete from session where id = 'qi9jBUCB1zDSM34lYbnh7ow08gEzGhBk'"
+cd .dev/playground && pnpm --filter @repo/db exec wrangler d1 execute DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state --command "delete from session where user_id = (select id from user where email = 'qa-w1@example.com')"
 ```
+
+Confirm it actually removed something — `wrangler d1 execute` reports the rows written. If it
+says zero, the cookie in `jar.txt` belongs to a different user or database and the `401` below
+would be meaningless.
 
 ```sh
 curl -s -b jar.txt -H 'Origin: http://localhost:3000' -w '\n%{http_code}\n' "$BASE_URL/auth/list-sessions"
@@ -495,6 +507,7 @@ curl -i -s -X POST "$BASE_URL/auth/sign-up/email" -H 'Content-Type: application/
 - ✅ **Explicit `COOKIE_DOMAIN` wins** → `Domain=.override.test` (not `.example.test`), confirming rule #1.
 - ✅ **Host-only default** (neither var set) → no `Domain` attribute, unprefixed cookie name, no `Secure` — see the sign-up check above.
 - ✅ **Pure-function coverage** of the remaining branches: `http://localhost:4000` → `undefined`; `http://127.0.0.1:4000` → `undefined`; `https://app.example.com` (unrecognized shape) → `undefined` (conservative host-only fallback).
+- ⬜ **Not yet re-run:** the `api.`-strip now requires the apex to still contain a dot, so a host whose apex *is* a TLD falls back to host-only instead of emitting a rejected cookie domain. Expect `https://api.dev` → `undefined` (was `.dev`) and `https://api.example.test` → `.example.test` (unchanged). Worth a quick pure-function check on the next pass.
 
 ### Live Worker — negative and validation cases
 
