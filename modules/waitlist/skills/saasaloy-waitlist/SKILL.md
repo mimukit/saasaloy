@@ -54,9 +54,11 @@ channel, and keeps the form's UI simple (no special-cased duplicate error state)
 
 ## CORS
 
-`web` and `api` are separate origins in dev (`:3000` vs `:4000`) and in prod. The route mounts
-Hono's built-in `hono/cors` itself (`waitlist.use("*", cors())`) — no new dependency, no edit to
-api's shared entry.
+`web` and `api` are separate origins in dev (`:3000` vs `:4000`) and in prod, so the form's
+`fetch` is cross-origin. The route itself carries **no CORS code**: `modules/api`'s entry applies
+the credentialed `CORS_ORIGINS` allowlist to `*` before this sub-app is mounted, and a route-level
+`cors()` would run as an inner middleware and overwrite those headers with permissive defaults.
+If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worker.
 
 ## Boundaries to honor
 
