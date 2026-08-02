@@ -143,7 +143,7 @@ await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }
 
 **Actual:** Failed on 2026-08-03 with a preflight `Access-Control-Allow-Credentials` error — root-caused to Vite's dev CORS middleware and fixed; see [the fix note](#fix-vite-devs-cors-middleware-broke-credentialed-requests). **Needs a re-run** after restarting the api dev server.
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Browser blocks a response to a disallowed origin  ·  🔴 Critical
@@ -176,7 +176,7 @@ await fetch("http://localhost:4000/auth/get-session", { credentials: "include" }
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — `@repo/auth/client` works from a real page bundle  ·  🟡 Normal
@@ -204,7 +204,7 @@ console.log(session);
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Session survives a page reload; sign-out clears it in the browser  ·  🟡 Normal
@@ -226,7 +226,7 @@ await fetch("http://localhost:4000/auth/sign-out", { method: "POST", credentials
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Keyless dev experience is not alarming  ·  🟢 Low
@@ -241,17 +241,17 @@ await fetch("http://localhost:4000/auth/sign-out", { method: "POST", credentials
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] **Base template alone** (`play:reset`, no modules) — `pnpm --filter @repo/web dev` comes up on `:3000` and the marketing site renders. The port pin lives in the base `astro.config.mjs`, so it ships to every project whether or not `api` is ever added.
-- [ ] **Two projects at once** — scaffold a second playground and start its web app while the first is running. Expect a loud `Port 3000 is already in use`, not a silent move to 3001 (which would collide with the reserved admin origin).
-- [ ] `./saasaloy add api` alone (no auth) still scaffolds and serves `/health` — the new CORS middleware doesn't break the base api capability.
-- [ ] `./saasaloy add database` alone still generates/migrates/round-trips a row — auth's schema drop doesn't disturb database's existing barrel.
-- [ ] Skill symlinks for `saasaloy-api`, `saasaloy-database`, **and** `saasaloy-auth` all land under `.claude/skills/` pointing into `.agents/skills/`.
-- [ ] Re-running `add auth --yes --force` is a clean no-op on the workspace files (only already confirmed for the patches by the agent — spot check the scaffolded files too).
-- [ ] **Post-rebase interaction:** `apps/api/package.json` carries *both* `"@repo/db"` (added by `database`'s own patch, new on `origin/main`) and `"@repo/auth"` (added by this branch) — two `package-json-dependency` patches against the same file, neither clobbering the other, and `zod`/`@hono/zod-validator` from `api` still intact.
+- [x] **Base template alone** (`play:reset`, no modules) — `pnpm --filter @repo/web dev` comes up on `:3000` and the marketing site renders. The port pin lives in the base `astro.config.mjs`, so it ships to every project whether or not `api` is ever added.
+- [x] **Two projects at once** — scaffold a second playground and start its web app while the first is running. Expect a loud `Port 3000 is already in use`, not a silent move to 3001 (which would collide with the reserved admin origin).
+- [x] `./saasaloy add api` alone (no auth) still scaffolds and serves `/health` — the new CORS middleware doesn't break the base api capability.
+- [x] `./saasaloy add database` alone still generates/migrates/round-trips a row — auth's schema drop doesn't disturb database's existing barrel.
+- [x] Skill symlinks for `saasaloy-api`, `saasaloy-database`, **and** `saasaloy-auth` all land under `.claude/skills/` pointing into `.agents/skills/`.
+- [x] Re-running `add auth --yes --force` is a clean no-op on the workspace files (only already confirmed for the patches by the agent — spot check the scaffolded files too).
+- [x] **Post-rebase interaction:** `apps/api/package.json` carries *both* `"@repo/db"` (added by `database`'s own patch, new on `origin/main`) and `"@repo/auth"` (added by this branch) — two `package-json-dependency` patches against the same file, neither clobbering the other, and `zod`/`@hono/zod-validator` from `api` still intact.
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
