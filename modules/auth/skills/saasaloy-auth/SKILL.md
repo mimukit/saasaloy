@@ -46,7 +46,10 @@ the feature's own files.
 | `COOKIE_DOMAIN` | Explicit cookie domain | `.x.com` (cross-subdomain) | Leave unset (host-only) |
 
 Local dev is **keyless** — every var above has a safe default, so `wrangler dev` works with zero
-config. Misconfigured prod fails **visibly** (CORS rejects the real origin) rather than silently.
+config. Misconfigured prod fails **visibly** rather than silently: an origin missing from
+`CORS_ORIGINS` gets no `Access-Control-Allow-Origin` header, so the browser refuses to hand the
+response to the page, and Better Auth's `trustedOrigins` (fed from the same var) additionally
+answers `403 INVALID_ORIGIN` on state-changing calls. Two independent layers — see below.
 
 ### The cookie-domain rule
 
@@ -63,6 +66,17 @@ config. Misconfigured prod fails **visibly** (CORS rejects the real origin) rath
 `auth`'s `trustedOrigins` reads the **same** `CORS_ORIGINS` env var as `modules/api`'s `cors()`
 middleware — one origin list, two readers, no drift. If a credentialed cross-origin call is
 failing, check `CORS_ORIGINS` on the api Worker first; auth carries zero CORS code of its own.
+
+The two readers enforce different things, and it's worth not confusing them:
+
+| Layer | Who enforces | What an unlisted origin gets |
+|---|---|---|
+| `cors()` in api's spine | the **browser** | The Worker still runs the handler and returns a body; it just omits `Access-Control-Allow-Origin`, so the browser won't let the calling page read the response. A non-browser client (`curl`) sees the body regardless. |
+| `trustedOrigins` in Better Auth | the **server** | State-changing auth calls are rejected outright with `403 INVALID_ORIGIN` (and `403 MISSING_OR_NULL_ORIGIN` when the header is absent) — before any session work happens. |
+
+So CORS is a read gate, not a request gate. When you need a request genuinely refused rather than
+merely unreadable, that's `trustedOrigins` or an explicit origin check — don't rely on the CORS
+headers to prove it.
 
 ## Protect a route: `getSession`, never `better-auth` directly
 
