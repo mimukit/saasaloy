@@ -141,9 +141,16 @@ Contract points that are easy to get wrong:
 plus a `wrangler-binding` patch adding `send_email` to `apps/api/wrangler.jsonc` (`matchOn: "name"`
 — `send_email` entries are keyed by `name`, not `binding`).
 
-A provider that needs an SDK version must pin it **exactly** (`resend@4.0.1` form in
-`dependencies[]`, `"range": "4.0.1"` in a patch). Run `pnpm deps:update` to fill or refresh it
-rather than typing a guess; `pnpm deps:check` fails CI on drift.
+A provider that needs an SDK version must pin it **exactly** — `"range": "4.0.1"`, never `^4.0.1`
+or `~4.0.1`.
+
+Pin it by hand, and check the version against npm rather than typing one from memory. **Patch
+`range` values are not scanned by `pnpm deps:update` or `pnpm deps:check`**: that script reads
+base-template `package.json`s, descriptor `dependencies[]`/`devDependencies[]`, and
+`modules/*/files/**/package.json`, and never descends into `patches[]`. Rule 5 puts a provider's
+SDK in a `package-json-dependency` patch and nowhere else, so the one sanctioned home for that pin
+is exactly the place the tooling will neither fill in for you nor fail CI on when it drifts. Same
+applies when you bump it later — nothing will remind you.
 
 ## Verify before you call it done
 
