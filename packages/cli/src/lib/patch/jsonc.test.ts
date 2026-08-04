@@ -67,6 +67,32 @@ describe("upsertWranglerBinding", () => {
     expect(again).toBe(withFlag);
   });
 
+  it("upserts a send_email binding idempotently under matchOn: 'name'", () => {
+    // `send_email` entries are keyed by `name`, not `binding` — the only shipping
+    // module that relies on the non-default matchOn (email-cloudflare), so its
+    // second-run no-op is worth pinning here rather than in a playground.
+    const entry = { name: "EMAIL", remote: true };
+    const once = upsertWranglerBinding(WRANGLER, {
+      bindingType: "send_email",
+      entry,
+      matchOn: "name",
+    });
+    expect(once).toContain("send_email");
+    expect(once).toContain("EMAIL");
+    expect(once).toContain("// Cloudflare Worker config");
+
+    const twice = upsertWranglerBinding(once, {
+      bindingType: "send_email",
+      entry,
+      matchOn: "name",
+    });
+    expect(twice).toBe(once);
+
+    // And the array is genuinely one entry, not two that happen to stringify alike.
+    const parsed = JSON.parse(stripComments(twice)) as { send_email: unknown[] };
+    expect(parsed.send_email).toEqual([entry]);
+  });
+
   it("honors a custom matchOn key (e.g. wrangler routes keyed by pattern)", () => {
     const withRoute = upsertWranglerBinding(WRANGLER, {
       bindingType: "routes",
