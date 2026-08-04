@@ -91,6 +91,19 @@ describe("upsertWranglerBinding", () => {
     // And the array is genuinely one entry, not two that happen to stringify alike.
     const parsed = JSON.parse(stripComments(twice)) as { send_email: unknown[] };
     expect(parsed.send_email).toEqual([entry]);
+
+    // A *different* `name` must still append. This is what makes the test able to fail:
+    // `send_email` entries carry no `binding` key, so under the default matchOn the
+    // comparison is `undefined === undefined` for every pair — an implementation that
+    // ignored matchOn would see a false match here and silently swallow the second entry.
+    const second = { name: "MARKETING", remote: true };
+    const both = upsertWranglerBinding(twice, {
+      bindingType: "send_email",
+      entry: second,
+      matchOn: "name",
+    });
+    const parsedBoth = JSON.parse(stripComments(both)) as { send_email: unknown[] };
+    expect(parsedBoth.send_email).toEqual([entry, second]);
   });
 
   it("honors a custom matchOn key (e.g. wrangler routes keyed by pattern)", () => {
