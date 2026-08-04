@@ -32,10 +32,9 @@ saasaloy sync               # regenerate agent views (AGENTS.md, CLAUDE.md, skil
 
 - **Capability modules** — `api`, `database`, `email`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
 - **Feature modules** — `waitlist`, `billing`, `teams`, … Each extends capabilities by dropping files into those conventions and declares its `dependsOn`.
+- **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
 
 Dependencies resolve recursively, topologically sorted, behind a confirmation prompt.
-
-- **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
 
 ## Requirements
 
