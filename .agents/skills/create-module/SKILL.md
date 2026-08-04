@@ -62,6 +62,12 @@ authoring first; it drives everything else.
 Rule of thumb: if you're creating a whole new `apps/*` or `packages/*`, it's a capability. If
 you're adding a route + a table + some UI to things that already exist, it's a feature.
 
+> **Authoring a provider?** A module that supplies one implementation of an existing capability's
+> provider interface (`email-cloudflare`, `email-console`, a future `email-resend`) is a feature
+> with a much narrower shape — one file, one registration patch, the vendor dep patched into the
+> capability's workspace. Use [`create-provider`](../create-provider/SKILL.md) for those; it
+> assumes everything on this page and adds only the differences.
+
 ## Step 2 — Write `registry-item.json`
 
 Start from this annotated feature example (waitlist) and trim/extend per tier:

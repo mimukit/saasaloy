@@ -35,6 +35,20 @@ saasaloy sync               # regenerate agent views (AGENTS.md, CLAUDE.md, skil
 
 Dependencies resolve recursively, topologically sorted, behind a confirmation prompt.
 
+- **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
+
+## Requirements
+
+Node 24+, pnpm 11+, and a Cloudflare account. Most of the stack runs on Cloudflare's free tier — `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it, and `saasaloy init` needs no account at all until you deploy.
+
+One module does not, and it's worth knowing before you install it rather than at the first failed send:
+
+| Module | Needs |
+|---|---|
+| `email-cloudflare` | Workers **paid plan**, plus a sending domain onboarded by hand in the Cloudflare dashboard (Email Service → Email Sending). Neither is something the CLI can do or verify for you. |
+| `email-console` | Nothing — it logs the rendered message instead of sending it, so local development and tests need no plan, no domain, and no API key. |
+
+No free-tier promise is made either way: Cloudflare's limits are Cloudflare's to change, and a project that grows past them should expect to pay. The point is only that the constraint is visible up front.
 
 ## License
 
