@@ -1,0 +1,91 @@
+import { deriveText } from "./render";
+import type {
+  EmailEnv,
+  EmailMessage,
+  EmailProvider,
+  EmailResult,
+  ResolvedEmailMessage,
+} from "./provider";
+
+// The provider registry and the `createEmail(env)` factory behind it. This file holds
+// everything that is true of *every* provider — selection, sender resolution,
+// plaintext derivation — so a provider module only ever ships a `send()`.
+
+export interface EmailConfig {
+  providers: EmailProvider[];
+}
+
+/** What a caller sends with. Returned by `createEmail(env)`. */
+export interface EmailClient {
+  /** The selected provider's name — handy in logs and in a `doctor` check. */
+  provider: string;
+  send(message: EmailMessage): Promise<EmailResult>;
+}
+
+export interface EmailRegistry {
+  providers: EmailProvider[];
+  create(env: EmailEnv): EmailClient;
+}
+
+/**
+ * Build the provider registry. The `providers` array is the patch point every
+ * `email-<provider>` module appends to — see `src/index.ts`.
+ */
+export function defineEmail(config: EmailConfig): EmailRegistry {
+  const providers = config.providers;
+
+  return {
+    providers,
+    create(env: EmailEnv): EmailClient {
+      const provider = selectProvider(providers, env.EMAIL_PROVIDER);
+
+      return {
+        provider: provider.name,
+        async send(message: EmailMessage): Promise<EmailResult> {
+          return provider.send(env, resolve(env, message));
+        },
+      };
+    },
+  };
+}
+
+/**
+ * `EMAIL_PROVIDER` is required even when exactly one provider is installed, and an
+ * unknown value is an error rather than a fallback. Both directions of the silent
+ * failure are worse than a throw: a production deploy that quietly stops sending, and
+ * a test run that quietly starts.
+ */
+function selectProvider(providers: EmailProvider[], selected: string | undefined): EmailProvider {
+  const registered = providers.map((p) => p.name);
+  const known =
+    registered.length > 0
+      ? `Registered providers: ${registered.join(", ")}.`
+      : "No providers are registered — install one, e.g. `saasaloy add email-console`.";
+
+  if (!selected) {
+    throw new Error(`EMAIL_PROVIDER is not set. ${known}`);
+  }
+
+  const provider = providers.find((p) => p.name === selected);
+  if (!provider) {
+    throw new Error(`EMAIL_PROVIDER is "${selected}", which is not registered. ${known}`);
+  }
+  return provider;
+}
+
+function resolve(env: EmailEnv, message: EmailMessage): ResolvedEmailMessage {
+  const from = message.from ?? env.EMAIL_FROM;
+  if (!from) {
+    throw new Error(
+      "No sender address: set EMAIL_FROM, or pass `from` on the message. It must be an " +
+        "address on a domain your provider is allowed to send from.",
+    );
+  }
+
+  const to = Array.isArray(message.to) ? message.to : [message.to];
+  if (to.length === 0) {
+    throw new Error("No recipients: `to` must hold at least one address.");
+  }
+
+  return { ...message, to, from, text: message.text ?? deriveText(message.html) };
+}

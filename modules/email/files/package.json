@@ -1,0 +1,18 @@
+{
+  "name": "@repo/email",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./templates/*": "./src/templates/*.ts"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/workers-types": "5.20260723.1",
+    "@repo/tsconfig": "workspace:*",
+    "typescript": "7.0.2"
+  }
+}
