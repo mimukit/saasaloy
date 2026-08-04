@@ -50,6 +50,8 @@ The package **never retries**, deliberately: a retry loop inside a request handl
 Worker's response open. Choose how a failure should behave instead.
 
 ```ts
+import { EmailError } from "@repo/email"; // alongside `createEmail` — needed by the catch below
+
 // Non-critical (welcome mail): don't make the user's request wait on it, and don't let a
 // mail outage fail an operation that already succeeded.
 c.executionCtx.waitUntil(
@@ -202,8 +204,10 @@ export function postmark(): EmailProvider {
 Then register it by hand in `src/index.ts`:
 
 ```ts
+// Add the import; `defineEmail` is already imported at the top of this file.
 import { postmark } from "./providers/postmark";
 
+// Then add the call to the existing array literal — don't replace the line's shape.
 export const email = defineEmail({ providers: [postmark()] });
 ```
 
@@ -251,7 +255,7 @@ In `packages/auth/src/auth.ts`, flip the flag and supply the sender. Better Auth
 the user and a pre-built URL:
 
 ```ts
-import { createEmail } from "@repo/email";
+import { createEmail, html, layout } from "@repo/email";
 import { env } from "cloudflare:workers";
 
 export const auth = betterAuth({
