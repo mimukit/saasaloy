@@ -12,7 +12,7 @@
       "bindingType": "send_email",
       "entry": {
         "name": "EMAIL",
-        "remote": true
+        "remote": false
       },
       "matchOn": "name"
     },

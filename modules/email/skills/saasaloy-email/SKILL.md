@@ -142,11 +142,13 @@ Two prerequisites the CLI **cannot** perform or verify — do them before expect
 The binding this module patches in:
 
 ```jsonc
-"send_email": [{ "name": "EMAIL", "remote": true }]
+"send_email": [{ "name": "EMAIL", "remote": false }]
 ```
 
-`remote: true` makes `wrangler dev` call the real Email Sending API rather than a local stub —
-mail actually leaves your machine in dev, which is the only way to prove the path end to end.
+`remote: false` is the shipped default so that installing this module never breaks the dev loop —
+see [Sending for real from dev](#sending-for-real-from-dev) for the one-key flip that turns on a
+live send, and why it isn't the default.
+
 The module deliberately leaves `allowed_sender_addresses` unset so each project picks its own; add
 it yourself to lock the Worker down to specific senders.
 
@@ -160,6 +162,42 @@ Use `email-console` and `EMAIL_PROVIDER=console`. Nothing sends, the rendered me
 Worker's log, and `send()` returns a synthetic `console-<uuid>` message id. Because the provider is
 registered through the same registry, the code path under test is the real one — only the transport
 differs.
+
+#### Sending for real from dev
+
+A `send_email` binding only reaches Cloudflare's Email Sending API when it is marked `remote`. To
+prove the path end to end, flip the one key in `apps/api/wrangler.jsonc`:
+
+```jsonc
+"send_email": [{ "name": "EMAIL", "remote": true }]
+```
+
+then run `wrangler dev` (not `vite dev`) with `EMAIL_PROVIDER=cloudflare` and a `EMAIL_FROM` on
+your onboarded domain. Mail actually leaves your machine.
+
+**Flip it back when you're done, and here is why it isn't the default.**
+`@cloudflare/vite-plugin` opens a remote proxy session at startup for *any* `remote: true` binding,
+before it knows or cares which email provider you selected. If it can't authenticate, the Vite dev
+loop doesn't start at all — so with the flag on, `pnpm --filter @repo/api dev` fails for every
+teammate who hasn't set up Cloudflare credentials:
+
+```
+⎔ Establishing remote connection...
+error when starting dev server:
+Error: Failed to start the remote proxy session. Error reloading remote server: In a
+non-interactive environment, it's necessary to set a CLOUDFLARE_API_TOKEN environment variable
+for wrangler to work.
+```
+
+Nothing in that message mentions email. If you see it, either authenticate (`wrangler login`, or
+set `CLOUDFLARE_API_TOKEN`) or set the binding back to `"remote": false`. Developing on
+`EMAIL_PROVIDER=console` does **not** exempt you — the binding is read before provider selection
+happens.
+
+If you *are* authenticated, `remote: true` starts fine and you may never see this — a past
+`wrangler login` persists in `~/.config/.wrangler/` and keeps working long after you've forgotten
+it. That's exactly why the default is `false`: the failure lands on whoever cloned the repo next,
+not on the person who set the flag.
 
 ## Writing a custom provider in your own project
 

@@ -22,11 +22,13 @@ observed output. What is left for a human is the part no CLI can reach: **[TC-1]
 a real send through a dashboard-onboarded domain, plus the inbox and copy judgments that follow
 from it.
 
-> **One agent finding needs an owner before ship.** Installing `email-cloudflare` breaks
-> `pnpm --filter @repo/api dev` on any machine without a Cloudflare API token — the binding is
-> written `remote: true` and `@cloudflare/vite-plugin` opens a remote proxy session at startup.
-> `wrangler dev` is unaffected. Full evidence in
-> [Finding: `remote: true` breaks the Vite dev loop](#finding-remote-true-breaks-the-vite-dev-loop).
+> **Resolved 2026-08-05 — the binding now ships `remote: false`.** As originally written
+> (`remote: true`) installing `email-cloudflare` broke `pnpm --filter @repo/api dev` on any machine
+> without a Cloudflare API token, because `@cloudflare/vite-plugin` opens a remote proxy session at
+> startup for any remote binding. The descriptor now ships `remote: false`, and the
+> `saasaloy-email` skill documents flipping it to `true` for a live dev send — see
+> [TC-4](#tc-4--the-remote-true-vite-dev-decision----critical) for the decision and
+> [the finding](#finding-remote-true-breaks-the-vite-dev-loop) for the original evidence.
 
 ## Preconditions
 
@@ -118,7 +120,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-1 | Real Cloudflare send (operator runbook) | 🔴 Critical |
 | TC-2 | The delivered message renders in real inboxes | 🟡 Normal |
 | TC-3 | Sending from a non-onboarded domain fails as `sender_not_verified` | 🟡 Normal |
-| TC-4 | Decide what to do about `remote: true` and the Vite dev loop | 🔴 Critical |
+| TC-4 | The `remote: true` / Vite dev decision — **decided, verify it holds** | 🔴 Critical |
 | TC-5 | The env panel and the `saasaloy-email` skill are usable without the plan | 🟢 Low |
 
 Everything else — install ordering, both patch kinds, idempotency, provider selection and its two
@@ -167,15 +169,18 @@ export CLOUDFLARE_API_TOKEN=<your token>
 printf 'EMAIL_PROVIDER=cloudflare\nEMAIL_FROM=hello@your-onboarded-domain.example\n' > .dev/playground/apps/api/.dev.vars
 ```
 
-5. **Confirm the binding landed** as `remote: true` — that is what makes `wrangler dev` call the
-   real Email Sending API instead of miniflare's local stub. Mail genuinely leaves your machine in
-   dev; this is the only way to prove the path end to end.
+5. **Confirm the binding landed, then flip it to `remote: true`.** The module ships
+   `remote: false` (TC-4), so out of the box `wrangler dev` uses miniflare's local stub and nothing
+   is sent. `remote: true` is what makes it call the real Email Sending API, so mail genuinely
+   leaves your machine — the only way to prove the path end to end.
 
 ```sh
 cat .dev/playground/apps/api/wrangler.jsonc
 ```
 
-   Expect a `send_email` array holding `{ "name": "EMAIL", "remote": true }`.
+   Expect a `send_email` array holding `{ "name": "EMAIL", "remote": false }`. Edit that one key
+   to `true` for the rest of this test case, and set it back afterwards — leaving it on will stop
+   `pnpm --filter @repo/api dev` from starting on any machine without Cloudflare credentials.
 
 6. **Run the Worker under `wrangler dev`** — not the Vite loop, see TC-4:
 
@@ -281,46 +286,84 @@ curl -s -X POST "$BASE_URL/qa-email/send?to=you@example.com" -w '\n%{http_code}\
 - [ ] Pass
 - [ ] Fail
 
-### TC-4 — Decide what to do about `remote: true` and the Vite dev loop  ·  🔴 Critical
+### TC-4 — The `remote: true` / Vite dev decision  ·  🔴 Critical
 
-This is a judgment call, not a reproduction — the agent already reproduced it, with output quoted
-in [the finding below](#finding-remote-true-breaks-the-vite-dev-loop). After
-`saasaloy add email-cloudflare`, `pnpm --filter @repo/api dev` refuses to start on a machine with
-no Cloudflare credentials, even when the developer intends to use `EMAIL_PROVIDER=console` and
-never touch the binding. `wrangler dev` starts fine. The break is `@cloudflare/vite-plugin`
-eagerly opening a remote proxy session for any `remote: true` binding.
+**Decided 2026-08-05: ship `remote: false` and document the flip.** What follows is the reasoning
+and then a short check that the decision actually holds on your machine.
+
+The problem, reproduced by the agent with output quoted in
+[the finding below](#finding-remote-true-breaks-the-vite-dev-loop): with the binding written
+`remote: true`, `pnpm --filter @repo/api dev` refused to start on a machine with no Cloudflare
+credentials — even for a developer using `EMAIL_PROVIDER=console` who never touches the binding.
+`@cloudflare/vite-plugin` opens a remote proxy session for any remote binding before provider
+selection happens, so `console` offers no exemption. `wrangler dev` was unaffected.
+
+The four options weighed, and why the second won:
+
+- **Ship as-is** — the runbook already says to authenticate. Rejected: a module that breaks
+  `pnpm dev` on install is a bad default, and the error names API tokens, never email.
+- **Ship `remote: false`, document the flip** ✅ **chosen.** The dev loop works on install with no
+  credentials. The live send stays reachable as a documented one-key edit.
+- **Ship as-is + document the failure** — rejected as strictly worse than the above: it makes a
+  broken default merely recognizable rather than fixing it.
+- **File a follow-up** against #47 (`saasaloy doctor`) — rejected as the *only* action, since it
+  ships the bad default anyway. Still worth doing on its own merits; see below.
+
+**Cost accepted:** a real dev send is no longer the default path, so the plan's Phase 5 AC 2 (and
+plan line 172) are amended to make the flip an explicit runbook step — TC-1 step 5 now carries it.
+A weaker default was judged the right trade because the evidence for `remote: true`'s benefit is
+itself unproven: under `wrangler dev` in local mode the agent observed the `EMAIL` binding **not
+listed at all**, so TC-1 remains the only thing that can confirm the live path works either way.
+
+**Applied in:** `modules/email-cloudflare/registry-item.json` (the binding) and
+`modules/email/skills/saasaloy-email/SKILL.md` (§ Sending for real from dev — the flip, plus the
+verbatim startup error so it is recognizable if someone leaves it on).
 
 **Steps**
 
-1. Read the finding and its two quoted startup logs.
-2. Reproduce it in one command if you want to see it yourself, on a shell with no
-   `CLOUDFLARE_API_TOKEN` and no `wrangler login`:
+1. Install and start the Vite dev loop:
 
 ```sh
 pnpm run play:reset && cd .dev/playground && ./saasaloy add email-cloudflare --yes && pnpm install && pnpm --filter @repo/api dev
 ```
 
-3. Choose one of:
-   - **Ship as-is** — `remote: true` is what makes a real dev send possible, and the runbook
-     already tells you to authenticate. Cost: a teammate who adds `email-cloudflare` for
-     production and develops on `console` hits a hard startup failure with a message about API
-     tokens that names nothing about email.
-   - **Ship `remote: false`** and document flipping it for a live send. Cost: the dev-send path,
-     which is AC 2's whole mechanism, is no longer the default.
-   - **Ship as-is and document the failure** in the `saasaloy-email` skill's local-development
-     section, so the error is recognizable.
-   - **File it** as a follow-up against #47 (`saasaloy doctor`) or as its own issue.
+2. Flip `"remote"` to `true` in `apps/api/wrangler.jsonc` and run the same dev command again.
+   **Step 2's outcome depends on your credentials** — see below.
 
 **Expected**
 
-- A decision is recorded here, and whichever option wins is reflected in either
-  `modules/email-cloudflare/registry-item.json` or `modules/email/skills/saasaloy-email/SKILL.md`
-  before merge.
+- **Step 1: the dev server starts, unconditionally** — `➜  Local: http://localhost:4000/`, with no
+  `⎔ Establishing remote connection...` line. This holds whether or not you have Cloudflare
+  credentials, and it is the entire point of the decision. Re-check it if the binding is ever
+  changed back.
+- **Step 2 depends on whether Cloudflare credentials are reachable**, which is the subtlety worth
+  understanding:
+  - **No credentials at all** — no `CLOUDFLARE_API_TOKEN` *and* no prior `wrangler login` — the
+    dev server **fails** with the `Failed to start the remote proxy session` error quoted in the
+    finding. This is the case the shipped default protects.
+  - **Credentials present** — including a `wrangler login` performed at any time in the past,
+    which persists in `~/.config/.wrangler/` and is easy to forget about — the dev server prints
+    `⎔ Establishing remote connection...` and then **starts normally**, just slower (~14s vs ~3s
+    observed).
 
-**Actual:** _(tester fills in — which option, and where it was applied)_
+  So a "it works fine for me" report on step 2 does not contradict the finding; it means the
+  reporter is authenticated. `CLOUDFLARE_API_TOKEN` being unset is *not* sufficient to reproduce
+  the failure.
 
-- [ ] Pass
+**Actual (2026-08-05, on a machine with a prior `wrangler login`):**
+
+- ✅ Step 1 — `VITE v8.1.5 ready in 2960 ms`, `➜  Local: http://localhost:4000/`, no remote
+  connection attempted. The regression the decision buys is confirmed.
+- ✅ Step 2 — `⎔ Establishing remote connection...` then `ready in 13847 ms` and served normally,
+  i.e. the credentialed branch above. The uncredentialed failure branch was **not** re-run here;
+  it remains as originally observed in the finding.
+
+- [x] Pass
 - [ ] Fail
+
+**Follow-up, not blocking:** `saasaloy doctor` (#47) should flag a `remote: true` `send_email`
+binding when no Cloudflare credentials are present, since the plugin's own error never mentions
+email.
 
 ### TC-5 — The env panel and the `saasaloy-email` skill are usable without the plan  ·  🟢 Low
 
@@ -646,6 +689,11 @@ cd .dev/playground && pnpm --filter @repo/api dev
 - ✅ **`email-console` alone is clean.** Fresh playground, `add email-console` only, no
   credentials: `vite dev` starts, `GET /health` → `200 {"status":"ok"}`, `turbo run typecheck
   build --force` → 4/4 successful.
+
+> **Outcome.** TC-4 was decided on 2026-08-05 in favour of shipping `remote: false`, which makes
+> the first bullet's failure no longer reachable from a default install. The evidence above is kept
+> as the record of *why* — and as the reproduction to run if anyone proposes changing the default
+> back. Everything above was observed with the binding written `remote: true`.
 
 ### Cleanup
 
