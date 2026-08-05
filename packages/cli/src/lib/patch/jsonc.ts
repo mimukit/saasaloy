@@ -15,11 +15,15 @@ import {
 export interface WranglerBinding {
   /** Top-level array to upsert into, e.g. "d1_databases", "kv_namespaces", "routes". */
   bindingType: string;
-  /** The object to insert (a binding or a route). */
-  entry: Record<string, unknown>;
   /**
-   * Property that identifies an entry for idempotency. Defaults to "binding"
-   * (bindings); pass "pattern" for routes, etc.
+   * The value to insert: an object (a binding or a route, matched by `matchOn`) or a
+   * bare string (a flag, e.g. `compatibility_flags: ["nodejs_compat"]`, matched by
+   * plain equality).
+   */
+  entry: Record<string, unknown> | string;
+  /**
+   * Property that identifies an object `entry` for idempotency. Defaults to "binding"
+   * (bindings); pass "pattern" for routes, etc. Ignored for a string `entry`.
    */
   matchOn?: string;
 }
@@ -29,9 +33,10 @@ export interface WranglerBinding {
  * document, idempotently and formatting-safe:
  *
  * - array missing → create it holding `entry`;
- * - array present, no entry matches `matchOn` → append `entry`;
- * - an entry already matches `matchOn` → return `source` **unchanged** (never
- *   clobber a value the user may have edited).
+ * - array present, no entry matches (`matchOn` for an object, equality for a string)
+ *   → append `entry`;
+ * - a matching entry already exists → return `source` **unchanged** (never clobber a
+ *   value the user may have edited).
  */
 export function upsertWranglerBinding(source: string, patch: WranglerBinding): string {
   const matchOn = patch.matchOn ?? "binding";
@@ -43,10 +48,14 @@ export function upsertWranglerBinding(source: string, patch: WranglerBinding): s
 
   if (arrayNode?.type === "array") {
     const existing = (arrayNode.children ?? []).map((child) => getNodeValue(child) as unknown);
-    const key = patch.entry[matchOn];
-    const alreadyPresent = existing.some(
-      (value) => isRecord(value) && value[matchOn] === key,
-    );
+    const entry = patch.entry;
+    // A local `const` (not the `patch.entry` property access) so the `typeof` guard's
+    // narrowing survives into the closure below — TS doesn't narrow property accesses
+    // across a nested function boundary the way it does a plain variable.
+    const alreadyPresent =
+      typeof entry === "string"
+        ? existing.includes(entry)
+        : existing.some((value) => isRecord(value) && value[matchOn] === entry[matchOn]);
     if (alreadyPresent) return source;
 
     const edits = modify(source, [patch.bindingType, existing.length], patch.entry, {
