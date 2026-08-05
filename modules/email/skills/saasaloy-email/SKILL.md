@@ -212,27 +212,50 @@ export function postmark(): EmailProvider {
   return {
     name: "postmark", // the value EMAIL_PROVIDER must hold
     async send(env: EmailEnv, message: ResolvedEmailMessage): Promise<EmailResult> {
-      const response = await fetch("https://api.postmarkapp.com/email", {
-        method: "POST",
-        headers: {
-          "content-type": "application/json",
-          "x-postmark-server-token": String(env.POSTMARK_TOKEN ?? ""),
-        },
-        body: JSON.stringify({
-          From: message.from,
-          To: message.to.join(","),
-          Subject: message.subject,
-          HtmlBody: message.html,
-          TextBody: message.text,
-        }),
-      });
+      let response: Response;
+      try {
+        response = await fetch("https://api.postmarkapp.com/email", {
+          method: "POST",
+          headers: {
+            "content-type": "application/json",
+            "x-postmark-server-token": String(env.POSTMARK_TOKEN ?? ""),
+          },
+          body: JSON.stringify({
+            From: message.from,
+            To: message.to.join(","),
+            Subject: message.subject,
+            HtmlBody: message.html,
+            TextBody: message.text,
+          }),
+        });
+      } catch (cause) {
+        // The request never completed — DNS, TLS, a dropped connection. Retryable.
+        throw new EmailError("provider_error", "postmark: request failed", {
+          retryable: true,
+          cause,
+        });
+      }
+
       if (!response.ok) {
         throw new EmailError("provider_error", `postmark: ${response.status}`, {
           retryable: response.status === 429 || response.status >= 500,
           providerCode: String(response.status),
         });
       }
-      const body = (await response.json()) as { MessageID: string };
+
+      let body: { MessageID?: string };
+      try {
+        body = (await response.json()) as { MessageID?: string };
+      } catch (cause) {
+        // A 2xx we can't parse. Re-sending is unlikely to help.
+        throw new EmailError("provider_error", "postmark: unreadable response", { cause });
+      }
+
+      // Don't take the cast's word for it — `EmailResult.messageId` is a string, and
+      // returning `undefined` here would break that contract silently.
+      if (!body.MessageID) {
+        throw new EmailError("provider_error", "postmark: response carried no MessageID");
+      }
       return { messageId: body.MessageID };
     },
   };
@@ -256,7 +279,12 @@ Contract notes:
 - Normalize failures into `EmailError` with one of the four `code` values, set `retryable`
   honestly, and keep the vendor's own code in `providerCode`. Default to
   `provider_error` / `retryable: false` for anything you don't recognize — a wrong `retryable: true`
-  means duplicate mail.
+  means duplicate mail. Cover *every* path out of the call, not just a non-2xx status: a rejected
+  request, an abort, and an unparseable body each reach the caller otherwise.
+- The core is a backstop, not a substitute. Anything that escapes your `send()` without being an
+  `EmailError` is wrapped as `provider_error` / `retryable: false`, with the original kept in
+  `cause` — so a caller can always branch on `code`. Relying on that costs you the accurate
+  `retryable` only you can determine.
 - Read secrets off the `env` you're handed. `process.env` does not exist on Workers.
 - Any npm dependency belongs in `packages/email/package.json`, not in another workspace — only this
   package touches provider SDKs (ADR 0020).

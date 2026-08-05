@@ -1,3 +1,4 @@
+import { EmailError } from "./provider";
 import { deriveText } from "./render";
 import type {
   EmailEnv,
@@ -42,7 +43,25 @@ export function defineEmail(config: EmailConfig): EmailRegistry {
       return {
         provider: provider.name,
         async send(message: EmailMessage): Promise<EmailResult> {
-          return provider.send(env, resolve(env, message));
+          // Resolved outside the `try` on purpose: a missing sender or an empty
+          // recipient list is a configuration error, not a send failure, and stays a
+          // plain `Error` — `EmailError.code` is reserved for the four send failures.
+          const resolved = resolve(env, message);
+
+          try {
+            return await provider.send(env, resolved);
+          } catch (error) {
+            // A provider is contractually responsible for normalizing its own failures,
+            // but a bespoke one written in a consumer's project may not — and a raw
+            // `TypeError` from a failed `fetch` reaching the caller would break the
+            // `EmailError` contract `provider.ts` promises. Re-throw a well-formed error
+            // untouched; wrap anything else, keeping the original in `cause`.
+            if (error instanceof EmailError) throw error;
+            throw new EmailError("provider_error", `${provider.name}: send failed`, {
+              retryable: false,
+              cause: error,
+            });
+          }
         },
       };
     },
