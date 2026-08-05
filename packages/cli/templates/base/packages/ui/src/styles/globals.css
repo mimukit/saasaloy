@@ -31,6 +31,12 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
+  /* Tell the browser which palette the document is using, so native UI it renders for
+     us — scrollbars, form controls, the default canvas — follows the theme too. The
+     tokens below only cover what we paint ourselves. Paired with `.dark` rather than
+     `light dark` on :root, because the theme is class-driven, not media-driven: the
+     OS preference is read once in Layout.astro and turned into a class. */
+  color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -66,6 +72,7 @@
 }
 
 .dark {
+  color-scheme: dark;
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
