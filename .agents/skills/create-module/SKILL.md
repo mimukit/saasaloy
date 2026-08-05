@@ -140,6 +140,18 @@ Field notes:
   what *features* use). A capability's own initial files (the entry, its first route) ship **in the
   scaffold**, so a capability's `files[]` is typically empty.
 
+  A scaffolded `package.json` **must declare a `clean` script**, or `pnpm clean` in the consumer
+  project silently skips the workspace and leaves its build output behind. Use `rimraf` (exact-pinned
+  in that workspace's `devDependencies` like any other dep), never `rm -rf` — it doesn't exist on
+  Windows. Pass `-g` when an argument is a glob. Delete only what the workspace *generates* — never
+  committed artifacts such as Drizzle migrations — and leave `node_modules` / `.turbo` alone; the
+  template's root `clean` removes those repo-wide after Turborepo finishes.
+
+  ```jsonc
+  "scripts": { "clean": "rimraf -g dist .wrangler \"*.tsbuildinfo\"" },
+  "devDependencies": { "rimraf": "6.1.3" }
+  ```
+
 ## Step 3 — Lay out `files/` along the conventions
 
 Convention-based extension points are what make granular modules safe: **no module AST-patches

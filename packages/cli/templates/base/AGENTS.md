@@ -17,6 +17,35 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 - Example: `pnpm --filter @repo/ui build`
 - Use `pnpm turbo run <task> --filter <package-name>` for Turborepo tasks
 
+### The `clean` Script — Required in Every Workspace
+
+`pnpm clean` at the root wipes the repo back to a fresh-clone state: it runs
+`turbo run clean` across every workspace, then deletes all `node_modules` and `.turbo`
+directories. Recover with `pnpm install`.
+
+**Every app and package you create MUST declare its own `clean` script.** A workspace
+without one is silently skipped by `turbo run clean` and leaves stale build output behind.
+
+- Use **`rimraf`** (added as an exact-pinned `devDependency` of that workspace) — never
+  `rm -rf`, which does not exist on Windows. Pass `-g` when any argument is a glob;
+  without it rimraf treats arguments as literal paths.
+- Delete only what the workspace **generates**: `dist`, `.astro`, `.wrangler`,
+  `*.tsbuildinfo`. Never delete committed source or generated-then-committed files
+  (e.g. Drizzle migrations).
+- Do **not** delete `node_modules` or `.turbo` from a workspace-level `clean` — the root
+  script removes those in one pass after Turborepo has finished. Deleting `.turbo` while
+  Turborepo is still streaming its task log into it fails on Windows.
+
+```jsonc
+// apps/<name>/package.json
+"scripts": {
+  "clean": "rimraf -g dist .wrangler \"*.tsbuildinfo\""
+},
+"devDependencies": {
+  "rimraf": "6.1.3"
+}
+```
+
 ## Tech & Tools
 
 - **pnpm** — non-auth settings live in `pnpm-workspace.yaml` (camelCase), never `.npmrc`.
@@ -46,6 +75,7 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 
 - Run `pnpm check-types` before committing code changes
 - Run `pnpm lint` and fix all errors
+- Give every new app or package a `clean` script backed by `rimraf` (see above)
 - Use TypeScript strict mode (no `any` without explicit reason)
 - Use workspace package names (`@repo/ui`, `@repo/eslint-config`) for imports
 
@@ -63,6 +93,7 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 ### 🚫 Never Do
 
 - Never use `npm` or `npx`, instead use `pnpm` & `pnpm dlx`
+- Never use `rm -rf` in a package script — it breaks on Windows; use `rimraf`
 - Commit secrets, API keys, or environment variables
 - Modify `node_modules/` or `pnpm-lock.yaml` manually (use `pnpm install`)
 - Remove or disable TypeScript strict mode

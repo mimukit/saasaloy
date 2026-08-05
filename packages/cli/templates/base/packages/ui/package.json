@@ -6,12 +6,16 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "scripts": {
+    "clean": "rimraf -g dist \"*.tsbuildinfo\""
+  },
   "peerDependencies": {
-    "react": "^19"
+    "react": "19.2.8"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
-    "@types/react": "^19",
-    "react": "^19"
+    "@types/react": "19.2.18",
+    "react": "19.2.8",
+    "rimraf": "6.1.3"
   }
 }

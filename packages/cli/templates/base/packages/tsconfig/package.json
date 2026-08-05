@@ -6,5 +6,11 @@
   "files": ["base.json"],
   "exports": {
     "./base.json": "./base.json"
+  },
+  "scripts": {
+    "clean": "rimraf -g dist \"*.tsbuildinfo\""
+  },
+  "devDependencies": {
+    "rimraf": "6.1.3"
   }
 }
