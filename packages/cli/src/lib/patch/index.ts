@@ -1,21 +1,24 @@
 import { toDiff } from "./diff.js";
 import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
+import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
 import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 // The config-patch engine (build spec §3.4): the ~10% of module application that isn't
 // a pure file-drop. Small, well-tested AST codemods the applier (#6) invokes for
-// structural edits — `jsonc-parser` for `wrangler.jsonc` bindings/routes, `magicast`
-// for TS/JS module edits (Better Auth plugin arrays). Every patch is pure and
-// `--dry-run`/`--diff`-able: `applyPatch` never writes, it returns the would-be
-// content plus a unified diff, and re-running an already-applied patch is a no-op.
+// structural edits — `jsonc-parser` for `wrangler.jsonc` bindings/routes and package.json
+// dependency merges, `magicast` for TS/JS module edits (Better Auth plugin arrays). Every
+// patch is pure and `--dry-run`/`--diff`-able: `applyPatch` never writes, it returns the
+// would-be content plus a unified diff, and re-running an already-applied patch is a no-op.
 
 export { toDiff } from "./diff.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
+export { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
 export { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
   | ({ kind: "wrangler-binding" } & WranglerBinding)
+  | ({ kind: "package-json-dependency" } & PackageJsonDependency)
   | ({ kind: "plugin-array" } & PluginArrayInsert);
 
 export interface PatchResult {
@@ -43,6 +46,8 @@ function applyCodemod(source: string, patch: Patch): string {
   switch (patch.kind) {
     case "wrangler-binding":
       return upsertWranglerBinding(source, patch);
+    case "package-json-dependency":
+      return upsertPackageJsonDependency(source, patch);
     case "plugin-array":
       return insertIntoPluginArray(source, patch);
     default: {

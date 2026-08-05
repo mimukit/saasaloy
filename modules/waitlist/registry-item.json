@@ -1,0 +1,21 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "waitlist",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "database"],
+  "dependencies": [],
+  "envVars": {
+    "PUBLIC_API_URL": "Base URL of the api Worker the form posts to (defaults to http://localhost:4000 in dev)."
+  },
+  "patches": [],
+  "files": [
+    { "path": "files/api/routes/waitlist.ts", "target": "@api/routes/waitlist.ts" },
+    { "path": "files/db/schema/waitlist.ts", "target": "@db/schema/waitlist.ts" },
+    { "path": "files/web/components/WaitlistForm.tsx", "target": "@web/components/WaitlistForm.tsx" },
+    { "path": "files/web/sections/waitlist.astro", "target": "@web/sections/waitlist.astro" },
+    { "path": "files/web/types/waitlist-env.d.ts", "target": "@web/types/waitlist-env.d.ts" }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-waitlist"]
+  }
+}

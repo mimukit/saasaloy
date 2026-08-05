@@ -48,8 +48,8 @@ The D1 binding arrives on the Worker's `env`, threaded through Hono as `c.env.DB
 ```ts
 // apps/api/src/routes/waitlist.ts
 import { Hono } from "hono";
-import { getDb, type DbBindings } from "@db/client";
-import { listWaitlist } from "@db/repositories/waitlist";
+import { getDb, type DbBindings } from "@repo/db/client";
+import { listWaitlist } from "@repo/db/repositories/waitlist";
 
 const waitlist = new Hono<{ Bindings: DbBindings }>();
 
@@ -57,6 +57,13 @@ waitlist.get("/", async (c) => c.json(await listWaitlist(getDb(c.env.DB))));
 
 export default waitlist;
 ```
+
+Note the import is `@repo/db/...` — the real package name (via `@repo/db`'s `exports` map) — not
+`@db/...`. `@db` is only the *file-placement* alias `saasaloy.json` uses to resolve a module's
+`files[].target` when copying files onto disk; it isn't wired into TypeScript or Vite as an import
+alias. A feature that needs `apps/api` to import from `packages/db` (like `waitlist`) has that
+dependency added automatically: this module's `patches` includes a `package-json-dependency` op
+that upserts `"@repo/db": "workspace:*"` into `apps/api/package.json` at `add` time.
 
 Never reach for `process.env` — it doesn't exist on Workers.
 
@@ -70,13 +77,16 @@ Drizzle its relational metadata in `getDb`):
 
 ```ts
 // packages/db/src/repositories/waitlist.ts
-import { waitlist } from "@db/schema/waitlist";
-import type { getDb } from "@db/client";
+import { waitlist } from "../schema/waitlist";
+import type { getDb } from "../client";
 
 export function listWaitlist(db: ReturnType<typeof getDb>) {
   return db.select().from(waitlist);
 }
 ```
+
+(A file inside `packages/db` itself imports its own siblings by relative path — `@repo/db/...`
+is for *other* workspaces consuming this package, not for code inside it.)
 
 ## Migrations: three manual scripts (never autopush)
 

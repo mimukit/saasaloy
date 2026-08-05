@@ -54,6 +54,19 @@ describe("upsertWranglerBinding", () => {
     expect(out).not.toContain("hijacked");
   });
 
+  it("supports a bare-string entry (e.g. compatibility_flags), matched by equality", () => {
+    const withFlag = upsertWranglerBinding(WRANGLER, {
+      bindingType: "compatibility_flags",
+      entry: "nodejs_compat",
+    });
+    expect(withFlag).toContain("nodejs_compat");
+    const again = upsertWranglerBinding(withFlag, {
+      bindingType: "compatibility_flags",
+      entry: "nodejs_compat",
+    });
+    expect(again).toBe(withFlag);
+  });
+
   it("honors a custom matchOn key (e.g. wrangler routes keyed by pattern)", () => {
     const withRoute = upsertWranglerBinding(WRANGLER, {
       bindingType: "routes",

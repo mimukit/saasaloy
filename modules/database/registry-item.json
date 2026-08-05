@@ -16,6 +16,13 @@
         "database_id": "local",
         "migrations_dir": "../../packages/db/migrations"
       }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/db",
+      "range": "workspace:*"
     }
   ],
   "files": [],

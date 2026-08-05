@@ -13,8 +13,8 @@ pnpm dev        # astro dev on apps/web
 ## Deploy
 
 ```sh
-pnpm --filter web build
-pnpm --filter web run deploy    # wrangler deploy (Cloudflare Workers static assets)
+pnpm --filter @repo/web build
+pnpm --filter @repo/web run deploy    # wrangler deploy (Cloudflare Workers static assets)
 ```
 
 ## Add features
