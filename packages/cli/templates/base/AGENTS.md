@@ -54,6 +54,37 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 - **Add features, don't hand-wire them.** Prefer `saasaloy add <module>` over manually
   creating routes/schema/auth; modules drop files into convention-based extension points.
 
+### The `@repo/ui` Design Layer
+
+`packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
+the `cn()` helper, and the vendored [shadcn](https://ui.shadcn.com) primitives in
+`src/components/`. `apps/web` pulls the theme in once, through the shared layout that
+imports `@repo/ui/globals.css`.
+
+Everything is reached by subpath — nothing is re-exported from the package root, so
+importing one primitive never drags in the rest:
+
+```ts
+import { Button } from "@repo/ui/components/button";
+import { cn } from "@repo/ui/lib/utils";
+```
+
+**Adding a primitive the base doesn't vendor.** Run the CLI from `packages/ui`, where
+`components.json` lives — not from the repo root, and not from `apps/web`:
+
+```sh
+pnpm -C packages/ui dlx shadcn@latest add dialog
+```
+
+- Use **`pnpm dlx`**, never `npx` (see Never Do).
+- The CLI writes into `src/components/`. Anything it appends to `package.json` arrives
+  as a range — **re-pin it to an exact version**.
+- Strip the `"use client"` directive it injects. It means nothing in Astro, and the
+  vendored primitives don't carry it.
+- `style` is `base-nova` (Base UI) and is fixed at init — the CLI cannot change it later.
+
+Primitives are source you own. Edit them in place rather than wrapping them.
+
 ### Naming Conventions
 
 - **Functions**: camelCase (`fetchUserData`, `calculateTotal`)
