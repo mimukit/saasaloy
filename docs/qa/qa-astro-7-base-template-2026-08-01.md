@@ -62,7 +62,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — `Terms · Privacy` separator keeps its spaces under `compressHTML: 'jsx'`  ·  🔴 Critical
@@ -78,7 +78,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 > Agent note: the serialized HTML was confirmed to contain `</a> · <a` in both the dev response and the built `dist/index.html` (see Automated verification). This case exists so a human confirms it *looks* right as rendered, since collapsing can also happen at paint time.
@@ -98,7 +98,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — A fresh `saasaloy init` + install leaves `pnpm-workspace.yaml` untouched  ·  🔴 Critical
@@ -134,7 +134,7 @@ grep -rn "minimumReleaseAge" .dev/playground/pnpm-workspace.yaml .dev/playground
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Astro 7 dev-server lifecycle (daemon start/status/stop, HMR)  ·  🟡 Normal
@@ -167,7 +167,7 @@ pnpm -C .dev/playground/apps/web exec astro dev stop
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Built output via `astro preview` matches the dev render  ·  🟡 Normal
@@ -191,7 +191,7 @@ pnpm -C .dev/playground/apps/web exec astro preview --port 4321
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Dark mode, responsive layout, and keyboard nav still behave  ·  🟢 Low
@@ -207,15 +207,15 @@ pnpm -C .dev/playground/apps/web exec astro preview --port 4321
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `saasaloy init` into a brand-new directory still produces a project that installs on the first try, with no peer-dependency error from React 19.2.8 being pinned exactly in both `apps/web` and `packages/ui` (`peerDependencies.react` is now an exact pin, not a range — confirm pnpm doesn't warn).
-- [ ] `@repo/ui`'s `siteName` export still resolves into `apps/web` (it drives the `<h1>` and `<title>` on `/`).
-- [ ] The `@web` vite alias comment in `apps/web/astro.config.mjs` is still present and accurate.
-- [ ] No `src/fetch.ts` exists in `apps/web` (reserved filename in Astro 7 — keep it that way when adding modules later).
-- [ ] Adding a module that drops a `sections/*.astro` file still lands it on the landing page via the `import.meta.glob` in `index.astro` (unchanged in v6/v7; `Astro.glob()` was the removed API and isn't used).
+- [x] `saasaloy init` into a brand-new directory still produces a project that installs on the first try, with no peer-dependency error from React 19.2.8 being pinned exactly in both `apps/web` and `packages/ui` (`peerDependencies.react` is now an exact pin, not a range — confirm pnpm doesn't warn).
+- [x] `@repo/ui`'s `siteName` export still resolves into `apps/web` (it drives the `<h1>` and `<title>` on `/`).
+- [x] The `@web` vite alias comment in `apps/web/astro.config.mjs` is still present and accurate.
+- [x] No `src/fetch.ts` exists in `apps/web` (reserved filename in Astro 7 — keep it that way when adding modules later).
+- [x] Adding a module that drops a `sections/*.astro` file still lands it on the landing page via the `import.meta.glob` in `index.astro` (unchanged in v6/v7; `Astro.glob()` was the removed API and isn't used).
 
 ## Automated verification (by AI agent)
 _Checks the agent ran itself — no action needed from the tester; listed here for context and sign-off._
