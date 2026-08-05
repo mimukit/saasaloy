@@ -95,7 +95,7 @@ Primitives are source you own. Edit them in place rather than wrapping them.
 
 ## Testing Instructions
 
-- Run type checking: `pnpm check-types` (must pass before commits)
+- Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (auto-fixes where possible)
 - Format check: `pnpm format` (auto-formats all files)
 - Run tests: `pnpm test` (when test scripts are added)
@@ -104,7 +104,7 @@ Primitives are source you own. Edit them in place rather than wrapping them.
 
 ### ✅ Always Do
 
-- Run `pnpm check-types` before committing code changes
+- Run `pnpm typecheck` before committing code changes
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)
 - Use TypeScript strict mode (no `any` without explicit reason)

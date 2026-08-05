@@ -253,10 +253,12 @@ Full pipeline, from a destroyed playground:
 pnpm run play:destroy && pnpm deps:verify
 ```
 
-Typecheck the vendored primitives, which the pipeline does **not** cover:
+Prove the pipeline's typecheck stage is load-bearing (the middle command must exit **1**):
 
 ```sh
-pnpm -C .dev/playground/packages/ui exec tsc --noEmit -p tsconfig.json
+printf '\nconst PROBE: number = "nope"\n' >> .dev/playground/packages/ui/src/lib/utils.ts
+pnpm -C .dev/playground typecheck
+cp packages/cli/templates/base/packages/ui/src/lib/utils.ts .dev/playground/packages/ui/src/lib/utils.ts
 ```
 
 Confirm `color-scheme` reached the built stylesheet:
@@ -268,10 +270,12 @@ grep -o "color-scheme:[a-z ]*" .dev/playground/apps/web/dist/_astro/*.css | sort
 - ✅ `pnpm deps:verify` from a destroyed playground → green end to end (scaffold → install → build → verify-css → typecheck), with a genuine `cache miss` rather than a replayed cached build.
 - ✅ `verify-css` → sentinel `--saasaloy-css-probe` found in the emitted CSS; Tailwind is scanning `packages/ui`.
 - ✅ **Negative test of the smoke test itself** — the `packages/ui` `@source` glob was deliberately pointed at a nonexistent directory, the playground rebuilt, and `verify-css` exited **1** with `sentinel ... is missing from all 4 built CSS/HTML file(s)`. The check is load-bearing, not vacuous. The glob was restored and the gate re-run green.
-- ✅ `tsc --noEmit` over `packages/ui` → exit 0. All seven primitives compile, and `@base-ui/react` resolves with the expected types.
+- ✅ `turbo run typecheck` → **1 task**, `@repo/ui:typecheck` (`tsc --noEmit -p tsconfig.json`), exit 0. All seven primitives compile, and `@base-ui/react` resolves with the expected types. `packages/ui` now declares the `typecheck` script and pins `typescript@7.0.2`, so the pipeline's typecheck stage covers the vendored primitives instead of running zero tasks.
 - ✅ `color-scheme` → both `light` and `dark` present in the built CSS.
 - ✅ `tw-animate-css@1.4.0` defines `--animate-accordion-down` / `-up`, so the accordion's animation utilities resolve.
-- ⚠️ `turbo run typecheck` executes **0 tasks** — no workspace in the base template declares a `typecheck` script. Pre-existing, and out of scope for #42, but it means the pipeline's typecheck stage is currently a no-op. This is why the primitives were typechecked by hand above.
+- ✅ **Negative test of the typecheck stage itself** — a deliberate `const PROBE: number = "nope"` was appended to `packages/ui/src/lib/utils.ts` and `turbo run typecheck` exited **1** with `error TS2322: Type 'string' is not assignable to type 'number'`. The stage is load-bearing, not vacuous. The file was restored and the gate re-run green (turbo replayed the original `9e8889f071681db3` hash, proving a byte-identical restore).
+- ✅ `pnpm deps:check` → exit 0 with the new `typescript@7.0.2` pin; no drift introduced.
+- ⚠️ `apps/web` still declares no `typecheck` script — `astro check` would need `@astrojs/check` added to the template. Pre-existing and out of scope for #42; the app's TS is still exercised by `astro build`.
 
 ## Not covered / needs human judgment
 
