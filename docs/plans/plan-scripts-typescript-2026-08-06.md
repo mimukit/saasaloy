@@ -44,7 +44,7 @@ Two incidental findings:
 | **Rejected: ajv runtime validation** | Genuinely validates against the existing `packages/cli/schemas/*.schema.json` rather than asserting, but adds `ajv` to root devDeps and converts a type gate into a runtime gate. Out of proportion to this issue. |
 | **Strictness** | **Keep `tsconfig.base.json` as-is, including `noUncheckedIndexedAccess`.** The 14 narrowing errors cluster in one place — the semver capture path at lines 123, 197, 207, 413–414, where `String.match()` returns `null` and its groups get indexed. That is the code deciding whether a bump is within-major and safe to apply; a failed parse currently flows into a comparison as `undefined` and compares silently wrong. Fix with a `parseSemver()` returning `null` and one guarded call site, not four separate narrowings. A `!` is acceptable only at a capture proven unreachable, with a comment saying why. |
 | **The `_json` monkey-patch** | Line 602 does `manifest._json = json` on an object built as `{ file, kind }` — the one error that is neither an annotation nor a null check. **`readManifestDeps` returns a new record** `{ file, kind, json, deps }` and the mutation disappears. Touches the loop at 599–603 and the writer at 781. |
-| **Prose scope** | **Living docs plus a dated ADR amendment.** 20 of the 23 references live in dated documents; rewriting a dated record makes it describe a world that did not exist on its date. Update `CONTRIBUTING.md` and the `sentinel.ts` comment; append one line to ADR 0016 (`Amended 2026-08-06: the script is now scripts/update-deps.ts, see #54`). Leave `docs/qa/qa-dep-update-workflow-2026-07-24.md` (13 refs) and the two plan docs (5 refs) as history. |
+| **Prose scope** | **Living docs plus a dated ADR amendment.** 20 of the 29 references live in dated plan/QA documents; rewriting a dated record makes it describe a world that did not exist on its date. Update `CONTRIBUTING.md` (1) and the `sentinel.ts` comment (2); append an amendment line to **both** ADR 0016 (`update-deps.mjs`) and **ADR 0022** (`verify-css.mjs`) — e.g. `Amended: the script is now scripts/update-deps.ts, see #54`. Leave `docs/qa/qa-dep-update-workflow-2026-07-24.md` (13 refs) and the two plan docs (7 refs) as history. |
 | **The `sentinel.ts` coupling** | Reference the checker **without its extension** — `scripts/verify-css` — so the comment is immune to this rename recurring. The file ships inside `packages/cli/templates/base/`, so the edit changes scaffolded output for every downstream project; the comment is the only thing explaining why an unused constant must not be deleted. Fix the false "no dependencies" claim in `verify-css`'s own header in the same pass. |
 | **Regression proof** | **A manual QA doc under `docs/qa/`**, matching the existing convention. `verify-css` is a smoke test for a *silent* failure, so a converted version that quietly stops asserting still exits 0 on a green build. **Run the negative case first**: break the `@source` glob, confirm non-zero, restore, confirm green. A smoke test never seen failing is not known to work. |
 | **File extension** | `.ts`, not `.mts`. Root `package.json` is `"type": "module"`, so `.ts` is already ESM. |
@@ -74,7 +74,16 @@ Rename all three to `.ts` with `git mv` so history follows, then work the errors
 ### Phase 3 — callers and prose
 
 4. Root `package.json` callers: `play:watch`, `deps:check`, `deps:update`, `deps:verify` — `.mjs` → `.ts` (four `node scripts/…` invocations, five references).
-5. `CONTRIBUTING.md`, `packages/cli/templates/base/packages/ui/src/lib/sentinel.ts`, and the ADR 0016 amendment line.
+5. `CONTRIBUTING.md`, `packages/cli/templates/base/packages/ui/src/lib/sentinel.ts`, and amendment lines on ADR 0016 and ADR 0022.
+
+   ADR 0022 (`adr-0022-design-layer-ships-in-the-base-2026-08-06.md`, line 21) names `scripts/verify-css.mjs` when explaining why the `@source` globs need a smoke test. It landed after this plan was first written — re-run the reference sweep before starting, since more ADRs may name these scripts by then:
+
+   ```sh
+   /bin/grep -rn 'update-deps\.mjs\|verify-css\.mjs\|watch-template\.mjs' \
+     --include='*.md' --include='*.json' --include='*.ts' . | grep -v node_modules
+   ```
+
+   Note `grep` must be the real binary — `update-deps.mjs` reads as binary because of the ESC byte, so an ignore-binaries wrapper silently skips it.
 
 ### Phase 4 — verification
 
