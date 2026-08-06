@@ -4,11 +4,8 @@ import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 
-// Styled against @repo/ui: the vendored primitives plus theme tokens only, so the form
-// follows the same light/dark palette as the blocks around it. No literal colours here —
-// anything that needs a colour reaches for a token (`text-destructive`, `border-border`).
-// The primitives are the only imports; `lucide-react` is a dependency of @repo/ui, not
-// of apps/web, so a module-dropped file cannot import an icon directly.
+// `lucide-react` is a dependency of @repo/ui, not of apps/web, so a module-dropped file
+// here cannot import an icon directly.
 
 // Falls back to the api Worker's pinned local dev port (:4000, fixed in both
 // vite.config.ts and wrangler.jsonc) when PUBLIC_API_URL isn't set — see the
