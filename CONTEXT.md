@@ -9,7 +9,11 @@ An open-source **composable SaaS accelerator**: a CLI + module system that scaff
 _Avoid: boilerplate, starter template._
 
 ### Base
-The near-inert scaffold `saasaloy init` produces: `apps/web` (Astro) + `packages/ui` + `packages/config`, and nothing churny. A thin base is the anti-rot thesis — the less there is, the less there is to rot.
+The scaffold `saasaloy init` produces: `apps/web` (Astro) + `packages/ui` + `packages/tsconfig`, and nothing churny. It is inert on *functional* surfaces — no services, auth, database or network dependencies — which is where the anti-rot thesis actually bites. It is not bare, though: `packages/ui` owns the **design layer** (the Tailwind 4 theme, the vendored shadcn primitives, and the [blocks](#block) the landing page is composed from), because presentation dependencies rot aesthetically rather than dangerously ([ADR 0022](docs/adr/adr-0022-design-layer-ships-in-the-base-2026-08-06.md)). Base files are a **one-time gift** — copied at `init`, never manifest-tracked, no update path.
+
+### Block
+A marketing-page composition in `packages/ui/src/blocks/` — `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`, `cta`, `footer` — each entirely self-contained in one props-driven `.tsx` with its own copy defaults, and reachable only at its own `@repo/ui/blocks/<name>` subpath (never re-exported from the package root). A block composes vendored shadcn primitives; a primitive is the single control it composes. Filenames are semantic kebab-case, not shadcn's registry-style `{category}-{NN}` numbering.
+_Avoid: section — that's the `sections/*.astro` file-drop extension point a module writes into. Avoid component — that's a primitive._
 
 ### Module
 A unit of capability or feature installed by `saasaloy add`.
