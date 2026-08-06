@@ -1,6 +1,13 @@
 ---
 import type { AstroComponentFactory } from "astro/runtime/server/index.js";
 import { siteName } from "@repo/ui";
+import { Cta } from "@repo/ui/blocks/cta";
+import { Faq } from "@repo/ui/blocks/faq";
+import { FeatureGrid } from "@repo/ui/blocks/feature-grid";
+import { Footer } from "@repo/ui/blocks/footer";
+import { Hero } from "@repo/ui/blocks/hero";
+import { Navbar } from "@repo/ui/blocks/navbar";
+import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import Layout from "../layouts/Layout.astro";
 
 // File-based landing-page sections. Every module in ../sections default-exports an
@@ -16,20 +23,37 @@ const sections = Object.keys(sectionModules)
   .map((key) => sectionModules[key].default);
 ---
 
-<Layout title={`${siteName} — coming soon`} description={`${siteName}, a Cloudflare-native SaaS.`}>
-  <div class="grid min-h-dvh place-items-center p-8 text-center">
-    <main class="max-w-[40rem]">
-      <h1 class="mb-2 text-[clamp(2rem,6vw,3.5rem)] font-bold tracking-tight">{siteName}</h1>
-      <p class="text-lg leading-[1.6] opacity-80">
-        A Cloudflare-native SaaS, scaffolded with Saasaloy.
-      </p>
-      <p class="mt-4 text-lg leading-[1.6] opacity-80">
-        Add features with <code class="font-mono">saasaloy add &lt;module&gt;</code>.
-      </p>
-      {sections.map((Section) => <Section />)}
-      <nav class="mt-8 text-[0.9rem] opacity-70">
-        <a href="/terms" class="hover:underline">Terms</a> · <a href="/privacy" class="hover:underline">Privacy</a>
-      </nav>
-    </main>
-  </div>
+{/*
+  The page is composed from @repo/ui/blocks/*, each reached by its own subpath export.
+  Blocks render to static HTML by default; only the three that need browser state carry
+  a client directive, and each one is deliberate:
+    - Navbar       client:idle    — mobile menu toggle, above the fold, so hydrate when
+                                    the browser goes idle rather than waiting for scroll.
+    - PricingTable client:visible — monthly/annual toggle, below the fold.
+    - Faq          client:visible — accordion, below the fold.
+  Hero, FeatureGrid, Cta and Footer take no directive and ship no JavaScript at all.
+  Never reach for a blanket `client:load` here — it would hydrate the whole page.
+*/}
+<Layout
+  title={`${siteName} — ship your SaaS, not your scaffolding`}
+  description={`${siteName}, a Cloudflare-native SaaS.`}
+>
+  <Navbar client:idle siteName={siteName} />
+  <main>
+    <Hero siteName={siteName} />
+    <FeatureGrid />
+    <PricingTable client:visible />
+    <Faq client:visible />
+    <Cta siteName={siteName} />
+    {
+      sections.length > 0 && (
+        <div class="mx-auto w-full max-w-6xl px-6 pb-20">
+          {sections.map((Section) => (
+            <Section />
+          ))}
+        </div>
+      )
+    }
+  </main>
+  <Footer siteName={siteName} />
 </Layout>
