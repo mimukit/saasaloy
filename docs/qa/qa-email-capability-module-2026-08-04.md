@@ -18,7 +18,7 @@ _Generated 2026-08-04 · covers `issue-15-email-capability-module` vs `main` (11
 **Split of work in this document.** Everything a script can decide — install, idempotency,
 patches, provider selection, escaping, derived plaintext, error normalization, typecheck, build —
 the agent already ran; see [Automated verification](#automated-verification-by-ai-agent) for the
-observed output. What is left for a human is the part no CLI can reach: **[TC-1](#tc-1--real-cloudflare-send-operator-runbook----critical)**,
+observed output. What is left for a human is the part no CLI can reach: **[TC-1](#tc-1--real-cloudflare-send-operator-runbook-----critical)**,
 a real send through a dashboard-onboarded domain, plus the inbox and copy judgments that follow
 from it.
 
@@ -27,7 +27,7 @@ from it.
 > without a Cloudflare API token, because `@cloudflare/vite-plugin` opens a remote proxy session at
 > startup for any remote binding. The descriptor now ships `remote: false`, and the
 > `saasaloy-email` skill documents flipping it to `true` for a live dev send — see
-> [TC-4](#tc-4--the-remote-true-vite-dev-decision----critical) for the decision and
+> [TC-4](#tc-4--the-remote-true--vite-dev-decision-----critical) for the decision and
 > [the finding](#finding-remote-true-breaks-the-vite-dev-loop) for the original evidence.
 
 ## Preconditions
@@ -447,7 +447,7 @@ cd .dev/playground && ./saasaloy add email-cloudflare --yes
   module in the same install.
 - ✅ **Env panel** printed all three vars — `CORS_ORIGINS` from `api`, plus:
 
-  ```
+  ```text
   EMAIL_PROVIDER — Which installed provider sends: `cloudflare` (add
   email-cloudflare) or `console` (add email-console). Always required —
   there is no default, so nothing sends by accident and nothing stops
@@ -551,7 +551,7 @@ curl -s -X POST "$BASE_URL/qa-email/send" -w '\n%{http_code}\n'
 
   and this in the Worker log, verbatim:
 
-  ```
+  ```text
   ───── email (console provider) ─────
   message-id: console-9fa2fbca-a8a6-4566-97ba-c719ebd734a6
   from:       qa-sender@example.test
@@ -606,14 +606,14 @@ curl -s -X POST "$BASE_URL/qa-email/no-binding" -w '\n%{http_code}\n'
 
 - ✅ **AC 4 — `EMAIL_PROVIDER` unset** → throws, naming what is registered:
 
-  ```
+  ```text
   EMAIL_PROVIDER is not set. Registered providers: cloudflare, console.
   ```
 
 - ✅ **AC 4 — `EMAIL_PROVIDER` unknown** (`resend`) → throws, quoting the bad value *and* naming
   the registered ones:
 
-  ```
+  ```text
   EMAIL_PROVIDER is "resend", which is not registered. Registered providers: cloudflare, console.
   ```
 
@@ -621,14 +621,14 @@ curl -s -X POST "$BASE_URL/qa-email/no-binding" -w '\n%{http_code}\n'
   direction.
 - ✅ **No sender** (no `EMAIL_FROM`, no per-message `from`) → throws:
 
-  ```
+  ```text
   No sender address: set EMAIL_FROM, or pass `from` on the message. It must be an address on a
   domain your provider is allowed to send from.
   ```
 
 - ✅ **Empty recipient list** (`to: []`) → throws:
 
-  ```
+  ```text
   No recipients: `to` must hold at least one address.
   ```
 
@@ -657,7 +657,7 @@ cd .dev/playground && pnpm --filter @repo/api dev
 - ❌ **With `email-cloudflare` installed and no Cloudflare credentials, `vite dev` will not
   start.** Observed, on a shell with no `CLOUDFLARE_API_TOKEN` and no prior `wrangler login`:
 
-  ```
+  ```text
   ⎔ Establishing remote connection...
   error when starting dev server:
   Error: Failed to start the remote proxy session. Error reloading remote server: In a
@@ -670,14 +670,14 @@ cd .dev/playground && pnpm --filter @repo/api dev
 - ✅ **Isolated to that one key.** Flipping the binding to `"remote": false` and changing nothing
   else, the same command starts normally:
 
-  ```
+  ```text
   Using secrets defined in .dev.vars
   ➜  Local:   http://localhost:4000/
   ```
 
 - ✅ **`wrangler dev` is unaffected** — with `remote: true` restored and still no credentials:
 
-  ```
+  ```text
   ⎔ Starting local server...
   [wrangler:info] Ready on http://localhost:4000
   ```

@@ -35,7 +35,7 @@ capability work.
 
 ## The shape (all modes)
 
-```
+```text
 modules/<capability>-<provider>/
   registry-item.json     # type: saasaloy:feature, dependsOn: ["<capability>"]
   files/<provider>.ts    # ONE file: the interface implementation
