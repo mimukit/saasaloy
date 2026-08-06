@@ -64,7 +64,7 @@ The pre-paint script is inline in `<head>` specifically so a dark-mode visitor n
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — All three pages render styled and faithful to before · 🔴 Critical
@@ -86,7 +86,7 @@ The pre-paint script is inline in `<head>` specifically so a dark-mode visitor n
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — The `sections/*.astro` drop-in extension point still works · 🔴 Critical
@@ -111,7 +111,7 @@ mkdir -p .dev/playground/apps/web/src/sections && printf -- '---\n---\n<p class=
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Vendored primitives render and behave · 🟡 Normal
@@ -146,7 +146,7 @@ rm .dev/playground/apps/web/src/pages/primitives.astro
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Native UI follows the theme (`color-scheme`) · 🟡 Normal
@@ -167,35 +167,66 @@ Regression guard: the port initially dropped this and it was restored in `ba38e6
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Adding a new primitive with the shadcn CLI works · 🟡 Normal
 
 The vendored set is deliberately small, so this is the documented path users will hit early. It's also the case most likely to expose a wrong `components.json`.
 
-**Steps**
+**The CLI must run with its working directory inside `packages/ui`**, where `components.json` lives — not the repo root, not `apps/web`. `shadcn` is already an exact-pinned dependency of `@repo/ui` (`4.16.1`), so `--filter … exec` is the right way to reach it: it runs in the package directory and uses the pinned binary rather than fetching `@latest`.
 
-1. From the playground, run the CLI exactly as the docs say — from `packages/ui`:
+> ⚠️ **Do not use `pnpm -C packages/ui dlx …`.** `-C` scopes pnpm's own workspace resolution; it does **not** change the directory `dlx` spawns the command in. shadcn then looks for `components.json` wherever your shell happens to be, offers to create one, and dies at `Verifying framework`. This spelling shipped in the docs and failed this test case on 2026-08-06 — if you see it anywhere, it's a bug.
+
+**Preconditions**
+
+The playground must be installed — `exec` needs the binary on disk, and `play:init` scaffolds with `--no-install`:
 
 ```sh
-pnpm -C .dev/playground/packages/ui dlx shadcn@latest add dialog
+pnpm play:reset && pnpm -C .dev/playground install
 ```
 
-2. Watch where it writes the file, and whether it edits `package.json`.
-3. Open the generated `packages/ui/src/components/dialog.tsx`.
+**Steps**
+
+1. Preview the file plan without writing anything:
+
+```sh
+pnpm -C .dev/playground --filter @repo/ui exec shadcn add dialog --dry-run
+```
+
+2. Apply it:
+
+```sh
+pnpm -C .dev/playground --filter @repo/ui exec shadcn add dialog
+```
+
+3. Watch where it writes the file, and whether it edits `package.json`.
+4. Open the generated `packages/ui/src/components/dialog.tsx`.
+5. Reset the playground when finished, so the next case starts clean:
+
+```sh
+pnpm play:reset && pnpm -C .dev/playground install
+```
 
 **Expected**
 
-- The CLI finds `components.json` without being pointed at it.
+- The CLI finds `components.json` without being pointed at it — no "You need to create a components.json file" prompt, no framework-detection failure.
 - The file lands in `packages/ui/src/components/dialog.tsx`, **not** in `apps/web` or a `src/components/ui/` subdirectory.
 - Its `cn` import resolves (`@repo/ui/lib/utils`).
 - It uses Base UI (`@base-ui/react`), matching the `base-nova` style — not Radix.
-- Note anything it appended to `package.json` as a **version range** — those need re-pinning to exact, per the repo convention. Flag it if you see one.
+- No `"use client"` directive. `components.json` sets `"rsc": false`, so the CLI strips it — it means nothing in Astro. If one appears, the config is wrong.
+- The dry run reports the already-vendored `button.tsx` as `skip (identical)` — the vendored set matches what the registry emits for this style.
+- `package.json` should be **unchanged**: `@base-ui/react` and `lucide-react` are already dependencies. If a component you pick does add something, it arrives as a **version range** — flag it, since the repo convention is exact pins.
+
+**Fallback (only if you can't install).** `dlx` works with shadcn's own flag, at the cost of fetching an unpinned version:
+
+```sh
+pnpm dlx shadcn@latest add dialog --cwd .dev/playground/packages/ui
+```
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Mobile / responsive layout · 🟡 Normal
@@ -214,7 +245,7 @@ pnpm -C .dev/playground/packages/ui dlx shadcn@latest add dialog
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — Keyboard navigation and focus rings · 🟢 Low
@@ -232,16 +263,16 @@ pnpm -C .dev/playground/packages/ui dlx shadcn@latest add dialog
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
 
-- [ ] `pnpm play:reset` still scaffolds a working project from scratch.
-- [ ] The `@web` Vite alias still resolves (dropping a section that imports `@web/...` works).
-- [ ] Dev server still comes up on port **3000** and fails loudly if the port is taken.
-- [ ] `pnpm -C .dev/playground clean` runs without error and leaves no `dist`/`.astro` behind.
-- [ ] `siteName` still imports from `@repo/ui` on all three pages.
+- [x] `pnpm play:reset` still scaffolds a working project from scratch.
+- [x] The `@web` Vite alias still resolves (dropping a section that imports `@web/...` works).
+- [x] Dev server still comes up on port **3000** and fails loudly if the port is taken.
+- [x] `pnpm -C .dev/playground clean` runs without error and leaves no `dist`/`.astro` behind.
+- [x] `siteName` still imports from `@repo/ui` on all three pages.
 
 ## Automated verification (by AI agent)
 
@@ -283,5 +314,5 @@ grep -o "color-scheme:[a-z ]*" .dev/playground/apps/web/dist/_astro/*.css | sort
 - **The white-flash check specifically.** Only a human watching a real first paint can judge it; a passing build says nothing about it.
 - **Browser/OS matrix.** Only whatever browser the tester uses. `oklch()` needs Safari 15.4+ / Chrome 111+; older browsers will render colors wrong and nothing here checks that.
 - **Visual diff against `origin/main`.** No screenshots were captured, so "faithful to before" is the tester's eye, not a measured comparison.
-- **The shadcn registry.** TC-6 hits the network and depends on `shadcn@latest` at the time you run it, which may drift from the pinned `4.16.1`.
+- **The shadcn registry.** TC-6 hits the network for the component itself. The blessed command uses the pinned `shadcn@4.16.1`, so the CLI can't drift under you — but the registry it fetches from is live and its output can change. The `dlx` fallback additionally pulls `@latest`, which may not be `4.16.1`.
 - **The primitives under real composition.** They're exercised in isolation on a scratch page; the compound-primitive-across-island-boundary trap the plan warns about only shows up once #43 composes blocks.
