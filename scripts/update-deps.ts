@@ -245,6 +245,16 @@ function cmp(a: string, b: string): number {
   return pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2];
 }
 
+// An exact spec that EXACT_RE admits but parseSemver rejects: a prerelease or
+// build-metadata pin such as `1.3.0-rc.1`. It has no orderable stable triple, so NO
+// comparison against it can decide a bump — `cmp` sorts it BELOW every real release, so a
+// LOWER stable version would read as "outdated" and a default apply would write a
+// downgrade. Such a pin is reported and never written, which is the outcome the pre-#54
+// script reached by throwing on the unparsed capture.
+function isUnorderableExact(dep: Dep): boolean {
+  return dep.kind === "exact" && parseSemver(dep.spec) === null;
+}
+
 // --- pnpm-workspace.yaml: minimumReleaseAge (single source of truth) ---------
 async function readMinReleaseMinutes(): Promise<number> {
   const text = await readFile(join(root, "pnpm-workspace.yaml"), "utf8");
@@ -427,9 +437,15 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   const json = isRecord(parsed) ? parsed : {};
   const deps: Dep[] = [];
 
+  // A missing bucket is normal — a manifest need not declare both. A bucket that IS
+  // present but has the wrong shape is a malformed manifest, and skipping it would silently
+  // drop every dep it holds out of the cooldown gate, so it fails the run loudly (exit 2).
   const pushObject = (bucket: DepBucket) => {
     const map = json[bucket];
-    if (!isRecord(map)) return;
+    if (map === undefined || map === null) return;
+    if (!isRecord(map)) {
+      throw new Error(`${manifest.file}: "${bucket}" must be an object of name → version`);
+    }
     for (const [name, value] of Object.entries(map)) {
       const spec = String(value);
       if (isSkippedName(name) || isSkippedSpec(spec)) continue;
@@ -438,7 +454,10 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   };
   const pushArray = (bucket: DepBucket) => {
     const arr = json[bucket];
-    if (!Array.isArray(arr)) return;
+    if (arr === undefined || arr === null) return;
+    if (!Array.isArray(arr)) {
+      throw new Error(`${manifest.file}: "${bucket}" must be an array of "name@version" entries`);
+    }
     for (const value of arr) {
       const entry = String(value);
       const at = entry.lastIndexOf("@");
@@ -468,7 +487,10 @@ function decideStatus(dep: Dep, r: Resolved): Status {
   if (r.target === null) return "within-cooldown"; // every eligible version is too fresh
   if (dep.kind === "bare") return "bare→pinned";
   if (dep.kind === "range") return "range→exact";
-  // exact
+  // exact — but only an orderable stable triple can be compared against the target, so an
+  // unorderable pin is reported as unresolved (non-actionable: no exit-1, no write) rather
+  // than being mis-read as outdated.
+  if (isUnorderableExact(dep)) return "unresolved";
   if (cmp(r.target, dep.spec) > 0) return "outdated";
   // target === current within major. A fresher within-major stable held back by the
   // cooldown is transient; a newer major is the deliberate --allow-major path.
@@ -513,7 +535,6 @@ const STATUS_LABEL: Record<Status, string> = {
 // stripAnsi / wrapForNote are duplicated from packages/cli/src/lib/tui.ts rather
 // than imported: this is a standalone root script, and reaching across the package
 // boundary into the CLI's TS source would drag in a build step. They're tiny.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes.
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
 // The escape itself, as an escape sequence rather than a literal control byte — a raw
 // 0x1b in the source makes grep treat this whole file as binary and skip it.
@@ -663,6 +684,9 @@ function buildCandidates(rows: Row[]): Candidate[] {
   for (const row of rows) {
     const r = row.resolved;
     if (!r) continue;
+    // Nothing is ever written over an unorderable exact pin — not even the opt-in major
+    // arm below, which would otherwise cross a major on a spec we cannot compare.
+    if (isUnorderableExact(row.dep)) continue;
     const cur = row.dep.spec;
     if (ACTIONABLE.has(row.status) && r.target && r.target !== cur) {
       out.push({
