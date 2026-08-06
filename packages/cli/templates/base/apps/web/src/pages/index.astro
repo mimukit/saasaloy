@@ -1,6 +1,7 @@
 ---
 import type { AstroComponentFactory } from "astro/runtime/server/index.js";
 import { siteName } from "@repo/ui";
+import Layout from "../layouts/Layout.astro";
 
 // File-based landing-page sections. Every module in ../sections default-exports an
 // Astro component; dropping `sections/<name>.astro` puts it on the landing page with
@@ -15,41 +16,20 @@ const sections = Object.keys(sectionModules)
   .map((key) => sectionModules[key].default);
 ---
 
-<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="utf-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>{siteName} — coming soon</title>
-    <meta name="description" content={`${siteName}, a Cloudflare-native SaaS.`} />
-    <style>
-      :root { color-scheme: light dark; }
-      body {
-        font-family: system-ui, sans-serif;
-        margin: 0;
-        min-height: 100dvh;
-        display: grid;
-        place-items: center;
-        text-align: center;
-        padding: 2rem;
-      }
-      main { max-width: 40rem; }
-      h1 { font-size: clamp(2rem, 6vw, 3.5rem); margin: 0 0 0.5rem; }
-      p { font-size: 1.125rem; line-height: 1.6; opacity: 0.8; }
-      code { font-family: ui-monospace, monospace; }
-      nav { margin-top: 2rem; font-size: 0.9rem; opacity: 0.7; }
-      a { color: inherit; }
-    </style>
-  </head>
-  <body>
-    <main>
-      <h1>{siteName}</h1>
-      <p>A Cloudflare-native SaaS, scaffolded with Saasaloy.</p>
-      <p>Add features with <code>saasaloy add &lt;module&gt;</code>.</p>
+<Layout title={`${siteName} — coming soon`} description={`${siteName}, a Cloudflare-native SaaS.`}>
+  <div class="grid min-h-dvh place-items-center p-8 text-center">
+    <main class="max-w-[40rem]">
+      <h1 class="mb-2 text-[clamp(2rem,6vw,3.5rem)] font-bold tracking-tight">{siteName}</h1>
+      <p class="text-lg leading-[1.6] opacity-80">
+        A Cloudflare-native SaaS, scaffolded with Saasaloy.
+      </p>
+      <p class="mt-4 text-lg leading-[1.6] opacity-80">
+        Add features with <code class="font-mono">saasaloy add &lt;module&gt;</code>.
+      </p>
       {sections.map((Section) => <Section />)}
-      <nav>
-        <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a>
+      <nav class="mt-8 text-[0.9rem] opacity-70">
+        <a href="/terms" class="hover:underline">Terms</a> · <a href="/privacy" class="hover:underline">Privacy</a>
       </nav>
     </main>
-  </body>
-</html>
+  </div>
+</Layout>

@@ -90,9 +90,25 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm cli` | run the built CLI directly (`node packages/cli/dist/index.js`) |
 | `pnpm cli:link` | build the CLI and put a global `saasaloy` bin on your `PATH` (link from `main` only) |
 | `pnpm cli:unlink` | remove the global `saasaloy` bin |
-| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim |
+| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim, `git init` the result |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
+
+### Why `play:init` runs `git init`
+
+The playground is gitignored by *this* repo, but it is itself a repo — because two tools
+in the generated project read git to decide what to skip, and both degrade badly without it:
+
+- **Turborepo** hashes task inputs through git. With no `.git`, `@repo/web:build` never
+  invalidates when `packages/ui` changes, so `deps:verify` happily validates a **cached
+  build of the previous template**.
+- **Tailwind's** scanner honours `.gitignore` only via an ignore walker that needs a real
+  `.git` directory. Without one it scans `node_modules` and the emitted stylesheet grows
+  roughly 5x.
+
+A real `saasaloy init` project is a git repo, so this just makes the playground behave like
+one. (The Tailwind half is also fixed independently by an explicit `@source not` rule in the
+template's `globals.css`, so a user who builds before their first `git init` is still fine.)
 
 ## Updating dependencies
 
@@ -105,7 +121,7 @@ resolve either. A dedicated maintainer command owns these files:
 
 ```sh
 pnpm deps:update    # interactive: grouped report → pick which bumps → confirm → write exact versions
-pnpm deps:verify    # re-scaffold .dev/playground, install, build + typecheck the generated project
+pnpm deps:verify    # re-scaffold .dev/playground, install, build, verify-css + typecheck the generated project
 pnpm deps:check     # read-only CI gate: report drift, exit non-zero when deps:update would change something
 ```
 
@@ -140,5 +156,13 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | --- | --- |
 | `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--allow-fresh`, `--dry-run`) |
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
-| `pnpm deps:verify` | `play:init` → install → build → typecheck the generated project (post-update gate) |
+| `pnpm deps:verify` | `play:init` → install → build → `verify-css` → typecheck the generated project (post-update gate) |
+
+`verify-css` (`scripts/verify-css.mjs`) covers the one template break that `build` and
+`typecheck` are both blind to: Tailwind silently dropping every utility class written in
+`packages/ui`. Its class detection is rooted at the current working directory — which is
+`apps/web` — so only the explicit `@source` globs in the template's `globals.css` reach
+`packages/ui`, and a glob that matches nothing is not an error. The script asserts that a
+sentinel utility declared only in `packages/ui/src/lib/sentinel.ts` actually landed in the
+built CSS. If it fails, suspect those globs before anything else.
 

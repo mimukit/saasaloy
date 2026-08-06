@@ -23,3 +23,21 @@ pnpm --filter @repo/web run deploy    # wrangler deploy (Cloudflare Workers stat
 saasaloy add waitlist       # pulls api + database
 saasaloy add billing        # pulls auth + Stripe
 ```
+
+## UI components
+
+`packages/ui` ships a Tailwind 4 theme and a small set of [shadcn](https://ui.shadcn.com)
+primitives. Import them by subpath:
+
+```ts
+import { Button } from "@repo/ui/components/button";
+```
+
+To add one the base doesn't include, run the pinned CLI in `packages/ui` — that's where
+`components.json` lives:
+
+```sh
+pnpm --filter @repo/ui exec shadcn add dialog
+```
+
+Components land in `packages/ui/src/components/` as source you own and can edit.

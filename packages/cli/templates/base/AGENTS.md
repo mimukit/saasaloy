@@ -54,6 +54,42 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 - **Add features, don't hand-wire them.** Prefer `saasaloy add <module>` over manually
   creating routes/schema/auth; modules drop files into convention-based extension points.
 
+### The `@repo/ui` Design Layer
+
+`packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
+the `cn()` helper, and the vendored [shadcn](https://ui.shadcn.com) primitives in
+`src/components/`. `apps/web` pulls the theme in once, through the shared layout that
+imports `@repo/ui/globals.css`.
+
+Everything is reached by subpath — nothing is re-exported from the package root, so
+importing one primitive never drags in the rest:
+
+```ts
+import { Button } from "@repo/ui/components/button";
+import { cn } from "@repo/ui/lib/utils";
+```
+
+**Adding a primitive the base doesn't vendor.** `shadcn` is already an exact-pinned
+dependency of `@repo/ui`, so reach it with `--filter … exec` — that runs in the package
+directory, where `components.json` lives:
+
+```sh
+pnpm --filter @repo/ui exec shadcn add dialog
+```
+
+- **Not `pnpm -C packages/ui dlx …`.** `-C` scopes pnpm's own workspace resolution; it
+  does *not* change the directory `dlx` spawns the command in. shadcn then looks for
+  `components.json` wherever your shell happens to be and dies at `Verifying framework`.
+  If you must use `dlx`, pass shadcn's own flag: `--cwd packages/ui`.
+- Never `npx` (see Never Do).
+- The CLI writes into `src/components/`. Anything it appends to `package.json` arrives
+  as a range — **re-pin it to an exact version**.
+- `style` is `base-nova` (Base UI) and is fixed at init — the CLI cannot change it later.
+- `rsc` is `false`, so the CLI strips the `"use client"` directive for you. It means
+  nothing in Astro, and the vendored primitives don't carry it.
+
+Primitives are source you own. Edit them in place rather than wrapping them.
+
 ### Naming Conventions
 
 - **Functions**: camelCase (`fetchUserData`, `calculateTotal`)
@@ -64,7 +100,7 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 
 ## Testing Instructions
 
-- Run type checking: `pnpm check-types` (must pass before commits)
+- Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (auto-fixes where possible)
 - Format check: `pnpm format` (auto-formats all files)
 - Run tests: `pnpm test` (when test scripts are added)
@@ -73,7 +109,7 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 
 ### ✅ Always Do
 
-- Run `pnpm check-types` before committing code changes
+- Run `pnpm typecheck` before committing code changes
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)
 - Use TypeScript strict mode (no `any` without explicit reason)

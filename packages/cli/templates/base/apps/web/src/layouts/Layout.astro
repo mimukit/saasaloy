@@ -1,0 +1,38 @@
+---
+// The one document shell for every page. It owns <html>/<head>/<body> and the single
+// import of the shared theme, so a page is only ever its own content — no page may
+// duplicate the shell or import globals.css again.
+import "@repo/ui/globals.css";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {description && <meta name="description" content={description} />}
+    {/*
+      Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
+      paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
+      from bundling it into a deferred module, which would defeat the whole point.
+      The base follows the OS only — no localStorage, no toggle (see the plan's
+      non-goals); a theme switcher would add the persistence layer here.
+    */}
+    <script is:inline>
+      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
+        document.documentElement.classList.add("dark");
+      }
+    </script>
+  </head>
+  <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
+    <slot />
+  </body>
+</html>

@@ -1,6 +1,7 @@
 // @ts-check
 import { fileURLToPath } from "node:url";
 import react from "@astrojs/react";
+import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
 // Static output — the marketing site is content-first and ships to Cloudflare as
@@ -20,6 +21,10 @@ export default defineConfig({
   // into a mystery CORS rejection. web is 3000, api is 4000 (see apps/api).
   server: { port: 3000 },
   vite: {
+    // Tailwind 4 is a Vite plugin, not an Astro integration — `@astrojs/tailwind` is EOL
+    // and never supported v4. The theme itself (tokens, @source globs) lives in
+    // packages/ui/src/styles/globals.css, which Layout.astro imports via @repo/ui.
+    plugins: [tailwindcss()],
     server: { strictPort: true },
     resolve: {
       // `@web` mirrors saasaloy.json's alias of the same name (apps/web/src) — that
