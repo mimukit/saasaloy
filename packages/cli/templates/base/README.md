@@ -27,10 +27,12 @@ saasaloy add billing        # pulls auth + Stripe
 ## UI components
 
 `packages/ui` ships a Tailwind 4 theme, a small set of [shadcn](https://ui.shadcn.com)
-primitives, and the marketing blocks the landing page is built from. Import them by
-subpath — nothing is re-exported from the package root:
+primitives, and the marketing blocks the landing page is built from. Import primitives and
+blocks by subpath — neither is re-exported from the package root, which carries
+project-wide constants only:
 
 ```ts
+import { siteName } from "@repo/ui";
 import { Button } from "@repo/ui/components/button";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
 ```

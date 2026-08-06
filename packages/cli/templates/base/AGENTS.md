@@ -61,10 +61,12 @@ the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
 `src/components/`, and the marketing **blocks** in `src/blocks/`. `apps/web` pulls the
 theme in once, through the shared layout that imports `@repo/ui/globals.css`.
 
-Everything is reached by subpath — nothing is re-exported from the package root, so
-importing one primitive or block never drags in the rest:
+Primitives and blocks are reached by subpath — neither is re-exported from the package
+root, so importing one never drags in the rest. The root export is project-wide constants
+only (`siteName`):
 
 ```ts
+import { siteName } from "@repo/ui";
 import { Button } from "@repo/ui/components/button";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import { cn } from "@repo/ui/lib/utils";
@@ -101,9 +103,12 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   `blocks/index.ts` barrel. Astro gives every `client:*` component its own React root, so
   a compound primitive (accordion, dialog, dropdown) split across an `.astro` file throws
   "must be used within" at runtime. Keep the whole composition inside the block.
-- **Props-driven, with the copy as in-file defaults.** Every block takes optional props
-  and falls back to a `const` default at the top of the file. Change the copy by editing
-  that const; keep the props for the cases a page really varies.
+- **Props-driven, with the copy as in-file defaults.** Every prop is optional and carries
+  a default in the file itself. Scalar copy takes its default inline in the parameter
+  destructuring (`hero.tsx`'s `siteName = "Acme"`); a list or an object takes a named
+  `const` at the top instead (`feature-grid.tsx`'s `defaultFeatures`), so it is one
+  readable block to edit rather than a literal wedged into a signature. Change the copy
+  by editing the default; keep the props for the cases a page really varies.
 - **Never pass a component or a function as a prop from `.astro`.** Astro serializes
   island props, so icons live *inside* the block. Swap one by editing the block.
 - **Semantic kebab-case filenames** (`feature-grid.tsx`), never shadcn's registry-style
