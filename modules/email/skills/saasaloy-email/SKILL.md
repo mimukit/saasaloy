@@ -49,8 +49,12 @@ registered names in the message.
 The package **never retries**, deliberately: a retry loop inside a request handler holds the
 Worker's response open. Choose how a failure should behave instead.
 
+Both branches below sit inside a route handler like the one above, so `c` is the Hono context.
+
 ```ts
 import { EmailError } from "@repo/email"; // alongside `createEmail` — needed by the catch below
+
+const mail = createEmail(c.env);
 
 // Non-critical (welcome mail): don't make the user's request wait on it, and don't let a
 // mail outage fail an operation that already succeeded.
@@ -181,7 +185,7 @@ before it knows or cares which email provider you selected. If it can't authenti
 loop doesn't start at all — so with the flag on, `pnpm --filter @repo/api dev` fails for every
 teammate who hasn't set up Cloudflare credentials:
 
-```
+```text
 ⎔ Establishing remote connection...
 error when starting dev server:
 Error: Failed to start the remote proxy session. Error reloading remote server: In a
@@ -227,13 +231,19 @@ export function postmark(): EmailProvider {
             HtmlBody: message.html,
             TextBody: message.text,
           }),
+          // Bound the call. Without this a hung provider holds the Worker's response
+          // open until the platform kills it, and the caller gets no `EmailError` at all.
+          signal: AbortSignal.timeout(10_000),
         });
       } catch (cause) {
-        // The request never completed — DNS, TLS, a dropped connection. Retryable.
-        throw new EmailError("provider_error", "postmark: request failed", {
-          retryable: true,
-          cause,
-        });
+        // The request never completed — a timeout, DNS, TLS, a dropped connection.
+        // Retryable either way; the abort is worth naming so logs distinguish it.
+        const timedOut = cause instanceof DOMException && cause.name === "TimeoutError";
+        throw new EmailError(
+          "provider_error",
+          timedOut ? "postmark: request timed out" : "postmark: request failed",
+          { retryable: true, cause },
+        );
       }
 
       if (!response.ok) {
