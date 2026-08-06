@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { MenuIcon, XIcon } from "lucide-react";
 
 import { Button, buttonVariants } from "@repo/ui/components/button";
@@ -38,6 +38,25 @@ export function Navbar({
   ctaHref = "#cta",
 }: NavbarProps) {
   const [open, setOpen] = useState(false);
+  const toggleRef = useRef<HTMLButtonElement>(null);
+
+  // Escape is the expected way out of an open menu, and focus has to go back to the
+  // toggle — the panel unmounts under the user's cursor otherwise, dropping focus to
+  // the document and sending the next Tab to the top of the page.
+  useEffect(() => {
+    if (!open) return;
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape") return;
+      setOpen(false);
+      toggleRef.current?.focus();
+    }
+
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, [open]);
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur">
@@ -62,14 +81,15 @@ export function Navbar({
           <a href={ctaHref} className={cn(buttonVariants({ size: "sm" }), "hidden md:inline-flex")}>
             {ctaLabel}
           </a>
-          {/* The one interactive control in the header. `aria-controls` points at the
-              panel below, which is why the panel is rendered conditionally rather than
-              hidden with a class — nothing to announce when it isn't there. */}
+          {/* The one interactive control in the header. The panel below is rendered
+              conditionally, so `aria-controls` is set only while it exists — an idref
+              pointing at nothing is invalid ARIA. */}
           <Button
+            ref={toggleRef}
             variant="ghost"
             size="icon-sm"
             className="md:hidden"
-            aria-controls="navbar-mobile-menu"
+            aria-controls={open ? "navbar-mobile-menu" : undefined}
             aria-expanded={open}
             aria-label={open ? "Close menu" : "Open menu"}
             onClick={() => setOpen((previous) => !previous)}

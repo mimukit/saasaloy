@@ -95,11 +95,12 @@ Primitives are source you own. Edit them in place rather than wrapping them.
 landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`,
 `cta`, `footer`. The rules are not stylistic — each one prevents a real failure:
 
-- **One block, one file, one named export.** `pricing-table.tsx` exports `PricingTable`
-  and nothing else — no default export, no `blocks/index.ts` barrel. Astro gives every
-  `client:*` component its own React root, so a compound primitive (accordion, dialog,
-  dropdown) split across an `.astro` file throws "must be used within" at runtime. Keep
-  the whole composition inside the block.
+- **One block, one file, one component export (plus its prop types).**
+  `pricing-table.tsx` exports `PricingTable` alongside `PricingTier` and
+  `PricingTableProps`, and nothing else — no second component, no default export, no
+  `blocks/index.ts` barrel. Astro gives every `client:*` component its own React root, so
+  a compound primitive (accordion, dialog, dropdown) split across an `.astro` file throws
+  "must be used within" at runtime. Keep the whole composition inside the block.
 - **Props-driven, with the copy as in-file defaults.** Every block takes optional props
   and falls back to a `const` default at the top of the file. Change the copy by editing
   that const; keep the props for the cases a page really varies.
