@@ -69,19 +69,24 @@ import { Button } from "@repo/ui/components/button";
 import { cn } from "@repo/ui/lib/utils";
 ```
 
-**Adding a primitive the base doesn't vendor.** Run the CLI from `packages/ui`, where
-`components.json` lives — not from the repo root, and not from `apps/web`:
+**Adding a primitive the base doesn't vendor.** `shadcn` is already an exact-pinned
+dependency of `@repo/ui`, so reach it with `--filter … exec` — that runs in the package
+directory, where `components.json` lives:
 
 ```sh
-pnpm -C packages/ui dlx shadcn@latest add dialog
+pnpm --filter @repo/ui exec shadcn add dialog
 ```
 
-- Use **`pnpm dlx`**, never `npx` (see Never Do).
+- **Not `pnpm -C packages/ui dlx …`.** `-C` scopes pnpm's own workspace resolution; it
+  does *not* change the directory `dlx` spawns the command in. shadcn then looks for
+  `components.json` wherever your shell happens to be and dies at `Verifying framework`.
+  If you must use `dlx`, pass shadcn's own flag: `--cwd packages/ui`.
+- Never `npx` (see Never Do).
 - The CLI writes into `src/components/`. Anything it appends to `package.json` arrives
   as a range — **re-pin it to an exact version**.
-- Strip the `"use client"` directive it injects. It means nothing in Astro, and the
-  vendored primitives don't carry it.
 - `style` is `base-nova` (Base UI) and is fixed at init — the CLI cannot change it later.
+- `rsc` is `false`, so the CLI strips the `"use client"` directive for you. It means
+  nothing in Astro, and the vendored primitives don't carry it.
 
 Primitives are source you own. Edit them in place rather than wrapping them.
 

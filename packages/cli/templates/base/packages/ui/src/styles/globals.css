@@ -2,7 +2,7 @@
    source globs, and the token set; apps import it via the `@repo/ui/globals.css`
    subpath export (see apps/web/src/layouts/Layout.astro) rather than redeclaring it.
    Tokens follow shadcn's `neutral` base color with `cssVariables: true`, so anything
-   added later with `pnpm -C packages/ui dlx shadcn@latest add <x>` themes correctly. */
+   added later with `pnpm --filter @repo/ui exec shadcn add <x>` themes correctly. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
