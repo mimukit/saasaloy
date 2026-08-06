@@ -159,3 +159,6 @@ routeTree.gen.ts
 !.env.example
 *.pem
 *.local
+
+# ---- statuskit scratch snapshots ----
+/docs/status/
