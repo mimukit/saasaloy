@@ -24,3 +24,5 @@ accepted — overrides the "no Tailwind/React" clause of [ADR 0003](adr-0003-bas
 
 ## References
 Issue #43 (parent #40). Plan: [`plan-ui-blocks-2026-08-01.md`](../plans/plan-ui-blocks-2026-08-01.md), Phases 3, 4 and 6. Prior: [ADR 0003](adr-0003-base-is-landing-page-only-2026-07-22.md), [ADR 0006](adr-0006-copy-in-updates-manifest-hash-tracking-2026-07-22.md), [ADR 0016](adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md). Glossary: `CONTEXT.md` → "Base", "Block".
+
+Amended 2026-08-06: the smoke test is now `scripts/verify-css.ts`, typechecked by the root `typecheck:scripts` gate (`tsconfig.scripts.json`). The `@source` consequence above is unaffected. See #54.

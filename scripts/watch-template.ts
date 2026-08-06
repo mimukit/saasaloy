@@ -15,7 +15,7 @@ const templateDir = resolve(root, "packages/cli/templates/base");
 const cli = resolve(root, "packages/cli/dist/index.js");
 const target = ".dev/playground";
 
-let timer = null;
+let timer: ReturnType<typeof setTimeout> | null = null;
 let running = false;
 let queued = false;
 
@@ -41,6 +41,6 @@ rescaffold();
 
 watch(templateDir, { recursive: true }, (_event, filename) => {
   if (filename) console.log(`[watch] changed: ${filename}`);
-  clearTimeout(timer);
+  if (timer) clearTimeout(timer);
   timer = setTimeout(rescaffold, 150);
 });

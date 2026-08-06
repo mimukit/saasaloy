@@ -158,7 +158,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
 | `pnpm deps:verify` | `play:init` → install → build → `verify-css` → typecheck the generated project (post-update gate) |
 
-`verify-css` (`scripts/verify-css.mjs`) covers the one template break that `build` and
+`verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
 `packages/ui`. Its class detection is rooted at the current working directory — which is
 `apps/web` — so only the explicit `@source` globs in the template's `globals.css` reach

@@ -14,7 +14,8 @@
     "build": "turbo run build",
     "dev": "turbo run dev",
     "lint": "turbo run lint",
-    "typecheck": "turbo run typecheck",
+    "typecheck": "pnpm run typecheck:scripts && turbo run typecheck",
+    "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "turbo run test",
     "cli": "node packages/cli/dist/index.js",
     "cli:dev": "pnpm --filter saasaloy dev",
@@ -23,13 +24,14 @@
     "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force --no-install && cp scripts/saasaloy-shim.sh .dev/playground/saasaloy && chmod +x .dev/playground/saasaloy && git init -q .dev/playground",
     "play:destroy": "rm -rf .dev/playground",
     "play:reset": "pnpm run play:destroy && pnpm run play:init",
-    "play:watch": "node scripts/watch-template.mjs",
-    "deps:check": "node scripts/update-deps.mjs --check",
-    "deps:update": "node scripts/update-deps.mjs",
-    "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && node scripts/verify-css.mjs && pnpm -C .dev/playground typecheck"
+    "play:watch": "node scripts/watch-template.ts",
+    "deps:check": "node scripts/update-deps.ts --check",
+    "deps:update": "node scripts/update-deps.ts",
+    "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && node scripts/verify-css.ts && pnpm -C .dev/playground typecheck"
   },
   "devDependencies": {
     "@clack/prompts": "1.7.0",
+    "@types/node": "26.1.1",
     "picocolors": "1.1.1",
     "turbo": "2.10.5",
     "typescript": "7.0.2"
