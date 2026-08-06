@@ -62,12 +62,34 @@ pnpm play:reset         # destroy + re-scaffold a clean playground (you re-run p
 pnpm play:destroy       # remove .dev/playground entirely
 ```
 
+### Global linking (`main` checkout only)
+
+Sometimes you want a plain `saasaloy` on your `PATH` — to scaffold a project outside
+`.dev/playground`, or to sanity-check the CLI the way an end user invokes it:
+
+```sh
+pnpm cli:link           # build the CLI and register its bin globally
+saasaloy init ~/tmp/demo
+pnpm cli:unlink         # remove the global bin when you're done
+```
+
+`pnpm add --global ./packages/cli` symlinks the package rather than copying it, so the global
+`saasaloy` always runs the current `dist/` — keep `pnpm cli:dev` running and your edits are live.
+
+The global bin points at **one** checkout's `packages/cli/dist/index.js`, so only link from
+your primary `main` checkout — if you link from a worktree (or link one checkout while working
+in another), every `saasaloy` call runs whichever build was linked last. It also resolves
+modules from the published registry, not this checkout's `modules/`. For module and
+uncommitted-work QA, use the playground shim above; it's worktree-safe by construction.
+
 ### Scripts
 
 | Script | What it does |
 | --- | --- |
 | `pnpm cli:dev` | `tsup --watch` — rebuild the CLI on source change |
 | `pnpm cli` | run the built CLI directly (`node packages/cli/dist/index.js`) |
+| `pnpm cli:link` | build the CLI and put a global `saasaloy` bin on your `PATH` (link from `main` only) |
+| `pnpm cli:unlink` | remove the global `saasaloy` bin |
 | `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
