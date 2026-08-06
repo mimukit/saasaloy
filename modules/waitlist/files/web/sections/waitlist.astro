@@ -2,8 +2,29 @@
 import WaitlistForm from "@web/components/WaitlistForm";
 ---
 
-<section>
-  <h2>Get early access</h2>
-  <p>Join the waitlist and we'll let you know the moment it's ready.</p>
-  <WaitlistForm client:load />
+{/*
+  A landing-page section, dropped in through index.astro's `sections/*.astro` glob. That
+  glob's wrapper already supplies `mx-auto max-w-6xl px-6`, so this file must NOT repeat
+  them — a second container nests inside the first and narrows the section.
+
+  Styled from the same material as @repo/ui/blocks/cta (the muted panel, the ring, the
+  heading scale) but laid out in two columns rather than centred: the Cta block renders
+  directly above this section, and two centred muted panels in a row read as a stutter.
+*/}
+<section id="waitlist" class="scroll-mt-20 py-20">
+  <div
+    class="grid gap-8 rounded-2xl bg-muted px-6 py-12 ring-1 ring-foreground/10 sm:px-10 lg:grid-cols-2 lg:items-center lg:gap-12"
+  >
+    <div class="flex flex-col gap-3">
+      <h2 class="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+        Get early access
+      </h2>
+      <p class="max-w-md text-base text-pretty text-muted-foreground">
+        Join the waitlist and we'll let you know the moment it's ready.
+      </p>
+    </div>
+    {/* The only part of the section that needs the browser, so it is the only part
+        hydrated — everything above it renders to static HTML. */}
+    <WaitlistForm client:load />
+  </div>
 </section>
