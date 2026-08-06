@@ -57,15 +57,18 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 ### The `@repo/ui` Design Layer
 
 `packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
-the `cn()` helper, and the vendored [shadcn](https://ui.shadcn.com) primitives in
-`src/components/`. `apps/web` pulls the theme in once, through the shared layout that
-imports `@repo/ui/globals.css`.
+the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
+`src/components/`, and the marketing **blocks** in `src/blocks/`. `apps/web` pulls the
+theme in once, through the shared layout that imports `@repo/ui/globals.css`.
 
-Everything is reached by subpath — nothing is re-exported from the package root, so
-importing one primitive never drags in the rest:
+Primitives and blocks are reached by subpath — neither is re-exported from the package
+root, so importing one never drags in the rest. The root export is project-wide constants
+only (`siteName`):
 
 ```ts
+import { siteName } from "@repo/ui";
 import { Button } from "@repo/ui/components/button";
+import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import { cn } from "@repo/ui/lib/utils";
 ```
 
@@ -89,6 +92,38 @@ pnpm --filter @repo/ui exec shadcn add dialog
   nothing in Astro, and the vendored primitives don't carry it.
 
 Primitives are source you own. Edit them in place rather than wrapping them.
+
+**Blocks — the page-level compositions.** `src/blocks/` holds the marketing blocks the
+landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`,
+`cta`, `footer`. The rules are not stylistic — each one prevents a real failure:
+
+- **One block, one file, one component export (plus its prop types).**
+  `pricing-table.tsx` exports `PricingTable` alongside `PricingTier` and
+  `PricingTableProps`, and nothing else — no second component, no default export, no
+  `blocks/index.ts` barrel. Astro gives every `client:*` component its own React root, so
+  a compound primitive (accordion, dialog, dropdown) split across an `.astro` file throws
+  "must be used within" at runtime. Keep the whole composition inside the block.
+- **Props-driven, with the copy as in-file defaults.** Every prop is optional and carries
+  a default in the file itself. Scalar copy takes its default inline in the parameter
+  destructuring (`hero.tsx`'s `siteName = "Acme"`); a list or an object takes a named
+  `const` at the top instead (`feature-grid.tsx`'s `defaultFeatures`), so it is one
+  readable block to edit rather than a literal wedged into a signature. Change the copy
+  by editing the default; keep the props for the cases a page really varies.
+- **Never pass a component or a function as a prop from `.astro`.** Astro serializes
+  island props, so icons live *inside* the block. Swap one by editing the block.
+- **Semantic kebab-case filenames** (`feature-grid.tsx`), never shadcn's registry-style
+  `{category}-{NN}` numbering — that disambiguates variants in a public registry, and
+  this project has neither.
+- **Static by default.** A block with no state renders to HTML and ships zero JS. Add a
+  client directive only to the block that actually needs the browser, and pick the
+  cheapest one: `client:idle` above the fold, `client:visible` below it. A blanket
+  `client:load` on the page hydrates everything and throws away the reason this is a
+  static site — see `apps/web/src/pages/index.astro` for the worked example.
+- **The landing page has a second extension point.** `index.astro` globs
+  `src/sections/*.astro` in sorted order, so dropping a file there adds a section with no
+  edit to the page. `saasaloy add <module>` uses it; do not remove the glob.
+
+Blocks, like primitives, are source you own — they are meant to be edited, not wrapped.
 
 ### Naming Conventions
 
