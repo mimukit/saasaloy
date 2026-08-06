@@ -79,7 +79,7 @@ The agent confirmed every block's text reaches the built HTML, but not that any 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Navbar mobile menu — open, Escape, focus return, link-click close · 🔴 Critical
@@ -110,7 +110,7 @@ This is the one hand-written interaction in the diff and the only thing above th
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Pricing monthly/annual toggle · 🔴 Critical
@@ -139,7 +139,7 @@ Hydrated with `client:visible`, so the JavaScript only arrives once the section 
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — FAQ accordion · 🔴 Critical
@@ -164,7 +164,7 @@ The accordion is a compound Base UI primitive kept whole inside one block precis
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Dark mode across the new blocks, no white flash · 🔴 Critical
@@ -191,7 +191,7 @@ The pre-paint script in `Layout.astro` is unchanged by this branch, but the bloc
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — The `sections/*.astro` file-drop extension point still works in dev · 🔴 Critical
@@ -222,7 +222,7 @@ rm .dev/playground/apps/web/src/sections/test.astro
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — Same-page anchors clear the sticky header · 🟡 Normal
@@ -247,7 +247,7 @@ The header is 3.5rem tall and the sections carry `scroll-mt-20` (5rem). The marg
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — Static blocks work with JavaScript disabled · 🟡 Normal
@@ -276,7 +276,7 @@ pnpm -C .dev/playground build && pnpm -C .dev/playground --filter @repo/web prev
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-9 — Responsive layout from 320px to wide · 🟡 Normal
@@ -298,7 +298,7 @@ pnpm -C .dev/playground build && pnpm -C .dev/playground --filter @repo/web prev
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-10 — Keyboard navigation, focus rings, and the toggle's labels · 🟡 Normal
@@ -323,7 +323,7 @@ pnpm -C .dev/playground build && pnpm -C .dev/playground --filter @repo/web prev
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-11 — `saasaloy add waitlist` still composes into the page · 🟡 Normal
@@ -361,7 +361,7 @@ pnpm play:reset && pnpm -C .dev/playground install
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-12 — Copy, defaults, and overall UX judgment · 🟢 Low
@@ -384,19 +384,19 @@ These blocks are the first thing every generated project shows a visitor, and th
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
 
-- [ ] `/terms` and `/privacy` still render their centered prose column and their `← Home` link.
-- [ ] The footer's "Legal" group reaches both pages, and both link back.
-- [ ] `pnpm play:reset` still scaffolds a working project from scratch.
-- [ ] Dev server still comes up on port **3000** and fails loudly if the port is taken.
-- [ ] `pnpm -C .dev/playground clean` runs without error and leaves no `dist`/`.astro` behind.
-- [ ] `siteName` still imports from `@repo/ui`'s root export on all three pages.
-- [ ] The `@web` Vite alias still resolves for a dropped-in section.
-- [ ] The vendored primitives are still individually importable by subpath — the blocks did not become the only way to reach them.
+- [x] `/terms` and `/privacy` still render their centered prose column and their `← Home` link.
+- [x] The footer's "Legal" group reaches both pages, and both link back.
+- [x] `pnpm play:reset` still scaffolds a working project from scratch.
+- [x] Dev server still comes up on port **3000** and fails loudly if the port is taken.
+- [x] `pnpm -C .dev/playground clean` runs without error and leaves no `dist`/`.astro` behind.
+- [x] `siteName` still imports from `@repo/ui`'s root export on all three pages.
+- [x] The `@web` Vite alias still resolves for a dropped-in section.
+- [x] The vendored primitives are still individually importable by subpath — the blocks did not become the only way to reach them.
 
 ## Automated verification (by AI agent)
 
