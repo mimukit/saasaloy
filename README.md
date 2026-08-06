@@ -38,7 +38,7 @@ Dependencies resolve recursively, topologically sorted, behind a confirmation pr
 
 ## Requirements
 
-Node 24+, pnpm 11+, and a Cloudflare account. Most of the stack runs on Cloudflare's free tier — `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it, and `saasaloy init` needs no account at all until you deploy.
+Node 24+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it.
 
 One module does not, and it's worth knowing before you install it rather than at the first failed send:
 
