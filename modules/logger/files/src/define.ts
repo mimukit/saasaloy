@@ -183,11 +183,19 @@ function selectProvider(
   return provider;
 }
 
-/** An unrecognized `LOG_LEVEL` falls back to `info` silently — a bad value must not be an outage. */
+/**
+ * An unrecognized `LOG_LEVEL` falls back to `info` silently — a bad value must not be an
+ * outage.
+ *
+ * The membership test is `Object.hasOwn`, not a bare `LEVELS[normalized]` lookup: a bare
+ * lookup resolves inherited `Object.prototype` keys, so `LOG_LEVEL=constructor` (or
+ * `__proto__`, `toString`, …) would pass the guard and leave `threshold` non-numeric —
+ * every comparison against it false, every level emitted, `trace` and `debug` included.
+ */
 function parseLevel(value: string | undefined): LogLevel {
   const normalized = value?.trim().toLowerCase();
   if (!normalized) return DEFAULT_LEVEL;
-  return LEVELS[normalized as LogLevel] === undefined ? DEFAULT_LEVEL : (normalized as LogLevel);
+  return Object.hasOwn(LEVELS, normalized) ? (normalized as LogLevel) : DEFAULT_LEVEL;
 }
 
 /**
