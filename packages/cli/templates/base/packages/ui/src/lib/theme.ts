@@ -154,6 +154,9 @@ export const THEME_INIT_SCRIPT = `(function () {
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    relabel(root.getAttribute(ATTRIBUTE) || read());
+    // The attribute is author-writable, so anything could be sitting there. LABELS has no
+    // entry for a value outside ORDER, and aria-label="undefined" is worse than a stale one.
+    var painted = root.getAttribute(ATTRIBUTE);
+    relabel(ORDER.indexOf(painted) < 0 ? read() : painted);
   });
 })();`;
