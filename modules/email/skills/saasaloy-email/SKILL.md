@@ -13,6 +13,12 @@ about any particular email service. Each provider ships as its own module — `e
 
 Callers import `@repo/email`, call `createEmail(env)`, and never learn which provider is active.
 
+> **`email-console` is dev-only, unlike the identically-named `logger-console`.** The two share a
+> naming pattern and mean opposite things: logging a message *instead of sending it* is a
+> substitute you must never deploy (it puts the rendered body, including one-time links, in your
+> log retention), whereas `logger-console` writes to the Workers Logs pipeline and is the
+> production default. Set `EMAIL_PROVIDER=console` in dev and tests only.
+
 ## Send from a route
 
 ```ts
