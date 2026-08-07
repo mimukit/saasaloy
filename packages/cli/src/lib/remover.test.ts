@@ -421,3 +421,149 @@ describe("executeRemovePlan — state reconciliation", () => {
     expect(lock.modules.billing).toBeDefined();
   });
 });
+
+// Regression cover for two findings on PR #37. Both are about trusting stale
+// inputs: the manifest's own keys, and the plan's view of disk once interactive
+// confirms have held it open.
+
+describe("buildRemovePlan — path containment", () => {
+  // The manifest is persisted JSON, so a corrupt or hand-edited key could point
+  // anywhere; `join()` would normalize the `..` away and the delete would land
+  // outside the project.
+  it.each([
+    ["parent traversal", "../../../etc/passwd"],
+    ["traversal mid-path", "apps/../../outside.ts"],
+    ["absolute posix path", "/etc/passwd"],
+    ["backslash separator", "apps\\api\\x.ts"],
+    ["windows drive path", "C:/Windows/system32/x.ts"],
+  ])("refuses a managed key with %s", async (_label, badTarget) => {
+    const manifest = emptyManifest();
+    manifest.managed[badTarget] = { module: "auth", hash: "0".repeat(64) };
+    await expect(build("auth", emptyConfig(), manifest, emptyLock())).rejects.toThrow(
+      /Refusing to resolve/,
+    );
+  });
+
+  it("refuses a link path that escapes the project root", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "s\n", "auth");
+    manifest.links[".agents/skills/saasaloy-auth"] = "../../../tmp/evil-link";
+    await expect(build("auth", emptyConfig(), manifest, emptyLock())).rejects.toThrow(
+      /Refusing to resolve/,
+    );
+  });
+
+  it("still accepts an ordinary nested project-relative key", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    const plan = await build("auth", emptyConfig(), manifest, emptyLock());
+    expect(plan.files[0]).toMatchObject({ action: "delete" });
+  });
+});
+
+describe("executeRemovePlan — revalidation between plan and execute", () => {
+  // The per-file drift confirms are interactive and can sit open indefinitely.
+  // Anything edited in that window is user-owned content, whatever the plan said.
+  it("spares a clean file edited after planning, instead of deleting it", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    expect(plan.files[0]).toMatchObject({ action: "delete" });
+
+    // The user edits while the confirm prompt is up.
+    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "edited during prompt\n", "utf8");
+
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(await readFile(join(root, "apps/api/src/routes/auth.ts"), "utf8")).toBe(
+      "edited during prompt\n",
+    );
+    expect(result.deleted).toHaveLength(0);
+    expect(result.driftSurvivors.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+  });
+
+  it("spares a confirmed drift file whose content changed again after the confirm", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "hand-edited\n", "utf8");
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    expect(plan.files[0]).toMatchObject({ action: "drift" });
+
+    // Confirmed deleting "hand-edited\n" — then it changed again.
+    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "edited yet again\n", "utf8");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+      deleteDrifted: new Set(["apps/api/src/routes/auth.ts"]),
+    });
+
+    expect(await readFile(join(root, "apps/api/src/routes/auth.ts"), "utf8")).toBe(
+      "edited yet again\n",
+    );
+    expect(result.deleted).toHaveLength(0);
+    expect(result.driftSurvivors.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+  });
+
+  it("reports a file deleted after planning as missing rather than failing", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    await rm(join(root, "apps/api/src/routes/auth.ts"));
+
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(result.deleted).toHaveLength(0);
+    expect(result.missingUntracked.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+  });
+
+  it("still deletes a file left untouched between plan and execute", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(await pathExists(join(root, "apps/api/src/routes/auth.ts"))).toBe(false);
+    expect(result.deleted.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+  });
+
+  it("leaves a link replaced by a real file after planning untouched, as a conflict", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "skill\n", "auth");
+    const targetAbs = join(root, ".agents/skills/saasaloy-auth");
+    const linkAbs = join(root, ".claude/skills/saasaloy-auth");
+    await mkdir(dirname(linkAbs), { recursive: true });
+    await symlink(targetAbs, linkAbs, "dir");
+    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/saasaloy-auth";
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    expect(plan.links[0]).toMatchObject({ action: "remove" });
+
+    // The user swaps the symlink for a real file of their own after planning.
+    await rm(linkAbs);
+    await writeFile(linkAbs, "mine now\n", "utf8");
+
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(await readFile(linkAbs, "utf8")).toBe("mine now\n");
+    expect(result.linksRemoved).toHaveLength(0);
+    expect(result.linkConflicts.map((l) => l.path)).toEqual([".claude/skills/saasaloy-auth"]);
+    expect((await lstat(linkAbs)).isSymbolicLink()).toBe(false);
+  });
+});

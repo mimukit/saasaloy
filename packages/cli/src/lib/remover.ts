@@ -1,6 +1,6 @@
 import { readdir, readFile, rm as rmPath } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { classifyLink, hashContent, pathExists } from "./fs-utils.js";
+import { classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import type { SaasaloyConfig } from "./schema.js";
@@ -88,7 +88,7 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
   const files: PlannedRemoveFile[] = [];
   for (const [target, entry] of Object.entries(manifest.managed)) {
     if (entry.module !== name) continue;
-    const targetAbs = join(root, ...target.split("/"));
+    const targetAbs = resolveWithinRoot(root, target);
     let action: FileRemoveAction;
     let oldContent: string | undefined;
     if (!(await pathExists(targetAbs))) {
@@ -103,8 +103,8 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
   const links: PlannedRemoveLink[] = [];
   for (const [target, path] of Object.entries(manifest.links)) {
     if (ownerOfLinkTarget(manifest, target) !== name) continue;
-    const targetAbs = join(root, ...target.split("/"));
-    const pathAbs = join(root, ...path.split("/"));
+    const targetAbs = resolveWithinRoot(root, target);
+    const pathAbs = resolveWithinRoot(root, path);
     const state = await classifyLink(pathAbs, targetAbs);
     links.push({
       module: name,
@@ -209,6 +209,23 @@ async function dropDanglingAliases(root: string, config: SaasaloyConfig): Promis
   return dropped;
 }
 
+// Whether a planned file still looks the way it did when the plan was built:
+//   unchanged — byte-identical to plan time → the plan's verdict still holds
+//   changed   — edited since → now user-owned content, must survive
+//   gone      — deleted since → nothing left to remove
+type FileRecheck = "unchanged" | "changed" | "gone";
+
+// Arbitrary time passes between buildRemovePlan and here — the per-file drift
+// confirms are interactive and can sit open indefinitely. Re-reading immediately
+// before the delete is what keeps issue #27's "drift is sacred" true in the gap:
+// a file the user edited while a prompt was up is drift, whatever the plan said.
+async function recheckFile(file: PlannedRemoveFile): Promise<FileRecheck> {
+  if (!(await pathExists(file.targetAbs))) return "gone";
+  if (file.oldContent === undefined) return "changed"; // planned `missing`, something is there now
+  const current = await readFile(file.targetAbs, "utf8");
+  return hashContent(current) === hashContent(file.oldContent) ? "unchanged" : "changed";
+}
+
 export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArgs): Promise<RemoveResult> {
   const { root, config, manifest, lock, deleteDrifted } = args;
 
@@ -217,16 +234,23 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
   const missingUntracked: PlannedRemoveFile[] = [];
 
   for (const file of plan.files) {
-    if (file.action === "delete") {
-      await rmPath(file.targetAbs, { force: true });
-      deleted.push(file);
-    } else if (file.action === "drift") {
-      if (deleteDrifted?.has(file.target)) {
+    // Hash-clean, or drift the caller explicitly confirmed deleting — both are
+    // "delete this exact content", so both have to prove the content is still that.
+    const wantsDelete = file.action === "delete" || (file.action === "drift" && !!deleteDrifted?.has(file.target));
+    if (wantsDelete) {
+      const state = await recheckFile(file);
+      if (state === "unchanged") {
         await rmPath(file.targetAbs, { force: true });
         deleted.push(file);
+      } else if (state === "gone") {
+        missingUntracked.push(file);
       } else {
+        // Edited between planning and now — the confirm the user gave was for
+        // different bytes, so it doesn't authorize deleting these.
         driftSurvivors.push(file);
       }
+    } else if (file.action === "drift") {
+      driftSurvivors.push(file);
     } else {
       missingUntracked.push(file);
     }
@@ -239,8 +263,16 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
   const linkConflicts: PlannedRemoveLink[] = [];
   for (const link of plan.links) {
     if (link.action === "remove") {
-      await rmPath(link.pathAbs, { force: true });
-      linksRemoved.push(link);
+      // Same staleness window as files: the link may have been replaced by a real
+      // file or repointed since planning, and neither is ours to delete.
+      const state = await classifyLink(link.pathAbs, link.targetAbs);
+      if (state === "correct") {
+        await rmPath(link.pathAbs, { force: true });
+        linksRemoved.push(link);
+      } else if (state === "conflict") {
+        linkConflicts.push(link);
+      }
+      // "missing" — already gone, nothing to unlink.
     } else if (link.action === "conflict") {
       linkConflicts.push(link);
     }
