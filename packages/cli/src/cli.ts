@@ -36,7 +36,7 @@ export function printHelp(registry: CommandRegistry): void {
 // why no help is printed above the picker; that would render the same list twice.
 // No intro()/outro() here either: the chosen command opens its own, so the handoff reads
 // as one continuous clack rail instead of two stacked boxes.
-export async function pickCommand(deps: CliDeps): Promise<number> {
+async function pickCommand(deps: CliDeps): Promise<number> {
   const { registry, select, isCancel } = deps;
   const picked = await select({
     message: "What would you like to do?",
