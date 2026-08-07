@@ -31,13 +31,26 @@ export function raw(value: string): SafeHtml {
   return new SafeHtml(value);
 }
 
+/**
+ * Escape a value for *any* position in the markup, including an unquoted attribute.
+ *
+ * The first five replacements are the familiar ones that neutralise markup. The last
+ * three are what make an unquoted interpolation — `html`<a href=${url}>`` — safe: in
+ * that position a space, a backtick or an `=` ends the attribute value, so a value
+ * carrying one can graft a second, attacker-chosen attribute onto the tag. Encoding
+ * them costs a longer entity in the source and nothing in the rendered mail, since the
+ * client's parser decodes each back before it draws anything.
+ */
 function escapeHtml(value: string): string {
   return value
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
+    .replace(/'/g, "&#39;")
+    .replace(/`/g, "&#96;")
+    .replace(/=/g, "&#61;")
+    .replace(/[ \t\n\f\r]/g, "&#32;");
 }
 
 /** A plain string is treated as text and escaped; a `SafeHtml` passes through. */
@@ -62,6 +75,10 @@ function interpolate(value: unknown): string {
  *
  * Nested `html` fragments and arrays of them interpolate as-is; `null`, `undefined`
  * and `false` render as nothing, so `${isTrial && html`<p>…</p>`}` works.
+ *
+ * Escaping stops *markup*, not meaning: a `javascript:` URL and a hostile `style`
+ * declaration are made of characters escaping never touches, so a value bound for an
+ * `href` or a `style` still needs validating on its own — see `safeUrl`.
  */
 export function html(strings: TemplateStringsArray, ...values: unknown[]): SafeHtml {
   let out = strings[0] ?? "";
