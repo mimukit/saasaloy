@@ -23,7 +23,7 @@ import type {
   RemovePlan,
 } from "../lib/remover.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
-import { wrapForNote } from "../lib/tui.js";
+import { isInteractive, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy remove <module>` — the local undo, mirroring `add`'s clack UX and flag
 // surface. Fully offline: the plan derives entirely from manifest.json,
@@ -201,6 +201,12 @@ export async function runRemove(argv: string[]): Promise<number> {
         note("Nothing installed.", "Nothing to do");
         outro(pc.dim("0 modules"));
         return 0;
+      }
+      // Same hazard as `add`: without a terminal this prompt can never be answered, so
+      // it would hang rather than fail.
+      if (!isInteractive()) {
+        cancel(`No module named and no terminal to pick one in — usage: \`${USAGE}\`.`);
+        return 1;
       }
       const picked = await select({
         message: "Pick a module to remove",
