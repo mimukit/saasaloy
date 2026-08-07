@@ -111,7 +111,7 @@ cat saasaloy.json && echo --- && cat apps/api/wrangler.jsonc
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-2 — Unmanaged files survive; pruning stops at the first non-empty ancestor  ·  🔴 Critical
@@ -145,7 +145,7 @@ find apps/api -type f
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-3 — Drift — decline the confirm, hand-edited file survives  ·  🔴 Critical
@@ -185,7 +185,7 @@ cat apps/api/src/index.ts
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-4 — Drift — accept the confirm, hand-edited file deleted anyway  ·  🟡 Normal
@@ -205,7 +205,7 @@ ls apps/api/src/index.ts 2>&1
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-5 — Dependents refusal blocks `remove api`; `--force` overrides  ·  🔴 Critical
@@ -236,7 +236,7 @@ echo "exit=$?"
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-6 — Config patch recorded on `add`, dropped + warned on `remove`  ·  🔴 Critical
@@ -271,7 +271,7 @@ cat .saasaloy/manifest.json | python3 -m json.tool | grep -A3 '"patches"'
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-7 — A patched file classifies as drift when its owning module is removed  ·  🟡 Normal
@@ -302,7 +302,7 @@ cat apps/api/wrangler.jsonc
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-8 — `--dry-run` / `--diff` preview identically, write nothing  ·  🟡 Normal
@@ -330,7 +330,7 @@ git status --short apps/api 2>/dev/null; ls apps/api/src/index.ts
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ### TC-9 — Bare `remove` picker + Ctrl-C cancels cleanly  ·  🟢 Low
@@ -354,19 +354,19 @@ git status --short apps/api 2>/dev/null; ls apps/api/src/index.ts
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
-- [ ] `saasaloy add` still applies cleanly and records `patches` correctly for a module with
+- [x] `saasaloy add` still applies cleanly and records `patches` correctly for a module with
       no patches (`api` alone) — empty `patches: []`, no spurious warnings.
-- [ ] `saasaloy --help` / command list includes `remove — undo a module's applied files via
+- [x] `saasaloy --help` / command list includes `remove — undo a module's applied files via
       the manifest (offline)`.
-- [ ] `saasaloy remove <name-not-installed>` fails with `<name> isn't installed — nothing to
+- [x] `saasaloy remove <name-not-installed>` fails with `<name> isn't installed — nothing to
       remove.`, exit 1, nothing changes.
-- [ ] `saasaloy remove api --bogus-flag` is rejected: `Unknown argument(s): --bogus-flag —
+- [x] `saasaloy remove api --bogus-flag` is rejected: `Unknown argument(s): --bogus-flag —
       usage: ...`, exit 1, before touching disk.
-- [ ] A pre-existing `.saasaloy/manifest.json` written before this change (no `patches` key)
+- [x] A pre-existing `.saasaloy/manifest.json` written before this change (no `patches` key)
       still loads and `remove` runs against it without crashing (see Automated verification).
 
 ## Automated verification (by AI agent)
