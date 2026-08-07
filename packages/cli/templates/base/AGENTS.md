@@ -93,6 +93,40 @@ pnpm --filter @repo/ui exec shadcn add dialog
 
 Primitives are source you own. Edit them in place rather than wrapping them.
 
+**Swapping the whole theme for a preset.** The token set in
+`packages/ui/src/styles/globals.css` is shadcn's `neutral` with `cssVariables: true`, and
+any shadcn **`registry:style`** item is a drop-in replacement for it. The same
+`--filter … exec` form applies — there is no separate theme command, and no Saasaloy one
+either:
+
+```sh
+pnpm --filter @repo/ui exec shadcn add https://tweakcn.com/r/themes/modern-minimal.json
+```
+
+The CLI merges the preset's `:root`, `.dark` and `@theme inline` blocks **into** the
+existing ones, so the file's hand-written parts — the three `@source` globs, the
+`@custom-variant dark`, the `@layer base` rules — stay put, and `components.json` is not
+touched. It usually *extends* `@theme inline` with mappings the base does not carry
+(fonts, tracking, shadows); that is expected.
+
+Two places to get an item from:
+
+1. **[`https://ui.shadcn.com/create`](https://ui.shadcn.com/create)** — first-party.
+   Describe or dial in a theme and it hands you a URL.
+2. **[`https://tweakcn.com`](https://tweakcn.com)** — a much larger preset library,
+   serving items at `https://tweakcn.com/r/themes/<name>.json`.
+
+Neither is special: the mechanism is the `registry:style` shape, so any URL that serves
+one works.
+
+**This edits a base file, and base files have no update path.** Saasaloy hands you the
+template once; it never comes back to migrate it. A swapped theme is yours to maintain,
+including re-applying anything you had customised in `globals.css` that the preset
+overwrote. Diff the file after running the command rather than assuming.
+
+Light/dark/system switching is unaffected by any of this — it keys off the `.dark` class,
+which every preset keeps.
+
 **Blocks — the page-level compositions.** `src/blocks/` holds the marketing blocks the
 landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`,
 `cta`, `footer`. The rules are not stylistic — each one prevents a real failure:
@@ -119,6 +153,17 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   cheapest one: `client:idle` above the fold, `client:visible` below it. A blanket
   `client:load` on the page hydrates everything and throws away the reason this is a
   static site — see `apps/web/src/pages/index.astro` for the worked example.
+- **`theme-toggle` is the exception that proves the rule.** It sits in `src/blocks/`
+  beside the marketing blocks but is chrome, not copy: `index.astro` places it as a
+  sibling of `<Navbar />` and it takes **no** client directive despite being
+  interactive. It has no `onClick` and no state — the pre-paint inline script the shared
+  layout emits (`THEME_INIT_SCRIPT`, from `packages/ui/src/lib/theme.ts`) drives every
+  `[data-theme-toggle]` on the page through one delegated listener, and CSS picks the
+  icon off `<html data-theme>`. Move it, restyle it via its `className`, or delete the
+  one line in `index.astro` to drop it. Do **not** "fix" it by adding `client:*` or an
+  `onClick`, and do not paste a second copy of the boot script into a page: any document
+  that renders the block must inline that one constant in its `<head>`, or the control
+  stays hidden.
 - **The landing page has a second extension point.** `index.astro` globs
   `src/sections/*.astro` in sorted order, so dropping a file there adds a section with no
   edit to the page. `saasaloy add <module>` uses it; do not remove the glob.
