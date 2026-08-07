@@ -1,6 +1,6 @@
 ---
 name: saasaloy-api
-description: Runbook for the api capability — Hono on Cloudflare Workers with file-based route registration. Use when adding, changing, or debugging routes in apps/api, wiring bindings (c.env), running the Worker locally, or deploying it. Covers the routes/ auto-glob convention, the mount-relative path rule, and how features add their own wrangler bindings.
+description: Runbook for the api capability — Hono on Cloudflare Workers with file-based route registration. Use when adding, changing, or debugging routes in apps/api, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, or deploying it. Covers the routes/ auto-glob convention, the mount-relative path rule, and how features add their own wrangler bindings.
 ---
 
 # api — Hono on Cloudflare Workers
@@ -61,6 +61,57 @@ Base `api` ships **zero bindings**. A capability or feature that needs one:
 Adding a binding is the one genuinely structural edit to `api`'s scaffold; everything else is a
 pure file-drop into `routes/`.
 
+## Logging: `c.get("log")`, never `console.log`
+
+`api` depends on `logger`, so every project gets `packages/logger` and the `logger-console`
+provider from `saasaloy add api` — nothing to install, nothing to wire. `src/index.ts` mounts a
+correlation middleware right after CORS that binds a request id to a child logger and puts it on
+the context:
+
+```ts
+const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+c.set("log", createLogger(c.env).child({ requestId }));
+```
+
+Read it in a route with `c.get("log")`. Compose `LoggerVariables` into the sub-app's generic so
+it's typed — the same move `database` asks for with `DbBindings`, and for the same reason: a route
+can't import the entry's types without creating a cycle.
+
+```ts
+// src/routes/widgets.ts
+import { Hono } from "hono";
+import type { LoggerVariables } from "@repo/logger";
+
+const widgets = new Hono<{ Variables: LoggerVariables }>();
+
+widgets.post("/", async (c) => {
+  const log = c.get("log");
+  log.info("creating widget", { plan: "pro" }); // → one line, carrying this request's requestId
+  try {
+    // …
+  } catch (err) {
+    log.error("widget creation failed", { err }); // `err` is serialized, not `{}`
+    throw err;
+  }
+  return c.json({ ok: true });
+});
+
+export default widgets;
+```
+
+Every line from one request shares its `requestId`, so a single query in Workers Logs reconstructs
+the whole request. The message comes **first** and the structured data second — `log.info(msg,
+fields?)` — and the fields are what get indexed, so put values in `fields` rather than
+interpolating them into the message.
+
+`createLogger(c.env)` (from `@repo/logger`) is the uncorrelated escape hatch for code that runs
+outside a request — a module-scope singleton, a scheduled handler, a queue consumer. Inside a
+route, prefer `c.get("log")`; a fresh `createLogger` there loses the request id.
+
+`LOG_LEVEL` sets the threshold (default `info`), and `wrangler.jsonc`'s `observability` block is
+what makes the output queryable in the dashboard — `head_sampling_rate` is its cost dial. The
+`saasaloy-logger` skill covers levels, redaction, reading logs, and writing another provider.
+
 ## Run it locally
 
 ```sh
@@ -119,4 +170,6 @@ Deployment of all services is centralized in the future **`infra`** capability (
 - **One route file = one mounted prefix**, named after the file. Keep the folder flat.
 - **Internal paths are mount-relative** (`get("/")` for the index of the mount).
 - **`c.env` for bindings, never `process.env`.**
+- **`c.get("log")` for logging, never `console.log`** — a bare console call is unlevelled and
+  uncorrelated, and it bypasses redaction.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
