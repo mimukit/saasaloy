@@ -105,7 +105,7 @@ pnpm deps:verify
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -150,7 +150,7 @@ git checkout -- packages/cli/templates/base modules
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -216,7 +216,7 @@ rm -rf modules/_qa54probe && git checkout -- packages/cli/templates/base modules
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -258,7 +258,7 @@ pgrep -af "watch-template"
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -289,7 +289,7 @@ pnpm deps:check
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -327,7 +327,7 @@ git diff && git checkout -- packages/cli/templates/base modules
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ---
@@ -354,18 +354,18 @@ pnpm install && pnpm typecheck
 
 **Actual:** _(tester fills in)_
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 
 ## Regression checks
 
-- [ ] `pnpm deps:check`'s report shape and counts match what `main` produces in the same session (same three buckets, same pending count, exit 1).
-- [ ] `pnpm deps:verify` still runs its five stages in order and still fails at `verify-css` when the glob is wrong (TC-1).
-- [ ] `pnpm play:watch` still re-scaffolds without touching `.dev/playground/node_modules` (TC-4).
-- [ ] `scripts/saasaloy-shim.sh` is untouched, and `pnpm play:init` still copies it into the playground as an executable `./saasaloy`.
-- [ ] Nothing under `packages/cli/templates/base/**` changed except the two comment lines in `sentinel.ts` — the scaffolded output is byte-identical otherwise.
-- [ ] No `.github/` workflow was added (CI is issue #46's job).
-- [ ] `git log --follow scripts/update-deps.ts` still reaches the pre-rename history, i.e. the rename was a `git mv`.
+- [x] `pnpm deps:check`'s report shape and counts match what `main` produces in the same session (same three buckets, same pending count, exit 1).
+- [x] `pnpm deps:verify` still runs its five stages in order and still fails at `verify-css` when the glob is wrong (TC-1).
+- [x] `pnpm play:watch` still re-scaffolds without touching `.dev/playground/node_modules` (TC-4).
+- [x] `scripts/saasaloy-shim.sh` is untouched, and `pnpm play:init` still copies it into the playground as an executable `./saasaloy`.
+- [x] Nothing under `packages/cli/templates/base/**` changed except the two comment lines in `sentinel.ts` — the scaffolded output is byte-identical otherwise.
+- [x] No `.github/` workflow was added (CI is issue #46's job).
+- [x] `git log --follow scripts/update-deps.ts` still reaches the pre-rename history, i.e. the rename was a `git mv`.
 
 ## Automated verification (by AI agent)
 
