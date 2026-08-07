@@ -41,11 +41,6 @@ const playgroundCss = join(playgroundUi, "src/styles/globals.css");
 const playgroundComponentsJson = join(playgroundUi, "components.json");
 const playgroundDist = join(playground, "apps/web/dist");
 
-const templateCss = join(
-  root,
-  "packages/cli/templates/base/packages/ui/src/styles/globals.css",
-);
-
 // Everything the base hand-wrote into globals.css that a merge must not eat. Each one is
 // a real failure mode, not a formatting preference: drop a @source glob and packages/ui
 // renders unstyled, drop @custom-variant and every `dark:` utility stops matching, drop
