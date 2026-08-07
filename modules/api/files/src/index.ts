@@ -1,12 +1,23 @@
+import { createLogger, type Logger } from "@repo/logger";
 import { Hono, type Context } from "hono";
 import { cors } from "hono/cors";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
-// (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` (below); a
-// capability or feature that adds a D1/R2/KV/Queue binding extends this type and
-// patches wrangler.jsonc.
+// (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger
+// vars (below); a capability or feature that adds a D1/R2/KV/Queue binding extends this
+// type and patches wrangler.jsonc.
 export type Bindings = {
   CORS_ORIGINS?: string;
+  /** Which registered log provider writes. Optional — unset selects the only installed one. */
+  LOGGER_PROVIDER?: string;
+  /** Minimum level to emit: trace | debug | info | warn | error | fatal. Defaults to `info`. */
+  LOG_LEVEL?: string;
+};
+
+// Request-scoped values set by middleware and read with `c.get(...)`. `log` is the
+// correlated logger the middleware below binds to every request.
+export type Variables = {
+  log: Logger;
 };
 
 // Local dev origins for `apps/web` (Astro, :3000) and `apps/admin` (TanStack
@@ -18,7 +29,7 @@ export type Bindings = {
 // falling back.
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
 
-const app = new Hono<{ Bindings: Bindings }>();
+const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 
 // Credentialed CORS lives in api's spine — every cross-origin caller (the admin SPA,
 // the waitlist form on the marketing site, auth's cookie-based session) shares the
@@ -38,6 +49,24 @@ app.use(
     credentials: true,
   }),
 );
+
+// Request correlation. Every route below reads the same logger with `c.get("log")`, and
+// every line it writes carries this request's `requestId` — that is what turns a pile of
+// log lines into a request you can follow.
+//
+// `cf-ray` first: it is the id Cloudflare's own dashboard, invocation logs and support
+// tickets key on, so a line correlates with the platform's view of the same request for
+// free. `crypto.randomUUID()` covers local dev, where there is no ray.
+//
+// An inbound `x-request-id` is deliberately **not** honored. It would trust a
+// client-supplied value into an indexed field — anyone could collide with, or forge, a
+// real request's id. A gateway that must propagate one should overwrite the header
+// upstream, not have this Worker believe it.
+app.use("*", async (c, next) => {
+  const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+  c.set("log", createLogger(c.env).child({ requestId }));
+  await next();
+});
 
 // File-based route registration. Every module in ./routes default-exports a Hono
 // sub-app named after its service; `import.meta.glob` resolves them to static imports
