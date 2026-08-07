@@ -11,6 +11,17 @@ export function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
 }
 
+// Can this session hold a prompt? Both streams have to be a terminal: clack needs
+// raw-mode stdin to read keys and a real stdout to draw its rail, so a pipe on either
+// side means nobody can answer. Read at call time — like `wrapForNote` reads `columns`
+// below — so the answer reflects the live process rather than module-load order.
+// `process.env.CI` is deliberately absent: every genuinely non-interactive context (CI
+// runners, `docker run` without -t, a pipe, `ssh host cmd`) already has no TTY, while a
+// developer with CI exported would silently lose every prompt in the CLI.
+export function isInteractive(): boolean {
+  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+}
+
 // Hard-wrap text to the terminal width so a `note` box can't overflow the rail.
 // clack's box adds a border + padding (~6 cols), so we wrap a bit narrower. Widths
 // are measured on the ANSI-stripped text so colored words wrap by their visible
