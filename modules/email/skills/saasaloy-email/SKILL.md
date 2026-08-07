@@ -112,7 +112,10 @@ export const resetPassword: EmailTemplate<ResetProps> = ({ name, resetUrl }) => 
 - **`html` escapes every interpolation.** A name, a subject, anything a user typed can't inject
   markup. Nested `html` fragments and arrays of them compose as-is; `null`/`undefined`/`false`
   render as nothing, so `${isTrial && html`<p>…</p>`}` works. Use `raw()` only for markup you
-  built yourself.
+  built yourself. Escaping covers unquoted attribute positions too (spaces, `=` and backticks
+  become entities), but it stops *markup*, not *meaning* — a `javascript:` URL contains nothing
+  to escape, so run any caller-supplied `href` through `safeUrl` and validate `style` values
+  yourself.
 - **`layout({ title, content, footer?, preheader? })`** wraps a fragment in a complete document
   with inline styles. Email clients strip `<style>` blocks and ignore most of CSS — keep styling
   inline and the structure a single column.
@@ -158,7 +161,9 @@ it yourself to lock the Worker down to specific senders.
 
 Known limits: 50 combined to/cc/bcc recipients, 5 MiB per message, 32 attachments, 16 KB of
 headers. Errors arrive as `EmailError` with `code` one of `sender_not_verified`, `rate_limited`,
-`too_large`, `provider_error`, the raw Cloudflare code kept in `providerCode`.
+`too_large`, `invalid_message`, `provider_error`, the raw Cloudflare code kept in `providerCode`.
+`E_INTERNAL_SERVER_ERROR` maps to `provider_error` with `retryable: true` — it is Cloudflare's
+failure, not the message's.
 
 ### Local development
 
@@ -166,6 +171,14 @@ Use `email-console` and `EMAIL_PROVIDER=console`. Nothing sends, the rendered me
 Worker's log, and `send()` returns a synthetic `console-<uuid>` message id. Because the provider is
 registered through the same registry, the code path under test is the real one — only the transport
 differs.
+
+> [!WARNING]
+> **Never set `EMAIL_PROVIDER=console` in a deployed environment.** Writing the message to the log
+> is the whole point of this provider, so it logs the body in full — which means recipient
+> addresses, whatever the template rendered, and any one-time link in it: password resets, magic
+> links, invitations. In production that is a credential sitting in your log retention, readable by
+> anyone with dashboard access. The provider is for `wrangler dev` and tests; production selects a
+> real one.
 
 #### Sending for real from dev
 
@@ -286,8 +299,10 @@ Contract notes:
 
 - The core hands you a **resolved** message: `from` filled in from `EMAIL_FROM`, `to` normalized to
   an array, `text` derived from `html`. Don't re-implement any of that.
-- Normalize failures into `EmailError` with one of the four `code` values, set `retryable`
-  honestly, and keep the vendor's own code in `providerCode`. Default to
+- Normalize failures into `EmailError` with one of the four `code` values a provider may raise
+  (`sender_not_verified`, `rate_limited`, `too_large`, `provider_error` — `invalid_message` is the
+  core's, for a message that never reached you), set `retryable` honestly, and keep the vendor's
+  own code in `providerCode`. Default to
   `provider_error` / `retryable: false` for anything you don't recognize — a wrong `retryable: true`
   means duplicate mail. Cover *every* path out of the call, not just a non-2xx status: a rejected
   request, an abort, and an unparseable body each reach the caller otherwise.

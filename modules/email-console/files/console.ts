@@ -7,6 +7,11 @@ import type { EmailEnv, EmailProvider, EmailResult, ResolvedEmailMessage } from 
 // Set `EMAIL_PROVIDER=console` to select it. It is registered exactly like any other
 // provider, so the code path under test is the real one; only the transport differs.
 //
+// Never select it in a deployed environment. Logging the message *is* the feature, so
+// the body goes to the log whole — including whatever one-time link the template put in
+// it (password reset, magic link, invitation), which in production is a live credential
+// sitting in log retention for anyone with dashboard access.
+//
 // The factory is `consoleEmail`, not `console`, so the generated import in
 // packages/email/src/index.ts can't shadow the global `console`. The provider's *name*
 // — the value EMAIL_PROVIDER takes — is still plain "console".
