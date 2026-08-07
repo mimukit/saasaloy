@@ -459,6 +459,47 @@ describe("executePlan — config patches", () => {
     expect(result.patchConflicts.map((x) => x.file)).toContain("apps/api/wrangler.jsonc");
     expect(result.patched).toHaveLength(0);
   });
+
+  it("records the applied patch in the manifest so `remove` can warn about it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWithWrangler(), await dbCapability()],
+      config,
+      manifest,
+    });
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.patches).toHaveLength(1);
+    expect(manifest.patches[0]).toMatchObject({
+      module: "database",
+      file: "apps/api/wrangler.jsonc",
+    });
+    expect(manifest.patches[0]?.patch.kind).toBe("wrangler-binding");
+  });
+
+  it("dedupes an identical patch entry on re-apply (structural equality)", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiWithWrangler(), await dbCapability()];
+    await executePlan(
+      await plan({ install: ["api", "database"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+    expect(manifest.patches).toHaveLength(1);
+
+    // Hand-revert the patched file so `--force` sees the same op apply again.
+    await writeFile(join(root, "apps", "api", "wrangler.jsonc"), '{\n  "name": "api"\n}\n', "utf8");
+
+    const second = await plan({ install: ["api", "database"], modules: mods, config, manifest });
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.patched).toHaveLength(1);
+    // Same module/file/patch as before — not duplicated.
+    expect(manifest.patches).toHaveLength(1);
+  });
 });
 
 describe("registry-item schema — pinned deps", () => {

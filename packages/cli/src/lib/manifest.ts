@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathExists } from "./fs-utils.js";
+import type { RegistryPatch } from "./schema.js";
 
 // `.saasaloy/manifest.json` records every file a module applied — copied source
 // files and copied skill files — by owning module and content hash. On update the
@@ -14,15 +15,29 @@ export interface ManagedEntry {
   hash: string;
 }
 
+// A structural config patch that actually landed on disk, recorded so `remove` can
+// warn the user which files it can't clean up (reversal is the follow-up issue —
+// see the `PlannedPatch` comment in applier.ts). Not itself reversible from this
+// record alone; `patch` is the op as authored, kept for a future reverse-patcher.
+export interface ManifestPatch {
+  /** Name of the module that applied this patch. */
+  module: string;
+  /** Project-relative POSIX path of the file that was patched. */
+  file: string;
+  /** The op as authored (kind + payload + file). */
+  patch: RegistryPatch;
+}
+
 export interface Manifest {
   managed: Record<string, ManagedEntry>;
   links: Record<string, string>;
+  patches: ManifestPatch[];
 }
 
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
 
 export function emptyManifest(): Manifest {
-  return { managed: {}, links: {} };
+  return { managed: {}, links: {}, patches: [] };
 }
 
 export async function loadManifest(root: string): Promise<Manifest> {
@@ -34,6 +49,7 @@ export async function loadManifest(root: string): Promise<Manifest> {
   return {
     managed: parsed.managed ?? {},
     links: parsed.links ?? {},
+    patches: parsed.patches ?? [],
   };
 }
 
