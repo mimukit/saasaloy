@@ -138,7 +138,12 @@ export const THEME_INIT_SCRIPT = `(function () {
   document.addEventListener("click", function (event) {
     var node = event.target;
     if (!node || typeof node.closest !== "function" || !node.closest(TRIGGER)) return;
-    var next = ORDER[(ORDER.indexOf(read()) + 1) % ORDER.length];
+    // Cycle from what is painted, not from what is stored. Where storage is unwritable
+    // the write() above is a no-op, so read() would answer "system" forever and every
+    // press would land on light. The attribute is set by paint() on every transition and
+    // is the one state that survives a dead localStorage.
+    var current = root.getAttribute(ATTRIBUTE) || read();
+    var next = ORDER[(ORDER.indexOf(current) + 1) % ORDER.length];
     write(next);
     paint(next);
     relabel(next);
@@ -149,6 +154,6 @@ export const THEME_INIT_SCRIPT = `(function () {
   });
 
   document.addEventListener("DOMContentLoaded", function () {
-    relabel(read());
+    relabel(root.getAttribute(ATTRIBUTE) || read());
   });
 })();`;
