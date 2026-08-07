@@ -44,8 +44,10 @@ export function defineEmail(config: EmailConfig): EmailRegistry {
         provider: provider.name,
         async send(message: EmailMessage): Promise<EmailResult> {
           // Resolved outside the `try` on purpose: a missing sender or an empty
-          // recipient list is a configuration error, not a send failure, and stays a
-          // plain `Error` — `EmailError.code` is reserved for the four send failures.
+          // recipient list is the caller's mistake, not the provider's, and wrapping it
+          // as `provider_error` would blame the wrong layer. It still throws an
+          // `EmailError` — `invalid_message` — because this runs inside `send()`, and
+          // `provider.ts` promises that `send()` throws exactly one kind of error.
           const resolved = resolve(env, message);
 
           try {
@@ -95,7 +97,8 @@ function selectProvider(providers: EmailProvider[], selected: string | undefined
 function resolve(env: EmailEnv, message: EmailMessage): ResolvedEmailMessage {
   const from = message.from ?? env.EMAIL_FROM;
   if (!from) {
-    throw new Error(
+    throw new EmailError(
+      "invalid_message",
       "No sender address: set EMAIL_FROM, or pass `from` on the message. It must be an " +
         "address on a domain your provider is allowed to send from.",
     );
@@ -103,7 +106,7 @@ function resolve(env: EmailEnv, message: EmailMessage): ResolvedEmailMessage {
 
   const to = Array.isArray(message.to) ? message.to : [message.to];
   if (to.length === 0) {
-    throw new Error("No recipients: `to` must hold at least one address.");
+    throw new EmailError("invalid_message", "No recipients: `to` must hold at least one address.");
   }
 
   return { ...message, to, from, text: message.text ?? deriveText(message.html) };

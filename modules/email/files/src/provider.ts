@@ -73,6 +73,12 @@ export type EmailErrorCode =
   | "sender_not_verified"
   | "rate_limited"
   | "too_large"
+  /**
+   * The message never reached a provider: no sender could be resolved, or `to` was
+   * empty. Raised by the core rather than mapped from a vendor, and never `retryable` —
+   * the same call will fail identically until the caller or the config changes.
+   */
+  | "invalid_message"
   | "provider_error";
 
 export interface EmailErrorOptions {
@@ -84,9 +90,15 @@ export interface EmailErrorOptions {
 }
 
 /**
- * The one error a `send()` throws. The package itself never retries — a retry loop
- * inside a request handler holds the Worker's response open. `retryable` is the hook
- * for a caller (or a future queue consumer) to decide.
+ * The one error a `send()` throws — including the validation the core does before a
+ * provider is reached, which surfaces as `invalid_message` rather than a bare `Error`
+ * so a caller's `catch` only ever has one shape to handle. (Selecting the provider
+ * happens earlier still, in `createEmail(env)`, and a bad `EMAIL_PROVIDER` throws a
+ * plain `Error` there: it is a deploy-time misconfiguration, not a failed message.)
+ *
+ * The package itself never retries — a retry loop inside a request handler holds the
+ * Worker's response open. `retryable` is the hook for a caller (or a future queue
+ * consumer) to decide.
  */
 export class EmailError extends Error {
   readonly code: EmailErrorCode;
