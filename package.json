@@ -27,7 +27,8 @@
     "play:watch": "node scripts/watch-template.ts",
     "deps:check": "node scripts/update-deps.ts --check",
     "deps:update": "node scripts/update-deps.ts",
-    "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && node scripts/verify-css.ts && pnpm -C .dev/playground typecheck"
+    "deps:verify": "pnpm run play:init && pnpm -C .dev/playground install && pnpm -C .dev/playground build && node scripts/verify-css.ts && pnpm -C .dev/playground typecheck",
+    "verify:preset": "node scripts/verify-preset.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.7.0",
