@@ -71,6 +71,44 @@ export function html(strings: TemplateStringsArray, ...values: unknown[]): SafeH
   return new SafeHtml(out);
 }
 
+/** `http:` is tolerated on these, and only these — see `safeUrl`. */
+const LOOPBACK_HOSTS = new Set(["localhost", "127.0.0.1", "[::1]"]);
+
+/**
+ * Validate a URL before it goes in an `href`, returning it unchanged when it's safe.
+ *
+ * Escaping is not enough on its own. The `html` tag above neutralises *markup*, but
+ * `javascript:alert(document.cookie)` contains no character that escaping touches, so
+ * it survives into the inbox as a live link. The scheme has to be checked separately:
+ *
+ * ```ts
+ * html`<a href="${safeUrl(props.ctaUrl)}">Open</a>`
+ * ```
+ *
+ * `https:` is required, with one carve-out — `http:` on a loopback host, which is the
+ * CTA a developer actually has while testing against the console provider. Throws on
+ * anything else, including a relative URL: an inbox has nothing to resolve one against.
+ */
+export function safeUrl(value: string): string {
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(
+      `Unsafe link: ${JSON.stringify(value)} is not an absolute URL. Email clients ` +
+        `have no page to resolve a relative one against.`,
+    );
+  }
+
+  if (url.protocol === "https:") return value;
+  if (url.protocol === "http:" && LOOPBACK_HOSTS.has(url.hostname)) return value;
+
+  throw new Error(
+    `Unsafe link: ${JSON.stringify(value)} must use https. (http is accepted only on ` +
+      `localhost, so local development against the console provider still works.)`,
+  );
+}
+
 export interface LayoutOptions {
   /** `<title>`, and the fallback for `preheader`. */
   title: string;
