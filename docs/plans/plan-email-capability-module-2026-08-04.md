@@ -171,9 +171,16 @@ Descriptor: `dependsOn: ["api"]`, one `package-json-dependency` patch adding `@r
 
   ```jsonc
   { "kind": "wrangler-binding", "file": "apps/api/wrangler.jsonc",
-    "bindingType": "send_email", "entry": { "name": "EMAIL", "remote": true },
+    "bindingType": "send_email", "entry": { "name": "EMAIL", "remote": false },
     "matchOn": "name" }
   ```
+
+  **Amended 2026-08-05 (was `"remote": true`).** QA found that `@cloudflare/vite-plugin` opens a
+  remote proxy session at startup for any remote binding, so `remote: true` made
+  `pnpm --filter @repo/api dev` fail on a machine with no Cloudflare credentials — including for a
+  developer on `EMAIL_PROVIDER=console` who never touches the binding. The module now ships
+  `remote: false` and the `saasaloy-email` skill documents flipping it for a live send. Reasoning
+  and the rejected alternatives are recorded in the QA plan's TC-4.
 
 - **`matchOn: "name"` is the first non-default use.** It defaults to `"binding"` (`jsonc.ts:42`); every existing caller relies on that default, so idempotency for `send_email` is currently unproven. Add a `jsonc.test.ts` case covering upsert-then-reupsert with `matchOn: "name"`.
 - `allowed_sender_addresses` is deliberately unset so each project picks its own — the module never hardcodes a domain.
@@ -201,7 +208,9 @@ This is what makes local development and tests work with no paid plan, no domain
 
 AC 2 restated so it is actually achievable:
 
-> A transactional email sends from `.dev/playground` via `wrangler dev` (binding `remote: true`) using a domain onboarded to Email Service, and the returned `messageId` plus the receiving inbox are recorded in `docs/qa/`. Separately, `EMAIL_PROVIDER=console` produces a rendered message with no Cloudflare setup at all.
+> A transactional email sends from `.dev/playground` via `wrangler dev` (with the binding flipped to `remote: true` — see the amendment in Phase 2) using a domain onboarded to Email Service, and the returned `messageId` plus the receiving inbox are recorded in `docs/qa/`. Separately, `EMAIL_PROVIDER=console` produces a rendered message with no Cloudflare setup at all.
+
+**Amended 2026-08-05.** The flip is now an explicit step in the QA runbook (TC-1 step 5) rather than the shipped default, so this AC is proved by an operator action instead of by the module's out-of-box configuration. The `console` half is unaffected.
 
 Blocking fact: **`saasaloy.dev` does not resolve in DNS** (noted in #46), so there is no first-party sender domain today. The proof needs *some* domain on the owner's Cloudflare account. The `console` provider means this blocks only the Cloudflare half of the proof, not the whole issue.
 

@@ -1,0 +1,40 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "email",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {
+    "EMAIL_PROVIDER": "Which installed provider sends: `cloudflare` (add email-cloudflare) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
+    "EMAIL_FROM": "Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message."
+  },
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/email",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/email",
+      "aliases": { "@email": "packages/email/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/render.ts", "target": "src/render.ts" },
+        { "path": "files/src/templates/welcome.ts", "target": "src/templates/welcome.ts" },
+        { "path": "files/src/providers/.gitkeep", "target": "src/providers/.gitkeep" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-email"]
+  }
+}

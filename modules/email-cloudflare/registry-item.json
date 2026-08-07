@@ -1,0 +1,33 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "email-cloudflare",
+  "type": "saasaloy:feature",
+  "dependsOn": ["email"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "send_email",
+      "entry": {
+        "name": "EMAIL",
+        "remote": false
+      },
+      "matchOn": "name"
+    },
+    {
+      "file": "packages/email/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "email",
+      "arrayProp": "providers",
+      "call": "cloudflare",
+      "import": {
+        "name": "cloudflare",
+        "from": "./providers/cloudflare"
+      }
+    }
+  ],
+  "files": [{ "path": "files/cloudflare.ts", "target": "@email/providers/cloudflare.ts" }],
+  "scaffolds": []
+}

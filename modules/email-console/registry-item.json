@@ -1,0 +1,23 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "email-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["email"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/email/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "email",
+      "arrayProp": "providers",
+      "call": "consoleEmail",
+      "import": {
+        "name": "consoleEmail",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [{ "path": "files/console.ts", "target": "@email/providers/console.ts" }],
+  "scaffolds": []
+}

@@ -243,7 +243,7 @@ The draft's phases are re-sequenced to reflect the thin base, granular modules, 
 
 Parked deliberately — each is a lower-altitude decision to settle when its feature is actually built.
 
-1. **Email provider** (`email` module) — assume **Resend + React Email** unless a better fit surfaces. Resolve when building `add email`.
+1. ~~**Email provider** (`email` module) — assume **Resend + React Email**.~~ **Resolved 2026-08-04, against the assumption.** `email` is a provider-agnostic core (`packages/email`, zero runtime deps, plain tagged-template helpers) with one module per provider: `email-cloudflare` (Email Sending binding — the default, per ADR 0001) and `email-console` (dev). No Resend client and no React Email in the first cut; `email-resend` is a follow-up module that changes no core code. See `docs/plans/plan-email-capability-module-2026-08-04.md` and ADR 0001's amendment.
 2. **`admin` shell scope** — what the base admin app includes (nav, session guard, empty dashboard) before feature modules add pages. Resolve when building `add admin`.
 3. **CI / anti-rot testing** — how (and whether) to test each module against *latest* Cloudflare / Better Auth / Stripe on a schedule, so churn is caught before it reaches a project. Resolve alongside Phase 2's update flow.
 4. **`saasaloy.json` + `registry-item.json` schemas** — the exact manifest + extension-field schemas (including the `agent` block), drafted as a `$schema`-validated forcing function. Resolve at the start of Phase 1 (it surfaces the real applier design).

@@ -20,5 +20,10 @@ is `api` (a capability — it carries `scaffolds[]`; see ADR 0013 for the scaffo
 capability built on a vendor SDK encapsulates it in the workspace it scaffolds — other workspaces
 import its exported utilities, never the vendor package (ADR 0020).
 
+A **provider module** (`email-cloudflare`, `email-console`) is a narrow feature: one file into a
+capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
+surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
+capability's skill documents it. See `.agents/skills/create-provider/`.
+
 Tests create disposable registry fixtures. CLI development and manual QA use throwaway
 registries under `.dev/`, so example modules do not need to live in the default registry.

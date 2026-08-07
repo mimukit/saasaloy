@@ -24,6 +24,10 @@ A module that scaffolds an app or package **and** establishes convention-based e
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
 
+### Provider module
+A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-console`, and the planned `email-resend`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. Allowed only where the capability wraps a *stateless* third-party service ([ADR 0001](docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment); the authoring guide is `.agents/skills/create-provider/`.
+_Taxonomy wart, on purpose: a provider module is typed `saasaloy:feature`, because `registry-item.schema.json` constrains `type` to `saasaloy:capability | saasaloy:feature`. It isn't a feature in the sense above — it adds no user-facing behavior. A third tier would be a descriptor-format change, and one wart is cheaper than that._
+
 ### Convention-based extension point
 An auto-discovery folder or barrel a module drops into without patching another module's internals — `api`'s `routes/` glob, `database`'s schema barrel, and the proposed `consumers/`, `scheduled/`, `uploads/` folders. These are what make granular modules safe.
 _Avoid: extension hook._

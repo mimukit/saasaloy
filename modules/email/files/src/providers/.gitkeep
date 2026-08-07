@@ -1,0 +1,5 @@
+# Provider implementations live here, one file per provider. `saasaloy add
+# email-cloudflare` (or email-console) drops its file in and appends it to the
+# `providers` array in src/index.ts — no edit anywhere else. Writing your own?
+# Export a factory returning an `EmailProvider` and add it to that array by hand;
+# see the saasaloy-email skill. This folder is empty until a provider is installed.
