@@ -36,6 +36,10 @@ const ERROR_CODES: Record<string, { code: EmailErrorCode; retryable: boolean }> 
   E_SENDER_NOT_VERIFIED: { code: "sender_not_verified", retryable: false },
   E_RATE_LIMIT_EXCEEDED: { code: "rate_limited", retryable: true },
   E_CONTENT_TOO_LARGE: { code: "too_large", retryable: false },
+  // The one failure here that is Cloudflare's rather than the message's: nothing about
+  // re-sending the same bytes is doomed, so it is the one unmapped-by-default code that
+  // has to be listed explicitly to escape the `retryable: false` fallback above.
+  E_INTERNAL_SERVER_ERROR: { code: "provider_error", retryable: true },
 };
 
 export function cloudflare(options: CloudflareEmailOptions = {}): EmailProvider {
