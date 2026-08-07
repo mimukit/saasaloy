@@ -20,3 +20,5 @@ accepted — establishes the version-selection policy for the `deps:check`/`deps
 
 ## References
 Plan: `docs/plans/plan-dep-update-workflow-2026-07-24.md`. Settings: `pnpm-workspace.yaml` (`saveExact`, `minimumReleaseAge`). Resolver reuses the `name@version` rule of `parseDep` (`packages/cli/src/lib/pkg-json.ts`). Issue: #31.
+
+Amended 2026-08-06: the script is now `scripts/update-deps.ts`, typechecked by the root `typecheck:scripts` gate (`tsconfig.scripts.json`). Nothing else in this record changes — the policy above is unaffected. See #54.

@@ -14,7 +14,9 @@
 // detection is text-based, so it needs no importer to be picked up.
 //
 // Runs inside `pnpm deps:verify`, after `build` (it needs the output) and before
-// `typecheck`. Standalone ESM with no dependencies, like the other scripts here.
+// `typecheck`. Imports nothing but node: builtins — unlike `update-deps`, which pulls in
+// @clack/prompts and picocolors. Node 24 strips the types, so there is no build step;
+// `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -37,7 +39,7 @@ const SENTINEL_SOURCE = "packages/cli/templates/base/packages/ui/src/lib/sentine
 // both and treat either as a hit.
 const BUILT_EXTENSIONS = [".css", ".html"];
 
-function fail(message, ...detail) {
+function fail(message: string, ...detail: string[]): never {
   console.error(`verify-css: ${message}`);
   for (const line of detail) console.error(`  ${line}`);
   process.exit(1);
@@ -45,7 +47,11 @@ function fail(message, ...detail) {
 
 // Every file under `dir`, optionally narrowed to a set of extensions. A missing
 // directory yields nothing; the callers decide whether that's fatal.
-async function collectFiles(dir, extensions = null, out = []) {
+async function collectFiles(
+  dir: string,
+  extensions: readonly string[] | null = null,
+  out: string[] = [],
+): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -63,7 +69,7 @@ async function collectFiles(dir, extensions = null, out = []) {
   return out;
 }
 
-async function filesContaining(files, needle) {
+async function filesContaining(files: readonly string[], needle: string): Promise<string[]> {
   const hits = [];
   for (const file of files) {
     if ((await readFile(file, "utf8")).includes(needle)) hits.push(file);

@@ -29,6 +29,9 @@
 // `minimumReleaseAge` (read from pnpm-workspace.yaml). A newer major is surfaced as
 // `major-available` and crossed only with --allow-major; the cooldown is overridden
 // only with --allow-fresh. Each manifest resolves independently from npm.
+//
+// TypeScript, run directly by Node 24's type stripping — there is no build step. The
+// types are checked by `pnpm typecheck` through tsconfig.scripts.json (#54).
 
 import { readFile, writeFile, readdir } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
@@ -44,9 +47,120 @@ import {
   isCancel,
   cancel,
 } from "@clack/prompts";
+import type { Option } from "@clack/prompts";
 import pc from "picocolors";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+
+// --- Types -------------------------------------------------------------------
+// Everything read from outside this script — npm packuments, package.jsons, module
+// descriptors — arrives as `unknown` and is narrowed at the point of use. The shapes
+// below describe only the thin slice actually consumed; every unrecognized key rides
+// through untouched on write-back.
+
+/** The one guard every external-JSON site funnels through. */
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+/** The slice of an npm packument the resolver uses, normalized at the fetch boundary. */
+interface Packument {
+  /** version → ISO publish time. Empty when the registry omits it. */
+  time: Record<string, string>;
+  /** The published `versions` map; only its keys are read. */
+  versions: Record<string, unknown>;
+}
+
+type DepBucket = "dependencies" | "devDependencies";
+const DEP_BUCKETS: readonly DepBucket[] = ["dependencies", "devDependencies"];
+
+/** How a version spec is written, which drives its status and what a write produces. */
+type SpecKind = "bare" | "exact" | "range";
+
+/** One scannable dependency lifted out of a manifest. */
+interface Dep {
+  bucket: DepBucket;
+  name: string;
+  spec: string;
+  kind: SpecKind;
+}
+
+type ManifestKind = "package-json" | "registry-item";
+
+/** A discovered manifest, before it has been read. */
+interface ManifestFile {
+  file: string;
+  kind: ManifestKind;
+}
+
+/**
+ * A manifest that has been read: its parsed document — kept because the write pass
+ * rewrites it in place to preserve key order — plus its scannable deps.
+ */
+interface Manifest extends ManifestFile {
+  json: Record<string, unknown>;
+  deps: Dep[];
+}
+
+/** What deps:update could pin for one dep, plus the context the report needs. */
+interface Resolved {
+  target: string | null;
+  targetOverall: string | null;
+  highestWithinMajor: string | null;
+  highestOverall: string | null;
+  newerMajor: boolean;
+}
+
+type Status =
+  | "up-to-date"
+  | "outdated"
+  | "range→exact"
+  | "bare→pinned"
+  | "major-available"
+  | "within-cooldown"
+  | "unresolved";
+
+/** One resolved (manifest, dep) pair — the unit the report and the picker render. */
+interface Row {
+  manifest: Manifest;
+  dep: Dep;
+  resolved: Resolved | null;
+  status: Status;
+  error?: string;
+}
+
+/** A (manifest, dep) pair awaiting registry resolution. */
+interface Job {
+  manifest: Manifest;
+  dep: Dep;
+}
+
+/** One proposed write. */
+interface Candidate {
+  row: Row;
+  target: string;
+  kind: "primary" | "major";
+  group: string;
+}
+
+/** A stable version as a numeric triple. */
+type Semver = [number, number, number];
+
+type SemverLevel = "major" | "minor" | "patch" | "none";
+
+/** Which report section a row renders under. */
+type GroupKey =
+  | "major"
+  | "minor"
+  | "patch"
+  | "migration"
+  | "major-available"
+  | "cooldown"
+  | "unresolved"
+  | "up-to-date";
+
+/** A picocolors formatter, as this script uses them. */
+type Colorize = (text: string) => string;
 
 // --- CLI flags ---------------------------------------------------------------
 const argv = process.argv.slice(2);
@@ -69,7 +183,7 @@ const unknown = argv.filter((a) => a.startsWith("-") && !KNOWN.has(a));
 if (unknown.length > 0) {
   console.error(`Unknown flag(s): ${unknown.join(", ")}`);
   console.error(
-    "usage: update-deps.mjs [--check] [--allow-major] [--allow-fresh] [--dry-run] [--yes|-y]",
+    "usage: update-deps.ts [--check] [--allow-major] [--allow-fresh] [--dry-run] [--yes|-y]",
   );
   process.exit(2);
 }
@@ -77,10 +191,10 @@ if (unknown.length > 0) {
 // --- Skip rules: specs that aren't resolvable npm registry versions ----------
 // A dep is skipped when its NAME is an internal workspace package or its VERSION
 // spec is a non-registry protocol — pnpm owns those, not this tool.
-function isSkippedName(name) {
+function isSkippedName(name: string): boolean {
   return name.startsWith("@repo/");
 }
-function isSkippedSpec(spec) {
+function isSkippedSpec(spec: string): boolean {
   return (
     spec.startsWith("workspace:") ||
     spec.startsWith("catalog:") ||
@@ -97,14 +211,14 @@ function isSkippedSpec(spec) {
 //   bare   — "" (no version) → pin it (bare→pinned); only descriptor arrays can be bare
 const EXACT_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
-function classifySpec(spec) {
+function classifySpec(spec: string): SpecKind {
   if (spec === "" || spec === "latest" || spec === "*") return "bare";
   if (EXACT_RE.test(spec)) return "exact";
   return "range";
 }
 
 // Leading major number of a spec, or null when there's nothing to anchor to (bare).
-function specMajor(spec) {
+function specMajor(spec: string): number | null {
   const m = spec.match(/(\d+)/);
   return m ? Number(m[1]) : null;
 }
@@ -112,21 +226,37 @@ function specMajor(spec) {
 // --- Semver (stable-only) compare --------------------------------------------
 // We only ever compare stable versions (prereleases are dropped before this), so a
 // plain numeric triple compare is sufficient — no prerelease-precedence rules needed.
-function parseStable(v) {
+// The parse returns null for anything that is not a bare triple and every caller
+// handles that null: the resolver only compares versions it already parsed, but a
+// manifest's CURRENT spec can be a prerelease pin (EXACT_RE admits `1.2.3-beta`), and
+// letting an unparsed capture flow into a comparison is how a bump decision goes
+// silently wrong.
+function parseSemver(v: string): Semver | null {
   const m = v.match(/^(\d+)\.(\d+)\.(\d+)$/);
   return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
 }
-function cmp(a, b) {
-  const pa = parseStable(a);
-  const pb = parseStable(b);
-  for (let i = 0; i < 3; i++) {
-    if (pa[i] !== pb[i]) return pa[i] - pb[i];
-  }
-  return 0;
+
+// A version that is not a stable triple sorts BELOW every version that is, so a real
+// release always reads as newer than an unparseable pin rather than comparing as equal.
+function cmp(a: string, b: string): number {
+  const pa = parseSemver(a);
+  const pb = parseSemver(b);
+  if (pa === null || pb === null) return (pa === null ? 0 : 1) - (pb === null ? 0 : 1);
+  return pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2];
+}
+
+// An exact spec that EXACT_RE admits but parseSemver rejects: a prerelease or
+// build-metadata pin such as `1.3.0-rc.1`. It has no orderable stable triple, so NO
+// comparison against it can decide a bump — `cmp` sorts it BELOW every real release, so a
+// LOWER stable version would read as "outdated" and a default apply would write a
+// downgrade. Such a pin is reported and never written, which is the outcome the pre-#54
+// script reached by throwing on the unparsed capture.
+function isUnorderableExact(dep: Dep): boolean {
+  return dep.kind === "exact" && parseSemver(dep.spec) === null;
 }
 
 // --- pnpm-workspace.yaml: minimumReleaseAge (single source of truth) ---------
-async function readMinReleaseMinutes() {
+async function readMinReleaseMinutes(): Promise<number> {
   const text = await readFile(join(root, "pnpm-workspace.yaml"), "utf8");
   // Match the active (non-commented) `minimumReleaseAge: <n>` line.
   for (const line of text.split("\n")) {
@@ -140,16 +270,29 @@ async function readMinReleaseMinutes() {
 // Cache the in-flight PROMISE (not just the resolved value): with parallel resolution the
 // same package can be requested by several manifests at once, and caching the promise means
 // they share a single fetch instead of racing duplicates.
-const registryCache = new Map();
+const registryCache = new Map<string, Promise<Packument>>();
 
-function fetchPackument(name) {
+// Narrow the packument once, at the boundary: a missing or malformed `time` / `versions`
+// becomes an empty map, which is exactly what the resolver's `?? {}` produced before.
+function toPackument(doc: unknown): Packument {
+  if (!isRecord(doc)) return { time: {}, versions: {} };
+  const time: Record<string, string> = {};
+  if (isRecord(doc.time)) {
+    for (const [version, published] of Object.entries(doc.time)) {
+      if (typeof published === "string") time[version] = published;
+    }
+  }
+  return { time, versions: isRecord(doc.versions) ? doc.versions : {} };
+}
+
+function fetchPackument(name: string): Promise<Packument> {
   const cached = registryCache.get(name);
   if (cached) return cached;
-  const p = (async () => {
+  const p = (async (): Promise<Packument> => {
     const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
     const res = await fetch(url);
     if (!res.ok) throw new Error(`registry ${res.status} for ${name}`);
-    return res.json();
+    return toPackument(await res.json());
   })();
   registryCache.set(name, p);
   return p;
@@ -158,13 +301,18 @@ function fetchPackument(name) {
 // Run an async fn over items with bounded concurrency, preserving input order in the
 // results array. Resolves the whole dependency set far faster than a serial loop while
 // keeping npm from seeing a burst of hundreds of simultaneous requests.
-async function mapWithConcurrency(items, limit, fn) {
-  const results = new Array(items.length);
+async function mapWithConcurrency<T, R>(
+  items: readonly T[],
+  limit: number,
+  fn: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
       const i = next++;
-      results[i] = await fn(items[i], i);
+      // `i < items.length` on a densely built array, so the element is always present.
+      results[i] = await fn(items[i]!, i);
     }
   };
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
@@ -176,16 +324,20 @@ async function mapWithConcurrency(items, limit, fn) {
 // `targetOverall` is the highest cooldown-eligible version across ALL majors — what a
 // deliberate major bump would write. Returns
 // { target, targetOverall, highestWithinMajor, highestOverall, newerMajor }.
-async function resolveVersion(name, curMajor, minMinutes) {
+async function resolveVersion(
+  name: string,
+  curMajor: number | null,
+  minMinutes: number,
+): Promise<Resolved> {
   const doc = await fetchPackument(name);
-  const times = doc.time ?? {};
+  const times = doc.time;
   const now = Date.now();
   const cooldownMs = minMinutes * 60 * 1000;
 
-  const stable = Object.keys(doc.versions ?? {}).filter((v) => parseStable(v) !== null);
+  const stable = Object.keys(doc.versions).filter((v) => parseSemver(v) !== null);
   stable.sort(cmp);
 
-  const clearsCooldown = (v) => {
+  const clearsCooldown = (v: string): boolean => {
     if (flags.allowFresh) return true;
     const t = times[v];
     return t ? now - Date.parse(t) >= cooldownMs : false;
@@ -194,17 +346,23 @@ async function resolveVersion(name, curMajor, minMinutes) {
   // The within-major cap is a property of the dep, not a flag: majors are opted into
   // per-dep in the picker (or with --allow-major for non-interactive runs), never by
   // silently lifting the cap here. Bare specs have no anchor, so nothing to cap against.
-  const withinMajor = (v) => curMajor === null || parseStable(v)[0] === curMajor;
+  const withinMajor = (v: string): boolean => {
+    if (curMajor === null) return true;
+    const parsed = parseSemver(v);
+    return parsed !== null && parsed[0] === curMajor;
+  };
 
+  // Every `[length - 1]` below is guarded by the `.length` check in front of it.
   const capped = stable.filter(withinMajor);
-  const highestWithinMajor = capped.length ? capped[capped.length - 1] : null;
-  const highestOverall = stable.length ? stable[stable.length - 1] : null;
+  const highestWithinMajor = capped.length ? capped[capped.length - 1]! : null;
+  const highestOverall = stable.length ? stable[stable.length - 1]! : null;
   const eligibleWithin = capped.filter(clearsCooldown);
-  const target = eligibleWithin.length ? eligibleWithin[eligibleWithin.length - 1] : null;
+  const target = eligibleWithin.length ? eligibleWithin[eligibleWithin.length - 1]! : null;
   const eligibleAll = stable.filter(clearsCooldown);
-  const targetOverall = eligibleAll.length ? eligibleAll[eligibleAll.length - 1] : null;
+  const targetOverall = eligibleAll.length ? eligibleAll[eligibleAll.length - 1]! : null;
+  const highestOverallSemver = highestOverall === null ? null : parseSemver(highestOverall);
   const newerMajor =
-    curMajor !== null && highestOverall !== null && parseStable(highestOverall)[0] > curMajor;
+    curMajor !== null && highestOverallSemver !== null && highestOverallSemver[0] > curMajor;
 
   return { target, targetOverall, highestWithinMajor, highestOverall, newerMajor };
 }
@@ -213,7 +371,11 @@ async function resolveVersion(name, curMajor, minMinutes) {
 // Three "invisible" manifest classes, structured as globs so the third (scaffolded
 // module workspaces) is already wired even though no create-module scaffold ships a
 // package.json yet.
-async function walk(dir, match, out) {
+async function walk(
+  dir: string,
+  match: (file: string) => boolean,
+  out: string[],
+): Promise<string[]> {
   let entries;
   try {
     entries = await readdir(dir, { withFileTypes: true });
@@ -232,8 +394,8 @@ async function walk(dir, match, out) {
   return out;
 }
 
-async function discoverManifests() {
-  const manifests = [];
+async function discoverManifests(): Promise<ManifestFile[]> {
+  const manifests: ManifestFile[] = [];
 
   // Class 1: base template package.jsons (object-form deps/devDeps).
   for (const file of await walk(
@@ -266,21 +428,38 @@ async function discoverManifests() {
   return manifests;
 }
 
-// Extract the scannable deps from a manifest as a flat list of
+// Read a manifest into the record the rest of the run carries: the discovered
+// { file, kind }, the parsed document, and the scannable deps as a flat list of
 // { bucket, name, spec, kind }. `bucket` is "dependencies" | "devDependencies".
-async function readManifestDeps(manifest) {
+async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   const raw = await readFile(manifest.file, "utf8");
-  const json = JSON.parse(raw);
-  const deps = [];
+  const parsed: unknown = JSON.parse(raw);
+  const json = isRecord(parsed) ? parsed : {};
+  const deps: Dep[] = [];
 
-  const pushObject = (bucket) => {
-    for (const [name, spec] of Object.entries(json[bucket] ?? {})) {
-      if (isSkippedName(name) || isSkippedSpec(String(spec))) continue;
-      deps.push({ bucket, name, spec: String(spec), kind: classifySpec(String(spec)) });
+  // A missing bucket is normal — a manifest need not declare both. A bucket that IS
+  // present but has the wrong shape is a malformed manifest, and skipping it would silently
+  // drop every dep it holds out of the cooldown gate, so it fails the run loudly (exit 2).
+  const pushObject = (bucket: DepBucket) => {
+    const map = json[bucket];
+    if (map === undefined || map === null) return;
+    if (!isRecord(map)) {
+      throw new Error(`${manifest.file}: "${bucket}" must be an object of name → version`);
+    }
+    for (const [name, value] of Object.entries(map)) {
+      const spec = String(value);
+      if (isSkippedName(name) || isSkippedSpec(spec)) continue;
+      deps.push({ bucket, name, spec, kind: classifySpec(spec) });
     }
   };
-  const pushArray = (bucket) => {
-    for (const entry of json[bucket] ?? []) {
+  const pushArray = (bucket: DepBucket) => {
+    const arr = json[bucket];
+    if (arr === undefined || arr === null) return;
+    if (!Array.isArray(arr)) {
+      throw new Error(`${manifest.file}: "${bucket}" must be an array of "name@version" entries`);
+    }
+    for (const value of arr) {
+      const entry = String(value);
       const at = entry.lastIndexOf("@");
       const name = at > 0 ? entry.slice(0, at) : entry;
       const spec = at > 0 ? entry.slice(at + 1) : "";
@@ -296,19 +475,22 @@ async function readManifestDeps(manifest) {
     pushArray("dependencies");
     pushArray("devDependencies");
   }
-  return { json, raw, deps };
+  return { file: manifest.file, kind: manifest.kind, json, deps };
 }
 
 // --- Status decision ---------------------------------------------------------
 // Reduce a resolved dep to one status. Actionable statuses (what a default
 // deps:update would change) drive the non-zero exit code; the rest are informational.
-const ACTIONABLE = new Set(["outdated", "range→exact", "bare→pinned"]);
+const ACTIONABLE = new Set<Status>(["outdated", "range→exact", "bare→pinned"]);
 
-function decideStatus(dep, r) {
+function decideStatus(dep: Dep, r: Resolved): Status {
   if (r.target === null) return "within-cooldown"; // every eligible version is too fresh
   if (dep.kind === "bare") return "bare→pinned";
   if (dep.kind === "range") return "range→exact";
-  // exact
+  // exact — but only an orderable stable triple can be compared against the target, so an
+  // unorderable pin is reported as unresolved (non-actionable: no exit-1, no write) rather
+  // than being mis-read as outdated.
+  if (isUnorderableExact(dep)) return "unresolved";
   if (cmp(r.target, dep.spec) > 0) return "outdated";
   // target === current within major. A fresher within-major stable held back by the
   // cooldown is transient; a newer major is the deliberate --allow-major path.
@@ -318,13 +500,16 @@ function decideStatus(dep, r) {
 }
 
 // --- Repo's own pins (for the shared-dep major-divergence note) --------------
-async function readRepoPins() {
-  const pins = new Map(); // name → exact/spec version
+async function readRepoPins(): Promise<Map<string, string>> {
+  const pins = new Map<string, string>(); // name → exact/spec version
   for (const rel of ["package.json", "packages/cli/package.json"]) {
     try {
-      const json = JSON.parse(await readFile(join(root, rel), "utf8"));
-      for (const bucket of ["dependencies", "devDependencies"]) {
-        for (const [name, spec] of Object.entries(json[bucket] ?? {})) {
+      const parsed: unknown = JSON.parse(await readFile(join(root, rel), "utf8"));
+      if (!isRecord(parsed)) continue;
+      for (const bucket of DEP_BUCKETS) {
+        const map = parsed[bucket];
+        if (!isRecord(map)) continue;
+        for (const [name, spec] of Object.entries(map)) {
           pins.set(name, String(spec));
         }
       }
@@ -336,7 +521,7 @@ async function readRepoPins() {
 }
 
 // --- Report + write ----------------------------------------------------------
-const STATUS_LABEL = {
+const STATUS_LABEL: Record<Status, string> = {
   "up-to-date": "up-to-date",
   outdated: "outdated",
   "range→exact": "range→exact",
@@ -348,11 +533,13 @@ const STATUS_LABEL = {
 
 // --- Terminal presentation (clack + picocolors) ------------------------------
 // stripAnsi / wrapForNote are duplicated from packages/cli/src/lib/tui.ts rather
-// than imported: this is a standalone root .mjs, and reaching across the package
+// than imported: this is a standalone root script, and reaching across the package
 // boundary into the CLI's TS source would drag in a build step. They're tiny.
-// biome-ignore lint/suspicious/noControlCharactersInRegex: matching ANSI escapes.
 const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
-function stripAnsi(text) {
+// The escape itself, as an escape sequence rather than a literal control byte — a raw
+// 0x1b in the source makes grep treat this whole file as binary and skip it.
+const ESC = "\x1b";
+function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
 }
 
@@ -360,14 +547,14 @@ function stripAnsi(text) {
 // Widths are measured on the ANSI-stripped text so colored words wrap by their
 // visible length; words carrying ANSI codes are left whole (a raw slice could cut
 // mid-escape).
-function wrapForNote(text) {
+function wrapForNote(text: string): string {
   const width = Math.max(24, (process.stdout.columns ?? 80) - 6);
-  const out = [];
+  const out: string[] = [];
   for (const line of text.split("\n")) {
     let current = "";
     for (const word of line.split(" ")) {
       let chunk = word;
-      while (stripAnsi(chunk).length > width && !chunk.includes("")) {
+      while (stripAnsi(chunk).length > width && !chunk.includes(ESC)) {
         if (current) {
           out.push(current);
           current = "";
@@ -389,9 +576,9 @@ function wrapForNote(text) {
 }
 
 // Semver bump level between two stable versions (null when either isn't a triple).
-function semverDelta(cur, target) {
-  const a = parseStable(cur);
-  const b = parseStable(target);
+function semverDelta(cur: string, target: string): SemverLevel | null {
+  const a = parseSemver(cur);
+  const b = parseSemver(target);
   if (!a || !b) return null;
   if (b[0] !== a[0]) return "major";
   if (b[1] !== a[1]) return "minor";
@@ -405,10 +592,14 @@ const DELTA_COLOR = { major: pc.red, minor: pc.cyan, patch: pc.green };
 // scheme (red major / cyan minor / green patch) — dimming the unchanged leading
 // segments so only the part that moved stands out. A non-exact current spec (range,
 // bare) has no triple to diff, so the whole exact target reads cyan (a migration).
-function colorTarget(cur, target) {
+function colorTarget(cur: string, target: string): string {
   const delta = semverDelta(cur, target);
   if (!delta || delta === "none") return pc.cyan(target);
-  const b = parseStable(target);
+  // A bump level means both versions parsed, so this re-parse cannot fail — but fall
+  // back to the migration color instead of asserting, so a later change to semverDelta
+  // can never turn a report row into a crash.
+  const b = parseSemver(target);
+  if (!b) return pc.cyan(target);
   const first = delta === "major" ? 0 : delta === "minor" ? 1 : 2;
   const head = b.slice(0, first).join(".");
   const tail = b.slice(first).join(".");
@@ -417,10 +608,13 @@ function colorTarget(cur, target) {
 
 // Which report group a row renders under. Actionable `outdated` rows split by bump
 // level; migrations, held-back, and errors get their own groups; up-to-date is hidden.
-function groupKey(row) {
+function groupKey(row: Row): GroupKey {
   switch (row.status) {
     case "outdated": {
-      const d = semverDelta(row.dep.spec, row.resolved?.target);
+      // decideStatus only returns "outdated" with a resolved target, so the null arm is
+      // unreachable; it falls to "patch", which is where a null delta already went.
+      const target = row.resolved?.target;
+      const d = target ? semverDelta(row.dep.spec, target) : null;
       return d === "major" ? "major" : d === "minor" ? "minor" : "patch";
     }
     case "range→exact":
@@ -437,7 +631,7 @@ function groupKey(row) {
   }
 }
 
-function renderRow(row) {
+function renderRow(row: Row): string {
   const dev = row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
@@ -457,7 +651,7 @@ function renderRow(row) {
 // The dedicated "major available" row: current → highest existing major, in red. Shown
 // for every dep with a newer major regardless of its within-major status, so a bump like
 // `astro 5 → 7` always surfaces in its own section (and its own picker group).
-function renderMajorRow(row) {
+function renderMajorRow(row: Row): string {
   const dev = row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
@@ -478,24 +672,32 @@ const PRIMARY_GROUP_TITLE = {
 };
 const MAJOR_GROUP_TITLE = "Major — crosses a major, review before selecting";
 
-function primaryGroupTitle(row) {
-  const d = semverDelta(row.dep.spec, row.resolved.target);
+function primaryGroupTitle(cur: string, target: string): string {
+  const d = semverDelta(cur, target);
   if (d === "patch") return PRIMARY_GROUP_TITLE.patch;
   if (d === "minor") return PRIMARY_GROUP_TITLE.minor;
   return PRIMARY_GROUP_TITLE.migration; // range/bare migration — no diffable triple
 }
 
-function buildCandidates(rows) {
-  const out = [];
+function buildCandidates(rows: Row[]): Candidate[] {
+  const out: Candidate[] = [];
   for (const row of rows) {
     const r = row.resolved;
     if (!r) continue;
+    // Nothing is ever written over an unorderable exact pin — not even the opt-in major
+    // arm below, which would otherwise cross a major on a spec we cannot compare.
+    if (isUnorderableExact(row.dep)) continue;
     const cur = row.dep.spec;
     if (ACTIONABLE.has(row.status) && r.target && r.target !== cur) {
-      out.push({ row, target: r.target, kind: "primary", group: primaryGroupTitle(row) });
+      out.push({
+        row,
+        target: r.target,
+        kind: "primary",
+        group: primaryGroupTitle(cur, r.target),
+      });
     }
     if (r.newerMajor && r.targetOverall) {
-      const mo = parseStable(r.targetOverall);
+      const mo = parseSemver(r.targetOverall);
       const cm = specMajor(cur);
       if (mo && cm !== null && mo[0] > cm && r.targetOverall !== cur) {
         out.push({ row, target: r.targetOverall, kind: "major", group: MAJOR_GROUP_TITLE });
@@ -506,7 +708,7 @@ function buildCandidates(rows) {
 }
 
 // Picker label for a candidate: name [dev]  current → target (target colored by kind).
-function candidateLabel(c) {
+function candidateLabel(c: Candidate): string {
   const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
   const cur = c.row.dep.spec === "" ? pc.dim("(bare)") : c.row.dep.spec;
   const tgt = c.kind === "major" ? pc.red(c.target) : colorTarget(c.row.dep.spec, c.target);
@@ -516,7 +718,7 @@ function candidateLabel(c) {
 // Post-selection summary line: solid, bold coloring with NO dimmed segments, so the "here's
 // what you're about to apply" list stays clearly legible (unlike the diff-style dimming of
 // the report/picker rows, which clack additionally dims when it echoes the submission).
-function selectionLine(c) {
+function selectionLine(c: Candidate): string {
   const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
   const cur = c.row.dep.spec === "" ? "(bare)" : c.row.dep.spec;
   const file = pc.dim(relative(root, c.row.manifest.file));
@@ -531,14 +733,15 @@ function selectionLine(c) {
 
 // The interactive group-picker + confirm. Returns the chosen candidates, or null when
 // the maintainer cancelled, declined the confirm, or selected nothing (no files touched).
-async function pickInteractive(candidates) {
+async function pickInteractive(candidates: Candidate[]): Promise<Candidate[] | null> {
   const ORDER = [
     PRIMARY_GROUP_TITLE.patch,
     PRIMARY_GROUP_TITLE.minor,
     PRIMARY_GROUP_TITLE.migration,
     MAJOR_GROUP_TITLE,
   ];
-  const groups = {};
+  // An option's value is its index into `candidates`, so a pick maps straight back.
+  const groups: Record<string, Option<number>[]> = {};
   candidates.forEach((c, i) => {
     (groups[c.group] ??= []).push({
       value: i,
@@ -546,10 +749,13 @@ async function pickInteractive(candidates) {
       hint: relative(root, c.row.manifest.file),
     });
   });
-  const options = {};
-  for (const title of ORDER) if (groups[title]) options[title] = groups[title];
+  const options: Record<string, Option<number>[]> = {};
+  for (const title of ORDER) {
+    const group = groups[title];
+    if (group) options[title] = group;
+  }
 
-  const picked = await groupMultiselect({
+  const picked = await groupMultiselect<number>({
     message: "Select updates to apply",
     options,
     initialValues: candidates.flatMap((c, i) => (c.kind === "primary" ? [i] : [])),
@@ -565,7 +771,8 @@ async function pickInteractive(candidates) {
     outro(pc.dim("Nothing selected — no files changed."));
     return null;
   }
-  const chosen = picked.map((i) => candidates[i]);
+  // Every index came out of the option list built above, so nothing is dropped here.
+  const chosen = picked.flatMap((i) => candidates[i] ?? []);
   note(
     wrapForNote(chosen.map(selectionLine).join("\n")),
     pc.cyan(pc.bold(`Selected ${chosen.length} update${chosen.length === 1 ? "" : "s"}`)),
@@ -580,9 +787,9 @@ async function pickInteractive(candidates) {
   return chosen;
 }
 
-async function main() {
+async function main(): Promise<void> {
   const minMinutes = await readMinReleaseMinutes();
-  const manifests = await discoverManifests();
+  const discovered = await discoverManifests();
   const repoPins = await readRepoPins();
 
   intro(pc.bgCyan(pc.black(flags.check ? " deps:check " : " deps:update ")));
@@ -595,24 +802,32 @@ async function main() {
   );
 
   // Flatten every scannable dep across manifests, then resolve them in parallel (bounded)
-  // behind a progress spinner.
-  const jobs = [];
-  for (const manifest of manifests) {
-    const { json, deps } = await readManifestDeps(manifest);
-    manifest._json = json; // stash the parsed doc for the write pass
-    for (const dep of deps) jobs.push({ manifest, dep });
+  // behind a progress spinner. Each read manifest carries its own parsed document, which
+  // the write pass rewrites in place.
+  const manifests: Manifest[] = [];
+  const jobs: Job[] = [];
+  for (const discoveredManifest of discovered) {
+    const manifest = await readManifestDeps(discoveredManifest);
+    manifests.push(manifest);
+    for (const dep of manifest.deps) jobs.push({ manifest, dep });
   }
 
   const s = spinner();
   s.start(`Resolving ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
   let done = 0;
   const rows = await mapWithConcurrency(jobs, 12, async ({ manifest, dep }) => {
-    let row;
+    let row: Row;
     try {
       const resolved = await resolveVersion(dep.name, specMajor(dep.spec), minMinutes);
       row = { manifest, dep, resolved, status: decideStatus(dep, resolved) };
     } catch (err) {
-      row = { manifest, dep, resolved: null, status: "unresolved", error: err.message };
+      row = {
+        manifest,
+        dep,
+        resolved: null,
+        status: "unresolved",
+        error: err instanceof Error ? err.message : String(err),
+      };
     }
     s.message(`Resolved ${++done}/${jobs.length} — ${dep.name}`);
     return row;
@@ -621,7 +836,7 @@ async function main() {
 
   // Informational: a shared dep whose major diverges from the repo's own pin. Built after
   // resolution so the note order stays stable regardless of parallel completion order.
-  const notes = [];
+  const notes: string[] = [];
   for (const { dep } of rows.filter((r) => r.resolved)) {
     const repoSpec = repoPins.get(dep.name);
     if (
@@ -655,7 +870,7 @@ async function main() {
     return;
   }
 
-  let toWrite;
+  let toWrite: Candidate[];
   if (flags.dryRun) {
     // Preview only: never prompt. Show exactly what a default apply would change (every
     // primary bump, plus majors only with --allow-major); writeUpdates prints the
@@ -663,8 +878,9 @@ async function main() {
     toWrite = candidates.filter((c) => c.kind === "primary" || flags.allowMajor);
   } else if (process.stdout.isTTY && !flags.yes) {
     // TTY: always pick + confirm. Primaries pre-checked; majors listed, unchecked.
-    toWrite = await pickInteractive(candidates);
-    if (toWrite === null) return; // cancelled, declined, or nothing selected
+    const picked = await pickInteractive(candidates);
+    if (picked === null) return; // cancelled, declined, or nothing selected
+    toWrite = picked;
   } else {
     // Non-interactive (--yes or piped): every primary bump, plus majors only when the
     // maintainer explicitly opted in with --allow-major.
@@ -679,17 +895,23 @@ async function main() {
   await writeUpdates(manifests, toWrite);
 }
 
-function printReport(rows, notes) {
-  const buckets = new Map();
+function printReport(rows: Row[], notes: string[]): void {
+  const buckets = new Map<GroupKey, Row[]>();
   for (const row of rows) {
     const key = groupKey(row);
     if (key === "up-to-date") continue;
-    if (!buckets.has(key)) buckets.set(key, []);
-    buckets.get(key).push(row);
+    const bucket = buckets.get(key);
+    if (bucket) bucket.push(row);
+    else buckets.set(key, [row]);
   }
 
   let shown = 0;
-  const section = (groupRows, color, title, renderer = renderRow) => {
+  const section = (
+    groupRows: Row[] | undefined,
+    color: Colorize,
+    title: string,
+    renderer: (row: Row) => string = renderRow,
+  ) => {
     if (!groupRows || groupRows.length === 0) return;
     shown += groupRows.length;
     note(
@@ -722,11 +944,9 @@ function printReport(rows, notes) {
     log.warn("No dependencies found to scan.");
     return;
   }
-  const counts = {};
-  for (const row of rows) counts[row.status] = (counts[row.status] ?? 0) + 1;
-  const summary = Object.entries(counts)
-    .map(([st, n]) => `${n} ${STATUS_LABEL[st] ?? st}`)
-    .join(pc.dim(" · "));
+  const counts = new Map<Status, number>();
+  for (const row of rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  const summary = [...counts].map(([st, n]) => `${n} ${STATUS_LABEL[st]}`).join(pc.dim(" · "));
   log.info(summary);
   if (shown === 0) log.success("All scanned dependencies are up to date.");
 }
@@ -735,36 +955,47 @@ function printReport(rows, notes) {
 // formatting (2-space, trailing newline). `toWrite` is the list of chosen candidates
 // ({ row, target, kind }); duplicates for one (file, bucket, name) collapse to the higher
 // version, so a selected major overrides its within-major primary.
-async function writeUpdates(manifests, toWrite) {
-  const byKey = new Map();
+async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promise<void> {
+  const byKey = new Map<string, Candidate>();
   for (const c of toWrite) {
-    const key = `${c.row.manifest.file} ${c.row.dep.bucket} ${c.row.dep.name}`;
+    const key = `${c.row.manifest.file} ${c.row.dep.bucket} ${c.row.dep.name}`;
     const prev = byKey.get(key);
     if (!prev || cmp(c.target, prev.target) > 0) byKey.set(key, c);
   }
 
-  const byFile = new Map();
+  const byFile = new Map<string, Candidate[]>();
   for (const c of byKey.values()) {
-    if (!byFile.has(c.row.manifest.file)) byFile.set(c.row.manifest.file, []);
-    byFile.get(c.row.manifest.file).push(c);
+    const fileCands = byFile.get(c.row.manifest.file);
+    if (fileCands) fileCands.push(c);
+    else byFile.set(c.row.manifest.file, [c]);
   }
 
   let changed = 0;
   for (const manifest of manifests) {
     const fileCands = byFile.get(manifest.file);
     if (!fileCands || fileCands.length === 0) continue;
-    const json = manifest._json;
+    const json = manifest.json;
 
     for (const c of fileCands) {
       const { dep } = c.row;
       const target = c.target;
       if (manifest.kind === "package-json") {
-        json[dep.bucket][dep.name] = target;
+        // The bucket was read out of this same document, so it is present and an object.
+        // Throwing beats inventing a bucket in a manifest that never had one.
+        const bucket = json[dep.bucket];
+        if (!isRecord(bucket)) {
+          throw new Error(`${manifest.file}: "${dep.bucket}" is not an object`);
+        }
+        bucket[dep.name] = target;
       } else {
         const arr = json[dep.bucket];
-        const idx = arr.findIndex((e) => {
-          const at = e.lastIndexOf("@");
-          return (at > 0 ? e.slice(0, at) : e) === dep.name;
+        if (!Array.isArray(arr)) {
+          throw new Error(`${manifest.file}: "${dep.bucket}" is not an array`);
+        }
+        const idx = arr.findIndex((e: unknown) => {
+          const entry = String(e);
+          const at = entry.lastIndexOf("@");
+          return (at > 0 ? entry.slice(0, at) : entry) === dep.name;
         });
         if (idx !== -1) arr[idx] = `${dep.name}@${target}`;
       }
@@ -792,7 +1023,7 @@ async function writeUpdates(manifests, toWrite) {
   );
 }
 
-main().catch((err) => {
+main().catch((err: unknown) => {
   console.error(err);
   process.exit(2);
 });
