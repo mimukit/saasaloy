@@ -1,0 +1,13 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    // Pulumi runs this program directly via ts-node/tsx — no bundler in the loop, and
+    // imports use explicit .js extensions per Node ESM. The base config's "Bundler"
+    // moduleResolution assumes a bundler resolves those; override to "nodenext" (Pulumi's
+    // documented ESM path) so resolution matches how this code actually runs.
+    "module": "nodenext",
+    "moduleResolution": "nodenext"
+  },
+  "include": ["index.ts", "src"]
+}

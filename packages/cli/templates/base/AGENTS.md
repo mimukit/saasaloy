@@ -10,6 +10,9 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 - **Root**: Configuration files, shared tooling
 - **`apps/*`**: Applications (Next.js, Astro apps - currently empty, will be added)
 - **`packages/*`**: Shared packages
+- **`infra`**: Centralized Cloudflare deployment (Pulumi), if the `infra` capability is installed —
+  a root-level workspace, not nested under `apps/*` or `packages/*` (it's neither an app nor a
+  shared package)
 
 ### Workspace Commands
 
@@ -170,5 +173,5 @@ Blocks, like primitives, are source you own — they are meant to be edited, not
 - Remove or disable TypeScript strict mode
 - Remove or disable lint-staged or commitlint hooks
 - Use `any` type without explicit `@ts-expect-error` or `@ts-ignore` with justification
-- Break the workspace structure (don't move packages outside `apps/*` or `packages/*`)
+- Break the workspace structure (don't move packages outside `apps/*`, `packages/*`, or `infra`)
 - Commit without running type checks and linting
