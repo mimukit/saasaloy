@@ -1,8 +1,9 @@
 # Plan — Module stacks: one command to a composed SaaS
 
-> **Not filed as an issue.** Deliberately gated — see Open questions for the trigger. The descriptor
-> shape is settled now, while nothing needs retrofitting; implementation waits for a module set that
-> makes a curated composition meaningful.
+> **Tracked in #58** — gated, not workable. #58 is a record, not a work item: it carries the gate
+> (`admin` #13 + `billing` #14 must land) and the open questions below, and stays `needs-planning`
+> until a grill settles them. The descriptor shape is settled now, while nothing needs retrofitting;
+> implementation waits for a module set that makes a curated composition meaningful.
 
 ## Context
 
@@ -92,7 +93,7 @@ Each stack ships with a skill-style README explaining what it composed and what 
 
 ## Open questions
 
-Targets for grillkit before this is filed as issues.
+Targets for grillkit before #58 can be decomposed into workable issues.
 
 - **What triggers the build?** A module count, or the landing of specific modules (`auth` + `admin` +
   `billing`, which is when composition first requires knowledge a newcomer lacks)? This plan should
