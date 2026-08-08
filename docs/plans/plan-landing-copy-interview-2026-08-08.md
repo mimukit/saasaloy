@@ -56,7 +56,7 @@ whenever it arrives, finds one file to split per locale.
 | Block removal | Permitted, behind its **own** confirmation, separate from the copy write. Dropping a `<PricingTable />` line from `index.astro` is an edit, not a redesign — and the alternative is shipping invented prices. |
 | Enforcement | `scripts/verify-content.ts` + `pnpm verify:content`, following `scripts/verify-css.ts`'s shape and `verify:preset`'s manual-only precedent. Fails on any user-visible string literal or template-literal message left in `src/blocks/*.tsx`. |
 | Sequencing | **Blocked by PR [#68](https://github.com/mimukit/saasaloy/pull/68)** (`feat(ui): theme switcher for light/dark and shadcn theme presets`, issue #64) — it already rewrites base `AGENTS.md`, `index.astro` and `Layout.astro`, and adds an eighth block. This work rebases on it and lands **before** [#60](https://github.com/mimukit/saasaloy/issues/60). |
-| Relationship to #60 | **#60's plan must be amended.** It currently claims "this work makes the content surfaces #61 writes into" while this plan claimed the reverse — as written neither builds it. #61 owns the content module; #60 rebases on it and its six new blocks inherit the convention. |
+| Relationship to #60 | **Settled, and #60 has been corrected to match.** Both plans previously claimed the other built the content surface, so as written neither did. #61 owns the content module and lands first; #60 rebases on it, its eight reworked blocks keep reading from it, and its six new ones add keys rather than carrying in-file defaults. #60's `Content` rubric row — *"no string a founder must hunt for in markup"* — is what `verify:content` mechanizes. |
 
 ### The content-shape rules, and why each exists
 
@@ -215,8 +215,8 @@ Not open questions — decisions consciously routed elsewhere.
   #73's to set.
 - **A Bengali webfont.** `Layout.astro` loads none and `font-sans` is the system stack. The skill
   reports the gap; #73 owns closing it.
-- **Amending #60's plan.** Its "this work makes the content surfaces" claim and its "#61 follows
-  this" sequencing both contradict this plan and must be corrected when #60 is grilled.
+- **Amending #60.** Done — its plan and issue body both claimed it built the content surface and
+  sequenced #61 after itself. Both are corrected: #60 is now `Blocked by #64 and #61`.
 
 ## Non-goals
 
