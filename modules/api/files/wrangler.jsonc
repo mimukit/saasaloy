@@ -9,6 +9,17 @@
   // own CORS allowlist. Test CORS against `wrangler dev`.
   "dev": {
     "port": 4000
+  },
+  // Workers Logs: what makes `console.*` output (everything `@repo/logger`'s console
+  // provider writes) queryable in the dashboard, with fields indexed rather than
+  // text-matched. On by default because a Worker you cannot see into is the expensive
+  // kind. `head_sampling_rate` is the cost dial — 1 keeps every invocation, 0.1 keeps a
+  // tenth; drop it per environment (`env.production.observability`) if a high-traffic
+  // Worker's log volume starts to matter. Sampling is the platform's job, not the
+  // logger's, which is why no module knob duplicates it.
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 1
   }
   // No bindings in the base `api` module. Capabilities and features that need a
   // D1 database, R2 bucket, KV namespace, or Queue patch this file to add their own

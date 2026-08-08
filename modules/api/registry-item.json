@@ -2,7 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "api",
   "type": "saasaloy:capability",
-  "dependsOn": [],
+  "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {
     "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to localhost dev origins when unset."
