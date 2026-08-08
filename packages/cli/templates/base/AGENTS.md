@@ -193,7 +193,11 @@ record and nothing else. Follow them when you add a block or a key:
 1. **Max three levels below a namespace** (`landing.features.title`). Compiler-based i18n
    libraries emit one flat identifier per message and cannot see deeper nesting.
 2. **Position is never the key.** Lists are arrays whose items carry a stable `id`, so
-   reordering the feature grid cannot silently reattach the wrong translation.
+   reordering the feature grid cannot silently reattach the wrong translation. One list is
+   exempt — a tier's `features` bullets stay a plain `string[]`, because nothing reads them
+   individually (a feature id picks an icon, an FAQ id anchors a question that outlives its
+   wording) and a tier's bullets are rewritten with that tier. The content file states the
+   trade-off in full.
 3. **Single-brace `{token}` placeholders, never a template literal.** Copy is data; a
    template literal is a function, which no extraction tool can read. Render with
    `interpolate()` from `@repo/ui/lib/interpolate`.

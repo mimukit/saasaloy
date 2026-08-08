@@ -284,9 +284,12 @@ A brief on disk means the interview already happened. Do not run it again from s
 
 ## Boundaries to honor
 
-- **Two files carry copy** — `packages/ui/src/content/landing.ts` (`landing.*` only) and
-  `packages/ui/src/index.ts` (`siteName`). The `lang` attribute and a consented block removal
-  are the only other edits.
+- **[The write surface](#the-write-surface) is the whole list of files you may touch** —
+  nothing outside that table. Two of them carry copy: `packages/ui/src/content/landing.ts`
+  (`landing.*` only) and `packages/ui/src/index.ts` (`siteName`). The other three are
+  `docs/product-brief.md`, which you write on **every** run (Step 2), the `lang` attribute in
+  `apps/web/src/layouts/Layout.astro`, and a consented block removal in
+  `apps/web/src/pages/index.astro`.
 - **Never edit a block.** `packages/ui/src/blocks/*.tsx` is off limits: no markup, no
   classes, no structure, no icon swaps. If copy will not fit a block, say so and let the owner
   decide.
