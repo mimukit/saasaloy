@@ -20,7 +20,15 @@
 //   1. Max three levels below a namespace (`landing.features.title`). Compiler-based
 //      i18n libraries emit one flat identifier per message and cannot see deeper nesting.
 //   2. Position is never the key. Lists are arrays whose items carry a stable `id`, so
-//      reordering the feature grid cannot silently reattach the wrong translation.
+//      reordering the feature grid cannot silently reattach the wrong translation. One
+//      list is exempt: a tier's `features` bullets (`landing.pricing.tiers[].features`)
+//      stay a plain `string[]`. They are the only strings here that nothing else reads —
+//      a `features.items[]` id picks an icon and an `faq.items[]` id is a stable anchor
+//      for a question that outlives its wording, while a tier bullet is read once, as
+//      part of one tier, and is rewritten with that tier whenever the plan changes. An id
+//      per bullet would have to be invented by whoever writes the bullet, for no reader.
+//      The cost is real and accepted: reorder a tier's bullets *without* editing them and
+//      a positional catalog follows the slot rather than the sentence.
 //   3. Placeholders are single-brace `{token}`, never a template literal. A catalog is
 //      data; a function is not serializable and no extraction tool can read it. Render
 //      them with `interpolate()` from ../lib/interpolate.ts.
@@ -118,7 +126,8 @@ export const landing = {
     // The exception to rule 5: the whole tier list lives here, prices and ctaHrefs
     // included, so pricing is rewritten in one place. `monthlyPrice`/`annualPrice` are
     // whole currency units; `null` renders ui.pricing.customPrice. Set `featured` on at
-    // most one tier.
+    // most one tier. Each tier carries an `id`; its `features` bullets deliberately do not
+    // (rule 2's stated exemption) — they are rewritten with the tier, never alone.
     tiers: [
       {
         id: "free",
