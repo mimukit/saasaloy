@@ -84,7 +84,11 @@ export async function main(argv: string[], deps: Partial<CliDeps> = {}): Promise
     return pickCommand({ registry, select, isCancel });
   }
 
-  const command = registry[name];
+  // Own keys only: a plain object inherits `toString`, `constructor`, `valueOf` and the
+  // rest from Object.prototype, and every one of them is truthy — so a bare `registry[name]`
+  // lets `saasaloy toString` past this guard and dies on `.run` instead of saying what it
+  // should, that the command is unknown.
+  const command = Object.hasOwn(registry, name) ? registry[name] : undefined;
   if (!command) {
     console.error(`${pc.red("Unknown command:")} ${name}\n`);
     printHelp(registry);
