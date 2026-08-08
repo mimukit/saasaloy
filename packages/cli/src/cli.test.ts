@@ -176,6 +176,26 @@ describe("main — dispatch", () => {
     expect(captured.out.join("\n")).toContain("Usage:");
     expect(picker.calls).toHaveLength(0);
   });
+
+  // The registry is a plain object, so it inherits these from Object.prototype and each
+  // one is truthy. Looked up without an own-key check they sail past the unknown-command
+  // guard and blow up on `.run`, turning a typo into a stack trace.
+  for (const name of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
+    it(`treats the inherited property ${name} as an unknown command`, async () => {
+      const captured = capture();
+      let code: number;
+      try {
+        code = await main([name], { registry });
+      } finally {
+        captured.restore();
+      }
+      expect(code).toBe(1);
+      expect(captured.err.join("\n")).toContain(name);
+      expect(captured.out.join("\n")).toContain("Usage:");
+      expect(init.calls).toHaveLength(0);
+      expect(add.calls).toHaveLength(0);
+    });
+  }
 });
 
 describe("main — bare invocation without a TTY", () => {
