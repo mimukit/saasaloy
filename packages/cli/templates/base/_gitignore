@@ -21,6 +21,6 @@ pnpm-debug.log*
 .idea/
 .vscode-test
 
-# Claude Code skill links — regenerated per-machine by `saasaloy add`.
+# Claude Code skill links — regenerated per-machine by `saasaloy init` and `saasaloy add`.
 # The real skill files are committed under .agents/skills/.
 .claude/skills/

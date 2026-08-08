@@ -58,8 +58,9 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 
 `packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
 the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
-`src/components/`, and the marketing **blocks** in `src/blocks/`. `apps/web` pulls the
-theme in once, through the shared layout that imports `@repo/ui/globals.css`.
+`src/components/`, the marketing **blocks** in `src/blocks/`, and the landing page's copy
+in `src/content/`. `apps/web` pulls the theme in once, through the shared layout that
+imports `@repo/ui/globals.css`.
 
 Primitives and blocks are reached by subpath — neither is re-exported from the package
 root, so importing one never drags in the rest. The root export is project-wide constants
@@ -69,6 +70,7 @@ only (`siteName`):
 import { siteName } from "@repo/ui";
 import { Button } from "@repo/ui/components/button";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
+import { landing, ui } from "@repo/ui/content/landing";
 import { cn } from "@repo/ui/lib/utils";
 ```
 
@@ -137,12 +139,12 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   `blocks/index.ts` barrel. Astro gives every `client:*` component its own React root, so
   a compound primitive (accordion, dialog, dropdown) split across an `.astro` file throws
   "must be used within" at runtime. Keep the whole composition inside the block.
-- **Props-driven, with the copy as in-file defaults.** Every prop is optional and carries
-  a default in the file itself. Scalar copy takes its default inline in the parameter
-  destructuring (`hero.tsx`'s `siteName = "Acme"`); a list or an object takes a named
-  `const` at the top instead (`feature-grid.tsx`'s `defaultFeatures`), so it is one
-  readable block to edit rather than a literal wedged into a signature. Change the copy
-  by editing the default; keep the props for the cases a page really varies.
+- **Props-driven, with every default read from the content module.** Every prop is still
+  optional and still carries a default — but the *words* come from
+  `packages/ui/src/content/landing.ts`, not from the block. `hero.tsx` has
+  `title = landing.hero.title`; `pricing-table.tsx` holds no tier data at all. Keep the
+  props for the cases a page really varies (a second landing page can override any of
+  them); change the copy by editing the content module. See below.
 - **Never pass a component or a function as a prop from `.astro`.** Astro serializes
   island props, so icons live *inside* the block. Swap one by editing the block.
 - **Semantic kebab-case filenames** (`feature-grid.tsx`), never shadcn's registry-style
@@ -169,6 +171,48 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   edit to the page. `saasaloy add <module>` uses it; do not remove the glob.
 
 Blocks, like primitives, are source you own — they are meant to be edited, not wrapped.
+
+**The content module — where the words live.** `packages/ui/src/content/landing.ts` holds
+every user-visible string on the landing page, in two namespaces:
+
+- **`landing.*`** — marketing copy. What the product is, who it is for, what it costs.
+  This is the whole surface a copy rewrite touches, plus `siteName` in
+  `packages/ui/src/index.ts`.
+- **`ui.*`** — chrome and accessibility labels (`Monthly`, `Most popular`, `Close menu`,
+  `Billing period`). Nothing here says anything about the product.
+
+Blocks import it **directly** — `import { landing, ui } from "@repo/ui/content/landing"` —
+never as props from `index.astro`. Astro serializes island props, so passing content into
+`<PricingTable client:visible />` would write every string into the HTML payload *and*
+still ship the defaults inside the island's bundle. Direct import keeps the static blocks
+at zero JavaScript.
+
+Five rules keep that file mechanically translatable — a translation layer reads a keyed
+record and nothing else. Follow them when you add a block or a key:
+
+1. **Max three levels below a namespace** (`landing.features.title`). Compiler-based i18n
+   libraries emit one flat identifier per message and cannot see deeper nesting.
+2. **Position is never the key.** Lists are arrays whose items carry a stable `id`, so
+   reordering the feature grid cannot silently reattach the wrong translation.
+3. **Single-brace `{token}` placeholders, never a template literal.** Copy is data; a
+   template literal is a function, which no extraction tool can read. Render with
+   `interpolate()` from `@repo/ui/lib/interpolate`.
+4. **No runtime concatenation.** `/month` plus `", billed annually"` is two whole
+   messages (`ui.pricing.perMonth`, `ui.pricing.perMonthAnnual`) — word order does not
+   survive the seam in every language.
+5. **Only user-visible strings move.** `href`s, section `id`s and icons are structure and
+   stay in the block. The one stated exception is pricing: the whole `tiers` array lives
+   in content, prices and `ctaHref`s included, so pricing is rewritten in one place.
+
+Two consequences worth knowing. Blanking a navbar or footer link's label in content drops
+that link, which is how a removed section loses its nav entry without editing a block. And
+the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: that file is
+inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
+
+**Rewriting the copy for your product.** `.claude/skills/saasaloy-landing-copy` (real files
+in `.agents/skills/`) interviews you about the product and writes the answers into the
+content module. Invoke it rather than editing eight blocks by hand — and if you edit by
+hand, keep the strings in the content module so the next pass finds them.
 
 ### Naming Conventions
 
