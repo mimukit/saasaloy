@@ -5,7 +5,7 @@
   "dependsOn": [],
   "dependencies": [],
   "envVars": {
-    "LOGGER_PROVIDER": "Which installed provider writes: `console` (add logger-console). Optional — unset selects the only registered provider, so logging works out of the box. Deliberately unlike EMAIL_PROVIDER: a naming typo throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.",
+    "LOGGER_PROVIDER": "Which installed provider writes: `console` (add logger-console). Optional — unset selects the first registered provider, so logging works out of the box once one is installed; with no provider registered (a logger-only install) every log call is a silent no-op. Deliberately unlike EMAIL_PROVIDER: a naming typo throws, but a missing value never does, because an outage caused by the observability layer is worse than one absent knob.",
     "LOG_LEVEL": "Minimum level to emit: trace | debug | info | warn | error | fatal. Defaults to `info`; an unrecognized value falls back to it silently."
   },
   "patches": [],
