@@ -3,6 +3,7 @@
 // import of the shared theme, so a page is only ever its own content — no page may
 // duplicate the shell or import globals.css again.
 import "@repo/ui/globals.css";
+import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
 
 interface Props {
   title: string;
@@ -22,15 +23,16 @@ const { title, description } = Astro.props;
     {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
       paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
-      from bundling it into a deferred module, which would defeat the whole point.
-      The base follows the OS only — no localStorage, no toggle (see the plan's
-      non-goals); a theme switcher would add the persistence layer here.
+      from bundling it into a deferred module, which would defeat the whole point —
+      `<script type="module">` is deferred by specification and always runs too late.
+      The script body is @repo/ui's THEME_INIT_SCRIPT, imported above and baked into
+      this HTML at build time, so the layout holds no copy of it: it reads the stored
+      choice, falls back to the OS preference, and also drives every
+      `[data-theme-toggle]` on the page through one delegated listener. That is why
+      @repo/ui/blocks/theme-toggle needs no client directive. Do not inline a second
+      resolver here, and do not turn this into an import.
     */}
-    <script is:inline>
-      if (window.matchMedia("(prefers-color-scheme: dark)").matches) {
-        document.documentElement.classList.add("dark");
-      }
-    </script>
+    <script is:inline set:html={THEME_INIT_SCRIPT} />
   </head>
   <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
     <slot />
