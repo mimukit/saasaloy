@@ -114,20 +114,25 @@ export function defineLogger(config: LoggerConfig): LoggerRegistry {
           // No provider registered: a silent no-op, never a throw. See `selectProvider`.
           if (!provider) return;
 
-          // Call-site fields win over bound ones, so a child's `requestId` can still be
-          // overridden at a single call site that means a different request.
-          const merged: LogFields = { ...bound, ...fields };
-          const err = takeError(merged);
-
-          const event: LogEvent = {
-            level: eventLevel,
-            message,
-            time: new Date().toISOString(),
-            fields: redact(merged, redactKeys),
-          };
-          if (err) event.err = err;
-
+          // Normalization lives *inside* the boundary, not above it: a caller's `fields` can
+          // carry a throwing getter or a proxy, so the spread, the error flattening and the
+          // redaction walk are all as capable of throwing as `write()` is. Building the event
+          // outside the `try` would let a hostile field object fail the request the log line
+          // was only describing.
           try {
+            // Call-site fields win over bound ones, so a child's `requestId` can still be
+            // overridden at a single call site that means a different request.
+            const merged: LogFields = { ...bound, ...fields };
+            const err = takeError(merged);
+
+            const event: LogEvent = {
+              level: eventLevel,
+              message,
+              time: new Date().toISOString(),
+              fields: redact(merged, redactKeys),
+            };
+            if (err) event.err = err;
+
             provider.write(env, event);
           } catch {
             // Swallowed on purpose, and swallowed *silently* — there is no `EmailError`
