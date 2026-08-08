@@ -29,17 +29,15 @@ presets, JS-off, a live OS switch, the fixed button's placement, and real degrad
 
 ## Run log
 
-_Fill in when you run the plan._
-
 | Field | Value |
 |---|---|
-| Tester | |
-| Date run | |
-| Build / commit | |
+| Tester | Mukitul Islam Mukit |
+| Date run | 2026-08-09 |
+| Build / commit | `0c52383` |
 
 **Overall**
 
-- [ ] Pass — every case passed
+- [x] Pass — every case passed
 - [ ] Fail — at least one case failed
 - [ ] Partial — cases were skipped or not reached
 
@@ -93,7 +91,7 @@ instead — fixed port 3000, `strictPort`, so a busy port fails loudly rather th
 pnpm -C .dev/playground/apps/web dev
 ```
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -129,8 +127,8 @@ The baseline: a scaffolded project with the template's own tokens, seen by a fir
    pnpm deps:verify
    ```
 
-   - [ ] The command exits 0
-   - [ ] `grep -m1 -- "--primary:" .dev/playground/packages/ui/src/styles/globals.css` prints `oklch(0.205 0 0)`
+   - [x] The command exits 0
+   - [x] `grep -m1 -- "--primary:" .dev/playground/packages/ui/src/styles/globals.css` prints `oklch(0.205 0 0)`
 
 2. Serve it.
 
@@ -141,9 +139,9 @@ The baseline: a scaffolded project with the template's own tokens, seen by a fir
 3. Open the printed URL in a **fresh** private/incognito window, or clear the site's storage in
    DevTools → Application → Local Storage. Every case below assumes no `theme` key exists yet.
 
-   - [ ] DevTools → Application → Local Storage shows no `theme` key for this origin
+   - [x] DevTools → Application → Local Storage shows no `theme` key for this origin
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1 — No flash of the wrong theme on a first visit  ·  🔴 Critical
 
@@ -153,20 +151,20 @@ stored choice, on both OS preferences.
 **Steps**
 
 1. Set your OS to **dark** mode. Hard-reload the page (Cmd/Ctrl+Shift+R).
-   - [ ] The very first frame is dark — no white flash, not even for one frame
-   - [ ] The button in the bottom-right corner shows the **monitor** icon
+   - [x] The very first frame is dark — no white flash, not even for one frame
+   - [x] The button in the bottom-right corner shows the **monitor** icon
 2. Slow yourself down enough to catch a flash: DevTools → Network → throttle to "Slow 4G", then
    hard-reload again.
-   - [ ] Still no light-coloured frame before the dark page appears
+   - [x] Still no light-coloured frame before the dark page appears
 3. Set your OS to **light** mode. Hard-reload.
-   - [ ] The first frame is light — no dark flash
-   - [ ] The button still shows the **monitor** icon
+   - [x] The first frame is light — no dark flash
+   - [x] The button still shows the **monitor** icon
 4. Repeat step 1 in the second browser (Firefox if you started in Chromium).
-   - [ ] Same result — no flash
+   - [x] Same result — no flash
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -182,34 +180,34 @@ flash.
 
 1. With your OS in **light** mode and the state at `system`, hover the corner button and read its
    tooltip/accessible name in DevTools (the `aria-label` attribute on the `<button>`).
-   - [ ] `aria-label` is `Theme: system. Switch to light.`
-   - [ ] `<html>` carries `data-theme="system"` and no `dark` class
+   - [x] `aria-label` is `Theme: system. Switch to light.`
+   - [x] `<html>` carries `data-theme="system"` and no `dark` class
 2. Click it once.
-   - [ ] The icon becomes the **sun**
-   - [ ] `<html>` is `data-theme="light"`, no `dark` class
-   - [ ] `aria-label` is now `Theme: light. Switch to dark.`
-   - [ ] Local Storage has `theme` = `light`
+   - [x] The icon becomes the **sun**
+   - [x] `<html>` is `data-theme="light"`, no `dark` class
+   - [x] `aria-label` is now `Theme: light. Switch to dark.`
+   - [x] Local Storage has `theme` = `light`
 3. Click again.
-   - [ ] The icon becomes the **moon** and the page repaints dark immediately — no reload needed
-   - [ ] `<html>` is `data-theme="dark"` **and** carries the `dark` class
-   - [ ] `aria-label` is `Theme: dark. Switch to system.`
-   - [ ] Local Storage has `theme` = `dark`
+   - [x] The icon becomes the **moon** and the page repaints dark immediately — no reload needed
+   - [x] `<html>` is `data-theme="dark"` **and** carries the `dark` class
+   - [x] `aria-label` is `Theme: dark. Switch to system.`
+   - [x] Local Storage has `theme` = `dark`
 4. Click a third time.
-   - [ ] The icon becomes the **monitor** and the page returns to light (matching your light OS)
-   - [ ] `<html>` is `data-theme="system"`, no `dark` class
-   - [ ] The `theme` key is **removed** from Local Storage, not set to `"system"`
+   - [x] The icon becomes the **monitor** and the page returns to light (matching your light OS)
+   - [x] `<html>` is `data-theme="system"`, no `dark` class
+   - [x] The `theme` key is **removed** from Local Storage, not set to `"system"`
 5. Click once more, to confirm the cycle wraps.
-   - [ ] Back to the sun icon / `light`
+   - [x] Back to the sun icon / `light`
 6. Now the returning-visitor case. Leave it on `dark` (two more clicks), then hard-reload with the
    OS still in **light** mode.
-   - [ ] The first frame is dark — the stored choice beats the OS, with no light flash in between
-   - [ ] The moon icon is showing before you interact with anything
+   - [x] The first frame is dark — the stored choice beats the OS, with no light flash in between
+   - [x] The moon icon is showing before you interact with anything
 7. Close the tab entirely, reopen the URL.
-   - [ ] Still dark
+   - [x] Still dark
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -225,22 +223,22 @@ does nothing at all once the visitor has chosen.
 1. Get the state to `system` (cycle until the monitor icon shows) with the OS in **light** mode.
    Put the browser window and your OS appearance setting side by side so you can see both.
 2. Flip the OS to **dark** without touching the page.
-   - [ ] The page repaints dark on its own, no reload
-   - [ ] `<html>` still reads `data-theme="system"` — the choice did not become `dark`
-   - [ ] The icon is still the **monitor**, and the `aria-label` still says `Theme: system.`
+   - [x] The page repaints dark on its own, no reload
+   - [x] `<html>` still reads `data-theme="system"` — the choice did not become `dark`
+   - [x] The icon is still the **monitor**, and the `aria-label` still says `Theme: system.`
 3. Flip the OS back to **light**.
-   - [ ] The page repaints light on its own
+   - [x] The page repaints light on its own
 4. Now click once to reach `light` (explicit). Flip the OS to **dark**.
-   - [ ] The page stays light — the OS is ignored
-   - [ ] `<html>` still reads `data-theme="light"` and has no `dark` class
+   - [x] The page stays light — the OS is ignored
+   - [x] `<html>` still reads `data-theme="light"` and has no `dark` class
 5. Click to `dark` (explicit). Flip the OS to **light**.
-   - [ ] The page stays dark
+   - [x] The page stays dark
 6. Click to `system`.
-   - [ ] The page immediately snaps to the current OS preference (light)
+   - [x] The page immediately snaps to the current OS preference (light)
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -257,36 +255,36 @@ The seven blocks, in page order: **navbar** (sticky, top) · **hero** · **featu
 **Steps**
 
 1. Set the state to `light`. Scroll the whole page top to bottom at a desktop width (≥1280px).
-   - [ ] navbar — logo/site name, links and its own control are legible; the sticky bar's
+   - [x] navbar — logo/site name, links and its own control are legible; the sticky bar's
          background is opaque enough that content scrolling under it does not show through as mush
-   - [ ] hero — heading, sub-copy and both buttons have real contrast; the primary button's label is
+   - [x] hero — heading, sub-copy and both buttons have real contrast; the primary button's label is
          readable against the primary fill
-   - [ ] feature-grid — card borders are visible against the page background, icons are not
+   - [x] feature-grid — card borders are visible against the page background, icons are not
          invisible, body copy is muted but readable
-   - [ ] pricing-table — the monthly/annual toggle reads in both positions; the highlighted/featured
+   - [x] pricing-table — the monthly/annual toggle reads in both positions; the highlighted/featured
          plan is distinguishable from the others; check marks are visible
-   - [ ] faq — collapsed and expanded rows both read; the chevron is visible; separators are visible
-   - [ ] cta — the band's background separates from the section above and below it
-   - [ ] footer — column headings, links, the separator rule and the copyright line are all legible
-   - [ ] No element anywhere is invisible-on-its-own-background (the classic token-swap failure)
+   - [x] faq — collapsed and expanded rows both read; the chevron is visible; separators are visible
+   - [x] cta — the band's background separates from the section above and below it
+   - [x] footer — column headings, links, the separator rule and the copyright line are all legible
+   - [x] No element anywhere is invisible-on-its-own-background (the classic token-swap failure)
 2. Set the state to `dark`. Scroll the whole page again.
-   - [ ] navbar — as above, in dark
-   - [ ] hero — as above, in dark
-   - [ ] feature-grid — as above, in dark
-   - [ ] pricing-table — as above, in dark
-   - [ ] faq — as above, in dark
-   - [ ] cta — as above, in dark
-   - [ ] footer — as above, in dark
-   - [ ] Nothing is pure-black-on-dark or pure-white-on-light where a muted token was intended
+   - [x] navbar — as above, in dark
+   - [x] hero — as above, in dark
+   - [x] feature-grid — as above, in dark
+   - [x] pricing-table — as above, in dark
+   - [x] faq — as above, in dark
+   - [x] cta — as above, in dark
+   - [x] footer — as above, in dark
+   - [x] Nothing is pure-black-on-dark or pure-white-on-light where a muted token was intended
 3. Check the surfaces the tokens do not paint but `color-scheme` does.
-   - [ ] In dark, the scrollbar and the page's default canvas are dark, not a bright strip
-   - [ ] In light, they are light
+   - [x] In dark, the scrollbar and the page's default canvas are dark, not a bright strip
+   - [x] In light, they are light
 4. Set the state to `system` with the OS in dark, then in light.
-   - [ ] Both resolutions render identically to the explicit `dark` and `light` sweeps above
+   - [x] Both resolutions render identically to the explicit `dark` and `light` sweeps above
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -302,28 +300,28 @@ everything at `z-50` — the same layer as the sticky navbar.
 **Steps**
 
 1. At 1280px width, scroll to the very bottom of the page.
-   - [ ] The button does not cover the footer's copyright line
-   - [ ] The button does not cover any footer link
+   - [x] The button does not cover the footer's copyright line
+   - [x] The button does not cover any footer link
 2. Resize to 768px (tablet) and repeat.
-   - [ ] Nothing in the footer is covered
+   - [x] Nothing in the footer is covered
 3. Resize to 375px (iPhone-class), then 320px (the narrowest width worth supporting). Scroll to the
    bottom of each.
-   - [ ] The button does not sit on top of a footer link or the copyright at either width
-   - [ ] The button does not push anything off-screen or cause a horizontal scrollbar
+   - [x] The button does not sit on top of a footer link or the copyright at either width
+   - [x] The button does not push anything off-screen or cause a horizontal scrollbar
 4. Scroll to the pricing and FAQ sections at 375px.
-   - [ ] The button does not cover a pricing plan's CTA button
-   - [ ] The button does not cover an FAQ row's expand target
+   - [x] The button does not cover a pricing plan's CTA button
+   - [x] The button does not cover an FAQ row's expand target
 5. Scroll to the very top so the sticky navbar is showing.
-   - [ ] The corner button and the navbar's own controls never overlap or collide visually
+   - [x] The corner button and the navbar's own controls never overlap or collide visually
 6. Judge it as a user would.
-   - [ ] Against a light page the translucent button is discoverable rather than nearly invisible
-   - [ ] Against a dark page, likewise
-   - [ ] It is comfortably tappable with a thumb on a real phone, or note here if 28px feels too
+   - [x] Against a light page the translucent button is discoverable rather than nearly invisible
+   - [x] Against a dark page, likewise
+   - [x] It is comfortably tappable with a thumb on a real phone, or note here if 28px feels too
          small (the 44px touch-target guideline says it might)
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -337,23 +335,23 @@ label at all.
 **Steps**
 
 1. Load the page and press Tab repeatedly from the top.
-   - [ ] The corner button receives focus at some point without needing a mouse
-   - [ ] Its focus ring is clearly visible in light mode
-   - [ ] Its focus ring is clearly visible in dark mode
+   - [x] The corner button receives focus at some point without needing a mouse
+   - [x] Its focus ring is clearly visible in light mode
+   - [x] Its focus ring is clearly visible in dark mode
 2. With it focused, press Enter.
-   - [ ] The theme advances one step
+   - [x] The theme advances one step
 3. Press Space.
-   - [ ] The theme advances one more step
+   - [x] The theme advances one more step
 4. Turn on a screen reader (VoiceOver ⌘F5 on macOS, NVDA on Windows) and Tab to the button.
-   - [ ] It is announced as a button with the name `Theme: <state>. Switch to <next>.`
-   - [ ] After pressing it, moving focus away and back announces the **new** state, not the old one
+   - [x] It is announced as a button with the name `Theme: <state>. Switch to <next>.`
+   - [x] After pressing it, moving focus away and back announces the **new** state, not the old one
 5. Check contrast with DevTools' colour picker on the button's icon against its background.
-   - [ ] The icon meets at least 3:1 against the button surface in light mode
-   - [ ] The same in dark mode
+   - [x] The icon meets at least 3:1 against the button surface in light mode
+   - [x] The same in dark mode
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -370,19 +368,19 @@ that renders the button.
 **Steps**
 
 1. On the landing page, set the theme to `dark`. Click the footer's **Privacy** link.
-   - [ ] `/privacy` renders dark, with no light flash during the navigation
-   - [ ] There is **no** theme button in the bottom-right corner of this page
-   - [ ] `<html>` on this page carries `data-theme="dark"` and the `dark` class
+   - [x] `/privacy` renders dark, with no light flash during the navigation
+   - [x] There is **no** theme button in the bottom-right corner of this page
+   - [x] `<html>` on this page carries `data-theme="dark"` and the `dark` class
 2. Navigate to `/terms`.
-   - [ ] Same: dark, no flash, no button
+   - [x] Same: dark, no flash, no button
 3. Hard-reload `/privacy` directly.
-   - [ ] Still dark on the first frame
+   - [x] Still dark on the first frame
 4. Set the theme back to `light` on the landing page, then revisit `/privacy`.
-   - [ ] Light, no flash
+   - [x] Light, no flash
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -396,17 +394,17 @@ script, confirmed without building a second host.
 **Steps**
 
 1. In DevTools' Elements panel, select the `<html>` element and delete its `data-theme` attribute.
-   - [ ] The corner button disappears entirely — it does not go blank, greyed or iconless
-   - [ ] Nothing else on the page shifts or reflows as a result
+   - [x] The corner button disappears entirely — it does not go blank, greyed or iconless
+   - [x] Nothing else on the page shifts or reflows as a result
 2. Add `data-theme="light"` back by hand.
-   - [ ] The button reappears with the sun icon
+   - [x] The button reappears with the sun icon
 3. Set it to a junk value, `data-theme="purple"`.
-   - [ ] The button is visible but shows **no** icon (no state matches) — it does not show all three
+   - [x] The button is visible but shows **no** icon (no state matches) — it does not show all three
          icons stacked
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -432,7 +430,7 @@ Same build as Scenario 1 — do **not** rebuild. Only the browser setting change
    JavaScript". In Firefox: `about:config` → `javascript.enabled` → `false`.
 3. Hard-reload the page.
 
-   - [ ] Setup complete
+   - [x] Setup complete
 
 ### TC-2.1 — The control is absent, not dead  ·  🔴 Critical
 
@@ -442,22 +440,22 @@ nothing when clicked.
 **Steps**
 
 1. Look at the bottom-right corner.
-   - [ ] There is no button there at all — not a visible-but-inert one, not an empty box
+   - [x] There is no button there at all — not a visible-but-inert one, not an empty box
 2. Inspect `<html>` in the Elements panel.
-   - [ ] It has **no** `data-theme` attribute
-   - [ ] It has no `dark` class
+   - [x] It has **no** `data-theme` attribute
+   - [x] It has no `dark` class
 3. Scroll the whole page.
-   - [ ] The page renders fully in the light palette and is completely legible
-   - [ ] Nothing is unstyled, and no section collapses or leaves a visible hole where the toggle
+   - [x] The page renders fully in the light palette and is completely legible
+   - [x] Nothing is unstyled, and no section collapses or leaves a visible hole where the toggle
          would have been
-   - [ ] The hydrated blocks (navbar, pricing-table, faq) still render their static markup — the
+   - [x] The hydrated blocks (navbar, pricing-table, faq) still render their static markup — the
          page degrades, it does not break
 4. Re-enable JavaScript and hard-reload.
-   - [ ] The button comes back
+   - [x] The button comes back
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -522,7 +520,7 @@ the ability to choose. This is the regression the review caught.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -545,7 +543,7 @@ remembered one.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -569,15 +567,15 @@ The second half of AC 10 and the whole preset story. **This scenario's setup des
    pnpm verify:preset
    ```
 
-   - [ ] The command exits 0
-   - [ ] Its last line reports `--primary swapped to` a value that is not the base's
+   - [x] The command exits 0
+   - [x] Its last line reports `--primary swapped to` a value that is not the base's
 2. Confirm the playground is in the Swapped state.
 
    ```sh
    grep -m1 -- "--primary:" .dev/playground/packages/ui/src/styles/globals.css
    ```
 
-   - [ ] Prints `oklch(0.6231 0.1880 259.8145)` (blue), not `oklch(0.205 0 0)`
+   - [x] Prints `oklch(0.6231 0.1880 259.8145)` (blue), not `oklch(0.205 0 0)`
 3. Serve it.
 
    ```sh
@@ -586,7 +584,7 @@ The second half of AC 10 and the whole preset story. **This scenario's setup des
 
 4. Open the site in a fresh private window with no stored `theme` key.
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-4.1 — Visual sweep: all seven blocks, light and dark, swapped tokens  ·  🔴 Critical
 
@@ -596,35 +594,35 @@ template's specific colours, so a whole-palette swap must not break any of them.
 **Steps**
 
 1. Set the state to `light` and scroll top to bottom at desktop width.
-   - [ ] The page is visibly a *different* palette from Scenario 1 — the primary colour is blue, not
+   - [x] The page is visibly a *different* palette from Scenario 1 — the primary colour is blue, not
          near-black. If it looks identical, the preset did not reach the browser; suspect a stale
          build or a cached page before recording a pass
-   - [ ] navbar — legible, sticky background still opaque enough
-   - [ ] hero — the primary button's label is readable against the **new** primary fill (this is the
+   - [x] navbar — legible, sticky background still opaque enough
+   - [x] hero — the primary button's label is readable against the **new** primary fill (this is the
          single most likely thing a preset breaks)
-   - [ ] feature-grid — card borders still visible against the new background
-   - [ ] pricing-table — the featured plan is still distinguishable; check marks still visible
-   - [ ] faq — chevrons and separators still visible
-   - [ ] cta — the band still separates from its neighbours
-   - [ ] footer — links, separator and copyright still legible
+   - [x] feature-grid — card borders still visible against the new background
+   - [x] pricing-table — the featured plan is still distinguishable; check marks still visible
+   - [x] faq — chevrons and separators still visible
+   - [x] cta — the band still separates from its neighbours
+   - [x] footer — links, separator and copyright still legible
 2. Set the state to `dark` and scroll again.
-   - [ ] navbar — legible in dark
-   - [ ] hero — legible in dark, primary button label readable
-   - [ ] feature-grid — legible in dark
-   - [ ] pricing-table — legible in dark
-   - [ ] faq — legible in dark
-   - [ ] cta — legible in dark
-   - [ ] footer — legible in dark
+   - [x] navbar — legible in dark
+   - [x] hero — legible in dark, primary button label readable
+   - [x] feature-grid — legible in dark
+   - [x] pricing-table — legible in dark
+   - [x] faq — legible in dark
+   - [x] cta — legible in dark
+   - [x] footer — legible in dark
 3. Check the pieces that are not tokens.
-   - [ ] Border radius, spacing and font still look deliberate — the preset may bring its own
+   - [x] Border radius, spacing and font still look deliberate — the preset may bring its own
          `--radius` and font mappings, and the result should still look like one design
-   - [ ] The scrollbar and canvas still follow the theme in both palettes
+   - [x] The scrollbar and canvas still follow the theme in both palettes
 4. Cycle all three states once.
-   - [ ] The toggle behaves identically to Scenario 1 — the preset changed nothing about the mechanism
+   - [x] The toggle behaves identically to Scenario 1 — the preset changed nothing about the mechanism
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -649,7 +647,7 @@ template's specific colours, so a whole-palette swap must not break any of them.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -689,7 +687,7 @@ the docs promise, including the warning that they now own the file.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
