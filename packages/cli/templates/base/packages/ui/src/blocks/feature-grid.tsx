@@ -4,62 +4,44 @@ import {
   GaugeIcon,
   LayersIcon,
   ShieldCheckIcon,
+  SparklesIcon,
   TerminalIcon,
   ZapIcon,
 } from "lucide-react";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { landing } from "@repo/ui/content/landing";
 
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
 //
-// The icons are referenced here rather than accepted as props on purpose: Astro
-// serializes island props, so a component or function cannot cross the .astro boundary.
-// Swap an icon by editing this file — that is what "you own the code" buys you.
+// The words come from ../content/landing.ts; the icons stay here, keyed by the same `id`.
+// That split is not arbitrary: Astro serializes island props, so a component or function
+// cannot cross the .astro boundary, and an icon is not a translatable string. Swap an icon
+// by editing the map below — that is what "you own the code" buys you.
 
 export interface Feature {
+  /** Stable key — picks the icon, and never the array position (see the content file). */
+  id: string;
   icon: ComponentType<{ className?: string }>;
   title: string;
   description: string;
 }
 
-const defaultFeatures: Feature[] = [
-  {
-    icon: ZapIcon,
-    title: "Fast by default",
-    description:
-      "Static HTML at the edge, with JavaScript sent only for the parts of the page that actually need it.",
-  },
-  {
-    icon: LayersIcon,
-    title: "Composable modules",
-    description:
-      "Add an API, a database, auth or billing when you need them — never before, and never all at once.",
-  },
-  {
-    icon: TerminalIcon,
-    title: "Source you own",
-    description:
-      "Every component lands in your repo as plain, editable source. No black box, no framework to fight.",
-  },
-  {
-    icon: ShieldCheckIcon,
-    title: "Secure foundations",
-    description:
-      "Sensible defaults for sessions, cookies and origins, so the boring security work is already done.",
-  },
-  {
-    icon: CloudIcon,
-    title: "Cloudflare-native",
-    description:
-      "Ships to Workers with static assets out of the box — one deploy command, no servers to babysit.",
-  },
-  {
-    icon: GaugeIcon,
-    title: "Built to stay current",
-    description:
-      "Dependencies are exact-pinned and updated deliberately, so upgrades are a decision, not a surprise.",
-  },
-];
+// One icon per content id. An id with no entry falls back rather than rendering nothing,
+// so adding a feature to the content file cannot break the page.
+const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  fast: ZapIcon,
+  modules: LayersIcon,
+  source: TerminalIcon,
+  secure: ShieldCheckIcon,
+  cloudflare: CloudIcon,
+  current: GaugeIcon,
+};
+
+const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
+  ...item,
+  icon: FEATURE_ICONS[item.id] ?? SparklesIcon,
+}));
 
 export interface FeatureGridProps {
   id?: string;
@@ -70,8 +52,8 @@ export interface FeatureGridProps {
 
 export function FeatureGrid({
   id = "features",
-  title = "Everything the first release needs",
-  description = "The parts every SaaS ends up building anyway, ready before you write a line of product code.",
+  title = landing.features.title,
+  description = landing.features.description,
   features = defaultFeatures,
 }: FeatureGridProps) {
   return (
@@ -85,7 +67,7 @@ export function FeatureGrid({
         {features.map((feature) => {
           const Icon = feature.icon;
           return (
-            <Card key={feature.title} className="h-full">
+            <Card key={feature.id} className="h-full">
               <CardHeader>
                 <span
                   aria-hidden="true"
