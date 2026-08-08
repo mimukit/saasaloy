@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from "react";
 import { MenuIcon, XIcon } from "lucide-react";
 
 import { Button, buttonVariants } from "@repo/ui/components/button";
+import { landing, ui } from "@repo/ui/content/landing";
 import { cn } from "@repo/ui/lib/utils";
 
-// Marketing blocks are self-contained on purpose: one file, one exported component, its
-// own copy defaults, no shared block barrel. Astro renders each `client:*` component as
-// its own React root, so a compound primitive split across the .astro boundary would
-// throw "must be used within" — composing the whole block here is what avoids that.
+// Marketing blocks are self-contained on purpose: one file, one exported component, no
+// shared block barrel — but the words all live in ../content/landing.ts. Astro renders
+// each `client:*` component as its own React root, so a compound primitive split across
+// the .astro boundary would throw "must be used within" — composing the whole block here
+// is what avoids that.
 //
 // This is the only block above the fold that needs JS (the mobile menu), which is why
 // index.astro hydrates it with `client:idle` while the static blocks ship none.
@@ -17,12 +19,14 @@ export interface NavbarLink {
   href: string;
 }
 
-// Same-page anchors, matching the ids the other blocks render.
+// Same-page anchors, matching the ids the other blocks render. The anchor is structure and
+// stays here; the label comes from content, and blanking it there drops the link — which
+// is how a removed section loses its nav entry without editing this file.
 const defaultLinks: NavbarLink[] = [
-  { label: "Features", href: "#features" },
-  { label: "Pricing", href: "#pricing" },
-  { label: "FAQ", href: "#faq" },
-];
+  { label: landing.navbar.linkFeatures, href: "#features" },
+  { label: landing.navbar.linkPricing, href: "#pricing" },
+  { label: landing.navbar.linkFaq, href: "#faq" },
+].filter((link) => link.label !== "");
 
 export interface NavbarProps {
   siteName?: string;
@@ -34,7 +38,7 @@ export interface NavbarProps {
 export function Navbar({
   siteName = "Acme",
   links = defaultLinks,
-  ctaLabel = "Get started",
+  ctaLabel = landing.navbar.ctaLabel,
   ctaHref = "#cta",
 }: NavbarProps) {
   const [open, setOpen] = useState(false);
@@ -65,7 +69,7 @@ export function Navbar({
           {siteName}
         </a>
 
-        <nav aria-label="Main" className="hidden items-center gap-6 md:flex">
+        <nav aria-label={ui.navbar.mainNavLabel} className="hidden items-center gap-6 md:flex">
           {links.map((link) => (
             <a
               key={link.href}
@@ -91,7 +95,7 @@ export function Navbar({
             className="md:hidden"
             aria-controls={open ? "navbar-mobile-menu" : undefined}
             aria-expanded={open}
-            aria-label={open ? "Close menu" : "Open menu"}
+            aria-label={open ? ui.navbar.closeMenu : ui.navbar.openMenu}
             onClick={() => setOpen((previous) => !previous)}
           >
             {open ? <XIcon /> : <MenuIcon />}
@@ -102,7 +106,7 @@ export function Navbar({
       {open && (
         <div id="navbar-mobile-menu" className="border-t border-border/60 md:hidden">
           <nav
-            aria-label="Mobile"
+            aria-label={ui.navbar.mobileNavLabel}
             className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-6 py-4"
           >
             {links.map((link) => (

@@ -11,13 +11,21 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
+import { landing, ui } from "@repo/ui/content/landing";
+import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
 // The billing-period toggle is the only reason this block is hydrated. index.astro gives
 // it `client:visible`, so the JavaScript is fetched when the section scrolls into view
 // rather than on load. Delete the toggle and the block goes fully static again.
+//
+// This block holds no tier data at all: the whole list lives in ../content/landing.ts
+// (`landing.pricing.tiers`), prices included, so pricing is rewritten in one file and
+// never hunted for in markup.
 
 export interface PricingTier {
+  /** Stable key, never the array position (see the content file). */
+  id: string;
   name: string;
   description: string;
   /** Price per month, in whole currency units. `null` renders "Custom". */
@@ -31,43 +39,6 @@ export interface PricingTier {
   featured?: boolean;
 }
 
-const defaultTiers: PricingTier[] = [
-  {
-    name: "Free",
-    description: "For side projects and the first hundred users.",
-    monthlyPrice: 0,
-    annualPrice: 0,
-    features: ["Up to 3 projects", "Community support", "1 GB storage"],
-    ctaLabel: "Start for free",
-    ctaHref: "#cta",
-  },
-  {
-    name: "Pro",
-    description: "For teams shipping to paying customers.",
-    monthlyPrice: 29,
-    annualPrice: 23,
-    features: [
-      "Unlimited projects",
-      "Email support",
-      "100 GB storage",
-      "Usage analytics",
-      "Custom domains",
-    ],
-    ctaLabel: "Start free trial",
-    ctaHref: "#cta",
-    featured: true,
-  },
-  {
-    name: "Enterprise",
-    description: "For organisations with procurement and a security review.",
-    monthlyPrice: null,
-    annualPrice: null,
-    features: ["SSO and SCIM", "Priority support", "Audit logs", "Custom contracts"],
-    ctaLabel: "Talk to sales",
-    ctaHref: "#cta",
-  },
-];
-
 export interface PricingTableProps {
   id?: string;
   title?: string;
@@ -80,11 +51,11 @@ export interface PricingTableProps {
 
 export function PricingTable({
   id = "pricing",
-  title = "Pricing that stays out of the way",
-  description = "Start free, upgrade when the product earns it. Every plan includes the full framework.",
-  tiers = defaultTiers,
-  annualNote = "Save 20%",
-  currencySymbol = "$",
+  title = landing.pricing.title,
+  description = landing.pricing.description,
+  tiers = landing.pricing.tiers,
+  annualNote = landing.pricing.annualNote,
+  currencySymbol = landing.pricing.currencySymbol,
 }: PricingTableProps) {
   const [annual, setAnnual] = useState(false);
 
@@ -97,7 +68,7 @@ export function PricingTable({
         <div className="mt-8 flex items-center justify-center gap-3">
           <div
             role="group"
-            aria-label="Billing period"
+            aria-label={ui.pricing.billingPeriodLabel}
             className="inline-flex items-center gap-1 rounded-xl border border-border p-1"
           >
             <Button
@@ -106,7 +77,7 @@ export function PricingTable({
               aria-pressed={!annual}
               onClick={() => setAnnual(false)}
             >
-              Monthly
+              {ui.pricing.monthly}
             </Button>
             <Button
               size="sm"
@@ -114,7 +85,7 @@ export function PricingTable({
               aria-pressed={annual}
               onClick={() => setAnnual(true)}
             >
-              Annual
+              {ui.pricing.annual}
             </Button>
           </div>
           {annualNote && <Badge variant="outline">{annualNote}</Badge>}
@@ -125,14 +96,11 @@ export function PricingTable({
         {tiers.map((tier) => {
           const price = annual ? tier.annualPrice : tier.monthlyPrice;
           return (
-            <Card
-              key={tier.name}
-              className={cn("h-full", tier.featured && "ring-2 ring-primary")}
-            >
+            <Card key={tier.id} className={cn("h-full", tier.featured && "ring-2 ring-primary")}>
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle>{tier.name}</CardTitle>
-                  {tier.featured && <Badge>Most popular</Badge>}
+                  {tier.featured && <Badge>{ui.pricing.featuredBadge}</Badge>}
                 </div>
                 <CardDescription>{tier.description}</CardDescription>
               </CardHeader>
@@ -140,11 +108,13 @@ export function PricingTable({
               <CardContent>
                 <p className="flex items-baseline gap-1">
                   <span className="text-3xl font-semibold tracking-tight">
-                    {price === null ? "Custom" : `${currencySymbol}${price}`}
+                    {price === null
+                      ? ui.pricing.customPrice
+                      : interpolate(ui.pricing.price, { currencySymbol, price })}
                   </span>
                   {price !== null && (
                     <span className="text-sm text-muted-foreground">
-                      /month{annual ? ", billed annually" : ""}
+                      {annual ? ui.pricing.perMonthAnnual : ui.pricing.perMonth}
                     </span>
                   )}
                 </p>
