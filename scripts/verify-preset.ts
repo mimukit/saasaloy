@@ -180,10 +180,15 @@ run("node", ["scripts/verify-css.ts"], "verify-css");
 // same reason verify-css does.
 const built = (await collectBuiltFiles(playgroundDist)).map(normalize).join("\n");
 
-if (!built.includes("--primary:")) {
+// Assert the preset's own value positively. A bare `--primary:` declaration only proves
+// the build emitted the token; any third value would satisfy it, and that is not what
+// the recipe promises.
+if (!built.includes(normalize(`--primary:${presetPrimary}`))) {
   fail(
-    `no --primary declaration in the built output under ${relative(root, playgroundDist)}`,
-    "Nothing to compare against, so a pass here would be vacuous. Did the build run?",
+    "the built CSS does not carry the preset --primary value",
+    `Expected ${presetPrimary} under ${relative(root, playgroundDist)}.`,
+    "Either the build did not run, or it re-serialised the value in a way normalize()",
+    "does not yet flatten — check the built output before trusting this failure.",
   );
 }
 
