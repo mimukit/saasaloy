@@ -51,7 +51,7 @@ Read against the eight blocks as they stand:
 | **`theme-toggle`** | **Rubric yes, restyle no.** It must clear `verify:a11y` and consume the new rhythm and type tokens, but its markup and its seat beside `<Navbar />` are #64's decision and stay. This plan does not re-litigate a merged PR. |
 | **Rubric durability** | **A tool-repo artefact**, at `docs/qa/landing-page-rubric.md`. Its *contract* — one `h1`, AA in both themes, additive motion, named-and-justified islands — is restated in the base `AGENTS.md` so the agent editing blocks downstream is told to preserve it. `verify-a11y` does **not** ship into the template: Playwright in every generated project is a large permanent payload against ADR 0022's deliberately minimal gift. |
 | **Naming** | Semantic kebab-case, unchanged from ADR 0022 — `logo-cloud.tsx`, `cta-banner.tsx`. Never Tailark's or shadcn's `{category}-{NN}` numbering. |
-| **Sequencing** | **Land after [#68](https://github.com/mimukit/saasaloy/pull/68) merges.** It is open and mergeable, and rewrites `Layout.astro`, `index.astro`, `globals.css` and `AGENTS.md` — the same files this work rewrites — while adding `theme-toggle.tsx`, `lib/theme.ts` and `scripts/verify-preset.ts`. Rebase on it. #62 and #61 follow this. |
+| **Sequencing** | **Land after [#68](https://github.com/mimukit/saasaloy/pull/68) merges.** It is open and mergeable, and rewrites `Layout.astro`, `index.astro`, `globals.css` and `AGENTS.md` — the same files this work rewrites — while adding `theme-toggle.tsx`, `lib/theme.ts` and `scripts/verify-preset.ts`. Rebase on it. **[#61](https://github.com/mimukit/saasaloy/issues/61) also rebases on #68 and lands before this work** — it introduces the content module these blocks read their copy from, so rebasing on it too avoids rewriting fourteen blocks twice. #62 follows. |
 | **Relationship to #64** | This work **does not touch** the theme control. Token work must keep the preset swap green (`pnpm verify:preset`). Grayscale actually makes this easier: presets have nothing to fight. |
 
 ### Why Tailark cannot be vendored
@@ -178,7 +178,7 @@ Not open questions — resolved as "not here":
 
 ## Non-goals
 
-- **Copywriting.** [#61](https://github.com/mimukit/saasaloy/issues/61) owns the copy interview; this work makes the content surfaces it writes into.
+- **Copywriting, and the content surface itself.** [#61](https://github.com/mimukit/saasaloy/issues/61) owns both — it introduces `packages/ui/src/content/landing.ts` and lands first. This work inherits that surface: the eight reworked blocks keep reading from it, and the six new ones add their keys to it rather than carrying in-file copy defaults.
 - **Retiring the `sections/*.astro` glob.** [#62](https://github.com/mimukit/saasaloy/issues/62) owns it; the glob stays intact here.
 - **The theme switcher.** [#64](https://github.com/mimukit/saasaloy/issues/64) / PR #68 owns it. This work rebases on it and must not regress it.
 - **Editing the vendored primitives** in `src/components/` — ADR 0022 keeps them aligned with what a later `shadcn add` produces.
