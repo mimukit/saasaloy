@@ -8,6 +8,7 @@ import { Footer } from "@repo/ui/blocks/footer";
 import { Hero } from "@repo/ui/blocks/hero";
 import { Navbar } from "@repo/ui/blocks/navbar";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
+import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
 import Layout from "../layouts/Layout.astro";
 
 // File-based landing-page sections. Every module in ../sections default-exports an
@@ -32,6 +33,12 @@ const sections = Object.keys(sectionModules)
     - PricingTable client:visible — monthly/annual toggle, below the fold.
     - Faq          client:visible — accordion, below the fold.
   Hero, FeatureGrid, Cta and Footer take no directive and ship no JavaScript at all.
+  ThemeToggle is the interesting case: it is interactive yet takes no directive either,
+  because its behaviour comes from the pre-paint inline script Layout.astro emits, not
+  from React. Giving it a `client:*` would ship a hydration runtime for a button that
+  has no onClick. It sits here rather than inside Navbar so that navbar.tsx stays the
+  landing blocks' file alone, and it carries its own positioning: fixed to the corner,
+  clear of the sticky header's own controls at every width.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 */}
 <Layout
@@ -39,6 +46,9 @@ const sections = Object.keys(sectionModules)
   description={`${siteName}, a Cloudflare-native SaaS.`}
 >
   <Navbar client:idle siteName={siteName} />
+  <ThemeToggle
+    className="fixed right-4 bottom-4 z-50 border-border/60 bg-background/80 shadow-sm backdrop-blur"
+  />
   <main>
     <Hero siteName={siteName} />
     <FeatureGrid />

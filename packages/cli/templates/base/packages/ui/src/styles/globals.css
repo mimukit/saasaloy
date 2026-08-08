@@ -26,8 +26,11 @@
    utilities no page uses. This exclusion makes the result independent of git state. */
 @source not "../../../../**/node_modules";
 
-/* Dark mode is the `.dark` class shadcn assumes, set pre-paint from the OS preference
-   by Layout.astro. No toggle UI in the base. */
+/* Dark mode is the `.dark` class shadcn assumes. It is set pre-paint by the inline
+   THEME_INIT_SCRIPT (packages/ui/src/lib/theme.ts) that every host document emits —
+   from the visitor's stored choice, falling back to the OS preference. The chosen
+   state also lands on <html> as `data-theme`, which is what blocks/theme-toggle.tsx
+   keys its icons off; nothing here needs to know about it. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
@@ -35,7 +38,9 @@
      us — scrollbars, form controls, the default canvas — follows the theme too. The
      tokens below only cover what we paint ourselves. Paired with `.dark` rather than
      `light dark` on :root, because the theme is class-driven, not media-driven: the
-     OS preference is read once in Layout.astro and turned into a class. */
+     pre-paint script resolves the visitor's choice (or the OS preference behind it)
+     into a class, and re-resolves on the fly when the OS flips while the choice is
+     `system`. `light dark` here would let the OS override an explicit choice. */
   color-scheme: light;
   --radius: 0.625rem;
   --background: oklch(1 0 0);

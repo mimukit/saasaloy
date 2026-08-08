@@ -166,3 +166,16 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 sentinel utility declared only in `packages/ui/src/lib/sentinel.ts` actually landed in the
 built CSS. If it fails, suspect those globs before anything else.
 
+`verify-preset` (`scripts/verify-preset.ts`, run with `pnpm verify:preset`) is the drill
+for **`shadcn` bumps specifically**. The template's `AGENTS.md` documents swapping a
+project's whole token set with `shadcn add <registry:style url>`, which works only
+because shadcn merges into the base's `globals.css` instead of overwriting it. The script
+runs that recipe for real against a fresh playground and asserts the base's own rules —
+the three `@source` globs, `@custom-variant dark`, `@layer base`, one each of `:root` /
+`.dark` / `@theme inline` — survived, `components.json` was untouched, and the swapped
+`--primary` reached the built CSS.
+
+It is **deliberately not part of `deps:verify`**: it fetches a preset from a third party,
+and the standing green gate must not depend on someone else's uptime. Run it by hand
+alongside `deps:verify` when `deps:update` moves `shadcn`.
+
