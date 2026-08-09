@@ -1,0 +1,23 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "sms-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["sms"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/sms/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "sms",
+      "arrayProp": "providers",
+      "call": "consoleSms",
+      "import": {
+        "name": "consoleSms",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [{ "path": "files/console.ts", "target": "@sms/providers/console.ts" }],
+  "scaffolds": []
+}

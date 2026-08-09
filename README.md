@@ -30,9 +30,9 @@ saasaloy sync               # regenerate agent views (AGENTS.md, CLAUDE.md, skil
 
 ### Modules
 
-- **Capability modules** — `api`, `database`, `email`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
+- **Capability modules** — `api`, `database`, `email`, `sms`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
 - **Feature modules** — `waitlist`, `billing`, `teams`, … Each extends capabilities by dropping files into those conventions and declares its `dependsOn`.
-- **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
+- **Provider modules** — `email-cloudflare`, `email-console`, `sms-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email or SMS service without any calling code learning which one is active.
 
 Dependencies resolve recursively, topologically sorted, behind a confirmation prompt.
 
@@ -46,6 +46,8 @@ One module does not, and it's worth knowing before you install it rather than at
 |---|---|
 | `email-cloudflare` | Workers **paid plan**, plus a sending domain onboarded by hand in the Cloudflare dashboard (Email Service → Email Sending). Neither is something the CLI can do or verify for you. |
 | `email-console` | Nothing — it logs the rendered message instead of sending it, so local development and tests need no plan, no domain, and no API key. |
+| `sms` | Nothing by itself, but it has no Cloudflare-native provider — Cloudflare has no SMS product, so every real provider is a third-party account you bring. `sms` and `sms-console` alone are free. |
+| `sms-console` | Nothing — it logs the message and what it would have cost in segments. Sending for real means a purchased number and, in the US, A2P 10DLC campaign registration with the carriers, which the CLI can neither perform nor verify. |
 
 No free-tier promise is made either way: Cloudflare's limits are Cloudflare's to change, and a project that grows past them should expect to pay. The point is only that the constraint is visible up front.
 
