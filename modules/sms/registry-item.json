@@ -1,0 +1,43 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "sms",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {
+    "SMS_PROVIDER": "Which installed provider sends: `console` (add sms-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
+    "SMS_FROM": "Default sender for messages that don't carry their own `from` — an E.164 number, a short code, or an alphanumeric sender id, whichever the selected provider is allowed to send from. Optional: a provider routing through a pool or a messaging service assigns the sender itself."
+  },
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/sms",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/sms",
+      "aliases": { "@sms": "packages/sms/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/segments.ts", "target": "src/segments.ts" },
+        {
+          "path": "files/src/templates/verification-code.ts",
+          "target": "src/templates/verification-code.ts"
+        },
+        { "path": "files/src/providers/.gitkeep", "target": "src/providers/.gitkeep" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-sms"]
+  }
+}
