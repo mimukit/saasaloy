@@ -130,8 +130,10 @@ starts from.
 | `lint:css` | `stylelint "**/*.css" --max-warnings 0` | the one CSS file we ship |
 | `format:check` | `prettier --check .` | everything except Markdown |
 
-`pnpm lint:fix` applies oxlint's and Stylelint's safe fixes; `pnpm format` rewrites with
-Prettier. Three things about this are easy to get wrong:
+`pnpm lint:fix` mirrors passes 1-3 — the type-aware oxlint invocation over the same two
+paths, then the plain one over everything, then Stylelint — each with `--fix` instead of
+its reporting flag; `pnpm format` is pass 4 with `--write`. Three things about this are
+easy to get wrong:
 
 - **The `-c` flag is not optional.** oxlint only auto-discovers `.oxlintrc.json`, and a
   JSON config cannot `extends` Ultracite's `.mjs` presets. Run it without `-c` and you are
@@ -168,7 +170,9 @@ because Ultracite enables ~470 rules and this repo had never been linted — fir
 produced ~670 findings. Everything in it is a style-tier rule that disagrees with a
 deliberate convention here (`func-style`, `no-inline-comments`, `no-await-in-loop`,
 `sort-keys`, the regex family, typescript-eslint's strict-type-checked tier). **No
-correctness rule is in it, and none should be.** Re-tightening one is a code change, not a
+correctness rule is in it, and none should be.** `no-control-regex` is the worked example:
+it is a Possible Problems rule, it fires in exactly two places, and it is suppressed at
+those two lines rather than in the block. Re-tightening one is a code change, not a
 config change — see [ADR 0023](docs/adr/adr-0023-generated-projects-ship-a-lint-and-hook-toolchain-2026-08-09.md).
 
 ### Commit hooks

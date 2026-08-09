@@ -601,6 +601,10 @@ const STATUS_LABEL: Record<Status, string> = {
 // stripAnsi / wrapForNote are duplicated from packages/cli/src/lib/tui.ts rather
 // than imported: this is a standalone root script, and reaching across the package
 // boundary into the CLI's TS source would drag in a build step. They're tiny.
+// The control character is deliberate: this pattern exists to match ANSI escapes, which
+// is exactly what `no-control-regex` flags. Suppressed here and at the original in
+// packages/cli/src/lib/tui.ts, and nowhere else.
+// oxlint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
 // The escape itself, as an escape sequence rather than a literal control byte — a raw
 // 0x1b in the source makes grep treat this whole file as binary and skip it.

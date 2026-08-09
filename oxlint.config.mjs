@@ -62,8 +62,14 @@ const ultracite = mergePresets(core, astro, react, tanstack, vitest);
 // under `style`, `pedantic` and `restriction`. This repo had never been linted,
 // so first contact produced ~670 findings. Everything oxlint could fix safely was
 // fixed (`oxlint --fix`); what stays off is listed here with its reason, per the
-// linter-adoption plan's "fix it or suppress it explicitly" rule. Nothing in this
-// block is a correctness rule — deleting an entry should produce churn, not bugs.
+// linter-adoption plan's "fix it or suppress it explicitly" rule.
+//
+// Nothing switched off here is one of ESLint's Possible Problems, and nothing here
+// is switched off globally when a narrower home exists: `no-control-regex` is
+// suppressed at its two call sites with `oxlint-disable-next-line`, and
+// `typescript/return-await` is retuned to `in-try-catch` below rather than dropped.
+// Deleting an entry in this block should produce churn, not bugs — if that ever
+// stops being true of one of them, it belongs somewhere else, not here.
 //
 // Re-litigating one of these is welcome. Do it by fixing the code the rule
 // objects to, not by quietly widening the block.
@@ -94,24 +100,35 @@ const suppressed = {
   "promise/prefer-catch": "off",
   "require-await": "off",
   "typescript/promise-function-async": "off",
-  "typescript/return-await": "off",
   "unicorn/no-await-expression-member": "off",
 
   // --- Regular expressions -------------------------------------------------
   // Adding `u` changes escape semantics, and named capture groups mean rewriting
   // every index-based match access. Both are mechanical-looking edits with real
-  // behaviour risk across ~70 sites in the applier's patch engine. `no-control-regex`
-  // fires on `stripAnsi`, whose whole job is matching control characters.
-  "no-control-regex": "off",
+  // behaviour risk across ~70 sites in the applier's patch engine.
+  //
+  // `no-control-regex` is deliberately NOT here. It is a Possible Problems rule, it
+  // fires in exactly two places (the `stripAnsi` ANSI pattern in
+  // packages/cli/src/lib/tui.ts and its copy in scripts/update-deps.ts), and both
+  // carry an `oxlint-disable-next-line` with the reason at the line. Everywhere
+  // else — including the modules we ship — it stays on.
   "prefer-named-capture-group": "off",
   "require-unicode-regexp": "off",
   "typescript/prefer-regexp-exec": "off",
 
   // --- Key and import ordering ---------------------------------------------
-  // Object keys here are grouped by meaning (a registry item's `name`/`type`
-  // before its payload); alphabetising them loses that. `unicorn/import-style`
-  // wants default imports for `node:path` and friends, against the named-import
-  // style used in every file.
+  // `sort-keys` ran with `--fix` during the adoption sweep, so most object literals
+  // in the repo are already alphabetical and stay that way. Turning it back on today
+  // reports ~37 sites its fixer would not touch, and those are the ones where the
+  // order carries meaning: the error-code table in modules/email-cloudflare, the
+  // `files`/`env`/`rules` shape of the override blocks in this very file and the
+  // template's, lint-staged's glob-to-command map, the URL-segment order in
+  // registry.ts's parsed spec, and the descriptor fixtures in applier.test.ts that
+  // mirror a registry item on disk. Alphabetising those is churn against readability.
+  // Do not re-order anything back — the rule is off for what it *still* reports.
+  //
+  // `unicorn/import-style` wants default imports for `node:path` and friends,
+  // against the named-import style used in every file.
   "sort-keys": "off",
   "unicorn/import-style": "off",
 
@@ -176,6 +193,12 @@ export default defineConfig({
     // defect everywhere else — above all in the assets we ship to users. #66's
     // logger guard was dropped and pointed at this line.
     "no-console": "error",
+    // Ultracite ships this as `["error", "always"]`, a stack-trace style preference
+    // that fired 11 times. The rule's `in-try-catch` mode is the correctness half —
+    // it catches a returned, un-awaited promise escaping the enclosing `catch`, where
+    // the handler never runs. That mode reports zero findings here, so the bug class
+    // stays guarded for free instead of being switched off with the style tier.
+    "typescript/return-await": ["error", "in-try-catch"],
   },
 
   overrides: [
