@@ -37,7 +37,7 @@ yours to rewrite.
    tree or no repo at all is worth one sentence — "your changes aren't committed, so you
    can't undo this with git; every write here is previewed and confirmed anyway" — and then
    you carry on. `saasaloy init` does not run `git init`, so a clean-tree requirement would
-   block exactly the person who just scaffolded. **Never refuse to run.**
+   block exactly the person who just scaffolded. **Neither state is a reason to stop.**
 4. **If the content module has already been rewritten** (it no longer matches the shipped
    demonstration copy) **and there is no brief**, say so plainly: someone wrote this by hand.
    Ask whether to work from what is there or start over. Do not overwrite it silently.
@@ -304,5 +304,6 @@ A brief on disk means the interview already happened. Do not run it again from s
 - **No dependencies, no i18n machinery, no webfonts.** Report the gap; do not close it.
 - **Never invent pricing or proof**, and never quietly leave the shipped demo numbers in
   place as if they were real.
-- **Never refuse to run** over a dirty tree, a missing repo, or a thin interview. Warn, write
-  less, and say what you left out.
+- **A dirty tree, a missing repo, or a thin interview is not a blocker.** Warn, write less,
+  and say what you left out. (This is about those three conditions only — anything unsafe or
+  outside this skill's scope you decline as you normally would.)
