@@ -1,24 +1,26 @@
-import { createLogger, type Logger } from "@repo/logger";
-import { Hono, type Context } from "hono";
+import { createLogger } from "@repo/logger";
+import type { Logger } from "@repo/logger";
+import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger
 // vars (below); a capability or feature that adds a D1/R2/KV/Queue binding extends this
 // type and patches wrangler.jsonc.
-export type Bindings = {
+export interface Bindings {
   CORS_ORIGINS?: string;
   /** Which registered log provider writes. Optional — unset selects the only installed one. */
   LOGGER_PROVIDER?: string;
   /** Minimum level to emit: trace | debug | info | warn | error | fatal. Defaults to `info`. */
   LOG_LEVEL?: string;
-};
+}
 
 // Request-scoped values set by middleware and read with `c.get(...)`. `log` is the
 // correlated logger the middleware below binds to every request.
-export type Variables = {
+export interface Variables {
   log: Logger;
-};
+}
 
 // Local dev origins for `apps/web` (Astro, :3000) and `apps/admin` (TanStack
 // Router/Vite, :3001) — the keyless dev fallback so `wrangler dev`/`vite dev` works
@@ -39,15 +41,16 @@ const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
 app.use(
   "*",
   cors({
+    credentials: true,
     origin: (origin, c: Context<{ Bindings: Bindings }>) => {
       const configured = c.env.CORS_ORIGINS?.split(",")
         .map((o: string) => o.trim())
         .filter(Boolean);
-      const allowed = configured && configured.length > 0 ? configured : DEV_ORIGINS;
+      const allowed =
+        configured && configured.length > 0 ? configured : DEV_ORIGINS;
       return origin && allowed.includes(origin) ? origin : null;
     },
-    credentials: true,
-  }),
+  })
 );
 
 // Request correlation. Every route below reads the same logger with `c.get("log")`, and
@@ -77,8 +80,10 @@ const routes = import.meta.glob<{ default: Hono }>("./routes/*.ts", {
 });
 
 for (const [path, module] of Object.entries(routes)) {
-  const name = path.match(/\.\/routes\/(.+)\.ts$/)?.[1];
-  if (name) app.route(`/${name}`, module.default);
+  const name = path.match(/\.\/routes\/(?<feature>.+)\.ts$/u)?.groups?.feature;
+  if (name) {
+    app.route(`/${name}`, module.default);
+  }
 }
 
 export default app;
