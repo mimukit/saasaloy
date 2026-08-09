@@ -1,13 +1,14 @@
-import { Hono, type Context } from "hono";
+import { Hono } from "hono";
+import type { Context } from "hono";
 import { cors } from "hono/cors";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` (below); a
 // capability or feature that adds a D1/R2/KV/Queue binding extends this type and
 // patches wrangler.jsonc.
-export type Bindings = {
+export interface Bindings {
   CORS_ORIGINS?: string;
-};
+}
 
 // Local dev origins for `apps/web` (Astro, :3000) and `apps/admin` (TanStack
 // Router/Vite, :3001) — the keyless dev fallback so `wrangler dev`/`vite dev` works
@@ -28,15 +29,16 @@ const app = new Hono<{ Bindings: Bindings }>();
 app.use(
   "*",
   cors({
+    credentials: true,
     origin: (origin, c: Context<{ Bindings: Bindings }>) => {
       const configured = c.env.CORS_ORIGINS?.split(",")
         .map((o: string) => o.trim())
         .filter(Boolean);
-      const allowed = configured && configured.length > 0 ? configured : DEV_ORIGINS;
+      const allowed =
+        configured && configured.length > 0 ? configured : DEV_ORIGINS;
       return origin && allowed.includes(origin) ? origin : null;
     },
-    credentials: true,
-  }),
+  })
 );
 
 // File-based route registration. Every module in ./routes default-exports a Hono
@@ -48,8 +50,10 @@ const routes = import.meta.glob<{ default: Hono }>("./routes/*.ts", {
 });
 
 for (const [path, module] of Object.entries(routes)) {
-  const name = path.match(/\.\/routes\/(.+)\.ts$/)?.[1];
-  if (name) app.route(`/${name}`, module.default);
+  const name = path.match(/\.\/routes\/(?<feature>.+)\.ts$/u)?.groups?.feature;
+  if (name) {
+    app.route(`/${name}`, module.default);
+  }
 }
 
 export default app;
