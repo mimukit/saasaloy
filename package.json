@@ -28,7 +28,7 @@
     "cli:dev": "pnpm --filter saasaloy dev",
     "cli:link": "pnpm --filter saasaloy build && pnpm add --global ./packages/cli",
     "cli:unlink": "pnpm rm --global saasaloy",
-    "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force --no-install && cp scripts/saasaloy-shim.sh .dev/playground/saasaloy && chmod +x .dev/playground/saasaloy && git init -q .dev/playground",
+    "play:init": "pnpm --filter saasaloy build && node packages/cli/dist/index.js init .dev/playground --force --no-install && cp scripts/saasaloy-shim.sh .dev/playground/saasaloy && chmod +x .dev/playground/saasaloy",
     "play:destroy": "rm -rf .dev/playground",
     "play:reset": "pnpm run play:destroy && pnpm run play:init",
     "play:watch": "node scripts/watch-template.ts",
