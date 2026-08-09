@@ -1,11 +1,45 @@
 import type { ComponentType } from "react";
 import {
+  ActivityIcon,
+  AwardIcon,
+  BellIcon,
+  BookOpenIcon,
+  BoxIcon,
+  CalendarIcon,
+  ClockIcon,
   CloudIcon,
+  CodeIcon,
+  CreditCardIcon,
+  DatabaseIcon,
+  FileTextIcon,
   GaugeIcon,
+  GlobeIcon,
+  GraduationCapIcon,
+  HandshakeIcon,
+  HeadphonesIcon,
+  KeyIcon,
   LayersIcon,
+  LayoutGridIcon,
+  ListChecksIcon,
+  LockIcon,
+  MapPinIcon,
+  MessageCircleIcon,
+  PenLineIcon,
+  PlugIcon,
+  ReceiptIcon,
+  RefreshCwIcon,
+  RocketIcon,
+  SearchIcon,
+  ServerIcon,
   ShieldCheckIcon,
+  SmartphoneIcon,
   SparklesIcon,
+  TargetIcon,
   TerminalIcon,
+  TrendingUpIcon,
+  UsersIcon,
+  WalletIcon,
+  WorkflowIcon,
   ZapIcon,
 } from "lucide-react";
 
@@ -13,43 +47,83 @@ import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/component
 import { landing } from "@repo/ui/content/landing";
 
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
+// That is also why the registry below can be long without costing anything: it is read at
+// build time and nothing in it reaches the browser.
 //
-// The words come from ../content/landing.ts; the icons stay here, keyed by the same `id`.
-// That split is not arbitrary: Astro serializes island props, so a component or function
-// cannot cross the .astro boundary, and an icon is not a translatable string. Swap an icon
-// by editing the map below — that is what "you own the code" buys you.
+// The words come from ../content/landing.ts, and so does each feature's icon — but as a
+// *name*, not a component. Astro serializes island props, so a component cannot cross the
+// .astro boundary; the registry that turns `"zap"` into `ZapIcon` therefore lives here,
+// beside the render. What that buys is the thing a copy rewrite actually needs: change
+// what a feature is about, change its glyph, one file, no block edit.
 
 export interface Feature {
-  /** Stable key — picks the icon, and never the array position (see the content file). */
+  /** Stable key — the translation key, never the array position (see the content file). */
   id: string;
   icon: ComponentType<{ className?: string }>;
   title: string;
   description: string;
 }
 
-// One icon per content id. An id with no entry falls back rather than rendering nothing,
-// so adding a feature to the content file cannot break the page.
+// The names `landing.features.items[].icon` may use. Add a lucide import and a line here to
+// widen it — these are ordinary source files you own, and the set below is a starting
+// vocabulary, not a limit. Keep the keys kebab-case, matching lucide's own icon names, so
+// picking one is a lookup rather than a guess.
 const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  fast: ZapIcon,
-  modules: LayersIcon,
-  source: TerminalIcon,
-  secure: ShieldCheckIcon,
-  cloudflare: CloudIcon,
-  current: GaugeIcon,
+  activity: ActivityIcon,
+  award: AwardIcon,
+  bell: BellIcon,
+  "book-open": BookOpenIcon,
+  box: BoxIcon,
+  calendar: CalendarIcon,
+  clock: ClockIcon,
+  cloud: CloudIcon,
+  code: CodeIcon,
+  "credit-card": CreditCardIcon,
+  database: DatabaseIcon,
+  "file-text": FileTextIcon,
+  gauge: GaugeIcon,
+  globe: GlobeIcon,
+  "graduation-cap": GraduationCapIcon,
+  handshake: HandshakeIcon,
+  headphones: HeadphonesIcon,
+  key: KeyIcon,
+  layers: LayersIcon,
+  "layout-grid": LayoutGridIcon,
+  "list-checks": ListChecksIcon,
+  lock: LockIcon,
+  "map-pin": MapPinIcon,
+  "message-circle": MessageCircleIcon,
+  "pen-line": PenLineIcon,
+  plug: PlugIcon,
+  receipt: ReceiptIcon,
+  "refresh-cw": RefreshCwIcon,
+  rocket: RocketIcon,
+  search: SearchIcon,
+  server: ServerIcon,
+  "shield-check": ShieldCheckIcon,
+  smartphone: SmartphoneIcon,
+  sparkles: SparklesIcon,
+  target: TargetIcon,
+  terminal: TerminalIcon,
+  "trending-up": TrendingUpIcon,
+  users: UsersIcon,
+  wallet: WalletIcon,
+  workflow: WorkflowIcon,
+  zap: ZapIcon,
 };
 
-// `Object.hasOwn` first, not a bare index: `FEATURE_ICONS[id]` walks the prototype chain, so
-// an id of `constructor` or `toString` resolves to an inherited function — not nullish, so a
-// `?? SparklesIcon` fallback never fires and React is handed something that isn't a
-// component. Ids are author-controlled and the saasaloy-landing-copy skill rewrites them, so
-// this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
-function iconFor(id: string): ComponentType<{ className?: string }> {
-  return (Object.hasOwn(FEATURE_ICONS, id) ? FEATURE_ICONS[id] : undefined) ?? SparklesIcon;
+// `Object.hasOwn` first, not a bare index: `FEATURE_ICONS[name]` walks the prototype chain,
+// so a name of `constructor` or `toString` resolves to an inherited function — not nullish,
+// so a `?? SparklesIcon` fallback never fires and React is handed something that isn't a
+// component. Icon names are author-controlled and the saasaloy-landing-copy skill writes
+// them, so this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
+function iconFor(name: string): ComponentType<{ className?: string }> {
+  return (Object.hasOwn(FEATURE_ICONS, name) ? FEATURE_ICONS[name] : undefined) ?? SparklesIcon;
 }
 
 const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
   ...item,
-  icon: iconFor(item.id),
+  icon: iconFor(item.icon),
 }));
 
 export interface FeatureGridProps {

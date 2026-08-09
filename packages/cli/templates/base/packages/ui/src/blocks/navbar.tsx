@@ -22,6 +22,10 @@ export interface NavbarLink {
 // Same-page anchors, matching the ids the other blocks render. The anchor is structure and
 // stays here; the label comes from content, and blanking it there drops the link — which
 // is how a removed section loses its nav entry without editing this file.
+//
+// The CTA button is the exception, and its href comes from content too: it is the one
+// control here that may point off the page, at a signup or a waitlist (content shape
+// rule 5c).
 const defaultLinks: NavbarLink[] = [
   { label: landing.navbar.linkFeatures, href: "#features" },
   { label: landing.navbar.linkPricing, href: "#pricing" },
@@ -39,7 +43,7 @@ export function Navbar({
   siteName = "Acme",
   links = defaultLinks,
   ctaLabel = landing.navbar.ctaLabel,
-  ctaHref = "#cta",
+  ctaHref = landing.navbar.ctaHref,
 }: NavbarProps) {
   const [open, setOpen] = useState(false);
   const toggleRef = useRef<HTMLButtonElement>(null);

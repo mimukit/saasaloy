@@ -11,8 +11,10 @@
 //   landing.*  Marketing copy — what your product is, who it is for, what it costs.
 //              This is the surface a copywriting agent rewrites. Own it, edit it freely.
 //   ui.*       Chrome and accessibility labels — "Monthly", "Most popular", "Close menu",
-//              "Billing period". Nothing here says anything about your product, and the
-//              landing-copy skill never touches it.
+//              "Billing period". Nothing here says anything about your product, so a copy
+//              pass never *rewrites* it. It does get *translated*, key for key, when
+//              landing.* is written in some language other than English — otherwise the
+//              page ships Bangla marketing copy under an English "Most popular" badge.
 //
 // SHAPE RULES. These are not style preferences; each one keeps this file mechanically
 // translatable, because a translation layer reads a keyed record and nothing else:
@@ -23,9 +25,9 @@
 //      reordering the feature grid cannot silently reattach the wrong translation. One
 //      list is exempt: a tier's `features` bullets (`landing.pricing.tiers[].features`)
 //      stay a plain `string[]`. They are the only strings here that nothing else reads —
-//      a `features.items[]` id picks an icon and an `faq.items[]` id is a stable anchor
-//      for a question that outlives its wording, while a tier bullet is read once, as
-//      part of one tier, and is rewritten with that tier whenever the plan changes. An id
+//      a `features.items[]` id and an `faq.items[]` id are both stable anchors for an item
+//      that outlives its wording, while a tier bullet is read once, as part of one tier,
+//      and is rewritten with that tier whenever the plan changes. An id
 //      per bullet would have to be invented by whoever writes the bullet, for no reader.
 //      The cost is real and accepted: reorder a tier's bullets *without* editing them and
 //      a positional catalog follows the slot rather than the sentence.
@@ -35,10 +37,24 @@
 //   4. No runtime concatenation. `/month` + `", billed annually"` is two whole messages
 //      (`ui.pricing.perMonth`, `ui.pricing.perMonthAnnual`) because word order does not
 //      survive the seam in every language.
-//   5. Only user-visible strings live here. `href`s, section `id`s and icons are
-//      structure and stay in the block — with pricing tiers as the one stated exception:
-//      the whole tier list moves here, prices and all, so a copy pass has exactly one
-//      file to rewrite.
+//   5. Only user-visible strings live here. Section `id`s and the same-page anchors that
+//      point at them are structure and stay in the block. Three things break that rule,
+//      all for the same reason — a thing rewritten *with* the copy belongs *near* the
+//      copy, or a rewrite leaves it stranded:
+//        a. Pricing tiers. The whole list, prices and `ctaHref`s included, so a plan
+//           change is one file rather than a file plus a block.
+//        b. A feature's `icon`, held as a registry *name* (`"zap"`) and never a component
+//           — a component cannot cross the .astro island boundary. Rewrite what a feature
+//           is about and its glyph has to be able to follow, or a page about IELTS
+//           listening practice renders a terminal prompt. The names ../blocks/feature-grid.tsx
+//           accepts are listed in that file.
+//        c. The two outbound calls to action — `landing.navbar.ctaHref` and
+//           `landing.cta.primaryActionHref`/`.secondaryActionHref`. These are where "sign
+//           up" actually goes. They leave the page, so unlike `#features` they cannot
+//           break a section link, and the person being interviewed about the product is
+//           the only one who knows the URL.
+//      A translation layer reads `id`, `icon` and every `*Href` as non-message data, the
+//      same way it already has to for a tier's `id`.
 //
 // One chrome string set deliberately lives elsewhere: the theme toggle's labels, in
 // ../lib/theme.ts. That file is inlined verbatim into a pre-paint <script> and is
@@ -52,13 +68,20 @@ export const landing = {
     description: "{siteName}, a Cloudflare-native SaaS.",
   },
 
-  // Header. The hrefs are same-page anchors owned by navbar.tsx; only the words are here.
-  // An empty label hides that link, which is how a removed section loses its nav entry.
+  // Header. The nav links' hrefs are same-page anchors owned by navbar.tsx; only their
+  // words are here. An empty label hides that link, which is how a removed section loses
+  // its nav entry.
+  //
+  // `ctaHref` is the exception (shape rule 5c): the header button is the page's most
+  // clicked control, and where it goes — a signup form, a waitlist, an app — is a fact
+  // about your product, not about the layout. It ships pointing at `#cta`, the closing
+  // section, which is honest for a page with nowhere else to send anyone yet.
   navbar: {
     linkFeatures: "Features",
     linkPricing: "Pricing",
     linkFaq: "FAQ",
     ctaLabel: "Get started",
+    ctaHref: "#cta",
   },
 
   hero: {
@@ -74,41 +97,50 @@ export const landing = {
     title: "Everything the first release needs",
     description:
       "The parts every SaaS ends up building anyway, ready before you write a line of product code.",
-    // `id` picks the icon in feature-grid.tsx and is the stable translation key. Add an
-    // item with a new id and it renders with the fallback icon until you map one.
+    // `id` is the stable translation key and never the array position. `icon` names a
+    // glyph from the registry at the top of ../blocks/feature-grid.tsx — rewrite what a
+    // feature is about and change its icon in the same edit. Every item needs one: a name
+    // the registry doesn't know renders the fallback glyph, but leaving the field off
+    // altogether is a type error, which is the louder and more useful failure.
     items: [
       {
         id: "fast",
+        icon: "zap",
         title: "Fast by default",
         description:
           "Static HTML at the edge, with JavaScript sent only for the parts of the page that actually need it.",
       },
       {
         id: "modules",
+        icon: "layers",
         title: "Composable modules",
         description:
           "Add an API, a database, auth or billing when you need them — never before, and never all at once.",
       },
       {
         id: "source",
+        icon: "terminal",
         title: "Source you own",
         description:
           "Every component lands in your repo as plain, editable source. No black box, no framework to fight.",
       },
       {
         id: "secure",
+        icon: "shield-check",
         title: "Secure foundations",
         description:
           "Sensible defaults for sessions, cookies and origins, so the boring security work is already done.",
       },
       {
         id: "cloudflare",
+        icon: "cloud",
         title: "Cloudflare-native",
         description:
           "Ships to Workers with static assets out of the box — one deploy command, no servers to babysit.",
       },
       {
         id: "current",
+        icon: "gauge",
         title: "Built to stay current",
         description:
           "Dependencies are exact-pinned and updated deliberately, so upgrades are a decision, not a surprise.",
@@ -206,12 +238,18 @@ export const landing = {
     ],
   },
 
+  // The closing ask. Both hrefs are shape rule 5c: outbound destinations, not anchors.
+  // They ship pointing at the homepage because a freshly scaffolded project has nowhere
+  // else to send anyone — replace them with the real signup, waitlist or docs URL, and
+  // write labels the destination can honestly satisfy until you do.
   cta: {
     title: "Start building today",
     description:
       "Set up {siteName} in a couple of minutes. No credit card, no sales call, no lock-in.",
     primaryActionLabel: "Get started",
+    primaryActionHref: "/",
     secondaryActionLabel: "Read the docs",
+    secondaryActionHref: "/",
   },
 
   // Footer navigation, like the navbar: hrefs live in footer.tsx, words live here, and an
