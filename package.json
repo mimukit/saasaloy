@@ -11,9 +11,16 @@
     "pnpm": ">=11"
   },
   "scripts": {
+    "prepare": "husky",
     "build": "turbo run build",
     "dev": "turbo run dev",
-    "lint": "turbo run lint",
+    "lint": "pnpm run lint:types && pnpm run lint:code && pnpm run lint:css && pnpm run format:check",
+    "lint:types": "oxlint -c oxlint.config.mjs --type-aware --deny-warnings packages/cli/src scripts",
+    "lint:code": "oxlint -c oxlint.config.mjs --deny-warnings .",
+    "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
+    "lint:fix": "oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
     "typecheck": "pnpm run typecheck:scripts && turbo run typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "turbo run test",
@@ -32,9 +39,23 @@
   },
   "devDependencies": {
     "@clack/prompts": "1.7.0",
+    "@commitlint/cli": "21.2.1",
+    "@commitlint/config-conventional": "21.2.0",
     "@types/node": "26.1.1",
+    "husky": "9.1.7",
+    "lint-staged": "17.3.0",
+    "oxlint": "1.77.0",
+    "oxlint-tsgolint": "7.0.2001",
     "picocolors": "1.1.1",
+    "prettier": "3.9.6",
+    "prettier-plugin-astro": "0.14.1",
+    "prettier-plugin-tailwindcss": "0.8.1",
+    "stylelint": "17.14.1",
+    "stylelint-config-idiomatic-order": "10.0.0",
+    "stylelint-config-standard": "40.0.0",
+    "stylelint-prettier": "5.0.3",
     "turbo": "2.10.5",
-    "typescript": "7.0.2"
+    "typescript": "7.0.2",
+    "ultracite": "7.10.1"
   }
 }
