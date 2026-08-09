@@ -19,13 +19,13 @@ _Avoid: section — that's the `sections/*.astro` file-drop extension point a mo
 A unit of capability or feature installed by `saasaloy add`.
 
 ### Capability module
-A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, and the Phase-3 set (`queue`, `storage`, `cron`, `kv`, `realtime`, `ai`, `observability`, `ratelimit`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
+A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, `sms`, and the Phase-3 set (`queue`, `storage`, `cron`, `kv`, `realtime`, `ai`, `observability`, `ratelimit`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
 
 ### Provider module
-A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-console`, and the planned `email-resend`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. Allowed only where the capability wraps a *stateless* third-party service ([ADR 0001](docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment); the authoring guide is `.agents/skills/create-provider/`.
+A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-console`, `sms-console`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. Allowed only where the capability wraps a *stateless* third-party service ([ADR 0001](docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment); the authoring guide is `.agents/skills/create-provider/`.
 _Taxonomy wart, on purpose: a provider module is typed `saasaloy:feature`, because `registry-item.schema.json` constrains `type` to `saasaloy:capability | saasaloy:feature`. It isn't a feature in the sense above — it adds no user-facing behavior. A third tier would be a descriptor-format change, and one wart is cheaper than that._
 
 ### Convention-based extension point
