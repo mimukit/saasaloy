@@ -1,0 +1,9 @@
+{
+  // Discovery shim, not a second configuration. `tsconfig.scripts.json` at the repo
+  // root stays the single source of compiler options for `scripts/` (and remains what
+  // `pnpm typecheck:scripts` runs), but oxlint's type-aware pass walks up from each
+  // file looking for a literal `tsconfig.json` and cannot see a non-standard name.
+  // Without this file every `node:` builtin degrades to an error type here and the
+  // `typescript/no-unsafe-*` family reports ~180 phantom violations.
+  "extends": "../tsconfig.scripts.json"
+}
