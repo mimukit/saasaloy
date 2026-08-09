@@ -38,9 +38,18 @@ const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
   current: GaugeIcon,
 };
 
+// `Object.hasOwn` first, not a bare index: `FEATURE_ICONS[id]` walks the prototype chain, so
+// an id of `constructor` or `toString` resolves to an inherited function — not nullish, so a
+// `?? SparklesIcon` fallback never fires and React is handed something that isn't a
+// component. Ids are author-controlled and the saasaloy-landing-copy skill rewrites them, so
+// this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
+function iconFor(id: string): ComponentType<{ className?: string }> {
+  return (Object.hasOwn(FEATURE_ICONS, id) ? FEATURE_ICONS[id] : undefined) ?? SparklesIcon;
+}
+
 const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
   ...item,
-  icon: FEATURE_ICONS[item.id] ?? SparklesIcon,
+  icon: iconFor(item.id),
 }));
 
 export interface FeatureGridProps {
