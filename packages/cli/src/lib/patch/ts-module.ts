@@ -23,12 +23,17 @@ export interface PluginArrayInsert {
  * - array property absent → create it as `[call()]`;
  * - import already present → not duplicated.
  */
-export function insertIntoPluginArray(source: string, patch: PluginArrayInsert): string {
+export function insertIntoPluginArray(
+  source: string,
+  patch: PluginArrayInsert
+): string {
   const mod = parseModule(source);
 
   const exported = mod.exports[patch.exportName];
   const callArg = exported?.$args?.[0];
-  if (!callArg) return source; // not the shape we expected — leave it be
+  if (!callArg) {
+    return source;
+  } // not the shape we expected — leave it be
 
   const array = callArg[patch.arrayProp];
 
@@ -36,9 +41,14 @@ export function insertIntoPluginArray(source: string, patch: PluginArrayInsert):
   // NB: magicast's array proxy hands raw AST nodes to `.some`/`.forEach` callbacks
   // (no `$type`/`$callee`), so we index each element to get the wrapped proxy.
   if (Array.isArray(array)) {
+    // for-of is not equivalent here: it would hand back the same raw AST nodes the
+    // callback form does, which is the whole reason this indexes.
+    // oxlint-disable-next-line typescript/prefer-for-of
     for (let i = 0; i < array.length; i++) {
       const el: unknown = array[i];
-      if (isFunctionCall(el) && el.$callee === patch.call) return source;
+      if (isFunctionCall(el) && el.$callee === patch.call) {
+        return source;
+      }
     }
   }
 
@@ -59,10 +69,18 @@ export function insertIntoPluginArray(source: string, patch: PluginArrayInsert):
     callArg[patch.arrayProp] = [newCall];
   }
 
-  return generateCode(mod).code;
+  // The generated project ships Prettier and runs it as part of its own `pnpm lint`,
+  // so what the codemod writes has to survive `prettier --check`. Two recast defaults
+  // do not: it prints new named imports as `{foo}`, and it drops the file's final
+  // newline. Both are ours to correct, not the user's to re-fix after every
+  // `saasaloy add`.
+  const code = generateCode(mod, { format: { objectCurlySpacing: true } }).code;
+  return source.endsWith("\n") && !code.endsWith("\n") ? `${code}\n` : code;
 }
 
-function isFunctionCall(value: unknown): value is { $type: string; $callee: string } {
+function isFunctionCall(
+  value: unknown
+): value is { $type: string; $callee: string } {
   return (
     typeof value === "object" &&
     value !== null &&
