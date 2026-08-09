@@ -18,6 +18,8 @@
       }
     }
   ],
-  "files": [{ "path": "files/console.ts", "target": "@email/providers/console.ts" }],
+  "files": [
+    { "path": "files/console.ts", "target": "@email/providers/console.ts" }
+  ],
   "scaffolds": []
 }

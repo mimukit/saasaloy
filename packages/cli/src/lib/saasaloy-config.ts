@@ -19,26 +19,34 @@ export async function loadConfig(root: string): Promise<LoadedConfig> {
   const file = join(root, CONFIG_FILE);
   if (!(await pathExists(file))) {
     throw new Error(
-      `No ${CONFIG_FILE} found in ${root}. Run \`saasaloy init\` first, or cd into a Saasaloy project.`,
+      `No ${CONFIG_FILE} found in ${root}. Run \`saasaloy init\` first, or cd into a Saasaloy project.`
     );
   }
-  const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
+  const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
   const result = await validateSaasaloyConfig(parsed);
   if (!result.valid) {
-    throw new Error(`${CONFIG_FILE} is invalid:\n  ${result.errors.join("\n  ")}`);
+    throw new Error(
+      `${CONFIG_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
+    );
   }
   return parsed as LoadedConfig;
 }
 
-export async function saveConfig(root: string, config: LoadedConfig): Promise<void> {
+export async function saveConfig(
+  root: string,
+  config: LoadedConfig
+): Promise<void> {
   const file = join(root, CONFIG_FILE);
-  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, "utf8");
+  await writeFile(file, `${JSON.stringify(config, null, 2)}\n`, "utf-8");
 }
 
 // Resolve `@api/routes/x.ts` against the alias map to a project-relative POSIX path
 // (e.g. `apps/api/src/routes/x.ts`). POSIX separators keep manifest keys stable
 // across OSes; callers split on "/" when touching the filesystem.
-export function resolveTarget(aliases: Record<string, string>, target: string): string {
+export function resolveTarget(
+  aliases: Record<string, string>,
+  target: string
+): string {
   const slash = target.indexOf("/");
   if (slash === -1) {
     throw new Error(`Malformed target "${target}" — expected "@alias/rest".`);
@@ -48,7 +56,9 @@ export function resolveTarget(aliases: Record<string, string>, target: string): 
   const base = aliases[alias];
   if (base === undefined) {
     const known = Object.keys(aliases).join(", ") || "(none)";
-    throw new Error(`Unknown alias "${alias}" in target "${target}". Known aliases: ${known}.`);
+    throw new Error(
+      `Unknown alias "${alias}" in target "${target}". Known aliases: ${known}.`
+    );
   }
   // `base` is already POSIX + no leading slash (enforced by the schema); join by hand
   // to avoid the platform separator that node:path would introduce on Windows.

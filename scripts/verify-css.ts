@@ -19,10 +19,9 @@
 // `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 
 // Astro emits into the app's own dist/, and the playground is a Turborepo monorepo, so
 // the output is under apps/web — NOT a top-level .dev/playground/dist.
@@ -32,7 +31,8 @@ const webSrcDir = join(root, ".dev/playground/apps/web/src");
 // The sentinel utility, and the file that is allowed to contain it. Kept as a literal
 // rather than imported, so this check fails if the source file moves or is deleted.
 const SENTINEL = "--saasaloy-css-probe";
-const SENTINEL_SOURCE = "packages/cli/templates/base/packages/ui/src/lib/sentinel.ts";
+const SENTINEL_SOURCE =
+  "packages/cli/templates/base/packages/ui/src/lib/sentinel.ts";
 
 // Astro inlines any stylesheet under ~4 kB straight into the page instead of emitting a
 // .css asset, so a CSS-only scan would pass or fail depending on the theme's size. Scan
@@ -41,7 +41,9 @@ const BUILT_EXTENSIONS = [".css", ".html"];
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`verify-css: ${message}`);
-  for (const line of detail) console.error(`  ${line}`);
+  for (const line of detail) {
+    console.error(`  ${line}`);
+  }
   process.exit(1);
 }
 
@@ -50,7 +52,7 @@ function fail(message: string, ...detail: string[]): never {
 async function collectFiles(
   dir: string,
   extensions: readonly string[] | null = null,
-  out: string[] = [],
+  out: string[] = []
 ): Promise<string[]> {
   let entries;
   try {
@@ -62,17 +64,25 @@ async function collectFiles(
     const abs = join(dir, entry.name);
     if (entry.isDirectory()) {
       await collectFiles(abs, extensions, out);
-    } else if (!extensions || extensions.some((ext) => entry.name.endsWith(ext))) {
+    } else if (
+      !extensions ||
+      extensions.some((ext) => entry.name.endsWith(ext))
+    ) {
       out.push(abs);
     }
   }
   return out;
 }
 
-async function filesContaining(files: readonly string[], needle: string): Promise<string[]> {
+async function filesContaining(
+  files: readonly string[],
+  needle: string
+): Promise<string[]> {
   const hits = [];
   for (const file of files) {
-    if ((await readFile(file, "utf8")).includes(needle)) hits.push(file);
+    if ((await readFile(file, "utf-8")).includes(needle)) {
+      hits.push(file);
+    }
   }
   return hits;
 }
@@ -85,7 +95,7 @@ if (builtFiles.length === 0) {
   fail(
     `no built output under ${relative(root, distDir)}`,
     "Run `pnpm deps:verify`, which builds the playground before this check.",
-    "If the build did run, Astro's output directory moved and this script needs updating.",
+    "If the build did run, Astro's output directory moved and this script needs updating."
   );
 }
 
@@ -97,7 +107,7 @@ if (leaked.length > 0) {
   fail(
     `sentinel "${SENTINEL}" leaked into apps/web source`,
     ...leaked.map((file) => relative(root, file)),
-    `It must exist only in ${SENTINEL_SOURCE}, or this check proves nothing about the glob.`,
+    `It must exist only in ${SENTINEL_SOURCE}, or this check proves nothing about the glob.`
   );
 }
 
@@ -108,11 +118,11 @@ if (matches.length === 0) {
     "Tailwind is not scanning packages/ui — every utility class in @repo/ui is being dropped.",
     "Check the `@source` globs in packages/cli/templates/base/packages/ui/src/styles/globals.css:",
     'the app glob is FOUR levels up ("../../../../apps/**"), not three.',
-    `Also confirm the sentinel still exists in ${SENTINEL_SOURCE}.`,
+    `Also confirm the sentinel still exists in ${SENTINEL_SOURCE}.`
   );
 }
 
 console.log(
   `verify-css: sentinel "${SENTINEL}" found in ` +
-    `${matches.map((file) => relative(distDir, file)).join(", ")} — Tailwind is scanning packages/ui.`,
+    `${matches.map((file) => relative(distDir, file)).join(", ")} — Tailwind is scanning packages/ui.`
 );

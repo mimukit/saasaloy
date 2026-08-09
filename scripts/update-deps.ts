@@ -34,8 +34,7 @@
 // types are checked by `pnpm typecheck` through tsconfig.scripts.json (#54).
 
 import { readFile, writeFile, readdir } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join, resolve, relative } from "node:path";
+import { join, relative, resolve } from "node:path";
 import {
   intro,
   outro,
@@ -50,7 +49,7 @@ import {
 import type { Option } from "@clack/prompts";
 import pc from "picocolors";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 
 // --- Types -------------------------------------------------------------------
 // Everything read from outside this script — npm packuments, package.jsons, module
@@ -165,9 +164,9 @@ type Colorize = (text: string) => string;
 // --- CLI flags ---------------------------------------------------------------
 const argv = process.argv.slice(2);
 const flags = {
-  check: argv.includes("--check"),
-  allowMajor: argv.includes("--allow-major"),
   allowFresh: argv.includes("--allow-fresh"),
+  allowMajor: argv.includes("--allow-major"),
+  check: argv.includes("--check"),
   dryRun: argv.includes("--dry-run"),
   yes: argv.includes("--yes") || argv.includes("-y"),
 };
@@ -183,7 +182,7 @@ const unknown = argv.filter((a) => a.startsWith("-") && !KNOWN.has(a));
 if (unknown.length > 0) {
   console.error(`Unknown flag(s): ${unknown.join(", ")}`);
   console.error(
-    "usage: update-deps.ts [--check] [--allow-major] [--allow-fresh] [--dry-run] [--yes|-y]",
+    "usage: update-deps.ts [--check] [--allow-major] [--allow-fresh] [--dry-run] [--yes|-y]"
   );
   process.exit(2);
 }
@@ -212,8 +211,12 @@ function isSkippedSpec(spec: string): boolean {
 const EXACT_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
 
 function classifySpec(spec: string): SpecKind {
-  if (spec === "" || spec === "latest" || spec === "*") return "bare";
-  if (EXACT_RE.test(spec)) return "exact";
+  if (spec === "" || spec === "latest" || spec === "*") {
+    return "bare";
+  }
+  if (EXACT_RE.test(spec)) {
+    return "exact";
+  }
   return "range";
 }
 
@@ -241,7 +244,9 @@ function parseSemver(v: string): Semver | null {
 function cmp(a: string, b: string): number {
   const pa = parseSemver(a);
   const pb = parseSemver(b);
-  if (pa === null || pb === null) return (pa === null ? 0 : 1) - (pb === null ? 0 : 1);
+  if (pa === null || pb === null) {
+    return (pa === null ? 0 : 1) - (pb === null ? 0 : 1);
+  }
   return pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2];
 }
 
@@ -257,11 +262,13 @@ function isUnorderableExact(dep: Dep): boolean {
 
 // --- pnpm-workspace.yaml: minimumReleaseAge (single source of truth) ---------
 async function readMinReleaseMinutes(): Promise<number> {
-  const text = await readFile(join(root, "pnpm-workspace.yaml"), "utf8");
+  const text = await readFile(join(root, "pnpm-workspace.yaml"), "utf-8");
   // Match the active (non-commented) `minimumReleaseAge: <n>` line.
   for (const line of text.split("\n")) {
     const m = line.match(/^\s*minimumReleaseAge:\s*(\d+)\s*$/);
-    if (m) return Number(m[1]);
+    if (m) {
+      return Number(m[1]);
+    }
   }
   return 0; // no cooldown configured → nothing is quarantined
 }
@@ -275,11 +282,15 @@ const registryCache = new Map<string, Promise<Packument>>();
 // Narrow the packument once, at the boundary: a missing or malformed `time` / `versions`
 // becomes an empty map, which is exactly what the resolver's `?? {}` produced before.
 function toPackument(doc: unknown): Packument {
-  if (!isRecord(doc)) return { time: {}, versions: {} };
+  if (!isRecord(doc)) {
+    return { time: {}, versions: {} };
+  }
   const time: Record<string, string> = {};
   if (isRecord(doc.time)) {
     for (const [version, published] of Object.entries(doc.time)) {
-      if (typeof published === "string") time[version] = published;
+      if (typeof published === "string") {
+        time[version] = published;
+      }
     }
   }
   return { time, versions: isRecord(doc.versions) ? doc.versions : {} };
@@ -287,11 +298,15 @@ function toPackument(doc: unknown): Packument {
 
 function fetchPackument(name: string): Promise<Packument> {
   const cached = registryCache.get(name);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const p = (async (): Promise<Packument> => {
     const url = `https://registry.npmjs.org/${name.replace("/", "%2F")}`;
     const res = await fetch(url);
-    if (!res.ok) throw new Error(`registry ${res.status} for ${name}`);
+    if (!res.ok) {
+      throw new Error(`registry ${res.status} for ${name}`);
+    }
     return toPackument(await res.json());
   })();
   registryCache.set(name, p);
@@ -304,9 +319,9 @@ function fetchPackument(name: string): Promise<Packument> {
 async function mapWithConcurrency<T, R>(
   items: readonly T[],
   limit: number,
-  fn: (item: T, index: number) => Promise<R>,
+  fn: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
-  const results = new Array<R>(items.length);
+  const results = Array.from<R>({ length: items.length });
   let next = 0;
   const worker = async () => {
     while (next < items.length) {
@@ -315,7 +330,9 @@ async function mapWithConcurrency<T, R>(
       results[i] = await fn(items[i]!, i);
     }
   };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  await Promise.all(
+    Array.from({ length: Math.min(limit, items.length) }, worker)
+  );
   return results;
 }
 
@@ -327,18 +344,22 @@ async function mapWithConcurrency<T, R>(
 async function resolveVersion(
   name: string,
   curMajor: number | null,
-  minMinutes: number,
+  minMinutes: number
 ): Promise<Resolved> {
   const doc = await fetchPackument(name);
   const times = doc.time;
   const now = Date.now();
   const cooldownMs = minMinutes * 60 * 1000;
 
-  const stable = Object.keys(doc.versions).filter((v) => parseSemver(v) !== null);
+  const stable = Object.keys(doc.versions).filter(
+    (v) => parseSemver(v) !== null
+  );
   stable.sort(cmp);
 
   const clearsCooldown = (v: string): boolean => {
-    if (flags.allowFresh) return true;
+    if (flags.allowFresh) {
+      return true;
+    }
     const t = times[v];
     return t ? now - Date.parse(t) >= cooldownMs : false;
   };
@@ -347,24 +368,35 @@ async function resolveVersion(
   // per-dep in the picker (or with --allow-major for non-interactive runs), never by
   // silently lifting the cap here. Bare specs have no anchor, so nothing to cap against.
   const withinMajor = (v: string): boolean => {
-    if (curMajor === null) return true;
+    if (curMajor === null) {
+      return true;
+    }
     const parsed = parseSemver(v);
     return parsed !== null && parsed[0] === curMajor;
   };
 
   // Every `[length - 1]` below is guarded by the `.length` check in front of it.
   const capped = stable.filter(withinMajor);
-  const highestWithinMajor = capped.length ? capped[capped.length - 1]! : null;
-  const highestOverall = stable.length ? stable[stable.length - 1]! : null;
+  const highestWithinMajor = capped.length ? capped.at(-1)! : null;
+  const highestOverall = stable.length ? stable.at(-1)! : null;
   const eligibleWithin = capped.filter(clearsCooldown);
-  const target = eligibleWithin.length ? eligibleWithin[eligibleWithin.length - 1]! : null;
+  const target = eligibleWithin.length ? eligibleWithin.at(-1)! : null;
   const eligibleAll = stable.filter(clearsCooldown);
-  const targetOverall = eligibleAll.length ? eligibleAll[eligibleAll.length - 1]! : null;
-  const highestOverallSemver = highestOverall === null ? null : parseSemver(highestOverall);
+  const targetOverall = eligibleAll.length ? eligibleAll.at(-1)! : null;
+  const highestOverallSemver =
+    highestOverall === null ? null : parseSemver(highestOverall);
   const newerMajor =
-    curMajor !== null && highestOverallSemver !== null && highestOverallSemver[0] > curMajor;
+    curMajor !== null &&
+    highestOverallSemver !== null &&
+    highestOverallSemver[0] > curMajor;
 
-  return { target, targetOverall, highestWithinMajor, highestOverall, newerMajor };
+  return {
+    highestOverall,
+    highestWithinMajor,
+    newerMajor,
+    target,
+    targetOverall,
+  };
 }
 
 // --- Manifest discovery ------------------------------------------------------
@@ -374,7 +406,7 @@ async function resolveVersion(
 async function walk(
   dir: string,
   match: (file: string) => boolean,
-  out: string[],
+  out: string[]
 ): Promise<string[]> {
   let entries;
   try {
@@ -385,7 +417,9 @@ async function walk(
   for (const entry of entries) {
     const abs = join(dir, entry.name);
     if (entry.isDirectory()) {
-      if (entry.name === "node_modules") continue;
+      if (entry.name === "node_modules") {
+        continue;
+      }
       await walk(abs, match, out);
     } else if (match(abs)) {
       out.push(abs);
@@ -401,7 +435,7 @@ async function discoverManifests(): Promise<ManifestFile[]> {
   for (const file of await walk(
     join(root, "packages/cli/templates/base"),
     (f) => f.endsWith("package.json"),
-    [],
+    []
   )) {
     manifests.push({ file, kind: "package-json" });
   }
@@ -410,7 +444,7 @@ async function discoverManifests(): Promise<ManifestFile[]> {
   for (const file of await walk(
     join(root, "modules"),
     (f) => f.endsWith("registry-item.json"),
-    [],
+    []
   )) {
     manifests.push({ file, kind: "registry-item" });
   }
@@ -419,8 +453,8 @@ async function discoverManifests(): Promise<ManifestFile[]> {
   // create-module scaffold ships one, but the glob is wired now.
   for (const file of await walk(
     join(root, "modules"),
-    (f) => f.endsWith("package.json") && f.includes(`${join("", "files", "")}`),
-    [],
+    (f) => f.endsWith("package.json") && f.includes(join("", "files", "")),
+    []
   )) {
     manifests.push({ file, kind: "package-json" });
   }
@@ -432,7 +466,7 @@ async function discoverManifests(): Promise<ManifestFile[]> {
 // { file, kind }, the parsed document, and the scannable deps as a flat list of
 // { bucket, name, spec, kind }. `bucket` is "dependencies" | "devDependencies".
 async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
-  const raw = await readFile(manifest.file, "utf8");
+  const raw = await readFile(manifest.file, "utf-8");
   const parsed: unknown = JSON.parse(raw);
   const json = isRecord(parsed) ? parsed : {};
   const deps: Dep[] = [];
@@ -442,29 +476,41 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   // drop every dep it holds out of the cooldown gate, so it fails the run loudly (exit 2).
   const pushObject = (bucket: DepBucket) => {
     const map = json[bucket];
-    if (map === undefined || map === null) return;
+    if (map === undefined || map === null) {
+      return;
+    }
     if (!isRecord(map)) {
-      throw new Error(`${manifest.file}: "${bucket}" must be an object of name → version`);
+      throw new Error(
+        `${manifest.file}: "${bucket}" must be an object of name → version`
+      );
     }
     for (const [name, value] of Object.entries(map)) {
       const spec = String(value);
-      if (isSkippedName(name) || isSkippedSpec(spec)) continue;
-      deps.push({ bucket, name, spec, kind: classifySpec(spec) });
+      if (isSkippedName(name) || isSkippedSpec(spec)) {
+        continue;
+      }
+      deps.push({ bucket, kind: classifySpec(spec), name, spec });
     }
   };
   const pushArray = (bucket: DepBucket) => {
     const arr = json[bucket];
-    if (arr === undefined || arr === null) return;
+    if (arr === undefined || arr === null) {
+      return;
+    }
     if (!Array.isArray(arr)) {
-      throw new Error(`${manifest.file}: "${bucket}" must be an array of "name@version" entries`);
+      throw new TypeError(
+        `${manifest.file}: "${bucket}" must be an array of "name@version" entries`
+      );
     }
     for (const value of arr) {
       const entry = String(value);
       const at = entry.lastIndexOf("@");
       const name = at > 0 ? entry.slice(0, at) : entry;
       const spec = at > 0 ? entry.slice(at + 1) : "";
-      if (isSkippedName(name) || isSkippedSpec(spec)) continue;
-      deps.push({ bucket, name, spec, kind: classifySpec(spec) });
+      if (isSkippedName(name) || isSkippedSpec(spec)) {
+        continue;
+      }
+      deps.push({ bucket, kind: classifySpec(spec), name, spec });
     }
   };
 
@@ -475,7 +521,7 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
     pushArray("dependencies");
     pushArray("devDependencies");
   }
-  return { file: manifest.file, kind: manifest.kind, json, deps };
+  return { deps, file: manifest.file, json, kind: manifest.kind };
 }
 
 // --- Status decision ---------------------------------------------------------
@@ -484,18 +530,32 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
 const ACTIONABLE = new Set<Status>(["outdated", "range→exact", "bare→pinned"]);
 
 function decideStatus(dep: Dep, r: Resolved): Status {
-  if (r.target === null) return "within-cooldown"; // every eligible version is too fresh
-  if (dep.kind === "bare") return "bare→pinned";
-  if (dep.kind === "range") return "range→exact";
+  if (r.target === null) {
+    return "within-cooldown";
+  } // every eligible version is too fresh
+  if (dep.kind === "bare") {
+    return "bare→pinned";
+  }
+  if (dep.kind === "range") {
+    return "range→exact";
+  }
   // exact — but only an orderable stable triple can be compared against the target, so an
   // unorderable pin is reported as unresolved (non-actionable: no exit-1, no write) rather
   // than being mis-read as outdated.
-  if (isUnorderableExact(dep)) return "unresolved";
-  if (cmp(r.target, dep.spec) > 0) return "outdated";
+  if (isUnorderableExact(dep)) {
+    return "unresolved";
+  }
+  if (cmp(r.target, dep.spec) > 0) {
+    return "outdated";
+  }
   // target === current within major. A fresher within-major stable held back by the
   // cooldown is transient; a newer major is the deliberate --allow-major path.
-  if (r.highestWithinMajor && cmp(r.highestWithinMajor, dep.spec) > 0) return "within-cooldown";
-  if (r.newerMajor) return "major-available";
+  if (r.highestWithinMajor && cmp(r.highestWithinMajor, dep.spec) > 0) {
+    return "within-cooldown";
+  }
+  if (r.newerMajor) {
+    return "major-available";
+  }
   return "up-to-date";
 }
 
@@ -504,11 +564,17 @@ async function readRepoPins(): Promise<Map<string, string>> {
   const pins = new Map<string, string>(); // name → exact/spec version
   for (const rel of ["package.json", "packages/cli/package.json"]) {
     try {
-      const parsed: unknown = JSON.parse(await readFile(join(root, rel), "utf8"));
-      if (!isRecord(parsed)) continue;
+      const parsed: unknown = JSON.parse(
+        await readFile(join(root, rel), "utf-8")
+      );
+      if (!isRecord(parsed)) {
+        continue;
+      }
       for (const bucket of DEP_BUCKETS) {
         const map = parsed[bucket];
-        if (!isRecord(map)) continue;
+        if (!isRecord(map)) {
+          continue;
+        }
         for (const [name, spec] of Object.entries(map)) {
           pins.set(name, String(spec));
         }
@@ -522,23 +588,23 @@ async function readRepoPins(): Promise<Map<string, string>> {
 
 // --- Report + write ----------------------------------------------------------
 const STATUS_LABEL: Record<Status, string> = {
-  "up-to-date": "up-to-date",
-  outdated: "outdated",
-  "range→exact": "range→exact",
   "bare→pinned": "bare→pinned",
   "major-available": "major-available",
-  "within-cooldown": "within-cooldown (skipped)",
+  outdated: "outdated",
+  "range→exact": "range→exact",
   unresolved: "unresolved (registry error)",
+  "up-to-date": "up-to-date",
+  "within-cooldown": "within-cooldown (skipped)",
 };
 
 // --- Terminal presentation (clack + picocolors) ------------------------------
 // stripAnsi / wrapForNote are duplicated from packages/cli/src/lib/tui.ts rather
 // than imported: this is a standalone root script, and reaching across the package
 // boundary into the CLI's TS source would drag in a build step. They're tiny.
-const ANSI_PATTERN = /\x1b\[[0-9;]*m/g;
+const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
 // The escape itself, as an escape sequence rather than a literal control byte — a raw
 // 0x1b in the source makes grep treat this whole file as binary and skip it.
-const ESC = "\x1b";
+const ESC = "\u001B";
 function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
 }
@@ -579,10 +645,18 @@ function wrapForNote(text: string): string {
 function semverDelta(cur: string, target: string): SemverLevel | null {
   const a = parseSemver(cur);
   const b = parseSemver(target);
-  if (!a || !b) return null;
-  if (b[0] !== a[0]) return "major";
-  if (b[1] !== a[1]) return "minor";
-  if (b[2] !== a[2]) return "patch";
+  if (!a || !b) {
+    return null;
+  }
+  if (b[0] !== a[0]) {
+    return "major";
+  }
+  if (b[1] !== a[1]) {
+    return "minor";
+  }
+  if (b[2] !== a[2]) {
+    return "patch";
+  }
   return "none";
 }
 
@@ -594,12 +668,16 @@ const DELTA_COLOR = { major: pc.red, minor: pc.cyan, patch: pc.green };
 // bare) has no triple to diff, so the whole exact target reads cyan (a migration).
 function colorTarget(cur: string, target: string): string {
   const delta = semverDelta(cur, target);
-  if (!delta || delta === "none") return pc.cyan(target);
+  if (!delta || delta === "none") {
+    return pc.cyan(target);
+  }
   // A bump level means both versions parsed, so this re-parse cannot fail — but fall
   // back to the migration color instead of asserting, so a later change to semverDelta
   // can never turn a report row into a crash.
   const b = parseSemver(target);
-  if (!b) return pc.cyan(target);
+  if (!b) {
+    return pc.cyan(target);
+  }
   const first = delta === "major" ? 0 : delta === "minor" ? 1 : 2;
   const head = b.slice(0, first).join(".");
   const tail = b.slice(first).join(".");
@@ -618,16 +696,21 @@ function groupKey(row: Row): GroupKey {
       return d === "major" ? "major" : d === "minor" ? "minor" : "patch";
     }
     case "range→exact":
-    case "bare→pinned":
+    case "bare→pinned": {
       return "migration";
-    case "major-available":
+    }
+    case "major-available": {
       return "major-available";
-    case "within-cooldown":
+    }
+    case "within-cooldown": {
       return "cooldown";
-    case "unresolved":
+    }
+    case "unresolved": {
       return "unresolved";
-    default:
+    }
+    default: {
       return "up-to-date";
+    }
   }
 }
 
@@ -666,16 +749,20 @@ function renderMajorRow(row: Row): string {
 // maintainer opts into it per-dep (picker) or wholesale (--allow-major). When both are
 // chosen for one dep the write pass keeps the higher version, so major wins.
 const PRIMARY_GROUP_TITLE = {
-  patch: "Patch",
-  minor: "Minor",
   migration: "Pin / migrate to exact",
+  minor: "Minor",
+  patch: "Patch",
 };
 const MAJOR_GROUP_TITLE = "Major — crosses a major, review before selecting";
 
 function primaryGroupTitle(cur: string, target: string): string {
   const d = semverDelta(cur, target);
-  if (d === "patch") return PRIMARY_GROUP_TITLE.patch;
-  if (d === "minor") return PRIMARY_GROUP_TITLE.minor;
+  if (d === "patch") {
+    return PRIMARY_GROUP_TITLE.patch;
+  }
+  if (d === "minor") {
+    return PRIMARY_GROUP_TITLE.minor;
+  }
   return PRIMARY_GROUP_TITLE.migration; // range/bare migration — no diffable triple
 }
 
@@ -683,24 +770,33 @@ function buildCandidates(rows: Row[]): Candidate[] {
   const out: Candidate[] = [];
   for (const row of rows) {
     const r = row.resolved;
-    if (!r) continue;
+    if (!r) {
+      continue;
+    }
     // Nothing is ever written over an unorderable exact pin — not even the opt-in major
     // arm below, which would otherwise cross a major on a spec we cannot compare.
-    if (isUnorderableExact(row.dep)) continue;
+    if (isUnorderableExact(row.dep)) {
+      continue;
+    }
     const cur = row.dep.spec;
     if (ACTIONABLE.has(row.status) && r.target && r.target !== cur) {
       out.push({
+        group: primaryGroupTitle(cur, r.target),
+        kind: "primary",
         row,
         target: r.target,
-        kind: "primary",
-        group: primaryGroupTitle(cur, r.target),
       });
     }
     if (r.newerMajor && r.targetOverall) {
       const mo = parseSemver(r.targetOverall);
       const cm = specMajor(cur);
       if (mo && cm !== null && mo[0] > cm && r.targetOverall !== cur) {
-        out.push({ row, target: r.targetOverall, kind: "major", group: MAJOR_GROUP_TITLE });
+        out.push({
+          group: MAJOR_GROUP_TITLE,
+          kind: "major",
+          row,
+          target: r.targetOverall,
+        });
       }
     }
   }
@@ -711,7 +807,10 @@ function buildCandidates(rows: Row[]): Candidate[] {
 function candidateLabel(c: Candidate): string {
   const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
   const cur = c.row.dep.spec === "" ? pc.dim("(bare)") : c.row.dep.spec;
-  const tgt = c.kind === "major" ? pc.red(c.target) : colorTarget(c.row.dep.spec, c.target);
+  const tgt =
+    c.kind === "major"
+      ? pc.red(c.target)
+      : colorTarget(c.row.dep.spec, c.target);
   return `${pc.cyan(c.row.dep.name)}${dev}  ${cur} ${pc.dim("→")} ${tgt}`;
 }
 
@@ -733,7 +832,9 @@ function selectionLine(c: Candidate): string {
 
 // The interactive group-picker + confirm. Returns the chosen candidates, or null when
 // the maintainer cancelled, declined the confirm, or selected nothing (no files touched).
-async function pickInteractive(candidates: Candidate[]): Promise<Candidate[] | null> {
+async function pickInteractive(
+  candidates: Candidate[]
+): Promise<Candidate[] | null> {
   const ORDER = [
     PRIMARY_GROUP_TITLE.patch,
     PRIMARY_GROUP_TITLE.minor,
@@ -742,26 +843,30 @@ async function pickInteractive(candidates: Candidate[]): Promise<Candidate[] | n
   ];
   // An option's value is its index into `candidates`, so a pick maps straight back.
   const groups: Record<string, Option<number>[]> = {};
-  candidates.forEach((c, i) => {
+  for (const [i, c] of candidates.entries()) {
     (groups[c.group] ??= []).push({
-      value: i,
-      label: candidateLabel(c),
       hint: relative(root, c.row.manifest.file),
+      label: candidateLabel(c),
+      value: i,
     });
-  });
+  }
   const options: Record<string, Option<number>[]> = {};
   for (const title of ORDER) {
     const group = groups[title];
-    if (group) options[title] = group;
+    if (group) {
+      options[title] = group;
+    }
   }
 
   const picked = await groupMultiselect<number>({
+    groupSpacing: 1,
+    initialValues: candidates.flatMap((c, i) =>
+      c.kind === "primary" ? [i] : []
+    ),
     message: "Select updates to apply",
     options,
-    initialValues: candidates.flatMap((c, i) => (c.kind === "primary" ? [i] : [])),
     required: false,
     selectableGroups: true,
-    groupSpacing: 1,
   });
   if (isCancel(picked)) {
     cancel("Update cancelled — no files changed.");
@@ -775,7 +880,11 @@ async function pickInteractive(candidates: Candidate[]): Promise<Candidate[] | n
   const chosen = picked.flatMap((i) => candidates[i] ?? []);
   note(
     wrapForNote(chosen.map(selectionLine).join("\n")),
-    pc.cyan(pc.bold(`Selected ${chosen.length} update${chosen.length === 1 ? "" : "s"}`)),
+    pc.cyan(
+      pc.bold(
+        `Selected ${chosen.length} update${chosen.length === 1 ? "" : "s"}`
+      )
+    )
   );
   const ok = await confirm({
     message: `Apply ${chosen.length} update${chosen.length === 1 ? "" : "s"}?`,
@@ -797,8 +906,8 @@ async function main(): Promise<void> {
   log.info(
     pc.dim(
       `exact pins · within-major · ${minMinutes}min (${days}d) cooldown` +
-        `${flags.allowMajor ? " · --allow-major" : ""}${flags.allowFresh ? " · --allow-fresh" : ""}`,
-    ),
+        `${flags.allowMajor ? " · --allow-major" : ""}${flags.allowFresh ? " · --allow-fresh" : ""}`
+    )
   );
 
   // Flatten every scannable dep across manifests, then resolve them in parallel (bounded)
@@ -809,30 +918,40 @@ async function main(): Promise<void> {
   for (const discoveredManifest of discovered) {
     const manifest = await readManifestDeps(discoveredManifest);
     manifests.push(manifest);
-    for (const dep of manifest.deps) jobs.push({ manifest, dep });
+    for (const dep of manifest.deps) {
+      jobs.push({ manifest, dep });
+    }
   }
 
   const s = spinner();
-  s.start(`Resolving ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
+  s.start(
+    `Resolving ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`
+  );
   let done = 0;
   const rows = await mapWithConcurrency(jobs, 12, async ({ manifest, dep }) => {
     let row: Row;
     try {
-      const resolved = await resolveVersion(dep.name, specMajor(dep.spec), minMinutes);
-      row = { manifest, dep, resolved, status: decideStatus(dep, resolved) };
-    } catch (err) {
+      const resolved = await resolveVersion(
+        dep.name,
+        specMajor(dep.spec),
+        minMinutes
+      );
+      row = { dep, manifest, resolved, status: decideStatus(dep, resolved) };
+    } catch (error) {
       row = {
         manifest,
         dep,
         resolved: null,
         status: "unresolved",
-        error: err instanceof Error ? err.message : String(err),
+        error: error instanceof Error ? error.message : String(error),
       };
     }
     s.message(`Resolved ${++done}/${jobs.length} — ${dep.name}`);
     return row;
   });
-  s.stop(`Resolved ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`);
+  s.stop(
+    `Resolved ${jobs.length} dependenc${jobs.length === 1 ? "y" : "ies"} from npm`
+  );
 
   // Informational: a shared dep whose major diverges from the repo's own pin. Built after
   // resolution so the note order stays stable regardless of parallel completion order.
@@ -846,7 +965,7 @@ async function main(): Promise<void> {
       specMajor(repoSpec) !== specMajor(dep.spec)
     ) {
       notes.push(
-        `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`,
+        `${dep.name}: template pins major ${specMajor(dep.spec)} vs repo's ${specMajor(repoSpec)} (${repoSpec}) — resolved independently.`
       );
     }
   }
@@ -859,7 +978,7 @@ async function main(): Promise<void> {
     outro(
       pending > 0
         ? pc.yellow(`${pending} pending — run ${pc.bold("pnpm deps:update")}`)
-        : pc.green("up to date"),
+        : pc.green("up to date")
     );
     process.exit(pending > 0 ? 1 : 0);
   }
@@ -875,21 +994,29 @@ async function main(): Promise<void> {
     // Preview only: never prompt. Show exactly what a default apply would change (every
     // primary bump, plus majors only with --allow-major); writeUpdates prints the
     // "would update" lines and writes nothing.
-    toWrite = candidates.filter((c) => c.kind === "primary" || flags.allowMajor);
+    toWrite = candidates.filter(
+      (c) => c.kind === "primary" || flags.allowMajor
+    );
   } else if (process.stdout.isTTY && !flags.yes) {
     // TTY: always pick + confirm. Primaries pre-checked; majors listed, unchecked.
     const picked = await pickInteractive(candidates);
-    if (picked === null) return; // cancelled, declined, or nothing selected
+    if (picked === null) {
+      return;
+    } // cancelled, declined, or nothing selected
     toWrite = picked;
   } else {
     // Non-interactive (--yes or piped): every primary bump, plus majors only when the
     // maintainer explicitly opted in with --allow-major.
     if (!process.stdout.isTTY && !flags.yes) {
       log.info(
-        pc.dim("Non-TTY — applying all eligible updates (pass -y in a TTY to skip the picker)."),
+        pc.dim(
+          "Non-TTY — applying all eligible updates (pass -y in a TTY to skip the picker)."
+        )
       );
     }
-    toWrite = candidates.filter((c) => c.kind === "primary" || flags.allowMajor);
+    toWrite = candidates.filter(
+      (c) => c.kind === "primary" || flags.allowMajor
+    );
   }
 
   await writeUpdates(manifests, toWrite);
@@ -899,10 +1026,15 @@ function printReport(rows: Row[], notes: string[]): void {
   const buckets = new Map<GroupKey, Row[]>();
   for (const row of rows) {
     const key = groupKey(row);
-    if (key === "up-to-date") continue;
+    if (key === "up-to-date") {
+      continue;
+    }
     const bucket = buckets.get(key);
-    if (bucket) bucket.push(row);
-    else buckets.set(key, [row]);
+    if (bucket) {
+      bucket.push(row);
+    } else {
+      buckets.set(key, [row]);
+    }
   }
 
   let shown = 0;
@@ -910,13 +1042,15 @@ function printReport(rows: Row[], notes: string[]): void {
     groupRows: Row[] | undefined,
     color: Colorize,
     title: string,
-    renderer: (row: Row) => string = renderRow,
+    renderer: (row: Row) => string = renderRow
   ) => {
-    if (!groupRows || groupRows.length === 0) return;
+    if (!groupRows || groupRows.length === 0) {
+      return;
+    }
     shown += groupRows.length;
     note(
       wrapForNote(groupRows.map(renderer).join("\n")),
-      color(`${title} ${pc.dim(`(${groupRows.length})`)}`),
+      color(`${title} ${pc.dim(`(${groupRows.length})`)}`)
     );
   };
 
@@ -931,13 +1065,16 @@ function printReport(rows: Row[], notes: string[]): void {
     rows.filter((r) => r.resolved?.newerMajor),
     pc.red,
     "Major available — crosses a major",
-    renderMajorRow,
+    renderMajorRow
   );
   section(buckets.get("cooldown"), pc.yellow, "Within cooldown — held back");
   section(buckets.get("unresolved"), pc.red, "Unresolved — registry error");
 
   if (notes.length) {
-    note(wrapForNote(notes.map((n) => pc.dim(`• ${n}`)).join("\n")), pc.dim("Notes"));
+    note(
+      wrapForNote(notes.map((n) => pc.dim(`• ${n}`)).join("\n")),
+      pc.dim("Notes")
+    );
   }
 
   if (rows.length === 0) {
@@ -945,40 +1082,56 @@ function printReport(rows: Row[], notes: string[]): void {
     return;
   }
   const counts = new Map<Status, number>();
-  for (const row of rows) counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
-  const summary = [...counts].map(([st, n]) => `${n} ${STATUS_LABEL[st]}`).join(pc.dim(" · "));
+  for (const row of rows) {
+    counts.set(row.status, (counts.get(row.status) ?? 0) + 1);
+  }
+  const summary = [...counts]
+    .map(([st, n]) => `${n} ${STATUS_LABEL[st]}`)
+    .join(pc.dim(" · "));
   log.info(summary);
-  if (shown === 0) log.success("All scanned dependencies are up to date.");
+  if (shown === 0) {
+    log.success("All scanned dependencies are up to date.");
+  }
 }
 
 // Rewrite each manifest's deps to the chosen exact version, preserving key order and JSON
 // formatting (2-space, trailing newline). `toWrite` is the list of chosen candidates
 // ({ row, target, kind }); duplicates for one (file, bucket, name) collapse to the higher
 // version, so a selected major overrides its within-major primary.
-async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promise<void> {
+async function writeUpdates(
+  manifests: Manifest[],
+  toWrite: Candidate[]
+): Promise<void> {
   const byKey = new Map<string, Candidate>();
   for (const c of toWrite) {
     const key = `${c.row.manifest.file} ${c.row.dep.bucket} ${c.row.dep.name}`;
     const prev = byKey.get(key);
-    if (!prev || cmp(c.target, prev.target) > 0) byKey.set(key, c);
+    if (!prev || cmp(c.target, prev.target) > 0) {
+      byKey.set(key, c);
+    }
   }
 
   const byFile = new Map<string, Candidate[]>();
   for (const c of byKey.values()) {
     const fileCands = byFile.get(c.row.manifest.file);
-    if (fileCands) fileCands.push(c);
-    else byFile.set(c.row.manifest.file, [c]);
+    if (fileCands) {
+      fileCands.push(c);
+    } else {
+      byFile.set(c.row.manifest.file, [c]);
+    }
   }
 
   let changed = 0;
   for (const manifest of manifests) {
     const fileCands = byFile.get(manifest.file);
-    if (!fileCands || fileCands.length === 0) continue;
-    const json = manifest.json;
+    if (!fileCands || fileCands.length === 0) {
+      continue;
+    }
+    const { json } = manifest;
 
     for (const c of fileCands) {
       const { dep } = c.row;
-      const target = c.target;
+      const { target } = c;
       if (manifest.kind === "package-json") {
         // The bucket was read out of this same document, so it is present and an object.
         // Throwing beats inventing a bucket in a manifest that never had one.
@@ -990,26 +1143,34 @@ async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promis
       } else {
         const arr = json[dep.bucket];
         if (!Array.isArray(arr)) {
-          throw new Error(`${manifest.file}: "${dep.bucket}" is not an array`);
+          throw new TypeError(
+            `${manifest.file}: "${dep.bucket}" is not an array`
+          );
         }
         const idx = arr.findIndex((e: unknown) => {
           const entry = String(e);
           const at = entry.lastIndexOf("@");
           return (at > 0 ? entry.slice(0, at) : entry) === dep.name;
         });
-        if (idx !== -1) arr[idx] = `${dep.name}@${target}`;
+        if (idx !== -1) {
+          arr[idx] = `${dep.name}@${target}`;
+        }
       }
       changed++;
       log.step(
         `${pc.dim(relative(root, manifest.file))}  ${pc.cyan(dep.name)} ` +
           `${dep.spec || pc.dim("(bare)")} ${pc.dim("→")} ${
             c.kind === "major" ? pc.red(target) : colorTarget(dep.spec, target)
-          }`,
+          }`
       );
     }
 
     if (!flags.dryRun) {
-      await writeFile(manifest.file, `${JSON.stringify(json, null, 2)}\n`, "utf8");
+      await writeFile(
+        manifest.file,
+        `${JSON.stringify(json, null, 2)}\n`,
+        "utf-8"
+      );
     }
   }
 
@@ -1019,11 +1180,11 @@ async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promis
       ? pc.dim("Nothing to update.")
       : `${flags.dryRun ? pc.yellow("dry run — ") : ""}${verb} ${pc.bold(String(changed))} ${
           changed === 1 ? "dependency" : "dependencies"
-        }.`,
+        }.`
   );
 }
 
-main().catch((err: unknown) => {
-  console.error(err);
+main().catch((error: unknown) => {
+  console.error(error);
   process.exit(2);
 });

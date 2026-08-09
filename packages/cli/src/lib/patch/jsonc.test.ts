@@ -11,7 +11,7 @@ const WRANGLER = `{
 }
 `;
 
-describe("upsertWranglerBinding", () => {
+describe(upsertWranglerBinding, () => {
   it("appends a new binding to an existing array, keeping comments and prior entries", () => {
     const out = upsertWranglerBinding(WRANGLER, {
       bindingType: "kv_namespaces",
@@ -28,19 +28,35 @@ describe("upsertWranglerBinding", () => {
   it("appends into an existing array of the same type without dropping siblings", () => {
     const out = upsertWranglerBinding(WRANGLER, {
       bindingType: "d1_databases",
-      entry: { binding: "ANALYTICS", database_name: "an-db", database_id: "xyz-789" },
+      entry: {
+        binding: "ANALYTICS",
+        database_id: "xyz-789",
+        database_name: "an-db",
+      },
     });
     expect(out).toContain("DB");
     expect(out).toContain("ANALYTICS");
     // Both entries parse back as an array of two.
-    const parsed = JSON.parse(stripComments(out)) as { d1_databases: unknown[] };
+    const parsed = JSON.parse(stripComments(out)) as {
+      d1_databases: unknown[];
+    };
     expect(parsed.d1_databases).toHaveLength(2);
   });
 
   it("is idempotent: re-inserting an already-present binding returns the source byte-for-byte", () => {
-    const entry = { binding: "DB", database_name: "app-db", database_id: "abc-123" };
-    const once = upsertWranglerBinding(WRANGLER, { bindingType: "d1_databases", entry });
-    const twice = upsertWranglerBinding(once, { bindingType: "d1_databases", entry });
+    const entry = {
+      binding: "DB",
+      database_id: "abc-123",
+      database_name: "app-db",
+    };
+    const once = upsertWranglerBinding(WRANGLER, {
+      bindingType: "d1_databases",
+      entry,
+    });
+    const twice = upsertWranglerBinding(once, {
+      bindingType: "d1_databases",
+      entry,
+    });
     expect(twice).toBe(once);
   });
 
@@ -48,7 +64,7 @@ describe("upsertWranglerBinding", () => {
     // Same `binding` name ("DB") but a different database_id — must NOT overwrite.
     const out = upsertWranglerBinding(WRANGLER, {
       bindingType: "d1_databases",
-      entry: { binding: "DB", database_name: "hijacked", database_id: "evil" },
+      entry: { binding: "DB", database_id: "evil", database_name: "hijacked" },
     });
     expect(out).toBe(WRANGLER);
     expect(out).not.toContain("hijacked");
@@ -89,8 +105,10 @@ describe("upsertWranglerBinding", () => {
     expect(twice).toBe(once);
 
     // And the array is genuinely one entry, not two that happen to stringify alike.
-    const parsed = JSON.parse(stripComments(twice)) as { send_email: unknown[] };
-    expect(parsed.send_email).toEqual([entry]);
+    const parsed = JSON.parse(stripComments(twice)) as {
+      send_email: unknown[];
+    };
+    expect(parsed.send_email).toStrictEqual([entry]);
 
     // A *different* `name` must still append. This is what makes the test able to fail:
     // `send_email` entries carry no `binding` key, so under the default matchOn the
@@ -102,19 +120,21 @@ describe("upsertWranglerBinding", () => {
       entry: second,
       matchOn: "name",
     });
-    const parsedBoth = JSON.parse(stripComments(both)) as { send_email: unknown[] };
-    expect(parsedBoth.send_email).toEqual([entry, second]);
+    const parsedBoth = JSON.parse(stripComments(both)) as {
+      send_email: unknown[];
+    };
+    expect(parsedBoth.send_email).toStrictEqual([entry, second]);
   });
 
   it("honors a custom matchOn key (e.g. wrangler routes keyed by pattern)", () => {
     const withRoute = upsertWranglerBinding(WRANGLER, {
       bindingType: "routes",
-      entry: { pattern: "api.example.com", custom_domain: true },
+      entry: { custom_domain: true, pattern: "api.example.com" },
       matchOn: "pattern",
     });
     const again = upsertWranglerBinding(withRoute, {
       bindingType: "routes",
-      entry: { pattern: "api.example.com", custom_domain: true },
+      entry: { custom_domain: true, pattern: "api.example.com" },
       matchOn: "pattern",
     });
     expect(again).toBe(withRoute);

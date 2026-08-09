@@ -1,6 +1,11 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
-import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
+import {
+  classifyLink,
+  createDirLink,
+  hashContent,
+  pathExists,
+} from "./fs-utils.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
@@ -18,7 +23,8 @@ import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 //   unchanged — on-disk content already equals what we'd write
 //   drift     — tracked by us but hand-edited (hash ≠ manifest) → route to AI-merge, don't clobber
 //   conflict  — exists but we never wrote it (untracked) → don't clobber
-export type FileAction = "create" | "overwrite" | "unchanged" | "drift" | "conflict";
+export type FileAction =
+  "create" | "overwrite" | "unchanged" | "drift" | "conflict";
 
 // Actions that are safe to write; drift/conflict are held back for a merge.
 const WRITABLE: ReadonlySet<FileAction> = new Set<FileAction>([
@@ -132,26 +138,33 @@ async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
 // sides are parsed from the same registry-item.json descriptor, so key order is
 // stable across a `--force` re-apply.
 function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
-  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
+  return (
+    a.module === b.module &&
+    a.file === b.file &&
+    JSON.stringify(a.patch) === JSON.stringify(b.patch)
+  );
 }
 
 async function classify(
   targetAbs: string,
   target: string,
   newHash: string,
-  manifest: Manifest,
+  manifest: Manifest
 ): Promise<{ action: FileAction; oldContent?: string }> {
   if (!(await pathExists(targetAbs))) {
     return { action: "create" };
   }
-  const oldContent = await readFile(targetAbs, "utf8");
+  const oldContent = await readFile(targetAbs, "utf-8");
   const oldHash = hashContent(oldContent);
   if (oldHash === newHash) {
     return { action: "unchanged", oldContent };
   }
   const managed = manifest.managed[target];
   if (managed) {
-    return { action: managed.hash === oldHash ? "overwrite" : "drift", oldContent };
+    return {
+      action: managed.hash === oldHash ? "overwrite" : "drift",
+      oldContent,
+    };
   }
   return { action: "conflict", oldContent };
 }
@@ -162,23 +175,28 @@ async function planModuleFile(
   target: string,
   root: string,
   manifest: Manifest,
-  isSkill: boolean,
+  isSkill: boolean
 ): Promise<PlannedFile> {
   const source = join(module.dir, sourceRel);
-  const content = await readFile(source, "utf8");
+  const content = await readFile(source, "utf-8");
   const newHash = hashContent(content);
   const targetAbs = join(root, ...target.split("/"));
-  const { action, oldContent } = await classify(targetAbs, target, newHash, manifest);
+  const { action, oldContent } = await classify(
+    targetAbs,
+    target,
+    newHash,
+    manifest
+  );
   return {
+    action,
+    content,
+    isSkill,
     module: module.item.name,
+    newHash,
+    oldContent,
     source,
     target,
     targetAbs,
-    content,
-    newHash,
-    action,
-    oldContent,
-    isSkill,
   };
 }
 
@@ -223,12 +241,16 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
 
   for (const name of install) {
     const mod = modules.get(name);
-    if (!mod) continue;
+    if (!mod) {
+      continue;
+    }
     const { item } = mod;
 
     for (const file of item.files ?? []) {
       const target = resolveTarget(aliasView, file.target);
-      files.push(await planModuleFile(mod, file.path, target, root, manifest, false));
+      files.push(
+        await planModuleFile(mod, file.path, target, root, manifest, false)
+      );
     }
 
     // A capability's scaffolds[] births a whole workspace: each file's target is
@@ -238,7 +260,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const scaffold of item.scaffolds ?? []) {
       for (const file of scaffold.files) {
         const target = posix.join(scaffold.workspace, file.target);
-        files.push(await planModuleFile(mod, file.path, target, root, manifest, false));
+        files.push(
+          await planModuleFile(mod, file.path, target, root, manifest, false)
+        );
       }
     }
 
@@ -252,7 +276,16 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       const skillFiles = await listFilesRelative(skillDir);
       for (const rel of skillFiles) {
         const target = posix.join(".agents/skills", folderName, rel);
-        files.push(await planModuleFile(mod, posix.join(skillRel, rel), target, root, manifest, true));
+        files.push(
+          await planModuleFile(
+            mod,
+            posix.join(skillRel, rel),
+            target,
+            root,
+            manifest,
+            true
+          )
+        );
       }
       const linkPath = posix.join(".claude/skills", folderName);
       const linkTarget = posix.join(".agents/skills", folderName);
@@ -260,18 +293,29 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       const targetAbs = join(root, ...linkTarget.split("/"));
       const state = await classifyLink(pathAbs, targetAbs);
       links.push({
+        action:
+          state === "missing"
+            ? "create"
+            : state === "correct"
+              ? "exists"
+              : "conflict",
         module: name,
         path: linkPath,
         pathAbs,
         target: linkTarget,
         targetAbs,
-        action: state === "missing" ? "create" : state === "correct" ? "exists" : "conflict",
       });
     }
 
-    for (const dep of item.dependencies ?? []) dependencies.push(dep);
-    for (const dep of item.devDependencies ?? []) devDependencies.push(dep);
-    for (const [key, value] of Object.entries(item.envVars ?? {})) envVars[key] = value;
+    for (const dep of item.dependencies ?? []) {
+      dependencies.push(dep);
+    }
+    for (const dep of item.devDependencies ?? []) {
+      devDependencies.push(dep);
+    }
+    for (const [key, value] of Object.entries(item.envVars ?? {})) {
+      envVars[key] = value;
+    }
   }
 
   // Plan patches after every file is collected, so an op targeting a file another module
@@ -290,37 +334,44 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       if (planned && WRITABLE.has(planned.action)) {
         source = planned.content;
       } else if (await pathExists(fileAbs)) {
-        source = await readFile(fileAbs, "utf8");
+        source = await readFile(fileAbs, "utf-8");
       } else {
         source = planned?.content;
       }
       if (source === undefined) {
-        patches.push({ module: name, file: op.file, fileAbs, patch: op, action: "missing", diff: "" });
+        patches.push({
+          action: "missing",
+          diff: "",
+          file: op.file,
+          fileAbs,
+          module: name,
+          patch: op,
+        });
         continue;
       }
       const { content, changed, diff } = applyPatch(source, op, op.file);
       patches.push({
-        module: name,
+        action: changed ? "apply" : "unchanged",
+        content,
+        diff,
         file: op.file,
         fileAbs,
+        module: name,
         patch: op,
-        action: changed ? "apply" : "unchanged",
-        diff,
-        content,
       });
     }
   }
 
   return {
-    install,
+    aliasConflicts,
+    aliases,
     alreadyInstalled,
-    files,
-    links,
     dependencies,
     devDependencies,
     envVars,
-    aliases,
-    aliasConflicts,
+    files,
+    install,
+    links,
     patches,
   };
 }
@@ -346,7 +397,7 @@ export async function executePlan(
   plan: Plan,
   root: string,
   config: SaasaloyConfig,
-  manifest: Manifest,
+  manifest: Manifest
 ): Promise<ApplyResult> {
   const written: PlannedFile[] = [];
   const heldBack: PlannedFile[] = [];
@@ -358,8 +409,11 @@ export async function executePlan(
   for (const file of plan.files) {
     if (WRITABLE.has(file.action)) {
       await mkdir(dirname(file.targetAbs), { recursive: true });
-      await writeFile(file.targetAbs, file.content, "utf8");
-      manifest.managed[file.target] = { module: file.module, hash: file.newHash };
+      await writeFile(file.targetAbs, file.content, "utf-8");
+      manifest.managed[file.target] = {
+        hash: file.newHash,
+        module: file.module,
+      };
       written.push(file);
     } else {
       heldBack.push(file);
@@ -376,15 +430,21 @@ export async function executePlan(
       patchConflicts.push(p);
       continue;
     }
-    const source = await readFile(p.fileAbs, "utf8");
+    const source = await readFile(p.fileAbs, "utf-8");
     const { content, changed } = applyPatch(source, p.patch, p.file);
     if (changed) {
-      await writeFile(p.fileAbs, content, "utf8");
+      await writeFile(p.fileAbs, content, "utf-8");
       patched.push(p);
       // Record for `remove` (which can't reverse it, only warn) — deduped so a
       // `--force` re-apply that lands the same op again doesn't duplicate the entry.
-      const entry: ManifestPatch = { module: p.module, file: p.file, patch: p.patch };
-      if (!manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
+      const entry: ManifestPatch = {
+        file: p.file,
+        module: p.module,
+        patch: p.patch,
+      };
+      if (
+        !manifest.patches.some((existing) => samePatchEntry(existing, entry))
+      ) {
         manifest.patches.push(entry);
       }
     }
@@ -415,8 +475,10 @@ export async function executePlan(
   // A module counts as installed once its clean files have landed. Preserve insertion
   // order and dedupe against what's already there.
   for (const name of plan.install) {
-    if (!config.installed.includes(name)) config.installed.push(name);
+    if (!config.installed.includes(name)) {
+      config.installed.push(name);
+    }
   }
 
-  return { written, heldBack, links, linkConflicts, patched, patchConflicts };
+  return { heldBack, linkConflicts, links, patchConflicts, patched, written };
 }

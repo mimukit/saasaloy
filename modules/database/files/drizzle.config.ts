@@ -12,6 +12,6 @@ import { defineConfig } from "drizzle-kit";
 // uses Vite's `import.meta.glob`, which esbuild can't execute.
 export default defineConfig({
   dialect: "sqlite",
-  schema: "./src/schema/*.ts",
   out: "./migrations",
+  schema: "./src/schema/*.ts",
 });

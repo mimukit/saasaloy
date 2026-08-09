@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, type Patch } from "./index.js";
+import { applyPatch } from "./index.js";
+import type { Patch } from "./index.js";
 
 const WRANGLER = `{
   "name": "api",
@@ -21,38 +22,42 @@ export const auth = betterAuth({
 `;
 
 const BINDING_PATCH: Patch = {
-  kind: "wrangler-binding",
   bindingType: "d1_databases",
-  entry: { binding: "DB", database_name: "app-db", database_id: "abc" },
+  entry: { binding: "DB", database_id: "abc", database_name: "app-db" },
+  kind: "wrangler-binding",
 };
 
 const DEPENDENCY_PATCH: Patch = {
   kind: "package-json-dependency",
-  section: "dependencies",
   name: "@repo/db",
   range: "workspace:*",
+  section: "dependencies",
 };
 
 const PLUGIN_PATCH: Patch = {
-  kind: "plugin-array",
-  exportName: "auth",
   arrayProp: "plugins",
   call: "stripe",
-  import: { name: "stripe", from: "@better-auth/stripe" },
+  exportName: "auth",
+  import: { from: "@better-auth/stripe", name: "stripe" },
+  kind: "plugin-array",
 };
 
-describe("applyPatch", () => {
+describe(applyPatch, () => {
   it("applies a wrangler-binding patch, reporting changed=true and a diff", () => {
     const result = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("DB");
     expect(result.diff).toContain("wrangler.jsonc");
     expect(result.diff).toContain("+");
   });
 
   it("applies a package-json-dependency patch, reporting changed=true and a diff", () => {
-    const result = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
-    expect(result.changed).toBe(true);
+    const result = applyPatch(
+      API_PACKAGE_JSON,
+      DEPENDENCY_PATCH,
+      "package.json"
+    );
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("@repo/db");
     expect(result.diff).toContain("package.json");
     expect(result.diff).toContain("+");
@@ -60,7 +65,7 @@ describe("applyPatch", () => {
 
   it("applies a plugin-array patch via magicast", () => {
     const result = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("stripe()");
     expect(result.diff).toContain("auth.ts");
   });
@@ -68,7 +73,7 @@ describe("applyPatch", () => {
   it("re-running any patch is a no-op: changed=false, empty diff, identical content", () => {
     const first = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
     const again = applyPatch(first.content, BINDING_PATCH, "wrangler.jsonc");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
   });
@@ -76,14 +81,18 @@ describe("applyPatch", () => {
   it("re-running a plugin-array patch is likewise a clean no-op", () => {
     const first = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
     const again = applyPatch(first.content, PLUGIN_PATCH, "auth.ts");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
   });
 
   it("re-running a package-json-dependency patch is likewise a clean no-op", () => {
-    const first = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
+    const first = applyPatch(
+      API_PACKAGE_JSON,
+      DEPENDENCY_PATCH,
+      "package.json"
+    );
     const again = applyPatch(first.content, DEPENDENCY_PATCH, "package.json");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
   });
 });

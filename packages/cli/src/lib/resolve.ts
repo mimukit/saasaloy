@@ -13,7 +13,10 @@ export interface Graph {
   modules: Map<string, LoadedModule>;
 }
 
-export async function resolveGraph(source: RegistrySource, requested: string): Promise<Graph> {
+export async function resolveGraph(
+  source: RegistrySource,
+  requested: string
+): Promise<Graph> {
   const modules = new Map<string, LoadedModule>();
   const order: string[] = [];
   const done = new Set<string>();
@@ -21,7 +24,9 @@ export async function resolveGraph(source: RegistrySource, requested: string): P
   const stack: string[] = [];
 
   async function visit(name: string, requiredBy?: string): Promise<void> {
-    if (done.has(name)) return;
+    if (done.has(name)) {
+      return;
+    }
     if (onPath.has(name)) {
       const cycle = [...stack.slice(stack.indexOf(name)), name].join(" → ");
       throw new Error(`Dependency cycle detected: ${cycle}.`);
@@ -40,5 +45,5 @@ export async function resolveGraph(source: RegistrySource, requested: string): P
   }
 
   await visit(requested);
-  return { order, modules };
+  return { modules, order };
 }

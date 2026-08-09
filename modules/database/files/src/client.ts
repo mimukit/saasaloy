@@ -12,7 +12,9 @@ import { schema } from "./schema";
 // `c.env.DB` is typed without api's entry needing a code-level patch:
 //
 //   new Hono<{ Bindings: DbBindings }>()
-export type DbBindings = { DB: D1Database };
+export interface DbBindings {
+  DB: D1Database;
+}
 
 export function getDb(d1: D1Database) {
   return drizzle(d1, { schema });

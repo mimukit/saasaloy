@@ -8,46 +8,60 @@ import type { Graph } from "./resolve.js";
 import { validateLock } from "./schema.js";
 
 const PROVENANCE: ModuleProvenance = {
-  source: "mimukit/saasaloy",
   ref: "main",
   resolved: "9f3a1c2b7e5d4808a1f6c9b2e0d7a4c3f5b8e1d0",
+  source: "mimukit/saasaloy",
 };
 
 function mod(name: string, dependsOn?: string[]): LoadedModule {
-  return { dir: `/tmp/${name}`, item: { name, type: "saasaloy:feature", dependsOn } };
+  return {
+    dir: `/tmp/${name}`,
+    item: { dependsOn, name, type: "saasaloy:feature" },
+  };
 }
 
 const ALL = ["database", "api", "hello-widget"];
 
 function graph(): Graph {
   return {
-    order: ALL,
     modules: new Map([
       ["database", mod("database")],
       ["api", mod("api", ["database"])],
       ["hello-widget", mod("hello-widget", ["api", "database"])],
     ]),
+    order: ALL,
   };
 }
 
-describe("upsertLock", () => {
+describe(upsertLock, () => {
   it("records each installed module under one source's provenance", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());
-    expect(Object.keys(lock.modules).sort()).toEqual(["api", "database", "hello-widget"]);
-    expect(lock.modules["hello-widget"]).toEqual({ ...PROVENANCE, dependsOn: ["api", "database"] });
+    expect(Object.keys(lock.modules).toSorted()).toStrictEqual([
+      "api",
+      "database",
+      "hello-widget",
+    ]);
+    expect(lock.modules["hello-widget"]).toStrictEqual({
+      ...PROVENANCE,
+      dependsOn: ["api", "database"],
+    });
   });
 
   it("records only the modules that were installed, not the whole graph", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ["hello-widget"], graph());
-    expect(Object.keys(lock.modules)).toEqual(["hello-widget"]);
+    expect(Object.keys(lock.modules)).toStrictEqual(["hello-widget"]);
   });
 
   it("leaves an already-installed dependency's prior SHA untouched", () => {
     const lock = emptyLock();
     // database was installed earlier at an older SHA.
-    const older: ModuleProvenance = { source: "mimukit/saasaloy", ref: "main", resolved: "b".repeat(40) };
+    const older: ModuleProvenance = {
+      ref: "main",
+      resolved: "b".repeat(40),
+      source: "mimukit/saasaloy",
+    };
     upsertLock(lock, older, ["database"], graph());
     // Now hello-widget is installed at a newer SHA; database is skipped, not re-fetched.
     upsertLock(lock, PROVENANCE, ["hello-widget"], graph());
@@ -58,14 +72,18 @@ describe("upsertLock", () => {
   it("omits dependsOn for a module that declares none", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());
-    expect(lock.modules.database).toEqual(PROVENANCE);
+    expect(lock.modules.database).toStrictEqual(PROVENANCE);
     expect(lock.modules.database).not.toHaveProperty("dependsOn");
   });
 
   it("overwrites a prior entry on re-resolution", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());
-    const next: ModuleProvenance = { source: "mimukit/saasaloy", ref: "main", resolved: "a".repeat(40) };
+    const next: ModuleProvenance = {
+      ref: "main",
+      resolved: "a".repeat(40),
+      source: "mimukit/saasaloy",
+    };
     upsertLock(lock, next, ALL, graph());
     expect(lock.modules.api?.resolved).toBe("a".repeat(40));
   });
@@ -76,8 +94,8 @@ describe("lockfile shape", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());
     const result = await validateLock(lock);
-    expect(result.errors).toEqual([]);
-    expect(result.valid).toBe(true);
+    expect(result.errors).toStrictEqual([]);
+    expect(result.valid).toBeTruthy();
   });
 });
 
@@ -89,11 +107,11 @@ describe("loadLock / saveLock", () => {
   });
 
   afterAll(async () => {
-    await rm(root, { recursive: true, force: true });
+    await rm(root, { force: true, recursive: true });
   });
 
   it("returns an empty lock when the file is missing", async () => {
-    expect((await loadLock(root)).modules).toEqual({});
+    expect((await loadLock(root)).modules).toStrictEqual({});
   });
 
   it("round-trips through disk", async () => {
@@ -102,6 +120,6 @@ describe("loadLock / saveLock", () => {
     await saveLock(root, lock);
     const reloaded = await loadLock(root);
     expect(reloaded.lockfileVersion).toBe(1);
-    expect(reloaded.modules).toEqual(lock.modules);
+    expect(reloaded.modules).toStrictEqual(lock.modules);
   });
 });

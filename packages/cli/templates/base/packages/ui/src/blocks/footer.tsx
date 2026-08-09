@@ -18,16 +18,16 @@ const defaultGroups: FooterGroup[] = [
   {
     heading: "Product",
     links: [
-      { label: "Features", href: "#features" },
-      { label: "Pricing", href: "#pricing" },
-      { label: "FAQ", href: "#faq" },
+      { href: "#features", label: "Features" },
+      { href: "#pricing", label: "Pricing" },
+      { href: "#faq", label: "FAQ" },
     ],
   },
   {
     heading: "Legal",
     links: [
-      { label: "Terms", href: "/terms" },
-      { label: "Privacy", href: "/privacy" },
+      { href: "/terms", label: "Terms" },
+      { href: "/privacy", label: "Privacy" },
     ],
   },
 ];
@@ -47,12 +47,14 @@ export function Footer({
   year = new Date().getFullYear(),
 }: FooterProps) {
   return (
-    <footer className="mt-8 border-t border-border/60">
+    <footer className="border-border/60 mt-8 border-t">
       <div className="mx-auto w-full max-w-6xl px-6 py-14">
         <div className="grid gap-10 sm:grid-cols-2 lg:grid-cols-4">
           <div className="lg:col-span-2">
             <p className="text-sm font-semibold tracking-tight">{siteName}</p>
-            <p className="mt-2 max-w-xs text-sm text-pretty text-muted-foreground">{tagline}</p>
+            <p className="text-muted-foreground mt-2 max-w-xs text-sm text-pretty">
+              {tagline}
+            </p>
           </div>
 
           {groups.map((group) => (
@@ -63,7 +65,7 @@ export function Footer({
                   <li key={link.href}>
                     <a
                       href={link.href}
-                      className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+                      className="text-muted-foreground hover:text-foreground text-sm transition-colors"
                     >
                       {link.label}
                     </a>
@@ -76,7 +78,7 @@ export function Footer({
 
         <Separator className="my-10" />
 
-        <p className="text-sm text-muted-foreground">
+        <p className="text-muted-foreground text-sm">
           © {year} {siteName}. All rights reserved.
         </p>
       </div>

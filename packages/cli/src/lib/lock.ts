@@ -11,7 +11,8 @@ import type { Graph } from "./resolve.js";
 
 export const LOCK_FILE = "saasaloy-lock.json";
 export const LOCKFILE_VERSION = 1;
-const LOCK_SCHEMA_URL = "https://saasaloy.dev/schemas/saasaloy-lock.schema.json";
+const LOCK_SCHEMA_URL =
+  "https://saasaloy.dev/schemas/saasaloy-lock.schema.json";
 
 export interface LockModule extends ModuleProvenance {
   /** The module's declared dependencies, so the resolved graph is self-describing. */
@@ -25,13 +26,19 @@ export interface Lockfile {
 }
 
 export function emptyLock(): Lockfile {
-  return { $schema: LOCK_SCHEMA_URL, lockfileVersion: LOCKFILE_VERSION, modules: {} };
+  return {
+    $schema: LOCK_SCHEMA_URL,
+    lockfileVersion: LOCKFILE_VERSION,
+    modules: {},
+  };
 }
 
 export async function loadLock(root: string): Promise<Lockfile> {
   const file = join(root, LOCK_FILE);
-  if (!(await pathExists(file))) return emptyLock();
-  const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Lockfile>;
+  if (!(await pathExists(file))) {
+    return emptyLock();
+  }
+  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Lockfile>;
   return {
     $schema: parsed.$schema ?? LOCK_SCHEMA_URL,
     lockfileVersion: parsed.lockfileVersion ?? LOCKFILE_VERSION,
@@ -41,7 +48,7 @@ export async function loadLock(root: string): Promise<Lockfile> {
 
 export async function saveLock(root: string, lock: Lockfile): Promise<void> {
   const file = join(root, LOCK_FILE);
-  await writeFile(file, `${JSON.stringify(lock, null, 2)}\n`, "utf8");
+  await writeFile(file, `${JSON.stringify(lock, null, 2)}\n`, "utf-8");
 }
 
 // Record the modules that were actually applied under one source's provenance —
@@ -52,7 +59,7 @@ export function upsertLock(
   lock: Lockfile,
   provenance: ModuleProvenance,
   installed: string[],
-  graph: Graph,
+  graph: Graph
 ): void {
   for (const name of installed) {
     const dependsOn = graph.modules.get(name)?.item.dependsOn;

@@ -4,8 +4,8 @@ import {
   getNodeValue,
   modify,
   parseTree,
-  type FormattingOptions,
 } from "jsonc-parser";
+import type { FormattingOptions } from "jsonc-parser";
 
 // `jsonc-parser` edits for `wrangler.jsonc` binding/route changes (build spec §3.4).
 // It rewrites only the touched region and leaves comments + surrounding formatting
@@ -38,35 +38,53 @@ export interface WranglerBinding {
  * - a matching entry already exists → return `source` **unchanged** (never clobber a
  *   value the user may have edited).
  */
-export function upsertWranglerBinding(source: string, patch: WranglerBinding): string {
+export function upsertWranglerBinding(
+  source: string,
+  patch: WranglerBinding
+): string {
   const matchOn = patch.matchOn ?? "binding";
   const root = parseTree(source);
-  if (!root) return source; // unparseable — leave it to the caller/validator to surface
+  if (!root) {
+    return source;
+  } // unparseable — leave it to the caller/validator to surface
 
   const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
   const formattingOptions = inferFormatting(source);
 
   if (arrayNode?.type === "array") {
-    const existing = (arrayNode.children ?? []).map((child) => getNodeValue(child) as unknown);
-    const entry = patch.entry;
+    const existing = (arrayNode.children ?? []).map(
+      (child) => getNodeValue(child) as unknown
+    );
+    const { entry } = patch;
     // A local `const` (not the `patch.entry` property access) so the `typeof` guard's
     // narrowing survives into the closure below — TS doesn't narrow property accesses
     // across a nested function boundary the way it does a plain variable.
     const alreadyPresent =
       typeof entry === "string"
         ? existing.includes(entry)
-        : existing.some((value) => isRecord(value) && value[matchOn] === entry[matchOn]);
-    if (alreadyPresent) return source;
+        : existing.some(
+            (value) => isRecord(value) && value[matchOn] === entry[matchOn]
+          );
+    if (alreadyPresent) {
+      return source;
+    }
 
-    const edits = modify(source, [patch.bindingType, existing.length], patch.entry, {
-      isArrayInsertion: true,
-      formattingOptions,
-    });
+    const edits = modify(
+      source,
+      [patch.bindingType, existing.length],
+      patch.entry,
+      {
+        formattingOptions,
+        isArrayInsertion: true,
+      }
+    );
     return applyEdits(source, edits);
   }
 
   // No array (or a non-array value) at that key — create the array fresh.
-  const edits = modify(source, [patch.bindingType], [patch.entry], { formattingOptions });
+  const edits = modify(source, [patch.bindingType], [patch.entry], {
+    formattingOptions,
+  });
   return applyEdits(source, edits);
 }
 
@@ -82,8 +100,8 @@ export function inferFormatting(source: string): FormattingOptions {
   const usesTabs = /^\t/m.test(source);
   const spaceIndent = source.match(/^( +)\S/m)?.[1];
   return {
-    tabSize: spaceIndent ? spaceIndent.length : 2,
-    insertSpaces: !usesTabs,
     eol: source.includes("\r\n") ? "\r\n" : "\n",
+    insertSpaces: !usesTabs,
+    tabSize: spaceIndent ? spaceIndent.length : 2,
   };
 }

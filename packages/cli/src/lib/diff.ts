@@ -3,7 +3,10 @@
 // human (or hand to an agent) what an update would change; we deliberately don't
 // pull in a diff library — the CLI stays lean and its deps stay auditable.
 
-export type DiffLine = { kind: "context" | "del" | "add"; text: string };
+export interface DiffLine {
+  kind: "context" | "del" | "add";
+  text: string;
+}
 
 export function lineDiff(oldText: string, newText: string): DiffLine[] {
   // An empty side is a pure creation/deletion. Special-cased because "".split("\n")
@@ -21,10 +24,15 @@ export function lineDiff(oldText: string, newText: string): DiffLine[] {
   const n = b.length;
 
   // dp[i][j] = length of the LCS of a[i..] and b[j..].
-  const dp: number[][] = Array.from({ length: m + 1 }, () => new Array<number>(n + 1).fill(0));
+  const dp: number[][] = Array.from({ length: m + 1 }, () =>
+    Array.from<number>({ length: n + 1 }).fill(0)
+  );
   for (let i = m - 1; i >= 0; i--) {
     for (let j = n - 1; j >= 0; j--) {
-      dp[i]![j] = a[i] === b[j] ? dp[i + 1]![j + 1]! + 1 : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
+      dp[i]![j] =
+        a[i] === b[j]
+          ? dp[i + 1]![j + 1]! + 1
+          : Math.max(dp[i + 1]![j]!, dp[i]![j + 1]!);
     }
   }
 
@@ -44,7 +52,11 @@ export function lineDiff(oldText: string, newText: string): DiffLine[] {
       j++;
     }
   }
-  while (i < m) out.push({ kind: "del", text: a[i++]! });
-  while (j < n) out.push({ kind: "add", text: b[j++]! });
+  while (i < m) {
+    out.push({ kind: "del", text: a[i++]! });
+  }
+  while (j < n) {
+    out.push({ kind: "add", text: b[j++]! });
+  }
   return out;
 }

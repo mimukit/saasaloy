@@ -28,6 +28,11 @@
       }
     }
   ],
-  "files": [{ "path": "files/cloudflare.ts", "target": "@email/providers/cloudflare.ts" }],
+  "files": [
+    {
+      "path": "files/cloudflare.ts",
+      "target": "@email/providers/cloudflare.ts"
+    }
+  ],
   "scaffolds": []
 }

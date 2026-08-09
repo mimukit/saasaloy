@@ -16,5 +16,5 @@ const modules = import.meta.glob<Record<string, unknown>>("./schema/*.ts", {
 
 export const schema: Record<string, unknown> = Object.assign(
   {},
-  ...Object.values(modules),
+  ...Object.values(modules)
 );

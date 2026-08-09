@@ -1,4 +1,5 @@
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
@@ -23,9 +24,9 @@ export default function WaitlistForm() {
     setStatus("submitting");
     try {
       const res = await fetch(`${API_BASE}/waitlist`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email }),
+        headers: { "Content-Type": "application/json" },
+        method: "POST",
       });
       setStatus(res.ok ? "success" : "error");
     } catch {
@@ -39,9 +40,9 @@ export default function WaitlistForm() {
     return (
       <p
         role="status"
-        className="rounded-xl border border-border bg-background px-4 py-3 text-sm font-medium text-pretty"
+        className="border-border bg-background rounded-xl border px-4 py-3 text-sm font-medium text-pretty"
       >
-        You're on the list — we'll be in touch.
+        You’re on the list — we’ll be in touch.
       </p>
     );
   }
@@ -71,7 +72,7 @@ export default function WaitlistForm() {
         </Button>
       </div>
       {status === "error" && (
-        <p role="alert" className="text-sm text-destructive">
+        <p role="alert" className="text-destructive text-sm">
           Something went wrong — try again.
         </p>
       )}

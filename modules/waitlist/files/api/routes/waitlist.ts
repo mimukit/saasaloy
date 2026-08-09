@@ -1,5 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
-import { getDb, type DbBindings } from "@repo/db/client";
+import { getDb } from "@repo/db/client";
+import type { DbBindings } from "@repo/db/client";
 import { waitlist as waitlistTable } from "@repo/db/schema/waitlist";
 import { Hono } from "hono";
 import { z } from "zod";
@@ -20,7 +21,10 @@ waitlist.post("/", zValidator("json", submitSchema), async (c) => {
 
   // Idempotent: a duplicate email is a conflict Drizzle silently no-ops, not an error —
   // the visitor sees the same "you're on the list" response, no membership leak.
-  await db.insert(waitlistTable).values({ email, createdAt: new Date() }).onConflictDoNothing();
+  await db
+    .insert(waitlistTable)
+    .values({ createdAt: new Date(), email })
+    .onConflictDoNothing();
 
   return c.json({ ok: true });
 });
