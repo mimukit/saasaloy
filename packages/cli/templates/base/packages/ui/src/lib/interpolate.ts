@@ -21,11 +21,11 @@
  */
 export function interpolate(
   message: string,
-  values: Record<string, string | number>,
+  values: Record<string, string | number>
 ): string {
   // `Object.hasOwn`, not `key in values`: `in` walks the prototype chain, so `{constructor}`
   // or `{toString}` would render a function body into the page instead of passing through.
-  return message.replace(/\{(\w+)\}/g, (token, key: string) =>
-    Object.hasOwn(values, key) ? String(values[key]) : token,
+  return message.replaceAll(/\{(\w+)\}/g, (token, key: string) =>
+    Object.hasOwn(values, key) ? String(values[key]) : token
   );
 }

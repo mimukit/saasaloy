@@ -1,8 +1,15 @@
 import { readdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { assertNoSymlinkPath, classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
+import {
+  assertNoSymlinkPath,
+  classifyLink,
+  hashContent,
+  pathExists,
+  resolveWithinRoot,
+} from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
-import { samePatchEntry, type Manifest, type ManifestPatch } from "./manifest.js";
+import { samePatchEntry } from "./manifest.js";
+import type { Manifest, ManifestPatch } from "./manifest.js";
 import { isReversibleKind, reversePatch } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
@@ -94,35 +101,46 @@ export interface BuildRemovePlanArgs {
 // owns a file directly under a link's target folder is the current owner of the
 // link too (the `saasaloy-<module>` folder convention makes collisions unlikely —
 // verified across modules/, same assumption the applier makes).
-function ownerOfLinkTarget(manifest: Manifest, linkTargetKey: string): string | undefined {
+function ownerOfLinkTarget(
+  manifest: Manifest,
+  linkTargetKey: string
+): string | undefined {
   const prefix = `${linkTargetKey}/`;
   for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (target.startsWith(prefix)) return entry.module;
+    if (target.startsWith(prefix)) {
+      return entry.module;
+    }
   }
   return undefined;
 }
 
-export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<RemovePlan> {
+export async function buildRemovePlan(
+  args: BuildRemovePlanArgs
+): Promise<RemovePlan> {
   const { root, name, config, manifest, lock } = args;
 
   const files: PlannedRemoveFile[] = [];
   for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (entry.module !== name) continue;
+    if (entry.module !== name) {
+      continue;
+    }
     const targetAbs = resolveWithinRoot(root, target);
     let action: FileRemoveAction;
     let oldContent: string | undefined;
-    if (!(await pathExists(targetAbs))) {
-      action = "missing";
-    } else {
-      oldContent = await readFile(targetAbs, "utf8");
+    if (await pathExists(targetAbs)) {
+      oldContent = await readFile(targetAbs, "utf-8");
       action = hashContent(oldContent) === entry.hash ? "delete" : "drift";
+    } else {
+      action = "missing";
     }
     files.push({ module: name, target, targetAbs, action, oldContent });
   }
 
   const links: PlannedRemoveLink[] = [];
   for (const [target, path] of Object.entries(manifest.links)) {
-    if (ownerOfLinkTarget(manifest, target) !== name) continue;
+    if (ownerOfLinkTarget(manifest, target) !== name) {
+      continue;
+    }
     const targetAbs = resolveWithinRoot(root, target);
     const pathAbs = resolveWithinRoot(root, path);
     const state = await classifyLink(pathAbs, targetAbs);
@@ -132,13 +150,20 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
       targetAbs,
       path,
       pathAbs,
-      action: state === "missing" ? "missing" : state === "correct" ? "remove" : "conflict",
+      action:
+        state === "missing"
+          ? "missing"
+          : state === "correct"
+            ? "remove"
+            : "conflict",
     });
   }
 
   const patches: PlannedRemovePatch[] = [];
   for (const entry of manifest.patches) {
-    if (entry.module !== name) continue;
+    if (entry.module !== name) {
+      continue;
+    }
     patches.push(await previewPatchRemoval(root, entry));
   }
 
@@ -147,16 +172,27 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
   const dependents: string[] = [];
   const missingLockEntries: string[] = [];
   for (const installedName of config.installed) {
-    if (installedName === name) continue;
+    if (installedName === name) {
+      continue;
+    }
     const lockEntry = lock.modules[installedName];
     if (!lockEntry) {
       missingLockEntries.push(installedName);
       continue;
     }
-    if (lockEntry.dependsOn?.includes(name)) dependents.push(installedName);
+    if (lockEntry.dependsOn?.includes(name)) {
+      dependents.push(installedName);
+    }
   }
 
-  return { module: name, files, links, patches, dependents, missingLockEntries };
+  return {
+    module: name,
+    files,
+    links,
+    patches,
+    dependents,
+    missingLockEntries,
+  };
 }
 
 /**
@@ -167,17 +203,28 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
  * `executeRemovePlan` re-reads and recomputes rather than trusting this diff, because the
  * file can change between planning and executing.
  */
-async function previewPatchRemoval(root: string, entry: ManifestPatch): Promise<PlannedRemovePatch> {
-  if (!isReversibleKind(entry.patch.kind)) return { entry, action: "drop", diff: "" };
+async function previewPatchRemoval(
+  root: string,
+  entry: ManifestPatch
+): Promise<PlannedRemovePatch> {
+  if (!isReversibleKind(entry.patch.kind)) {
+    return { entry, action: "drop", diff: "" };
+  }
 
   const fileAbs = resolveWithinRoot(root, entry.file);
-  if (!(await pathExists(fileAbs))) return { entry, action: "gone", diff: "" };
+  if (!(await pathExists(fileAbs))) {
+    return { entry, action: "gone", diff: "" };
+  }
   await assertNoSymlinkPath(root, fileAbs);
 
-  const source = await readFile(fileAbs, "utf8");
+  const source = await readFile(fileAbs, "utf-8");
   const result = reversePatch(source, entry.patch, entry.file);
-  if (result?.changed) return { entry, action: "revert", diff: result.diff };
-  if (result?.reason !== undefined) return { entry, action: "refused", diff: "", reason: result.reason };
+  if (result?.changed) {
+    return { entry, action: "revert", diff: result.diff };
+  }
+  if (result?.reason !== undefined) {
+    return { entry, action: "refused", diff: "", reason: result.reason };
+  }
   return { entry, action: "gone", diff: "" };
 }
 
@@ -235,15 +282,24 @@ function toPosixRelative(root: string, abs: string): string {
 // empty, stopping at the first non-empty ancestor and never past `root`. Only
 // directories a deletion in *this run* could have emptied are ever candidates —
 // we start exclusively from paths this run actually removed.
-async function pruneEmptyDirs(root: string, deletedAbsPaths: string[]): Promise<string[]> {
+async function pruneEmptyDirs(
+  root: string,
+  deletedAbsPaths: string[]
+): Promise<string[]> {
   const pruned: string[] = [];
   for (const abs of deletedAbsPaths) {
     let dir = dirname(abs);
     while (dir === root || dir.startsWith(root + sep)) {
-      if (dir === root) break;
-      if (!(await pathExists(dir))) break; // already pruned via another file's chain
+      if (dir === root) {
+        break;
+      }
+      if (!(await pathExists(dir))) {
+        break;
+      } // already pruned via another file's chain
       const entries = await readdir(dir);
-      if (entries.length > 0) break; // first non-empty ancestor — stop climbing
+      if (entries.length > 0) {
+        break;
+      } // first non-empty ancestor — stop climbing
       // `recursive` is required by fs.rm to remove a directory at all; safe here
       // since we just confirmed it's empty.
       await rmPath(dir, { recursive: true, force: true });
@@ -256,7 +312,10 @@ async function pruneEmptyDirs(root: string, deletedAbsPaths: string[]): Promise<
 
 // A dangling alias would let a future `add` silently recreate a half-workspace;
 // dropping it makes `resolveTarget` fail loudly ("Unknown alias") instead.
-async function dropDanglingAliases(root: string, config: SaasaloyConfig): Promise<string[]> {
+async function dropDanglingAliases(
+  root: string,
+  config: SaasaloyConfig
+): Promise<string[]> {
   const dropped: string[] = [];
   for (const [alias, prefix] of Object.entries(config.aliases)) {
     const prefixAbs = join(root, ...prefix.split("/"));
@@ -279,13 +338,22 @@ type FileRecheck = "unchanged" | "changed" | "gone";
 // before the delete is what keeps issue #27's "drift is sacred" true in the gap:
 // a file the user edited while a prompt was up is drift, whatever the plan said.
 async function recheckFile(file: PlannedRemoveFile): Promise<FileRecheck> {
-  if (!(await pathExists(file.targetAbs))) return "gone";
-  if (file.oldContent === undefined) return "changed"; // planned `missing`, something is there now
-  const current = await readFile(file.targetAbs, "utf8");
-  return hashContent(current) === hashContent(file.oldContent) ? "unchanged" : "changed";
+  if (!(await pathExists(file.targetAbs))) {
+    return "gone";
+  }
+  if (file.oldContent === undefined) {
+    return "changed";
+  } // planned `missing`, something is there now
+  const current = await readFile(file.targetAbs, "utf-8");
+  return hashContent(current) === hashContent(file.oldContent)
+    ? "unchanged"
+    : "changed";
 }
 
-export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArgs): Promise<RemoveResult> {
+export async function executeRemovePlan(
+  plan: RemovePlan,
+  args: ExecuteRemoveArgs
+): Promise<RemoveResult> {
   const { root, config, manifest, lock, deleteDrifted } = args;
 
   const deleted: PlannedRemoveFile[] = [];
@@ -295,7 +363,9 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
   for (const file of plan.files) {
     // Hash-clean, or drift the caller explicitly confirmed deleting — both are
     // "delete this exact content", so both have to prove the content is still that.
-    const wantsDelete = file.action === "delete" || (file.action === "drift" && !!deleteDrifted?.has(file.target));
+    const wantsDelete =
+      file.action === "delete" ||
+      (file.action === "drift" && !!deleteDrifted?.has(file.target));
     if (wantsDelete) {
       const state = await recheckFile(file);
       if (state === "unchanged") {
@@ -359,10 +429,10 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
       // project; the read and write below both follow symlinks. Refuse a linked component
       // rather than reverse a patch into a file outside the root.
       await assertNoSymlinkPath(root, fileAbs);
-      const source = await readFile(fileAbs, "utf8");
+      const source = await readFile(fileAbs, "utf-8");
       const result = reversePatch(source, entry.patch, entry.file);
       if (result?.changed) {
-        await writeFile(fileAbs, result.content, "utf8");
+        await writeFile(fileAbs, result.content, "utf-8");
         reversed = true;
       } else if (result?.reason !== undefined) {
         patchRefusals.push({ patch: entry, reason: result.reason });
@@ -373,7 +443,9 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
     // `runRemove` saves the manifest from a `finally`: an entry still listed after its
     // file was already rewritten is a ledger that lies about disk. Anything this loop
     // never reached stays tracked, which is the point.
-    manifest.patches = manifest.patches.filter((p) => !samePatchEntry(p, entry));
+    manifest.patches = manifest.patches.filter(
+      (p) => !samePatchEntry(p, entry)
+    );
   }
 
   const prunedDirs = await pruneEmptyDirs(root, [

@@ -191,10 +191,16 @@ export const landing = {
       {
         id: "enterprise",
         name: "Enterprise",
-        description: "For organisations with procurement and a security review.",
+        description:
+          "For organisations with procurement and a security review.",
         monthlyPrice: null,
         annualPrice: null,
-        features: ["SSO and SCIM", "Priority support", "Audit logs", "Custom contracts"],
+        features: [
+          "SSO and SCIM",
+          "Priority support",
+          "Audit logs",
+          "Custom contracts",
+        ],
         ctaLabel: "Talk to sales",
         ctaHref: "#cta",
       },
@@ -203,7 +209,8 @@ export const landing = {
 
   faq: {
     title: "Questions, answered",
-    description: "The things people ask before they commit a weekend to a new stack.",
+    description:
+      "The things people ask before they commit a weekend to a new stack.",
     items: [
       {
         id: "what-you-get",

@@ -36,17 +36,26 @@ export interface ChainedRoute {
  *   (`chainedRouteInsertRefusal` reports why);
  * - export missing or an unrecognised shape → return `source` unchanged.
  */
-export function insertChainedRoute(source: string, patch: ChainedRoute): string {
+export function insertChainedRoute(
+  source: string,
+  patch: ChainedRoute
+): string {
   const mod = parseModule(source);
   const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) return source; // not the shape we expected — leave it be
+  if (!slot) {
+    return source;
+  } // not the shape we expected — leave it be
 
   for (const link of chainLinks(slot.node)) {
-    if (isRouteLink(link, patch.path)) return source; // already routed
+    if (isRouteLink(link, patch.path)) {
+      return source;
+    } // already routed
   }
 
   const imports = mod.imports as unknown as ModuleImports;
-  if (insertBindingConflict(imports, patch)) return source; // wrong binding — never wire it
+  if (insertBindingConflict(imports, patch)) {
+    return source;
+  } // wrong binding — never wire it
 
   // Ensure the named import exists (magicast keys imports by local name).
   if (!(patch.import.name in mod.imports)) {
@@ -69,12 +78,19 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
  * idempotent no-op at the call site. `applyPatch` asks this only when nothing changed,
  * which is what lets `add` warn by name instead of silently skipping a route.
  */
-export function chainedRouteInsertRefusal(source: string, patch: ChainedRoute): string | undefined {
+export function chainedRouteInsertRefusal(
+  source: string,
+  patch: ChainedRoute
+): string | undefined {
   const mod = parseModule(source);
   const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) return undefined; // unrecognised shape, reported by the caller as "missing"
+  if (!slot) {
+    return undefined;
+  } // unrecognised shape, reported by the caller as "missing"
   for (const link of chainLinks(slot.node)) {
-    if (isRouteLink(link, patch.path)) return undefined; // already routed, not a refusal
+    if (isRouteLink(link, patch.path)) {
+      return undefined;
+    } // already routed, not a refusal
   }
   return insertBindingConflict(mod.imports as unknown as ModuleImports, patch);
 }
@@ -100,10 +116,15 @@ export function chainedRouteInsertRefusal(source: string, patch: ChainedRoute): 
  * - the identifier is still referenced elsewhere in the file → the import stays, so a
  *   hand-written second use (`app.use(waitlist.middleware)`) is not left unbound.
  */
-export function removeChainedRoute(source: string, patch: ChainedRoute): string {
+export function removeChainedRoute(
+  source: string,
+  patch: ChainedRoute
+): string {
   const mod = parseModule(source);
   const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) return source;
+  if (!slot) {
+    return source;
+  }
 
   // Walk outermost-inward, remembering the link that holds the one we're looking for —
   // splicing a link out means re-pointing its holder at the link's own receiver.
@@ -116,12 +137,18 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
     }
     holder = link;
   }
-  if (!found) return source; // already gone — never force-edit
-  if (handlerDrift(found, patch)) return source; // user's handler — not ours to delete
+  if (!found) {
+    return source;
+  } // already gone — never force-edit
+  if (handlerDrift(found, patch)) {
+    return source;
+  } // user's handler — not ours to delete
   // The link can read exactly as written while meaning something else: repointing the
   // import changes what `waitlist` resolves to without touching the `.route()` line. That
   // makes both the link and the import the user's, so neither is ours to delete.
-  if (removeBindingConflict(mod.imports as unknown as ModuleImports, patch)) return source;
+  if (removeBindingConflict(mod.imports as unknown as ModuleImports, patch)) {
+    return source;
+  }
 
   const receiver = (found.callee as MemberExpression).object;
   if (holder) {
@@ -134,7 +161,10 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
   // a binding the file still references elsewhere must keep its import or the file stops
   // compiling.
   const program = mod.$ast as unknown as Program;
-  if (patch.import.name in mod.imports && !isReferenced(program, patch.import.name)) {
+  if (
+    patch.import.name in mod.imports &&
+    !isReferenced(program, patch.import.name)
+  ) {
     delete mod.imports[patch.import.name];
   }
   return keepTerminator(source, generateCode(mod).code);
@@ -146,10 +176,15 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
  * `chainedRouteInsertRefusal`, and the same reason for existing: it tells the remover's
  * "nothing left to revert" apart from "that route is yours now".
  */
-export function chainedRouteRemoveRefusal(source: string, patch: ChainedRoute): string | undefined {
+export function chainedRouteRemoveRefusal(
+  source: string,
+  patch: ChainedRoute
+): string | undefined {
   const mod = parseModule(source);
   const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
-  if (!slot) return undefined;
+  if (!slot) {
+    return undefined;
+  }
   for (const link of chainLinks(slot.node)) {
     if (isRouteLink(link, patch.path)) {
       return (
@@ -167,7 +202,10 @@ export function chainedRouteRemoveRefusal(source: string, patch: ChainedRoute): 
 // that keeps a patch from clobbering a hand edit that happens to sit at the same path.
 
 /** Structural view of magicast's import proxy: local name → what it binds. */
-type ModuleImports = Record<string, { imported?: unknown; from?: unknown } | undefined>;
+type ModuleImports = Record<
+  string,
+  { imported?: unknown; from?: unknown } | undefined
+>;
 
 /**
  * The binding currently held by the patch's local name, when it is not the recorded one.
@@ -180,19 +218,26 @@ type ModuleImports = Record<string, { imported?: unknown; from?: unknown } | und
  */
 function foreignBinding(
   imports: ModuleImports,
-  want: ChainedRoute["import"],
+  want: ChainedRoute["import"]
 ): { imported: string; from: string } | undefined {
   const held = imports[want.name];
-  if (!held) return undefined;
+  if (!held) {
+    return undefined;
+  }
 
   const imported = typeof held.imported === "string" ? held.imported : "";
   const from = typeof held.from === "string" ? held.from : "";
-  if (imported === want.name && from === want.from) return undefined;
+  if (imported === want.name && from === want.from) {
+    return undefined;
+  }
   return { imported, from };
 }
 
 /** "…is imported as a default import from "./legacy.js"" — the shared half of both reasons. */
-function describeBinding(name: string, held: { imported: string; from: string }): string {
+function describeBinding(
+  name: string,
+  held: { imported: string; from: string }
+): string {
   const bound =
     held.imported === "*"
       ? "as a namespace import"
@@ -202,15 +247,25 @@ function describeBinding(name: string, held: { imported: string; from: string })
   return `${JSON.stringify(name)} is imported ${bound} from ${JSON.stringify(held.from)}`;
 }
 
-function insertBindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
+function insertBindingConflict(
+  imports: ModuleImports,
+  patch: ChainedRoute
+): string | undefined {
   const held = foreignBinding(imports, patch.import);
-  if (!held) return undefined;
+  if (!held) {
+    return undefined;
+  }
   return `${describeBinding(patch.import.name, held)}, so routing ${JSON.stringify(patch.path)} would bind the wrong handler`;
 }
 
-function removeBindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
+function removeBindingConflict(
+  imports: ModuleImports,
+  patch: ChainedRoute
+): string | undefined {
   const held = foreignBinding(imports, patch.import);
-  if (!held) return undefined;
+  if (!held) {
+    return undefined;
+  }
   return `${describeBinding(patch.import.name, held)} now, not from ${JSON.stringify(patch.import.from)}, so the link and its import are not the ones that were applied`;
 }
 
@@ -219,30 +274,48 @@ function removeBindingConflict(imports: ModuleImports, patch: ChainedRoute): str
  * handler. Anything that isn't the plain `call` identifier (or dotted path) counts, an
  * inline arrow included: the second argument is no longer what the manifest recorded.
  */
-function handlerDrift(link: CallExpression, patch: ChainedRoute): string | undefined {
+function handlerDrift(
+  link: CallExpression,
+  patch: ChainedRoute
+): string | undefined {
   const argument = link.arguments[1];
   const handler = argument === undefined ? undefined : dottedName(argument);
-  if (handler === patch.call) return undefined;
-  const now = handler === undefined ? "an inline expression" : JSON.stringify(handler);
+  if (handler === patch.call) {
+    return undefined;
+  }
+  const now =
+    handler === undefined ? "an inline expression" : JSON.stringify(handler);
   return `${JSON.stringify(patch.path)} now routes to ${now}, not to ${JSON.stringify(patch.call)}`;
 }
 
 /** `waitlist` → "waitlist", `api.waitlist` → "api.waitlist", anything else → undefined. */
 function dottedName(node: AstNode): string | undefined {
-  if (node.type === "Identifier") return (node as Identifier).name;
-  if (node.type !== "MemberExpression") return undefined;
+  if (node.type === "Identifier") {
+    return (node as Identifier).name;
+  }
+  if (node.type !== "MemberExpression") {
+    return undefined;
+  }
   const member = node as MemberExpression;
-  if (member.property.type !== "Identifier") return undefined;
+  if (member.property.type !== "Identifier") {
+    return undefined;
+  }
   const object = dottedName(member.object);
-  return object === undefined ? undefined : `${object}.${(member.property as Identifier).name}`;
+  return object === undefined
+    ? undefined
+    : `${object}.${(member.property as Identifier).name}`;
 }
 
 // recast reprints the whole program, and its printer drops a trailing newline the source
 // had. Untouched bytes must stay untouched, so put the terminator back — an add→remove
 // round trip is then byte-identical to the file the user started with.
 function keepTerminator(source: string, code: string): string {
-  if (source.endsWith("\n") && !code.endsWith("\n")) return `${code}\n`;
-  if (!source.endsWith("\n") && code.endsWith("\n")) return code.slice(0, -1);
+  if (source.endsWith("\n") && !code.endsWith("\n")) {
+    return `${code}\n`;
+  }
+  if (!source.endsWith("\n") && code.endsWith("\n")) {
+    return code.slice(0, -1);
+  }
   return code;
 }
 
@@ -254,22 +327,38 @@ function isReferenced(program: Program, name: string): boolean {
   let found = false;
 
   function walk(node: unknown, key?: string): void {
-    if (found || node === null || typeof node !== "object") return;
+    if (found || node === null || typeof node !== "object") {
+      return;
+    }
     if (Array.isArray(node)) {
-      for (const child of node) walk(child);
+      for (const child of node) {
+        walk(child);
+      }
       return;
     }
     const record = node as Record<string, unknown> & { type?: string };
-    if (typeof record.type !== "string") return;
-    if (record.type === "ImportDeclaration") return; // the import itself is not a use
+    if (typeof record.type !== "string") {
+      return;
+    }
+    if (record.type === "ImportDeclaration") {
+      return;
+    } // the import itself is not a use
     if (record.type === "Identifier") {
       // Skip a name in a non-reference slot: `a.name`, `{ name: … }`, `function name()`.
-      if (key !== "property" && key !== "key" && record.name === name) found = true;
+      if (key !== "property" && key !== "key" && record.name === name) {
+        found = true;
+      }
       return;
     }
     for (const [childKey, value] of Object.entries(record)) {
       // recast hangs its own bookkeeping off these; walking them re-walks the whole file.
-      if (childKey === "loc" || childKey === "comments" || childKey === "original") continue;
+      if (
+        childKey === "loc" ||
+        childKey === "comments" ||
+        childKey === "original"
+      ) {
+        continue;
+      }
       walk(value, childKey);
     }
   }
@@ -326,21 +415,37 @@ interface ChainSlot {
 
 // --- Locating the chain -----------------------------------------------------------
 
-function findChainSlot(program: Program, exportName: string): ChainSlot | undefined {
+function findChainSlot(
+  program: Program,
+  exportName: string
+): ChainSlot | undefined {
   const exported = findExportSlot(program, exportName);
-  if (!exported) return undefined;
+  if (!exported) {
+    return undefined;
+  }
   // `export default app` exports a reference, not the chain. Follow it to the
   // declaration so the edit lands on `const app = …` and the export line is untouched.
   if (exported.node.type === "Identifier") {
-    const declared = findDeclaratorSlot(program, (exported.node as Identifier).name);
-    if (declared) return declared;
+    const declared = findDeclaratorSlot(
+      program,
+      (exported.node as Identifier).name
+    );
+    if (declared) {
+      return declared;
+    }
   }
   return exported;
 }
 
-function findExportSlot(program: Program, exportName: string): ChainSlot | undefined {
+function findExportSlot(
+  program: Program,
+  exportName: string
+): ChainSlot | undefined {
   for (const statement of program.body) {
-    if (exportName === "default" && statement.type === "ExportDefaultDeclaration") {
+    if (
+      exportName === "default" &&
+      statement.type === "ExportDefaultDeclaration"
+    ) {
       const node = statement as ExportDefaultDeclaration;
       return {
         node: node.declaration,
@@ -349,18 +454,29 @@ function findExportSlot(program: Program, exportName: string): ChainSlot | undef
         },
       };
     }
-    if (exportName !== "default" && statement.type === "ExportNamedDeclaration") {
+    if (
+      exportName !== "default" &&
+      statement.type === "ExportNamedDeclaration"
+    ) {
       const declaration = (statement as ExportNamedDeclaration).declaration;
       if (declaration?.type === "VariableDeclaration") {
-        const slot = declaratorSlot(declaration as VariableDeclaration, exportName);
-        if (slot) return slot;
+        const slot = declaratorSlot(
+          declaration as VariableDeclaration,
+          exportName
+        );
+        if (slot) {
+          return slot;
+        }
       }
     }
   }
   return undefined;
 }
 
-function findDeclaratorSlot(program: Program, name: string): ChainSlot | undefined {
+function findDeclaratorSlot(
+  program: Program,
+  name: string
+): ChainSlot | undefined {
   for (const statement of program.body) {
     const declaration =
       statement.type === "VariableDeclaration"
@@ -368,18 +484,31 @@ function findDeclaratorSlot(program: Program, name: string): ChainSlot | undefin
         : statement.type === "ExportNamedDeclaration"
           ? (statement as ExportNamedDeclaration).declaration
           : undefined;
-    if (declaration?.type !== "VariableDeclaration") continue;
+    if (declaration?.type !== "VariableDeclaration") {
+      continue;
+    }
     const slot = declaratorSlot(declaration as VariableDeclaration, name);
-    if (slot) return slot;
+    if (slot) {
+      return slot;
+    }
   }
   return undefined;
 }
 
-function declaratorSlot(declaration: VariableDeclaration, name: string): ChainSlot | undefined {
+function declaratorSlot(
+  declaration: VariableDeclaration,
+  name: string
+): ChainSlot | undefined {
   for (const declarator of declaration.declarations) {
-    if (declarator.id.type !== "Identifier") continue;
-    if ((declarator.id as Identifier).name !== name) continue;
-    if (!declarator.init) continue;
+    if (declarator.id.type !== "Identifier") {
+      continue;
+    }
+    if ((declarator.id as Identifier).name !== name) {
+      continue;
+    }
+    if (!declarator.init) {
+      continue;
+    }
     return {
       node: declarator.init,
       replace: (next) => {
@@ -392,10 +521,17 @@ function declaratorSlot(declaration: VariableDeclaration, name: string): ChainSl
 
 // --- Reading and writing the chain ------------------------------------------------
 
-/** Yield each `x.y(…)` link of a call chain, outermost first. */
+/**
+ * Yield each `x.y(…)` link of a call chain, outermost first.
+ *
+ * @yields {CallExpression} the next link, walking inward from the outermost call.
+ */
 function* chainLinks(node: AstNode): Generator<CallExpression> {
   let current = node;
-  while (current.type === "CallExpression" && (current as CallExpression).callee.type === "MemberExpression") {
+  while (
+    current.type === "CallExpression" &&
+    (current as CallExpression).callee.type === "MemberExpression"
+  ) {
     const call = current as CallExpression;
     yield call;
     current = (call.callee as MemberExpression).object;
@@ -404,7 +540,12 @@ function* chainLinks(node: AstNode): Generator<CallExpression> {
 
 function isRouteLink(link: CallExpression, path: string): boolean {
   const property = (link.callee as MemberExpression).property;
-  if (property.type !== "Identifier" || (property as Identifier).name !== "route") return false;
+  if (
+    property.type !== "Identifier" ||
+    (property as Identifier).name !== "route"
+  ) {
+    return false;
+  }
   const first = link.arguments[0];
   return first !== undefined && stringValue(first) === path;
 }
@@ -412,7 +553,9 @@ function isRouteLink(link: CallExpression, path: string): boolean {
 // The parser emits `StringLiteral`; magicast's own builders emit ast-types `Literal`.
 // A chain can hold both once a previous patch has run, so read either.
 function stringValue(node: AstNode): string | undefined {
-  if (node.type !== "StringLiteral" && node.type !== "Literal") return undefined;
+  if (node.type !== "StringLiteral" && node.type !== "Literal") {
+    return undefined;
+  }
   const value = (node as StringLike).value;
   return typeof value === "string" ? value : undefined;
 }
@@ -421,8 +564,14 @@ function stringValue(node: AstNode): string | undefined {
 // expression against a placeholder receiver and graft the real chain in as the
 // receiver. The grafted node keeps its original source, so recast reprints only the
 // appended link.
-function buildRouteLink(receiver: AstNode, path: string, call: string): AstNode {
-  const parsed = builders.raw(`__chain__.route(${JSON.stringify(path)}, ${call})`) as unknown as {
+function buildRouteLink(
+  receiver: AstNode,
+  path: string,
+  call: string
+): AstNode {
+  const parsed = builders.raw(
+    `__chain__.route(${JSON.stringify(path)}, ${call})`
+  ) as unknown as {
     $ast: AstNode;
   };
   const link = parsed.$ast as CallExpression;

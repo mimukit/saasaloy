@@ -6,6 +6,9 @@ import { log } from "@clack/prompts";
 import pc from "picocolors";
 
 export const logger = {
+  error(message: string): void {
+    log.error(message);
+  },
   info(message: string): void {
     log.info(message);
   },
@@ -19,8 +22,5 @@ export const logger = {
   },
   warn(message: string): void {
     log.warn(message);
-  },
-  error(message: string): void {
-    log.error(message);
   },
 };

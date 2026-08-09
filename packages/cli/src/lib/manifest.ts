@@ -45,7 +45,11 @@ export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
  * the manifest it edits can be separate loads of the same file.
  */
 export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
-  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
+  return (
+    a.module === b.module &&
+    a.file === b.file &&
+    JSON.stringify(a.patch) === JSON.stringify(b.patch)
+  );
 }
 
 /**
@@ -56,13 +60,17 @@ export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
  */
 export function managedModules(manifest: Manifest): Set<string> {
   const names = new Set<string>();
-  for (const entry of Object.values(manifest.managed)) names.add(entry.module);
-  for (const entry of manifest.patches) names.add(entry.module);
+  for (const entry of Object.values(manifest.managed)) {
+    names.add(entry.module);
+  }
+  for (const entry of manifest.patches) {
+    names.add(entry.module);
+  }
   return names;
 }
 
 export function emptyManifest(): Manifest {
-  return { managed: {}, links: {}, patches: [] };
+  return { links: {}, managed: {}, patches: [] };
 }
 
 export async function loadManifest(root: string): Promise<Manifest> {
@@ -70,16 +78,19 @@ export async function loadManifest(root: string): Promise<Manifest> {
   if (!(await pathExists(file))) {
     return emptyManifest();
   }
-  const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Manifest>;
+  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Manifest>;
   return {
-    managed: parsed.managed ?? {},
     links: parsed.links ?? {},
+    managed: parsed.managed ?? {},
     patches: parsed.patches ?? [],
   };
 }
 
-export async function saveManifest(root: string, manifest: Manifest): Promise<void> {
+export async function saveManifest(
+  root: string,
+  manifest: Manifest
+): Promise<void> {
   const file = join(root, MANIFEST_FILE);
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
 }

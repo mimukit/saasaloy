@@ -1,4 +1,9 @@
-import type { EmailEnv, EmailProvider, EmailResult, ResolvedEmailMessage } from "../provider";
+import type {
+  EmailEnv,
+  EmailProvider,
+  EmailResult,
+  ResolvedEmailMessage,
+} from "../provider";
 
 // The development provider: renders the message to the Worker's log and returns a
 // synthetic id. No binding, no API key, no paid plan, no domain onboarding — which is
@@ -25,7 +30,10 @@ export function consoleEmail(options: ConsoleEmailOptions = {}): EmailProvider {
   return {
     name: "console",
 
-    async send(_env: EmailEnv, message: ResolvedEmailMessage): Promise<EmailResult> {
+    async send(
+      _env: EmailEnv,
+      message: ResolvedEmailMessage
+    ): Promise<EmailResult> {
       const messageId = `console-${crypto.randomUUID()}`;
 
       const lines = [

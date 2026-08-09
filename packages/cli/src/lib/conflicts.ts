@@ -78,9 +78,13 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
 
   function record(declaredBy: string, conflictsWith: string): void {
     // A module naming itself is a typo, not a self-conflict — ignore it.
-    if (declaredBy === conflictsWith) return;
+    if (declaredBy === conflictsWith) {
+      return;
+    }
     const key = pairKey(declaredBy, conflictsWith);
-    if (seen.has(key)) return;
+    if (seen.has(key)) {
+      return;
+    }
     seen.add(key);
     const installedSide = installed.has(conflictsWith)
       ? conflictsWith
@@ -98,7 +102,9 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
   // this same graph — two mutually exclusive modules pulled in by one `add`.
   for (const [name, mod] of graph.modules) {
     for (const other of mod.item.conflictsWith ?? []) {
-      if (installed.has(other) || graph.modules.has(other)) record(name, other);
+      if (installed.has(other) || graph.modules.has(other)) {
+        record(name, other);
+      }
     }
   }
 
@@ -107,16 +113,22 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
   // read that descriptor, and a fresh descriptor beats a recorded copy of one.
   const missingLockEntries: string[] = [];
   for (const name of config.installed) {
-    if (graph.modules.has(name)) continue;
+    if (graph.modules.has(name)) {
+      continue;
+    }
     const entry = lock.modules[name];
     if (!entry) {
       // Silent for anything the tool never installed — the scaffold's `web`, or a hand
       // edit. There is no descriptor behind it, so there is no conflict to miss.
-      if (!managed || managed.has(name)) missingLockEntries.push(name);
+      if (!managed || managed.has(name)) {
+        missingLockEntries.push(name);
+      }
       continue;
     }
     for (const other of entry.conflictsWith ?? []) {
-      if (graph.modules.has(other)) record(name, other);
+      if (graph.modules.has(other)) {
+        record(name, other);
+      }
     }
   }
 
@@ -130,12 +142,18 @@ function describe(conflict: ModuleConflict, requested: string): string {
   const { declaredBy, conflictsWith, installed } = conflict;
 
   if (!installed) {
-    const first = declaredBy === requested ? declaredBy : `${declaredBy} (required by ${requested})`;
+    const first =
+      declaredBy === requested
+        ? declaredBy
+        : `${declaredBy} (required by ${requested})`;
     return `${first} declares a conflict with ${conflictsWith}, and adding ${requested} installs both. Add only one of them.`;
   }
 
   const incoming = installed === declaredBy ? conflictsWith : declaredBy;
-  const phrase = incoming === requested ? incoming : `${incoming} (required by ${requested})`;
+  const phrase =
+    incoming === requested
+      ? incoming
+      : `${incoming} (required by ${requested})`;
   const sentence =
     installed === declaredBy
       ? `${installed} is already installed and declares a conflict with ${phrase}`
@@ -144,7 +162,12 @@ function describe(conflict: ModuleConflict, requested: string): string {
 }
 
 /** The refusal `add` prints. One line per conflicting pair, under a heading. */
-export function formatConflicts(conflicts: ModuleConflict[], requested: string): string {
+export function formatConflicts(
+  conflicts: ModuleConflict[],
+  requested: string
+): string {
   const heading = `Cannot add ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
-  return [heading, ...conflicts.map((c) => `  ${describe(c, requested)}`)].join("\n");
+  return [heading, ...conflicts.map((c) => `  ${describe(c, requested)}`)].join(
+    "\n"
+  );
 }

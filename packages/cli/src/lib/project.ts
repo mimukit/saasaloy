@@ -8,14 +8,20 @@ import { pathExists } from "./fs-utils.js";
 // starting dir when nothing is found.
 const MARKERS = ["saasaloy.json"];
 
-export async function findProjectRoot(start: string = process.cwd()): Promise<string> {
+export async function findProjectRoot(
+  start: string = process.cwd()
+): Promise<string> {
   let dir = start;
   const { root } = parse(dir);
   for (;;) {
     for (const marker of MARKERS) {
-      if (await pathExists(join(dir, marker))) return dir;
+      if (await pathExists(join(dir, marker))) {
+        return dir;
+      }
     }
-    if (dir === root) return start;
+    if (dir === root) {
+      return start;
+    }
     dir = dirname(dir);
   }
 }

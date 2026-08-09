@@ -43,7 +43,12 @@ import {
   ZapIcon,
 } from "lucide-react";
 
-import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import {
+  Card,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@repo/ui/components/card";
 import { landing } from "@repo/ui/content/landing";
 
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
@@ -118,7 +123,10 @@ const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
 // component. Icon names are author-controlled and the saasaloy-landing-copy skill writes
 // them, so this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
 function iconFor(name: string): ComponentType<{ className?: string }> {
-  return (Object.hasOwn(FEATURE_ICONS, name) ? FEATURE_ICONS[name] : undefined) ?? SparklesIcon;
+  return (
+    (Object.hasOwn(FEATURE_ICONS, name) ? FEATURE_ICONS[name] : undefined) ??
+    SparklesIcon
+  );
 }
 
 const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
@@ -140,10 +148,17 @@ export function FeatureGrid({
   features = defaultFeatures,
 }: FeatureGridProps) {
   return (
-    <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20">
+    <section
+      id={id}
+      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
+    >
       <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{title}</h2>
-        <p className="mt-4 text-base text-pretty text-muted-foreground">{description}</p>
+        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          {title}
+        </h2>
+        <p className="text-muted-foreground mt-4 text-base text-pretty">
+          {description}
+        </p>
       </div>
 
       <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -154,7 +169,7 @@ export function FeatureGrid({
               <CardHeader>
                 <span
                   aria-hidden="true"
-                  className="mb-3 flex size-9 items-center justify-center rounded-lg bg-muted text-foreground"
+                  className="bg-muted text-foreground mb-3 flex size-9 items-center justify-center rounded-lg"
                 >
                   <Icon className="size-4" />
                 </span>

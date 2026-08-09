@@ -5,7 +5,7 @@ import { defineConfig } from "vitest/config";
 // and jsonc-parser, not a browser DOM.
 export default defineConfig({
   test: {
-    include: ["src/**/*.test.ts"],
     environment: "node",
+    include: ["src/**/*.test.ts"],
   },
 });

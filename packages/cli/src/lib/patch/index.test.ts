@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, isReversibleKind, reversePatch, type Patch } from "./index.js";
+import { applyPatch, isReversibleKind, reversePatch } from "./index.js";
+import type { Patch } from "./index.js";
 
 const WRANGLER = `{
   "name": "api",
@@ -62,18 +63,22 @@ const ROUTE_PATCH: Patch = {
   import: { name: "waitlist", from: "./routes/waitlist.js" },
 };
 
-describe("applyPatch", () => {
+describe(applyPatch, () => {
   it("applies a wrangler-binding patch, reporting changed=true and a diff", () => {
     const result = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("DB");
     expect(result.diff).toContain("wrangler.jsonc");
     expect(result.diff).toContain("+");
   });
 
   it("applies a package-json-dependency patch, reporting changed=true and a diff", () => {
-    const result = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
-    expect(result.changed).toBe(true);
+    const result = applyPatch(
+      API_PACKAGE_JSON,
+      DEPENDENCY_PATCH,
+      "package.json"
+    );
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("@repo/db");
     expect(result.diff).toContain("package.json");
     expect(result.diff).toContain("+");
@@ -81,7 +86,7 @@ describe("applyPatch", () => {
 
   it("applies a package-json-script patch, reporting changed=true and a diff", () => {
     const result = applyPatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("db:generate");
     expect(result.content).toContain("drizzle-kit generate");
     expect(result.diff).toContain("package.json");
@@ -90,7 +95,7 @@ describe("applyPatch", () => {
 
   it("applies a plugin-array patch via magicast", () => {
     const result = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain("stripe()");
     expect(result.diff).toContain("auth.ts");
   });
@@ -98,7 +103,7 @@ describe("applyPatch", () => {
   it("re-running any patch is a no-op: changed=false, empty diff, identical content", () => {
     const first = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
     const again = applyPatch(first.content, BINDING_PATCH, "wrangler.jsonc");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
   });
@@ -106,28 +111,32 @@ describe("applyPatch", () => {
   it("re-running a plugin-array patch is likewise a clean no-op", () => {
     const first = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
     const again = applyPatch(first.content, PLUGIN_PATCH, "auth.ts");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
   });
 
   it("re-running a package-json-dependency patch is likewise a clean no-op", () => {
-    const first = applyPatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json");
+    const first = applyPatch(
+      API_PACKAGE_JSON,
+      DEPENDENCY_PATCH,
+      "package.json"
+    );
     const again = applyPatch(first.content, DEPENDENCY_PATCH, "package.json");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
   });
 
   it("re-running a package-json-script patch is likewise a clean no-op", () => {
     const first = applyPatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json");
     const again = applyPatch(first.content, SCRIPT_PATCH, "package.json");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
   });
 
   it("applies a chained-route patch via magicast", () => {
     const result = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
-    expect(result.changed).toBe(true);
+    expect(result.changed).toBeTruthy();
     expect(result.content).toContain('.route("/waitlist", waitlist)');
     expect(result.diff).toContain("index.ts");
     expect(result.diff).toContain("+");
@@ -136,7 +145,7 @@ describe("applyPatch", () => {
   it("re-running a chained-route patch is likewise a clean no-op", () => {
     const first = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
     const again = applyPatch(first.content, ROUTE_PATCH, "index.ts");
-    expect(again.changed).toBe(false);
+    expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
     // An idempotent no-op is not a refusal, so there is nothing to report.
@@ -152,24 +161,28 @@ const app = new Hono();
 export default app;
 `;
     const result = applyPatch(conflicting, ROUTE_PATCH, "index.ts");
-    expect(result.changed).toBe(false);
+    expect(result.changed).toBeFalsy();
     expect(result.content).toBe(conflicting);
     expect(result.reason).toContain("./legacy.js");
   });
 
   it("carries no reason for the kinds that can only ever no-op", () => {
     const applied = applyPatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json");
-    expect(applyPatch(applied.content, SCRIPT_PATCH, "package.json").reason).toBeUndefined();
+    expect(
+      applyPatch(applied.content, SCRIPT_PATCH, "package.json").reason
+    ).toBeUndefined();
     const bound = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
-    expect(applyPatch(bound.content, BINDING_PATCH, "wrangler.jsonc").reason).toBeUndefined();
+    expect(
+      applyPatch(bound.content, BINDING_PATCH, "wrangler.jsonc").reason
+    ).toBeUndefined();
   });
 });
 
-describe("reversePatch", () => {
+describe(reversePatch, () => {
   it("undoes a chained-route patch, reporting changed=true and a diff", () => {
     const applied = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
     const reversed = reversePatch(applied.content, ROUTE_PATCH, "index.ts");
-    expect(reversed?.changed).toBe(true);
+    expect(reversed?.changed).toBeTruthy();
     expect(reversed?.content).not.toContain("waitlist");
     expect(reversed?.diff).toContain("index.ts");
     expect(reversed?.diff).toContain("-");
@@ -177,7 +190,7 @@ describe("reversePatch", () => {
 
   it("reports changed=false when the patch is already reversed", () => {
     const reversed = reversePatch(API_ENTRY, ROUTE_PATCH, "index.ts");
-    expect(reversed?.changed).toBe(false);
+    expect(reversed?.changed).toBeFalsy();
     expect(reversed?.diff).toBe("");
     expect(reversed?.content).toBe(API_ENTRY);
     // Already gone is not a refusal — the remover reports the two differently.
@@ -193,23 +206,29 @@ const app = new Hono().route("/waitlist", myWaitlist);
 export default app;
 `;
     const reversed = reversePatch(repointed, ROUTE_PATCH, "index.ts");
-    expect(reversed?.changed).toBe(false);
+    expect(reversed?.changed).toBeFalsy();
     expect(reversed?.content).toBe(repointed);
     expect(reversed?.reason).toContain("myWaitlist");
   });
 
   it("returns undefined for a kind with no inverse yet (#36 owns the rest)", () => {
     expect(reversePatch(AUTH, PLUGIN_PATCH, "auth.ts")).toBeUndefined();
-    expect(reversePatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc")).toBeUndefined();
-    expect(reversePatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json")).toBeUndefined();
-    expect(reversePatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json")).toBeUndefined();
+    expect(
+      reversePatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc")
+    ).toBeUndefined();
+    expect(
+      reversePatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json")
+    ).toBeUndefined();
+    expect(
+      reversePatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json")
+    ).toBeUndefined();
   });
 
   it("isReversibleKind agrees with what reversePatch will undo", () => {
-    expect(isReversibleKind("chained-route")).toBe(true);
-    expect(isReversibleKind("plugin-array")).toBe(false);
-    expect(isReversibleKind("wrangler-binding")).toBe(false);
-    expect(isReversibleKind("package-json-script")).toBe(false);
-    expect(isReversibleKind("package-json-dependency")).toBe(false);
+    expect(isReversibleKind("chained-route")).toBeTruthy();
+    expect(isReversibleKind("plugin-array")).toBeFalsy();
+    expect(isReversibleKind("wrangler-binding")).toBeFalsy();
+    expect(isReversibleKind("package-json-script")).toBeFalsy();
+    expect(isReversibleKind("package-json-dependency")).toBeFalsy();
   });
 });

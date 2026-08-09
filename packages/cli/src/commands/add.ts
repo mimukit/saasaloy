@@ -1,16 +1,25 @@
-import { cancel, confirm, intro, isCancel, log, note, outro, select } from "@clack/prompts";
-import pc from "picocolors";
 import {
-  type ApplyResult,
-  buildPlan,
-  executePlan,
-  type FileAction,
-  type Plan,
-  type PlannedFile,
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  log,
+  note,
+  outro,
+  select,
+} from "@clack/prompts";
+import pc from "picocolors";
+import { buildPlan, executePlan } from "../lib/applier.js";
+import type {
+  ApplyResult,
+  FileAction,
+  Plan,
+  PlannedFile,
 } from "../lib/applier.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { planWritesUi } from "../lib/design.js";
 import { lineDiff } from "../lib/diff.js";
+import type { DiffLine } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
 import { loadManifest, managedModules, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
@@ -21,8 +30,8 @@ import {
   DEFAULT_REPO,
   parseCoordinate,
   REGISTRY_ENV,
-  type RegistrySource,
 } from "../lib/registry.js";
+import type { RegistrySource } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { wrapForNote } from "../lib/tui.js";
@@ -43,7 +52,8 @@ interface Options {
 }
 
 const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y", "--force"]);
-const USAGE = "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]";
+const USAGE =
+  "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]";
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -58,38 +68,39 @@ function parseArgs(argv: string[]): Options {
   }
   unknown.push(...positional.slice(1));
   return {
-    name: positional[0],
-    dryRun: argv.includes("--dry-run"),
     diff: argv.includes("--diff"),
-    yes: argv.includes("--yes") || argv.includes("-y"),
+    dryRun: argv.includes("--dry-run"),
     force: argv.includes("--force"),
+    name: positional[0],
     unknown,
+    yes: argv.includes("--yes") || argv.includes("-y"),
   };
 }
 
 const ACTION_LABEL: Record<FileAction, string> = {
+  conflict: pc.yellow("conflict → merge"),
   create: pc.green("create"),
+  drift: pc.yellow("drift → merge"),
   overwrite: pc.cyan("overwrite"),
   unchanged: pc.dim("unchanged"),
-  drift: pc.yellow("drift → merge"),
-  conflict: pc.yellow("conflict → merge"),
 };
 
 // Cap a single file's diff so a big generated file can't flood the terminal.
 const MAX_DIFF_LINES = 60;
 
+// Keyed by DiffLine["kind"], so adding a kind to lib/diff.ts is a type error here
+// rather than a silently unstyled line.
+const DIFF_LINE_STYLE: Record<DiffLine["kind"], (text: string) => string> = {
+  add: (text) => pc.green(`+ ${text}`),
+  context: (text) => pc.dim(`  ${text}`),
+  del: (text) => pc.red(`- ${text}`),
+};
+
 function renderDiff(file: PlannedFile): string {
   const lines = lineDiff(file.oldContent ?? "", file.content);
-  const shown = lines.slice(0, MAX_DIFF_LINES).map((line) => {
-    switch (line.kind) {
-      case "add":
-        return pc.green(`+ ${line.text}`);
-      case "del":
-        return pc.red(`- ${line.text}`);
-      default:
-        return pc.dim(`  ${line.text}`);
-    }
-  });
+  const shown = lines
+    .slice(0, MAX_DIFF_LINES)
+    .map((line) => DIFF_LINE_STYLE[line.kind](line.text));
   if (lines.length > MAX_DIFF_LINES) {
     shown.push(pc.dim(`  … ${lines.length - MAX_DIFF_LINES} more lines`));
   }
@@ -99,24 +110,34 @@ function renderDiff(file: PlannedFile): string {
 function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   if (prereqs.length > 0) {
     note(
-      wrapForNote(`${pc.bold(requested)} requires: ${prereqs.map((p) => pc.cyan(p)).join(", ")}`),
-      "Dependencies",
+      wrapForNote(
+        `${pc.bold(requested)} requires: ${prereqs.map((p) => pc.cyan(p)).join(", ")}`
+      ),
+      "Dependencies"
     );
   }
   const willInstall = plan.install.map((m) => pc.cyan(m)).join(pc.dim(" → "));
   const lines = [`will install: ${willInstall}`];
   if (plan.alreadyInstalled.length > 0) {
-    lines.push(pc.dim(`already installed (skipped): ${plan.alreadyInstalled.join(", ")}`));
+    lines.push(
+      pc.dim(`already installed (skipped): ${plan.alreadyInstalled.join(", ")}`)
+    );
   }
 
-  const writable = plan.files.filter((f) => f.action !== "drift" && f.action !== "conflict");
-  const held = plan.files.filter((f) => f.action === "drift" || f.action === "conflict");
+  const writable = plan.files.filter(
+    (f) => f.action !== "drift" && f.action !== "conflict"
+  );
+  const held = plan.files.filter(
+    (f) => f.action === "drift" || f.action === "conflict"
+  );
   lines.push("");
   for (const file of plan.files) {
     lines.push(`  ${ACTION_LABEL[file.action]}  ${file.target}`);
   }
-  lines.push("");
-  lines.push(pc.dim(`${writable.length} file(s) to apply, ${held.length} needing merge`));
+  lines.push(
+    "",
+    pc.dim(`${writable.length} file(s) to apply, ${held.length} needing merge`)
+  );
   if (plan.dependencies.length > 0) {
     lines.push(pc.dim(`deps: ${plan.dependencies.join(", ")}`));
   }
@@ -126,49 +147,59 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   note(wrapForNote(lines.join("\n")), "Plan");
 
   if (Object.keys(plan.envVars).length > 0) {
-    const envLines = Object.entries(plan.envVars).map(([k, v]) => `${pc.cyan(k)} ${pc.dim(`— ${v}`)}`);
+    const envLines = Object.entries(plan.envVars).map(
+      ([k, v]) => `${pc.cyan(k)} ${pc.dim(`— ${v}`)}`
+    );
     note(wrapForNote(envLines.join("\n")), "Env vars to set");
   }
   if (Object.keys(plan.aliases).length > 0) {
-    const aliasLines = Object.entries(plan.aliases).map(([a, p]) => `${pc.cyan(a)} ${pc.dim(`→ ${p}`)}`);
+    const aliasLines = Object.entries(plan.aliases).map(
+      ([a, p]) => `${pc.cyan(a)} ${pc.dim(`→ ${p}`)}`
+    );
     note(
       wrapForNote(
-        `${aliasLines.join("\n")}\n\n${pc.dim("New workspace(s) — run `pnpm install` to link them.")}`,
+        `${aliasLines.join("\n")}\n\n${pc.dim("New workspace(s) — run `pnpm install` to link them.")}`
       ),
-      "Aliases registered",
+      "Aliases registered"
     );
   }
   for (const conflict of plan.aliasConflicts) {
-    log.warn(`Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`);
+    log.warn(
+      `Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`
+    );
   }
   const newLinks = plan.links.filter((l) => l.action !== "conflict");
   if (newLinks.length > 0) {
-    const linkLines = newLinks.map((l) => `${pc.cyan(l.path)} ${pc.dim(`→ ${l.target}`)}`);
+    const linkLines = newLinks.map(
+      (l) => `${pc.cyan(l.path)} ${pc.dim(`→ ${l.target}`)}`
+    );
     note(
       wrapForNote(
-        `${linkLines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`,
+        `${linkLines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`
       ),
-      "Skill links",
+      "Skill links"
     );
   }
   for (const link of plan.links) {
     if (link.action === "conflict") {
       log.warn(
         `Skill link ${pc.cyan(link.path)} already exists and isn't ours — ` +
-          `left untouched ${pc.dim("(remove it to let `add` link the skill)")}.`,
+          `left untouched ${pc.dim("(remove it to let `add` link the skill)")}.`
       );
     }
   }
   const applyPatches = plan.patches.filter((p) => p.action === "apply");
   if (applyPatches.length > 0) {
-    const patchLines = applyPatches.map((p) => `${pc.cyan(p.file)} ${pc.dim(`— ${p.patch.kind}`)}`);
+    const patchLines = applyPatches.map(
+      (p) => `${pc.cyan(p.file)} ${pc.dim(`— ${p.patch.kind}`)}`
+    );
     note(wrapForNote(patchLines.join("\n")), "Config patches");
   }
   for (const p of plan.patches) {
     if (p.action === "missing") {
       log.warn(
         `Config patch target ${pc.cyan(p.file)} is missing — ${p.patch.kind} not applied ` +
-          `${pc.dim(`(is ${p.module}'s prerequisite installed?)`)}.`,
+          `${pc.dim(`(is ${p.module}'s prerequisite installed?)`)}.`
       );
     }
   }
@@ -179,7 +210,9 @@ export async function runAdd(argv: string[]): Promise<number> {
   intro(pc.bgCyan(pc.black(" saasaloy add ")));
 
   if (opts.unknown.length > 0) {
-    cancel(`Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`);
+    cancel(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    );
     return 1;
   }
 
@@ -220,7 +253,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     source = createRegistrySource(coord);
     if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
       log.warn(
-        `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`,
+        `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`
       );
     }
 
@@ -234,13 +267,13 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
       const picked = await select({
         message: `Pick a module to add ${pc.dim(`(from ${source.label})`)}`,
-        options: available.map((n) => ({ value: n, label: n })),
+        options: available.map((n) => ({ label: n, value: n })),
       });
       if (isCancel(picked)) {
         cancel("add cancelled");
         return 1;
       }
-      requested = picked as string;
+      requested = picked;
     }
 
     const graph = await resolveGraph(source, requested);
@@ -260,7 +293,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     if (conflicts.missingLockEntries.length > 0) {
       log.warn(
         `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
-          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
+          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`
       );
     }
     if (conflicts.conflicts.length > 0) {
@@ -269,26 +302,29 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
 
     const install = graph.order.filter(
-      (n) => !config.installed.includes(n) || (opts.force && n === requested),
+      (n) => !config.installed.includes(n) || (opts.force && n === requested)
     );
     // Installed and not being (re-)applied — a forced module belongs to `install`, not here.
     const alreadyInstalled = graph.order.filter(
-      (n) => config.installed.includes(n) && !install.includes(n),
+      (n) => config.installed.includes(n) && !install.includes(n)
     );
 
     if (install.length === 0) {
-      note(`${pc.cyan(requested)} and its dependencies are already installed.`, "Nothing to do");
+      note(
+        `${pc.cyan(requested)} and its dependencies are already installed.`,
+        "Nothing to do"
+      );
       outro(pc.dim("use --force to re-apply"));
       return 0;
     }
 
     plan = await buildPlan({
-      root,
-      install,
       alreadyInstalled,
-      modules: graph.modules,
       config,
+      install,
       manifest,
+      modules: graph.modules,
+      root,
     });
 
     summarizePlan(plan, requested, prereqs);
@@ -301,18 +337,28 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     if (opts.diff) {
       for (const file of plan.files) {
-        if (file.action === "unchanged") continue;
+        if (file.action === "unchanged") {
+          continue;
+        }
         note(renderDiff(file), `${ACTION_LABEL[file.action]}  ${file.target}`);
       }
       for (const p of plan.patches) {
-        if (p.action !== "apply") continue;
+        if (p.action !== "apply") {
+          continue;
+        }
         note(p.diff, `${pc.green("patch")}  ${p.file}`);
       }
     }
 
     // --dry-run and --diff both preview only; nothing is written.
     if (opts.dryRun || opts.diff) {
-      outro(pc.dim(opts.diff ? "diff only — nothing applied" : "dry run — nothing applied"));
+      outro(
+        pc.dim(
+          opts.diff
+            ? "diff only — nothing applied"
+            : "dry run — nothing applied"
+        )
+      );
       return 0;
     }
 
@@ -334,19 +380,21 @@ export async function runAdd(argv: string[]): Promise<number> {
     const allDeps = [...plan.dependencies, ...plan.devDependencies];
     if (allDeps.length > 0) {
       if (pkg) {
-        const { added, devAdded, conflicts } = planDeps(
-          pkg,
-          plan.dependencies,
-          plan.devDependencies,
-        );
+        const {
+          added,
+          devAdded,
+          conflicts: depConflicts,
+        } = planDeps(pkg, plan.dependencies, plan.devDependencies);
         await writeDeps(root, pkg, added, devAdded);
         depsAdded = [...added, ...devAdded].map((d) => d.name);
-        for (const conflict of conflicts) {
+        for (const conflict of depConflicts) {
           log.warn(`Dependency version conflict — ${conflict}.`);
         }
       } else {
         // Best-effort means "don't block", not "fail silently".
-        log.warn(`No package.json at the project root — add ${allDeps.join(", ")} yourself.`);
+        log.warn(
+          `No package.json at the project root — add ${allDeps.join(", ")} yourself.`
+        );
       }
     }
 
@@ -370,45 +418,56 @@ export async function runAdd(argv: string[]): Promise<number> {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
     }
     for (const link of result.links) {
-      const label = link.action === "create" ? pc.green("link") : pc.dim("link");
+      const label =
+        link.action === "create" ? pc.green("link") : pc.dim("link");
       log.step(`${label}  ${link.path} ${pc.dim(`→ ${link.target}`)}`);
     }
     for (const link of result.linkConflicts) {
-      log.warn(`Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`);
+      log.warn(
+        `Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`
+      );
     }
     for (const p of result.patched) {
-      log.step(`${pc.green("patch")}  ${p.file} ${pc.dim(`— ${p.patch.kind}`)}`);
+      log.step(
+        `${pc.green("patch")}  ${p.file} ${pc.dim(`— ${p.patch.kind}`)}`
+      );
     }
     for (const p of result.patchConflicts) {
-      log.warn(`Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`);
+      log.warn(
+        `Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`
+      );
     }
     // A refusal is not an idempotent no-op: the patch would have written something wrong,
     // so nothing was written and nothing was tracked. Name the file and the reason.
     for (const r of result.patchRefusals) {
-      log.warn(`Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`);
+      log.warn(
+        `Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`
+      );
     }
     if (result.heldBack.length > 0) {
-      const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");
+      const merges = result.heldBack
+        .map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`)
+        .join("\n");
       note(
         wrapForNote(
-          `${merges}\n\n${pc.dim("These were left untouched. Hand them to an agent with `--diff` to merge.")}`,
+          `${merges}\n\n${pc.dim("These were left untouched. Hand them to an agent with `--diff` to merge.")}`
         ),
-        "Needs merge",
+        "Needs merge"
       );
     }
     if (depsAdded.length > 0) {
       note(
         wrapForNote(
-          `${depsAdded.map((d) => pc.cyan(d)).join(", ")}\n\n${pc.dim("Run `pnpm install` to fetch them.")}`,
+          `${depsAdded.map((d) => pc.cyan(d)).join(", ")}\n\n${pc.dim("Run `pnpm install` to fetch them.")}`
         ),
-        "Dependencies added",
+        "Dependencies added"
       );
     }
 
     outro(
       pc.green(
-        `Applied ${plan.install.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`,
-      ),
+        `Applied ${plan.install.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
+      )
     );
     return 0;
   } catch (error) {

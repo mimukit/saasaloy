@@ -43,14 +43,21 @@ export interface AddDepsResult {
  * and `dependencies` wins (a `devDependencies` entry for an already-claimed name is
  * dropped). Within a bucket, the first module to declare a dep wins (topological order).
  */
-export function planDeps(pkg: PackageJson, deps: string[], devDeps: string[] = []): AddDepsResult {
+export function planDeps(
+  pkg: PackageJson,
+  deps: string[],
+  devDeps: string[] = []
+): AddDepsResult {
   const conflicts: string[] = [];
   const skipped: string[] = [];
   // Name → chosen version across both buckets, so a later module — or the dev bucket —
   // pinning a different version is a real disagreement worth surfacing, not silently dropping.
   const seen = new Map<string, string>();
 
-  function planBucket(specs: string[], existing: Record<string, string>): DepChange[] {
+  function planBucket(
+    specs: string[],
+    existing: Record<string, string>
+  ): DepChange[] {
     const out: DepChange[] = [];
     for (const spec of specs) {
       const { name, version } = parseDep(spec);
@@ -63,13 +70,15 @@ export function planDeps(pkg: PackageJson, deps: string[], devDeps: string[] = [
       }
       seen.set(name, version);
       const current = existing[name];
-      if (current !== undefined) {
+      if (current === undefined) {
+        out.push({ name, version });
+      } else {
         if (version !== "latest" && current !== version) {
-          conflicts.push(`${name}: package.json already has ${current}, ignoring ${version}`);
+          conflicts.push(
+            `${name}: package.json already has ${current}, ignoring ${version}`
+          );
         }
         skipped.push(name);
-      } else {
-        out.push({ name, version });
       }
     }
     return out;
@@ -77,7 +86,7 @@ export function planDeps(pkg: PackageJson, deps: string[], devDeps: string[] = [
 
   const added = planBucket(deps, pkg.dependencies ?? {});
   const devAdded = planBucket(devDeps, pkg.devDependencies ?? {});
-  return { added, devAdded, skipped, conflicts };
+  return { added, conflicts, devAdded, skipped };
 }
 
 export interface PackageJson {
@@ -86,23 +95,27 @@ export interface PackageJson {
   [key: string]: unknown;
 }
 
-export async function readRootPackageJson(root: string): Promise<PackageJson | null> {
+export async function readRootPackageJson(
+  root: string
+): Promise<PackageJson | null> {
   const file = join(root, "package.json");
-  if (!(await pathExists(file))) return null;
-  return JSON.parse(await readFile(file, "utf8")) as PackageJson;
+  if (!(await pathExists(file))) {
+    return null;
+  }
+  return JSON.parse(await readFile(file, "utf-8")) as PackageJson;
 }
 
 /** Merge additions into an existing bucket, keeping keys sorted. */
 function mergeSorted(
   existing: Record<string, string> | undefined,
-  added: DepChange[],
+  added: DepChange[]
 ): Record<string, string> {
-  const merged = { ...(existing ?? {}) };
+  const merged = { ...existing };
   for (const { name, version } of added) {
     merged[name] = version;
   }
   const sorted: Record<string, string> = {};
-  for (const key of Object.keys(merged).sort()) {
+  for (const key of Object.keys(merged).toSorted()) {
     sorted[key] = merged[key]!;
   }
   return sorted;
@@ -113,11 +126,17 @@ export async function writeDeps(
   root: string,
   pkg: PackageJson,
   added: DepChange[],
-  devAdded: DepChange[] = [],
+  devAdded: DepChange[] = []
 ): Promise<void> {
-  if (added.length === 0 && devAdded.length === 0) return;
-  if (added.length > 0) pkg.dependencies = mergeSorted(pkg.dependencies, added);
-  if (devAdded.length > 0) pkg.devDependencies = mergeSorted(pkg.devDependencies, devAdded);
+  if (added.length === 0 && devAdded.length === 0) {
+    return;
+  }
+  if (added.length > 0) {
+    pkg.dependencies = mergeSorted(pkg.dependencies, added);
+  }
+  if (devAdded.length > 0) {
+    pkg.devDependencies = mergeSorted(pkg.devDependencies, devAdded);
+  }
   const file = join(root, "package.json");
-  await writeFile(file, `${JSON.stringify(pkg, null, 2)}\n`, "utf8");
+  await writeFile(file, `${JSON.stringify(pkg, null, 2)}\n`, "utf-8");
 }

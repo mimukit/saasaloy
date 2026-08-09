@@ -23,14 +23,15 @@ import Layout from "../layouts/Layout.astro";
 // Sorted filename order gives deterministic placement; empty-safe (the base ships none).
 const sectionModules = import.meta.glob<{ default: AstroComponentFactory }>(
   "../sections/*.astro",
-  { eager: true },
+  { eager: true }
 );
 const sections = Object.keys(sectionModules)
-  .sort()
+  .toSorted()
   .map((key) => sectionModules[key].default);
 ---
 
-{/*
+{
+  /*
   The page is composed from @repo/ui/blocks/*, each reached by its own subpath export.
   Blocks render to static HTML by default; only the three that need browser state carry
   a client directive, and each one is deliberate:
@@ -46,14 +47,15 @@ const sections = Object.keys(sectionModules)
   landing blocks' file alone, and it carries its own positioning: fixed to the corner,
   clear of the sticky header's own controls at every width.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
-*/}
+*/
+}
 <Layout
   title={interpolate(landing.meta.title, { siteName })}
   description={interpolate(landing.meta.description, { siteName })}
 >
   <Navbar client:idle siteName={siteName} />
   <ThemeToggle
-    className="fixed right-4 bottom-4 z-50 border-border/60 bg-background/80 shadow-sm backdrop-blur"
+    className="border-border/60 bg-background/80 fixed right-4 bottom-4 z-50 shadow-sm backdrop-blur"
   />
   <main>
     <Hero siteName={siteName} />

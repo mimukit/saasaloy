@@ -12,6 +12,7 @@
    class written inside packages/ui is silently dropped — no error, no warning, just
    missing CSS. A non-matching @source glob is equally silent, so both paths matter. */
 @source "../**/*.{ts,tsx}";
+
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to
    packages/apps/** — a directory that does not exist. shadcn's own astro-monorepo
@@ -19,6 +20,7 @@
    auto-detection happens to cover the app; that cover vanishes when Turborepo builds
    from the repo root. Do not "correct" this back to three. */
 @source "../../../../apps/**/*.{ts,tsx,astro}";
+
 /* Tailwind's own scanner skips node_modules only by way of .gitignore, and its ignore
    walker needs a real .git directory to honour one. Before `git init` — a fresh
    `saasaloy init`, or CI checking out a tarball — every .ts/.md under node_modules gets
@@ -42,6 +44,7 @@
      into a class, and re-resolves on the fly when the OS flips while the choice is
      `system`. `light dark` here would let the OS override an explicit choice. */
   color-scheme: light;
+
   --radius: 0.625rem;
   --background: oklch(1 0 0);
   --foreground: oklch(0.145 0 0);
@@ -78,6 +81,7 @@
 
 .dark {
   color-scheme: dark;
+
   --background: oklch(0.145 0 0);
   --foreground: oklch(0.985 0 0);
   --card: oklch(0.205 0 0);
@@ -153,6 +157,7 @@
   * {
     @apply border-border outline-ring/50;
   }
+
   body {
     @apply bg-background text-foreground;
   }
