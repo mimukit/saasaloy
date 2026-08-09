@@ -1,0 +1,50 @@
+home: docs/wiki
+engine: none
+pages:
+  - path: index.md
+    documents: [README.md, packages/cli/src/index.ts]
+  - path: getting-started.md
+    mode: tutorial
+    documents:
+      - package.json
+      - packages/cli/package.json
+      - packages/cli/src/commands/init.ts
+      - packages/cli/templates/base/**
+  - path: how-to/add-a-module.md
+    mode: how-to
+    documents:
+      - packages/cli/src/commands/add.ts
+      - packages/cli/src/lib/applier.ts
+      - packages/cli/src/lib/resolve.ts
+      - modules/*/registry-item.json
+  - path: how-to/remove-a-module.md
+    mode: how-to
+    documents:
+      - packages/cli/src/commands/remove.ts
+      - packages/cli/src/lib/remover.ts
+  - path: how-to/contribute-a-module.md
+    mode: how-to
+    documents:
+      - modules/README.md
+      - packages/cli/schemas/registry-item.schema.json
+      - .agents/skills/**
+      - CONTRIBUTING.md
+  - path: architecture.md
+    mode: explanation
+    documents:
+      - packages/cli/src/**
+      - packages/cli/templates/base/**
+      - modules/*/registry-item.json
+  - path: reference.md
+    mode: reference
+    documents:
+      - packages/cli/src/commands/**
+      - packages/cli/src/lib/registry.ts
+      - packages/cli/schemas/*.schema.json
+  - path: runbooks/bad-descriptor-on-main.md
+    mode: how-to
+    documents:
+      - packages/cli/src/lib/registry.ts
+      - packages/cli/src/lib/schema.ts
+      - packages/cli/src/lib/lock.ts
+      - modules/*/registry-item.json

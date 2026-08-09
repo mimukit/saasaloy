@@ -49,6 +49,10 @@ One module does not, and it's worth knowing before you install it rather than at
 
 No free-tier promise is made either way: Cloudflare's limits are Cloudflare's to change, and a project that grows past them should expect to pay. The point is only that the constraint is visible up front.
 
+## Documentation
+
+Getting started, how-to guides, the architecture overview and the full command reference live in [`docs/wiki/`](docs/wiki/index.md).
+
 ## License
 
 Licensed under the [MIT license](https://github.com/shadcn/ui/blob/main/LICENSE.md).
