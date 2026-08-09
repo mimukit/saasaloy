@@ -186,7 +186,8 @@ and accessibility labels — which is what lets a project owner (or the
 `saasaloy-landing-copy` skill) rewrite the copy in one file. Write a string back into a
 block and nothing complains: the build is green, the types are green, and the string is
 once again something a founder has to hunt for in markup. The script scans
-`templates/base/packages/ui/src/blocks/*.tsx` and fails on three shapes — a prose string
+`packages/cli/templates/base/packages/ui/src/blocks/*.tsx` (and the page that composes
+them, `apps/web/src/pages/index.astro`) and fails on three shapes — a prose string
 literal, text sitting directly in JSX (`<Badge>Most popular</Badge>`), and a spoken
 attribute written as a literal (`aria-label`, `alt`, `title`, `placeholder`). Class names
 are exempt; a Tailwind string is not copy.
