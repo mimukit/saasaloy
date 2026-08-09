@@ -176,10 +176,14 @@ Blocks, like primitives, are source you own — they are meant to be edited, not
 every user-visible string on the landing page, in two namespaces:
 
 - **`landing.*`** — marketing copy. What the product is, who it is for, what it costs.
-  This is the whole surface a copy rewrite touches, plus `siteName` in
-  `packages/ui/src/index.ts`.
+  This is the whole surface a copy rewrite touches. The brand itself is not here: `siteName`
+  lives in `packages/ui/src/index.ts`, is not translated, and is set once by
+  `saasaloy-setup`.
 - **`ui.*`** — chrome and accessibility labels (`Monthly`, `Most popular`, `Close menu`,
-  `Billing period`). Nothing here says anything about the product.
+  `Billing period`). Nothing here says anything about the product, so a copy pass never
+  rewrites it. It does get translated, key for key, when `landing.*` is written in some
+  language other than English — no translation layer ships in the base, so that pass is the
+  only one these strings get.
 
 Blocks import it **directly** — `import { landing, ui } from "@repo/ui/content/landing"` —
 never as props from `index.astro`. Astro serializes island props, so passing content into
@@ -195,28 +199,44 @@ record and nothing else. Follow them when you add a block or a key:
 2. **Position is never the key.** Lists are arrays whose items carry a stable `id`, so
    reordering the feature grid cannot silently reattach the wrong translation. One list is
    exempt — a tier's `features` bullets stay a plain `string[]`, because nothing reads them
-   individually (a feature id picks an icon, an FAQ id anchors a question that outlives its
-   wording) and a tier's bullets are rewritten with that tier. The content file states the
-   trade-off in full.
+   individually (a feature id and an FAQ id both anchor an item that outlives its wording)
+   and a tier's bullets are rewritten with that tier. The content file states the trade-off
+   in full.
 3. **Single-brace `{token}` placeholders, never a template literal.** Copy is data; a
    template literal is a function, which no extraction tool can read. Render with
    `interpolate()` from `@repo/ui/lib/interpolate`.
 4. **No runtime concatenation.** `/month` plus `", billed annually"` is two whole
    messages (`ui.pricing.perMonth`, `ui.pricing.perMonthAnnual`) — word order does not
    survive the seam in every language.
-5. **Only user-visible strings move.** `href`s, section `id`s and icons are structure and
-   stay in the block. The one stated exception is pricing: the whole `tiers` array lives
-   in content, prices and `ctaHref`s included, so pricing is rewritten in one place.
+5. **Only user-visible strings move.** Section `id`s and the same-page anchors pointing at
+   them are structure and stay in the block. Three things break the rule, all because a
+   thing rewritten *with* the copy belongs *near* the copy: the whole `tiers` array (prices
+   and `ctaHref`s included); each feature's `icon`, held as a registry *name* like `"zap"`
+   and resolved to a component by the map at the top of `blocks/feature-grid.tsx`; and the
+   two outbound calls to action, `landing.navbar.ctaHref` and
+   `landing.cta.primaryActionHref`/`.secondaryActionHref`, which leave the page and so
+   cannot break a section link. A translation layer reads `id`, `icon` and every `*Href` as
+   non-message data.
 
 Two consequences worth knowing. Blanking a navbar or footer link's label in content drops
 that link, which is how a removed section loses its nav entry without editing a block. And
 the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: that file is
 inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 
-**Rewriting the copy for your product.** `.claude/skills/saasaloy-landing-copy` (real files
-in `.agents/skills/`) interviews you about the product and writes the answers into the
-content module. Invoke it rather than editing eight blocks by hand — and if you edit by
-hand, keep the strings in the content module so the next pass finds them.
+**Making this project yours.** Two skills ship with the base (linked at
+`.claude/skills/`, real files in `.agents/skills/`), and they run in order:
+
+1. **`saasaloy-setup`** asks ten questions about the product — starting with its name — and
+   writes the answers to `docs/product-brief.md`. Every question carries sample answers you
+   can take, edit, or ignore. It also sets `siteName` and the page's `lang`. Nothing else
+   reads your product knowledge out of your head, so run it first; other skills read the
+   brief rather than interviewing you again.
+2. **`saasaloy-landing-copy`** turns that brief into the landing page's words. It drafts
+   into `docs/landing-copy-draft.md` for you to review and edit, then writes
+   `packages/ui/src/content/landing.ts` once you approve, then deletes the draft.
+
+Invoke them rather than editing eight blocks by hand — and if you do edit by hand, keep the
+strings in the content module so the next pass finds them.
 
 ### Naming Conventions
 
