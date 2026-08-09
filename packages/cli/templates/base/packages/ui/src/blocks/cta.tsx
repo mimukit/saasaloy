@@ -8,7 +8,9 @@ import { cn } from "@repo/ui/lib/utils";
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
 // It is also the anchor (`#cta`) every other block's call to action points at.
 //
-// Every word comes from ../content/landing.ts. Edit the copy there, not here.
+// Every word comes from ../content/landing.ts, and so do both destinations: these two
+// buttons leave the page, and where they go is a fact about the product rather than about
+// the layout (content shape rule 5c). Edit them there, not here.
 
 export interface CtaAction {
   label: string;
@@ -30,8 +32,11 @@ export function Cta({
   siteName = "Acme",
   title = landing.cta.title,
   description = interpolate(landing.cta.description, { siteName }),
-  primaryAction = { label: landing.cta.primaryActionLabel, href: "/" },
-  secondaryAction = { label: landing.cta.secondaryActionLabel, href: "/" },
+  primaryAction = { label: landing.cta.primaryActionLabel, href: landing.cta.primaryActionHref },
+  secondaryAction = {
+    label: landing.cta.secondaryActionLabel,
+    href: landing.cta.secondaryActionHref,
+  },
 }: CtaProps) {
   return (
     <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20">
