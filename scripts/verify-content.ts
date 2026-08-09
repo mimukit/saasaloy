@@ -7,7 +7,7 @@
 // back into pricing-table.tsx and the build stays green, the types stay green, and the
 // string is once again something a founder has to hunt for in markup.
 //
-// So: scan the template's blocks and fail on three shapes.
+// So: scan the template's blocks, and the page that composes them, and fail on three shapes.
 //
 //   A. a string literal that reads like prose        `title = "Start building today"`
 //   B. text sitting directly in JSX                  `<Badge>Most popular</Badge>`
@@ -38,6 +38,11 @@ const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const BASE_UI = "packages/cli/templates/base/packages/ui";
 const BLOCKS_DIR = join(root, BASE_UI, "src/blocks");
 const CONTENT_MODULE = join(root, BASE_UI, "src/content/landing.ts");
+// The page that composes the blocks is the second place a string can drift back in: it owns
+// the tab title and meta description, and both now read from `landing.meta`. Rules A and C
+// apply to Astro frontmatter and markup unchanged, and rule B reads the template markup the
+// same way it reads JSX.
+const LANDING_PAGE = join(root, "packages/cli/templates/base/apps/web/src/pages/index.astro");
 
 // The attributes whose value a screen reader or a tooltip reads out loud. Any literal
 // here is user-visible even when it is a single word, so rule C ignores the prose test.
@@ -222,17 +227,21 @@ function findSpokenLiterals(source: string): Finding[] {
   return findings;
 }
 
-function scan(source: string): Finding[] {
+/** Every rule's findings, before deduplication — one string can appear under two rules. */
+function scanAll(source: string): Finding[] {
   const clean = stripComments(source);
-  const all = [
+  return [
     ...findProseLiterals(stripClassNames(clean)),
     ...findJsxText(blankLiterals(clean)),
     ...findSpokenLiterals(clean),
   ];
+}
+
+function scan(source: string): Finding[] {
   // One string can trip two rules (`title = "…"` reads as prose and as a spoken label).
   // Report the defect once, by where it is rather than by how it was caught.
   const seen = new Set<string>();
-  return all
+  return scanAll(source)
     .filter((finding) => {
       const key = `${finding.line}:${finding.text}`;
       if (seen.has(key)) return false;
@@ -248,13 +257,19 @@ function scan(source: string): Finding[] {
 // the worst outcome available here. So prove the three rules still bite, and prove they
 // still leave the structural shapes a block is allowed to contain alone.
 
+// Each fixture names the rule it exists to prove, and is matched on that letter rather than
+// on "some rule fired": two of these trip a second rule as well (`title` is a spoken
+// attribute *and* prose; `"A dashboard"` has whitespace, so rule A catches it too), and a
+// loose check would let the rule they were written for stop matching unnoticed. `Finding.rule`
+// is already prefixed with the letter, so `startsWith` is the whole test — run against
+// `scanAll`, because `scan`'s dedupe keeps only the first rule to reach a given line+text.
 const MUST_FLAG = [
-  ['rule A', 'const title = "Start building today";'],
-  ['rule A', 'const d = `${siteName} gives your product a front door.`;'],
-  ['rule B', "<Badge>Most popular</Badge>"],
-  ['rule B', "<Button\n  size=\"sm\"\n>\n  Monthly\n</Button>"],
-  ['rule C', '<nav aria-label="Main" />'],
-  ['rule C', '<img alt="A dashboard" />'],
+  ["A", 'const title = "Start building today";'],
+  ["A", 'const d = `${siteName} gives your product a front door.`;'],
+  ["B", "<Badge>Most popular</Badge>"],
+  ["B", '<Button\n  size="sm"\n>\n  Monthly\n</Button>'],
+  ["C", '<nav aria-label="Main" />'],
+  ["C", '<img alt="A dashboard" />'],
 ] as const;
 
 const MUST_PASS = [
@@ -271,9 +286,9 @@ const MUST_PASS = [
 ];
 
 for (const [rule, sample] of MUST_FLAG) {
-  if (scan(sample).length === 0) {
+  if (!scanAll(sample).some((finding) => finding.rule.startsWith(rule))) {
     fail(
-      `self-test: ${rule} no longer flags its own example`,
+      `self-test: rule ${rule} no longer flags its own example`,
       sample.replace(/\n/g, " ⏎ "),
       "The scanner is broken, so a clean run would prove nothing. Fix scripts/verify-content.ts.",
     );
@@ -309,7 +324,8 @@ if (!contentModule.includes("export const landing") || !contentModule.includes("
 
 const blockFiles = (await readdir(BLOCKS_DIR).catch(() => []))
   .filter((name) => name.endsWith(".tsx"))
-  .sort();
+  .sort()
+  .map((name) => join(BLOCKS_DIR, name));
 
 if (blockFiles.length === 0) {
   fail(
@@ -318,11 +334,18 @@ if (blockFiles.length === 0) {
   );
 }
 
+const scanFiles = [...blockFiles, LANDING_PAGE];
+
 const offenders: string[] = [];
-for (const name of blockFiles) {
-  const file = join(BLOCKS_DIR, name);
-  const findings = scan(await readFile(file, "utf8"));
-  for (const finding of findings) {
+for (const file of scanFiles) {
+  const source = await readFile(file, "utf8").catch(() => null);
+  if (source === null) {
+    fail(
+      `${relative(root, file)} is missing`,
+      "Either it moved and this script needs updating, or the template lost it.",
+    );
+  }
+  for (const finding of scan(source)) {
     offenders.push(`${relative(root, file)}:${finding.line}  ${finding.rule} — ${JSON.stringify(finding.text)}`);
   }
 }
@@ -339,6 +362,6 @@ if (offenders.length > 0) {
 }
 
 console.log(
-  `verify-content: ${blockFiles.length} block(s) clean — ` +
+  `verify-content: ${blockFiles.length} block(s) + ${relative(root, LANDING_PAGE)} clean — ` +
     `no prose literal, JSX text or spoken label outside ${relative(root, CONTENT_MODULE)}.`,
 );
