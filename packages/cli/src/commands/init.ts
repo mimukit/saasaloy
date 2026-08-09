@@ -4,6 +4,7 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cancel, intro, isCancel, note, outro, select, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
+import type { LinkState } from "../lib/fs-utils.js";
 import { classifyLink, createDirLink, pathExists, readDirNames } from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
 import { copyTemplate } from "../lib/scaffold.js";
@@ -66,6 +67,14 @@ interface SkillLinkResult {
   linked: string[];
   conflicts: string[];
   failures: { name: string; message: string }[];
+  // `.agents/skills` itself couldn't be read, so no per-skill result is meaningful.
+  // A *missing* directory isn't this: that's the ordinary "template ships no skills" case
+  // and comes back as an empty result.
+  unreadable?: string;
+}
+
+function errorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 // Point `.claude/skills/<name>` at each skill the base ships, so Claude Code discovers it
@@ -84,10 +93,29 @@ interface SkillLinkResult {
 async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
   const result: SkillLinkResult = { linked: [], conflicts: [], failures: [] };
   const skillsDir = join(target, ".agents", "skills");
-  for (const name of await readDirNames(skillsDir)) {
+  let names: string[];
+  try {
+    names = await readDirNames(skillsDir);
+  } catch (error) {
+    // readDirNames returns [] when the directory is simply absent, so reaching here means
+    // it exists and we couldn't read it. Say so: the alternative is init printing no links
+    // and no reason, which reads exactly like a template that ships no skills.
+    result.unreadable = errorMessage(error);
+    return result;
+  }
+  for (const name of names) {
     const linkAbs = join(target, ".claude", "skills", name);
     const targetAbs = join(skillsDir, name);
-    const state = await classifyLink(linkAbs, targetAbs);
+    // classifyLink can reject after its lstat succeeds (the readlink behind it), so it
+    // belongs inside the non-fatal path too — a link is a convenience, and no failure
+    // here may take `init` down after the scaffold already landed.
+    let state: LinkState;
+    try {
+      state = await classifyLink(linkAbs, targetAbs);
+    } catch (error) {
+      result.failures.push({ name, message: errorMessage(error) });
+      continue;
+    }
     if (state === "conflict") {
       result.conflicts.push(name);
       continue;
@@ -100,10 +128,7 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
       await createDirLink(linkAbs, targetAbs);
       result.linked.push(name);
     } catch (error) {
-      result.failures.push({
-        name,
-        message: error instanceof Error ? error.message : String(error),
-      });
+      result.failures.push({ name, message: errorMessage(error) });
     }
   }
   return result;
@@ -176,6 +201,12 @@ export async function runInit(argv: string[]): Promise<number> {
         `${lines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`,
       ),
       "Skill links",
+    );
+  }
+  if (skills.unreadable) {
+    logger.warn(
+      `Couldn't read ${pc.cyan(".agents/skills")}: ${skills.unreadable} ` +
+        `${pc.dim("(the skill files are still there — fix the permissions and re-run init to link them)")}.`,
     );
   }
   for (const name of skills.conflicts) {
