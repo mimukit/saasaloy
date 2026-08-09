@@ -2,7 +2,10 @@
 
 // pnpm (and our own picocolors output) embed SGR codes; strip them when measuring
 // or when a block needs recoloring uniformly (embedded resets cancel a wrapper color).
-// The control character is deliberate — this pattern exists to match ANSI escapes.
+// The control character is deliberate — this pattern exists to match ANSI escapes,
+// which is exactly what `no-control-regex` flags. Suppressed at this line and at the
+// copy in scripts/update-deps.ts, and nowhere else.
+// oxlint-disable-next-line no-control-regex
 const ANSI_PATTERN = /\u001B\[[0-9;]*m/g;
 export function stripAnsi(text: string): string {
   return text.replace(ANSI_PATTERN, "");
