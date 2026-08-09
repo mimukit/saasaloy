@@ -147,7 +147,7 @@ countSegments("Your code is 123456");
 // 1
 
 measureSegments("Your code is 123456 ✅");
-// { encoding: "ucs-2", units: 22, segments: 1 }
+// { encoding: "ucs-2", units: 21, segments: 1 }
 ```
 
 The rules, which are not the ones most people carry in their head:

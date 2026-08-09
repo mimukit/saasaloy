@@ -61,7 +61,7 @@ const UCS2_PART = 67;
  *
  * ```ts
  * measureSegments("Your code is 123456");        // gsm-7,  19 units, 1 segment
- * measureSegments("Your code is 123456 ✅");     // ucs-2,  22 units, 1 segment
+ * measureSegments("Your code is 123456 ✅");     // ucs-2,  21 units, 1 segment
  * ```
  */
 export function measureSegments(body: string): SmsSegmentation {
