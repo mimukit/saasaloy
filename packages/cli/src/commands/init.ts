@@ -77,6 +77,21 @@ function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
 
+// Some of the base's skills run in an order — saasaloy-setup writes the brief that
+// saasaloy-landing-copy reads — and readdir's alphabetical order happens to invert exactly
+// that pair. There is no manifest to read a dependency out of, and inventing one for two
+// skills would cost more than it explains, so the order is listed here. Anything not named
+// keeps its directory order, after these.
+const SKILL_ORDER = ["saasaloy-setup"];
+
+function bySkillOrder(a: string, b: string): number {
+  const rank = (name: string) => {
+    const at = SKILL_ORDER.indexOf(name);
+    return at === -1 ? SKILL_ORDER.length : at;
+  };
+  return rank(a) - rank(b);
+}
+
 // Point `.claude/skills/<name>` at each skill the base ships, so Claude Code discovers it
 // the moment scaffolding finishes rather than after the owner reads AGENTS.md.
 //
@@ -103,7 +118,7 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
     result.unreadable = errorMessage(error);
     return result;
   }
-  for (const name of names) {
+  for (const name of names.sort(bySkillOrder)) {
     const linkAbs = join(target, ".claude", "skills", name);
     const targetAbs = join(skillsDir, name);
     // classifyLink can reject after its lstat succeeds (the readlink behind it), so it
