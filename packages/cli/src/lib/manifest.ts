@@ -37,7 +37,7 @@ export interface Manifest {
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
 
 export function emptyManifest(): Manifest {
-  return { managed: {}, links: {}, patches: [] };
+  return { links: {}, managed: {}, patches: [] };
 }
 
 export async function loadManifest(root: string): Promise<Manifest> {
@@ -45,16 +45,19 @@ export async function loadManifest(root: string): Promise<Manifest> {
   if (!(await pathExists(file))) {
     return emptyManifest();
   }
-  const parsed = JSON.parse(await readFile(file, "utf8")) as Partial<Manifest>;
+  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Manifest>;
   return {
-    managed: parsed.managed ?? {},
     links: parsed.links ?? {},
+    managed: parsed.managed ?? {},
     patches: parsed.patches ?? [],
   };
 }
 
-export async function saveManifest(root: string, manifest: Manifest): Promise<void> {
+export async function saveManifest(
+  root: string,
+  manifest: Manifest
+): Promise<void> {
   const file = join(root, MANIFEST_FILE);
   await mkdir(dirname(file), { recursive: true });
-  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf8");
+  await writeFile(file, `${JSON.stringify(manifest, null, 2)}\n`, "utf-8");
 }

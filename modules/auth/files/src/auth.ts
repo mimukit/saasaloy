@@ -6,13 +6,13 @@ import { getDb } from "@repo/db/client";
 // Bindings + secrets this module reads. `cloudflare:workers`' importable `env` (not
 // Hono's `c.env`) is used deliberately here — see the comment on `export const auth`
 // below for why.
-type AuthEnv = {
+interface AuthEnv {
   DB: D1Database;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   COOKIE_DOMAIN?: string;
   CORS_ORIGINS?: string;
-};
+}
 
 const authEnv = env as unknown as AuthEnv;
 
@@ -37,19 +37,25 @@ function trustedOrigins(): string[] {
 // because a mis-derived domain breaks login silently and host-only always works
 // (just without subdomain sharing) — never the more dangerous failure mode.
 function deriveCookieDomain(): string | undefined {
-  if (authEnv.COOKIE_DOMAIN) return authEnv.COOKIE_DOMAIN;
+  if (authEnv.COOKIE_DOMAIN) {
+    return authEnv.COOKIE_DOMAIN;
+  }
 
   const baseURL = authEnv.BETTER_AUTH_URL;
-  if (!baseURL) return undefined;
+  if (!baseURL) {
+    return undefined;
+  }
 
   let hostname: string;
   try {
-    hostname = new URL(baseURL).hostname;
+    ({ hostname } = new URL(baseURL));
   } catch {
     return undefined;
   }
 
-  if (hostname === "localhost" || hostname === "127.0.0.1") return undefined; // host-only
+  if (hostname === "localhost" || hostname === "127.0.0.1") {
+    return undefined;
+  } // host-only
   if (hostname.startsWith("api.")) {
     const apex = hostname.slice("api.".length);
     // The apex must still have a dot in it. Without this guard a host whose own apex
@@ -58,7 +64,9 @@ function deriveCookieDomain(): string | undefined {
     // whole function exists to avoid. (A two-label check won't catch a registry suffix
     // like `api.co.uk`; a real public-suffix list is more than a scaffold should carry,
     // and nobody hosts an API on the apex of a public suffix.)
-    if (apex.includes(".")) return `.${apex}`;
+    if (apex.includes(".")) {
+      return `.${apex}`;
+    }
   }
   return undefined; // conservative: never guess a domain shape we don't recognize
 }
@@ -83,7 +91,7 @@ export const auth = betterAuth({
   },
   database: drizzleAdapter(getDb(authEnv.DB), { provider: "sqlite" }),
   advanced: cookieDomain
-    ? { crossSubDomainCookies: { enabled: true, domain: cookieDomain } }
+    ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
     : undefined,
   // Establishes the patch point; auth itself consumes none. Keep this an array
   // literal (never omit it) — `insertIntoPluginArray` needs a real array to push into.

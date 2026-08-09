@@ -20,5 +20,5 @@ export default defineConfig({
   // the same request works under `wrangler dev`. It also reflects every loopback
   // origin, so the allowlist looked wider than it is. Off, both dev paths behave
   // identically.
-  server: { port: 4000, strictPort: true, cors: false },
+  server: { cors: false, port: 4000, strictPort: true },
 });

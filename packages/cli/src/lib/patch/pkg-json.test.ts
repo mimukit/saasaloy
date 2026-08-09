@@ -12,49 +12,54 @@ const PACKAGE_JSON = `{
 }
 `;
 
-describe("upsertPackageJsonDependency", () => {
+describe(upsertPackageJsonDependency, () => {
   it("adds a new dependency to an existing section, keeping prior entries", () => {
     const out = upsertPackageJsonDependency(PACKAGE_JSON, {
-      section: "dependencies",
       name: "@repo/db",
       range: "workspace:*",
+      section: "dependencies",
     });
     expect(out).toContain("@repo/db");
     expect(out).toContain("workspace:*");
     expect(out).toContain("hono");
     const parsed = JSON.parse(out) as { dependencies: Record<string, string> };
-    expect(parsed.dependencies).toEqual({ hono: "4.12.31", "@repo/db": "workspace:*" });
+    expect(parsed.dependencies).toStrictEqual({
+      "@repo/db": "workspace:*",
+      hono: "4.12.31",
+    });
   });
 
   it("creates the section fresh when it doesn't exist yet", () => {
     const out = upsertPackageJsonDependency(PACKAGE_JSON, {
-      section: "peerDependencies",
       name: "react",
       range: "^19",
+      section: "peerDependencies",
     });
-    const parsed = JSON.parse(out) as { peerDependencies: Record<string, string> };
-    expect(parsed.peerDependencies).toEqual({ react: "^19" });
+    const parsed = JSON.parse(out) as {
+      peerDependencies: Record<string, string>;
+    };
+    expect(parsed.peerDependencies).toStrictEqual({ react: "^19" });
   });
 
   it("is idempotent: re-inserting an already-present dependency returns the source byte-for-byte", () => {
     const once = upsertPackageJsonDependency(PACKAGE_JSON, {
-      section: "dependencies",
       name: "@repo/db",
       range: "workspace:*",
+      section: "dependencies",
     });
     const twice = upsertPackageJsonDependency(once, {
-      section: "dependencies",
       name: "@repo/db",
       range: "workspace:*",
+      section: "dependencies",
     });
     expect(twice).toBe(once);
   });
 
   it("never clobbers: a dependency already present at a different range is left untouched", () => {
     const out = upsertPackageJsonDependency(PACKAGE_JSON, {
-      section: "dependencies",
       name: "hono",
       range: "5.0.0",
+      section: "dependencies",
     });
     expect(out).toBe(PACKAGE_JSON);
     expect(out).not.toContain("5.0.0");
@@ -62,9 +67,9 @@ describe("upsertPackageJsonDependency", () => {
 
   it("preserves formatting (2-space indent) of the surrounding document", () => {
     const out = upsertPackageJsonDependency(PACKAGE_JSON, {
-      section: "dependencies",
       name: "@repo/db",
       range: "workspace:*",
+      section: "dependencies",
     });
     expect(out).toContain('  "dependencies"');
     expect(out).toContain('    "@repo/db"');

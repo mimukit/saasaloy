@@ -23,13 +23,24 @@ export interface HeroProps {
   secondaryAction?: HeroAction | null;
 }
 
+// Hoisted out of the parameter list: an object literal written as a default prop is a
+// fresh object on every render, which defeats memoization downstream.
+const DEFAULT_PRIMARY_ACTION: HeroAction = {
+  href: "#cta",
+  label: "Get started",
+};
+const DEFAULT_SECONDARY_ACTION: HeroAction = {
+  href: "#pricing",
+  label: "See pricing",
+};
+
 export function Hero({
   siteName = "Acme",
   eyebrow = "Now in early access",
   title = "The SaaS you meant to build, already scaffolded.",
   description = `${siteName} gives your product a real front door on day one — a landing page, a design system, and room for every feature you add next.`,
-  primaryAction = { label: "Get started", href: "#cta" },
-  secondaryAction = { label: "See pricing", href: "#pricing" },
+  primaryAction = DEFAULT_PRIMARY_ACTION,
+  secondaryAction = DEFAULT_SECONDARY_ACTION,
 }: HeroProps) {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-24 sm:py-32">
@@ -42,18 +53,21 @@ export function Hero({
         <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl md:text-6xl">
           {title}
         </h1>
-        <p className="mt-6 max-w-2xl text-base text-pretty text-muted-foreground sm:text-lg">
+        <p className="text-muted-foreground mt-6 max-w-2xl text-base text-pretty sm:text-lg">
           {description}
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
-          <a href={primaryAction.href} className={cn(buttonVariants({ size: "lg" }))}>
+          <a
+            href={primaryAction.href}
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
             {primaryAction.label}
             <ArrowRightIcon data-icon="inline-end" />
           </a>
           {secondaryAction && (
             <a
               href={secondaryAction.href}
-              className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
+              className={cn(buttonVariants({ size: "lg", variant: "outline" }))}
             >
               {secondaryAction.label}
             </a>

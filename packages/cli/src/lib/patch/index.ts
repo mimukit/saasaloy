@@ -1,7 +1,10 @@
 import { toDiff } from "./diff.js";
-import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
-import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
-import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
+import { upsertWranglerBinding } from "./jsonc.js";
+import type { WranglerBinding } from "./jsonc.js";
+import { upsertPackageJsonDependency } from "./pkg-json.js";
+import type { PackageJsonDependency } from "./pkg-json.js";
+import { insertIntoPluginArray } from "./ts-module.js";
+import type { PluginArrayInsert } from "./ts-module.js";
 
 // The config-patch engine (build spec §3.4): the ~10% of module application that isn't
 // a pure file-drop. Small, well-tested AST codemods the applier (#6) invokes for
@@ -12,7 +15,10 @@ import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 export { toDiff } from "./diff.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
-export { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
+export {
+  upsertPackageJsonDependency,
+  type PackageJsonDependency,
+} from "./pkg-json.js";
 export { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
@@ -36,20 +42,27 @@ export interface PatchResult {
  * (`--dry-run`/`--diff`) or commit as it sees fit. Idempotent — a patch already
  * present yields `changed: false` and an empty diff.
  */
-export function applyPatch(source: string, patch: Patch, filename: string): PatchResult {
+export function applyPatch(
+  source: string,
+  patch: Patch,
+  filename: string
+): PatchResult {
   const content = applyCodemod(source, patch);
   const diff = toDiff(source, content, filename);
-  return { content, changed: content !== source, diff };
+  return { changed: content !== source, content, diff };
 }
 
 function applyCodemod(source: string, patch: Patch): string {
   switch (patch.kind) {
-    case "wrangler-binding":
+    case "wrangler-binding": {
       return upsertWranglerBinding(source, patch);
-    case "package-json-dependency":
+    }
+    case "package-json-dependency": {
       return upsertPackageJsonDependency(source, patch);
-    case "plugin-array":
+    }
+    case "plugin-array": {
       return insertIntoPluginArray(source, patch);
+    }
     default: {
       const exhaustive: never = patch;
       throw new Error(`unknown patch kind: ${JSON.stringify(exhaustive)}`);

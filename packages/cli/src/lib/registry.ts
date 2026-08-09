@@ -73,7 +73,9 @@ export interface Coordinate {
 // branch's tip SHA instead, or rely on the default branch. Pinning a ref on the *default*
 // repo (`waitlist@v2`) is likewise unsupported: a ref requires an explicit `owner/repo`.
 export function parseCoordinate(input?: string): Coordinate {
-  if (!input) return {};
+  if (!input) {
+    return {};
+  }
 
   let ref: string | undefined;
   let rest = input;
@@ -85,17 +87,25 @@ export function parseCoordinate(input?: string): Coordinate {
     const beforeAt = input.slice(0, at);
     const afterRef = slash === -1 ? "" : afterAt.slice(slash + 1);
     rest = afterRef ? `${beforeAt}/${afterRef}` : beforeAt;
-    if (!ref) throw new Error(`Malformed coordinate "${input}" — empty ref after "@".`);
+    if (!ref) {
+      throw new Error(`Malformed coordinate "${input}" — empty ref after "@".`);
+    }
   }
 
   const segs = rest.split("/").filter(Boolean);
 
-  if (ref === undefined && segs.length === 1) return { module: segs[0] };
-  if (segs.length === 2) return { owner: segs[0], repo: segs[1], ref };
-  if (segs.length === 3) return { owner: segs[0], repo: segs[1], ref, module: segs[2] };
+  if (ref === undefined && segs.length === 1) {
+    return { module: segs[0] };
+  }
+  if (segs.length === 2) {
+    return { owner: segs[0], repo: segs[1], ref };
+  }
+  if (segs.length === 3) {
+    return { owner: segs[0], repo: segs[1], ref, module: segs[2] };
+  }
 
   throw new Error(
-    `Malformed coordinate "${input}" — expected "name", "owner/repo", or "owner/repo[@ref]/name".`,
+    `Malformed coordinate "${input}" — expected "name", "owner/repo", or "owner/repo[@ref]/name".`
   );
 }
 
@@ -103,10 +113,16 @@ export function parseCoordinate(input?: string): Coordinate {
 export function createRegistrySource(coord: Coordinate): RegistrySource {
   const override = process.env[REGISTRY_ENV];
   if (override) {
-    const dir = isAbsolute(override) ? override : resolve(process.cwd(), override);
+    const dir = isAbsolute(override)
+      ? override
+      : resolve(process.cwd(), override);
     return new LocalRegistrySource(dir);
   }
-  return new RemoteRegistrySource(coord.owner ?? DEFAULT_OWNER, coord.repo ?? DEFAULT_REPO, coord.ref);
+  return new RemoteRegistrySource(
+    coord.owner ?? DEFAULT_OWNER,
+    coord.repo ?? DEFAULT_REPO,
+    coord.ref
+  );
 }
 
 // --- Shared descriptor loading ---------------------------------------------------
@@ -115,22 +131,26 @@ export function createRegistrySource(coord: Coordinate): RegistrySource {
 export async function loadModuleFolder(
   dir: string,
   name: string,
-  requiredBy?: string,
+  requiredBy?: string
 ): Promise<LoadedModule> {
   const file = join(dir, "registry-item.json");
   if (!(await pathExists(file))) {
     const because = requiredBy ? ` (required by ${requiredBy})` : "";
-    throw new Error(`Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`);
+    throw new Error(
+      `Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`
+    );
   }
-  const parsed = JSON.parse(await readFile(file, "utf8")) as unknown;
+  const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
   const result = await validateRegistryItem(parsed);
   if (!result.valid) {
-    throw new Error(`Module "${name}" has an invalid descriptor:\n  ${result.errors.join("\n  ")}`);
+    throw new Error(
+      `Module "${name}" has an invalid descriptor:\n  ${result.errors.join("\n  ")}`
+    );
   }
   const item = parsed as RegistryItem;
   if (item.name !== name) {
     throw new Error(
-      `Module folder "${name}" declares name "${item.name}" — the folder and descriptor name must match.`,
+      `Module folder "${name}" declares name "${item.name}" — the folder and descriptor name must match.`
     );
   }
   return { dir, item };
@@ -155,13 +175,15 @@ export class LocalRegistrySource implements RegistrySource {
     await this.assertExists();
     const names: string[] = [];
     for (const name of await readDirNames(this.dir)) {
-      if (await pathExists(join(this.dir, name, "registry-item.json"))) names.push(name);
+      if (await pathExists(join(this.dir, name, "registry-item.json"))) {
+        names.push(name);
+      }
     }
-    return names.sort();
+    return names.toSorted();
   }
 
   provenance(): ModuleProvenance {
-    return { source: "local", ref: "local", resolved: "local" };
+    return { ref: "local", resolved: "local", source: "local" };
   }
 
   private async assertExists(): Promise<void> {
@@ -193,7 +215,7 @@ export class RemoteRegistrySource implements RegistrySource {
   constructor(
     private readonly owner: string,
     private readonly repo: string,
-    private readonly ref?: string,
+    private readonly ref?: string
   ) {}
 
   get label(): string {
@@ -206,16 +228,20 @@ export class RemoteRegistrySource implements RegistrySource {
     this.tempDirs.push(parent);
     const dir = join(parent, name);
     try {
-      await downloadTemplate(`github:${this.owner}/${this.repo}/modules/${name}#${sha}`, {
-        dir,
-        auth: authToken(),
-        force: true,
-      });
+      await downloadTemplate(
+        `github:${this.owner}/${this.repo}/modules/${name}#${sha}`,
+        {
+          auth: authToken(),
+          dir,
+          force: true,
+        }
+      );
     } catch (error) {
       const because = requiredBy ? ` (required by ${requiredBy})` : "";
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(
         `Could not fetch module "${name}"${because} from ${this.owner}/${this.repo} — ${detail}`,
+        { cause: error }
       );
     }
     return loadModuleFolder(dir, name, requiredBy);
@@ -224,37 +250,58 @@ export class RemoteRegistrySource implements RegistrySource {
   async listModules(): Promise<string[]> {
     const { sha } = await this.resolve();
     const tree = await this.api<{ tree?: TreeEntry[] }>(
-      `/repos/${this.owner}/${this.repo}/git/trees/${sha}?recursive=1`,
+      `/repos/${this.owner}/${this.repo}/git/trees/${sha}?recursive=1`
     );
     const names: string[] = [];
     for (const entry of tree.tree ?? []) {
-      const name = /^modules\/([a-z0-9][a-z0-9-]*)\/registry-item\.json$/.exec(entry.path)?.[1];
-      if (name) names.push(name);
+      const name = /^modules\/([a-z0-9][a-z0-9-]*)\/registry-item\.json$/.exec(
+        entry.path
+      )?.[1];
+      if (name) {
+        names.push(name);
+      }
     }
-    return names.sort();
+    return names.toSorted();
   }
 
   provenance(): ModuleProvenance {
     if (!this.resolved) {
-      throw new Error("provenance() called before the source resolved a commit SHA.");
+      throw new Error(
+        "provenance() called before the source resolved a commit SHA."
+      );
     }
-    return { source: `${this.owner}/${this.repo}`, ref: this.resolved.ref, resolved: this.resolved.sha };
+    return {
+      ref: this.resolved.ref,
+      resolved: this.resolved.sha,
+      source: `${this.owner}/${this.repo}`,
+    };
   }
 
   async cleanup(): Promise<void> {
-    await Promise.all(this.tempDirs.map((dir) => rm(dir, { recursive: true, force: true })));
+    await Promise.all(
+      this.tempDirs.map((dir) => rm(dir, { force: true, recursive: true }))
+    );
     this.tempDirs.length = 0;
   }
 
   // Resolve the requested ref (or the repo's default branch) to a concrete commit SHA,
   // once per source — every module in one install pins to the same SHA.
   private async resolve(): Promise<{ ref: string; sha: string }> {
-    if (this.resolved) return this.resolved;
+    if (this.resolved) {
+      return this.resolved;
+    }
     const ref =
       this.ref ??
-      (await this.api<{ default_branch: string }>(`/repos/${this.owner}/${this.repo}`)).default_branch;
+      (
+        await this.api<{ default_branch: string }>(
+          `/repos/${this.owner}/${this.repo}`
+        )
+      ).default_branch;
     const sha = (
-      await this.apiText(`/repos/${this.owner}/${this.repo}/commits/${ref}`, "application/vnd.github.sha")
+      await this.apiText(
+        `/repos/${this.owner}/${this.repo}/commits/${ref}`,
+        "application/vnd.github.sha"
+      )
     ).trim();
     this.resolved = { ref, sha };
     return this.resolved;
@@ -267,26 +314,39 @@ export class RemoteRegistrySource implements RegistrySource {
       "X-GitHub-Api-Version": "2022-11-28",
     };
     const auth = authToken();
-    if (auth) headers.Authorization = `Bearer ${auth}`;
+    if (auth) {
+      headers.Authorization = `Bearer ${auth}`;
+    }
     return headers;
   }
 
   private async api<T>(path: string): Promise<T> {
-    return JSON.parse(await this.apiText(path, "application/vnd.github+json")) as T;
+    return JSON.parse(
+      await this.apiText(path, "application/vnd.github+json")
+    ) as T;
   }
 
   private async apiText(path: string, accept: string): Promise<string> {
-    const res = await fetch(`${GITHUB_API}${path}`, { headers: this.headers(accept) });
+    const res = await fetch(`${GITHUB_API}${path}`, {
+      headers: this.headers(accept),
+    });
     if (!res.ok) {
-      if (res.status === 403 && res.headers.get("x-ratelimit-remaining") === "0") {
+      if (
+        res.status === 403 &&
+        res.headers.get("x-ratelimit-remaining") === "0"
+      ) {
         throw new Error(
-          `GitHub API rate limit hit for ${this.owner}/${this.repo}. Set GITHUB_TOKEN to raise it.`,
+          `GitHub API rate limit hit for ${this.owner}/${this.repo}. Set GITHUB_TOKEN to raise it.`
         );
       }
       if (res.status === 404) {
-        throw new Error(`Not found on GitHub: ${this.owner}/${this.repo} (${path}).`);
+        throw new Error(
+          `Not found on GitHub: ${this.owner}/${this.repo} (${path}).`
+        );
       }
-      throw new Error(`GitHub API error ${res.status} for ${this.owner}/${this.repo} (${path}).`);
+      throw new Error(
+        `GitHub API error ${res.status} for ${this.owner}/${this.repo} (${path}).`
+      );
     }
     return res.text();
   }

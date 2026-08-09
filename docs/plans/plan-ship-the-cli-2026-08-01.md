@@ -34,13 +34,13 @@ merging one automatically-authored PR.
 |----------|-----------|
 | **Scope** | Publish + CI + lint only. The `saasaloy.dev` docs site and module gallery are **parked** — they're a product, not release engineering, they share no code with this work, and bundling them would hold the npm publish hostage to a design project. Revisited in its own session. |
 | **Release mechanism** | **Changesets.** `CONTRIBUTING.md` already promises it, so adopting it makes an existing public claim true rather than requiring a retraction. It generates `CHANGELOG.md` and a "Version Packages" PR, which is the missing piece — a tag-driven `npm version` flow would be marginally simpler for one publishable package but leaves the changelog manual. |
-| **Linter** | **Ultracite** (`ultracite@7.9.4`) configured for the **oxlint + oxfmt** toolchain — its published `peerDependencies` are `oxlint ^1.0.0` and `oxfmt >=0.1.0`. It ships framework presets for `astro`, `react`, `tanstack`, and `vitest`, which is exactly this repo's stack, and it is monorepo-aware. Rust-based, so it stays fast as `modules/` grows. Rejected ESLint (heavier dep tree, more config for a repo this size) and a bare oxlint config (Ultracite's preset is the value). |
+| **Linter** | **Moved out of this plan.** Linter selection and configuration are owned by [#71](https://github.com/mimukit/saasaloy/issues/71) and [`plan-linter-adoption-2026-08-08.md`](plan-linter-adoption-2026-08-08.md), which adopts Ultracite's **oxlint** provider (`ultracite` + `oxlint` + `oxlint-tsgolint`) alongside Prettier and Stylelint, and **rejects oxfmt**. This plan keeps only the CI half: the workflow runs the gate #71 creates. |
 | **First published version** | **`0.1.0`.** Pre-1.0 signals honestly that the applier is still moving (`remove`, `update`, and reverse-patches are unbuilt), while `0.0.x` reads as abandoned. |
 | **Publish authentication** | **npm trusted publishing via OIDC** — the release workflow requests `id-token: write` and publishes with no long-lived `NPM_TOKEN` secret in the repo. Consistent with the supply-chain posture already encoded in `pnpm-workspace.yaml` (`minimumReleaseAge: 4320`, `allowBuilds` allow-listing). Requires one-time configuration on npmjs.com — see Open questions. |
 | **Build-on-publish** | A `prepublishOnly` script in `packages/cli` runs `tsup`, so `npm publish` can never ship a stale or absent `dist/`. Today nothing forces a build before packing. |
 | **What CI gates** | `lint`, `typecheck`, `test`, and `build` on every pull request. `deps:check` is included but its failure semantics need a decision — see Open questions. |
 | **Node version** | Single source of truth. Today `.nvmrc` says `v24.18.0`, root `engines.node` says `>=24.0.0`, and `packages/cli/engines.node` says `>=24.13.0` — three different floors. CI reads `.nvmrc`; the published package keeps the *lowest* floor it genuinely supports. |
-| **Template files stay unlinted** | `packages/cli/templates/base/**` is shipped *asset* code, not repo source — generated projects get their own toolchain. Ultracite ignores it. |
+| **Template files stay unlinted** | **Reversed by [#71](https://github.com/mimukit/saasaloy/issues/71).** `packages/cli/templates/base/**` and `modules/*/files/**` *are* linted — the premise ("`{{PROJECT_NAME}}` makes them unparseable") doesn't survive the code, since the only code file carrying the token holds it inside a string literal. Generated projects also get their own toolchain, shipped from the base template. |
 | **README corrections ride along** | The README advertises `saasaloy sync`, which ADR 0007 and `CONTEXT.md` record as deliberately removed ("Avoid (superseded)"), and calls Postgres "coming soon" while `plan-phase-3-modules-2026-07-22.md` lists Postgres/multi-cloud as explicitly **cut**. Both are front-page distribution material, so they're fixed here rather than tracked separately. |
 
 ## Approach
@@ -66,23 +66,24 @@ The smallest change that turns `packages/cli` into a thing npm can serve.
   outside the repo, and run `saasaloy init` + `saasaloy add api` against it. This is the first time
   the shipped artifact will have ever been exercised.
 
-### Phase 2 — Ultracite (oxlint + oxfmt)
+### Phase 2 — (moved to #71)
 
-Turn `pnpm lint` from a no-op into a gate.
+Turning `pnpm lint` from a no-op into a gate is
+[#71](https://github.com/mimukit/saasaloy/issues/71)'s whole scope, and this plan no longer
+describes it. See [`plan-linter-adoption-2026-08-08.md`](plan-linter-adoption-2026-08-08.md)
+for the configuration that actually landed. Three details from the original phase are wrong
+and are recorded here only so nobody reinstates them:
 
-- Run `ultracite init --linter oxlint` at the repo root, selecting the `astro`, `react`, `tanstack`,
-  and `vitest` presets.
-- **Allow the Rust binaries to install.** pnpm 11 blocks all postinstall scripts by default and
-  `pnpm-workspace.yaml`'s `allowBuilds` currently permits only `esbuild`. `oxlint` and `oxfmt` ship
-  platform binaries and will need entries, or installs will silently produce a non-functional
-  linter.
-- Pin exact versions (`saveExact`) and respect the 3-day `minimumReleaseAge` cooldown like every
-  other dependency in the repo.
-- Add a real `lint` script to `packages/cli/package.json` so `turbo run lint` stops being a no-op,
-  plus `lint:fix`/`format` for local use.
-- Exclude `packages/cli/templates/base/**` from linting.
-- Land the resulting autofix diff as its own commit, separate from the config, so the config change
-  stays reviewable.
+- **No `ultracite init`, and no oxfmt.** The linter is Ultracite's oxlint provider composed by
+  hand in `oxlint.config.mjs`; formatting stays with Prettier + Stylelint.
+- **No `allowBuilds` entry.** `oxlint` and `oxlint-tsgolint` ship prebuilt per-platform binaries
+  through `optionalDependencies` and declare no install scripts, so pnpm 11's build block is
+  never hit.
+- **No per-workspace `lint` script and no turbo task.** `packages/cli` is the only workspace
+  member, so `turbo run lint` structurally cannot reach `scripts/`, `modules/` or `templates/`.
+  The empty `lint` task was deleted from `turbo.json` rather than filled in.
+
+What remains for this plan is Phase 3's job: the CI workflow invokes the root `pnpm lint`.
 
 ### Phase 3 — CI on pull request
 
@@ -91,7 +92,9 @@ The first `.github/` content this repo has ever had.
 - `.github/workflows/ci.yml`, triggered on `pull_request` and on push to `main`.
 - `pnpm/action-setup` + `actions/setup-node` reading the Node version from `.nvmrc`, with pnpm store
   caching.
-- Run `lint`, `typecheck`, `test`, `build` — through Turbo so its cache does the deduplication.
+- Run `lint`, `typecheck`, `test`, `build`. `typecheck`, `test` and `build` go through Turbo so its
+  cache does the deduplication; `lint` is a plain root script (#71 deleted the turbo task — see
+  Phase 2). Set `HUSKY=0` so the hook install is skipped in CI.
 - `concurrency` with `cancel-in-progress` so superseded pushes don't burn minutes.
 - Note that `engineStrict: true` is already set, so a CI Node/pnpm mismatch fails loudly rather than
   producing a confusing downstream error.

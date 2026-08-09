@@ -11,8 +11,8 @@ import { createAuthClient } from "better-auth/client";
 // `credentials: true` for this to succeed cross-origin.
 export function createClient(baseURL: string) {
   return createAuthClient({
-    baseURL,
     basePath: "/auth",
+    baseURL,
     fetchOptions: { credentials: "include" },
   });
 }

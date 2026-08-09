@@ -32,7 +32,10 @@ export interface CloudflareEmailOptions {
  * retry is the more expensive mistake (duplicate mail, or a hot loop against a hard
  * rejection). Add a row when you meet a new code in the wild.
  */
-const ERROR_CODES: Record<string, { code: EmailErrorCode; retryable: boolean }> = {
+const ERROR_CODES: Record<
+  string,
+  { code: EmailErrorCode; retryable: boolean }
+> = {
   E_SENDER_NOT_VERIFIED: { code: "sender_not_verified", retryable: false },
   E_RATE_LIMIT_EXCEEDED: { code: "rate_limited", retryable: true },
   E_CONTENT_TOO_LARGE: { code: "too_large", retryable: false },
@@ -42,56 +45,65 @@ const ERROR_CODES: Record<string, { code: EmailErrorCode; retryable: boolean }> 
   E_INTERNAL_SERVER_ERROR: { code: "provider_error", retryable: true },
 };
 
-export function cloudflare(options: CloudflareEmailOptions = {}): EmailProvider {
+export function cloudflare(
+  options: CloudflareEmailOptions = {}
+): EmailProvider {
   const bindingName = options.binding ?? "EMAIL";
 
   return {
     name: "cloudflare",
 
-    async send(env: EmailEnv, message: ResolvedEmailMessage): Promise<EmailResult> {
+    async send(
+      env: EmailEnv,
+      message: ResolvedEmailMessage
+    ): Promise<EmailResult> {
       const binding = env[bindingName] as SendEmail | undefined;
       if (!binding || typeof binding.send !== "function") {
         throw new EmailError(
           "provider_error",
           `No \`${bindingName}\` Email Sending binding on this Worker's env. Check the ` +
             "send_email entry in apps/api/wrangler.jsonc, and that this account is on a " +
-            "Workers paid plan with a domain onboarded to Email Service.",
+            "Workers paid plan with a domain onboarded to Email Service."
         );
       }
 
       try {
         const result = await binding.send({
           from: message.from,
-          to: message.to,
-          subject: message.subject,
           html: message.html,
+          subject: message.subject,
           text: message.text,
+          to: message.to,
           ...(message.replyTo ? { replyTo: message.replyTo } : {}),
         });
         return { messageId: result.messageId };
-      } catch (cause) {
-        throw normalize(cause);
+      } catch (error) {
+        throw normalize(error);
       }
     },
   };
 }
 
 function normalize(cause: unknown): EmailError {
-  if (cause instanceof EmailError) return cause;
+  if (cause instanceof EmailError) {
+    return cause;
+  }
 
   const providerCode = readCode(cause);
   const mapped = providerCode ? ERROR_CODES[providerCode] : undefined;
   const message = cause instanceof Error ? cause.message : String(cause);
 
   return new EmailError(mapped?.code ?? "provider_error", message, {
-    retryable: mapped?.retryable ?? false,
-    providerCode,
     cause,
+    providerCode,
+    retryable: mapped?.retryable ?? false,
   });
 }
 
 function readCode(cause: unknown): string | undefined {
-  if (typeof cause !== "object" || cause === null) return undefined;
-  const code = (cause as { code?: unknown }).code;
+  if (typeof cause !== "object" || cause === null) {
+    return undefined;
+  }
+  const { code } = cause as { code?: unknown };
   return typeof code === "string" ? code : undefined;
 }

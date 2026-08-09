@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { toDiff } from "./diff.js";
 
-describe("toDiff", () => {
+describe(toDiff, () => {
   it("returns an empty string when content is unchanged (idempotent no-op)", () => {
     expect(toDiff("a\nb\n", "a\nb\n", "file.txt")).toBe("");
   });

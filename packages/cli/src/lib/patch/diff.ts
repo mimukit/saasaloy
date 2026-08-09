@@ -9,8 +9,14 @@ import { createTwoFilesPatch } from "diff";
  * Returns `""` when the two are identical — the signal an applier uses to
  * report "nothing to do" and never touch the file (idempotent re-run).
  */
-export function toDiff(before: string, after: string, filename: string): string {
-  if (before === after) return "";
+export function toDiff(
+  before: string,
+  after: string,
+  filename: string
+): string {
+  if (before === after) {
+    return "";
+  }
   // Same path on both sides: this is an in-place edit, not a rename.
   const patch = createTwoFilesPatch(filename, filename, before, after, "", "");
   // Drop the leading `Index:`-style banner createPatch would add; createTwoFilesPatch

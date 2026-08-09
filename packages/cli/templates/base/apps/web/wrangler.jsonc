@@ -4,6 +4,6 @@
   "compatibility_date": "2026-07-22",
   // Pure static site: serve Astro's build output as Workers static assets, no Worker code.
   "assets": {
-    "directory": "./dist"
-  }
+    "directory": "./dist",
+  },
 }

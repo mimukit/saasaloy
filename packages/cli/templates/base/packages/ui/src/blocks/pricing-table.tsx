@@ -33,19 +33,20 @@ export interface PricingTier {
 
 const defaultTiers: PricingTier[] = [
   {
-    name: "Free",
-    description: "For side projects and the first hundred users.",
-    monthlyPrice: 0,
     annualPrice: 0,
-    features: ["Up to 3 projects", "Community support", "1 GB storage"],
-    ctaLabel: "Start for free",
     ctaHref: "#cta",
+    ctaLabel: "Start for free",
+    description: "For side projects and the first hundred users.",
+    features: ["Up to 3 projects", "Community support", "1 GB storage"],
+    monthlyPrice: 0,
+    name: "Free",
   },
   {
-    name: "Pro",
-    description: "For teams shipping to paying customers.",
-    monthlyPrice: 29,
     annualPrice: 23,
+    ctaHref: "#cta",
+    ctaLabel: "Start free trial",
+    description: "For teams shipping to paying customers.",
+    featured: true,
     features: [
       "Unlimited projects",
       "Email support",
@@ -53,18 +54,22 @@ const defaultTiers: PricingTier[] = [
       "Usage analytics",
       "Custom domains",
     ],
-    ctaLabel: "Start free trial",
-    ctaHref: "#cta",
-    featured: true,
+    monthlyPrice: 29,
+    name: "Pro",
   },
   {
-    name: "Enterprise",
-    description: "For organisations with procurement and a security review.",
-    monthlyPrice: null,
     annualPrice: null,
-    features: ["SSO and SCIM", "Priority support", "Audit logs", "Custom contracts"],
-    ctaLabel: "Talk to sales",
     ctaHref: "#cta",
+    ctaLabel: "Talk to sales",
+    description: "For organisations with procurement and a security review.",
+    features: [
+      "SSO and SCIM",
+      "Priority support",
+      "Audit logs",
+      "Custom contracts",
+    ],
+    monthlyPrice: null,
+    name: "Enterprise",
   },
 ];
 
@@ -89,22 +94,31 @@ export function PricingTable({
   const [annual, setAnnual] = useState(false);
 
   return (
-    <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20">
+    <section
+      id={id}
+      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
+    >
       <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{title}</h2>
-        <p className="mt-4 text-base text-pretty text-muted-foreground">{description}</p>
+        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          {title}
+        </h2>
+        <p className="text-muted-foreground mt-4 text-base text-pretty">
+          {description}
+        </p>
 
         <div className="mt-8 flex items-center justify-center gap-3">
           <div
             role="group"
             aria-label="Billing period"
-            className="inline-flex items-center gap-1 rounded-xl border border-border p-1"
+            className="border-border inline-flex items-center gap-1 rounded-xl border p-1"
           >
             <Button
               size="sm"
               variant={annual ? "ghost" : "secondary"}
               aria-pressed={!annual}
-              onClick={() => setAnnual(false)}
+              onClick={() => {
+                setAnnual(false);
+              }}
             >
               Monthly
             </Button>
@@ -112,7 +126,9 @@ export function PricingTable({
               size="sm"
               variant={annual ? "secondary" : "ghost"}
               aria-pressed={annual}
-              onClick={() => setAnnual(true)}
+              onClick={() => {
+                setAnnual(true);
+              }}
             >
               Annual
             </Button>
@@ -124,15 +140,18 @@ export function PricingTable({
       <div className="mt-14 grid items-start gap-4 lg:grid-cols-3">
         {tiers.map((tier) => {
           const price = annual ? tier.annualPrice : tier.monthlyPrice;
+          // `featured` is optional on PricingTier, and a nullable boolean in a
+          // conditional is exactly what strict-boolean-expressions objects to.
+          const featured = tier.featured ?? false;
           return (
             <Card
               key={tier.name}
-              className={cn("h-full", tier.featured && "ring-2 ring-primary")}
+              className={cn("h-full", featured && "ring-primary ring-2")}
             >
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle>{tier.name}</CardTitle>
-                  {tier.featured && <Badge>Most popular</Badge>}
+                  {featured && <Badge>Most popular</Badge>}
                 </div>
                 <CardDescription>{tier.description}</CardDescription>
               </CardHeader>
@@ -143,7 +162,7 @@ export function PricingTable({
                     {price === null ? "Custom" : `${currencySymbol}${price}`}
                   </span>
                   {price !== null && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       /month{annual ? ", billed annually" : ""}
                     </span>
                   )}
@@ -151,8 +170,14 @@ export function PricingTable({
 
                 <ul className="mt-6 flex flex-col gap-2.5">
                   {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm">
-                      <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-sm"
+                    >
+                      <CheckIcon
+                        aria-hidden="true"
+                        className="mt-0.5 size-4 shrink-0"
+                      />
                       <span className="text-muted-foreground">{feature}</span>
                     </li>
                   ))}
@@ -163,8 +188,10 @@ export function PricingTable({
                 <a
                   href={tier.ctaHref}
                   className={cn(
-                    buttonVariants({ variant: tier.featured ? "default" : "outline" }),
-                    "w-full",
+                    buttonVariants({
+                      variant: featured ? "default" : "outline",
+                    }),
+                    "w-full"
                   )}
                 >
                   {tier.ctaLabel}

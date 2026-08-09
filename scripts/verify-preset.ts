@@ -24,10 +24,9 @@
 
 import { spawnSync } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 
 // tweakcn serves the widest catalogue of `registry:style` items, and its URL shape is
 // stable and versionless. The mechanism under test is the registry item, not the host —
@@ -64,7 +63,9 @@ const SINGLETON_BLOCKS: readonly [label: string, pattern: RegExp][] = [
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`verify-preset: ${message}`);
-  for (const line of detail) console.error(`  ${line}`);
+  for (const line of detail) {
+    console.error(`  ${line}`);
+  }
   process.exit(1);
 }
 
@@ -76,23 +77,31 @@ function step(message: string): void {
 // failing pnpm/shadcn reports itself in full rather than through a summary of ours.
 function run(command: string, args: readonly string[], label: string): void {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
-  if (result.error) fail(`${label} could not start`, String(result.error));
-  if (result.status !== 0) fail(`${label} failed`, `exit code ${String(result.status)}`);
+  if (result.error) {
+    fail(`${label} could not start`, String(result.error));
+  }
+  if (result.status !== 0) {
+    fail(`${label} failed`, `exit code ${String(result.status)}`);
+  }
 }
 
 // CSS values survive the build re-serialised: `oklch(0.205 0 0)` comes back as
 // `oklch(.205 0 0)`, whitespace collapses, and the declaration may be inlined into HTML.
 // Compare on a shape that ignores all of it.
 function normalize(css: string): string {
-  return css.replace(/\s+/g, "").replace(/(^|[^\d.])0\./g, "$1.");
+  return css.replaceAll(/\s+/g, "").replaceAll(/(^|[^\d.])0\./g, "$1.");
 }
 
 // The `--primary: <value>;` declared in a stylesheet's FIRST :root block.
 function readRootPrimary(css: string, source: string): string {
   const rootBlock = /:root\s*\{([\s\S]*?)\}/.exec(css);
-  if (!rootBlock?.[1]) fail(`no :root block in ${source}`);
+  if (!rootBlock?.[1]) {
+    fail(`no :root block in ${source}`);
+  }
   const primary = /--primary:\s*([^;]+);/.exec(rootBlock[1]);
-  if (!primary?.[1]) fail(`no --primary declaration in ${source}'s :root block`);
+  if (!primary?.[1]) {
+    fail(`no --primary declaration in ${source}'s :root block`);
+  }
   return primary[1].trim();
 }
 
@@ -102,9 +111,12 @@ step("scaffolding .dev/playground from the template");
 run("pnpm", ["run", "play:init"], "play:init");
 run("pnpm", ["-C", ".dev/playground", "install"], "playground install");
 
-const cssBefore = await readFile(playgroundCss, "utf8");
-const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf8");
-const basePrimary = readRootPrimary(cssBefore, "the freshly scaffolded globals.css");
+const cssBefore = await readFile(playgroundCss, "utf-8");
+const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf-8");
+const basePrimary = readRootPrimary(
+  cssBefore,
+  "the freshly scaffolded globals.css"
+);
 
 // --- Run the documented recipe ---------------------------------------------------
 
@@ -114,12 +126,20 @@ step(`applying preset ${PRESET_URL}`);
 // the same `exec` form the template's AGENTS.md documents, aimed at the playground.
 run(
   "pnpm",
-  ["--dir", ".dev/playground/packages/ui", "exec", "shadcn", "add", PRESET_URL, "--yes"],
-  "shadcn add",
+  [
+    "--dir",
+    ".dev/playground/packages/ui",
+    "exec",
+    "shadcn",
+    "add",
+    PRESET_URL,
+    "--yes",
+  ],
+  "shadcn add"
 );
 
-const cssAfter = await readFile(playgroundCss, "utf8");
-const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf8");
+const cssAfter = await readFile(playgroundCss, "utf-8");
+const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf-8");
 
 // --- Assert the base's own rules survived the merge -------------------------------
 
@@ -127,7 +147,7 @@ if (cssAfter === cssBefore) {
   fail(
     "shadcn add left globals.css untouched",
     `The preset at ${PRESET_URL} applied nothing — the URL may have moved, or shadcn`,
-    "no longer treats a registry:style item as a theme swap. Check its output above.",
+    "no longer treats a registry:style item as a theme swap. Check its output above."
   );
 }
 
@@ -136,7 +156,7 @@ if (componentsJsonAfter !== componentsJsonBefore) {
     "shadcn add rewrote components.json",
     "ADR 0022 fixes `style` at init because the CLI cannot change it later; a preset",
     "moving that field would silently re-base the project's primitives.",
-    `See ${relative(root, playgroundComponentsJson)}.`,
+    `See ${relative(root, playgroundComponentsJson)}.`
   );
 }
 
@@ -146,7 +166,7 @@ if (missing.length > 0) {
     `${String(missing.length)} hand-written rule(s) did not survive the preset merge`,
     ...missing,
     "shadcn now overwrites globals.css rather than merging into it. Either pin shadcn",
-    "back, or stop documenting the in-place recipe in the template's AGENTS.md.",
+    "back, or stop documenting the in-place recipe in the template's AGENTS.md."
   );
 }
 
@@ -155,7 +175,7 @@ for (const [label, pattern] of SINGLETON_BLOCKS) {
   if (count !== 1) {
     fail(
       `expected exactly one \`${label}\` block after the merge, found ${String(count)}`,
-      "A duplicated block wins by source order and drops whatever the first one declared.",
+      "A duplicated block wins by source order and drops whatever the first one declared."
     );
   }
 }
@@ -165,7 +185,7 @@ if (normalize(presetPrimary) === normalize(basePrimary)) {
   fail(
     `--primary is still the base value (${basePrimary}) after applying the preset`,
     "The merge preserved the file but changed no tokens, so this check proves nothing.",
-    "Pick a preset whose palette differs from the template's, or suspect shadcn.",
+    "Pick a preset whose palette differs from the template's, or suspect shadcn."
   );
 }
 
@@ -178,7 +198,9 @@ run("node", ["scripts/verify-css.ts"], "verify-css");
 
 // Astro inlines small stylesheets straight into the page, so scan both extensions —
 // same reason verify-css does.
-const built = (await collectBuiltFiles(playgroundDist)).map(normalize).join("\n");
+const built = (await collectBuiltFiles(playgroundDist))
+  .map(normalize)
+  .join("\n");
 
 // Assert the preset's own value positively. A bare `--primary:` declaration only proves
 // the build emitted the token; any third value would satisfy it, and that is not what
@@ -188,7 +210,7 @@ if (!built.includes(normalize(`--primary:${presetPrimary}`))) {
     "the built CSS does not carry the preset --primary value",
     `Expected ${presetPrimary} under ${relative(root, playgroundDist)}.`,
     "Either the build did not run, or it re-serialised the value in a way normalize()",
-    "does not yet flatten — check the built output before trusting this failure.",
+    "does not yet flatten — check the built output before trusting this failure."
   );
 }
 
@@ -197,13 +219,13 @@ if (built.includes(normalize(`--primary:${basePrimary}`))) {
     "the built CSS still carries the base --primary value",
     `Expected the preset's ${presetPrimary}, found the template's ${basePrimary}.`,
     "globals.css was swapped but the build did not pick it up — suspect a stale",
-    "Turborepo cache in the playground (play:init runs `git init` for exactly this).",
+    "Turborepo cache in the playground (play:init runs `git init` for exactly this)."
   );
 }
 
 console.log(
   `verify-preset: preset ${PRESET_URL} applied cleanly — base rules intact, ` +
-    `--primary swapped to ${presetPrimary} in the built output.`,
+    `--primary swapped to ${presetPrimary} in the built output.`
 );
 
 // Read every built .css/.html file. Declared after use on purpose: the assertions above
@@ -212,17 +234,21 @@ async function collectBuiltFiles(dir: string): Promise<string[]> {
   const contents: string[] = [];
   let entries;
   try {
-    entries = await readdir(dir, { withFileTypes: true, recursive: true });
+    entries = await readdir(dir, { recursive: true, withFileTypes: true });
   } catch {
     fail(
       `no built output under ${relative(root, dir)}`,
-      "The playground build did not emit anything where this script expects it.",
+      "The playground build did not emit anything where this script expects it."
     );
   }
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith(".css") && !entry.name.endsWith(".html")) continue;
-    contents.push(await readFile(join(entry.parentPath, entry.name), "utf8"));
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (!entry.name.endsWith(".css") && !entry.name.endsWith(".html")) {
+      continue;
+    }
+    contents.push(await readFile(join(entry.parentPath, entry.name), "utf-8"));
   }
   if (contents.length === 0) {
     fail(`no built CSS or HTML under ${relative(root, dir)}`);
