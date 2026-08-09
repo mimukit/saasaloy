@@ -191,7 +191,8 @@ cannot consume one (`extends` takes file paths, JSON only).
   2. `lint:code` — oxlint over everything, no type information
   3. `lint:css` — Stylelint over `**/*.css`
   4. `format:check` — `prettier --check .`
-- `pnpm lint:fix` — oxlint `--fix` plus Stylelint `--fix`. **Never** add
+- `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over
+  `packages/ui/src`, the plain one over everything, then Stylelint. **Never** add
   `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
 - `pnpm format` — `prettier --write .`
 - `pnpm typecheck` — `tsc`, and it must pass before you commit.

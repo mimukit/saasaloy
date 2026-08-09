@@ -17,7 +17,7 @@
     "lint:types": "oxlint -c oxlint.config.mjs --type-aware --deny-warnings packages/ui/src",
     "lint:code": "oxlint -c oxlint.config.mjs --deny-warnings .",
     "lint:css": "stylelint \"**/*.css\" --max-warnings 0",
-    "lint:fix": "oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
+    "lint:fix": "oxlint -c oxlint.config.mjs --type-aware --fix packages/ui/src && oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "typecheck": "turbo run typecheck"
