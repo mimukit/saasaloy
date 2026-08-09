@@ -116,6 +116,87 @@ tools in a generated project read git, and all three degrade without it:
 (The Tailwind half is also covered independently by an explicit `@source not` rule in the
 template's `globals.css`, so a build before the first commit is still fine.)
 
+## Linting and formatting
+
+`pnpm lint` is the gate. It runs four passes and fails on the first one that finds
+anything — including in `packages/cli/templates/base/**` and `modules/*/files/**`, which
+are linted like any other source, because they are the code every generated project
+starts from.
+
+| Pass | Command | Covers |
+| --- | --- | --- |
+| `lint:types` | `oxlint -c oxlint.config.mjs --type-aware --deny-warnings packages/cli/src scripts` | the two paths with a resolvable tsconfig |
+| `lint:code` | `oxlint -c oxlint.config.mjs --deny-warnings .` | everything, no type information |
+| `lint:css` | `stylelint "**/*.css" --max-warnings 0` | the one CSS file we ship |
+| `format:check` | `prettier --check .` | everything except Markdown |
+
+`pnpm lint:fix` applies oxlint's and Stylelint's safe fixes; `pnpm format` rewrites with
+Prettier. Three things about this are easy to get wrong:
+
+- **The `-c` flag is not optional.** oxlint only auto-discovers `.oxlintrc.json`, and a
+  JSON config cannot `extends` Ultracite's `.mjs` presets. Run it without `-c` and you are
+  linting with oxlint's defaults, not ours.
+- **Pass 2 re-walks the files pass 1 covered.** That is deliberate and cheap. The
+  alternative — an ignore list keeping pass 2 off `packages/cli/src` and `scripts/` — is a
+  second place for the path split to drift.
+- **Never run `oxlint --fix-suggestions`.** On this repo it rewrites `a[i++]` to
+  `a[i += 1]` in `packages/cli/src/lib/diff.ts`, which is a different program, and all 121
+  tests still pass. `lint:fix` is `--fix` only.
+
+**Markdown is not formatted**, by decision. Ultracite's Prettier config sets
+`proseWrap: "never"`, which would collapse every hand-wrapped paragraph in this repo's
+ADRs, plans and QA docs into a single line. `.prettierignore` excludes `**/*.md`.
+
+### Adding a justified suppression
+
+Fix the code first. When a rule is genuinely wrong for one place, suppress **that place**
+and say why:
+
+```ts
+// for-of is not equivalent here: it would hand back the same raw AST nodes the
+// callback form does, which is the whole reason this indexes.
+// oxlint-disable-next-line typescript/prefer-for-of
+for (let i = 0; i < array.length; i++) {
+```
+
+The directive applies to the **immediately following line**, so the reason goes above it,
+not between.
+
+Turning a rule off for the whole repo goes in the `suppressed` block in
+`oxlint.config.mjs`, with its reason, in the group it belongs to. That block exists
+because Ultracite enables ~470 rules and this repo had never been linted — first contact
+produced ~670 findings. Everything in it is a style-tier rule that disagrees with a
+deliberate convention here (`func-style`, `no-inline-comments`, `no-await-in-loop`,
+`sort-keys`, the regex family, typescript-eslint's strict-type-checked tier). **No
+correctness rule is in it, and none should be.** Re-tightening one is a code change, not a
+config change — see [ADR 0023](docs/adr/adr-0023-generated-projects-ship-a-lint-and-hook-toolchain-2026-08-09.md).
+
+### Commit hooks
+
+`pnpm install` runs `prepare: "husky"`, which installs two hooks:
+
+- **`pre-commit`** runs lint-staged over staged files only — `oxlint --fix --deny-warnings`,
+  `stylelint --fix --max-warnings 0`, `prettier --write`. It skips the type-aware pass on
+  purpose: that one needs the whole project graph, which defeats staged-file scoping.
+- **`commit-msg`** runs commitlint with `@commitlint/config-conventional`, so messages must
+  read `type(scope): subject`. Scopes are free-form.
+
+Bypass in a genuine emergency with `git commit --no-verify`. `HUSKY=0` skips every hook at
+once, and is how CI avoids installing them.
+
+The same stack ships in the base template, so a generated project gets it too
+(`packages/cli/templates/base/_husky/` becomes `.husky/` at scaffold time — `copyTemplate`
+renames leading-underscore names, and husky's shims run the hook file through `sh`, so it
+needs no executable bit).
+
+### What the linter does *not* replace
+
+`scripts/verify-css.ts` and `scripts/verify-preset.ts` assert build-time invariants no
+linter can see: that Tailwind actually scanned `packages/ui` (a non-matching `@source`
+glob is silent, not an error), and that a `shadcn` preset swap left the base's
+hand-written CSS intact. Both stay exactly as they are. `pnpm lint` passing says nothing
+about either.
+
 ## Updating dependencies
 
 Saasaloy ships dependency versions to downstream projects from two sets of files that
