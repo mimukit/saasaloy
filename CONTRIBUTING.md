@@ -90,15 +90,22 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm cli` | run the built CLI directly (`node packages/cli/dist/index.js`) |
 | `pnpm cli:link` | build the CLI and put a global `saasaloy` bin on your `PATH` (link from `main` only) |
 | `pnpm cli:unlink` | remove the global `saasaloy` bin |
-| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim, `git init` the result |
+| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
 
-### Why `play:init` runs `git init`
+### Why the playground is a git repository
 
-The playground is gitignored by *this* repo, but it is itself a repo — because two tools
-in the generated project read git to decide what to skip, and both degrade badly without it:
+`play:init` no longer runs `git init` itself — `saasaloy init` does, for every project it
+scaffolds (see [ADR 0024](docs/adr/adr-0024-saasaloy-init-initialises-a-git-repository-2026-08-09.md)).
+The playground gets its repository the same way a user's project does, which is the point:
+the two paths no longer differ.
 
+The reasons the playground needs one have not changed, they just moved into the CLI. Three
+tools in a generated project read git, and all three degrade without it:
+
+- **husky** refuses to install commit hooks outside a work tree, and the template's
+  `prepare: "husky"` runs on the very first `pnpm install`.
 - **Turborepo** hashes task inputs through git. With no `.git`, `@repo/web:build` never
   invalidates when `packages/ui` changes, so `deps:verify` happily validates a **cached
   build of the previous template**.
@@ -106,9 +113,8 @@ in the generated project read git to decide what to skip, and both degrade badly
   `.git` directory. Without one it scans `node_modules` and the emitted stylesheet grows
   roughly 5x.
 
-A real `saasaloy init` project is a git repo, so this just makes the playground behave like
-one. (The Tailwind half is also fixed independently by an explicit `@source not` rule in the
-template's `globals.css`, so a user who builds before their first `git init` is still fine.)
+(The Tailwind half is also covered independently by an explicit `@source not` rule in the
+template's `globals.css`, so a build before the first commit is still fine.)
 
 ## Updating dependencies
 

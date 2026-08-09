@@ -2,7 +2,16 @@ import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cancel, intro, isCancel, note, outro, select, spinner, text } from "@clack/prompts";
+import {
+  cancel,
+  intro,
+  isCancel,
+  note,
+  outro,
+  select,
+  spinner,
+  text,
+} from "@clack/prompts";
 import pc from "picocolors";
 import { pathExists } from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
@@ -15,7 +24,9 @@ import { stripAnsi, wrapForNote } from "../lib/tui.js";
 // admin, features) are added later via `saasaloy add`, which copies their skills in.
 
 // Bundled at <pkg>/templates/base; at runtime import.meta.url is <pkg>/dist/index.js.
-const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url));
+const TEMPLATE_DIR = fileURLToPath(
+  new URL("../templates/base", import.meta.url)
+);
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -25,13 +36,15 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 // report *why*. pnpm writes its `ERR_PNPM_*` diagnostics to stdout, not stderr,
 // so we keep both. Never throws — failures come back as { ok: false } so init
 // can carry on regardless.
-function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }> {
+function runPnpmInstall(
+  cwd: string
+): Promise<{ ok: boolean; message?: string }> {
   return new Promise((resolvePromise) => {
     // On Windows pnpm is `pnpm.cmd`, which bare spawn won't resolve — go via the shell there.
     const child = spawn("pnpm", ["install"], {
       cwd,
-      stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32",
+      stdio: ["ignore", "pipe", "pipe"],
     });
     let stdout = "";
     let stderr = "";
@@ -43,17 +56,93 @@ function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }>
     });
     child.on("error", (err) => {
       // e.g. pnpm not on PATH.
-      resolvePromise({ ok: false, message: err.message });
+      resolvePromise({ message: err.message, ok: false });
     });
     child.on("close", (code) => {
       if (code === 0) {
         resolvePromise({ ok: true });
       } else {
         // Prefer pnpm's own diagnostics (stderr, then stdout); fall back to the code.
-        const details = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+        const details = [stderr.trim(), stdout.trim()]
+          .filter(Boolean)
+          .join("\n");
         resolvePromise({
+          message:
+            details || `pnpm install exited with code ${code ?? "unknown"}`,
           ok: false,
-          message: details || `pnpm install exited with code ${code ?? "unknown"}`,
+        });
+      }
+    });
+  });
+}
+
+// Run a git subcommand in `dir` and report only whether it exited 0. Every caller
+// here treats "git is missing" and "git said no" the same way, so a spawn error
+// resolves false rather than throwing.
+function gitSucceeds(dir: string, args: string[]): Promise<boolean> {
+  return new Promise((resolvePromise) => {
+    const child = spawn("git", args, {
+      cwd: dir,
+      shell: process.platform === "win32",
+      stdio: "ignore",
+    });
+    child.on("error", () => {
+      resolvePromise(false);
+    });
+    child.on("close", (code) => {
+      resolvePromise(code === 0);
+    });
+  });
+}
+
+// Would `git init` here nest a repository inside one that tracks this directory?
+//
+// Two separate questions, because "inside a work tree" alone gives the wrong answer
+// for the one case this repo exercises constantly. `saasaloy init ./apps/my-app` run
+// inside an existing project must NOT create a nested repo — but `.dev/playground`
+// sits inside this repo too, and `/.dev/` is gitignored, so a repository there is
+// exactly right (and is what husky, Turborepo and Tailwind need). An ignored path is
+// by definition not the outer repository's business.
+async function wouldNestInsideRepo(dir: string): Promise<boolean> {
+  if (!(await gitSucceeds(dir, ["rev-parse", "--is-inside-work-tree"]))) {
+    return false;
+  }
+  // `check-ignore` exits 0 when the path IS ignored by the enclosing repository.
+  return !(await gitSucceeds(dir, ["check-ignore", "--quiet", "."]));
+}
+
+// `git init` in the scaffolded project. Three things downstream need it:
+//   - husky refuses to install its hooks without a `.git` directory, and the very
+//     next step is `pnpm install`, which runs `prepare: "husky"`;
+//   - Turborepo hashes inputs through git, and without a repo it falls back to a
+//     slower, less precise walk;
+//   - Tailwind's scanner only skips node_modules by way of .gitignore, and its
+//     ignore walker needs a real .git to honour one (see globals.css's third
+//     @source glob).
+// Never throws, matching runPnpmInstall: a missing `git` warns and init carries on.
+function runGitInit(cwd: string): Promise<{ ok: boolean; message?: string }> {
+  return new Promise((resolvePromise) => {
+    const child = spawn("git", ["init", "--quiet"], {
+      cwd,
+      shell: process.platform === "win32",
+      stdio: ["ignore", "ignore", "pipe"],
+    });
+    let stderr = "";
+    child.stderr?.on("data", (chunk) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (err) => {
+      // e.g. git not on PATH.
+      resolvePromise({ message: err.message, ok: false });
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolvePromise({ ok: true });
+      } else {
+        resolvePromise({
+          message:
+            stderr.trim() || `git init exited with code ${code ?? "unknown"}`,
+          ok: false,
         });
       }
     });
@@ -61,12 +150,11 @@ function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }>
 }
 
 export async function runInit(argv: string[]): Promise<number> {
-  const positional = argv.filter((arg) => !arg.startsWith("-"));
   const force = argv.includes("--force");
   // Skip the install prompt entirely and never run pnpm install — for scripted/CI
   // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
   const noInstall = argv.includes("--no-install");
-  let nameArg = positional[0];
+  let nameArg = argv.find((arg) => !arg.startsWith("-"));
 
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
 
@@ -77,13 +165,14 @@ export async function runInit(argv: string[]): Promise<number> {
       placeholder: "my-app (use `.` for the current directory)",
       validate: (value) => {
         const trimmed = value?.trim() ?? "";
-        if (!trimmed) return "Enter a project name (or `.` for the current directory).";
+        if (!trimmed) {
+          return "Enter a project name (or `.` for the current directory).";
+        }
         // Mirror the arg path: name is the basename of the resolved target.
         const name = basename(resolve(process.cwd(), trimmed));
-        if (!NAME_PATTERN.test(name)) {
-          return "Use lowercase letters, digits, and hyphens (e.g. my-app).";
-        }
-        return undefined;
+        return NAME_PATTERN.test(name)
+          ? undefined
+          : "Use lowercase letters, digits, and hyphens (e.g. my-app).";
       },
     });
     if (isCancel(answer)) {
@@ -99,7 +188,7 @@ export async function runInit(argv: string[]): Promise<number> {
 
   if (!NAME_PATTERN.test(projectName)) {
     cancel(
-      `Invalid project name "${projectName}". Use lowercase letters, digits, and hyphens (e.g. my-app).`,
+      `Invalid project name "${projectName}". Use lowercase letters, digits, and hyphens (e.g. my-app).`
     );
     return 1;
   }
@@ -107,7 +196,9 @@ export async function runInit(argv: string[]): Promise<number> {
   if (await pathExists(target)) {
     const entries = (await readdir(target)).filter((e) => e !== ".git");
     if (entries.length > 0 && !force) {
-      cancel(`Directory ${nameArg} is not empty. Re-run with --force to scaffold into it anyway.`);
+      cancel(
+        `Directory ${nameArg} is not empty. Re-run with --force to scaffold into it anyway.`
+      );
       return 1;
     }
   }
@@ -115,7 +206,32 @@ export async function runInit(argv: string[]): Promise<number> {
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   await copyTemplate(TEMPLATE_DIR, target, { PROJECT_NAME: projectName });
-  s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`);
+  s.stop(
+    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
+  );
+
+  // Initialise a repository unless that would nest one inside a repo that tracks
+  // this path — `saasaloy init ./apps/my-app` inside an existing project is a
+  // supported shape. This runs BEFORE the install prompt because `pnpm install`
+  // triggers the template's `prepare: "husky"`, which needs `.git` to already exist.
+  if (await wouldNestInsideRepo(target)) {
+    logger.info(
+      `${pc.cyan(projectName)} is already inside a git repository — skipping ${pc.cyan("git init")}.`
+    );
+  } else {
+    const git = await runGitInit(target);
+    if (git.ok) {
+      logger.info(`Initialised a git repository ${pc.dim("(git init)")}.`);
+    } else {
+      // Not fatal: everything git buys us degrades rather than breaks.
+      logger.warn(
+        `Couldn't run ${pc.cyan("git init")} — run it yourself before ${pc.cyan("pnpm install")} so the commit hooks install.`
+      );
+      if (git.message) {
+        logger.warn(pc.dim(stripAnsi(git.message)));
+      }
+    }
+  }
 
   // Offer to install now; on decline (or cancel) fall back to the printed steps.
   // `select` (not `confirm`) so each choice renders on its own line.
@@ -123,12 +239,12 @@ export async function runInit(argv: string[]): Promise<number> {
   const wantsInstall = noInstall
     ? false
     : await select({
+        initialValue: true,
         message: "Install dependencies now?",
         options: [
           { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
           { value: false, label: "No, I'll run it later" },
         ],
-        initialValue: true,
       });
   if (!isCancel(wantsInstall) && wantsInstall) {
     const install = spinner();
@@ -140,7 +256,9 @@ export async function runInit(argv: string[]): Promise<number> {
     } else {
       // Don't break the flow — report and let the user finish it by hand.
       install.stop(pc.yellow("pnpm install did not finish"));
-      logger.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
+      logger.warn(
+        `Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`
+      );
       if (result.message) {
         // Show pnpm's own diagnostics inside a box, tail-trimmed and soft-wrapped to
         // the terminal width so a long line (e.g. a registry URL) can't break the rail.
@@ -159,7 +277,7 @@ export async function runInit(argv: string[]): Promise<number> {
   }
 
   const steps = [
-    nameArg !== "." ? `cd ${nameArg}` : null,
+    nameArg === "." ? null : `cd ${nameArg}`,
     installed ? null : "pnpm install",
     `pnpm dev                     ${pc.dim("# run dev servers")}`,
   ]
