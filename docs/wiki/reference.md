@@ -20,8 +20,9 @@ saasaloy <command> [options]
 `saasaloy`, `saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command
 list and exit 0. An unrecognised command prints an error plus the list and exits 1.
 
-`add`, `remove` and `list` are run from inside a project. `add` and `remove` find the
-project root by walking up from your working directory looking for `saasaloy.json`.
+`add` and `remove` are run from inside a project: they find the project root by walking up
+from your working directory looking for `saasaloy.json`. `list` reads no project files and
+works anywhere.
 
 ## `saasaloy init`
 
@@ -90,8 +91,8 @@ saasaloy list [<owner/repo[@ref]>]
 
 **`list` takes no flags.** Arguments beginning with `-` are filtered out and never
 inspected. It accepts one optional coordinate naming a registry; with none it lists the
-default registry. Output is names only, from a single API call, which is why a module with
-an invalid descriptor still appears here and only fails at `add`.
+default registry. Output is names only, read from one listing of the repo's git tree, which
+is why a module with an invalid descriptor still appears here and only fails at `add`.
 
 ## Module coordinates
 

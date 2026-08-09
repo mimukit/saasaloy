@@ -49,8 +49,13 @@ Modules install from a checkout as well as from GitHub. Point the CLI at your wo
 with `SAASALOY_REGISTRY_DIR` and install into a throwaway project:
 
 ```bash
-SAASALOY_REGISTRY_DIR=./modules saasaloy add my-module --diff
+cd /path/to/a/throwaway/project
+SAASALOY_REGISTRY_DIR=/path/to/your/saasaloy/modules saasaloy add my-module --diff
 ```
+
+Use an absolute path: a relative one resolves against the directory you run `add` from,
+not against your checkout. Run it from the throwaway project, not from the checkout — the
+tool repo is not a Saasaloy project, so `add` there cancels with `No saasaloy.json found`.
 
 The local source wins over any `owner/repo` coordinate, and the CLI says so when both are
 present.

@@ -41,7 +41,7 @@ You want to publish a module other projects can install.
 ## Elsewhere in the repo
 
 - [`CONTEXT.md`](../../CONTEXT.md) defines the vocabulary these pages use: module,
-  capability, provider, coordinate, applier, drift.
+  capability, provider, coordinate, applier.
 - [`docs/adr/`](../adr/) records why the design is what it is, one decision per file.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.

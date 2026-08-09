@@ -25,8 +25,8 @@ pnpm install
 pnpm cli:link
 ```
 
-`pnpm cli:link` builds `packages/cli` and runs `pnpm add --global ./packages/cli`, which
-symlinks the package rather than copying it. Check it worked:
+`pnpm cli:link` builds `packages/cli` and puts a global `saasaloy` bin on your `PATH`.
+Check it worked:
 
 ```bash
 saasaloy --help
@@ -91,9 +91,9 @@ That is the whole base: a landing page and the two packages it leans on. There i
 no database and no auth yet, on purpose. Those are modules, and you install the ones you
 need.
 
-`saasaloy.json` is what marks this directory as a Saasaloy project. Every later `saasaloy`
-command walks up from your working directory looking for it, so you can run them from any
-subdirectory.
+`saasaloy.json` is what marks this directory as a Saasaloy project. `saasaloy add` and
+`saasaloy remove` walk up from your working directory looking for it, so you can run them
+from any subdirectory.
 
 ## Next
 

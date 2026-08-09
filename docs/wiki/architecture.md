@@ -4,7 +4,7 @@ Saasaloy is a copy-in tool, not a framework. Nothing it installs is imported fro
 Saasaloy package at runtime; the CLI writes source files into your repo and then gets out
 of the way. That single choice explains most of what follows.
 
-Terms used here — module, capability, feature, provider, applier, coordinate, drift — are
+Terms used here — module, capability, feature, provider, applier, coordinate — are
 defined once in [`CONTEXT.md`](../../CONTEXT.md). The decisions behind the design are in
 [`docs/adr/`](../adr/), one per file, linked below where they apply.
 
