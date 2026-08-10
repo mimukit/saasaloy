@@ -26,6 +26,7 @@ import {
   type ModuleUpdateInput,
   type ModuleUpdatePlan,
   type PlannedUpdateFile,
+  recordRefRewrites,
   type UpdateFileAction,
   type UpdatePlan,
   type UpdateResult,
@@ -217,10 +218,17 @@ function summarizePlan(plan: UpdatePlan): void {
   );
 }
 
-function skipReason(comparison: ModuleComparison): string {
+function skipReason(comparison: ModuleComparison, preview = false): string {
   switch (comparison.status) {
-    case "current":
-      return `already at ${short(comparison.current)}`;
+    case "current": {
+      const at = `already at ${short(comparison.current)}`;
+      if (!comparison.refRewrite) return at;
+      // The SHA didn't move but the ref did — say so, or "already at <sha7>" would read
+      // as though `--ref` had been ignored.
+      return preview
+        ? `${at} — \`--ref\` would move the lock onto \`${comparison.ref}\``
+        : `${at} — now tracking \`${comparison.ref}\``;
+    }
     default:
       return comparison.detail ?? comparison.status;
   }
@@ -335,8 +343,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const outdated = comparisons.filter((c) => c.status === "outdated");
     const skipped = comparisons.filter((c) => c.status !== "outdated");
     if (outdated.length === 0) {
+      // `--ref` onto a tag that already points at the SHA the lock records moves no
+      // files, but it is still the explicit unpin — record it here or the module stays
+      // pinned forever. `--dry-run`/`--diff` preview only, so they write nothing.
+      const preview = opts.dryRun || opts.diff;
+      if (!preview && recordRefRewrites(lock, comparisons).length > 0) {
+        await saveLock(root, lock);
+      }
       for (const comparison of skipped) {
-        log.info(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`, TUI_ON_STDERR);
+        log.info(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison, preview)}`)}`, TUI_ON_STDERR);
       }
       outro(pc.green("Everything is up to date."), TUI_ON_STDERR);
       return 0;
@@ -347,46 +362,66 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // base we can't reach degrades the document rather than failing the update.
     const inputs: ModuleUpdateInput[] = [];
     for (const comparison of outdated) {
-      const theirsSource = registryOverride
-        ? createRegistrySource({})
-        : remote(comparison.source, comparison.latest);
-      if (registryOverride) sources.push(theirsSource);
+      // One module's fetch failing is that module's problem: a dead tarball, a renamed
+      // dependency, a network blip. It is reported and skipped, never fatal, so a bare
+      // `update` still lands every other module (criterion 17).
+      try {
+        const theirsSource = registryOverride
+          ? createRegistrySource({})
+          : remote(comparison.source, comparison.latest);
+        if (registryOverride) sources.push(theirsSource);
 
-      const graph = await resolveGraph(theirsSource, comparison.name);
-      const theirs = graph.modules.get(comparison.name);
-      if (!theirs) continue;
+        const graph = await resolveGraph(theirsSource, comparison.name);
+        const theirs = graph.modules.get(comparison.name);
+        if (!theirs) throw new Error(`${comparison.name} isn't in the registry at ${short(comparison.latest)}.`);
 
-      let base: LoadedModule | undefined;
-      let noMergeBase: string | undefined;
-      if (registryOverride || comparison.current === "local") {
-        noMergeBase = "local install";
-      } else {
-        try {
-          base = await remote(comparison.source, comparison.current).readModule(comparison.name);
-        } catch (error) {
-          // A force-pushed branch, a deleted tag, a repo gone private — the clean path
-          // has already been decided, so refusing here would leave the user worse off.
-          noMergeBase = error instanceof Error ? error.message : String(error);
+        let base: LoadedModule | undefined;
+        let noMergeBase: string | undefined;
+        if (registryOverride || comparison.current === "local") {
+          noMergeBase = "local install";
+        } else {
+          try {
+            base = await remote(comparison.source, comparison.current).readModule(comparison.name);
+          } catch (error) {
+            // A force-pushed branch, a deleted tag, a repo gone private — the clean path
+            // has already been decided, so refusing here would leave the user worse off.
+            noMergeBase = error instanceof Error ? error.message : String(error);
+          }
         }
+
+        const intent =
+          base && !registryOverride
+            ? await theirsSource.commitSubjects(
+                `modules/${comparison.name}`,
+                comparison.current,
+                comparison.latest,
+              )
+            : [];
+
+        inputs.push({
+          comparison,
+          theirs,
+          ...(base ? { base } : {}),
+          ...(noMergeBase ? { noMergeBase } : {}),
+          intent,
+          prereqs: { order: graph.order.filter((n) => n !== comparison.name), modules: graph.modules },
+        });
+      } catch (error) {
+        skipped.push({
+          ...comparison,
+          status: "unresolvable",
+          detail: error instanceof Error ? error.message : String(error),
+        });
       }
+    }
 
-      const intent =
-        base && !registryOverride
-          ? await theirsSource.commitSubjects(
-              `modules/${comparison.name}`,
-              comparison.current,
-              comparison.latest,
-            )
-          : [];
-
-      inputs.push({
-        comparison,
-        theirs,
-        ...(base ? { base } : {}),
-        ...(noMergeBase ? { noMergeBase } : {}),
-        intent,
-        prereqs: { order: graph.order.filter((n) => n !== comparison.name), modules: graph.modules },
-      });
+    // Everything outdated failed to fetch — there is no plan to summarize or confirm.
+    if (inputs.length === 0) {
+      for (const comparison of skipped) {
+        log.warn(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`, TUI_ON_STDERR);
+      }
+      outro(pc.yellow("Nothing could be updated."), TUI_ON_STDERR);
+      return 1;
     }
 
     const pkg = await readRootPackageJson(root);
