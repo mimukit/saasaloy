@@ -1,6 +1,6 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
-import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
+import { classifyLink, createDirLink, hashContent, listFilesRelative, pathExists } from "./fs-utils.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
@@ -31,6 +31,8 @@ export interface PlannedFile {
   module: string;
   /** Absolute path of the source file inside the module folder. */
   source: string;
+  /** Module-relative POSIX source path (`files/lib/x.ts`) — recorded as the manifest's `from`. */
+  from: string;
   /** Project-relative POSIX path (manifest key + display). */
   target: string;
   /** Absolute destination path. */
@@ -113,21 +115,6 @@ export interface Plan {
   patches: PlannedPatch[];
 }
 
-// Recursively list files under a directory as paths relative to it (POSIX-joined).
-async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const out: string[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? posix.join(prefix, entry.name) : entry.name;
-    if (entry.isDirectory()) {
-      out.push(...(await listFilesRelative(join(dir, entry.name), rel)));
-    } else if (entry.isFile()) {
-      out.push(rel);
-    }
-  }
-  return out;
-}
-
 // Structural equality on the (module, file, patch) triple — good enough since both
 // sides are parsed from the same registry-item.json descriptor, so key order is
 // stable across a `--force` re-apply.
@@ -172,6 +159,7 @@ async function planModuleFile(
   return {
     module: module.item.name,
     source,
+    from: sourceRel,
     target,
     targetAbs,
     content,
@@ -359,7 +347,7 @@ export async function executePlan(
     if (WRITABLE.has(file.action)) {
       await mkdir(dirname(file.targetAbs), { recursive: true });
       await writeFile(file.targetAbs, file.content, "utf8");
-      manifest.managed[file.target] = { module: file.module, hash: file.newHash };
+      manifest.managed[file.target] = { module: file.module, hash: file.newHash, from: file.from };
       written.push(file);
     } else {
       heldBack.push(file);
