@@ -13,6 +13,13 @@ export interface ManagedEntry {
   /** Name of the module that applied this file. */
   module: string;
   hash: string;
+  /**
+   * Module-relative source path this file was copied from (e.g. `files/lib/email.ts`).
+   * `update` needs it to fetch the same file at two commit SHAs, which the hash alone
+   * can't express. Optional: entries written before this shipped don't carry it, and
+   * `update` falls back to re-deriving the target from the descriptor (issue #48).
+   */
+  from?: string;
 }
 
 // A structural config patch that actually landed on disk, recorded so `remove` can
