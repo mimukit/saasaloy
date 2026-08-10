@@ -139,6 +139,17 @@ describe("renderMergePlan", () => {
     expect(doc).toContain("theirs → mine");
   });
 
+  // A `conflict` can carry a base (the module shipped an older revision of the file; the
+  // one on disk was simply never tracked), and the three-way diffs are rendered right
+  // below this paragraph — so it must not claim the comparison is two-way.
+  it("does not claim there is no base for a conflict that has one", () => {
+    const doc = renderMergePlan(plan([modulePlan({ files: [file({ action: "conflict" })] })]));
+    expect(doc).not.toMatch(/there is no base for it/i);
+    expect(doc).not.toMatch(/this is a two-way comparison/i);
+    expect(doc).toContain("**base → theirs**");
+    expect(doc).toContain("**base → mine**");
+  });
+
   it("says a dropped file's edits are still on disk", () => {
     const doc = renderMergePlan(
       plan([
@@ -203,6 +214,30 @@ describe("renderMergePlan", () => {
   it("tells the agent the user's edits are the ones that must not be lost", () => {
     const doc = renderMergePlan(plan([modulePlan({ files: [file()] })]));
     expect(doc).toMatch(/must not be lost/i);
+  });
+
+  // There is no accept path: `update` can't tell a finished merge from an unfinished one,
+  // so a re-run re-offers the same files. The document has to say that rather than
+  // promise a terminal state it can't deliver.
+  it("never promises that a re-run will record the merge", () => {
+    const doc = renderMergePlan(plan([modulePlan({ files: [file()] })]));
+    expect(doc).not.toMatch(/record the result/i);
+    expect(doc).toContain(`the lock stays on \`${OLD_SHA}\``);
+    expect(doc).toMatch(/offer the same files again/i);
+  });
+
+  it("names each module's own base when several drifted at once", () => {
+    const doc = renderMergePlan(
+      plan([
+        modulePlan({ files: [file()] }),
+        modulePlan({
+          name: "auth",
+          comparison: comparison({ name: "auth", current: "c".repeat(40) }),
+          files: [file({ module: "auth" })],
+        }),
+      ]),
+    );
+    expect(doc).toMatch(/each module's lock entry stays on the base SHA/i);
   });
 
   it("names the verification command without inviting anyone to run it here", () => {

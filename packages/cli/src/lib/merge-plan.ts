@@ -113,9 +113,15 @@ function renderFile(file: PlannedUpdateFile): string[] {
 
   if (file.action === "conflict") {
     out.push(
-      "The new version of the module ships this file, but a file already sits at that path that " +
-        "Saasaloy never wrote. There is no base for it — the module didn't have it at your " +
-        "current version — so this is a two-way comparison.",
+      file.base === undefined
+        ? "The new version of the module ships this file, but a file already sits at that path " +
+            "that Saasaloy never wrote. There is no base for it — the module didn't have it at " +
+            "your current version — so this is a two-way comparison."
+        : "The new version of the module ships this file, but a file already sits at that path " +
+            "that Saasaloy never wrote, so nothing records what it looked like when it was " +
+            "applied. The module's own older version of the file is available and is used as " +
+            "the base below — but the on-disk file was never tracked against it, so treat it as " +
+            "independent work rather than as edits on top of that base.",
       "",
     );
   }
@@ -176,6 +182,17 @@ function renderPatch(patch: PlannedUpdatePatch): string[] {
   ];
 }
 
+/**
+ * Where the lock is left, said concretely when every merging module shares one base SHA
+ * and generically when a bare `update` collected several.
+ */
+function lockStaysOn(plan: UpdatePlan): string {
+  const bases = [...new Set(plan.modules.filter((m) => m.needsMerge).map((m) => m.comparison.current))];
+  return bases.length === 1
+    ? `the lock stays on \`${bases[0]}\``
+    : "each module's lock entry stays on the base SHA named in its Provenance section";
+}
+
 function renderInstructions(plan: UpdatePlan): string[] {
   const out: string[] = ["## Instructions", ""];
   out.push(
@@ -190,8 +207,18 @@ function renderInstructions(plan: UpdatePlan): string[] {
       "conflict and you cannot preserve both, leave the user's version in place and say so " +
       "rather than choosing for them.",
     "4. Don't touch files that aren't listed here — everything else was already updated cleanly.",
-    "5. Don't edit `.saasaloy/manifest.json` or `saasaloy-lock.json`. Re-run `saasaloy update` " +
-      "once the merge is done and it will record the result.",
+    "5. Don't edit `.saasaloy/manifest.json` or `saasaloy-lock.json` — Saasaloy owns both.",
+    "",
+    "### What Saasaloy records afterwards",
+    "",
+    "Nothing, and that is deliberate. Saasaloy has no way to tell a finished merge from an " +
+      "unfinished one, so it does not mark this plan resolved: the files above stay tracked at " +
+      `the module's old version and ${lockStaysOn(plan)}. A later ` +
+      "`saasaloy update` will offer the same files again, against the same base, until a file " +
+      "either matches the new version byte for byte or the module stops shipping it. The old " +
+      "SHA is the only merge base that exists — advancing it would leave these files with " +
+      "nothing to diff against, which is why the merge is yours to keep, not Saasaloy's to " +
+      "record.",
     "",
   );
 
