@@ -7,6 +7,7 @@ import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch, type PatchMatch } from "./patch/index.js";
 import { type DepChange, type PackageJson, parseDep, writeDeps } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
+import { classifyTrackedFile, type FileRemoveAction } from "./remover.js";
 import { resolveTarget } from "./saasaloy-config.js";
 import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 
@@ -59,6 +60,13 @@ export interface ModuleComparison {
   status: UpdateStatus;
   /** Why, for everything that isn't a plain current/outdated — shown in the summary. */
   detail?: string;
+  /**
+   * `--ref` named a ref the lock isn't tracking, but it resolves to the SHA already
+   * recorded — so there are no files to update and the lock's `ref` still has to move.
+   * Without this a `--ref v2` onto a pin whose tag hasn't moved yet would report
+   * "already at <sha7>" and silently leave the module pinned forever (criterion 3).
+   */
+  refRewrite?: boolean;
 }
 
 export interface CompareInstalledArgs {
@@ -156,13 +164,17 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
     const ref = overrideRef ?? entry.ref;
     try {
       const latest = await resolveRef(name, entry, ref);
+      const status: UpdateStatus = latest === entry.resolved ? "current" : "outdated";
       out.push({
         name,
         source: entry.source,
         ref,
         current: entry.resolved,
         latest,
-        status: latest === entry.resolved ? "current" : "outdated",
+        status,
+        // An `outdated` module rewrites `ref` as part of moving `resolved`; only a
+        // `current` one needs the ref move called out on its own.
+        ...(status === "current" && ref !== entry.ref ? { refRewrite: true } : {}),
       });
     } catch (error) {
       out.push({
@@ -178,6 +190,28 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
   }
 
   return out;
+}
+
+/**
+ * Move the lock's `ref` for modules whose ref changed but whose SHA didn't — the
+ * `--ref <branch|tag>` unpin of a module the tag already points at. There is nothing to
+ * apply, so no update plan is ever built for these; without this the unpin would be
+ * dropped on the floor and the module would stay pinned (criterion 3). `resolved` is
+ * untouched by construction: it already holds the SHA the new ref resolves to.
+ * Returns the names actually rewritten.
+ */
+export function recordRefRewrites(lock: Lockfile, comparisons: ModuleComparison[]): string[] {
+  const rewritten: string[] = [];
+  for (const comparison of comparisons) {
+    if (!comparison.refRewrite) continue;
+    const entry = lock.modules[comparison.name];
+    // Same guard executeUpdatePlan uses: a comparison against a different source isn't
+    // describing this entry's ref.
+    if (!entry || entry.ref === comparison.ref || entry.source !== comparison.source) continue;
+    entry.ref = comparison.ref;
+    rewritten.push(comparison.name);
+  }
+  return rewritten;
 }
 
 // --- Phase 2: classify every managed file three ways ------------------------------
@@ -208,6 +242,13 @@ export type UpdateFileAction =
   | "delete"
   | "delete-drift"
   | "delete-missing";
+
+/** `remove`'s verdicts for a tracked file, said in `update`'s vocabulary (same classifier). */
+const DELETE_ACTION: Record<FileRemoveAction, UpdateFileAction> = {
+  delete: "delete",
+  drift: "delete-drift",
+  missing: "delete-missing",
+};
 
 /** Actions safe to write without a human in the loop (the clean path, spec §2.13). */
 const WRITABLE: ReadonlySet<UpdateFileAction> = new Set<UpdateFileAction>([
@@ -269,7 +310,7 @@ export interface DepBump {
   name: string;
   from: string;
   to: string;
-  /** True when the pin lives in `devDependencies`. */
+  /** True when the pin lives in package.json's `devDependencies` — the bucket it is rewritten in. */
   dev: boolean;
 }
 
@@ -525,8 +566,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       from: entry.from ?? baseRef?.from ?? target,
       target,
       targetAbs,
-      action:
-        mine === undefined ? "delete-missing" : hashContent(mine) === entry.hash ? "delete" : "delete-drift",
+      action: DELETE_ACTION[classifyTrackedFile(mine, entry.hash)],
       base: baseRef ? await readFile(baseRef.abs, "utf8") : undefined,
       mine,
     });
@@ -687,7 +727,12 @@ function planDepChanges(
     const basePins = pinsOf(base, dev);
 
     for (const [name, wanted] of pinsOf(theirs, dev)) {
-      const current = bucket[name] ?? otherBucket[name];
+      // The pin may sit in the *other* bucket — the user moved it, or an earlier version
+      // of the descriptor declared it there. Bump it where it actually lives: writing it
+      // into the bucket this descriptor declares would leave the stale pin behind and
+      // package.json would carry the same package at two versions.
+      const inDeclaredBucket = bucket[name] !== undefined;
+      const current = inDeclaredBucket ? bucket[name] : otherBucket[name];
       if (current === undefined) {
         (dev ? devDepAdds : depAdds).push({ name, version: wanted });
         continue;
@@ -696,7 +741,7 @@ function planDepChanges(
 
       const basePin = basePins.get(name);
       if (basePin !== undefined && basePin !== wanted && current === basePin) {
-        depBumps.push({ name, from: current, to: wanted, dev });
+        depBumps.push({ name, from: current, to: wanted, dev: inDeclaredBucket ? dev : !dev });
       } else {
         depConflicts.push(`${name}: package.json already has ${current}, ignoring ${wanted}`);
       }

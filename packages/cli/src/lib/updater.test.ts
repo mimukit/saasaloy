@@ -13,6 +13,7 @@ import {
   compareInstalled,
   executeUpdatePlan,
   type ModuleUpdateInput,
+  recordRefRewrites,
   type UpdatePlan,
 } from "./updater.js";
 
@@ -171,6 +172,29 @@ describe("compareInstalled", () => {
     expect(result).toMatchObject({ ref: "v2", latest: NEW_SHA, status: "outdated" });
   });
 
+  // The unpin has to happen even when there is nothing to apply: a tag that already
+  // points at the recorded SHA would otherwise report "already at <sha7>" and leave the
+  // module pinned, so every later bare `update` would keep skipping it.
+  it("flags a --ref unpin whose new ref resolves to the SHA already recorded", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock({ ref: OLD_SHA }),
+      resolveRef: resolvesTo(OLD_SHA),
+      overrideRef: "v2",
+    });
+    expect(result).toMatchObject({ status: "current", ref: "v2", refRewrite: true });
+  });
+
+  it("leaves refRewrite unset when the ref itself did not change", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock(),
+      resolveRef: resolvesTo(OLD_SHA),
+    });
+    expect(result?.status).toBe("current");
+    expect(result?.refRewrite).toBeUndefined();
+  });
+
   it("reports an installed module with no lock entry as unresolvable, never throwing", async () => {
     const [result] = await compareInstalled({
       installed: ["mystery"],
@@ -227,6 +251,34 @@ describe("compareInstalled", () => {
       ["api", "outdated"],
       ["email", "current"],
     ]);
+  });
+});
+
+describe("recordRefRewrites", () => {
+  it("takes the pin off a module whose new ref resolves to the same SHA", async () => {
+    const lock = emailLock({ ref: OLD_SHA });
+    const comparisons = await compareInstalled({
+      installed: ["email"],
+      lock,
+      resolveRef: async () => OLD_SHA,
+      overrideRef: "v2",
+    });
+
+    expect(recordRefRewrites(lock, comparisons)).toEqual(["email"]);
+    // `ref` is intent and `resolved` is fact — only the intent moved.
+    expect(lock.modules.email).toMatchObject({ ref: "v2", resolved: OLD_SHA });
+  });
+
+  it("touches nothing when no comparison asked for a ref rewrite", async () => {
+    const lock = emailLock();
+    const comparisons = await compareInstalled({
+      installed: ["email"],
+      lock,
+      resolveRef: async () => OLD_SHA,
+    });
+
+    expect(recordRefRewrites(lock, comparisons)).toEqual([]);
+    expect(lock.modules.email).toMatchObject({ ref: "main", resolved: OLD_SHA });
   });
 });
 
@@ -418,6 +470,32 @@ describe("buildUpdatePlan — dependency pins", () => {
     });
     expect(plan.modules[0]?.depBumps).toEqual([]);
     expect(plan.modules[0]?.depConflicts.join(" ")).toContain("hono");
+  });
+
+  // The descriptor calls it a runtime dep; this project keeps it in devDependencies.
+  // Bumping it into the descriptor's bucket would leave the stale pin behind, so
+  // package.json would carry two versions of the same package.
+  it("bumps a pin in whichever bucket package.json actually holds it", async () => {
+    const base = await writeModule("old", "email", withDeps(["hono@4.6.3"]), {});
+    const theirs = await writeModule("new", "email", withDeps(["hono@4.7.1"]), {});
+    await writeFile(
+      join(root, "package.json"),
+      `${JSON.stringify({ name: "app", devDependencies: { hono: "4.6.3" } }, null, 2)}\n`,
+      "utf8",
+    );
+    const pkg = JSON.parse(await readFile(join(root, "package.json"), "utf8"));
+    const state = { config: config(), manifest: emptyManifest(), lock: emailLock() };
+
+    const plan = await build({ ...state, inputs: [input({ theirs, base })], pkg });
+    expect(plan.modules[0]?.depBumps).toMatchObject([{ name: "hono", from: "4.6.3", to: "4.7.1", dev: true }]);
+
+    await executeUpdatePlan(plan, { root, ...state, pkg });
+    const written = JSON.parse(await readFile(join(root, "package.json"), "utf8")) as {
+      dependencies?: Record<string, string>;
+      devDependencies: Record<string, string>;
+    };
+    expect(written.devDependencies.hono).toBe("4.7.1");
+    expect(written.dependencies?.hono).toBeUndefined();
   });
 
   it("adds a dependency the new version introduces", async () => {
