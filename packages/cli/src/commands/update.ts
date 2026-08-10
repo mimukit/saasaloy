@@ -418,7 +418,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // Everything outdated failed to fetch — there is no plan to summarize or confirm.
     if (inputs.length === 0) {
       for (const comparison of skipped) {
-        log.warn(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`, TUI_ON_STDERR);
+        // Only a fetch failure is a warning here — a `current` module is just news.
+        const line = `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`;
+        if (comparison.status === "unresolvable") log.warn(line, TUI_ON_STDERR);
+        else log.info(line, TUI_ON_STDERR);
       }
       outro(pc.yellow("Nothing could be updated."), TUI_ON_STDERR);
       return 1;
