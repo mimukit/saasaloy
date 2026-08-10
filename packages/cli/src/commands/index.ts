@@ -2,6 +2,7 @@ import { runAdd } from "./add.js";
 import { runInit } from "./init.js";
 import { runList } from "./list.js";
 import { runRemove } from "./remove.js";
+import { runUpdate } from "./update.js";
 
 // The command registry. It is the single source both consumers in `../cli.ts` read —
 // `printHelp()` and the bare-invocation picker — so a new command is one entry here and
@@ -26,6 +27,11 @@ export const COMMANDS: CommandRegistry = {
   add: {
     describe: "apply a module into the current project (resolves dependsOn)",
     run: runAdd,
+  },
+  update: {
+    describe:
+      "re-apply modules at a newer ref, with a merge plan for anything you edited",
+    run: runUpdate,
   },
   remove: {
     describe: "undo a module's applied files via the manifest (offline)",
