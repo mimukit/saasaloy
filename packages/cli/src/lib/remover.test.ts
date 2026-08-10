@@ -10,12 +10,16 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { pathExists } from "./fs-utils.js";
+import { hashContent, pathExists } from "./fs-utils.js";
 import { emptyLock } from "./lock.js";
 import type { Lockfile } from "./lock.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
-import { buildRemovePlan, executeRemovePlan } from "./remover.js";
+import {
+  buildRemovePlan,
+  classifyTrackedFile,
+  executeRemovePlan,
+} from "./remover.js";
 import type { RemovePlan } from "./remover.js";
 import type { SaasaloyConfig } from "./schema.js";
 
@@ -59,6 +63,22 @@ async function build(
 ): Promise<RemovePlan> {
   return buildRemovePlan({ root, name, config, manifest, lock });
 }
+
+// The one definition of "is this still the file Saasaloy put there?", shared with
+// `update`'s delete side (updater.ts) so the two commands can't disagree about drift.
+describe("classifyTrackedFile", () => {
+  it("calls a file whose hash still matches safe to delete", () => {
+    expect(classifyTrackedFile("v1\n", hashContent("v1\n"))).toBe("delete");
+  });
+
+  it("calls a hand-edited file drift", () => {
+    expect(classifyTrackedFile("edited\n", hashContent("v1\n"))).toBe("drift");
+  });
+
+  it("calls an absent file missing", () => {
+    expect(classifyTrackedFile(undefined, hashContent("v1\n"))).toBe("missing");
+  });
+});
 
 describe("buildRemovePlan — file classification", () => {
   it("classifies a hash-clean managed file as delete", async () => {

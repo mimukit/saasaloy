@@ -26,6 +26,18 @@ import type { SaasaloyConfig } from "./schema.js";
 //   missing — already gone → nothing to delete, just untrack
 export type FileRemoveAction = "delete" | "drift" | "missing";
 
+/**
+ * The verdict for one tracked file, from its on-disk content (`undefined` when the file
+ * is gone) and the hash the manifest recorded when we wrote it. `update`'s delete side
+ * asks exactly this question, so it calls this too and renames the answers to its own
+ * `delete`/`delete-drift`/`delete-missing` — one definition of "is this still the file
+ * Saasaloy put there?" for both commands.
+ */
+export function classifyTrackedFile(content: string | undefined, manifestHash: string): FileRemoveAction {
+  if (content === undefined) return "missing";
+  return hashContent(content) === manifestHash ? "delete" : "drift";
+}
+
 export interface PlannedRemoveFile {
   module: string;
   /** Project-relative POSIX path (manifest key). */
@@ -125,15 +137,16 @@ export async function buildRemovePlan(
       continue;
     }
     const targetAbs = resolveWithinRoot(root, target);
-    let action: FileRemoveAction;
-    let oldContent: string | undefined;
-    if (await pathExists(targetAbs)) {
-      oldContent = await readFile(targetAbs, "utf-8");
-      action = hashContent(oldContent) === entry.hash ? "delete" : "drift";
-    } else {
-      action = "missing";
-    }
-    files.push({ module: name, target, targetAbs, action, oldContent });
+    const oldContent = (await pathExists(targetAbs))
+      ? await readFile(targetAbs, "utf-8")
+      : undefined;
+    files.push({
+      module: name,
+      target,
+      targetAbs,
+      action: classifyTrackedFile(oldContent, entry.hash),
+      oldContent,
+    });
   }
 
   const links: PlannedRemoveLink[] = [];
