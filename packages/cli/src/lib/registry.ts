@@ -48,6 +48,20 @@ export interface RegistrySource {
   listModules(): Promise<string[]>;
   /** Provenance for the lockfile (source + ref + resolved SHA). */
   provenance(): ModuleProvenance;
+  /**
+   * The commit SHA this source's ref currently points at (`local` for a local
+   * checkout). `saasaloy update` compares it against the lock's `resolved` to decide
+   * whether anything moved — the same resolution path `readModule` pins to, exposed.
+   */
+  resolveSha(): Promise<string>;
+  /**
+   * Subjects of the commits touching `modulePath` between two SHAs, oldest first —
+   * the natural-language "intent" half of the merge plan (issue #48, decision 4).
+   * Best-effort: returns `[]` rather than throwing when the history isn't reachable
+   * (force-push, deleted tag, rate limit, local source), so a merge plan degrades to
+   * diff-only instead of failing.
+   */
+  commitSubjects(modulePath: string, baseSha: string, headSha: string): Promise<string[]>;
   /** Drop any temp working dirs created while fetching. No-op for a local source. */
   cleanup?(): Promise<void>;
 }
@@ -186,6 +200,16 @@ export class LocalRegistrySource implements RegistrySource {
     return { ref: "local", resolved: "local", source: "local" };
   }
 
+  // A working copy has no commit identity and no history to read — `update` treats
+  // both as "no merge base, no intent" and degrades the merge plan accordingly.
+  async resolveSha(): Promise<string> {
+    return "local";
+  }
+
+  async commitSubjects(_modulePath: string, _baseSha: string, _headSha: string): Promise<string[]> {
+    return [];
+  }
+
   private async assertExists(): Promise<void> {
     if (!(await pathExists(this.dir))) {
       throw new Error(`${REGISTRY_ENV}=${this.dir} does not exist.`);
@@ -205,6 +229,16 @@ function authToken(): string | undefined {
 
 interface TreeEntry {
   path: string;
+}
+
+interface CommitEntry {
+  sha: string;
+  commit: { message: string };
+}
+
+/** First line of a commit message — this repo's Conventional Commits read as a changelog. */
+function subjectOf(message: string): string {
+  return message.split("\n", 1)[0]?.trim() ?? "";
 }
 
 /** A GitHub repo fetched via giget; descriptors + files pulled at a pinned commit SHA. */
@@ -275,6 +309,33 @@ export class RemoteRegistrySource implements RegistrySource {
       resolved: this.resolved.sha,
       source: `${this.owner}/${this.repo}`,
     };
+  }
+
+  async resolveSha(): Promise<string> {
+    return (await this.resolve()).sha;
+  }
+
+  // GitHub has no "commits touching this path between A and B" endpoint, so intersect
+  // two queries: `compare` gives the commits between the SHAs, `commits?path=` gives
+  // the ones touching the module. Both are reported best-effort — the merge plan is
+  // still useful without intent, and an update must never fail over a changelog.
+  async commitSubjects(modulePath: string, baseSha: string, headSha: string): Promise<string[]> {
+    if (baseSha === headSha) return [];
+    try {
+      const between = await this.api<{ commits?: CommitEntry[] }>(
+        `/repos/${this.owner}/${this.repo}/compare/${baseSha}...${headSha}`,
+      );
+      const touching = await this.api<CommitEntry[]>(
+        `/repos/${this.owner}/${this.repo}/commits?sha=${headSha}&path=${encodeURIComponent(modulePath)}&per_page=100`,
+      );
+      const touchingShas = new Set(touching.map((c) => c.sha));
+      return (between.commits ?? [])
+        .filter((c) => touchingShas.has(c.sha))
+        .map((c) => subjectOf(c.commit.message))
+        .filter((subject) => subject.length > 0);
+    } catch {
+      return [];
+    }
   }
 
   async cleanup(): Promise<void> {
