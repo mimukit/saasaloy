@@ -232,3 +232,55 @@ export default app;
     expect(isReversibleKind("package-json-dependency")).toBeFalsy();
   });
 });
+
+// `changed` alone can't tell "already applied" from "the user edited the value we
+// wanted" — both are no-ops. `matched` separates them so `update` can report the
+// second into the merge plan (issue #48, decision 1).
+describe("applyPatch — matched", () => {
+  it("reports no match when the patch actually applies", () => {
+    expect(applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc").matched).toBeUndefined();
+  });
+
+  it("reports no match when the entry is byte-identical (a true idempotent re-run)", () => {
+    const first = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
+    expect(applyPatch(first.content, BINDING_PATCH, "wrangler.jsonc").matched).toBeUndefined();
+  });
+
+  it("reports a wrangler-binding whose matchOn key holds an edited entry", () => {
+    // The live case: `database` ships `database_id: "local"` and every real user edits it.
+    const edited = `{
+  "name": "api",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "app-db", "database_id": "9f2c-real-id" }
+  ]
+}
+`;
+    const result = applyPatch(edited, BINDING_PATCH, "wrangler.jsonc");
+    expect(result.changed).toBe(false);
+    expect(result.matched).toMatchObject({
+      key: "d1_databases[binding=DB]",
+      current: { binding: "DB", database_id: "9f2c-real-id" },
+      wanted: { binding: "DB", database_id: "abc" },
+    });
+  });
+
+  it("reports a package-json-dependency already present at a different range", () => {
+    const edited = `{
+  "name": "@repo/api",
+  "dependencies": { "@repo/db": "workspace:^" }
+}
+`;
+    const result = applyPatch(edited, DEPENDENCY_PATCH, "package.json");
+    expect(result.changed).toBe(false);
+    expect(result.matched).toMatchObject({
+      key: "dependencies[@repo/db]",
+      current: "workspace:^",
+      wanted: "workspace:*",
+    });
+  });
+
+  it("reports nothing for a plugin-array patch — it has no identity key", () => {
+    const first = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
+    expect(applyPatch(first.content, PLUGIN_PATCH, "auth.ts").matched).toBeUndefined();
+  });
+});

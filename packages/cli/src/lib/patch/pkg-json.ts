@@ -70,3 +70,25 @@ export function upsertPackageJsonDependency(
   );
   return applyEdits(source, edits);
 }
+
+/**
+ * Report the dependency this patch would have added when it is already declared at a
+ * *different* range — the same "already present, but not what we wanted" signal
+ * `matchWranglerBinding` gives for bindings (issue #48, decision 1). `undefined` when
+ * the name is absent (the patch applies) or already pinned to `patch.range`.
+ */
+export function matchPackageJsonDependency(
+  source: string,
+  patch: PackageJsonDependency,
+): { key: string; current: unknown; wanted: unknown } | undefined {
+  const root = parseTree(source);
+  if (!root) return undefined;
+  const sectionNode = findNodeAtLocation(root, [patch.section]);
+  if (sectionNode?.type !== "object") return undefined;
+
+  const existing = getNodeValue(sectionNode) as Record<string, unknown>;
+  if (!Object.prototype.hasOwnProperty.call(existing, patch.name)) return undefined;
+  const current = existing[patch.name];
+  if (current === patch.range) return undefined;
+  return { key: `${patch.section}[${patch.name}]`, current, wanted: patch.range };
+}

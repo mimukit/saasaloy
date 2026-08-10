@@ -6,9 +6,12 @@ import {
 } from "./chained-route.js";
 import type { ChainedRoute } from "./chained-route.js";
 import { toDiff } from "./diff.js";
-import { upsertWranglerBinding } from "./jsonc.js";
+import { matchWranglerBinding, upsertWranglerBinding } from "./jsonc.js";
 import type { WranglerBinding } from "./jsonc.js";
-import { upsertPackageJsonDependency } from "./pkg-json.js";
+import {
+  matchPackageJsonDependency,
+  upsertPackageJsonDependency,
+} from "./pkg-json.js";
 import type { PackageJsonDependency } from "./pkg-json.js";
 import { upsertPackageJsonScript } from "./pkg-json-script.js";
 import type { PackageJsonScript } from "./pkg-json-script.js";
@@ -30,8 +33,14 @@ export {
   type ChainedRoute,
 } from "./chained-route.js";
 export { toDiff } from "./diff.js";
-export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 export {
+  type BindingMatch,
+  matchWranglerBinding,
+  upsertWranglerBinding,
+  type WranglerBinding,
+} from "./jsonc.js";
+export {
+  matchPackageJsonDependency,
   upsertPackageJsonDependency,
   type PackageJsonDependency,
 } from "./pkg-json.js";
@@ -51,6 +60,21 @@ export type Patch =
 
 export type PatchKind = Patch["kind"];
 
+/**
+ * An entry the codemod found under the identity it matches on, holding a value other
+ * than the one the descriptor declares — i.e. the user edited what we would have
+ * written. Distinct from a plain `changed: false`, which also covers a clean
+ * already-applied re-run (issue #48, decision 1).
+ */
+export interface PatchMatch {
+  /** Where the collision is, as `<container>[<identity>]` (e.g. `d1_databases[binding=DB]`). */
+  key: string;
+  /** The value on disk today. */
+  current: unknown;
+  /** The value the descriptor declares. */
+  wanted: unknown;
+}
+
 export interface PatchResult {
   /** The would-be file content after the patch (equal to the input on a no-op). */
   content: string;
@@ -64,6 +88,12 @@ export interface PatchResult {
    * idempotent no-op, which is the common case and says nothing worth reporting.
    */
   reason?: string;
+  /**
+   * Set when the patch was a no-op *because* something already occupies its identity
+   * at a different value. `saasaloy update` reports these into the merge plan; `add`
+   * ignores it, so its behaviour is unchanged.
+   */
+  matched?: PatchMatch;
 }
 
 /**
@@ -79,12 +109,27 @@ export function applyPatch(
 ): PatchResult {
   const content = applyCodemod(source, patch);
   const changed = content !== source;
+  const matched = matchExisting(source, patch);
   return {
     content,
     changed,
     diff: toDiff(source, content, filename),
     reason: changed ? undefined : refusalReason(REFUSALS, source, patch),
+    ...(matched ? { matched } : {}),
   };
+}
+
+// Only the two jsonc codemods have an identity to collide on. A `plugin-array` insert
+// is matched by the call expression itself, so a match is always an exact re-run.
+function matchExisting(source: string, patch: Patch): PatchMatch | undefined {
+  switch (patch.kind) {
+    case "wrangler-binding":
+      return matchWranglerBinding(source, patch);
+    case "package-json-dependency":
+      return matchPackageJsonDependency(source, patch);
+    default:
+      return undefined;
+  }
 }
 
 function applyCodemod(source: string, patch: Patch): string {
