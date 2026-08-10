@@ -1,9 +1,10 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import {
   classifyLink,
   createDirLink,
   hashContent,
+  listFilesRelative,
   pathExists,
 } from "./fs-utils.js";
 import { samePatchEntry } from "./manifest.js";
@@ -121,21 +122,6 @@ export interface Plan {
   aliasConflicts: string[];
   /** Structural config patches to apply (previewed against the would-be on-disk state). */
   patches: PlannedPatch[];
-}
-
-// Recursively list files under a directory as paths relative to it (POSIX-joined).
-async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const out: string[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? posix.join(prefix, entry.name) : entry.name;
-    if (entry.isDirectory()) {
-      out.push(...(await listFilesRelative(join(dir, entry.name), rel)));
-    } else if (entry.isFile()) {
-      out.push(rel);
-    }
-  }
-  return out;
 }
 
 async function classify(

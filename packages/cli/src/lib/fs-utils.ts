@@ -7,7 +7,15 @@ import {
   readlink,
   symlink,
 } from "node:fs/promises";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import {
+  dirname,
+  isAbsolute,
+  join,
+  posix,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
 
 /** sha256 hex digest of a string — used to fingerprint managed files in the manifest. */
 export function hashContent(content: string): string {
@@ -95,6 +103,28 @@ export async function assertNoSymlinkPath(
       );
     }
   }
+}
+
+/**
+ * Recursively list the files under `dir` as POSIX paths relative to it. Used to expand
+ * an `agent.skills` folder into the individual files a module ships, by both the
+ * applier (at add time) and the updater (comparing two SHAs of the same folder).
+ */
+export async function listFilesRelative(
+  dir: string,
+  prefix = ""
+): Promise<string[]> {
+  const entries = await readdir(dir, { withFileTypes: true });
+  const out: string[] = [];
+  for (const entry of entries) {
+    const rel = prefix ? posix.join(prefix, entry.name) : entry.name;
+    if (entry.isDirectory()) {
+      out.push(...(await listFilesRelative(join(dir, entry.name), rel)));
+    } else if (entry.isFile()) {
+      out.push(rel);
+    }
+  }
+  return out;
 }
 
 /**
