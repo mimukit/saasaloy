@@ -38,6 +38,8 @@ export interface PlannedFile {
   module: string;
   /** Absolute path of the source file inside the module folder. */
   source: string;
+  /** Module-relative POSIX source path (`files/lib/x.ts`) — recorded as the manifest's `from`. */
+  from: string;
   /** Project-relative POSIX path (manifest key + display). */
   target: string;
   /** Absolute destination path. */
@@ -181,6 +183,7 @@ async function planModuleFile(
   return {
     module: module.item.name,
     source,
+    from: sourceRel,
     target,
     targetAbs,
     content,
@@ -414,6 +417,7 @@ export async function executePlan(
       manifest.managed[file.target] = {
         module: file.module,
         hash: file.newHash,
+        from: file.from,
       };
       written.push(file);
     } else {
