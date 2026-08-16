@@ -133,8 +133,9 @@ interface. Pick one before you send anything.
 
 ## Project files
 
-A generated project carries three state files. Their keys are defined by JSON Schema
-rather than repeated here, so the schema is always the current answer:
+A project uses three state files, but not from the start: `init` writes only
+`saasaloy.json`, and the first `saasaloy add` creates the other two. Their keys are defined
+by JSON Schema rather than repeated here, so the schema is always the current answer:
 
 | File | Schema |
 |---|---|
@@ -169,7 +170,7 @@ persists the manifest and config so the record matches what actually landed, and
 re-running `add` is the intended recovery. The known rough edges: npm dependencies are
 merged into `package.json` before any file is written, so a failure can leave dependencies
 for a module whose code never arrived; and the lockfile is saved outside that guarantee, so
-a partial apply can leave files on disk with no recorded provenance. Nothing currently
-tells you that re-running is the fix.
+a partial apply can leave files on disk with no source, ref or commit SHA recorded in
+`saasaloy-lock.json`. Nothing currently tells you that re-running is the fix.
 
 _Verified against `main`@`48d32d7` on 2026-08-09._

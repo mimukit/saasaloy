@@ -62,15 +62,17 @@ link them before anything can import them.
 ## Re-running and re-applying
 
 `add` is idempotent. If the module and its dependencies are already installed you get
-`Nothing to do` and exit 0. To reapply the module you named, overwriting its managed files
-with the registry's current content:
+`Nothing to do` and exit 0. To reapply the module you named, overwriting its managed
+files:
 
 ```bash
 saasaloy add waitlist --force
 ```
 
 `--force` applies to the module you asked for. Dependencies that are already installed
-stay as they are.
+stay as they are. It reapplies whatever the coordinate resolves to, which is not
+necessarily `main`'s tip — with the module already in the lockfile, that is the SHA the
+lock recorded.
 
 A repeat `add` of a module already in `saasaloy-lock.json` reuses the commit SHA the lock
 recorded, so it reproduces the same bytes rather than picking up whatever landed on `main`
