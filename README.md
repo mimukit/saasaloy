@@ -2,7 +2,7 @@
 
 An **open source SaaS accelerator** — a composable CLI + module system, not a static boilerplate, inspired by Shadcn UI copy-in modular architecture. It's Shadcn for fullstack SaaS application.
 
-Saasaloy scaffolds by default a Cloudflare-native Turborepo monorepo with a near-inert base, then installs everything churny — API, database, auth, admin, and SaaS features — on demand. Every project it generates is **AI-agent-native**.
+Saasaloy scaffolds by default a Cloudflare-native Turborepo monorepo with a near-inert base, then installs everything churny — API, database, auth, and SaaS features — on demand; an admin app is coming soon ([#13](https://github.com/mimukit/saasaloy/issues/13)). Every project it generates is **AI-agent-native**.
 
 As mentioned above, it borrows [shadcn](https://ui.shadcn.com/)'s distribution mechanics (declarative, you-own-the-code descriptors).
 
@@ -11,9 +11,9 @@ As mentioned above, it borrows [shadcn](https://ui.shadcn.com/)'s distribution m
 | Concern | Choice |
 |---|---|
 | Marketing (`apps/web`) | Astro |
-| App (`apps/admin`) | TanStack Router + Vite (SPA) |
+| App (`apps/admin`) | TanStack Router + Vite (SPA) — coming soon ([#13](https://github.com/mimukit/saasaloy/issues/13)) |
 | Backend (`apps/api`) | Hono on Workers |
-| Database | Drizzle, D1 (SQLite), Postgres (comming soon) |
+| Database | Drizzle, D1 (SQLite), Postgres (coming soon) |
 | Auth | Better Auth|
 | Monorepo | Turborepo + pnpm |
 
@@ -22,23 +22,23 @@ All-in on Cloudflare serverless architecture by default to develop & maintain in
 ## How it works
 
 ```bash
-saasaloy init my-app        # scaffold the base: Astro landing + packages/ui + config
-saasaloy add waitlist       # pulls api + database, drops in the feature
-saasaloy add billing        # pulls auth + Stripe webhooks + pricing UI
-saasaloy sync               # regenerate agent views (AGENTS.md, CLAUDE.md, skill links)
+saasaloy init my-app       # scaffold the base: Astro landing + packages/ui + config
+saasaloy add waitlist      # pulls api + database, drops in the feature
+saasaloy list              # see available modules
+saasaloy remove waitlist   # undo an applied module via the manifest
 ```
 
 ### Modules
 
-- **Capability modules** — `api`, `database`, `email`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
-- **Feature modules** — `waitlist`, `billing`, `teams`, … Each extends capabilities by dropping files into those conventions and declares its `dependsOn`.
+- **Capability modules** — `api`, `database`, `email`, `auth`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels). `admin` is coming soon ([#13](https://github.com/mimukit/saasaloy/issues/13)).
+- **Feature modules** — `waitlist`. Each extends capabilities by dropping files into those conventions and declares its `dependsOn`. `billing` ([#14](https://github.com/mimukit/saasaloy/issues/14)) and `teams` ([#16](https://github.com/mimukit/saasaloy/issues/16)) are coming soon.
 - **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
 
 Dependencies resolve recursively, topologically sorted, behind a confirmation prompt.
 
 ## Requirements
 
-Node 24+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it.
+Node 24.13.0+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it.
 
 One module does not, and it's worth knowing before you install it rather than at the first failed send:
 
@@ -55,5 +55,5 @@ Getting started, how-to guides, the architecture overview and the full command r
 
 ## License
 
-Licensed under the [MIT license](https://github.com/shadcn/ui/blob/main/LICENSE.md).
+Licensed under the [MIT license](LICENSE.md).
 
