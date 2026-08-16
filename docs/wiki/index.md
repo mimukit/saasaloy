@@ -24,6 +24,8 @@ You want a project scaffolded and features installed into it.
 - [Modules](modules.md) — every module in the default registry, in one table.
 - [Add a module](how-to/add-a-module.md) — install a feature and its prerequisites.
 - [Remove a module](how-to/remove-a-module.md) — take one back out, and what stays behind.
+- [Deploy to Cloudflare](how-to/deploy-to-cloudflare.md) — ship each workspace, and the two
+  placeholders that bite on a first remote deploy.
 
 ## Build a module
 
@@ -48,4 +50,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`0f8b7a7` on 2026-08-30._
+_Verified against `main`@`cfcb0fd` on 2026-08-30._
