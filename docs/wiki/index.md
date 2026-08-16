@@ -12,8 +12,9 @@ Two things worth knowing before you pick a page:
 - **The CLI is not published to npm.** Installing it today means cloning this repo and
   linking the built binary. [Getting started](getting-started.md) walks that path.
   [#46](https://github.com/mimukit/saasaloy/issues/46) tracks the publish.
-- **The registry is this repo.** `saasaloy add waitlist` fetches `modules/waitlist/` from
-  GitHub at a resolved commit SHA. There is no package registry in between.
+- **The registry is this repo.** `mimukit/saasaloy` is the default registry, so
+  `saasaloy add waitlist` fetches `modules/waitlist/` from it on GitHub at a resolved
+  commit SHA. There is no package registry in between.
 
 ## Use Saasaloy
 

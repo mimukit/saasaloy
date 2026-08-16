@@ -78,7 +78,7 @@ pnpm dev
 
 ## What you just got
 
-```
+```text
 my-app/
   apps/web/            Astro landing page (port 3000)
   packages/ui/         shared React + Tailwind components

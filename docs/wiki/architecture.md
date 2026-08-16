@@ -84,7 +84,9 @@ back and reported
 
 **The lock is the reproducibility anchor.** A repeat `add` of a module already in the lock
 reuses its recorded SHA instead of resolving `main` again, so the same install produces the
-same bytes.
+same bytes. The reuse is narrow: the add must name the module, carry no explicit `@ref`,
+and target the same `owner/repo` the lock entry recorded, with `SAASALOY_REGISTRY_DIR`
+unset. Everything else resolves the ref afresh.
 
 ## Two tiers of module
 

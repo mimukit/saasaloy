@@ -6,7 +6,7 @@ a flag isn't listed, it doesn't exist.
 
 ## Commands
 
-```
+```text
 saasaloy <command> [options]
 ```
 
@@ -26,7 +26,7 @@ works anywhere.
 
 ## `saasaloy init`
 
-```
+```text
 saasaloy init [<name>] [--force] [--no-install]
 ```
 
@@ -44,7 +44,7 @@ Unlike `add` and `remove`, `init` does not reject unknown flags. Anything beginn
 
 ## `saasaloy add`
 
-```
+```text
 saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]
 ```
 
@@ -65,7 +65,7 @@ See [Add a module](how-to/add-a-module.md) for the workflow.
 
 ## `saasaloy remove`
 
-```
+```text
 saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force]
 ```
 
@@ -85,7 +85,7 @@ See [Remove a module](how-to/remove-a-module.md), and read
 
 ## `saasaloy list`
 
-```
+```text
 saasaloy list [<owner/repo[@ref]>]
 ```
 
@@ -96,7 +96,7 @@ is why a module with an invalid descriptor still appears here and only fails at 
 
 ## Module coordinates
 
-```
+```text
 waitlist                → default registry (mimukit/saasaloy), module `waitlist`
 owner/repo/waitlist     → third-party repo, module `waitlist`
 owner/repo@ref/waitlist → pinned to a branch, tag or SHA

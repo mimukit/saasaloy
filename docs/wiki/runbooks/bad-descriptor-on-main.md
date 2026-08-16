@@ -8,7 +8,7 @@ and a downstream install. The moment a broken `modules/<name>/registry-item.json
 
 A downstream `saasaloy add` cancels with one of the descriptor validation errors:
 
-```
+```text
 Unknown module "<name>" — no <name>/registry-item.json in the registry.
 Module "<name>" has an invalid descriptor:
   <ajv errors, one per line>
@@ -100,8 +100,10 @@ Anyone who hit this needs one of two things:
   saasaloy add mimukit/saasaloy@<last-good-sha>/<name>
   ```
 
-  Any commit SHA or tag works. Because an explicit ref bypasses the lock pin, this also
-  gets a user off a bad SHA their own lockfile already recorded.
+  Any commit SHA works, and so does any tag the coordinate grammar accepts — a ref
+  containing `/` does not, so pin the tip SHA of a slash-named tag instead
+  ([reference](../reference.md#module-coordinates)). Because an explicit ref bypasses the
+  lock pin, this also gets a user off a bad SHA their own lockfile already recorded.
 
 ## Why there is no faster lever
 

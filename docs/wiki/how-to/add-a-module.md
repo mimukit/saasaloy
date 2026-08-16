@@ -74,7 +74,9 @@ stay as they are.
 
 A repeat `add` of a module already in `saasaloy-lock.json` reuses the commit SHA the lock
 recorded, so it reproduces the same bytes rather than picking up whatever landed on `main`
-since. Naming an explicit ref (`owner/repo@v2/module`) overrides that.
+since. That holds only while you are adding from the same `owner/repo` the lock entry
+names. Naming an explicit ref (`owner/repo@v2/module`) overrides it, and so does setting
+`SAASALOY_REGISTRY_DIR` — a local registry is read straight off disk, with no pin.
 
 ## Files the CLI refuses to touch
 

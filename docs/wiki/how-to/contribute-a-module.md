@@ -24,7 +24,7 @@ update flow — see [`CONTRIBUTING.md`](../../../CONTRIBUTING.md).
 
 ## The shape of a module
 
-```
+```text
 modules/
   <name>/
     registry-item.json       # the descriptor

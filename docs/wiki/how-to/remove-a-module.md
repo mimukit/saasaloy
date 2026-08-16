@@ -42,7 +42,7 @@ gone in a scripted run, delete them yourself afterwards.
 
 ## Modules other modules depend on
 
-```
+```text
 waitlist is still depended on by billing — refusing (use --force to remove it anyway).
 ```
 
