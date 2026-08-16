@@ -23,6 +23,8 @@ You want a project scaffolded and features installed into it.
 - [Getting started](getting-started.md) — install the CLI, scaffold a project, run it.
 - [Add a module](how-to/add-a-module.md) — install a feature and its prerequisites.
 - [Remove a module](how-to/remove-a-module.md) — take one back out, and what stays behind.
+- [Deploy to Cloudflare](how-to/deploy-to-cloudflare.md) — ship each workspace, and the two
+  placeholders that bite on a first remote deploy.
 
 ## Build a module
 
@@ -47,4 +49,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`1989275` on 2026-08-16._
