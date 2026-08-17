@@ -1,65 +1,130 @@
 import type { ComponentType } from "react";
 import {
+  ActivityIcon,
+  AwardIcon,
+  BellIcon,
+  BookOpenIcon,
+  BoxIcon,
+  CalendarIcon,
+  ClockIcon,
   CloudIcon,
+  CodeIcon,
+  CreditCardIcon,
+  DatabaseIcon,
+  FileTextIcon,
   GaugeIcon,
+  GlobeIcon,
+  GraduationCapIcon,
+  HandshakeIcon,
+  HeadphonesIcon,
+  KeyIcon,
   LayersIcon,
+  LayoutGridIcon,
+  ListChecksIcon,
+  LockIcon,
+  MapPinIcon,
+  MessageCircleIcon,
+  PenLineIcon,
+  PlugIcon,
+  ReceiptIcon,
+  RefreshCwIcon,
+  RocketIcon,
+  SearchIcon,
+  ServerIcon,
   ShieldCheckIcon,
+  SmartphoneIcon,
+  SparklesIcon,
+  TargetIcon,
   TerminalIcon,
+  TrendingUpIcon,
+  UsersIcon,
+  WalletIcon,
+  WorkflowIcon,
   ZapIcon,
 } from "lucide-react";
 
 import { Card, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import { landing } from "@repo/ui/content/landing";
 
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
+// That is also why the registry below can be long without costing anything: it is read at
+// build time and nothing in it reaches the browser.
 //
-// The icons are referenced here rather than accepted as props on purpose: Astro
-// serializes island props, so a component or function cannot cross the .astro boundary.
-// Swap an icon by editing this file — that is what "you own the code" buys you.
+// The words come from ../content/landing.ts, and so does each feature's icon — but as a
+// *name*, not a component. Astro serializes island props, so a component cannot cross the
+// .astro boundary; the registry that turns `"zap"` into `ZapIcon` therefore lives here,
+// beside the render. What that buys is the thing a copy rewrite actually needs: change
+// what a feature is about, change its glyph, one file, no block edit.
 
 export interface Feature {
+  /** Stable key — the translation key, never the array position (see the content file). */
+  id: string;
   icon: ComponentType<{ className?: string }>;
   title: string;
   description: string;
 }
 
-const defaultFeatures: Feature[] = [
-  {
-    icon: ZapIcon,
-    title: "Fast by default",
-    description:
-      "Static HTML at the edge, with JavaScript sent only for the parts of the page that actually need it.",
-  },
-  {
-    icon: LayersIcon,
-    title: "Composable modules",
-    description:
-      "Add an API, a database, auth or billing when you need them — never before, and never all at once.",
-  },
-  {
-    icon: TerminalIcon,
-    title: "Source you own",
-    description:
-      "Every component lands in your repo as plain, editable source. No black box, no framework to fight.",
-  },
-  {
-    icon: ShieldCheckIcon,
-    title: "Secure foundations",
-    description:
-      "Sensible defaults for sessions, cookies and origins, so the boring security work is already done.",
-  },
-  {
-    icon: CloudIcon,
-    title: "Cloudflare-native",
-    description:
-      "Ships to Workers with static assets out of the box — one deploy command, no servers to babysit.",
-  },
-  {
-    icon: GaugeIcon,
-    title: "Built to stay current",
-    description:
-      "Dependencies are exact-pinned and updated deliberately, so upgrades are a decision, not a surprise.",
-  },
-];
+// The names `landing.features.items[].icon` may use. Add a lucide import and a line here to
+// widen it — these are ordinary source files you own, and the set below is a starting
+// vocabulary, not a limit. Keep the keys kebab-case, matching lucide's own icon names, so
+// picking one is a lookup rather than a guess.
+const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
+  activity: ActivityIcon,
+  award: AwardIcon,
+  bell: BellIcon,
+  "book-open": BookOpenIcon,
+  box: BoxIcon,
+  calendar: CalendarIcon,
+  clock: ClockIcon,
+  cloud: CloudIcon,
+  code: CodeIcon,
+  "credit-card": CreditCardIcon,
+  database: DatabaseIcon,
+  "file-text": FileTextIcon,
+  gauge: GaugeIcon,
+  globe: GlobeIcon,
+  "graduation-cap": GraduationCapIcon,
+  handshake: HandshakeIcon,
+  headphones: HeadphonesIcon,
+  key: KeyIcon,
+  layers: LayersIcon,
+  "layout-grid": LayoutGridIcon,
+  "list-checks": ListChecksIcon,
+  lock: LockIcon,
+  "map-pin": MapPinIcon,
+  "message-circle": MessageCircleIcon,
+  "pen-line": PenLineIcon,
+  plug: PlugIcon,
+  receipt: ReceiptIcon,
+  "refresh-cw": RefreshCwIcon,
+  rocket: RocketIcon,
+  search: SearchIcon,
+  server: ServerIcon,
+  "shield-check": ShieldCheckIcon,
+  smartphone: SmartphoneIcon,
+  sparkles: SparklesIcon,
+  target: TargetIcon,
+  terminal: TerminalIcon,
+  "trending-up": TrendingUpIcon,
+  users: UsersIcon,
+  wallet: WalletIcon,
+  workflow: WorkflowIcon,
+  zap: ZapIcon,
+};
+
+// `Object.hasOwn` first, not a bare index: `FEATURE_ICONS[name]` walks the prototype chain,
+// so a name of `constructor` or `toString` resolves to an inherited function — not nullish,
+// so a `?? SparklesIcon` fallback never fires and React is handed something that isn't a
+// component. Icon names are author-controlled and the saasaloy-landing-copy skill writes
+// them, so this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
+function iconFor(name: string): ComponentType<{ className?: string }> {
+  return (Object.hasOwn(FEATURE_ICONS, name) ? FEATURE_ICONS[name] : undefined) ?? SparklesIcon;
+}
+
+const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
+  ...item,
+  icon: iconFor(item.icon),
+}));
 
 export interface FeatureGridProps {
   id?: string;
@@ -70,8 +135,8 @@ export interface FeatureGridProps {
 
 export function FeatureGrid({
   id = "features",
-  title = "Everything the first release needs",
-  description = "The parts every SaaS ends up building anyway, ready before you write a line of product code.",
+  title = landing.features.title,
+  description = landing.features.description,
   features = defaultFeatures,
 }: FeatureGridProps) {
   return (
@@ -85,7 +150,7 @@ export function FeatureGrid({
         {features.map((feature) => {
           const Icon = feature.icon;
           return (
-            <Card key={feature.title} className="h-full">
+            <Card key={feature.id} className="h-full">
               <CardHeader>
                 <span
                   aria-hidden="true"

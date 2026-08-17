@@ -9,7 +9,13 @@ import { Hero } from "@repo/ui/blocks/hero";
 import { Navbar } from "@repo/ui/blocks/navbar";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
 import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
+import { landing } from "@repo/ui/content/landing";
+import { interpolate } from "@repo/ui/lib/interpolate";
 import Layout from "../layouts/Layout.astro";
+
+// This page carries no copy of its own — the tab title and meta description come from
+// landing.meta.*, which spells the brand as a `{siteName}` token. Every block reads its
+// own words from the same file (packages/ui/src/content/landing.ts).
 
 // File-based landing-page sections. Every module in ../sections default-exports an
 // Astro component; dropping `sections/<name>.astro` puts it on the landing page with
@@ -42,8 +48,8 @@ const sections = Object.keys(sectionModules)
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 */}
 <Layout
-  title={`${siteName} — ship your SaaS, not your scaffolding`}
-  description={`${siteName}, a Cloudflare-native SaaS.`}
+  title={interpolate(landing.meta.title, { siteName })}
+  description={interpolate(landing.meta.description, { siteName })}
 >
   <Navbar client:idle siteName={siteName} />
   <ThemeToggle

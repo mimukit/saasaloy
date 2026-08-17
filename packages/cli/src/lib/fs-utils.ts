@@ -42,13 +42,25 @@ export function resolveWithinRoot(root: string, relPosixPath: string): string {
   return abs;
 }
 
-/** Names of the immediate subdirectories of `dir` (skips files); [] if `dir` is missing. */
+/**
+ * Names of the immediate subdirectories of `dir` (skips files); `[]` if `dir` is missing
+ * or isn't a directory at all.
+ *
+ * Anything else — a permission error, an I/O failure — is rethrown rather than folded
+ * into that empty array. Both callers loop over the result, so a swallowed error reads
+ * as "there was nothing here", and the caller reports neither the work nor the reason
+ * it didn't happen.
+ *
+ * @throws if `dir` exists but cannot be read.
+ */
 export async function readDirNames(dir: string): Promise<string[]> {
   try {
     const entries = await readdir(dir, { withFileTypes: true });
     return entries.filter((e) => e.isDirectory()).map((e) => e.name);
-  } catch {
-    return [];
+  } catch (error) {
+    const code = (error as NodeJS.ErrnoException).code;
+    if (code === "ENOENT" || code === "ENOTDIR") return [];
+    throw error;
   }
 }
 

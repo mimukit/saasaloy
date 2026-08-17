@@ -179,3 +179,22 @@ It is **deliberately not part of `deps:verify`**: it fetches a preset from a thi
 and the standing green gate must not depend on someone else's uptime. Run it by hand
 alongside `deps:verify` when `deps:update` moves `shadcn`.
 
+`verify-content` (`scripts/verify-content.ts`, run with `pnpm verify:content`) guards the
+template's **content module**. Every word the scaffolded landing page shows lives in
+`packages/ui/src/content/landing.ts` — `landing.*` for marketing copy, `ui.*` for chrome
+and accessibility labels — which is what lets a project owner (or the
+`saasaloy-landing-copy` skill) rewrite the copy in one file. Write a string back into a
+block and nothing complains: the build is green, the types are green, and the string is
+once again something a founder has to hunt for in markup. The script scans
+`packages/cli/templates/base/packages/ui/src/blocks/*.tsx` (and the page that composes
+them, `apps/web/src/pages/index.astro`) and fails on three shapes — a prose string
+literal, text sitting directly in JSX (`<Badge>Most popular</Badge>`), and a spoken
+attribute written as a literal (`aria-label`, `alt`, `title`, `placeholder`). Class names
+are exempt; a Tailwind string is not copy.
+
+It is textual, not a TypeScript parse (node: builtins only, like `verify-css`), so it
+catches drift rather than proving absence — and it self-tests its own rules on fixtures
+first, so a scanner that stopped matching fails loudly instead of passing everything. Run
+it by hand after touching a block or the content module; it is **not** in `deps:verify`,
+which builds a playground to answer a different question.
+
