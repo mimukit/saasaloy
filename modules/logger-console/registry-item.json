@@ -1,0 +1,23 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "logger-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["logger"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/logger/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "logger",
+      "arrayProp": "providers",
+      "call": "consoleLogger",
+      "import": {
+        "name": "consoleLogger",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [{ "path": "files/console.ts", "target": "@logger/providers/console.ts" }],
+  "scaffolds": []
+}

@@ -30,15 +30,15 @@ saasaloy sync               # regenerate agent views (AGENTS.md, CLAUDE.md, skil
 
 ### Modules
 
-- **Capability modules** — `api`, `database`, `email`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
+- **Capability modules** — `api`, `database`, `email`, `logger`, `auth`, `admin`. Each scaffolds an app or package and establishes convention-based extension points (file-based routes, schema barrels).
 - **Feature modules** — `waitlist`, `billing`, `teams`, … Each extends capabilities by dropping files into those conventions and declares its `dependsOn`.
-- **Provider modules** — `email-cloudflare`, `email-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email (later: SMS) service without any calling code learning which one is active.
+- **Provider modules** — `email-cloudflare`, `email-console`, `logger-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email or log sink (later: SMS) service without any calling code learning which one is active.
 
 Dependencies resolve recursively, topologically sorted, behind a confirmation prompt.
 
 ## Requirements
 
-Node 24+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` (D1), `auth`, and `waitlist` all work on it.
+Node 24+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` (D1), `logger`, `auth`, and `waitlist` all work on it.
 
 One module does not, and it's worth knowing before you install it rather than at the first failed send:
 

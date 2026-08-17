@@ -13,7 +13,8 @@
   "dependencies": {
     "hono": "4.12.33",
     "zod": "4.4.3",
-    "@hono/zod-validator": "0.9.0"
+    "@hono/zod-validator": "0.9.0",
+    "@repo/logger": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.50.0",
