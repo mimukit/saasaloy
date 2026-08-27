@@ -237,7 +237,9 @@ per package the resolver enumerates the npm `versions` map, **drops prereleases*
 `dist-tags`** (never trusts `latest`), caps the pre-checked default at the **highest eligible version
 within the current major**, and requires the publish time to clear `minimumReleaseAge` (read from
 `pnpm-workspace.yaml`). Everything is pinned **exact**. Each manifest resolves independently; a shared
-dep whose major diverges from the repo's own pin is printed as an informational note.
+dep whose major diverges from the repo's own pin is printed as an informational note, and so is a dep
+name that resolves to two different exact versions across the scanned manifests in one run. Both notes
+are informational: neither writes a change and neither affects the `deps:check` exit code.
 
 - **Majors** — never applied by default. Cross one **deliberately**: tick it in the picker's **Major**
   group, or pass `--allow-major` for a non-interactive run. Majors are where the template breaks

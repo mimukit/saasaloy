@@ -668,6 +668,37 @@ async function readRepoPins(): Promise<Map<string, string>> {
   return pins;
 }
 
+// --- Cross-manifest divergence (informational) -------------------------------
+// One dep name pinned at two different versions across the manifests scanned in this run.
+// The updater resolves each manifest independently, so nothing here forces them together;
+// the note exists so a maintainer sees the split instead of discovering it in a scaffold.
+// Full versions are compared, not majors: `zod 4.4.3` next to `zod 4.5.0` is still a split.
+function buildDivergenceNotes(rows: Row[]): string[] {
+  const bySpec = new Map<string, Map<string, string[]>>(); // name → spec → files
+  for (const { manifest, dep } of rows) {
+    if (dep.kind !== "exact") continue; // a range or a bare spec has no single version to compare
+    let specs = bySpec.get(dep.name);
+    if (!specs) {
+      specs = new Map<string, string[]>();
+      bySpec.set(dep.name, specs);
+    }
+    const files = specs.get(dep.spec);
+    if (files) files.push(relative(root, manifest.file));
+    else specs.set(dep.spec, [relative(root, manifest.file)]);
+  }
+
+  const notes: string[] = [];
+  for (const name of [...bySpec.keys()].sort()) {
+    const specs = bySpec.get(name)!;
+    if (specs.size < 2) continue;
+    const parts = [...specs.keys()]
+      .sort(cmp)
+      .map((spec) => `${spec} (${specs.get(spec)!.sort().join(", ")})`);
+    notes.push(`${name}: diverges across manifests — ${parts.join(" vs ")}.`);
+  }
+  return notes;
+}
+
 // --- Report + write ----------------------------------------------------------
 const STATUS_LABEL: Record<Status, string> = {
   "bare→pinned": "bare→pinned",
@@ -1073,6 +1104,9 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // Informational: the same dep name pinned at two versions across the scanned manifests.
+  notes.push(...buildDivergenceNotes(rows));
 
   printReport(rows, notes);
 
