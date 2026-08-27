@@ -6,7 +6,7 @@
     "./*": "./src/*.ts"
   },
   "scripts": {
-    "clean": "rimraf -g dist \"*.tsbuildinfo\"",
+    "clean": "rimraf -g \"*.tsbuildinfo\"",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
