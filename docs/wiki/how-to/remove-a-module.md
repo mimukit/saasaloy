@@ -54,15 +54,17 @@ because it might depend on the target and there is no way to tell.
 ## What stays behind
 
 `remove` cleans up its own files, its skill symlinks, the now-empty directories it
-created, and the `saasaloy.json` aliases whose target directory is gone. Three things it
-does not touch:
+created, the `saasaloy.json` aliases whose target directory is gone, and any
+`chained-route` patch the module applied, taking the `.route()` link and its import back
+out of the entry file. Three things it does not touch:
 
-- **Config patches are never reversed.** When a module patched a file another module owns,
-  `remove` prints one warning per patched file and drops the entry from the manifest.
-  Dropping the entry is untracking, not undoing. Removing `email-cloudflare`, for
-  instance, leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the provider
-  entry in `packages/email/src/index.ts` exactly where they were. Revert those by hand.
-  See [Known limitations](../reference.md#known-limitations) for the issue tracking this.
+- **Config patches of every other kind stay.** When a module patched a file another module
+  owns, `remove` prints one warning per patched file and drops the entry from the
+  manifest. Dropping the entry is untracking, not undoing. Removing `email-cloudflare`,
+  for instance, leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
+  provider entry in `packages/email/src/index.ts` exactly where they were. Revert those by
+  hand. See [Known limitations](../reference.md#known-limitations) for the issue tracking
+  this.
 - **npm dependencies stay in your root `package.json`.** `add` merges them in; `remove`
   has no dependency handling at all.
 - **Environment variables you set for the module** are left alone, wherever you put them.
