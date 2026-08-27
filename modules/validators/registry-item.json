@@ -1,0 +1,32 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "validators",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/validators",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/validators",
+      "aliases": { "@validators": "packages/validators/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/common.ts", "target": "src/common.ts" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-validators"]
+  }
+}
