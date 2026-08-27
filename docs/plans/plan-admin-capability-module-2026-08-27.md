@@ -69,7 +69,7 @@ Facts read from the repo; none required a decision, all shaped one below.
 
 **Verify:** `saasaloy add admin` on a clean playground resolves the chain `auth → api → database`; `pnpm typecheck` and `pnpm build` green with no prior dev run; run twice is idempotent.
 
-### Phase 2 — auth: client, guard, login, signup
+### Phase 2 — auth: client, guard, login, signup (built 2026-08-27)
 
 - `src/lib/auth.ts` — the React auth client (`better-auth/react`), one place holding `VITE_API_URL` + `basePath` + credentials.
 - `src/lib/api.ts` — the fetch helper: base URL, `credentials: 'include'`, 401 → `/login`.
