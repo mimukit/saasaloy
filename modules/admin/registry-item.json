@@ -1,0 +1,33 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "admin",
+  "type": "saasaloy:capability",
+  "dependsOn": ["auth"],
+  "dependencies": [],
+  "devDependencies": [],
+  "envVars": {
+    "VITE_API_URL": "Origin of the api Worker (e.g. https://api.x.com), baked into the bundle at build time. Falls back to http://localhost:4000 when unset."
+  },
+  "patches": [],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "apps/admin",
+      "aliases": { "@admin": "apps/admin/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
+        { "path": "files/vite.config.ts", "target": "vite.config.ts" },
+        { "path": "files/index.html", "target": "index.html" },
+        { "path": "files/src/main.tsx", "target": "src/main.tsx" },
+        { "path": "files/src/routeTree.gen.ts", "target": "src/routeTree.gen.ts" },
+        { "path": "files/src/routes/__root.tsx", "target": "src/routes/__root.tsx" },
+        { "path": "files/src/routes/index.tsx", "target": "src/routes/index.tsx" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-admin"]
+  }
+}

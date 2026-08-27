@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <!--
+      No theme script here on purpose. The pre-paint theme resolver is injected at
+      `head-prepend` by the `admin:theme-init` plugin in vite.config.ts, which imports
+      THEME_INIT_SCRIPT from @repo/ui so there is only ever one copy of it. Do not
+      paste a resolver into this file, and do not import one as a module script.
+    -->
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="robots" content="noindex" />
+    <title>Admin</title>
+  </head>
+  <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

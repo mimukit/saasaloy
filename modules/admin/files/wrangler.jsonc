@@ -1,0 +1,17 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  // Literal name, like apps/api's. Module files are copied byte-for-byte by the
+  // applier — `{{PROJECT_NAME}}` substitution only happens for `saasaloy init`'s base
+  // template, so a placeholder here would ship the braces into the project. Rename the
+  // Worker here if the account needs a project-prefixed name.
+  "name": "admin",
+  "compatibility_date": "2026-07-22",
+  // Pure client-rendered SPA: no Worker code, just the Vite build output served as
+  // Workers static assets (same shape as apps/web). `single-page-application` makes a
+  // deep link like /billing return index.html so TanStack Router resolves it on the
+  // client instead of the edge answering 404.
+  "assets": {
+    "directory": "./dist",
+    "not_found_handling": "single-page-application"
+  }
+}
