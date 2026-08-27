@@ -53,7 +53,15 @@ function LoginPage() {
       title="Sign in"
       description="Use the email and password for your account."
       error={error}
-      footer={{ prompt: "No account yet?", label: "Create one", to: "/signup" }}
+      footer={{
+        prompt: "No account yet?",
+        label: "Create one",
+        to: "/signup",
+        // Signup honours `redirect` too. Dropping it here is what would send a visitor
+        // who deep-linked into a guarded page, bounced to login, then chose "Create
+        // one" to / instead of the page they asked for.
+        search: { redirect: search.redirect },
+      }}
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">

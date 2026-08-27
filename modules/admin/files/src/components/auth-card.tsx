@@ -20,6 +20,12 @@ export interface AuthCardProps {
     label: string;
     /** A route in this app — `/login` or `/signup`. */
     to: "/login" | "/signup";
+    /**
+     * Search to carry across. Both screens read `redirect` and finish the trip through
+     * `safeRedirect`, so the hop between them has to forward it or a guarded deep link
+     * loses its destination the moment the visitor switches screens.
+     */
+    search?: { redirect?: string };
   };
 }
 
@@ -40,7 +46,11 @@ export function AuthCard({ title, description, error, children, footer }: AuthCa
           {children}
           <p className="text-sm text-muted-foreground">
             {footer.prompt}{" "}
-            <Link to={footer.to} className="text-foreground underline underline-offset-4">
+            <Link
+              to={footer.to}
+              search={footer.search ?? {}}
+              className="text-foreground underline underline-offset-4"
+            >
               {footer.label}
             </Link>
           </p>

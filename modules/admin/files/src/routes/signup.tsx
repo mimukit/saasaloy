@@ -53,7 +53,12 @@ function SignupPage() {
       title="Create your account"
       description="The first account you create is this project's first user."
       error={error}
-      footer={{ prompt: "Already have an account?", label: "Sign in", to: "/login" }}
+      footer={{
+        prompt: "Already have an account?",
+        label: "Sign in",
+        to: "/login",
+        search: { redirect: search.redirect },
+      }}
     >
       <form onSubmit={handleSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">
