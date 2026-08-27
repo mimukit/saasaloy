@@ -140,6 +140,11 @@ vite.config.ts.timestamp-*
 count.txt
 todos.json
 routeTree.gen.ts
+# ...except the admin module's copy. That one is not build output here: it is a module
+# file the CLI copies into apps/admin, and the scaffold has to typecheck before its
+# first vite run ever regenerates it. Leaving it ignored ships a registry entry that
+# points at a file no clone has.
+!modules/admin/files/src/routeTree.gen.ts
 
 # DynamoDB Local
 .dynamodb/
