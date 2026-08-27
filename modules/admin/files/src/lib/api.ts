@@ -22,10 +22,18 @@ export class ApiError extends Error {
 }
 
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
+  // `RequestInit["headers"]` is a union: a plain object, a `[name, value][]`, or a
+  // `Headers` instance. Spreading it only works for the first — a `Headers` has no own
+  // enumerable entries, so `{...headers}` is `{}` and the caller's headers vanish with
+  // no error, and an array spreads into numeric keys. The `Headers` constructor takes
+  // all three, so build from it and let the caller override the default content type.
+  const headers = new Headers(init.headers);
+  if (!headers.has("content-type")) headers.set("content-type", "application/json");
+
   const response = await fetch(`${API_URL}${path}`, {
     ...init,
     credentials: "include",
-    headers: { "content-type": "application/json", ...init.headers },
+    headers,
   });
 
   if (response.status === 401) {
