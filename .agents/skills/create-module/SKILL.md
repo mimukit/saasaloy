@@ -144,8 +144,8 @@ Field notes:
   binding name, the dependency name, the script name, the callee, the route path), and an entry
   already there is left exactly as the user last edited it, so a re-`add` is a byte-for-byte
   no-op. `chained-route` is the only kind `remove` reverses, taking the link and its import back
-  out; the other four are dropped from the manifest with a warning until #36 generalises the
-  inverse.
+  out (the import stays if the file still references the binding somewhere else); the other four
+  are dropped from the manifest with a warning until #36 generalises the inverse.
 - **`agent.skills[]`** — skill folder(s) under this module (`skills/saasaloy-<name>`) copied into
   the consumer's `.claude/skills/saasaloy-<name>/` by `add` (see Step 4). Module skills are
   **always `saasaloy-`-prefixed** so they can't collide with the user's own installed skills.

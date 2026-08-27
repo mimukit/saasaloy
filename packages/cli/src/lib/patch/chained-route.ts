@@ -52,7 +52,7 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
   }
 
   slot.replace(buildRouteLink(slot.node, patch.path, patch.call));
-  return generateCode(mod).code;
+  return keepTerminator(source, generateCode(mod).code);
 }
 
 /**
@@ -64,7 +64,9 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
  *   never force-edited (the remover warns and skips instead);
  * - the link is the only one → the bare receiver is left behind (`const app = new
  *   Hono();`), which still parses and typechecks;
- * - the import statement holds other specifiers → only this one is removed.
+ * - the import statement holds other specifiers → only this one is removed;
+ * - the identifier is still referenced elsewhere in the file → the import stays, so a
+ *   hand-written second use (`app.use(waitlist.middleware)`) is not left unbound.
  */
 export function removeChainedRoute(source: string, patch: ChainedRoute): string {
   const mod = parseModule(source);
@@ -91,10 +93,55 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
     slot.replace(receiver);
   }
 
-  // Guarded: magicast's delete trap throws when the local name isn't imported, and a
-  // hand-removed import must not turn the reversal into an error.
-  if (patch.import.name in mod.imports) delete mod.imports[patch.import.name];
-  return generateCode(mod).code;
+  // Guarded twice: magicast's delete trap throws when the local name isn't imported, and
+  // a binding the file still references elsewhere must keep its import or the file stops
+  // compiling.
+  const program = mod.$ast as unknown as Program;
+  if (patch.import.name in mod.imports && !isReferenced(program, patch.import.name)) {
+    delete mod.imports[patch.import.name];
+  }
+  return keepTerminator(source, generateCode(mod).code);
+}
+
+// recast reprints the whole program, and its printer drops a trailing newline the source
+// had. Untouched bytes must stay untouched, so put the terminator back — an add→remove
+// round trip is then byte-identical to the file the user started with.
+function keepTerminator(source: string, code: string): string {
+  if (source.endsWith("\n") && !code.endsWith("\n")) return `${code}\n`;
+  if (!source.endsWith("\n") && code.endsWith("\n")) return code.slice(0, -1);
+  return code;
+}
+
+// Does any non-import part of the program still read `name`? Walks the plain-object AST
+// rather than pulling in a visitor, since the only question is whether an `Identifier`
+// with this name survives outside the import declarations and outside member/property
+// positions (`x.waitlist` is not a use of `waitlist`).
+function isReferenced(program: Program, name: string): boolean {
+  let found = false;
+
+  function walk(node: unknown, key?: string): void {
+    if (found || node === null || typeof node !== "object") return;
+    if (Array.isArray(node)) {
+      for (const child of node) walk(child);
+      return;
+    }
+    const record = node as Record<string, unknown> & { type?: string };
+    if (typeof record.type !== "string") return;
+    if (record.type === "ImportDeclaration") return; // the import itself is not a use
+    if (record.type === "Identifier") {
+      // Skip a name in a non-reference slot: `a.name`, `{ name: … }`, `function name()`.
+      if (key !== "property" && key !== "key" && record.name === name) found = true;
+      return;
+    }
+    for (const [childKey, value] of Object.entries(record)) {
+      // recast hangs its own bookkeeping off these; walking them re-walks the whole file.
+      if (childKey === "loc" || childKey === "comments" || childKey === "original") continue;
+      walk(value, childKey);
+    }
+  }
+
+  walk(program.body);
+  return found;
 }
 
 // --- AST shapes -------------------------------------------------------------------

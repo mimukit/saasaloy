@@ -203,4 +203,44 @@ export default app;
     const once = removeChainedRoute(applied, WAITLIST);
     expect(removeChainedRoute(once, WAITLIST)).toBe(once);
   });
+
+  it("keeps the import when the identifier is still referenced elsewhere", () => {
+    const alsoUsed = `import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+app.use(waitlist.middleware);
+
+export default app;
+`;
+    const out = removeChainedRoute(alsoUsed, WAITLIST);
+    expect(out).not.toContain('.route("/waitlist"');
+    expect(out).toContain("app.use(waitlist.middleware)");
+    // Dropping the import here would leave `waitlist.middleware` unbound.
+    expect(out).toContain('from "./routes/waitlist.js"');
+    expect(parses(out)).toBe(true);
+  });
+});
+
+describe("trailing newline", () => {
+  it("keeps the terminator on insert", () => {
+    expect(insertChainedRoute(ENTRY, WAITLIST).endsWith("\n")).toBe(true);
+  });
+
+  it("keeps the terminator on remove", () => {
+    const applied = insertChainedRoute(ENTRY, WAITLIST);
+    expect(removeChainedRoute(applied, WAITLIST).endsWith("\n")).toBe(true);
+  });
+
+  it("an add → remove round trip is byte-identical, last byte included", () => {
+    const applied = insertChainedRoute(ENTRY, WAITLIST);
+    expect(removeChainedRoute(applied, WAITLIST)).toBe(ENTRY);
+  });
+
+  it("does not add a terminator to a file that had none", () => {
+    const noNewline = ENTRY.slice(0, -1);
+    const applied = insertChainedRoute(noNewline, WAITLIST);
+    expect(applied.endsWith("\n")).toBe(false);
+    expect(removeChainedRoute(applied, WAITLIST)).toBe(noNewline);
+  });
 });
