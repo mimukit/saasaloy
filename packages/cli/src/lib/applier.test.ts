@@ -317,6 +317,73 @@ describe("registry-item schema — tightened scaffolds", () => {
   });
 });
 
+describe("registry-item schema — package-json-script payload", () => {
+  const item = (patch: Record<string, unknown>) => ({
+    name: "database",
+    type: "saasaloy:feature" as const,
+    patches: [patch],
+  });
+
+  it("accepts a package-json-script patch carrying both name and value", async () => {
+    const result = await validateRegistryItem(
+      item({
+        file: "apps/api/package.json",
+        kind: "package-json-script",
+        name: "db:generate",
+        value: "drizzle-kit generate",
+      }),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it("rejects a package-json-script patch missing the script name", async () => {
+    const result = await validateRegistryItem(
+      item({
+        file: "apps/api/package.json",
+        kind: "package-json-script",
+        value: "drizzle-kit generate",
+      }),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain('missing required property "name"');
+  });
+
+  it("rejects a package-json-script patch missing the script value", async () => {
+    const result = await validateRegistryItem(
+      item({
+        file: "apps/api/package.json",
+        kind: "package-json-script",
+        name: "db:generate",
+      }),
+    );
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain('missing required property "value"');
+  });
+
+  it("rejects an empty script name or value", async () => {
+    const blankName = await validateRegistryItem(
+      item({ file: "apps/api/package.json", kind: "package-json-script", name: "", value: "x" }),
+    );
+    expect(blankName.valid).toBe(false);
+
+    const blankValue = await validateRegistryItem(
+      item({ file: "apps/api/package.json", kind: "package-json-script", name: "x", value: "" }),
+    );
+    expect(blankValue.valid).toBe(false);
+  });
+
+  it("leaves the pre-existing patch kinds' payloads unvalidated", async () => {
+    // Phase 1 tightens only the new kind; the three existing kinds keep their
+    // permissive payloads so descriptors already on disk still validate.
+    const result = await validateRegistryItem(
+      item({ file: "apps/api/wrangler.jsonc", kind: "wrangler-binding" }),
+    );
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe("buildPlan — dep buckets", () => {
   it("aggregates dependencies and devDependencies into parallel plan arrays", async () => {
     const mod = await writeModule(

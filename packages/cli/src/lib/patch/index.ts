@@ -1,6 +1,7 @@
 import { toDiff } from "./diff.js";
 import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
+import { upsertPackageJsonScript, type PackageJsonScript } from "./pkg-json-script.js";
 import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 // The config-patch engine (build spec §3.4): the ~10% of module application that isn't
@@ -13,12 +14,14 @@ import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 export { toDiff } from "./diff.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 export { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
+export { upsertPackageJsonScript, type PackageJsonScript } from "./pkg-json-script.js";
 export { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
+  | ({ kind: "package-json-script" } & PackageJsonScript)
   | ({ kind: "plugin-array" } & PluginArrayInsert);
 
 export interface PatchResult {
@@ -48,6 +51,8 @@ function applyCodemod(source: string, patch: Patch): string {
       return upsertWranglerBinding(source, patch);
     case "package-json-dependency":
       return upsertPackageJsonDependency(source, patch);
+    case "package-json-script":
+      return upsertPackageJsonScript(source, patch);
     case "plugin-array":
       return insertIntoPluginArray(source, patch);
     default: {
