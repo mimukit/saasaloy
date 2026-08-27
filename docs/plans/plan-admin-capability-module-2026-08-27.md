@@ -87,11 +87,11 @@ Facts read from the repo; none required a decision, all shaped one below.
 
 **Verify:** shell renders in light and dark with no first-paint flash; dropping a dummy `routes/_authed/demo.tsx` with a `nav` entry puts it in the nav with no other edit, and deleting the file removes it.
 
-### Phase 4 — skill + verification
+### Phase 4 — skill + verification (built 2026-08-27)
 
 - `modules/admin/skills/saasaloy-admin/SKILL.md`: adding a page (the one-file drop with `staticData.nav`), the guard contract and its once-per-load freshness, calling the API through `lib/api.ts`, the env checklist (`VITE_API_URL` per environment; prod `CORS_ORIGINS` must include the admin origin and `COOKIE_DOMAIN` must span the subdomains), and the #64 theme-plugin rule.
 - Full playground pass: `add admin` from clean, dependency chain, second-run idempotence, `pnpm deps:verify` clean.
-- QA doc under `docs/qa/`.
+- QA doc under `docs/qa/` (written by the QA step, not the build).
 
 ### Rejected alternatives
 
