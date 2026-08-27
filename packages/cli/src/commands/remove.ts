@@ -3,6 +3,7 @@ import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { isReversibleKind } from "../lib/patch/index.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   buildRemovePlan,
@@ -121,7 +122,17 @@ function summarizeRemovePlan(plan: RemovePlan, name: string, yes: boolean): void
     );
   }
 
+  // `chained-route` is the one kind with an inverse, so it's listed as work rather than
+  // warned about; what actually happened is reported post-execute (#83, #36).
+  const reversible = plan.patches.filter((p) => isReversibleKind(p.patch.kind));
+  if (reversible.length > 0) {
+    const patchLines = reversible.map(
+      (p) => `  ${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`,
+    );
+    note(wrapForNote(patchLines.join("\n")), "Config patches");
+  }
   for (const p of plan.patches) {
+    if (isReversibleKind(p.patch.kind)) continue;
     log.warn(
       `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} is not reversed by \`remove\` — hand-revert it if needed.`,
     );
@@ -250,6 +261,18 @@ export async function runRemove(argv: string[]): Promise<number> {
     }
     for (const link of result.linkConflicts) {
       log.warn(`Skill link ${pc.cyan(link.path)} left untouched — not ours to remove.`);
+    }
+    for (const p of result.patchesReversed) {
+      log.step(`${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`);
+    }
+    // A reversible entry that landed in `patchesDropped` had nothing left to undo —
+    // the link was hand-removed, or the file is gone. Say so rather than claiming a
+    // revert; the non-reversible kinds were already warned about from the plan.
+    for (const p of result.patchesDropped) {
+      if (!isReversibleKind(p.patch.kind)) continue;
+      log.warn(
+        `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} was already gone — nothing to revert.`,
+      );
     }
     for (const dir of result.prunedDirs) {
       log.step(`${pc.dim("prune")}  ${dir}`);

@@ -384,6 +384,50 @@ describe("registry-item schema — package-json-script payload", () => {
   });
 });
 
+describe("registry-item schema — chained-route payload", () => {
+  const item = (patch: Record<string, unknown>) => ({
+    name: "waitlist",
+    type: "saasaloy:feature" as const,
+    patches: [patch],
+  });
+
+  const full = {
+    file: "apps/api/src/index.ts",
+    kind: "chained-route",
+    exportName: "default",
+    path: "/waitlist",
+    call: "waitlist",
+    import: { name: "waitlist", from: "./routes/waitlist.js" },
+  };
+
+  it("accepts a chained-route patch carrying every payload field", async () => {
+    const result = await validateRegistryItem(item(full));
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+  });
+
+  it.each(["exportName", "path", "call", "import"])(
+    "rejects a chained-route patch missing %s",
+    async (field) => {
+      const { [field]: _dropped, ...rest } = full as Record<string, unknown>;
+      const result = await validateRegistryItem(item(rest));
+      expect(result.valid).toBe(false);
+      expect(result.errors.join("\n")).toContain(`missing required property "${field}"`);
+    },
+  );
+
+  it("rejects an import missing its module specifier", async () => {
+    const result = await validateRegistryItem(item({ ...full, import: { name: "waitlist" } }));
+    expect(result.valid).toBe(false);
+    expect(result.errors.join("\n")).toContain('missing required property "from"');
+  });
+
+  it("rejects an empty path", async () => {
+    const result = await validateRegistryItem(item({ ...full, path: "" }));
+    expect(result.valid).toBe(false);
+  });
+});
+
 describe("buildPlan — dep buckets", () => {
   it("aggregates dependencies and devDependencies into parallel plan arrays", async () => {
     const mod = await writeModule(

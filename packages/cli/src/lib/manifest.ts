@@ -15,10 +15,11 @@ export interface ManagedEntry {
   hash: string;
 }
 
-// A structural config patch that actually landed on disk, recorded so `remove` can
-// warn the user which files it can't clean up (reversal is the follow-up issue —
-// see the `PlannedPatch` comment in applier.ts). Not itself reversible from this
-// record alone; `patch` is the op as authored, kept for a future reverse-patcher.
+// A structural config patch that actually landed on disk, recorded so `remove` can undo
+// it — or, for a kind with no inverse yet, warn the user which file it can't clean up
+// (see the `PlannedPatch` comment in applier.ts). `patch` is the op as authored, which is
+// what `reversePatch` reads: a `chained-route` entry is reversible from this record alone,
+// the other kinds wait on issue #36.
 export interface ManifestPatch {
   /** Name of the module that applied this patch. */
   module: string;

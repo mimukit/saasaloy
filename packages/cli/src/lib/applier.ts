@@ -59,8 +59,9 @@ export type PatchAction = "apply" | "unchanged" | "missing";
 // A structural config patch bound to a concrete target file (ADR 0019). Unlike a
 // PlannedFile it is never manifest-tracked as a managed file — a patch mutates a
 // file another module owns, so it isn't a clean managed copy. `executePlan` records
-// each applied patch in `manifest.patches` so `remove` can warn about it; clean
-// reverse-patching is the follow-up issue.
+// each applied patch in `manifest.patches`, which is what `remove` reads back: it
+// reverses a `chained-route` entry and warns about every other kind until issue #36
+// generalises the inverse.
 export interface PlannedPatch {
   module: string;
   /** Project-relative POSIX path of the file being patched. */

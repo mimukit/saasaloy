@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { applyPatch, type Patch } from "./index.js";
+import { applyPatch, isReversibleKind, reversePatch, type Patch } from "./index.js";
 
 const WRANGLER = `{
   "name": "api",
@@ -45,6 +45,21 @@ const PLUGIN_PATCH: Patch = {
   arrayProp: "plugins",
   call: "stripe",
   import: { name: "stripe", from: "@better-auth/stripe" },
+};
+
+const API_ENTRY = `import { Hono } from "hono";
+
+const app = new Hono();
+
+export default app;
+`;
+
+const ROUTE_PATCH: Patch = {
+  kind: "chained-route",
+  exportName: "default",
+  path: "/waitlist",
+  call: "waitlist",
+  import: { name: "waitlist", from: "./routes/waitlist.js" },
 };
 
 describe("applyPatch", () => {
@@ -108,5 +123,54 @@ describe("applyPatch", () => {
     expect(again.changed).toBe(false);
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
+  });
+
+  it("applies a chained-route patch via magicast", () => {
+    const result = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
+    expect(result.changed).toBe(true);
+    expect(result.content).toContain('.route("/waitlist", waitlist)');
+    expect(result.diff).toContain("index.ts");
+    expect(result.diff).toContain("+");
+  });
+
+  it("re-running a chained-route patch is likewise a clean no-op", () => {
+    const first = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
+    const again = applyPatch(first.content, ROUTE_PATCH, "index.ts");
+    expect(again.changed).toBe(false);
+    expect(again.diff).toBe("");
+    expect(again.content).toBe(first.content);
+  });
+});
+
+describe("reversePatch", () => {
+  it("undoes a chained-route patch, reporting changed=true and a diff", () => {
+    const applied = applyPatch(API_ENTRY, ROUTE_PATCH, "index.ts");
+    const reversed = reversePatch(applied.content, ROUTE_PATCH, "index.ts");
+    expect(reversed?.changed).toBe(true);
+    expect(reversed?.content).not.toContain("waitlist");
+    expect(reversed?.diff).toContain("index.ts");
+    expect(reversed?.diff).toContain("-");
+  });
+
+  it("reports changed=false when the patch is already reversed", () => {
+    const reversed = reversePatch(API_ENTRY, ROUTE_PATCH, "index.ts");
+    expect(reversed?.changed).toBe(false);
+    expect(reversed?.diff).toBe("");
+    expect(reversed?.content).toBe(API_ENTRY);
+  });
+
+  it("returns undefined for a kind with no inverse yet (#36 owns the rest)", () => {
+    expect(reversePatch(AUTH, PLUGIN_PATCH, "auth.ts")).toBeUndefined();
+    expect(reversePatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc")).toBeUndefined();
+    expect(reversePatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json")).toBeUndefined();
+    expect(reversePatch(API_PACKAGE_JSON, DEPENDENCY_PATCH, "package.json")).toBeUndefined();
+  });
+
+  it("isReversibleKind agrees with what reversePatch will undo", () => {
+    expect(isReversibleKind("chained-route")).toBe(true);
+    expect(isReversibleKind("plugin-array")).toBe(false);
+    expect(isReversibleKind("wrangler-binding")).toBe(false);
+    expect(isReversibleKind("package-json-script")).toBe(false);
+    expect(isReversibleKind("package-json-dependency")).toBe(false);
   });
 });

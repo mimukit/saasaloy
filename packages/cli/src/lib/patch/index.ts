@@ -1,3 +1,4 @@
+import { insertChainedRoute, removeChainedRoute, type ChainedRoute } from "./chained-route.js";
 import { toDiff } from "./diff.js";
 import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
@@ -11,6 +12,11 @@ import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 // patch is pure and `--dry-run`/`--diff`-able: `applyPatch` never writes, it returns the
 // would-be content plus a unified diff, and re-running an already-applied patch is a no-op.
 
+export {
+  insertChainedRoute,
+  removeChainedRoute,
+  type ChainedRoute,
+} from "./chained-route.js";
 export { toDiff } from "./diff.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 export { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
@@ -22,7 +28,10 @@ export type Patch =
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
   | ({ kind: "package-json-script" } & PackageJsonScript)
-  | ({ kind: "plugin-array" } & PluginArrayInsert);
+  | ({ kind: "plugin-array" } & PluginArrayInsert)
+  | ({ kind: "chained-route" } & ChainedRoute);
+
+export type PatchKind = Patch["kind"];
 
 export interface PatchResult {
   /** The would-be file content after the patch (equal to the input on a no-op). */
@@ -55,9 +64,34 @@ function applyCodemod(source: string, patch: Patch): string {
       return upsertPackageJsonScript(source, patch);
     case "plugin-array":
       return insertIntoPluginArray(source, patch);
+    case "chained-route":
+      return insertChainedRoute(source, patch);
     default: {
       const exhaustive: never = patch;
       throw new Error(`unknown patch kind: ${JSON.stringify(exhaustive)}`);
     }
   }
+}
+
+// Patch kinds that ship an inverse today. `chained-route` is the only one: issue #83
+// scoped its reversal deliberately, and the general mechanism across every kind is
+// issue #36's. `remove` still drops-and-warns for everything not listed here.
+const REVERSIBLE_KINDS: ReadonlySet<string> = new Set<PatchKind>(["chained-route"]);
+
+/** Whether `reversePatch` can undo a patch of this kind. */
+export function isReversibleKind(kind: string): boolean {
+  return REVERSIBLE_KINDS.has(kind);
+}
+
+/**
+ * Undo one structural `patch`, the mirror of `applyPatch`. Returns `undefined` for a
+ * kind with no inverse yet, so the caller can tell "nothing to reverse here" from "the
+ * reversal ran and changed nothing". Pure and idempotent, like the forward direction:
+ * a patch already reversed yields `changed: false` and an empty diff, which is what
+ * keeps a hand-reverted file from being force-edited.
+ */
+export function reversePatch(source: string, patch: Patch, filename: string): PatchResult | undefined {
+  if (patch.kind !== "chained-route") return undefined;
+  const content = removeChainedRoute(source, patch);
+  return { content, changed: content !== source, diff: toDiff(source, content, filename) };
 }
