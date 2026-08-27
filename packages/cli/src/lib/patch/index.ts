@@ -73,14 +73,19 @@ function applyCodemod(source: string, patch: Patch): string {
   }
 }
 
-// Patch kinds that ship an inverse today. `chained-route` is the only one: issue #83
-// scoped its reversal deliberately, and the general mechanism across every kind is
-// issue #36's. `remove` still drops-and-warns for everything not listed here.
-const REVERSIBLE_KINDS: ReadonlySet<string> = new Set<PatchKind>(["chained-route"]);
+// The one table of kind → inverse codemod. `chained-route` is the only entry today:
+// issue #83 scoped its reversal deliberately, and the general mechanism across every kind
+// is issue #36's. `remove` drops-and-warns for every kind absent from this table, and both
+// `isReversibleKind` and `reversePatch` read it, so adding an inverse is one edit.
+type Inverse<K extends PatchKind> = (source: string, patch: Extract<Patch, { kind: K }>) => string;
+
+const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
+  "chained-route": removeChainedRoute,
+};
 
 /** Whether `reversePatch` can undo a patch of this kind. */
 export function isReversibleKind(kind: string): boolean {
-  return REVERSIBLE_KINDS.has(kind);
+  return Object.hasOwn(INVERSES, kind);
 }
 
 /**
@@ -91,7 +96,8 @@ export function isReversibleKind(kind: string): boolean {
  * keeps a hand-reverted file from being force-edited.
  */
 export function reversePatch(source: string, patch: Patch, filename: string): PatchResult | undefined {
-  if (patch.kind !== "chained-route") return undefined;
-  const content = removeChainedRoute(source, patch);
+  const inverse = INVERSES[patch.kind] as ((source: string, patch: Patch) => string) | undefined;
+  if (!inverse) return undefined;
+  const content = inverse(source, patch);
   return { content, changed: content !== source, diff: toDiff(source, content, filename) };
 }
