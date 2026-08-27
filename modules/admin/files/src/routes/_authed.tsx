@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Outlet, createFileRoute, redirect, useNavigate } from "@tanstack/react-router";
 
-import { Button } from "@repo/ui/components/button";
+import { Nav } from "../components/nav";
 import { signOut } from "../lib/auth";
 
 // The session gate, and the reason a page belongs under `src/routes/_authed/`. The
@@ -43,14 +43,16 @@ function AuthedLayout() {
     await navigate({ to: "/login" });
   }
 
+  // The shell every guarded page renders inside. `Nav` builds its links from the route
+  // tree, so a new page under this folder joins the nav on its own — see
+  // src/components/nav.tsx for the convention and _authed/index.tsx for the example.
   return (
     <div className="flex min-h-svh flex-col">
-      <header className="flex items-center justify-end gap-3 border-b px-6 py-3">
-        <span className="text-sm text-muted-foreground">{session.user.email}</span>
-        <Button variant="outline" onClick={handleSignOut} disabled={pending}>
-          Sign out
-        </Button>
-      </header>
+      <Nav
+        email={session.user.email}
+        onSignOut={handleSignOut}
+        signOutPending={pending}
+      />
       <Outlet />
     </div>
   );
