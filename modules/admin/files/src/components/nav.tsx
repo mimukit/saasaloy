@@ -41,9 +41,11 @@ export interface NavProps {
   onSignOut: () => void;
   /** True while sign-out is in flight, so the button cannot be pressed twice. */
   signOutPending?: boolean;
+  /** Set when the last sign-out failed and the session is therefore still live. */
+  signOutError?: string | null;
 }
 
-export function Nav({ email, onSignOut, signOutPending = false }: NavProps) {
+export function Nav({ email, onSignOut, signOutPending = false, signOutError = null }: NavProps) {
   const router = useRouter();
   const items = collectNavItems(Object.values(router.routesById));
 
@@ -67,6 +69,11 @@ export function Nav({ email, onSignOut, signOutPending = false }: NavProps) {
         ))}
       </nav>
       <div className="ml-auto flex items-center gap-3">
+        {signOutError && (
+          <span role="alert" className="text-destructive text-sm">
+            {signOutError}
+          </span>
+        )}
         <span className="text-muted-foreground text-sm">{email}</span>
         <ThemeToggle />
         <Button variant="outline" onClick={onSignOut} disabled={signOutPending}>

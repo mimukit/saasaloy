@@ -33,14 +33,33 @@ function AuthedLayout() {
   const { auth, session } = Route.useRouteContext();
   const navigate = useNavigate();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSignOut() {
+    setError(null);
     setPending(true);
-    await signOut();
-    // Drop the cached session before leaving, or the guard waves the next visit
-    // through on an answer the server has already invalidated.
-    auth.reset();
-    await navigate({ to: "/login" });
+    try {
+      // Better Auth reports a refused sign-out in the result rather than by throwing,
+      // so an ignored return value means clearing the client cache while the server
+      // cookie is still live — signed out in this tab, signed in everywhere else.
+      // Stay put and say so instead.
+      const result = await signOut();
+      if (result.error) {
+        setError(result.error.message ?? "Could not sign out. Try again.");
+        return;
+      }
+      // Drop the cached session before leaving, or the guard waves the next visit
+      // through on an answer the server has already invalidated.
+      auth.reset();
+      await navigate({ to: "/login" });
+    } catch {
+      // A dropped connection lands here. Same rule as above: the cookie may well have
+      // survived, so do not pretend the session is gone.
+      setError("Could not reach the server. Try again.");
+    } finally {
+      // Without this the button stays disabled until a reload on any failure.
+      setPending(false);
+    }
   }
 
   // The shell every guarded page renders inside. `Nav` builds its links from the route
@@ -52,6 +71,7 @@ function AuthedLayout() {
         email={session.user.email}
         onSignOut={handleSignOut}
         signOutPending={pending}
+        signOutError={error}
       />
       <Outlet />
     </div>
