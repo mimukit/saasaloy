@@ -1,9 +1,12 @@
-import { describe, expect, it } from "vitest";
+import { mkdtemp, rm } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { detectConflicts, formatConflicts, type ModuleConflict } from "./conflicts.js";
-import { emptyLock, type Lockfile, upsertLock } from "./lock.js";
+import { emptyLock, loadLock, type Lockfile, saveLock, upsertLock } from "./lock.js";
 import type { LoadedModule, ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
-import { type SaasaloyConfig, validateRegistryItem } from "./schema.js";
+import { type SaasaloyConfig, validateLock, validateRegistryItem } from "./schema.js";
 
 const PROVENANCE: ModuleProvenance = {
   source: "mimukit/saasaloy",
@@ -268,5 +271,52 @@ describe("registry-item schema — conflictsWith", () => {
   it("rejects duplicates and non-array values", async () => {
     expect((await validateRegistryItem(item(["database-pg", "database-pg"]))).valid).toBe(false);
     expect((await validateRegistryItem(item("database-pg"))).valid).toBe(false);
+  });
+});
+
+// #83 Phase 4. Every test above hands `detectConflicts` a Lockfile it holds in memory.
+// The reverse direction only works in a real run if the field survives the JSON write
+// and read between the two `add` invocations, so this drives that seam: install one
+// module, save the lock, load it back in a fresh process's shape, then add the other.
+describe("conflictsWith — across two runs, through the lockfile on disk", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-conflicts-root-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("refuses the second module using only what the first run wrote to disk", async () => {
+    // Run 1: `add database-d1`, which declares the conflict. Nothing is installed yet,
+    // so nothing is refused, and the lock records what the descriptor said.
+    const d1 = mod("database-d1", { conflictsWith: ["database-pg"] });
+    const first = detectConflicts({ graph: graph(d1), config: config(), lock: emptyLock() });
+    expect(first.conflicts).toEqual([]);
+
+    const lock = emptyLock();
+    upsertLock(lock, PROVENANCE, ["database-d1"], graph(d1));
+    await saveLock(root, lock);
+
+    // Run 2: `add database-pg`. Its own descriptor declares nothing, and `database-d1`'s
+    // descriptor is long gone — the refusal has to come out of the lockfile.
+    const reloaded = await loadLock(root);
+    expect(reloaded.modules["database-d1"]?.conflictsWith).toEqual(["database-pg"]);
+    expect((await validateLock(reloaded)).errors).toEqual([]);
+
+    const report = detectConflicts({
+      graph: graph(mod("database-pg")),
+      config: config("database-d1"),
+      lock: reloaded,
+    });
+    expect(report.missingLockEntries).toEqual([]);
+    expect(report.conflicts).toEqual([
+      { declaredBy: "database-d1", conflictsWith: "database-pg", installed: "database-d1" },
+    ]);
+    expect(formatConflicts(report.conflicts, "database-pg")).toContain(
+      "Run `saasaloy remove database-d1` first.",
+    );
   });
 });

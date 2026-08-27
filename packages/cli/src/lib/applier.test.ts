@@ -27,10 +27,11 @@ afterEach(async () => {
 });
 
 // Lay a module folder on disk (source files under its dir) and return its LoadedModule.
+// `files` is optional: a module that only carries patches ships no source files of its own.
 async function writeModule(
   name: string,
   item: Omit<RegistryItem, "name">,
-  files: Record<string, string>,
+  files: Record<string, string> = {},
 ): Promise<LoadedModule> {
   const dir = join(moduleRoot, name);
   for (const [rel, content] of Object.entries(files)) {
@@ -610,6 +611,255 @@ describe("executePlan — config patches", () => {
     expect(result.patched).toHaveLength(1);
     // Same module/file/patch as before — not duplicated.
     expect(manifest.patches).toHaveLength(1);
+  });
+});
+
+// #83 Phase 4. The two new patch kinds have their own codemod unit tests; what those
+// can't show is the case the kinds exist for — a module patching a workspace ANOTHER
+// module scaffolds in the same run. These drive add and re-add through the real
+// buildPlan/executePlan pair, so the `unchanged` action and the never-clobber rule are
+// asserted on disk rather than on a string. The remove leg lives in remover.test.ts.
+
+// An `api`-shaped capability scaffolding both files the new kinds target: the
+// workspace's package.json and its Hono entry chain.
+async function apiWorkspace(): Promise<LoadedModule> {
+  return writeModule(
+    "api",
+    {
+      type: "saasaloy:capability",
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          aliases: { "@api": "apps/api/src" },
+          files: [
+            { path: "files/package.json", target: "package.json" },
+            { path: "files/src/index.ts", target: "src/index.ts" },
+          ],
+        },
+      ],
+    },
+    {
+      "files/package.json": '{\n  "name": "@app/api",\n  "scripts": {\n    "dev": "wrangler dev"\n  }\n}\n',
+      "files/src/index.ts": `import { Hono } from "hono";
+
+const app = new Hono();
+
+export type AppType = typeof app;
+export default app;
+`,
+    },
+  );
+}
+
+// A `database`-shaped capability adding a command to the app it wires itself into.
+async function dbWithScript(): Promise<LoadedModule> {
+  return writeModule("database", {
+    type: "saasaloy:capability",
+    dependsOn: ["api"],
+    patches: [
+      {
+        file: "apps/api/package.json",
+        kind: "package-json-script",
+        name: "db:generate",
+        value: "drizzle-kit generate",
+      },
+    ],
+  });
+}
+
+// A `waitlist`-shaped feature registering its sub-router on api's exported chain.
+async function waitlistWithRoute(): Promise<LoadedModule> {
+  return writeModule("waitlist", {
+    type: "saasaloy:feature",
+    dependsOn: ["api"],
+    patches: [
+      {
+        file: "apps/api/src/index.ts",
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    ],
+  });
+}
+
+const PKG_TARGET = "apps/api/package.json";
+const ENTRY_TARGET = "apps/api/src/index.ts";
+
+describe("applier — package-json-script end to end", () => {
+  it("plans the script against a package.json the same run scaffolds", async () => {
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWorkspace(), await dbWithScript()],
+    });
+    expect(p.patches).toHaveLength(1);
+    expect(p.patches[0]).toMatchObject({
+      module: "database",
+      file: PKG_TARGET,
+      action: "apply",
+    });
+    expect(p.patches[0]?.diff).toContain("db:generate");
+  });
+
+  it("writes the script beside the scaffolded one and records the patch", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWorkspace(), await dbWithScript()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+
+    const pkg = JSON.parse(await readFile(join(root, "apps", "api", "package.json"), "utf8"));
+    expect(pkg.scripts).toEqual({ dev: "wrangler dev", "db:generate": "drizzle-kit generate" });
+    expect(result.patched.map((x) => x.file)).toContain(PKG_TARGET);
+    // The patched file stays owned by whoever scaffolded it (ADR 0019).
+    expect(manifest.managed[PKG_TARGET]?.module).toBe("api");
+    expect(manifest.patches[0]).toMatchObject({ module: "database", file: PKG_TARGET });
+    expect(manifest.patches[0]?.patch.kind).toBe("package-json-script");
+  });
+
+  it("plans a re-add as unchanged and writes nothing the second time", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiWorkspace(), await dbWithScript()];
+    await executePlan(
+      await plan({ install: ["api", "database"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+    const before = await readFile(join(root, "apps", "api", "package.json"), "utf8");
+
+    const second = await plan({ install: ["api", "database"], modules: mods, config, manifest });
+    expect(second.patches[0]?.action).toBe("unchanged");
+    expect(second.patches[0]?.diff).toBe("");
+
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.patched).toHaveLength(0);
+    expect(await readFile(join(root, "apps", "api", "package.json"), "utf8")).toBe(before);
+    expect(manifest.patches).toHaveLength(1);
+  });
+
+  it("leaves a command the user edited alone", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiWorkspace(), await dbWithScript()];
+    await executePlan(
+      await plan({ install: ["api", "database"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+
+    const abs = join(root, "apps", "api", "package.json");
+    const edited = (await readFile(abs, "utf8")).replace(
+      "drizzle-kit generate",
+      "drizzle-kit generate --custom",
+    );
+    await writeFile(abs, edited, "utf8");
+
+    const second = await plan({ install: ["api", "database"], modules: mods, config, manifest });
+    expect(second.patches[0]?.action).toBe("unchanged");
+    await executePlan(second, root, config, manifest);
+    expect(await readFile(abs, "utf8")).toBe(edited);
+  });
+});
+
+describe("applier — chained-route end to end", () => {
+  it("plans the route link against an entry file the same run scaffolds", async () => {
+    const p = await plan({
+      install: ["api", "waitlist"],
+      modules: [await apiWorkspace(), await waitlistWithRoute()],
+    });
+    expect(p.patches).toHaveLength(1);
+    expect(p.patches[0]).toMatchObject({
+      module: "waitlist",
+      file: ENTRY_TARGET,
+      action: "apply",
+    });
+    expect(p.patches[0]?.diff).toContain('.route("/waitlist", waitlist)');
+  });
+
+  it("writes the link and its import, and adds no sentinel comment (ADR 0006)", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "waitlist"],
+      modules: [await apiWorkspace(), await waitlistWithRoute()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+
+    const entry = await readFile(join(root, "apps", "api", "src", "index.ts"), "utf8");
+    // magicast writes its own import at the top of the file, without inner spacing —
+    // the same shape the plugin-array codemod has always emitted.
+    expect(entry).toMatch(/import \{\s*waitlist\s*\} from "\.\/routes\/waitlist\.js";/);
+    expect(entry).toContain('.route("/waitlist", waitlist)');
+    // The chain locates itself; nothing marks the insertion point.
+    expect(entry.toLowerCase()).not.toContain("saasaloy");
+    // The type export the RPC client derives from survives the edit.
+    expect(entry).toContain("export type AppType = typeof app;");
+    expect(result.patched.map((x) => x.file)).toContain(ENTRY_TARGET);
+    expect(manifest.patches[0]?.patch.kind).toBe("chained-route");
+  });
+
+  it("plans a re-add as unchanged and writes nothing the second time", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiWorkspace(), await waitlistWithRoute()];
+    await executePlan(
+      await plan({ install: ["api", "waitlist"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+    const before = await readFile(join(root, "apps", "api", "src", "index.ts"), "utf8");
+
+    const second = await plan({ install: ["api", "waitlist"], modules: mods, config, manifest });
+    expect(second.patches[0]?.action).toBe("unchanged");
+    expect(second.patches[0]?.diff).toBe("");
+
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.patched).toHaveLength(0);
+    expect(await readFile(join(root, "apps", "api", "src", "index.ts"), "utf8")).toBe(before);
+    expect(manifest.patches).toHaveLength(1);
+  });
+
+  it("appends a second module's link without disturbing the first", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const billing = await writeModule("billing", {
+      type: "saasaloy:feature",
+      dependsOn: ["api"],
+      patches: [
+        {
+          file: ENTRY_TARGET,
+          kind: "chained-route",
+          exportName: "default",
+          path: "/billing",
+          call: "billing",
+          import: { name: "billing", from: "./routes/billing.js" },
+        },
+      ],
+    });
+    const mods = [await apiWorkspace(), await waitlistWithRoute(), billing];
+    await executePlan(
+      await plan({ install: ["api", "waitlist", "billing"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+
+    const entry = await readFile(join(root, "apps", "api", "src", "index.ts"), "utf8");
+    expect(entry).toContain('.route("/waitlist", waitlist)');
+    expect(entry).toContain('.route("/billing", billing)');
+    expect(manifest.patches).toHaveLength(2);
   });
 });
 

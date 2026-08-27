@@ -327,6 +327,40 @@ describe("executeRemovePlan — patches", () => {
     expect(result.patchesReversed).toEqual([]);
     expect(manifest.patches).toEqual([billingPatch]);
   });
+
+  // #83 Phase 4: the new `package-json-script` kind has no inverse either, so `remove`
+  // must leave the command on disk rather than half-reverting it. Pinning the contract
+  // here means #36 has to change this test deliberately when it generalises reversal.
+  it("leaves a package-json-script command on disk and drops the record", async () => {
+    const target = "apps/api/package.json";
+    const source = '{\n  "name": "@app/api",\n  "scripts": {\n    "db:generate": "drizzle-kit generate"\n  }\n}\n';
+    const abs = join(root, ...target.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, source, "utf8");
+
+    const manifest = emptyManifest();
+    const patch: ManifestPatch = {
+      module: "database",
+      file: target,
+      patch: {
+        file: target,
+        kind: "package-json-script",
+        name: "db:generate",
+        value: "drizzle-kit generate",
+      },
+    };
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["database"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("database", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+    expect(await readFile(abs, "utf8")).toBe(source);
+    expect(manifest.patches).toEqual([]);
+  });
 });
 
 // The one reversible patch kind (#83). Everything else stays drop-and-warn until #36
