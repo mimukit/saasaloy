@@ -193,6 +193,26 @@ describe("detectConflicts — reverse direction (installed module declared it)",
     });
     expect(report.missingLockEntries).toEqual([]);
   });
+
+  it("stays silent about an installed name the tool never applied (the template's web)", () => {
+    const report = detectConflicts({
+      graph: graph(mod("database-d1")),
+      config: config("web", "api"),
+      lock: lockFor(mod("api")),
+      managed: new Set(["api"]), // `web` comes from the scaffold, not from `add`
+    });
+    expect(report.missingLockEntries).toEqual([]);
+  });
+
+  it("still reports a managed module that lost its lock entry", () => {
+    const report = detectConflicts({
+      graph: graph(mod("database-d1")),
+      config: config("web", "api"),
+      lock: emptyLock(),
+      managed: new Set(["api"]),
+    });
+    expect(report.missingLockEntries).toEqual(["api"]);
+  });
 });
 
 describe("formatConflicts", () => {

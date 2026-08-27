@@ -37,6 +37,19 @@ export interface Manifest {
 
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
 
+/**
+ * Every module the tool has actually applied to this project, read off what it recorded.
+ * A name in `saasaloy.json` `installed[]` that is absent here came from the scaffold
+ * template (`web`) or a hand edit: the tool never installed it, so it has no descriptor,
+ * no lock entry, and nothing to say about conflicts.
+ */
+export function managedModules(manifest: Manifest): Set<string> {
+  const names = new Set<string>();
+  for (const entry of Object.values(manifest.managed)) names.add(entry.module);
+  for (const entry of manifest.patches) names.add(entry.module);
+  return names;
+}
+
 export function emptyManifest(): Manifest {
   return { managed: {}, links: {}, patches: [] };
 }

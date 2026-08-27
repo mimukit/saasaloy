@@ -11,7 +11,7 @@ import {
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { loadManifest, managedModules, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
@@ -247,7 +247,15 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     // Mutually exclusive modules are refused before anything is written, and `--force`
     // doesn't bypass it — force means "re-apply this module", not "install it anyway".
-    const conflicts = detectConflicts({ graph, config, lock });
+    const manifest = await loadManifest(root);
+    const conflicts = detectConflicts({
+      graph,
+      config,
+      lock,
+      // Only modules this tool applied. The scaffold template lists `web` in `installed[]`
+      // and never writes it a lock entry, so checking every name warns on every add.
+      managed: managedModules(manifest),
+    });
     if (conflicts.missingLockEntries.length > 0) {
       log.warn(
         `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
@@ -273,7 +281,6 @@ export async function runAdd(argv: string[]): Promise<number> {
       return 0;
     }
 
-    const manifest = await loadManifest(root);
     plan = await buildPlan({
       root,
       install,
