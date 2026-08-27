@@ -1,9 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
 
-// The dashboard. `staticData.nav` is the worked example of the extension point: a
-// feature module adds a page by dropping one file next to this one, declaring its own
-// `nav` entry, and editing nothing else. `order: 0` keeps the dashboard first.
-export const Route = createFileRoute("/")({
+// The dashboard. Living under `_authed/` is what puts it behind the session guard —
+// the folder adds no URL segment, so this is still served at /. `staticData.nav` is
+// the worked example of the extension point: a feature module adds a page by dropping
+// one file next to this one, declaring its own `nav` entry, and editing nothing else.
+// `order: 0` keeps the dashboard first.
+export const Route = createFileRoute("/_authed/")({
   component: Dashboard,
   staticData: { nav: { label: "Dashboard", order: 0 } },
 });

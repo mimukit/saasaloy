@@ -22,8 +22,14 @@
         { "path": "files/index.html", "target": "index.html" },
         { "path": "files/src/main.tsx", "target": "src/main.tsx" },
         { "path": "files/src/routeTree.gen.ts", "target": "src/routeTree.gen.ts" },
+        { "path": "files/src/lib/auth.ts", "target": "src/lib/auth.ts" },
+        { "path": "files/src/lib/api.ts", "target": "src/lib/api.ts" },
+        { "path": "files/src/components/auth-card.tsx", "target": "src/components/auth-card.tsx" },
         { "path": "files/src/routes/__root.tsx", "target": "src/routes/__root.tsx" },
-        { "path": "files/src/routes/index.tsx", "target": "src/routes/index.tsx" }
+        { "path": "files/src/routes/_authed.tsx", "target": "src/routes/_authed.tsx" },
+        { "path": "files/src/routes/login.tsx", "target": "src/routes/login.tsx" },
+        { "path": "files/src/routes/signup.tsx", "target": "src/routes/signup.tsx" },
+        { "path": "files/src/routes/_authed/index.tsx", "target": "src/routes/_authed/index.tsx" }
       ]
     }
   ],

@@ -2,6 +2,7 @@ import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import "@repo/ui/globals.css";
+import { createAuthState } from "./lib/auth";
 import { routeTree } from "./routeTree.gen";
 
 // The nav contract for the whole app. A page declares its own nav entry in its route
@@ -23,7 +24,9 @@ declare module "@tanstack/react-router" {
   }
 }
 
-const router = createRouter({ routeTree });
+// One `AuthState` per app load, handed to the router as context. Every guard and page
+// reads the session through it, so the app asks the server for it exactly once.
+const router = createRouter({ routeTree, context: { auth: createAuthState() } });
 
 declare module "@tanstack/react-router" {
   interface Register {
