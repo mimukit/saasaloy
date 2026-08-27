@@ -79,7 +79,7 @@ Facts read from the repo; none required a decision, all shaped one below.
 
 **Verify:** under `wrangler dev` (api) + `vite dev` (admin), an unauthenticated hit on `/` lands on `/login`; signup creates the first user and lands on the dashboard; the cookie rides cross-origin; sign-out returns to `/login`; a manufactured 401 redirects.
 
-### Phase 3 — the shell
+### Phase 3 — the shell (built 2026-08-27)
 
 - `src/routes/_authed/index.tsx` — the empty dashboard, carrying `staticData: { nav: { label: "Dashboard", order: 0 } }` as the worked example of the convention.
 - Nav component: walks the route tree for `staticData.nav` entries, renders them ordered, plus the `theme-toggle` block and sign-out.
