@@ -63,6 +63,17 @@ That's the whole step, with no edit anywhere else. Two mechanisms both react to 
 Tables are the one place the dialect leaks into the core. A schema written against one driver's
 dialect does not port to the other by itself.
 
+## A table is not a request schema
+
+`src/schema/<name>.ts` describes the column shape a row is stored in. It is not the shape a client
+is allowed to send. Request validation belongs in `@repo/validators` (the `validators` capability),
+where the schema stays isomorphic and a browser bundle can import it too. A Drizzle table cannot,
+because it carries the ORM and the D1 dialect with it.
+
+So a create endpoint reads its input schema from `@repo/validators/<feature>`, and the repository it
+calls takes the already-parsed value. Do not derive one from the other with `drizzle-zod`, and do not
+put `zod` in `packages/db`.
+
 ## The repository layer: thin functions, not an ORM wrapper
 
 Keep raw queries out of routes. A repository is a plain function taking a `db`, living in
@@ -137,6 +148,7 @@ explicit command you run.
 - **Drop `src/schema/<name>.ts` to add a table.** Never hand-edit the barrel.
 - **Keep the barrel at `src/schema.ts`** and `src/schema/` flat; see the esbuild note above.
 - **Queries live in `src/repositories/`**, imported by routes; routes don't build SQL inline.
+- **Column shapes live here; request validation lives in `@repo/validators`.**
 - **Keep the core neutral.** A connection, a dialect, a config file or a migrate script added here
   belongs in a driver module instead.
 - **One driver per project.** `conflictsWith` enforces it; switching means `saasaloy remove` on the
