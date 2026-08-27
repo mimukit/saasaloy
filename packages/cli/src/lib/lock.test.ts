@@ -13,8 +13,8 @@ const PROVENANCE: ModuleProvenance = {
   resolved: "9f3a1c2b7e5d4808a1f6c9b2e0d7a4c3f5b8e1d0",
 };
 
-function mod(name: string, dependsOn?: string[]): LoadedModule {
-  return { dir: `/tmp/${name}`, item: { name, type: "saasaloy:feature", dependsOn } };
+function mod(name: string, dependsOn?: string[], conflictsWith?: string[]): LoadedModule {
+  return { dir: `/tmp/${name}`, item: { name, type: "saasaloy:feature", dependsOn, conflictsWith } };
 }
 
 const ALL = ["database", "api", "hello-widget"];
@@ -62,6 +62,22 @@ describe("upsertLock", () => {
     expect(lock.modules.database).not.toHaveProperty("dependsOn");
   });
 
+  it("records conflictsWith so `add` can read it back after the descriptor is gone", () => {
+    const lock = emptyLock();
+    const withConflict: Graph = {
+      order: ["database-pg"],
+      modules: new Map([["database-pg", mod("database-pg", undefined, ["database-d1"])]]),
+    };
+    upsertLock(lock, PROVENANCE, ["database-pg"], withConflict);
+    expect(lock.modules["database-pg"]).toEqual({ ...PROVENANCE, conflictsWith: ["database-d1"] });
+  });
+
+  it("omits conflictsWith for a module that declares none", () => {
+    const lock = emptyLock();
+    upsertLock(lock, PROVENANCE, ALL, graph());
+    expect(lock.modules.api).not.toHaveProperty("conflictsWith");
+  });
+
   it("overwrites a prior entry on re-resolution", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());
@@ -78,6 +94,15 @@ describe("lockfile shape", () => {
     const result = await validateLock(lock);
     expect(result.errors).toEqual([]);
     expect(result.valid).toBe(true);
+  });
+
+  it("validates an entry carrying conflictsWith, at lockfileVersion 1", async () => {
+    const lock = emptyLock();
+    lock.modules["database-pg"] = { ...PROVENANCE, conflictsWith: ["database-d1"] };
+    const result = await validateLock(lock);
+    expect(result.errors).toEqual([]);
+    expect(result.valid).toBe(true);
+    expect(lock.lockfileVersion).toBe(1);
   });
 });
 

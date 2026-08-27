@@ -16,6 +16,9 @@ const LOCK_SCHEMA_URL = "https://saasaloy.dev/schemas/saasaloy-lock.schema.json"
 export interface LockModule extends ModuleProvenance {
   /** The module's declared dependencies, so the resolved graph is self-describing. */
   dependsOn?: string[];
+  /** The module's declared `conflictsWith`, so `add` can refuse a conflicting module
+   *  that goes in second — the descriptor is gone by then, the lock is not. */
+  conflictsWith?: string[];
 }
 
 export interface Lockfile {
@@ -47,7 +50,9 @@ export async function saveLock(root: string, lock: Lockfile): Promise<void> {
 // Record the modules that were actually applied under one source's provenance —
 // intra-repo, so they share the same source/ref/SHA. Only `installed` is written: an
 // already-installed dependency keeps the SHA it was fetched at, so the lock never
-// misstates the provenance of bytes on disk. `graph` supplies each module's `dependsOn`.
+// misstates the provenance of bytes on disk. `graph` supplies each module's declared
+// `dependsOn` and `conflictsWith` — the two lists `remove` and `add` need to read back
+// offline, once the descriptor they came from is gone.
 export function upsertLock(
   lock: Lockfile,
   provenance: ModuleProvenance,
@@ -55,10 +60,13 @@ export function upsertLock(
   graph: Graph,
 ): void {
   for (const name of installed) {
-    const dependsOn = graph.modules.get(name)?.item.dependsOn;
+    const item = graph.modules.get(name)?.item;
+    const dependsOn = item?.dependsOn;
+    const conflictsWith = item?.conflictsWith;
     lock.modules[name] = {
       ...provenance,
       ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+      ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
     };
   }
 }

@@ -30,6 +30,15 @@
         "pattern": "^[a-z0-9][a-z0-9-]*$"
       }
     },
+    "conflictsWith": {
+      "type": "array",
+      "description": "Modules this one refuses to sit beside — two implementations of the same capability, say. `add` refuses with a message naming both modules when a conflicting module is already installed. Either side may declare it: the field is recorded into saasaloy-lock.json, so the refusal fires in either install order. Never auto-resolved; `add` uninstalls nothing.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
     "dependencies": {
       "type": "array",
       "description": "npm packages merged into the consumer's `dependencies`. Each must be exact-pinned `name@version` (e.g. zod@4.0.5) — bare names and ranges are rejected; `pnpm deps:update` fills/refreshes the versions.",

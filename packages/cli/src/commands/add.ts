@@ -8,6 +8,7 @@ import {
   type Plan,
   type PlannedFile,
 } from "../lib/applier.js";
+import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
@@ -243,6 +244,20 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     const graph = await resolveGraph(source, requested);
     prereqs = graph.order.filter((n) => n !== requested);
+
+    // Mutually exclusive modules are refused before anything is written, and `--force`
+    // doesn't bypass it — force means "re-apply this module", not "install it anyway".
+    const conflicts = detectConflicts({ graph, config, lock });
+    if (conflicts.missingLockEntries.length > 0) {
+      log.warn(
+        `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
+          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
+      );
+    }
+    if (conflicts.conflicts.length > 0) {
+      cancel(formatConflicts(conflicts.conflicts, requested));
+      return 1;
+    }
 
     const install = graph.order.filter(
       (n) => !config.installed.includes(n) || (opts.force && n === requested),
