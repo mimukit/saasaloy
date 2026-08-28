@@ -3,6 +3,7 @@ import type { Logger } from "@repo/logger";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { cors } from "hono/cors";
+import health from "./routes/health";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger
@@ -31,14 +32,21 @@ export interface Variables {
 // falling back.
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
 
-const app = new Hono<{ Bindings: Bindings; Variables: Variables }>();
+// The pre-chain binding. Its type is written out on purpose: an explicit annotation
+// freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so anything
+// mounted on `base` (app-wide middleware, `auth`'s catch-all handler) cannot widen
+// `AppType`. Routes that a client must see go on the chain below instead.
+export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
+  Bindings: Bindings;
+  Variables: Variables;
+}>();
 
 // Credentialed CORS lives in api's spine — every cross-origin caller (the admin SPA,
 // the waitlist form on the marketing site, auth's cookie-based session) shares the
 // same origin allowlist, so it's a property of api's topology, not any one consumer's.
 // `auth`'s `trustedOrigins` reuses this same `CORS_ORIGINS` var (one list, two readers,
 // no drift).
-app.use(
+base.use(
   "*",
   cors({
     credentials: true,
@@ -65,7 +73,7 @@ app.use(
 // client-supplied value into an indexed field — anyone could collide with, or forge, a
 // real request's id. A gateway that must propagate one should overwrite the header
 // upstream, not have this Worker believe it.
-app.use("*", async (c, next) => {
+base.use("*", async (c, next) => {
   const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
   c.set("log", createLogger(c.env).child({ requestId }));
   // `next` is Hono's downstream continuation, not a Node error-first callback; returning
@@ -74,19 +82,15 @@ app.use("*", async (c, next) => {
   await next();
 });
 
-// File-based route registration. Every module in ./routes default-exports a Hono
-// sub-app named after its service; `import.meta.glob` resolves them to static imports
-// at build time (Workers has no runtime filesystem), and each mounts at `/<basename>`.
-// So dropping `routes/<feature>.ts` adds `/<feature>` with no edit to this file.
-const routes = import.meta.glob<{ default: Hono }>("./routes/*.ts", {
-  eager: true,
-});
+// The typed route chain. Every mounted route is one `.route()` link in a single
+// expression, so `typeof app` carries each path, its input, and its response shape —
+// that is what `hc<AppType>` reads. A module registers itself by patching one link in
+// here (the `chained-route` patch kind), not by dropping a file into a scanned folder:
+// a glob gives the chain no type to carry.
+const app = base.route("/health", health);
 
-for (const [path, module] of Object.entries(routes)) {
-  const name = path.match(/\.\/routes\/(?<feature>.+)\.ts$/u)?.groups?.feature;
-  if (name) {
-    app.route(`/${name}`, module.default);
-  }
-}
+// The contract consumers import. `@repo/api/client` re-exports this type and nothing
+// else, so a browser bundle gets the routes without pulling the Worker entry in.
+export type AppType = typeof app;
 
 export default app;
