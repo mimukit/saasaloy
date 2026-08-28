@@ -84,21 +84,22 @@ headers to prove it.
 // apps/api/src/routes/widgets.ts
 import { Hono } from "hono";
 import { getSession } from "@repo/auth/server";
+import { errorBody } from "@repo/validators/common";
 
-const widgets = new Hono();
-
-widgets.get("/", async (c) => {
+export const widgets = new Hono().get("/", async (c) => {
   const session = await getSession(c.req.raw);
-  if (!session) return c.json({ error: "unauthorized" }, 401);
-  return c.json({ userId: session.user.id });
+  if (!session) return c.json(errorBody("unauthorized", "sign in first"), 401);
+  return c.json({ userId: session.user.id }, 200);
 });
-
-export default widgets;
 ```
 
 `getSession` wraps `auth.api.getSession({ headers })` — the httpOnly cookie rides along on
 `c.req.raw` automatically. No route imports `better-auth` (ADR 0020); everything goes through
 `@repo/auth/server`.
+
+Note the shape: one named `export const`, one chained expression, an explicit status on every
+`c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the
+exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0023).
 
 ## Revocation: delete the session row
 
