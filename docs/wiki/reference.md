@@ -84,7 +84,7 @@ positionals are rejected with exit 1.
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is removed. |
-| `--diff` | print the plan plus a deletion diff per file, and stop. Nothing is removed. |
+| `--diff` | print the plan plus a deletion diff per file and a reversal diff per `chained-route` patch, and stop. Nothing is removed. |
 | `--yes`, `-y` | skip every prompt, including the per-file drift confirmation. Drifted files then survive on disk, untracked. |
 | `--force` | remove the module even though other installed modules depend on it. |
 

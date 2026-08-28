@@ -30,6 +30,12 @@ saasaloy remove waitlist --dry-run
 saasaloy remove waitlist --diff
 ```
 
+`--diff` shows a deletion diff per file, and for a `chained-route` patch the reversal it
+would apply to the entry file. Each patch is labelled by what will happen to it: `revert`
+when there is an edit to undo, `drift → left` when the line is yours now and the reason
+why, `already gone` when nothing is left to undo, and `untrack` for a patch kind `remove`
+cannot reverse.
+
 ## Hand-edited files
 
 For each drifted file, `remove` asks whether to delete it anyway, defaulting to no. A file
