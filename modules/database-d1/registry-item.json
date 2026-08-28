@@ -1,0 +1,61 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "database-d1",
+  "type": "saasaloy:feature",
+  "dependsOn": ["database"],
+  "conflictsWith": ["database-postgres"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "d1_databases",
+      "entry": {
+        "binding": "DB",
+        "database_name": "app-db",
+        "database_id": "local",
+        "migrations_dir": "../../packages/db/migrations"
+      }
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:migrate:local",
+      "value": "wrangler d1 migrations apply DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:migrate:prod",
+      "value": "wrangler d1 migrations apply DB --remote --config ../../apps/api/wrangler.jsonc"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@cloudflare/workers-types",
+      "range": "5.20260801.1"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "wrangler",
+      "range": "4.118.0"
+    }
+  ],
+  "files": [{ "path": "files/src/client.ts", "target": "@db/client.ts" }],
+  "scaffolds": [
+    {
+      "workspace": "packages/db",
+      "files": [
+        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-database-d1"]
+  }
+}
