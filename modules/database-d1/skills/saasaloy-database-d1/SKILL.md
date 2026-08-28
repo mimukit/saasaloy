@@ -128,8 +128,28 @@ saasaloy remove database-d1
 saasaloy add database-postgres
 ```
 
-`remove` takes back the files this module owns (`src/client.ts`, `drizzle.config.ts`,
-`tsconfig.json`) and warns about the leftovers it cannot reverse: the `d1_databases` block in
+`remove` deletes the two files this module owns, `src/client.ts` and `drizzle.config.ts`. It also
+deletes `packages/db/tsconfig.json`, which is **not** this module's file: the core `database`
+scaffolds it too, `add database-d1` overwrote the core's copy, and `remove` now takes the whole
+file away without restoring the core's version.
+
+So run the two commands back to back. In between them `packages/db` has no `tsconfig.json` at all,
+and `pnpm typecheck` fails at `@repo/db` with tsc printing its option help instead. Adding the
+other driver writes the file again and the failure clears. If you need to stop after `remove`,
+put the core's copy back by hand:
+
+```json
+// packages/db/tsconfig.json
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["vite/client"]
+  },
+  "include": ["src", "drizzle.config.ts"]
+}
+```
+
+`remove` also warns about the leftovers it cannot reverse: the `d1_databases` block in
 `apps/api/wrangler.jsonc` and the two `db:migrate:*` scripts plus the `wrangler` devDependency in
 `packages/db/package.json`. Delete those by hand. Your `src/schema/*.ts` files stay put and are
 still SQLite — port them to `pg-core` yourself.
