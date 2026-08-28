@@ -2,11 +2,15 @@ import { ArrowRightIcon } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { buttonVariants } from "@repo/ui/components/button";
+import { landing } from "@repo/ui/content/landing";
+import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
 // Fully static — no state, no effects, so index.astro renders it with no `client:*`
 // directive and it ships zero JavaScript. Keep it that way: adding a hook here forces
 // the whole above-the-fold block into a hydrated island.
+//
+// Every word comes from ../content/landing.ts. Edit the copy there, not here.
 
 export interface HeroAction {
   label: string;
@@ -25,11 +29,11 @@ export interface HeroProps {
 
 export function Hero({
   siteName = "Acme",
-  eyebrow = "Now in early access",
-  title = "The SaaS you meant to build, already scaffolded.",
-  description = `${siteName} gives your product a real front door on day one — a landing page, a design system, and room for every feature you add next.`,
-  primaryAction = { label: "Get started", href: "#cta" },
-  secondaryAction = { label: "See pricing", href: "#pricing" },
+  eyebrow = landing.hero.eyebrow,
+  title = landing.hero.title,
+  description = interpolate(landing.hero.description, { siteName }),
+  primaryAction = { label: landing.hero.primaryActionLabel, href: "#cta" },
+  secondaryAction = { label: landing.hero.secondaryActionLabel, href: "#pricing" },
 }: HeroProps) {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-24 sm:py-32">

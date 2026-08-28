@@ -4,44 +4,21 @@ import {
   AccordionItem,
   AccordionTrigger,
 } from "@repo/ui/components/accordion";
+import { landing } from "@repo/ui/content/landing";
 
 // Accordion is a compound primitive: trigger and panel talk to a context the root
 // provides. Astro gives every `client:*` component its own React root, so splitting the
 // pieces across an .astro file would break that context at runtime — the whole block is
 // one island, hydrated with `client:visible` from index.astro.
+//
+// Every word comes from ../content/landing.ts. Edit the copy there, not here.
 
 export interface FaqItem {
+  /** Stable key, never the array position (see the content file). */
+  id: string;
   question: string;
   answer: string;
 }
-
-const defaultItems: FaqItem[] = [
-  {
-    question: "What do I actually get?",
-    answer:
-      "A working monorepo: a static marketing site, a shared design system, and a command that adds the rest — API, database, auth, billing — one capability at a time.",
-  },
-  {
-    question: "Is this a boilerplate I have to keep in sync?",
-    answer:
-      "No. Everything is copied into your repository as source you own and edit. There is no framework release to chase and nothing that overwrites your changes behind your back.",
-  },
-  {
-    question: "Can I use my own design system?",
-    answer:
-      "Yes. The theme is a single stylesheet of design tokens and the components are plain files in your repo, so restyling is editing, not forking.",
-  },
-  {
-    question: "Where does it deploy?",
-    answer:
-      "Cloudflare, by default — static assets on Workers, with the same account covering the database, queues and storage a feature module needs later.",
-  },
-  {
-    question: "What if I outgrow it?",
-    answer:
-      "Then you keep the code. Nothing here is a runtime dependency on us: the generated project is an ordinary pnpm workspace that builds without any of our tooling installed.",
-  },
-];
 
 export interface FaqProps {
   id?: string;
@@ -52,9 +29,9 @@ export interface FaqProps {
 
 export function Faq({
   id = "faq",
-  title = "Questions, answered",
-  description = "The things people ask before they commit a weekend to a new stack.",
-  items = defaultItems,
+  title = landing.faq.title,
+  description = landing.faq.description,
+  items = landing.faq.items,
 }: FaqProps) {
   return (
     <section id={id} className="mx-auto w-full max-w-3xl scroll-mt-20 px-6 py-20">
@@ -65,7 +42,7 @@ export function Faq({
 
       <Accordion className="mt-12">
         {items.map((item) => (
-          <AccordionItem key={item.question}>
+          <AccordionItem key={item.id}>
             <AccordionTrigger className="text-base">{item.question}</AccordionTrigger>
             <AccordionContent className="text-muted-foreground">{item.answer}</AccordionContent>
           </AccordionItem>
