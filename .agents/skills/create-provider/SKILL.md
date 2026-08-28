@@ -29,6 +29,11 @@ amendment carves out exactly one exception, and a new provider must land inside 
   abstraction — sending email, sending an SMS. There is no migration; the endpoint is
   interchangeable.
 
+A stateful capability can still offer a **choice made once, at install time**, without becoming
+multi-provider. That is a driver module, and `database-d1` / `database-postgres` are the only pair
+today. It is a different shape with its own rules, so if that is what you are writing, stop here
+and read ADR 0023 instead.
+
 Also check that a real interface already exists. Provider modules only work where a capability has
 scaffolded a workspace with a `providers` registry to append to. Inventing that interface is
 capability work.
@@ -63,6 +68,15 @@ Provider modules ship **no skill folder of their own**. The capability's skill i
 gets documented; add a row to its provider table and, if the provider needs out-of-band setup, a
 short runbook section there. One skill per capability keeps a consumer from installing five
 near-identical runbooks.
+
+> **Drivers are the exception, and they are not providers.** `database-d1` and `database-postgres`
+> each ship a skill folder, carry `scaffolds[]`, and replace files the capability would otherwise
+> own. They can do that because they exclude each other with `conflictsWith`, so a project installs
+> exactly one and receives exactly one runbook. That is a **driver module**, recorded in
+> [ADR 0023](../../../docs/adr/adr-0023-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
+> a licence to grow a provider. If your module is mutually exclusive with a sibling, read that ADR.
+> If it is one of several that coexist behind an interface, every rule on this page still binds
+> you.
 
 ### Why the whole descriptor, and not one swappable function body
 

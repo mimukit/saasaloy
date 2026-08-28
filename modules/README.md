@@ -25,5 +25,20 @@ capability's `providers/` folder plus the patch that registers it, carrying what
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.
 
+A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several
+providers coexist behind one interface and a runtime env var picks one; only one driver may be
+installed, and each names the other in `conflictsWith` so `saasaloy add` refuses the second with a
+non-zero exit. A driver also outgrows the provider shape on purpose. It carries `scaffolds[]` and
+replaces files the capability would otherwise own (`packages/db/src/client.ts`,
+`drizzle.config.ts`, `tsconfig.json`). It ships its own skill too, because a project installs
+exactly one driver and the two runbooks share almost nothing. See ADR 0023.
+
+The `database` trio is the worked example. The core (`database`) scaffolds `packages/db` with the
+schema barrel, the repository layer and `db:generate`, and knows no dialect. `database-d1` adds the
+`d1_databases` binding, the `db:migrate:local` / `db:migrate:prod` scripts and the D1 client.
+`database-postgres` adds `DATABASE_URL` to `envVars`, a `nodejs_compat` entry in the
+`compatibility_flags` of `apps/api/wrangler.jsonc`, a single `db:migrate` script, and a client that
+prefers a `HYPERDRIVE` binding over `DATABASE_URL` when one is bound.
+
 Tests create disposable registry fixtures. CLI development and manual QA use throwaway
 registries under `.dev/`, so example modules do not need to live in the default registry.
