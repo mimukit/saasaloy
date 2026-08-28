@@ -23,8 +23,8 @@ resolved and installed automatically.
 
 ## What it patches
 
-Three patches, all reversible by `saasaloy remove` only for the first — the rest are dropped with a
-warning (#36), so uninstalling leaves the two web dependencies behind:
+Three patches; `saasaloy remove` reverses only the first — the other two are dropped with a warning
+(#36), so uninstalling leaves the two web dependencies behind:
 
 | Patch | Target | Why |
 |---|---|---|
@@ -34,6 +34,14 @@ warning (#36), so uninstalling leaves the two web dependencies behind:
 
 The route link is a patch, not a drop, because a folder scan gives the chain no type to carry. See
 the `saasaloy-api` skill for the convention. Nothing here edits `src/schema.ts` or `index.astro`.
+
+The `hono` patch carries a **version**, `4.12.33`, and it is the only versioned patch range in the
+repo. It must match `modules/api/files/package.json`'s `hono` pin: `apps/web` infers `AppType`
+across the package boundary from `apps/api`, and two `hono` copies at different versions make that
+inference fail in ways the error message does not explain. `pnpm deps:check` scans this range and
+fails on drift, but `pnpm deps:update` will not rewrite it — re-serializing the descriptor would
+reflow the whole file, so the report prints the edit and you make it by hand (see CONTRIBUTING.md
+"Updating dependencies", and #93 for the fix that automates it).
 
 ## After install: generate + apply the migration
 
@@ -55,9 +63,13 @@ them:
 | **201** | `{ ok: true }` | the address was accepted, new or duplicate |
 | **400** | `{ error: { code: "invalid_input", message } }` | the address failed `waitlistInput` |
 
-The 400 comes from `zValidator`'s third-argument failure hook, which returns
-`errorBody("invalid_input", message)` from `@repo/validators/common`. Without the hook, Hono answers
-a rejected body with its own default shape instead of the project's envelope.
+The 400 has two sources and one shape. A body that parses and fails `waitlistInput` hits
+`zValidator`'s third-argument failure hook, which returns `errorBody("invalid_input", message)` from
+`@repo/validators/common`. A body that does not parse at all never reaches the hook — Hono's json
+validator throws `HTTPException(400, "Malformed JSON in request body")` first — and `modules/api`'s
+`onError` handler converts that to the same `{ error: { code: "invalid_input", message } }`. Both
+paths match the type `hc` publishes. Neither the hook nor the handler is optional: drop either and
+one of the two 400s ships as plain text.
 
 ## The input schema lives in `@repo/validators`
 
