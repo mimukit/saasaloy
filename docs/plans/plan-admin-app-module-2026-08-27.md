@@ -33,7 +33,7 @@ Enable better-auth's `admin` plugin in `packages/auth`'s server config and clien
 
 Create `modules/admin/registry-item.json` scaffolding `apps/admin`: `package.json` (`@repo/admin`, react 19.2, TanStack Router/plugin/Query, `@repo/ui`, type-only `@repo/api` and `@repo/auth` devDependencies, `clean`, `dev` on `:3001` strictPort, `build`, `deploy`, `typecheck`), `vite.config.ts` (react + router-plugin + tailwind + `envPrefix: "PUBLIC_"`), `wrangler.jsonc` (static assets, SPA fallback), `tsconfig.json`, `index.html`, `src/main.tsx`, `src/routes/__root.tsx`. Verify: `saasaloy add admin` in `.dev` scaffolds, `pnpm dev` serves the shell on `:3001`, `pnpm build` + `wrangler deploy --dry-run` pass.
 
-### Phase 3: guarded shell (#87)
+### Phase 3: guarded shell (#87) (built 2026-08-28)
 
 `src/lib/auth.ts` wraps `@repo/auth`'s client with `PUBLIC_API_URL`; `src/routes/login.tsx` renders the sign-in form with `@repo/ui` components; the root layout's `beforeLoad` requires an admin-role session and redirects everyone else to `/login` (signed-in non-admins get a denied state, not the shell). Sidebar shell with a user menu and sign-out. Verify in `.dev`: sign up, promote, sign in, guarded redirect for both anonymous and non-admin users, sign out, cookie behaviour across `:3001` → `:4000`.
 
