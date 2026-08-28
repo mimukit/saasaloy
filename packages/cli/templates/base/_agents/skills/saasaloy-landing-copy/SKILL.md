@@ -384,10 +384,12 @@ Copy on disk plus a brief means this has run before.
 - **No dependencies, no i18n machinery, no webfonts.** Report the gap; do not close it.
 - **Never invent pricing or proof**, and never quietly leave the shipped demo numbers in
   place as if they were real.
-- **No repeated setup interview.** If the brief is missing, or too thin to write from
-  safely, hand back to `saasaloy-setup` rather than asking its questions yourself. If an
-  otherwise usable brief leaves a page-specific gap, ask only the questions
-  [Step 1](#step-1--fill-only-the-gaps-the-brief-left) allows.
+- **No repeated setup interview.** The threshold is presence, not depth. Hand back to
+  `saasaloy-setup` only when `docs/product-brief.md` is absent, or names no product at
+  all. A brief that exists and names the product is usable however thin it is: proceed
+  under the next bullet, and for a page-specific gap ask only the questions
+  [Step 1](#step-1--fill-only-the-gaps-the-brief-left) allows. Never ask the setup
+  interview's own questions yourself.
 - **A dirty tree, a missing repo, or a thin brief is not a blocker.** Warn, write less, and
   say what you left out. (This is about those three conditions only — anything unsafe or
   outside this skill's scope you decline as you normally would.)
