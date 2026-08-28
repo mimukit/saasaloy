@@ -52,7 +52,13 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
   Exact versions are pinned (`saveExact`).
 - **TypeScript + ESM.** Internal packages are consumed JIT (no build step) via `workspace:*`.
 - **Add features, don't hand-wire them.** Prefer `saasaloy add <module>` over manually
-  creating routes/schema/auth; modules drop files into convention-based extension points.
+  creating routes/schema/auth. Most of what a module contributes is a file dropped at a
+  convention-based extension point; the rest is a small reversible patch on a file that has
+  to name its entries statically. An api route is the second kind — `saasaloy add` edits
+  `apps/api/src/index.ts` to add one `.route()` link and its import, and `saasaloy remove`
+  takes both out again. Do not add a route by dropping a file into `apps/api/src/routes/`
+  and expecting it to mount: nothing globs that folder, and the entry file's `AppType` is
+  what the typed `hc` client reads.
 
 ### The `@repo/ui` Design Layer
 

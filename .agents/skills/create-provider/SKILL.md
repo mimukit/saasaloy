@@ -62,7 +62,10 @@ Five rules hold for every mode:
    `{ "path": "files/<provider>.ts", "target": "@<capability>/providers/<provider>.ts" }`.
 4. **Register with a `plugin-array` patch** on the capability's barrel. This is the existing
    codemod (`packages/cli/src/lib/patch/ts-module.ts`), unchanged — it adds the import and appends
-   the call idempotently.
+   the call idempotently. Dropping the file registers nothing; nothing scans `providers/`. That
+   split is now the registry-wide rule rather than a provider quirk — an `api` route registers the
+   same way, through the `chained-route` patch (ADR 0023) — so a target file that is a **statically
+   named list** is what you should expect at every extension point.
 5. **The npm dependency, if any, goes in the *capability's* `package.json`** through a
    `package-json-dependency` patch — never the descriptor's `dependencies[]` (which merges into the
    project root) and never another workspace. Only the capability's own workspace may import a
