@@ -1,0 +1,13 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["vite/client"],
+    // No `baseUrl` — TypeScript 7 removed it. A relative `paths` entry resolves
+    // against this file's own directory, which is what `baseUrl: "."` used to mean.
+    "paths": {
+      "@admin/*": ["./src/*"]
+    }
+  },
+  "include": ["src", "vite.config.ts"]
+}
