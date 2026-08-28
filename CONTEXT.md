@@ -33,8 +33,12 @@ A module supplying **one of several mutually exclusive implementations of a stat
 _Avoid: adapter, dialect module. A driver is typed `saasaloy:feature` for the same schema reason a provider is._
 
 ### Convention-based extension point
-An auto-discovery folder or barrel a module drops into without patching another module's internals — `api`'s `routes/` glob, `database`'s schema barrel, and the proposed `consumers/`, `scheduled/`, `uploads/` folders. These are what make granular modules safe.
+An auto-discovery folder or barrel a module drops into without patching another module's internals — `database`'s schema barrel, `apps/web`'s `sections/*.astro` glob, and the proposed `consumers/`, `scheduled/`, `uploads/` folders. These are what make granular modules safe. `api`'s `routes/` was one until [ADR 0023](docs/adr/adr-0023-routes-register-by-chained-route-patch-2026-08-28.md); it is now a [registration table](#registration-table).
 _Avoid: extension hook._
+
+### Registration table
+A file a capability publishes that names its entries **statically**, so a type can be derived from it — `apps/api/src/index.ts`'s `.route()` chain, a capability's `providers` barrel array. A module still drops its file, but it registers by patching one line into the table, and `remove` takes that line back out. The opposite of a [convention-based extension point](#convention-based-extension-point): a scan needs no patch and yields no type, a table needs a patch and yields one ([ADR 0023](docs/adr/adr-0023-routes-register-by-chained-route-patch-2026-08-28.md)).
+_Avoid: route manifest, registry (that is a [registry source](#registry-source))._
 
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).

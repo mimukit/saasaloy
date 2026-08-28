@@ -1,0 +1,25 @@
+# 0023 — API routes register by patch, not by file-drop
+
+`modules/api` mounted routes by scanning a directory: `src/index.ts` ran `import.meta.glob("./routes/*.ts", { eager: true })` and called `app.route("/" + basename, module.default)` for each hit. A module added a route by dropping one file into `@api/routes/` and touching nothing else. That is the cheapest authoring story available, and it gives a caller nothing. The mounted app's type is a bare `Hono`, so `hc<typeof app>` infers no paths, no request bodies, and no response shapes, and every consumer falls back to a hand-written `fetch` against a string URL. **Route registration therefore moves to the `chained-route` patch kind** (#83): `apps/api/src/index.ts` names every route in one `.route()` call chain, exports the resulting type as `AppType`, and `saasaloy add` inserts a module's link and its import rather than relying on a scan. Settled while grilling issue #86.
+
+The drop does not go away. A route module still ships its handler as a `files[]` entry; only the *registration* moves into `patches[]`. What changes is that the drop alone no longer mounts anything.
+
+## Status
+accepted — amends [ADR 0005](adr-0005-two-tier-convention-based-modules-2026-07-22.md), whose rejected option names "a `routes/` folder the Hono entry auto-globs" as a worked example of a convention-based extension point. That example is now false. ADR 0005's rule stands otherwise: no module AST-patches another module's *internals*, the schema barrel still auto-re-exports `schema/`, and `src/index.ts` is a registration table a capability publishes for exactly this purpose.
+
+## Considered Options
+- **Keep the glob and hand-write a separate type.** A `routes.d.ts` or a manually maintained `AppType` union would preserve the drop and still give `hc` something to read. Rejected: the type and the folder drift the moment anyone forgets, and a wrong type is worse than no type because it typechecks.
+- **Keep the glob and generate the chain at build time.** A codegen step could read the folder and emit the static chain. Rejected: it adds a build artifact, a watcher, and a stale-output failure mode to buy back an authoring convenience worth one JSON object per module.
+- **A new patch kind for the untyped mount.** `auth`'s catch-all must mount *without* entering `AppType`, which briefly argued for a second kind. Rejected: the same `chained-route` kind does it by pointing `exportName` at `base`, the annotated pre-chain binding, whose written-out type cannot widen.
+- **Leave `auth` on a hand-edit.** Rejected: it is the one mount `remove` could then not undo, and it is the mount most likely to be installed and uninstalled while a project finds its shape.
+
+## Consequences
+- **A route file exports its sub-app by name, as one chained expression** — `export const health = new Hono().get(…)`. Two constraints, both real. The codemod refuses to wire a link whose local binding resolves to a default import, and a chain broken into separate statements exports a type that has forgotten its own routes.
+- **`exportName` selects whether a route is visible to `hc`.** `"default"` follows `export default app` to `const app = …`, so the link lands inside `AppType`. `"base"` targets the annotated pre-chain binding and stays out of it. `auth` is the only current user of `"base"`, because a catch-all has no per-path type worth publishing.
+- **The CORS middleware is a link in `base`'s chain, not a `base.use(…)` statement below it.** A `chained-route` patch on `base` appends to the initializer, and Hono runs matched handlers in registration order, so the statement form would register `auth`'s catch-all *before* the middleware and leave its responses without CORS headers. The chain form is load-bearing; a later cleanup that "simplifies" it back to a statement reintroduces the bug silently.
+- **`remove` gets better, and `update` gets harder.** `chained-route` is the one kind `saasaloy remove` reverses, so uninstalling a route now takes the link and the import back out and leaves `src/index.ts` byte-identical. Against that, `src/index.ts` becomes a file the CLI writes, so it is subject to the manifest-hash and three-way-merge path that #48 owns, where a glob's entry file was inert.
+- **Every generic teaching surface that described the drop is now wrong and was rewritten**: `.agents/skills/create-module`, `.agents/skills/create-provider`, `packages/cli/templates/base/AGENTS.md`, and the `saasaloy-api`, `saasaloy-auth` and `saasaloy-waitlist` module skills.
+- **A wide chain costs typecheck time.** The chain is one expression, so TypeScript resolves every route's generics together. Per-feature `hc` clients are the documented mitigation; the measured number for roughly 30 routes lives in the `saasaloy-api` skill.
+
+## References
+Plan: `docs/plans/plan-api-rpc-routes-2026-08-27.md`. Prior: [ADR 0005](adr-0005-two-tier-convention-based-modules-2026-07-22.md), [ADR 0006](adr-0006-copy-in-updates-manifest-hash-tracking-2026-07-22.md), [ADR 0019](adr-0019-module-patches-applied-flat-array-2026-07-24.md). Codemod: `packages/cli/src/lib/patch/chained-route.ts`. Issues: #86, #83, #48.
