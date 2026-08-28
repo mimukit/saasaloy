@@ -335,6 +335,51 @@ export default app;
     expect(parses(out)).toBe(true);
   });
 
+  // The link can read exactly as written and still mean something else: repointing the
+  // import changes what the identifier resolves to. Deleting the import here would take
+  // out a line the user rewrote.
+  it("leaves the link alone when the user repointed its import", () => {
+    const repointedImport = `import { Hono } from "hono";
+import { waitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`;
+    expect(removeChainedRoute(repointedImport, WAITLIST)).toBe(repointedImport);
+    const refusal = chainedRouteRemoveRefusal(repointedImport, WAITLIST);
+    expect(refusal).toContain("./mine.js");
+    expect(refusal).toContain("./routes/waitlist.js");
+  });
+
+  it("leaves the link alone when the import became a default or namespace binding", () => {
+    for (const line of [
+      'import waitlist from "./routes/waitlist.js";',
+      'import * as waitlist from "./routes/waitlist.js";',
+    ]) {
+      const source = `import { Hono } from "hono";
+${line}
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`;
+      expect(removeChainedRoute(source, WAITLIST)).toBe(source);
+      expect(chainedRouteRemoveRefusal(source, WAITLIST)).toBeDefined();
+    }
+  });
+
+  it("still removes a link whose import is absent entirely", () => {
+    const noImport = `import { Hono } from "hono";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`;
+    expect(chainedRouteRemoveRefusal(noImport, WAITLIST)).toBeUndefined();
+    expect(removeChainedRoute(noImport, WAITLIST)).not.toContain('.route("/waitlist"');
+  });
+
   it("reports no refusal when the link is already gone", () => {
     expect(chainedRouteRemoveRefusal(ENTRY, WAITLIST)).toBeUndefined();
   });

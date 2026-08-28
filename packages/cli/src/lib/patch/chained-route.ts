@@ -46,7 +46,7 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
   }
 
   const imports = mod.imports as unknown as ModuleImports;
-  if (bindingConflict(imports, patch)) return source; // wrong binding — never wire it
+  if (insertBindingConflict(imports, patch)) return source; // wrong binding — never wire it
 
   // Ensure the named import exists (magicast keys imports by local name).
   if (!(patch.import.name in mod.imports)) {
@@ -76,7 +76,7 @@ export function chainedRouteInsertRefusal(source: string, patch: ChainedRoute): 
   for (const link of chainLinks(slot.node)) {
     if (isRouteLink(link, patch.path)) return undefined; // already routed, not a refusal
   }
-  return bindingConflict(mod.imports as unknown as ModuleImports, patch);
+  return insertBindingConflict(mod.imports as unknown as ModuleImports, patch);
 }
 
 /**
@@ -92,6 +92,8 @@ export function chainedRouteInsertRefusal(source: string, patch: ChainedRoute): 
  *   never force-edited (the remover warns and skips instead);
  * - the link routes `path` to anything but `call` → return `source` **unchanged**
  *   (`chainedRouteRemoveRefusal` reports why);
+ * - the local name now binds a different import → return `source` **unchanged**, since
+ *   repointing the import changes what the link means without touching the link;
  * - the link is the only one → the bare receiver is left behind (`const app = new
  *   Hono();`), which still parses and typechecks;
  * - the import statement holds other specifiers → only this one is removed;
@@ -116,6 +118,10 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
   }
   if (!found) return source; // already gone — never force-edit
   if (handlerDrift(found, patch)) return source; // user's handler — not ours to delete
+  // The link can read exactly as written while meaning something else: repointing the
+  // import changes what `waitlist` resolves to without touching the `.route()` line. That
+  // makes both the link and the import the user's, so neither is ours to delete.
+  if (removeBindingConflict(mod.imports as unknown as ModuleImports, patch)) return source;
 
   const receiver = (found.callee as MemberExpression).object;
   if (holder) {
@@ -145,7 +151,12 @@ export function chainedRouteRemoveRefusal(source: string, patch: ChainedRoute): 
   const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
   if (!slot) return undefined;
   for (const link of chainLinks(slot.node)) {
-    if (isRouteLink(link, patch.path)) return handlerDrift(link, patch);
+    if (isRouteLink(link, patch.path)) {
+      return (
+        handlerDrift(link, patch) ??
+        removeBindingConflict(mod.imports as unknown as ModuleImports, patch)
+      );
+    }
   }
   return undefined; // already gone, not a refusal
 }
@@ -159,27 +170,48 @@ export function chainedRouteRemoveRefusal(source: string, patch: ChainedRoute): 
 type ModuleImports = Record<string, { imported?: unknown; from?: unknown } | undefined>;
 
 /**
+ * The binding currently held by the patch's local name, when it is not the recorded one.
+ *
  * magicast keys imports by *local* name, so `patch.import.name in mod.imports` proves only
- * that something holds the name — not that it is the binding this patch needs. A file that
- * already imports `waitlist` from its own module would otherwise get
- * `.route("/waitlist", waitlist)` wired to the wrong handler, silently. Compare the local
- * name, the imported name, and the source before reusing a binding.
+ * that something holds the name — not that it is the binding this patch needs. Both
+ * directions care: `insert` would wire the route to the wrong handler, and `remove` would
+ * delete an import line the user rewrote. Compare the local name, the imported name, and
+ * the source. An unbound name is not a conflict; it is the ordinary case.
  */
-function bindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
-  const held = imports[patch.import.name];
+function foreignBinding(
+  imports: ModuleImports,
+  want: ChainedRoute["import"],
+): { imported: string; from: string } | undefined {
+  const held = imports[want.name];
   if (!held) return undefined;
 
   const imported = typeof held.imported === "string" ? held.imported : "";
   const from = typeof held.from === "string" ? held.from : "";
-  if (imported === patch.import.name && from === patch.import.from) return undefined;
+  if (imported === want.name && from === want.from) return undefined;
+  return { imported, from };
+}
 
+/** "…is imported as a default import from "./legacy.js"" — the shared half of both reasons. */
+function describeBinding(name: string, held: { imported: string; from: string }): string {
   const bound =
-    imported === "*"
+    held.imported === "*"
       ? "as a namespace import"
-      : imported === "default"
+      : held.imported === "default"
         ? "as a default import"
-        : `as ${JSON.stringify(imported)}`;
-  return `${JSON.stringify(patch.import.name)} is already imported ${bound} from ${JSON.stringify(from)}, so routing ${JSON.stringify(patch.path)} would bind the wrong handler`;
+        : `as ${JSON.stringify(held.imported)}`;
+  return `${JSON.stringify(name)} is imported ${bound} from ${JSON.stringify(held.from)}`;
+}
+
+function insertBindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
+  const held = foreignBinding(imports, patch.import);
+  if (!held) return undefined;
+  return `${describeBinding(patch.import.name, held)}, so routing ${JSON.stringify(patch.path)} would bind the wrong handler`;
+}
+
+function removeBindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
+  const held = foreignBinding(imports, patch.import);
+  if (!held) return undefined;
+  return `${describeBinding(patch.import.name, held)} now, not from ${JSON.stringify(patch.import.from)}, so the link and its import are not the ones that were applied`;
 }
 
 /**
