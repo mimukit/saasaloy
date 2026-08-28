@@ -62,9 +62,14 @@ export function resolveConnectionString(env: DbBindings): string {
  * the sockets one request may open when it issues queries in parallel.
  *
  * Close the connection when the response is done, so a socket does not linger for the rest
- * of the isolate's life:
+ * of the isolate's life. `end()` runs as soon as it is called, and postgres.js rejects every
+ * query issued after it, so schedule it in a `finally` after the last `await`:
  *
- *   c.executionCtx.waitUntil(db.$client.end());
+ *   try {
+ *     return c.json(await listWaitlist(db));
+ *   } finally {
+ *     c.executionCtx.waitUntil(db.$client.end());
+ *   }
  */
 export function getDb(env: DbBindings) {
   const sql = postgres(resolveConnectionString(env), { max: 5, fetch_types: false });

@@ -91,8 +91,11 @@ const waitlist = new Hono<{ Bindings: DbBindings }>();
 
 waitlist.get("/", async (c) => {
   const db = getDb(c.env);
-  c.executionCtx.waitUntil(db.$client.end());
-  return c.json(await listWaitlist(db));
+  try {
+    return c.json(await listWaitlist(db));
+  } finally {
+    c.executionCtx.waitUntil(db.$client.end());
+  }
 });
 
 export default waitlist;
@@ -105,7 +108,10 @@ Two rules the D1 driver does not have:
   `Cannot perform I/O on behalf of a different request`.
 - **Close the connection when the response is done**, with
   `c.executionCtx.waitUntil(db.$client.end())`. `db.$client` is the underlying postgres.js instance.
-  Skip this and each request leaves a socket open for the rest of the isolate's life.
+  Skip this and each request leaves a socket open for the rest of the isolate's life. Order matters:
+  `end()` runs the moment you call it, not when the promise you hand `waitUntil` settles, and
+  postgres.js rejects every query issued after it. Put the call in a `finally` after the last
+  `await`, as above, never on the line below `getDb`.
 
 `getDb` passes the schema barrel to Drizzle, so `db.query.<table>` and relational queries work.
 
