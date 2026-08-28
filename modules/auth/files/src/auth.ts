@@ -1,6 +1,7 @@
 import { env } from "cloudflare:workers";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { admin } from "better-auth/plugins";
 import { getDb } from "@repo/db/client";
 
 // Bindings + secrets this module reads. `cloudflare:workers`' importable `env` (not
@@ -93,7 +94,15 @@ export const auth = betterAuth({
   advanced: cookieDomain
     ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
     : undefined,
-  // Establishes the patch point; auth itself consumes none. Keep this an array
-  // literal (never omit it) — `insertIntoPluginArray` needs a real array to push into.
-  plugins: [],
+  // Also the patch point for feature capabilities (`billing` pushing `stripe()`,
+  // `teams` pushing `organization()`). Keep this an array literal (never omit it, never
+  // hoist it to a named const) — `insertIntoPluginArray` needs a real array to push into.
+  //
+  // `admin()` is the one plugin auth ships with. It adds `user.role`/`banned`/`banReason`/
+  // `banExpires` and `session.impersonatedBy` (mirrored in `@db/schema/auth.ts`), gives every
+  // new user the default role `"user"`, and treats `"admin"` as the privileged role. It is on
+  // by default so a session carries a role from the first sign-up: `apps/admin`'s guard reads
+  // `session.user.role === "admin"`, and a role that only appears once some later module turns
+  // it on would make that guard silently deny everyone.
+  plugins: [admin()],
 });

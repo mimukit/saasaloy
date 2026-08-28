@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, protecting a route with getSession, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, or debugging cookie/CORS/session issues.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, protecting a route with getSession, promoting the first admin or checking a user's role, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, or debugging cookie/CORS/session issues.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -18,7 +18,7 @@ negligible, and sessions are instantly revocable by deleting the row.
 ```ts
 export const auth = betterAuth({
   // ...
-  plugins: [],
+  plugins: [admin()],
 });
 ```
 
@@ -106,6 +106,52 @@ Note the shape: one named `export const`, one chained expression, an explicit st
 `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the
 exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0023).
 
+## Roles and the first admin
+
+Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a
+`role` column, writes `"user"` into it for every new sign-up, and treats `"admin"` as the
+privileged role. `apps/admin`'s guard reads exactly one thing:
+
+```ts
+const { data } = await client.getSession();
+if (data?.user.role !== "admin") { /* denied */ }
+```
+
+`role` is typed on the client because `packages/auth/src/client.ts` pairs `adminClient()` with
+the server plugin. Keep the pair: drop the client half and `session.user.role` goes back to
+being an unchecked cast.
+
+Nothing promotes the first admin for you, and nothing should — an endpoint that hands out the
+admin role is the one endpoint you cannot afford to get wrong. Sign up normally, then flip the
+row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in
+`packages/db`, which is what the relative paths are written against:
+
+```sh
+# local D1 (the same SQLite `vite dev` serves from)
+pnpm --filter @repo/db exec wrangler d1 execute DB --local \
+  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
+  --command "update user set role = 'admin' where email = 'you@example.com'"
+
+# production D1
+pnpm --filter @repo/db exec wrangler d1 execute DB --remote \
+  --config ../../apps/api/wrangler.jsonc \
+  --command "update user set role = 'admin' where email = 'you@example.com'"
+```
+
+Swap `update` for `select email, role from user` to check it landed. The change takes effect on
+the next `getSession` call, because sessions are DB-backed and the role is read off the user row
+— no re-login needed, and `cookieCache` is off (see the last boundary below).
+
+Once one admin exists, promote the rest through the API instead of SQL: `client.admin.setRole({
+userId, role: "admin" })`, which the server authorizes against the caller's own role. The plugin
+also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same namespace.
+
+**A project that installed auth before this shipped needs a migration.** The four new `user`
+fields and `session.impersonatedBy` are schema changes like any other: run
+`pnpm --filter @repo/db db:generate`, read the emitted SQL, then `db:migrate:local` (and
+`db:migrate:prod` when you deploy). Existing users come out of it with `role` null, which is not
+`"admin"`, so the guard denies them until you promote one.
+
 ## Revocation: delete the session row
 
 Sessions are DB-backed on purpose (build-spec §2.5) — revoking one is a delete, no token
@@ -135,6 +181,10 @@ await client.signIn.email({ email, password });
 `fetchOptions: { credentials: "include" }` is baked in — the calling origin must be in
 `CORS_ORIGINS` (api's spine) for the cookie to be set/sent cross-origin.
 
+`plugins: [adminClient()]` is baked in too, mirroring the server's `admin()`. That is what types
+`session.user.role` and puts `client.admin.*` on the returned client. Handing those methods to a
+non-admin browser grants nothing; the server authorizes every call.
+
 ## Enabling social OAuth / email verification (not wired)
 
 - **Social providers** (Google, GitHub, …): add a `socialProviders` block to
@@ -148,12 +198,16 @@ await client.signIn.email({ email, password });
 ## Schema: hand-authored, never generated at `add` time
 
 `@db/schema/auth.ts` (dropped into `packages/db/src/schema/auth.ts`) is a **checked-in Drizzle
-snapshot** of Better Auth's core tables (`user`, `session`, `account`, `verification`), pinned to
-the exact `better-auth` version in `packages/auth/package.json` — not run through a generator at
-add-time (no exec, deterministic, `--diff`-able). If you bump `better-auth`, **re-verify this file
-against the new version's schema** (`@better-auth/core`'s `getAuthTables()`) before shipping —
-fix the snapshot, not the adapter config, on a mismatch. It's picked up by database's existing
-barrel + migration scripts same as any other table:
+snapshot** of Better Auth's core tables (`user`, `session`, `account`, `verification`) plus the
+fields the `admin` plugin adds (`user.role`, `banned`, `ban_reason`, `ban_expires`, and
+`session.impersonated_by`), pinned to the exact `better-auth` version in
+`packages/auth/package.json` — not run through a generator at add-time (no exec, deterministic,
+`--diff`-able). If you bump `better-auth`, **re-verify this file against the new version's
+schema** (`@better-auth/core`'s `getAuthTables()`, and the admin plugin's own `schema` export)
+before shipping — fix the snapshot, not the adapter config, on a mismatch. The adapter matches on
+the Drizzle **property** name (`banReason`), not the SQL column name (`ban_reason`), and does no
+case conversion. It's picked up by database's existing barrel + migration scripts same as any
+other table:
 
 ```sh
 pnpm --filter @repo/db db:generate       # emits SQL for the new tables
@@ -167,7 +221,8 @@ pnpm --filter @repo/db db:migrate:local  # applies to local D1
 - **`packages/auth/src/auth.ts` stays a module-scope singleton** — don't refactor it into a
   per-request factory; that would break the plugin-array patch point every future capability
   relies on.
-- **`plugins: []` stays a literal array**, even empty — never omit it.
+- **`plugins` stays a literal array** in the `betterAuth({ ... })` call — never omit it, never
+  hoist it to a named const, and never leave it empty by dropping `admin()`.
 - **CORS is api's job.** Don't add CORS handling here; reuse `CORS_ORIGINS`.
 - **Sessions are DB-backed; `cookieCache` stays off** — revocability over the marginal latency of
   a D1 read per request.
