@@ -328,14 +328,20 @@ When the brief yields nothing a block can honestly carry — no pricing, no proo
 — you may propose removing that block. **Separately.** Never bundled into the copy write,
 never silent.
 
-It is two edits, and both are allowed:
+It is three edits, and all three are allowed:
 
 1. Delete that block's line from `apps/web/src/pages/index.astro`.
 2. Blank the matching label in content (`landing.navbar.linkPricing = ""`,
    `landing.footer.linkPricing = ""`). A blank label drops the link, so the page keeps no
    nav entry pointing at a section that is gone.
+3. **Retarget or drop any hero action pointing at the removed section.** A blank label
+   does not save you here: the hero's `href` lives in the block, so it survives an empty
+   label and the button still points at nothing. The hero's secondary action ships as
+   `href: "#pricing"`, so when you remove the pricing block, pass `secondaryAction={null}`
+   to `<Hero>` in `index.astro` to drop the button, or pass a whole action pointing at a
+   section that still exists. Confirm which one with the owner along with the removal.
 
-Removing a block is not redesigning one. You are deleting a line from a page, not editing
+Removing a block is not redesigning one. You are editing lines in a page, not editing
 `packages/ui/src/blocks/`.
 
 ## Re-running
@@ -378,8 +384,10 @@ Copy on disk plus a brief means this has run before.
 - **No dependencies, no i18n machinery, no webfonts.** Report the gap; do not close it.
 - **Never invent pricing or proof**, and never quietly leave the shipped demo numbers in
   place as if they were real.
-- **No interview.** If the brief is missing or thin, hand back to `saasaloy-setup` rather
-  than asking its questions yourself. Filling a specific gap the page needs is not this.
+- **No repeated setup interview.** If the brief is missing, or too thin to write from
+  safely, hand back to `saasaloy-setup` rather than asking its questions yourself. If an
+  otherwise usable brief leaves a page-specific gap, ask only the questions
+  [Step 1](#step-1--fill-only-the-gaps-the-brief-left) allows.
 - **A dirty tree, a missing repo, or a thin brief is not a blocker.** Warn, write less, and
   say what you left out. (This is about those three conditions only — anything unsafe or
   outside this skill's scope you decline as you normally would.)
