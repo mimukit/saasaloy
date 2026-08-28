@@ -3,6 +3,7 @@ import type { Logger } from "@repo/logger";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { cors } from "hono/cors";
+import { HTTPException } from "hono/http-exception";
 import { health } from "./routes/health";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
@@ -31,6 +32,32 @@ export interface Variables {
 // prod value fails visibly (CORS rejects the real origin) rather than silently
 // falling back.
 const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
+
+// The one error body this api answers with: `{ error: { code, message } }`. It is the
+// same envelope `@repo/validators`' `errorSchema` describes, written out here because
+// api cannot import it — `validators` declares `dependsOn: ["api"]`, so the dependency
+// runs one way only. Change one and change the other.
+type ErrorBody = { error: { code: string; message: string } };
+
+// A short, stable code per status, so a caller branches on `error.code` instead of
+// parsing prose. Anything unmapped falls back by class.
+const ERROR_CODES: Record<number, string> = {
+  400: "invalid_input",
+  401: "unauthorized",
+  403: "forbidden",
+  404: "not_found",
+  409: "conflict",
+  415: "unsupported_media_type",
+  422: "invalid_input",
+  429: "rate_limited",
+};
+
+function errorFor(status: number, message: string): ErrorBody {
+  const code = ERROR_CODES[status] ?? (status >= 500 ? "internal_error" : "client_error");
+  // `errorSchema` requires a non-empty message, and `new HTTPException(400)` carries an
+  // empty one, so the code doubles as the fallback text.
+  return { error: { code, message: message || code } };
+}
 
 // The pre-chain binding. Its type is written out on purpose: an explicit annotation
 // freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so anything
@@ -89,6 +116,30 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono
     // it would end the middleware before the response phase.
     // oxlint-disable-next-line node/callback-return
     await next();
+  })
+  // Every thrown error leaves as the envelope, because some 4xx are thrown rather than
+  // returned and would otherwise ship a different body than the route's own type says.
+  // The malformed-JSON case is the one that bites: Hono's json validator throws
+  // `HTTPException(400, "Malformed JSON in request body")` *before* a `zValidator`
+  // failure hook runs, so without this handler a route that publishes an envelope on
+  // 400 answers that path with plain text, and `hc`'s type lies.
+  //
+  // `onError` is a single slot rather than an ordered middleware, so it rides the same
+  // chain for consistency and a patch that lands after it still gets the handler.
+  //
+  // A sub-app mounted with `.route()` inherits this handler as long as it sets no
+  // `onError` of its own, so route modules need no error plumbing.
+  .onError((err, c) => {
+    if (err instanceof HTTPException) {
+      return c.json(errorFor(err.status, err.message), err.status);
+    }
+    // An unexpected throw is logged in full and answered with a fixed message: the real
+    // one can carry a binding value, a query, or a stack. `onError` can fire before the
+    // correlation middleware ran (a throw from CORS), so fall back to an uncorrelated
+    // logger rather than assuming `log` is set.
+    const log = c.get("log") ?? createLogger(c.env);
+    log.error("unhandled error", { err });
+    return c.json(errorFor(500, "internal error"), 500);
   });
 
 // The typed route chain. Every mounted route is one `.route()` link in a single

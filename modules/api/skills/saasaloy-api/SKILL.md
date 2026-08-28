@@ -25,7 +25,8 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono
   Variables: Variables;
 }>()
   .use("*", cors({ /* … */ }))
-  .use("*", requestCorrelation); // binds c.get("log") — see Logging, below
+  .use("*", requestCorrelation) // binds c.get("log") — see Logging, below
+  .onError((err, c) => { /* every thrown error leaves as the error envelope */ });
 
 const app = base.route("/health", health);
 
@@ -251,6 +252,29 @@ shared `{ error: { code, message } }` envelope from `@repo/validators/common`. S
 
 Keep the three layers apart: request shapes in `@repo/validators`, database column shapes in
 `packages/db`, HTTP wiring here in `apps/api`.
+
+## Errors: one envelope, including the ones you did not throw
+
+`base` ends in an `onError` handler, and it is there because a route cannot cover every error it
+answers with. A `zValidator` failure hook returns the envelope for a body that *parses* and fails
+the schema. A body that does not parse never reaches the hook: Hono's json validator throws
+`HTTPException(400, "Malformed JSON in request body")` first, and an unhandled `HTTPException`
+answers as **plain text**. That is a second 400 shape behind one declared type, and `hc` publishes
+only the first — a caller branching on `res.status === 400` and calling `res.json()` would throw.
+
+The handler converts every `HTTPException` to `{ error: { code, message } }` with the status it
+carried, and any other throw to a 500 with a fixed message (the real error goes to `console.error`,
+because it can carry a binding value or a query). A sub-app mounted with `.route()` inherits the
+handler, so a route module writes no error plumbing of its own.
+
+`apps/api` writes the envelope out by hand instead of importing `errorBody` from
+`@repo/validators/common`, because `validators` declares `dependsOn: ["api"]` — the dependency runs
+one way. The two shapes are identical and each names the other. Change one, change the other.
+
+Two things the handler does **not** cover. A 404 for an unrouted path goes through Hono's
+`notFound` handler, not this one, and still answers as plain text — no declared type covers an
+unrouted path, so nothing lies. And a handler that *returns* a response is untouched; only throws
+land here.
 
 ## Run it locally
 
