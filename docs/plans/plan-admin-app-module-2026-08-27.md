@@ -25,7 +25,7 @@ The README promises an `admin` capability (`apps/admin`, TanStack Router + Vite 
 
 Reuse `apps/web`'s package.json and wrangler.jsonc as the scaffold template (scripts, `clean`, static-assets deploy), `@repo/ui` for Tailwind 4.3 + shadcn components, `@repo/auth/client` for sessions, and the `package-json-dependency` patch kind for the workspace deps. The `create-module` skill authors the descriptor.
 
-### Phase 1: auth module gains the admin role (#87)
+### Phase 1: auth module gains the admin role (#87) (built 2026-08-28)
 
 Enable better-auth's `admin` plugin in `packages/auth`'s server config and client; add the role column to the auth schema (new migration via the database flow); document the first-admin promotion one-liner in the auth SKILL.md. Verify in `.dev`: a promoted user's session carries `role: "admin"`.
 
