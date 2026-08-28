@@ -122,6 +122,11 @@ pnpm --filter @repo/db db:generate       # diff schema → emit SQL under migrat
 connection, so it runs the same way on either driver. Review the emitted SQL and commit it beside
 the schema change.
 
+It still needs a driver installed, because the config it reads, `drizzle.config.ts`, ships with the
+driver. Run it on a core-only project and drizzle-kit falls back to its own default and reports
+`drizzle.config.json file does not exist`, naming a file this project never had. Add a driver
+first.
+
 **Applying** a migration is the driver's command, because it needs the connection: see
 `saasaloy-database-d1` or `saasaloy-database-postgres` for the one your project has. There is no
 `drizzle-kit push` and no auto-migrate on boot in either. Applying a migration is always an
