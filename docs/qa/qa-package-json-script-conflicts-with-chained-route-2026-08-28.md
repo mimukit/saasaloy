@@ -44,6 +44,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-2.1 | 2: playground with two conflicting modules | The refusal message tells the user what to do | 🔴 Critical |
 | TC-2.2 | 2: playground with two conflicting modules | Patched and reverted files read like hand-written code | 🟡 Normal |
 | TC-2.3 | 2: playground with two conflicting modules | The CLI stays quiet when there is nothing to warn about | 🟢 Low |
+| TC-2.4 | 2: playground with two conflicting modules | A user's own route and import survive add and remove | 🔴 Critical |
 
 ## Scenario 1: worktree only, no build
 
@@ -278,6 +279,39 @@ No module under `modules/` declares `conflictsWith` or uses the two new patch ki
 
    - [ ] A warning now names `db-alpha` as unverifiable, and the run proceeds instead of failing
    - [ ] The remedy the warning offers is one the user can actually perform on `db-alpha`
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _what actually happened on a fail; why it was skipped_
+
+### TC-2.4: A user's own route and import survive add and remove · 🔴 Critical
+
+**Goal.** The route path locates a patch; it does not prove ownership. Both directions skip and report rather than overwriting a line the user wrote.
+
+**Steps**
+
+1. Reset the scenario, then bind `waitlist` in the entry file to a module of your own before adding `db-beta`.
+
+   ```sh
+   cd ../.. && pnpm play:reset && mkdir -p .dev/playground/apps/api/src/routes && printf 'import { Hono } from "hono";\nimport { waitlist } from "./mine.js";\n\nconst app = new Hono();\n\nexport default app;\n' > .dev/playground/apps/api/src/index.ts && printf '{\n  "name": "api",\n  "scripts": {\n    "build": "tsc"\n  }\n}\n' > .dev/playground/apps/api/package.json && cd .dev/playground && node ../../packages/cli/dist/index.js add db-beta --yes; echo "EXIT=$?"
+   ```
+
+   - [ ] A warning names `apps/api/src/index.ts` and says the name is already imported from `./mine.js`
+   - [ ] The warning says what to do next, and the file still imports from `./mine.js` with no `.route("/waitlist", …)` added
+   - [ ] `.saasaloy/manifest.json` records no `chained-route` patch, so a later `remove` claims nothing here
+2. Reset, install cleanly, then repoint the installed route at a handler of your own and remove the module.
+
+   ```sh
+   cd ../.. && pnpm play:reset && printf 'import { Hono } from "hono";\nimport { health } from "./routes/health.js";\n\nconst app = new Hono();\n\nexport default app.route("/health", health);\n' > .dev/playground/apps/api/src/index.ts && printf '{\n  "name": "api",\n  "scripts": {\n    "build": "tsc"\n  }\n}\n' > .dev/playground/apps/api/package.json && cd .dev/playground && node ../../packages/cli/dist/index.js add db-beta --yes && node -e 'const f="apps/api/src/index.ts",fs=require("fs");fs.writeFileSync(f,fs.readFileSync(f,"utf8").replace("\"/waitlist\", waitlist","\"/waitlist\", myWaitlist"))' && node ../../packages/cli/dist/index.js remove db-beta --yes; echo "EXIT=$?"
+   ```
+
+   - [ ] `remove` reports the patch left untouched and names the handler it found instead
+   - [ ] The message reads as "this line is yours now", not as "there was nothing to revert"
+   - [ ] `.route("/waitlist", myWaitlist)` is still in the file, and the module is gone from `saasaloy.json`
 
 **Result**
 

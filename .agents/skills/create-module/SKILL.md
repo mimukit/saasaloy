@@ -143,9 +143,17 @@ Field notes:
   Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
   binding name, the dependency name, the script name, the callee, the route path), and an entry
   already there is left exactly as the user last edited it, so a re-`add` is a byte-for-byte
-  no-op. `chained-route` is the only kind `remove` reverses, taking the link and its import back
-  out (the import stays if the file still references the binding somewhere else); the other four
-  are dropped from the manifest with a warning until #36 generalises the inverse.
+  no-op. `chained-route` is the only kind `remove` reverses, taking the link back out, and the
+  named import with it when the file no longer references the binding anywhere else; the other
+  four are dropped from the manifest with a warning until #36 generalises the inverse.
+
+  The match key locates an edit; it does not prove the edit is still yours. `chained-route`
+  checks identity on both sides, and **skips with a warning rather than guessing**: `add`
+  refuses when the entry file already binds your import's local name to a different module,
+  because wiring the route would point it at the wrong handler, and `remove` leaves the link
+  alone when the recorded path now routes to something other than your `call`. Both cases mean
+  a user owns that line. Design the module for the skip: `add` reports the file and the reason,
+  and records nothing, so the user wires it by hand.
 - **`agent.skills[]`** — skill folder(s) under this module (`skills/saasaloy-<name>`) copied into
   the consumer's `.claude/skills/saasaloy-<name>/` by `add` (see Step 4). Module skills are
   **always `saasaloy-`-prefixed** so they can't collide with the user's own installed skills.

@@ -55,8 +55,12 @@ because it might depend on the target and there is no way to tell.
 
 `remove` cleans up its own files, its skill symlinks, the now-empty directories it
 created, the `saasaloy.json` aliases whose target directory is gone, and any
-`chained-route` patch the module applied, taking the `.route()` link and its import back
-out of the entry file. Three things it does not touch:
+`chained-route` patch the module applied. Reversing that patch always takes the
+`.route()` link out of the entry file. It takes the named import out only when no other
+code still references the identifier, so a hand-written `app.use(waitlist.middleware)`
+is never left unbound. A route you repointed at your own handler is left where it is and
+reported, because the link no longer matches what the manifest recorded. Three things it
+does not touch:
 
 - **Config patches of every other kind stay.** When a module patched a file another module
   owns, `remove` prints one warning per patched file and drops the entry from the

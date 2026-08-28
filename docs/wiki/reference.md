@@ -168,7 +168,8 @@ Two gaps are load-bearing enough to plan around.
 **`remove` reverses one config patch kind out of five.**
 [#36](https://github.com/mimukit/saasaloy/issues/36). When a module patches a file another
 module owns, `remove` can only undo the edit for `chained-route`, where it takes the
-`.route()` link and its import back out. For the other four kinds it drops the record from
+`.route()` link back out, and the named import with it when no other code in the file still
+references the identifier. For the other four kinds it drops the record from
 the manifest and prints a warning naming the file, and the edit stays. Removing
 `email-cloudflare` leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
 provider registration in `packages/email/src/index.ts`. Revert those by hand. Skill links,
