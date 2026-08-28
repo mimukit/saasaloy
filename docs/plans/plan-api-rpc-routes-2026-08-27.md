@@ -60,7 +60,7 @@ Phase 2 therefore ships **201 and an `errorSchema`-shaped 400**, and leaves the 
 - Typecheck time with roughly 30 synthetic chained routes is measured and recorded in the api skill.
 - `hc<AppType>` against the dev Worker infers `/health`.
 
-### Phase 2 — migrate the waitlist module
+### Phase 2 — migrate the waitlist module (built 2026-08-28)
 
 - The waitlist route is chained with explicit **201 and 400** responses, the 400 shaped by `errorSchema` through `zValidator`'s failure hook. A duplicate email keeps its current success response.
 - The input schema moves to `@repo/validators/waitlist`, dropped through the `@validators` alias that `modules/validators/registry-item.json` declares, and waitlist's `dependsOn` gains `validators`.
