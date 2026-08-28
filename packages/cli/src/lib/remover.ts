@@ -3,7 +3,7 @@ import { dirname, join, relative, sep } from "node:path";
 import { assertNoSymlinkPath, classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
 import { samePatchEntry, type Manifest, type ManifestPatch } from "./manifest.js";
-import { reversePatch } from "./patch/index.js";
+import { isReversibleKind, reversePatch } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy remove` — mirrors applier.ts's buildPlan/
@@ -47,14 +47,32 @@ export interface PlannedRemoveLink {
   action: LinkRemoveAction;
 }
 
+// How a recorded config patch relates to what's on disk right now:
+//   revert  — a reversible kind with an edit still there → `diff` previews the undo
+//   refused — the inverse declined it; the line is the user's now → `reason` says why
+//   gone    — nothing left to undo (target file absent, or already hand-reverted)
+//   drop    — a kind with no inverse yet (#36) → the record goes, the edit stays
+export type PatchRemoveAction = "revert" | "refused" | "gone" | "drop";
+
+export interface PlannedRemovePatch {
+  /** The manifest entry this untracks. Dropped on execute whatever the action. */
+  entry: ManifestPatch;
+  action: PatchRemoveAction;
+  /** Unified diff of the would-be reversal; `""` for every action but `revert`. */
+  diff: string;
+  /** Why the inverse refused — set only when `action` is `refused`. */
+  reason?: string;
+}
+
 export interface RemovePlan {
   module: string;
   files: PlannedRemoveFile[];
   links: PlannedRemoveLink[];
-  /** This module's entries in manifest.patches. Every entry is dropped on execute;
-   *  a `chained-route` entry is also *reversed* on disk first (the one kind with an
-   *  inverse — see `reversePatch`). The command warns naming each file it can't undo. */
-  patches: ManifestPatch[];
+  /** This module's entries in manifest.patches, each classified against fresh disk state.
+   *  Every entry is dropped on execute; a `chained-route` entry is also *reversed* on disk
+   *  first (the one kind with an inverse — see `reversePatch`), and `diff` previews that
+   *  reversal so `--dry-run`/`--diff` show the edit rather than only labelling it. */
+  patches: PlannedRemovePatch[];
   /** Installed modules whose lock `dependsOn` names this module — block removal
    *  without `--force`. */
   dependents: string[];
@@ -118,7 +136,11 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
     });
   }
 
-  const patches = manifest.patches.filter((p) => p.module === name);
+  const patches: PlannedRemovePatch[] = [];
+  for (const entry of manifest.patches) {
+    if (entry.module !== name) continue;
+    patches.push(await previewPatchRemoval(root, entry));
+  }
 
   // A reverse-dependency map over the lock's `dependsOn`, restricted to what's
   // actually installed — an uninstalled module's stale dependsOn doesn't matter.
@@ -135,6 +157,28 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
   }
 
   return { module: name, files, links, patches, dependents, missingLockEntries };
+}
+
+/**
+ * Classify one recorded patch against fresh disk state, and preview its reversal.
+ *
+ * `reversePatch` is pure, so the plan can carry the exact edit `--diff` promises without
+ * writing anything — the repo requires every destructive operation to be previewable.
+ * `executeRemovePlan` re-reads and recomputes rather than trusting this diff, because the
+ * file can change between planning and executing.
+ */
+async function previewPatchRemoval(root: string, entry: ManifestPatch): Promise<PlannedRemovePatch> {
+  if (!isReversibleKind(entry.patch.kind)) return { entry, action: "drop", diff: "" };
+
+  const fileAbs = resolveWithinRoot(root, entry.file);
+  if (!(await pathExists(fileAbs))) return { entry, action: "gone", diff: "" };
+  await assertNoSymlinkPath(root, fileAbs);
+
+  const source = await readFile(fileAbs, "utf8");
+  const result = reversePatch(source, entry.patch, entry.file);
+  if (result?.changed) return { entry, action: "revert", diff: result.diff };
+  if (result?.reason !== undefined) return { entry, action: "refused", diff: "", reason: result.reason };
+  return { entry, action: "gone", diff: "" };
 }
 
 export interface ExecuteRemoveArgs {
@@ -306,7 +350,8 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
   const patchesReversed: ManifestPatch[] = [];
   const patchesDropped: ManifestPatch[] = [];
   const patchRefusals: RemovePatchRefusal[] = [];
-  for (const entry of plan.patches) {
+  for (const planned of plan.patches) {
+    const entry = planned.entry;
     const fileAbs = resolveWithinRoot(root, entry.file);
     let reversed = false;
     if (await pathExists(fileAbs)) {
