@@ -5,8 +5,48 @@
   "dependsOn": ["database"],
   "conflictsWith": ["database-d1"],
   "dependencies": [],
-  "envVars": {},
-  "patches": [],
-  "files": [],
-  "scaffolds": []
+  "envVars": {
+    "DATABASE_URL": "Postgres connection string, e.g. postgres://user:pass@host:5432/app. Read from apps/api/.dev.vars in local dev and from a Workers secret (`wrangler secret put DATABASE_URL`) in production. A HYPERDRIVE binding, when present, takes precedence over it."
+  },
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "compatibility_flags",
+      "entry": "nodejs_compat"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:migrate",
+      "value": "drizzle-kit migrate"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "postgres",
+      "range": "3.4.9"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@types/node",
+      "range": "26.1.2"
+    }
+  ],
+  "files": [{ "path": "files/src/client.ts", "target": "@db/client.ts" }],
+  "scaffolds": [
+    {
+      "workspace": "packages/db",
+      "files": [
+        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-database-postgres"]
+  }
 }
