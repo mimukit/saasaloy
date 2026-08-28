@@ -61,6 +61,12 @@ export function resolveConnectionString(env: DbBindings): string {
  * and Hyperdrive's pooled connections cannot answer it consistently anyway. `max: 5` caps
  * the sockets one request may open when it issues queries in parallel.
  *
+ * No `ssl` option is passed, deliberately. postgres.js defaults it to `false` and lets the
+ * connection string set it, so a remote database asks for TLS with `?sslmode=verify-full`
+ * in `DATABASE_URL`. Hardcoding a mode here would override that string and break the two
+ * connections that carry no TLS of their own: Hyperdrive's local proxy, and a local
+ * container. See the `saasaloy-database-postgres` skill.
+ *
  * Close the connection when the response is done, so a socket does not linger for the rest
  * of the isolate's life. `end()` runs as soon as it is called, and postgres.js rejects every
  * query issued after it, so schedule it in a `finally` after the last `await`:

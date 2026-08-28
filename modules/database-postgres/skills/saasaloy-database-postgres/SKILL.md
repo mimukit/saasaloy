@@ -51,8 +51,9 @@ Wrangler reads `.dev.vars` beside the Worker and puts each key on `env`. Write t
 DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/app"
 ```
 
-The base template's `.gitignore` already lists `.dev.vars`, so the file stays out of git. Commit an
-`apps/api/.dev.vars.example` instead if you want the key documented for the next person.
+The base template's `.gitignore` already lists `.dev.vars`, so the file stays out of git. It also
+carries a `!.dev.vars.example` exception, so commit an `apps/api/.dev.vars.example` with the key and
+no value if you want it documented for the next person.
 
 `drizzle.config.ts` loads that same file when `DATABASE_URL` is absent from the shell environment,
 so `db:migrate` and a `vite dev` Worker agree on one URL with no second place to edit. An explicit
@@ -76,6 +77,28 @@ wrangler secret put DATABASE_URL --config apps/api/wrangler.jsonc
 
 Never put it in `vars` in `wrangler.jsonc` — that block is plaintext and lands in git. Rotate by
 running `wrangler secret put` again; the new value takes effect on the next deploy.
+
+### TLS: the connection string decides
+
+**postgres.js defaults `ssl` to `false`.** A `DATABASE_URL` that says nothing about TLS connects in
+cleartext, password included, which is fine over loopback to a local container and wrong to a
+database anywhere else. `getDb` passes no `ssl` option on purpose, so the string is the one place
+that decides:
+
+```sh
+DATABASE_URL="postgres://user:pass@db.example.com:5432/app?sslmode=verify-full"
+```
+
+`sslmode=verify-full` checks the certificate chain and the hostname. `sslmode=require` encrypts
+without verifying either, so it stops a passive listener and not an active one; take it only when
+the provider's certificate cannot verify. `?sslrootcert=system` is postgres.js's alias for
+`verify-full` against the runtime's own root store. Workers cannot load a custom CA, so a database
+whose certificate is not publicly rooted needs Hyperdrive rather than a `ca` option.
+
+Two cases take no `sslmode` at all. **Hyperdrive** hands you a `connectionString` pointing at
+Cloudflare's local proxy, which is not a TLS endpoint; Cloudflare secures the hop to the real
+database itself. **The local container** above serves no TLS. Both fail to connect if you force a
+mode on them, which is why this is a property of each URL and not a default in the client.
 
 ## Read the DB from a route: `getDb(c.env)`
 
