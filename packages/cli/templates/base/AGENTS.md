@@ -62,6 +62,8 @@ the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
 in `src/content/`. `apps/web` pulls the theme in once, through the shared layout that
 imports `@repo/ui/globals.css`.
 
+`DESIGN.md` at the repository root records the token values and the rules behind them. Read it before you add or change UI.
+
 Primitives and blocks are reached by subpath — neither is re-exported from the package
 root, so importing one never drags in the rest. The root export is project-wide constants
 only (`siteName`):
@@ -125,6 +127,8 @@ one works.
 template once; it never comes back to migrate it. A swapped theme is yours to maintain,
 including re-applying anything you had customised in `globals.css` that the preset
 overwrote. Diff the file after running the command rather than assuming.
+
+A preset swap invalidates `DESIGN.md`. Run `saasaloy-design theme` to apply the preset and update the contract in one flow.
 
 Light/dark/system switching is unaffected by any of this — it keys off the `.dark` class,
 which every preset keeps.
@@ -257,6 +261,7 @@ strings in the content module so the next pass finds them.
 
 ### ✅ Always Do
 
+- Read `DESIGN.md` before writing or changing UI
 - Run `pnpm typecheck` before committing code changes
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)

@@ -77,6 +77,14 @@ const ACTION_LABEL: Record<FileAction, string> = {
 // Cap a single file's diff so a big generated file can't flood the terminal.
 const MAX_DIFF_LINES = 60;
 
+export function planWritesUi(files: Plan["files"]): boolean {
+  return files.some(
+    (file) =>
+      (file.action === "create" || file.action === "overwrite") &&
+      file.target.startsWith("packages/ui/"),
+  );
+}
+
 function renderDiff(file: PlannedFile): string {
   const lines = lineDiff(file.oldContent ?? "", file.content);
   const shown = lines.slice(0, MAX_DIFF_LINES).map((line) => {
@@ -291,6 +299,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     });
 
     summarizePlan(plan, requested, prereqs);
+
+    if (planWritesUi(plan.files)) {
+      log.info(
+        `This module writes ${pc.cyan("packages/ui/")}. Run ${pc.cyan("/saasaloy-design update")} after it applies.`,
+      );
+    }
 
     if (opts.diff) {
       for (const file of plan.files) {
