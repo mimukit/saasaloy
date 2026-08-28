@@ -3,7 +3,7 @@ import type { Logger } from "@repo/logger";
 import { Hono } from "hono";
 import type { Context } from "hono";
 import { cors } from "hono/cors";
-import health from "./routes/health";
+import { health } from "./routes/health";
 
 // Bindings live on the Workers runtime and are threaded through Hono's context
 // (`c.env`) — never `process.env`. Base `api` declares `CORS_ORIGINS` and the two logger

@@ -45,24 +45,27 @@ Two bindings, and the split between them is the point:
 
 Two steps. The handler is still a file; only its registration changed.
 
-**1. Write `src/routes/<feature>.ts` as one chained expression**, default-exporting the sub-app:
+**1. Write `src/routes/<feature>.ts` as one chained expression**, under a named export that
+matches the file:
 
 ```ts
 // src/routes/widgets.ts  →  mounted at /widgets
 import { Hono } from "hono";
 
-const widgets = new Hono()
+export const widgets = new Hono()
   .get("/", (c) => c.json({ widgets: [] }, 200)) //         GET  /widgets
   .post("/", (c) => c.json({ created: true }, 201)) //      POST /widgets
   .get("/:id", (c) => c.json({ id: c.req.param("id") }, 200)); // GET /widgets/:id
-
-export default widgets;
 ```
+
+**Named, not default.** The `chained-route` codemod writes a named import for the handler and
+refuses to wire a link whose binding resolves to a default import, so `export default widgets`
+leaves the route unmountable by patch.
 
 **2. Add the link to the chain** in `src/index.ts`:
 
 ```ts
-import widgets from "./routes/widgets";
+import { widgets } from "./routes/widgets";
 
 const app = base.route("/health", health).route("/widgets", widgets);
 ```
@@ -303,7 +306,8 @@ Deployment of all services is centralized in the future **`infra`** capability (
 - **Build every sub-app as one unbroken chain.** A statement-per-route file typechecks and serves
   correctly while handing the client an empty type.
 - **Pass the status code to `c.json`** on every path, success included.
-- **One route file = one mounted prefix**, named after the file. Keep the folder flat.
+- **One route file = one mounted prefix**, named after the file, under a named `export const`.
+  Keep the folder flat.
 - **Internal paths are mount-relative** (`get("/")` for the index of the mount).
 - **Mount on `base`, not on the chain**, when a handler must stay out of `AppType`.
 - **`c.env` for bindings, never `process.env`.**
