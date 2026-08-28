@@ -158,13 +158,13 @@ plus a `wrangler-binding` patch adding `send_email` to `apps/api/wrangler.jsonc`
 A provider that needs an SDK version must pin it **exactly** — `"range": "4.0.1"`, never `^4.0.1`
 or `~4.0.1`.
 
-Pin it by hand, and check the version against npm rather than typing one from memory. **Patch
-`range` values are not scanned by `pnpm deps:update` or `pnpm deps:check`**: that script reads
-base-template `package.json`s, descriptor `dependencies[]`/`devDependencies[]`, and
-`modules/*/files/**/package.json`, and never descends into `patches[]`. Rule 5 puts a provider's
-SDK in a `package-json-dependency` patch and nowhere else, so the one sanctioned home for that pin
-is exactly the place the tooling will neither fill in for you nor fail CI on when it drifts. Same
-applies when you bump it later — nothing will remind you.
+Pin it by hand the first time, and check the version against npm rather than typing one from
+memory. After that the tooling keeps it current. `pnpm deps:update` and `pnpm deps:check` read the
+`range` of every `package-json-dependency` patch as a third dependency site alongside a
+descriptor's `dependencies[]` and `devDependencies[]`, so a provider's SDK pin gets the same
+cooldown and within-major gate as everything else (ADR 0016, amended for #85). This used to be the
+one place drift went unnoticed. It no longer is, which also means a patch missing `name`, `range`
+or a `section` naming a real dependency map now fails the run outright.
 
 ## Verify before you call it done
 
