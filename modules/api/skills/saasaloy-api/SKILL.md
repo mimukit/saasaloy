@@ -23,10 +23,9 @@ chain rather than a file drop.
 export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
   Bindings: Bindings;
   Variables: Variables;
-}>();
-
-base.use("*", cors({ /* … */ }));
-base.use("*", /* request correlation — see Logging below */);
+}>()
+  .use("*", cors({ /* … */ }))
+  .use("*", requestCorrelation); // binds c.get("log") — see Logging, below
 
 const app = base.route("/health", health);
 
@@ -40,6 +39,13 @@ Two bindings, and the split between them is the point:
   client, such as a catch-all auth handler. Its type annotation is written out on purpose. That
   freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so mounting on it cannot widen `AppType`.
 - **`app`** is the typed chain. Everything a caller should see through `hc` goes here.
+
+**Keep every app-wide middleware as a link in `base`'s chain**, not as a `base.use("*", …)`
+statement underneath. A `chained-route` patch with `exportName: "base"` appends to that
+initializer, and Hono runs the handlers a request matches in registration order. Written as a
+statement, the middleware would register *after* the catch-all it is meant to wrap: `/auth`
+responses would come back with no CORS headers, and `c.get("log")` would be undefined inside that
+handler.
 
 ## Add a route
 

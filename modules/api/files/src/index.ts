@@ -36,34 +36,22 @@ const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
 // freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so anything
 // mounted on `base` (app-wide middleware, `auth`'s catch-all handler) cannot widen
 // `AppType`. Routes that a client must see go on the chain below instead.
-export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
-  Bindings: Bindings;
-  Variables: Variables;
-}>();
-
+//
+// Both middlewares below are links in this chain rather than `base.use(...)` statements,
+// and that is load-bearing. A `chained-route` patch targeting `base` appends to this
+// initializer, so a statement form would leave the untyped mount registered *before*
+// the middleware — Hono runs matched handlers in registration order, and the mounted
+// handler answers first, so neither CORS nor the request logger would reach it.
+//
 // Credentialed CORS lives in api's spine — every cross-origin caller (the admin SPA,
 // the waitlist form on the marketing site, auth's cookie-based session) shares the
 // same origin allowlist, so it's a property of api's topology, not any one consumer's.
 // `auth`'s `trustedOrigins` reuses this same `CORS_ORIGINS` var (one list, two readers,
 // no drift).
-base.use(
-  "*",
-  cors({
-    credentials: true,
-    origin: (origin, c: Context<{ Bindings: Bindings }>) => {
-      const configured = c.env.CORS_ORIGINS?.split(",")
-        .map((o: string) => o.trim())
-        .filter(Boolean);
-      const allowed =
-        configured && configured.length > 0 ? configured : DEV_ORIGINS;
-      return origin && allowed.includes(origin) ? origin : null;
-    },
-  })
-);
-
-// Request correlation. Every route below reads the same logger with `c.get("log")`, and
-// every line it writes carries this request's `requestId` — that is what turns a pile of
-// log lines into a request you can follow.
+//
+// The second link is request correlation. Every route below reads the same logger with
+// `c.get("log")`, and every line it writes carries this request's `requestId` — that is
+// what turns a pile of log lines into a request you can follow.
 //
 // `cf-ray` first: it is the id Cloudflare's own dashboard, invocation logs and support
 // tickets key on, so a line correlates with the platform's view of the same request for
@@ -73,14 +61,35 @@ base.use(
 // client-supplied value into an indexed field — anyone could collide with, or forge, a
 // real request's id. A gateway that must propagate one should overwrite the header
 // upstream, not have this Worker believe it.
-base.use("*", async (c, next) => {
-  const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
-  c.set("log", createLogger(c.env).child({ requestId }));
-  // `next` is Hono's downstream continuation, not a Node error-first callback; returning
-  // it would end the middleware before the response phase.
-  // oxlint-disable-next-line node/callback-return
-  await next();
-});
+export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
+  Bindings: Bindings;
+  Variables: Variables;
+}>()
+  .use(
+    "*",
+    cors({
+      credentials: true,
+      origin: (
+        origin,
+        c: Context<{ Bindings: Bindings; Variables: Variables }>
+      ) => {
+        const configured = c.env.CORS_ORIGINS?.split(",")
+          .map((o: string) => o.trim())
+          .filter(Boolean);
+        const allowed =
+          configured && configured.length > 0 ? configured : DEV_ORIGINS;
+        return origin && allowed.includes(origin) ? origin : null;
+      },
+    })
+  )
+  .use("*", async (c, next) => {
+    const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
+    c.set("log", createLogger(c.env).child({ requestId }));
+    // `next` is Hono's downstream continuation, not a Node error-first callback; returning
+    // it would end the middleware before the response phase.
+    // oxlint-disable-next-line node/callback-return
+    await next();
+  });
 
 // The typed route chain. Every mounted route is one `.route()` link in a single
 // expression, so `typeof app` carries each path, its input, and its response shape —
