@@ -21,7 +21,7 @@ It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves
 |------|-----------------|
 | `docs/product-brief.md` | The whole file. Create `docs/` if it does not exist. |
 | `packages/ui/src/index.ts` | `siteName` — the brand constant, and nothing else in the file. |
-| `apps/web/src/layouts/Layout.astro` | The `lang` attribute only, and only when the language is not English. |
+| `apps/web/src/layouts/Layout.astro` | The `lang` attribute only, and only when it differs from the brief's language code. |
 
 Nothing else. You are not here to write the landing page, add a dependency, or touch a
 block.
@@ -223,8 +223,9 @@ Show the change and confirm it, one file at a time.
 1. **`siteName`** in `packages/ui/src/index.ts`. This is the brand as it appears in the
    header, the footer and the browser tab. It is not translated, and it is the only thing
    in that file you may edit.
-2. **`lang`** in `apps/web/src/layouts/Layout.astro`, only when the language is not
-   English. It ships hardcoded as `en`. Getting this wrong tells screen readers to
+2. **`lang`** in `apps/web/src/layouts/Layout.astro`. Set it to the brief's language code
+   whenever the attribute differs from it, including back to `en` on a re-run that returns
+   to English. It ships hardcoded as `en`. Getting this wrong tells screen readers to
    pronounce Bangla with English phonetics.
 
 Then check it still builds, because both files are imported by the page:
@@ -261,7 +262,7 @@ can see:
 - **Never write landing copy.** Not into `packages/ui/src/content/landing.ts`, not into a
   block, not "just the headline while we're here". The brief is your output.
 - **Never edit a block or the design layer** — `packages/ui/src/blocks/*`,
-  `src/styles/globals.css`, `src/components/*`, `components.json`, or a Tailwind class
+  `packages/ui/src/styles/globals.css`, `packages/ui/src/components/*`, `components.json`, or a Tailwind class
   anywhere.
 - **Never invent pricing, proof, a customer name, or a URL.** Not in the brief, and not in
   a sample answer.

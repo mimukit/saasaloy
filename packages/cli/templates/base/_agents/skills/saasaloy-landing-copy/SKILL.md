@@ -143,9 +143,10 @@ alternative. The eyebrow uses the two named beta firms rather than a stage name.
   Run `/saasaloy-setup`, or change the one attribute yourself.
 ```
 
-If the owner would rather skip the review — "just write it" — that is their call to make
-and you take it. Say once what they are giving up, then go straight to
-[Step 4](#step-4--write-the-content-module) and show the diff there instead.
+If the owner would rather skip the review — "just write it" — **still write the draft
+file.** The draft is the record of what you propose, so it is not theirs to skip. Say once
+that you are treating their go-ahead as approval, write `docs/landing-copy-draft.md`, name
+the path, then go to [Step 4](#step-4--write-the-content-module) and show the diff there.
 
 ## Step 3 — the owner reviews
 
