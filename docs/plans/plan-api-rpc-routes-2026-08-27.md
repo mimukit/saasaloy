@@ -68,7 +68,7 @@ Phase 2 therefore ships **201 and an `errorSchema`-shaped 400**, and leaves the 
 - `saasaloy remove waitlist` leaves a compiling api through the chained-route inverse.
 - `modules/waitlist/skills/saasaloy-waitlist/SKILL.md` drops the route file-drop claim at line 65 and points at the chained-route patch.
 
-### Phase 3 — auth mount, docs, and ADR
+### Phase 3 — auth mount, docs, and ADR (built 2026-08-28)
 
 - The auth module's handler mounts before the typed chain and stays out of `AppType`.
 - An ADR records the drop-to-patch route convention change.
