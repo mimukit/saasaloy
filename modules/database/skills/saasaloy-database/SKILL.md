@@ -1,20 +1,40 @@
 ---
 name: saasaloy-database
-description: Runbook for the database capability — Drizzle ORM on Cloudflare D1 in packages/db. Use when adding or changing tables, writing repositories, running or generating migrations, reading the DB from a route (c.env.DB), or wiring the D1 binding. Covers the schema-barrel drop convention, the thin repository pattern, the three manual migration scripts, and the placeholder-id → remote flow.
+description: Runbook for the database capability — the driver-neutral Drizzle ORM data layer in packages/db. Use when adding or changing tables, writing repositories, generating migrations, or choosing between the database-d1 and database-postgres drivers. Covers the schema-barrel drop convention, the thin repository pattern, and db:generate. The connection, the dialect and the migrate commands belong to the driver skills, saasaloy-database-d1 and saasaloy-database-postgres.
 ---
 
-# database — Drizzle ORM on Cloudflare D1
+# database — the driver-neutral data layer
 
-`packages/db` (`@repo/db`) is the data layer: [Drizzle ORM](https://orm.drizzle.team) over
-**Cloudflare D1** (SQLite at the edge). It's consumed by `apps/api` — the D1 binding lives on the
-Worker, so the api entry reads it as `c.env.DB` and hands it to `getDb`. Its two defining
-conventions are the **schema barrel** (drop a table file, it's picked up everywhere) and a **thin
-repository layer** (raw queries live in one place, not sprawled through routes). Migrations are
-**fully manual** — three explicit scripts, never autopush/automigrate.
+`packages/db` (`@repo/db`) is the data layer's **core**: [Drizzle ORM](https://orm.drizzle.team)
+tables, a **schema barrel**, a **thin repository layer**, and one script, `db:generate`. It holds
+nothing that knows which database is behind it. There is no client here, no dialect, no connection
+string and no migrate command.
+
+Those live in a **driver module**, one per database, mirroring the `email` capability and its
+providers:
+
+| Driver module       | Database                    | Skill                          |
+| ------------------- | --------------------------- | ------------------------------ |
+| `database-d1`       | Cloudflare D1 (SQLite)      | `saasaloy-database-d1`         |
+| `database-postgres` | Postgres, over postgres.js  | `saasaloy-database-postgres`   |
+
+Install **exactly one**. Each driver declares the other in `conflictsWith`, so `add` refuses the
+second one rather than letting two clients fight over `src/client.ts`.
+
+```sh
+saasaloy add database
+saasaloy add database-d1        # or: saasaloy add database-postgres
+```
+
+Read the driver's skill for anything the tables themselves don't decide: how the connection reaches
+a request handler, which bindings or environment variables it needs, and how a generated migration
+is applied.
 
 ## Add a table (the core convention)
 
-Create `src/schema/<name>.ts` that exports Drizzle table(s):
+Create `src/schema/<name>.ts` that exports Drizzle table(s). Import the table builder for the
+dialect your driver uses (`drizzle-orm/sqlite-core` or `drizzle-orm/pg-core`); the driver skill
+names it.
 
 ```ts
 // packages/db/src/schema/waitlist.ts
@@ -27,53 +47,29 @@ export const waitlist = sqliteTable("waitlist", {
 });
 ```
 
-That's the whole step — no edit anywhere else. Two mechanisms both react to the drop:
+That's the whole step, with no edit anywhere else. Two mechanisms both react to the drop:
 
-- **Runtime:** `src/schema.ts` (the barrel) merges every `src/schema/*.ts` into one `schema`
-  object via Vite's `import.meta.glob`, which the api Worker's Vite bundles. `getDb` passes it to
-  Drizzle, so `db.query.waitlist` and relational queries work.
-- **Migrations:** `drizzle.config.ts` points drizzle-kit at the same `./src/schema/*.ts` glob, so
-  `db:generate` sees the new table and emits SQL for it.
+- **Runtime:** `src/schema.ts` (the schema barrel) merges every `src/schema/*.ts` into one `schema`
+  object via Vite's `import.meta.glob`, which the api Worker's Vite bundles. The driver's `getDb`
+  passes that object to Drizzle, so `db.query.waitlist` and relational queries work.
+- **Migrations:** the driver's `drizzle.config.ts` points drizzle-kit at the same
+  `./src/schema/*.ts` glob, so `db:generate` sees the new table and emits SQL for it.
 
 > **Why the barrel is `src/schema.ts`, not `src/schema/index.ts`:** drizzle-kit loads schema files
 > with esbuild (Node), which can't run `import.meta.glob` (Vite-only). Keeping the barrel *beside*
-> `src/schema/` — not inside it — keeps it out of drizzle-kit's glob. Don't move it in.
+> `src/schema/`, not inside it, keeps it out of drizzle-kit's glob. Don't move it in.
 > Keep `src/schema/` **flat**: one level of `*.ts` table files.
 
-## Read the DB from a route: `c.env.DB`, never `process.env`
-
-The D1 binding arrives on the Worker's `env`, threaded through Hono as `c.env.DB`. Compose
-`DbBindings` into the route's Hono generic so it's typed with no patch to api's entry:
-
-```ts
-// apps/api/src/routes/waitlist.ts
-import { Hono } from "hono";
-import { getDb, type DbBindings } from "@repo/db/client";
-import { listWaitlist } from "@repo/db/repositories/waitlist";
-
-const waitlist = new Hono<{ Bindings: DbBindings }>();
-
-waitlist.get("/", async (c) => c.json(await listWaitlist(getDb(c.env.DB))));
-
-export default waitlist;
-```
-
-Note the import is `@repo/db/...` — the real package name (via `@repo/db`'s `exports` map) — not
-`@db/...`. `@db` is only the *file-placement* alias `saasaloy.json` uses to resolve a module's
-`files[].target` when copying files onto disk; it isn't wired into TypeScript or Vite as an import
-alias. A feature that needs `apps/api` to import from `packages/db` (like `waitlist`) has that
-dependency added automatically: this module's `patches` includes a `package-json-dependency` op
-that upserts `"@repo/db": "workspace:*"` into `apps/api/package.json` at `add` time.
-
-Never reach for `process.env` — it doesn't exist on Workers.
+Tables are the one place the dialect leaks into the core. A schema written against one driver's
+dialect does not port to the other by itself.
 
 ## The repository layer: thin functions, not an ORM wrapper
 
 Keep raw queries out of routes. A repository is a plain function taking a `db`, living in
-`src/repositories/<name>.ts`. Unlike `schema/`, repositories are **not** auto-registered — import
+`src/repositories/<name>.ts`. Unlike `schema/`, repositories are **not** auto-registered, so import
 the one you need directly. Import the **table itself** from its schema file (fully typed), not off
-the runtime barrel — the barrel's merged `schema` is intentionally loose (it exists only to hand
-Drizzle its relational metadata in `getDb`):
+the runtime barrel. The barrel's merged `schema` is intentionally loose; it exists only to hand
+Drizzle its relational metadata in `getDb`:
 
 ```ts
 // packages/db/src/repositories/waitlist.ts
@@ -85,52 +81,59 @@ export function listWaitlist(db: ReturnType<typeof getDb>) {
 }
 ```
 
-(A file inside `packages/db` itself imports its own siblings by relative path — `@repo/db/...`
-is for *other* workspaces consuming this package, not for code inside it.)
+(A file inside `packages/db` imports its own siblings by relative path. `@repo/db/...` is for
+*other* workspaces consuming this package, not for code inside it.)
 
-## Migrations: three manual scripts (never autopush)
+A repository written against the shared Drizzle query builder works on either driver. One reaching
+for driver-specific SQL does not, so keep it on the builder where you can.
 
-Migrations are deliberately hand-driven. Run from `packages/db`:
+## `getDb` and the `@repo/db/client` contract
+
+The core's `package.json` declares the `./client` export, but the file behind it,
+`src/client.ts`, is scaffolded by the **driver**. Every consumer imports the same path either way:
+
+```ts
+import { getDb } from "@repo/db/client";
+import { listWaitlist } from "@repo/db/repositories/waitlist";
+```
+
+`getDb` takes whatever the active driver connects with, so its argument and the type it exports
+alongside are the driver's business. The driver skill shows the exact call for a route.
+
+Note the import is `@repo/db/...`, the real package name, via `@repo/db`'s `exports` map, not
+`@db/...`. `@db` is only the *file-placement* alias `saasaloy.json` uses to resolve a module's
+`files[].target` when copying files onto disk; it isn't wired into TypeScript or Vite as an import
+alias. A feature that needs `apps/api` to import from `packages/db` (like `waitlist`) has that
+dependency added automatically: this module's `patches` includes a `package-json-dependency` op
+that upserts `"@repo/db": "workspace:*"` into `apps/api/package.json` at `add` time.
+
+Installing `database` on its own leaves the `./client` export pointing at a file that isn't there
+yet. That's expected, and it resolves the moment a driver lands.
+
+## Migrations: generate here, apply in the driver
+
+Migrations are deliberately hand-driven. The core owns exactly one half of that:
 
 ```sh
 pnpm --filter @repo/db db:generate       # diff schema → emit SQL under migrations/
-pnpm --filter @repo/db db:migrate:local  # apply pending migrations to LOCAL D1
-pnpm --filter @repo/db db:migrate:prod   # apply pending migrations to REMOTE (production) D1
 ```
 
-- `db:generate` (`drizzle-kit generate`) only reads the schema and writes SQL — no DB connection.
-  Review the emitted SQL, commit it alongside the schema change.
-- `db:migrate:local` / `:prod` run `wrangler d1 migrations apply DB` against the binding declared
-  in `apps/api/wrangler.jsonc` (reached via `--config`). Local also passes `--persist-to` so the
-  migrated SQLite is the same one `vite dev` serves from.
-- There is **no** `drizzle-kit push` and **no** auto-migrate on boot. Applying a migration is
-  always an explicit command you run.
+`db:generate` (`drizzle-kit generate`) only reads the schema and writes SQL. It opens no
+connection, so it runs the same way on either driver. Review the emitted SQL and commit it beside
+the schema change.
 
-## The D1 binding and the placeholder id
-
-`add database` patches `apps/api/wrangler.jsonc` with the binding:
-
-```jsonc
-"d1_databases": [
-  { "binding": "DB", "database_name": "app-db", "database_id": "local", "migrations_dir": "../../packages/db/migrations" }
-]
-```
-
-Local dev **ignores `database_id`** — `"local"` is a placeholder and everything works against the
-miniflare SQLite. For **remote** (`db:migrate:prod` / production), create the real database and
-paste its id:
-
-```sh
-wrangler d1 create app-db        # prints the real database_id
-# → replace "local" in apps/api/wrangler.jsonc with the printed id
-```
+**Applying** a migration is the driver's command, because it needs the connection: see
+`saasaloy-database-d1` or `saasaloy-database-postgres` for the one your project has. There is no
+`drizzle-kit push` and no auto-migrate on boot in either. Applying a migration is always an
+explicit command you run.
 
 ## Boundaries to honor
 
-- **Drop `src/schema/<name>.ts` to add a table** — never hand-edit the barrel or drizzle.config.ts.
-- **Keep the barrel at `src/schema.ts`** and `src/schema/` flat — see the esbuild note above.
+- **Drop `src/schema/<name>.ts` to add a table.** Never hand-edit the barrel.
+- **Keep the barrel at `src/schema.ts`** and `src/schema/` flat; see the esbuild note above.
 - **Queries live in `src/repositories/`**, imported by routes; routes don't build SQL inline.
-- **`c.env.DB` for the binding, never `process.env`.**
-- **Migrations are manual** — generate, review, then apply local/prod explicitly.
-- **Remote application is not this module's job to automate.** `db:migrate:prod` exists for manual
-  use; centralized production deploy belongs to the future **`infra`** capability.
+- **Keep the core neutral.** A connection, a dialect, a config file or a migrate script added here
+  belongs in a driver module instead.
+- **One driver per project.** `conflictsWith` enforces it; switching means `saasaloy remove` on the
+  old driver first.
+- **Migrations are manual.** Generate, review, then apply with the driver's command.
