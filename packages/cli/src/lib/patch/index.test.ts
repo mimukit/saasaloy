@@ -139,6 +139,29 @@ describe("applyPatch", () => {
     expect(again.changed).toBe(false);
     expect(again.diff).toBe("");
     expect(again.content).toBe(first.content);
+    // An idempotent no-op is not a refusal, so there is nothing to report.
+    expect(again.reason).toBeUndefined();
+  });
+
+  it("reports a reason when the codemod refuses instead of no-op'ing", () => {
+    const conflicting = `import { Hono } from "hono";
+import { waitlist } from "./legacy.js";
+
+const app = new Hono();
+
+export default app;
+`;
+    const result = applyPatch(conflicting, ROUTE_PATCH, "index.ts");
+    expect(result.changed).toBe(false);
+    expect(result.content).toBe(conflicting);
+    expect(result.reason).toContain("./legacy.js");
+  });
+
+  it("carries no reason for the kinds that can only ever no-op", () => {
+    const applied = applyPatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json");
+    expect(applyPatch(applied.content, SCRIPT_PATCH, "package.json").reason).toBeUndefined();
+    const bound = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
+    expect(applyPatch(bound.content, BINDING_PATCH, "wrangler.jsonc").reason).toBeUndefined();
   });
 });
 
@@ -157,6 +180,22 @@ describe("reversePatch", () => {
     expect(reversed?.changed).toBe(false);
     expect(reversed?.diff).toBe("");
     expect(reversed?.content).toBe(API_ENTRY);
+    // Already gone is not a refusal — the remover reports the two differently.
+    expect(reversed?.reason).toBeUndefined();
+  });
+
+  it("reports a reason when the inverse refuses a route the user repointed", () => {
+    const repointed = `import { Hono } from "hono";
+import { myWaitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", myWaitlist);
+
+export default app;
+`;
+    const reversed = reversePatch(repointed, ROUTE_PATCH, "index.ts");
+    expect(reversed?.changed).toBe(false);
+    expect(reversed?.content).toBe(repointed);
+    expect(reversed?.reason).toContain("myWaitlist");
   });
 
   it("returns undefined for a kind with no inverse yet (#36 owns the rest)", () => {

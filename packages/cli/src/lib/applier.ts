@@ -1,7 +1,7 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import { classifyLink, createDirLink, hashContent, pathExists } from "./fs-utils.js";
-import type { Manifest, ManifestPatch } from "./manifest.js";
+import { samePatchEntry, type Manifest, type ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
@@ -127,13 +127,6 @@ async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
     }
   }
   return out;
-}
-
-// Structural equality on the (module, file, patch) triple — good enough since both
-// sides are parsed from the same registry-item.json descriptor, so key order is
-// stable across a `--force` re-apply.
-function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
-  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
 }
 
 async function classify(
@@ -338,6 +331,15 @@ export interface ApplyResult {
   patched: PlannedPatch[];
   /** Patches whose target file was absent — reported, not applied. */
   patchConflicts: PlannedPatch[];
+  /** Patches the codemod declined to apply, each with the reason it gave. Distinct from
+   *  an idempotent no-op, which changes nothing and has nothing to report. */
+  patchRefusals: PatchRefusal[];
+}
+
+/** A patch left unapplied on purpose, and the codemod's own account of why. */
+export interface PatchRefusal {
+  patch: PlannedPatch;
+  reason: string;
 }
 
 // Write the safe files, record each in the manifest with its content hash, and mark
@@ -355,6 +357,7 @@ export async function executePlan(
   const linkConflicts: PlannedLink[] = [];
   const patched: PlannedPatch[] = [];
   const patchConflicts: PlannedPatch[] = [];
+  const patchRefusals: PatchRefusal[] = [];
 
   for (const file of plan.files) {
     if (WRITABLE.has(file.action)) {
@@ -378,16 +381,21 @@ export async function executePlan(
       continue;
     }
     const source = await readFile(p.fileAbs, "utf8");
-    const { content, changed } = applyPatch(source, p.patch, p.file);
+    const { content, changed, reason } = applyPatch(source, p.patch, p.file);
     if (changed) {
       await writeFile(p.fileAbs, content, "utf8");
       patched.push(p);
-      // Record for `remove` (which can't reverse it, only warn) — deduped so a
-      // `--force` re-apply that lands the same op again doesn't duplicate the entry.
+      // Record for `remove` (which reverses only `chained-route` today, and warns for the
+      // rest) — deduped so a `--force` re-apply that lands the same op again doesn't
+      // duplicate the entry.
       const entry: ManifestPatch = { module: p.module, file: p.file, patch: p.patch };
       if (!manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
         manifest.patches.push(entry);
       }
+    } else if (reason !== undefined) {
+      // The codemod refused rather than no-op'd: nothing is written and nothing is
+      // tracked, so the manifest keeps saying `remove` has no business in this file.
+      patchRefusals.push({ patch: p, reason });
     }
   }
 
@@ -419,5 +427,5 @@ export async function executePlan(
     if (!config.installed.includes(name)) config.installed.push(name);
   }
 
-  return { written, heldBack, links, linkConflicts, patched, patchConflicts };
+  return { written, heldBack, links, linkConflicts, patched, patchConflicts, patchRefusals };
 }

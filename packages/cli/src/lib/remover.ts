@@ -1,8 +1,8 @@
 import { readdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
+import { assertNoSymlinkPath, classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
-import type { Manifest, ManifestPatch } from "./manifest.js";
+import { samePatchEntry, type Manifest, type ManifestPatch } from "./manifest.js";
 import { reversePatch } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
@@ -165,12 +165,22 @@ export interface RemoveResult {
   /** Patch entries actually undone on disk — a `chained-route` link and its import. */
   patchesReversed: ManifestPatch[];
   /** Patch entries untracked without being undone: a kind with no inverse yet (#36),
-   *  a target file that's gone, or a link already hand-reverted. The command warns. */
+   *  a target file that's gone, a link already hand-reverted, or a refusal. The command warns. */
   patchesDropped: ManifestPatch[];
+  /** The subset of `patchesDropped` the inverse codemod actively declined, each with its
+   *  reason — a route the user repointed at their own handler, say. Separates "there was
+   *  nothing left to undo" from "that line is yours now" in what the command prints. */
+  patchRefusals: RemovePatchRefusal[];
   /** Project-relative POSIX directories pruned because this run emptied them. */
   prunedDirs: string[];
   /** saasaloy.json alias names dropped because their prefix directory vanished. */
   droppedAliases: string[];
+}
+
+/** A patch entry left on disk on purpose, and the inverse codemod's account of why. */
+export interface RemovePatchRefusal {
+  patch: ManifestPatch;
+  reason: string;
 }
 
 function toPosixRelative(root: string, abs: string): string {
@@ -295,20 +305,31 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
   // file is untracked and warned about instead of force-edited.
   const patchesReversed: ManifestPatch[] = [];
   const patchesDropped: ManifestPatch[] = [];
+  const patchRefusals: RemovePatchRefusal[] = [];
   for (const entry of plan.patches) {
     const fileAbs = resolveWithinRoot(root, entry.file);
     let reversed = false;
     if (await pathExists(fileAbs)) {
+      // `resolveWithinRoot` proves only that the recorded path is lexically inside the
+      // project; the read and write below both follow symlinks. Refuse a linked component
+      // rather than reverse a patch into a file outside the root.
+      await assertNoSymlinkPath(root, fileAbs);
       const source = await readFile(fileAbs, "utf8");
       const result = reversePatch(source, entry.patch, entry.file);
       if (result?.changed) {
         await writeFile(fileAbs, result.content, "utf8");
         reversed = true;
+      } else if (result?.reason !== undefined) {
+        patchRefusals.push({ patch: entry, reason: result.reason });
       }
     }
     (reversed ? patchesReversed : patchesDropped).push(entry);
+    // Untrack this entry now, not after the loop. Reversing a patch is a disk write, and
+    // `runRemove` saves the manifest from a `finally`: an entry still listed after its
+    // file was already rewritten is a ledger that lies about disk. Anything this loop
+    // never reached stays tracked, which is the point.
+    manifest.patches = manifest.patches.filter((p) => !samePatchEntry(p, entry));
   }
-  manifest.patches = manifest.patches.filter((p) => p.module !== plan.module);
 
   const prunedDirs = await pruneEmptyDirs(root, [
     ...deleted.map((f) => f.targetAbs),
@@ -327,6 +348,7 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
     linkConflicts,
     patchesReversed,
     patchesDropped,
+    patchRefusals,
     prunedDirs,
     droppedAliases,
   };

@@ -265,13 +265,18 @@ export async function runRemove(argv: string[]): Promise<number> {
     for (const p of result.patchesReversed) {
       log.step(`${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`);
     }
-    // A reversible entry that landed in `patchesDropped` had nothing left to undo —
-    // the link was hand-removed, or the file is gone. Say so rather than claiming a
-    // revert; the non-reversible kinds were already warned about from the plan.
+    // A reversible entry that landed in `patchesDropped` either had nothing left to undo —
+    // the link was hand-removed, or the file is gone — or the inverse refused it, which is
+    // a different thing to say. Never claim a revert; the non-reversible kinds were already
+    // warned about from the plan.
+    const refusals = new Map(result.patchRefusals.map((r) => [r.patch, r.reason]));
     for (const p of result.patchesDropped) {
       if (!isReversibleKind(p.patch.kind)) continue;
+      const reason = refusals.get(p);
       log.warn(
-        `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} was already gone — nothing to revert.`,
+        reason === undefined
+          ? `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} was already gone — nothing to revert.`
+          : `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} left untouched — ${reason}.`,
       );
     }
     for (const dir of result.prunedDirs) {

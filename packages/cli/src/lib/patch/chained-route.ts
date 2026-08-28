@@ -31,6 +31,9 @@ export interface ChainedRoute {
  *   declaration and extend that, so `export type AppType = typeof app` keeps working;
  * - the chain has no `.route()` link yet → this becomes the first one;
  * - import already present → not duplicated;
+ * - the local name is already bound to a *different* import → return `source`
+ *   unchanged, because wiring the route would bind the wrong handler
+ *   (`chainedRouteInsertRefusal` reports why);
  * - export missing or an unrecognised shape → return `source` unchanged.
  */
 export function insertChainedRoute(source: string, patch: ChainedRoute): string {
@@ -41,6 +44,9 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
   for (const link of chainLinks(slot.node)) {
     if (isRouteLink(link, patch.path)) return source; // already routed
   }
+
+  const imports = mod.imports as unknown as ModuleImports;
+  if (bindingConflict(imports, patch)) return source; // wrong binding — never wire it
 
   // Ensure the named import exists (magicast keys imports by local name).
   if (!(patch.import.name in mod.imports)) {
@@ -56,12 +62,36 @@ export function insertChainedRoute(source: string, patch: ChainedRoute): string 
 }
 
 /**
+ * Why `insertChainedRoute` declined to change `source`, or `undefined` when it had no
+ * objection (it applied the link, or the link was already there).
+ *
+ * The codemods are pure `string → string`, so a refusal is indistinguishable from an
+ * idempotent no-op at the call site. `applyPatch` asks this only when nothing changed,
+ * which is what lets `add` warn by name instead of silently skipping a route.
+ */
+export function chainedRouteInsertRefusal(source: string, patch: ChainedRoute): string | undefined {
+  const mod = parseModule(source);
+  const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
+  if (!slot) return undefined; // unrecognised shape, reported by the caller as "missing"
+  for (const link of chainLinks(slot.node)) {
+    if (isRouteLink(link, patch.path)) return undefined; // already routed, not a refusal
+  }
+  return bindingConflict(mod.imports as unknown as ModuleImports, patch);
+}
+
+/**
  * The inverse: drop the `.route()` link matching `path` from the exported chain, and
- * drop the named import it needed. Matched on `path` alone, since that is the key the
- * forward direction is idempotent on.
+ * drop the named import it needed.
+ *
+ * Located by `path`, since that is the key the forward direction is idempotent on, then
+ * **verified against the recorded handler** before anything is deleted. A user who
+ * repointed the route at their own handler owns that line, and drift is surfaced rather
+ * than resolved here.
  *
  * - link already absent → return `source` **unchanged**, so a hand-reverted file is
  *   never force-edited (the remover warns and skips instead);
+ * - the link routes `path` to anything but `call` → return `source` **unchanged**
+ *   (`chainedRouteRemoveRefusal` reports why);
  * - the link is the only one → the bare receiver is left behind (`const app = new
  *   Hono();`), which still parses and typechecks;
  * - the import statement holds other specifiers → only this one is removed;
@@ -85,6 +115,7 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
     holder = link;
   }
   if (!found) return source; // already gone — never force-edit
+  if (handlerDrift(found, patch)) return source; // user's handler — not ours to delete
 
   const receiver = (found.callee as MemberExpression).object;
   if (holder) {
@@ -101,6 +132,77 @@ export function removeChainedRoute(source: string, patch: ChainedRoute): string 
     delete mod.imports[patch.import.name];
   }
   return keepTerminator(source, generateCode(mod).code);
+}
+
+/**
+ * Why `removeChainedRoute` declined to change `source`, or `undefined` when it had no
+ * objection (it removed the link, or the link was already gone). The mirror of
+ * `chainedRouteInsertRefusal`, and the same reason for existing: it tells the remover's
+ * "nothing left to revert" apart from "that route is yours now".
+ */
+export function chainedRouteRemoveRefusal(source: string, patch: ChainedRoute): string | undefined {
+  const mod = parseModule(source);
+  const slot = findChainSlot(mod.$ast as unknown as Program, patch.exportName);
+  if (!slot) return undefined;
+  for (const link of chainLinks(slot.node)) {
+    if (isRouteLink(link, patch.path)) return handlerDrift(link, patch);
+  }
+  return undefined; // already gone, not a refusal
+}
+
+// --- Ownership -------------------------------------------------------------------
+// Both directions key on the route path, and a path is not proof of ownership. These two
+// answer "is this link, or this binding, still the one the manifest recorded?" — the check
+// that keeps a patch from clobbering a hand edit that happens to sit at the same path.
+
+/** Structural view of magicast's import proxy: local name → what it binds. */
+type ModuleImports = Record<string, { imported?: unknown; from?: unknown } | undefined>;
+
+/**
+ * magicast keys imports by *local* name, so `patch.import.name in mod.imports` proves only
+ * that something holds the name — not that it is the binding this patch needs. A file that
+ * already imports `waitlist` from its own module would otherwise get
+ * `.route("/waitlist", waitlist)` wired to the wrong handler, silently. Compare the local
+ * name, the imported name, and the source before reusing a binding.
+ */
+function bindingConflict(imports: ModuleImports, patch: ChainedRoute): string | undefined {
+  const held = imports[patch.import.name];
+  if (!held) return undefined;
+
+  const imported = typeof held.imported === "string" ? held.imported : "";
+  const from = typeof held.from === "string" ? held.from : "";
+  if (imported === patch.import.name && from === patch.import.from) return undefined;
+
+  const bound =
+    imported === "*"
+      ? "as a namespace import"
+      : imported === "default"
+        ? "as a default import"
+        : `as ${JSON.stringify(imported)}`;
+  return `${JSON.stringify(patch.import.name)} is already imported ${bound} from ${JSON.stringify(from)}, so routing ${JSON.stringify(patch.path)} would bind the wrong handler`;
+}
+
+/**
+ * Whether the link found at the recorded path routes it somewhere other than the recorded
+ * handler. Anything that isn't the plain `call` identifier (or dotted path) counts, an
+ * inline arrow included: the second argument is no longer what the manifest recorded.
+ */
+function handlerDrift(link: CallExpression, patch: ChainedRoute): string | undefined {
+  const argument = link.arguments[1];
+  const handler = argument === undefined ? undefined : dottedName(argument);
+  if (handler === patch.call) return undefined;
+  const now = handler === undefined ? "an inline expression" : JSON.stringify(handler);
+  return `${JSON.stringify(patch.path)} now routes to ${now}, not to ${JSON.stringify(patch.call)}`;
+}
+
+/** `waitlist` → "waitlist", `api.waitlist` → "api.waitlist", anything else → undefined. */
+function dottedName(node: AstNode): string | undefined {
+  if (node.type === "Identifier") return (node as Identifier).name;
+  if (node.type !== "MemberExpression") return undefined;
+  const member = node as MemberExpression;
+  if (member.property.type !== "Identifier") return undefined;
+  const object = dottedName(member.object);
+  return object === undefined ? undefined : `${object}.${(member.property as Identifier).name}`;
 }
 
 // recast reprints the whole program, and its printer drops a trailing newline the source

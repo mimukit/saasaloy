@@ -375,6 +375,11 @@ export async function runAdd(argv: string[]): Promise<number> {
     for (const p of result.patchConflicts) {
       log.warn(`Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`);
     }
+    // A refusal is not an idempotent no-op: the patch would have written something wrong,
+    // so nothing was written and nothing was tracked. Name the file and the reason.
+    for (const r of result.patchRefusals) {
+      log.warn(`Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`);
+    }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");
       note(

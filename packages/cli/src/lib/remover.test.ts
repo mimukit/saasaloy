@@ -513,6 +513,100 @@ export default app;
     expect(result.patchesReversed).toHaveLength(1);
     expect(await readFile(abs, "utf8")).not.toContain("waitlist");
   });
+
+  it("leaves a route repointed at the user's own handler, and says why", async () => {
+    const source = `import { Hono } from "hono";
+import { myWaitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", myWaitlist);
+
+export default app;
+`;
+    const abs = await writeEntry(source);
+    const manifest = emptyManifest();
+    const patch = routePatch("waitlist", "/waitlist", "waitlist");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    // The line is the user's now, so it survives — but the record still goes, because
+    // the module is being uninstalled either way.
+    expect(await readFile(abs, "utf8")).toBe(source);
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.reason).toContain("myWaitlist");
+    expect(manifest.patches).toEqual([]);
+  });
+
+  it("untracks each entry as it is handled, so a mid-run failure matches disk", async () => {
+    const abs = await writeEntry(`import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`);
+    // A directory where the second entry expects a file: `pathExists` says yes, the read
+    // throws EISDIR. Any mid-loop I/O failure would do; this one needs no mocking.
+    const broken = "apps/api/src/broken.ts";
+    await mkdir(join(root, ...broken.split("/")), { recursive: true });
+
+    const manifest = emptyManifest();
+    const good = routePatch("waitlist", "/waitlist", "waitlist");
+    const bad: ManifestPatch = {
+      module: "waitlist",
+      file: broken,
+      patch: {
+        file: broken,
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    };
+    manifest.patches.push(good, bad);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+
+    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow();
+
+    // The first entry was reversed on disk, so it must not still be tracked; the second
+    // never completed, so it must be. `runRemove` saves the manifest from a `finally`.
+    expect(await readFile(abs, "utf8")).not.toContain("/waitlist");
+    expect(manifest.patches).toEqual([bad]);
+  });
+
+  it("refuses a patch target reached through a symlink, touching nothing outside the root", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "saasaloy-remove-outside-"));
+    const secret = join(outside, "secret.ts");
+    const original = `export const secret = "untouched";\n`;
+    await writeFile(secret, original, "utf8");
+
+    // A hand-edited or corrupt manifest names an in-root path; the path is a symlink out.
+    const linkAbs = join(root, ...ENTRY_TARGET.split("/"));
+    await mkdir(dirname(linkAbs), { recursive: true });
+    await symlink(secret, linkAbs);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(routePatch("waitlist", "/waitlist", "waitlist"));
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+
+    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow(
+      /symlink/,
+    );
+    expect(await readFile(secret, "utf8")).toBe(original);
+    await rm(outside, { recursive: true, force: true });
+  });
 });
 
 describe("executeRemovePlan — empty-dir pruning", () => {

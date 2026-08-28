@@ -38,6 +38,17 @@ export interface Manifest {
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
 
 /**
+ * Structural equality on the (module, file, patch) triple — good enough since both sides
+ * are parsed from the same registry-item.json descriptor, so key order is stable across a
+ * `--force` re-apply. `add` dedupes new entries with it; `remove` untracks with it, and
+ * needs the structural form rather than reference identity because the plan it walks and
+ * the manifest it edits can be separate loads of the same file.
+ */
+export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
+  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
+}
+
+/**
  * Every module the tool has actually applied to this project, read off what it recorded.
  * A name in `saasaloy.json` `installed[]` that is absent here came from the scaffold
  * template (`web`) or a hand edit: the tool never installed it, so it has no descriptor,

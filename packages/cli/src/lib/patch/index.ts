@@ -1,4 +1,10 @@
-import { insertChainedRoute, removeChainedRoute, type ChainedRoute } from "./chained-route.js";
+import {
+  chainedRouteInsertRefusal,
+  chainedRouteRemoveRefusal,
+  insertChainedRoute,
+  removeChainedRoute,
+  type ChainedRoute,
+} from "./chained-route.js";
 import { toDiff } from "./diff.js";
 import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
 import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
@@ -13,6 +19,8 @@ import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 // would-be content plus a unified diff, and re-running an already-applied patch is a no-op.
 
 export {
+  chainedRouteInsertRefusal,
+  chainedRouteRemoveRefusal,
   insertChainedRoute,
   removeChainedRoute,
   type ChainedRoute,
@@ -40,6 +48,12 @@ export interface PatchResult {
   changed: boolean;
   /** Unified diff of the change; `""` when nothing changed. */
   diff: string;
+  /**
+   * Why an unchanged result was *refused* rather than already-applied — a binding the
+   * patch would have wired wrongly, a route the user repointed. `undefined` for a plain
+   * idempotent no-op, which is the common case and says nothing worth reporting.
+   */
+  reason?: string;
 }
 
 /**
@@ -50,8 +64,13 @@ export interface PatchResult {
  */
 export function applyPatch(source: string, patch: Patch, filename: string): PatchResult {
   const content = applyCodemod(source, patch);
-  const diff = toDiff(source, content, filename);
-  return { content, changed: content !== source, diff };
+  const changed = content !== source;
+  return {
+    content,
+    changed,
+    diff: toDiff(source, content, filename),
+    reason: changed ? undefined : refusalReason(REFUSALS, source, patch),
+  };
 }
 
 function applyCodemod(source: string, patch: Patch): string {
@@ -99,5 +118,39 @@ export function reversePatch(source: string, patch: Patch, filename: string): Pa
   const inverse = INVERSES[patch.kind] as ((source: string, patch: Patch) => string) | undefined;
   if (!inverse) return undefined;
   const content = inverse(source, patch);
-  return { content, changed: content !== source, diff: toDiff(source, content, filename) };
+  const changed = content !== source;
+  return {
+    content,
+    changed,
+    diff: toDiff(source, content, filename),
+    reason: changed ? undefined : refusalReason(REVERSAL_REFUSALS, source, patch),
+  };
+}
+
+// The tables of kind → "why did nothing change?", one per direction. A codemod is pure
+// `string → string`, so a refusal to touch the file looks exactly like an idempotent
+// no-op at the call site; these tell the two apart, so `add` and `remove` can warn by
+// name instead of skipping in silence. Only `chained-route` can refuse today: the other
+// four kinds only ever no-op because their edit is already present, which is not worth
+// reporting. Asking costs a second parse, so both callers ask only when nothing changed.
+type Refusal<K extends PatchKind> = (
+  source: string,
+  patch: Extract<Patch, { kind: K }>,
+) => string | undefined;
+
+const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
+  "chained-route": chainedRouteInsertRefusal,
+};
+
+const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
+  "chained-route": chainedRouteRemoveRefusal,
+};
+
+function refusalReason(
+  table: { [K in PatchKind]?: Refusal<K> },
+  source: string,
+  patch: Patch,
+): string | undefined {
+  const ask = table[patch.kind] as ((source: string, patch: Patch) => string | undefined) | undefined;
+  return ask?.(source, patch);
 }

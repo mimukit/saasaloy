@@ -831,6 +831,43 @@ describe("applier — chained-route end to end", () => {
     expect(manifest.patches).toHaveLength(1);
   });
 
+  it("refuses the route when the entry file binds the name to another module", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const abs = join(root, "apps", "api", "src", "index.ts");
+
+    // Scaffold the api workspace, then plant the conflicting import by hand — the shape a
+    // real project arrives in, where `waitlist` already means something else here.
+    await executePlan(
+      await plan({ install: ["api"], modules: [await apiWorkspace()], config, manifest }),
+      root,
+      config,
+      manifest,
+    );
+    const conflicting = (await readFile(abs, "utf8")).replace(
+      'import { Hono } from "hono";',
+      'import { Hono } from "hono";\nimport { waitlist } from "./legacy.js";',
+    );
+    await writeFile(abs, conflicting, "utf8");
+
+    const second = await plan({
+      install: ["api", "waitlist"],
+      modules: [await apiWorkspace(), await waitlistWithRoute()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(second, root, config, manifest);
+
+    // Wiring `.route("/waitlist", waitlist)` here would bind the legacy module's export.
+    expect(await readFile(abs, "utf8")).toBe(conflicting);
+    expect(result.patched).toHaveLength(0);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.patch.file).toBe(ENTRY_TARGET);
+    expect(result.patchRefusals[0]?.reason).toContain("./legacy.js");
+    // Nothing was applied, so `remove` must not think it has a patch to reverse here.
+    expect(manifest.patches).toHaveLength(0);
+  });
+
   it("appends a second module's link without disturbing the first", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();

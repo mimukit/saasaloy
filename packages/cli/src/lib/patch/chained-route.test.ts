@@ -1,6 +1,12 @@
 import { parseModule } from "magicast";
 import { describe, expect, it } from "vitest";
-import { insertChainedRoute, removeChainedRoute, type ChainedRoute } from "./chained-route.js";
+import {
+  chainedRouteInsertRefusal,
+  chainedRouteRemoveRefusal,
+  insertChainedRoute,
+  removeChainedRoute,
+  type ChainedRoute,
+} from "./chained-route.js";
 
 // The Hono RPC entry shape: a router built once, extended by `.route()` links, exported
 // so `typeof app` can be published as the client's AppType. A feature module adds its
@@ -108,6 +114,67 @@ export default new Hono();
     const out = insertChainedRoute(ENTRY, WAITLIST);
     expect(out).not.toContain("saasaloy");
     expect(out.match(/\/\//g) ?? []).toHaveLength(0);
+  });
+
+  // magicast keys imports by local name, so presence alone is not proof the binding is
+  // the one this patch needs. Wiring the route anyway is the silent-wrong-handler bug.
+  it("refuses when the local name is already imported from another module", () => {
+    const legacy = `import { Hono } from "hono";
+import { waitlist } from "./legacy.js";
+
+const app = new Hono();
+
+export default app;
+`;
+    expect(insertChainedRoute(legacy, WAITLIST)).toBe(legacy);
+    const refusal = chainedRouteInsertRefusal(legacy, WAITLIST);
+    expect(refusal).toContain("./legacy.js");
+    expect(refusal).toContain("/waitlist");
+  });
+
+  it("refuses when the local name is held by a default import", () => {
+    const asDefault = `import { Hono } from "hono";
+import waitlist from "./legacy.js";
+
+const app = new Hono();
+
+export default app;
+`;
+    expect(insertChainedRoute(asDefault, WAITLIST)).toBe(asDefault);
+    expect(chainedRouteInsertRefusal(asDefault, WAITLIST)).toContain("default import");
+  });
+
+  it("refuses when the local name is held by a renamed specifier", () => {
+    const renamed = `import { Hono } from "hono";
+import { legacyWaitlist as waitlist } from "./routes/waitlist.js";
+
+const app = new Hono();
+
+export default app;
+`;
+    expect(insertChainedRoute(renamed, WAITLIST)).toBe(renamed);
+    expect(chainedRouteInsertRefusal(renamed, WAITLIST)).toContain("legacyWaitlist");
+  });
+
+  it("reuses the binding when the existing import is the one it needs", () => {
+    const same = `import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono();
+
+export default app;
+`;
+    const out = insertChainedRoute(same, WAITLIST);
+    expect(out).toContain('.route("/waitlist", waitlist)');
+    expect(out.match(/routes\/waitlist\.js/g) ?? []).toHaveLength(1);
+    expect(chainedRouteInsertRefusal(same, WAITLIST)).toBeUndefined();
+    expect(parses(out)).toBe(true);
+  });
+
+  it("reports no refusal for an idempotent no-op or an absent export", () => {
+    const applied = insertChainedRoute(ENTRY, WAITLIST);
+    expect(chainedRouteInsertRefusal(applied, WAITLIST)).toBeUndefined();
+    expect(chainedRouteInsertRefusal(ENTRY, { ...WAITLIST, exportName: "nope" })).toBeUndefined();
   });
 });
 
@@ -219,6 +286,57 @@ export default app;
     // Dropping the import here would leave `waitlist.middleware` unbound.
     expect(out).toContain('from "./routes/waitlist.js"');
     expect(parses(out)).toBe(true);
+  });
+
+  // The path is the lookup key, not proof of ownership. A route the user repointed is
+  // theirs, and deleting it would be the "silently delete drifted content" failure.
+  it("leaves a route the user repointed at their own handler", () => {
+    const repointed = `import { Hono } from "hono";
+import { myWaitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", myWaitlist);
+
+export default app;
+`;
+    expect(removeChainedRoute(repointed, WAITLIST)).toBe(repointed);
+    const refusal = chainedRouteRemoveRefusal(repointed, WAITLIST);
+    expect(refusal).toContain("myWaitlist");
+    expect(refusal).toContain("/waitlist");
+  });
+
+  it("leaves a route whose handler is now an inline expression", () => {
+    const inline = `import { Hono } from "hono";
+
+const app = new Hono().route("/waitlist", new Hono());
+
+export default app;
+`;
+    expect(removeChainedRoute(inline, WAITLIST)).toBe(inline);
+    expect(chainedRouteRemoveRefusal(inline, WAITLIST)).toContain("inline expression");
+  });
+
+  it("removes a route recorded against a dotted handler", () => {
+    const dotted = `import { Hono } from "hono";
+import { routes } from "./routes/index.js";
+
+const app = new Hono().route("/waitlist", routes.waitlist);
+
+export default app;
+`;
+    const patch: ChainedRoute = {
+      exportName: "default",
+      path: "/waitlist",
+      call: "routes.waitlist",
+      import: { name: "routes", from: "./routes/index.js" },
+    };
+    expect(chainedRouteRemoveRefusal(dotted, patch)).toBeUndefined();
+    const out = removeChainedRoute(dotted, patch);
+    expect(out).not.toContain('.route("/waitlist"');
+    expect(parses(out)).toBe(true);
+  });
+
+  it("reports no refusal when the link is already gone", () => {
+    expect(chainedRouteRemoveRefusal(ENTRY, WAITLIST)).toBeUndefined();
   });
 });
 
