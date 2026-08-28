@@ -29,7 +29,7 @@ Reuse `apps/web`'s package.json and wrangler.jsonc as the scaffold template (scr
 
 Enable better-auth's `admin` plugin in `packages/auth`'s server config and client; add the role column to the auth schema (new migration via the database flow); document the first-admin promotion one-liner in the auth SKILL.md. Verify in `.dev`: a promoted user's session carries `role: "admin"`.
 
-### Phase 2: module descriptor and app scaffold (#87)
+### Phase 2: module descriptor and app scaffold (#87) (built 2026-08-28)
 
 Create `modules/admin/registry-item.json` scaffolding `apps/admin`: `package.json` (`@repo/admin`, react 19.2, TanStack Router/plugin/Query, `@repo/ui`, type-only `@repo/api` and `@repo/auth` devDependencies, `clean`, `dev` on `:3001` strictPort, `build`, `deploy`, `typecheck`), `vite.config.ts` (react + router-plugin + tailwind + `envPrefix: "PUBLIC_"`), `wrangler.jsonc` (static assets, SPA fallback), `tsconfig.json`, `index.html`, `src/main.tsx`, `src/routes/__root.tsx`. Verify: `saasaloy add admin` in `.dev` scaffolds, `pnpm dev` serves the shell on `:3001`, `pnpm build` + `wrangler deploy --dry-run` pass.
 
