@@ -1,0 +1,12 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "database-postgres",
+  "type": "saasaloy:feature",
+  "dependsOn": ["database"],
+  "conflictsWith": ["database-d1"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [],
+  "files": [],
+  "scaffolds": []
+}
