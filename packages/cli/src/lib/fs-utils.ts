@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { access, lstat, mkdir, readdir, readlink, symlink } from "node:fs/promises";
-import { dirname, isAbsolute, relative, resolve, sep } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 /** sha256 hex digest of a string — used to fingerprint managed files in the manifest. */
 export function hashContent(content: string): string {
@@ -40,6 +40,41 @@ export function resolveWithinRoot(root: string, relPosixPath: string): string {
   if (abs !== rootAbs && !abs.startsWith(rootAbs + sep)) reject("path escapes the project root");
 
   return abs;
+}
+
+/**
+ * Reject a path that reaches its target through a symlink, at any component below `root`.
+ *
+ * `resolveWithinRoot` proves only that the *lexical* path stays inside the project. Every
+ * `readFile`/`writeFile` that follows resolves links, so a symlink planted anywhere along
+ * the path turns an in-root state-file entry into a read or write outside the project.
+ * Walk the components from `root` down and refuse the first link found.
+ *
+ * A component that doesn't exist yet ends the walk: there is no link to follow, and
+ * whether the caller may create it is its own question.
+ *
+ * @throws if any component of `abs` below `root` is a symlink.
+ */
+export async function assertNoSymlinkPath(root: string, abs: string): Promise<void> {
+  const rootAbs = resolve(root);
+  const rel = relative(rootAbs, resolve(abs));
+  if (rel === "") return;
+
+  let current = rootAbs;
+  for (const segment of rel.split(sep)) {
+    current = join(current, segment);
+    let stat: Awaited<ReturnType<typeof lstat>>;
+    try {
+      stat = await lstat(current);
+    } catch {
+      return; // not on disk yet — nothing here can be followed
+    }
+    if (stat.isSymbolicLink()) {
+      throw new Error(
+        `Refusing to touch ${JSON.stringify(rel.split(sep).join("/"))}: ${JSON.stringify(segment)} is a symlink, and following it would leave the project root. This usually means the state file that recorded the path is corrupt or was hand-edited.`,
+      );
+    }
+  }
 }
 
 /**

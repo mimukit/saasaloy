@@ -1,8 +1,9 @@
-import { readdir, readFile, rm as rmPath } from "node:fs/promises";
+import { readdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
 import { dirname, join, relative, sep } from "node:path";
-import { classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
+import { assertNoSymlinkPath, classifyLink, hashContent, pathExists, resolveWithinRoot } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
-import type { Manifest, ManifestPatch } from "./manifest.js";
+import { samePatchEntry, type Manifest, type ManifestPatch } from "./manifest.js";
+import { isReversibleKind, reversePatch } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy remove` — mirrors applier.ts's buildPlan/
@@ -46,13 +47,32 @@ export interface PlannedRemoveLink {
   action: LinkRemoveAction;
 }
 
+// How a recorded config patch relates to what's on disk right now:
+//   revert  — a reversible kind with an edit still there → `diff` previews the undo
+//   refused — the inverse declined it; the line is the user's now → `reason` says why
+//   gone    — nothing left to undo (target file absent, or already hand-reverted)
+//   drop    — a kind with no inverse yet (#36) → the record goes, the edit stays
+export type PatchRemoveAction = "revert" | "refused" | "gone" | "drop";
+
+export interface PlannedRemovePatch {
+  /** The manifest entry this untracks. Dropped on execute whatever the action. */
+  entry: ManifestPatch;
+  action: PatchRemoveAction;
+  /** Unified diff of the would-be reversal; `""` for every action but `revert`. */
+  diff: string;
+  /** Why the inverse refused — set only when `action` is `refused`. */
+  reason?: string;
+}
+
 export interface RemovePlan {
   module: string;
   files: PlannedRemoveFile[];
   links: PlannedRemoveLink[];
-  /** This module's entries in manifest.patches — dropped on execute, never reversed
-   *  from here (that's the follow-up issue); the command warns naming each file. */
-  patches: ManifestPatch[];
+  /** This module's entries in manifest.patches, each classified against fresh disk state.
+   *  Every entry is dropped on execute; a `chained-route` entry is also *reversed* on disk
+   *  first (the one kind with an inverse — see `reversePatch`), and `diff` previews that
+   *  reversal so `--dry-run`/`--diff` show the edit rather than only labelling it. */
+  patches: PlannedRemovePatch[];
   /** Installed modules whose lock `dependsOn` names this module — block removal
    *  without `--force`. */
   dependents: string[];
@@ -116,7 +136,11 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
     });
   }
 
-  const patches = manifest.patches.filter((p) => p.module === name);
+  const patches: PlannedRemovePatch[] = [];
+  for (const entry of manifest.patches) {
+    if (entry.module !== name) continue;
+    patches.push(await previewPatchRemoval(root, entry));
+  }
 
   // A reverse-dependency map over the lock's `dependsOn`, restricted to what's
   // actually installed — an uninstalled module's stale dependsOn doesn't matter.
@@ -133,6 +157,28 @@ export async function buildRemovePlan(args: BuildRemovePlanArgs): Promise<Remove
   }
 
   return { module: name, files, links, patches, dependents, missingLockEntries };
+}
+
+/**
+ * Classify one recorded patch against fresh disk state, and preview its reversal.
+ *
+ * `reversePatch` is pure, so the plan can carry the exact edit `--diff` promises without
+ * writing anything — the repo requires every destructive operation to be previewable.
+ * `executeRemovePlan` re-reads and recomputes rather than trusting this diff, because the
+ * file can change between planning and executing.
+ */
+async function previewPatchRemoval(root: string, entry: ManifestPatch): Promise<PlannedRemovePatch> {
+  if (!isReversibleKind(entry.patch.kind)) return { entry, action: "drop", diff: "" };
+
+  const fileAbs = resolveWithinRoot(root, entry.file);
+  if (!(await pathExists(fileAbs))) return { entry, action: "gone", diff: "" };
+  await assertNoSymlinkPath(root, fileAbs);
+
+  const source = await readFile(fileAbs, "utf8");
+  const result = reversePatch(source, entry.patch, entry.file);
+  if (result?.changed) return { entry, action: "revert", diff: result.diff };
+  if (result?.reason !== undefined) return { entry, action: "refused", diff: "", reason: result.reason };
+  return { entry, action: "gone", diff: "" };
 }
 
 export interface ExecuteRemoveArgs {
@@ -160,12 +206,25 @@ export interface RemoveResult {
   linksRemoved: PlannedRemoveLink[];
   /** Symlinks left untouched because something else occupies their path. */
   linkConflicts: PlannedRemoveLink[];
-  /** This module's manifest.patches entries, dropped (never reversed). */
+  /** Patch entries actually undone on disk — a `chained-route` link and its import. */
+  patchesReversed: ManifestPatch[];
+  /** Patch entries untracked without being undone: a kind with no inverse yet (#36),
+   *  a target file that's gone, a link already hand-reverted, or a refusal. The command warns. */
   patchesDropped: ManifestPatch[];
+  /** The subset of `patchesDropped` the inverse codemod actively declined, each with its
+   *  reason — a route the user repointed at their own handler, say. Separates "there was
+   *  nothing left to undo" from "that line is yours now" in what the command prints. */
+  patchRefusals: RemovePatchRefusal[];
   /** Project-relative POSIX directories pruned because this run emptied them. */
   prunedDirs: string[];
   /** saasaloy.json alias names dropped because their prefix directory vanished. */
   droppedAliases: string[];
+}
+
+/** A patch entry left on disk on purpose, and the inverse codemod's account of why. */
+export interface RemovePatchRefusal {
+  patch: ManifestPatch;
+  reason: string;
 }
 
 function toPosixRelative(root: string, abs: string): string {
@@ -280,9 +339,42 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
     delete manifest.links[link.target];
   }
 
-  // Patches are report-only here — dropping the entry isn't a reversal, just
-  // untracking; the command warns naming each file so the user can hand-revert.
-  manifest.patches = manifest.patches.filter((p) => p.module !== plan.module);
+  // Reverse what can be reversed, then untrack every entry either way. Only
+  // `chained-route` has an inverse today (#83); the rest stay report-only until #36
+  // generalises the mechanism, and the command warns naming each file.
+  //
+  // Read fresh disk content rather than trusting the plan, mirroring what `executePlan`
+  // does forward: the file may have been hand-edited since the plan was built. The
+  // codemod is a no-op when the link it recorded is already gone, so a hand-reverted
+  // file is untracked and warned about instead of force-edited.
+  const patchesReversed: ManifestPatch[] = [];
+  const patchesDropped: ManifestPatch[] = [];
+  const patchRefusals: RemovePatchRefusal[] = [];
+  for (const planned of plan.patches) {
+    const entry = planned.entry;
+    const fileAbs = resolveWithinRoot(root, entry.file);
+    let reversed = false;
+    if (await pathExists(fileAbs)) {
+      // `resolveWithinRoot` proves only that the recorded path is lexically inside the
+      // project; the read and write below both follow symlinks. Refuse a linked component
+      // rather than reverse a patch into a file outside the root.
+      await assertNoSymlinkPath(root, fileAbs);
+      const source = await readFile(fileAbs, "utf8");
+      const result = reversePatch(source, entry.patch, entry.file);
+      if (result?.changed) {
+        await writeFile(fileAbs, result.content, "utf8");
+        reversed = true;
+      } else if (result?.reason !== undefined) {
+        patchRefusals.push({ patch: entry, reason: result.reason });
+      }
+    }
+    (reversed ? patchesReversed : patchesDropped).push(entry);
+    // Untrack this entry now, not after the loop. Reversing a patch is a disk write, and
+    // `runRemove` saves the manifest from a `finally`: an entry still listed after its
+    // file was already rewritten is a ledger that lies about disk. Anything this loop
+    // never reached stays tracked, which is the point.
+    manifest.patches = manifest.patches.filter((p) => !samePatchEntry(p, entry));
+  }
 
   const prunedDirs = await pruneEmptyDirs(root, [
     ...deleted.map((f) => f.targetAbs),
@@ -299,7 +391,9 @@ export async function executeRemovePlan(plan: RemovePlan, args: ExecuteRemoveArg
     missingUntracked,
     linksRemoved,
     linkConflicts,
-    patchesDropped: plan.patches,
+    patchesReversed,
+    patchesDropped,
+    patchRefusals,
     prunedDirs,
     droppedAliases,
   };

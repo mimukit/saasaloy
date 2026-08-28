@@ -61,6 +61,14 @@ positional arguments are rejected before any work happens, with exit 1.
 Without `--force`, a module whose graph is fully installed prints `Nothing to do` and
 exits 0.
 
+A module descriptor may declare `conflictsWith`, naming modules it refuses to sit beside.
+`add` checks that list before it writes anything and exits 1 with a message naming both
+modules and the `saasaloy remove` that clears the conflict. The check reads both the
+incoming descriptors and `saasaloy-lock.json`, so it fires whichever module went in first,
+and `--force` does not bypass it. `add` never uninstalls anything to resolve a conflict. A
+module installed before its lock entry existed can't be checked this way; `add` says so and
+proceeds.
+
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
 ## `saasaloy remove`
@@ -76,7 +84,7 @@ positionals are rejected with exit 1.
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is removed. |
-| `--diff` | print the plan plus a deletion diff per file, and stop. Nothing is removed. |
+| `--diff` | print the plan plus a deletion diff per file and a reversal diff per `chained-route` patch, and stop. Nothing is removed. |
 | `--yes`, `-y` | skip every prompt, including the per-file drift confirmation. Drifted files then survive on disk, untracked. |
 | `--force` | remove the module even though other installed modules depend on it. |
 
@@ -157,12 +165,15 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 Two gaps are load-bearing enough to plan around.
 
-**`remove` does not reverse config patches.**
+**`remove` reverses one config patch kind out of five.**
 [#36](https://github.com/mimukit/saasaloy/issues/36). When a module patches a file another
-module owns, `remove` drops the record from the manifest and prints a warning naming the
-file. The edit stays. Removing `email-cloudflare` leaves the `send_email` binding in
-`apps/api/wrangler.jsonc` and the provider registration in `packages/email/src/index.ts`.
-Revert those by hand. Skill links, by contrast, are removed properly.
+module owns, `remove` can only undo the edit for `chained-route`, where it takes the
+`.route()` link back out, and the named import with it when no other code in the file still
+references the identifier. For the other four kinds it drops the record from
+the manifest and prints a warning naming the file, and the edit stays. Removing
+`email-cloudflare` leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
+provider registration in `packages/email/src/index.ts`. Revert those by hand. Skill links,
+by contrast, are removed properly.
 
 **`add` is not transactional.**
 [#49](https://github.com/mimukit/saasaloy/issues/49). If `add` fails partway through, it

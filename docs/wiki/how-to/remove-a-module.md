@@ -30,6 +30,12 @@ saasaloy remove waitlist --dry-run
 saasaloy remove waitlist --diff
 ```
 
+`--diff` shows a deletion diff per file, and for a `chained-route` patch the reversal it
+would apply to the entry file. Each patch is labelled by what will happen to it: `revert`
+when there is an edit to undo, `drift → left` when the line is yours now and the reason
+why, `already gone` when nothing is left to undo, and `untrack` for a patch kind `remove`
+cannot reverse.
+
 ## Hand-edited files
 
 For each drifted file, `remove` asks whether to delete it anyway, defaulting to no. A file
@@ -54,15 +60,21 @@ because it might depend on the target and there is no way to tell.
 ## What stays behind
 
 `remove` cleans up its own files, its skill symlinks, the now-empty directories it
-created, and the `saasaloy.json` aliases whose target directory is gone. Three things it
+created, the `saasaloy.json` aliases whose target directory is gone, and any
+`chained-route` patch the module applied. Reversing that patch always takes the
+`.route()` link out of the entry file. It takes the named import out only when no other
+code still references the identifier, so a hand-written `app.use(waitlist.middleware)`
+is never left unbound. A route you repointed at your own handler is left where it is and
+reported, because the link no longer matches what the manifest recorded. Three things it
 does not touch:
 
-- **Config patches are never reversed.** When a module patched a file another module owns,
-  `remove` prints one warning per patched file and drops the entry from the manifest.
-  Dropping the entry is untracking, not undoing. Removing `email-cloudflare`, for
-  instance, leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the provider
-  entry in `packages/email/src/index.ts` exactly where they were. Revert those by hand.
-  See [Known limitations](../reference.md#known-limitations) for the issue tracking this.
+- **Config patches of every other kind stay.** When a module patched a file another module
+  owns, `remove` prints one warning per patched file and drops the entry from the
+  manifest. Dropping the entry is untracking, not undoing. Removing `email-cloudflare`,
+  for instance, leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
+  provider entry in `packages/email/src/index.ts` exactly where they were. Revert those by
+  hand. See [Known limitations](../reference.md#known-limitations) for the issue tracking
+  this.
 - **npm dependencies stay in your root `package.json`.** `add` merges them in; `remove`
   has no dependency handling at all.
 - **Environment variables you set for the module** are left alone, wherever you put them.

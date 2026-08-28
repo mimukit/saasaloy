@@ -8,9 +8,10 @@ import {
   type Plan,
   type PlannedFile,
 } from "../lib/applier.js";
+import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { loadManifest, managedModules, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
@@ -244,6 +245,28 @@ export async function runAdd(argv: string[]): Promise<number> {
     const graph = await resolveGraph(source, requested);
     prereqs = graph.order.filter((n) => n !== requested);
 
+    // Mutually exclusive modules are refused before anything is written, and `--force`
+    // doesn't bypass it — force means "re-apply this module", not "install it anyway".
+    const manifest = await loadManifest(root);
+    const conflicts = detectConflicts({
+      graph,
+      config,
+      lock,
+      // Only modules this tool applied. The scaffold template lists `web` in `installed[]`
+      // and never writes it a lock entry, so checking every name warns on every add.
+      managed: managedModules(manifest),
+    });
+    if (conflicts.missingLockEntries.length > 0) {
+      log.warn(
+        `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
+          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
+      );
+    }
+    if (conflicts.conflicts.length > 0) {
+      cancel(formatConflicts(conflicts.conflicts, requested));
+      return 1;
+    }
+
     const install = graph.order.filter(
       (n) => !config.installed.includes(n) || (opts.force && n === requested),
     );
@@ -258,7 +281,6 @@ export async function runAdd(argv: string[]): Promise<number> {
       return 0;
     }
 
-    const manifest = await loadManifest(root);
     plan = await buildPlan({
       root,
       install,
@@ -352,6 +374,11 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     for (const p of result.patchConflicts) {
       log.warn(`Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`);
+    }
+    // A refusal is not an idempotent no-op: the patch would have written something wrong,
+    // so nothing was written and nothing was tracked. Name the file and the reason.
+    for (const r of result.patchRefusals) {
+      log.warn(`Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`);
     }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack.map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`).join("\n");

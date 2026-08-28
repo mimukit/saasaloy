@@ -106,8 +106,9 @@ through AST-aware codemods rather than string replacement
 recorded flat in the manifest
 ([ADR 0019](../adr/adr-0019-module-patches-applied-flat-array-2026-07-24.md)).
 
-The asymmetry to know about: patches are applied forward and never reversed on `remove`.
-See [Known limitations](reference.md#known-limitations).
+The asymmetry to know about: a patch is applied forward by every kind, but only
+`chained-route` has an inverse `remove` can run. The other four are dropped from the
+manifest with a warning. See [Known limitations](reference.md#known-limitations).
 
 ## The base is nearly empty
 

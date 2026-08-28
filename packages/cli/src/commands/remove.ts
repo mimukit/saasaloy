@@ -3,12 +3,14 @@ import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { isReversibleKind } from "../lib/patch/index.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   buildRemovePlan,
   executeRemovePlan,
   type FileRemoveAction,
   type LinkRemoveAction,
+  type PatchRemoveAction,
   type PlannedRemoveFile,
   type RemovePlan,
 } from "../lib/remover.js";
@@ -74,6 +76,13 @@ const LINK_ACTION_LABEL: Record<LinkRemoveAction, string> = {
   conflict: pc.yellow("conflict → left"),
 };
 
+const PATCH_ACTION_LABEL: Record<PatchRemoveAction, string> = {
+  revert: pc.red("revert"),
+  refused: pc.yellow("drift → left"),
+  gone: pc.dim("already gone"),
+  drop: pc.dim("untrack"),
+};
+
 // Cap a single file's deletion diff so a big generated file can't flood the terminal
 // (same cap as `add`'s renderDiff).
 const MAX_DIFF_LINES = 60;
@@ -121,9 +130,21 @@ function summarizeRemovePlan(plan: RemovePlan, name: string, yes: boolean): void
     );
   }
 
+  // `chained-route` is the one kind with an inverse, so it's listed as work rather than
+  // warned about; what actually happened is reported post-execute (#83, #36).
+  const reversible = plan.patches.filter((p) => p.action !== "drop");
+  if (reversible.length > 0) {
+    const patchLines = reversible.map(
+      (p) =>
+        `  ${PATCH_ACTION_LABEL[p.action]}  ${p.entry.file} ${pc.dim(`(${p.entry.patch.kind})`)}` +
+        (p.reason === undefined ? "" : `\n    ${pc.dim(p.reason)}`),
+    );
+    note(wrapForNote(patchLines.join("\n")), "Config patches");
+  }
   for (const p of plan.patches) {
+    if (p.action !== "drop") continue;
     log.warn(
-      `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} is not reversed by \`remove\` — hand-revert it if needed.`,
+      `Config patch on ${pc.cyan(p.entry.file)} ${pc.dim(`(${p.entry.patch.kind})`)} is not reversed by \`remove\` — hand-revert it if needed.`,
     );
   }
 }
@@ -190,6 +211,12 @@ export async function runRemove(argv: string[]): Promise<number> {
         if (file.action === "missing") continue;
         note(renderDeleteDiff(file), `${fileActionLabel(file.action, opts.yes)}  ${file.target}`);
       }
+      // A reversal is a destructive edit to someone else's file, so it previews like one.
+      // The diff comes from the plan's pure `reversePatch` run; nothing has been written.
+      for (const p of plan.patches) {
+        if (p.action !== "revert") continue;
+        note(p.diff, `${pc.red("revert")}  ${p.entry.file}`);
+      }
     }
 
     // --dry-run and --diff both preview only; nothing is written.
@@ -250,6 +277,23 @@ export async function runRemove(argv: string[]): Promise<number> {
     }
     for (const link of result.linkConflicts) {
       log.warn(`Skill link ${pc.cyan(link.path)} left untouched — not ours to remove.`);
+    }
+    for (const p of result.patchesReversed) {
+      log.step(`${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`);
+    }
+    // A reversible entry that landed in `patchesDropped` either had nothing left to undo —
+    // the link was hand-removed, or the file is gone — or the inverse refused it, which is
+    // a different thing to say. Never claim a revert; the non-reversible kinds were already
+    // warned about from the plan.
+    const refusals = new Map(result.patchRefusals.map((r) => [r.patch, r.reason]));
+    for (const p of result.patchesDropped) {
+      if (!isReversibleKind(p.patch.kind)) continue;
+      const reason = refusals.get(p);
+      log.warn(
+        reason === undefined
+          ? `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} was already gone — nothing to revert.`
+          : `Config patch on ${pc.cyan(p.file)} ${pc.dim(`(${p.patch.kind})`)} left untouched — ${reason}.`,
+      );
     }
     for (const dir of result.prunedDirs) {
       log.step(`${pc.dim("prune")}  ${dir}`);

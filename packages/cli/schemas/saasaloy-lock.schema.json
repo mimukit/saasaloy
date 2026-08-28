@@ -46,6 +46,15 @@
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9-]*$"
             }
+          },
+          "conflictsWith": {
+            "type": "array",
+            "description": "The module's declared `conflictsWith` list, recorded because descriptors aren't kept after install — this is what lets `add` refuse a conflicting module that goes in second.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
           }
         }
       }

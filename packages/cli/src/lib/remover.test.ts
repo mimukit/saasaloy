@@ -173,7 +173,7 @@ describe("buildRemovePlan — links", () => {
 });
 
 describe("buildRemovePlan — patches", () => {
-  it("collects only this module's manifest.patches entries (report-only)", async () => {
+  it("collects only this module's manifest.patches entries", async () => {
     const manifest = emptyManifest();
     const authPatch: ManifestPatch = {
       module: "auth",
@@ -188,7 +188,100 @@ describe("buildRemovePlan — patches", () => {
     manifest.patches.push(authPatch, billingPatch);
 
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
-    expect(plan.patches).toEqual([authPatch]);
+    expect(plan.patches).toEqual([{ entry: authPatch, action: "drop", diff: "" }]);
+  });
+
+  it("previews a reversible patch as a diff, writing nothing", async () => {
+    const target = "apps/api/src/index.ts";
+    const source = `import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`;
+    const abs = join(root, ...target.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, source, "utf8");
+
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "waitlist",
+      file: target,
+      patch: {
+        file: target,
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    });
+
+    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    expect(plan.patches[0]?.action).toBe("revert");
+    // `--diff` promises the edit, not a label: the removed link has to be in there.
+    expect(plan.patches[0]?.diff).toContain(target);
+    expect(plan.patches[0]?.diff).toContain('.route("/waitlist", waitlist)');
+    // Planning is read-only.
+    expect(await readFile(abs, "utf8")).toBe(source);
+  });
+
+  it("classifies a patch the inverse refuses, with the reason and no diff", async () => {
+    const target = "apps/api/src/index.ts";
+    const abs = join(root, ...target.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(
+      abs,
+      `import { Hono } from "hono";
+import { myWaitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", myWaitlist);
+
+export default app;
+`,
+      "utf8",
+    );
+
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "waitlist",
+      file: target,
+      patch: {
+        file: target,
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    });
+
+    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    expect(plan.patches[0]?.action).toBe("refused");
+    expect(plan.patches[0]?.diff).toBe("");
+    expect(plan.patches[0]?.reason).toContain("myWaitlist");
+  });
+
+  it("classifies a reversible patch whose target file is gone", async () => {
+    const target = "apps/api/src/index.ts";
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "waitlist",
+      file: target,
+      patch: {
+        file: target,
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    });
+
+    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    expect(plan.patches[0]?.action).toBe("gone");
+    expect(plan.patches[0]?.diff).toBe("");
   });
 });
 
@@ -304,7 +397,7 @@ describe("executeRemovePlan — links", () => {
 });
 
 describe("executeRemovePlan — patches", () => {
-  it("drops the module's patch entries and reports them for the command to warn about", async () => {
+  it("drops a kind with no inverse and reports it for the command to warn about", async () => {
     const manifest = emptyManifest();
     const authPatch: ManifestPatch = {
       module: "auth",
@@ -324,7 +417,323 @@ describe("executeRemovePlan — patches", () => {
     const result = await executeRemovePlan(plan, { root, config, manifest, lock });
 
     expect(result.patchesDropped).toEqual([authPatch]);
+    expect(result.patchesReversed).toEqual([]);
     expect(manifest.patches).toEqual([billingPatch]);
+  });
+
+  // #83 Phase 4: the new `package-json-script` kind has no inverse either, so `remove`
+  // must leave the command on disk rather than half-reverting it. Pinning the contract
+  // here means #36 has to change this test deliberately when it generalises reversal.
+  it("leaves a package-json-script command on disk and drops the record", async () => {
+    const target = "apps/api/package.json";
+    const source = '{\n  "name": "@app/api",\n  "scripts": {\n    "db:generate": "drizzle-kit generate"\n  }\n}\n';
+    const abs = join(root, ...target.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, source, "utf8");
+
+    const manifest = emptyManifest();
+    const patch: ManifestPatch = {
+      module: "database",
+      file: target,
+      patch: {
+        file: target,
+        kind: "package-json-script",
+        name: "db:generate",
+        value: "drizzle-kit generate",
+      },
+    };
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["database"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("database", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+    expect(await readFile(abs, "utf8")).toBe(source);
+    expect(manifest.patches).toEqual([]);
+  });
+});
+
+// The one reversible patch kind (#83). Everything else stays drop-and-warn until #36
+// generalises the mechanism, so these tests pin the seam as much as the codemod.
+describe("executeRemovePlan — chained-route reversal", () => {
+  const ENTRY_TARGET = "apps/api/src/index.ts";
+
+  function routePatch(module: string, path: string, call: string): ManifestPatch {
+    return {
+      module,
+      file: ENTRY_TARGET,
+      patch: {
+        file: ENTRY_TARGET,
+        kind: "chained-route",
+        exportName: "default",
+        path,
+        call,
+        import: { name: call, from: `./routes/${call}.js` },
+      },
+    };
+  }
+
+  // The entry file belongs to `api`, not to the module being removed — a patch mutates
+  // another module's file, which is exactly why it isn't manifest-managed.
+  async function writeEntry(content: string): Promise<string> {
+    const abs = join(root, ...ENTRY_TARGET.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, content, "utf8");
+    return abs;
+  }
+
+  it("deletes the .route() link and its import, leaving a file that still compiles", async () => {
+    const abs = await writeEntry(`import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export type AppType = typeof app;
+export default app;
+`);
+    const manifest = emptyManifest();
+    const patch = routePatch("waitlist", "/waitlist", "waitlist");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    const after = await readFile(abs, "utf8");
+    expect(after).not.toContain("waitlist");
+    expect(after).toContain("const app = new Hono();");
+    expect(after).toContain("export type AppType = typeof app;");
+    expect(result.patchesReversed).toEqual([patch]);
+    expect(result.patchesDropped).toEqual([]);
+    expect(manifest.patches).toEqual([]);
+  });
+
+  it("leaves another module's link in the same chain alone", async () => {
+    const abs = await writeEntry(`import { Hono } from "hono";
+import { billing } from "./routes/billing.js";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/billing", billing).route("/waitlist", waitlist);
+
+export default app;
+`);
+    const manifest = emptyManifest();
+    manifest.patches.push(
+      routePatch("waitlist", "/waitlist", "waitlist"),
+      routePatch("billing", "/billing", "billing"),
+    );
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist", "billing"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    const after = await readFile(abs, "utf8");
+    expect(after).toContain('.route("/billing", billing)');
+    expect(after).toContain('from "./routes/billing.js"');
+    expect(after).not.toContain("/waitlist");
+    expect(manifest.patches.map((p) => p.module)).toEqual(["billing"]);
+  });
+
+  it("drops without reverting when the link was already hand-removed", async () => {
+    const source = `import { Hono } from "hono";
+
+const app = new Hono();
+
+export default app;
+`;
+    const abs = await writeEntry(source);
+    const manifest = emptyManifest();
+    const patch = routePatch("waitlist", "/waitlist", "waitlist");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(await readFile(abs, "utf8")).toBe(source);
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+  });
+
+  it("drops without reverting when the target file is gone", async () => {
+    const manifest = emptyManifest();
+    const patch = routePatch("waitlist", "/waitlist", "waitlist");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+  });
+
+  it("reverses against fresh disk content, not the content at plan time", async () => {
+    const abs = await writeEntry(`import { Hono } from "hono";
+
+const app = new Hono();
+
+export default app;
+`);
+    const manifest = emptyManifest();
+    manifest.patches.push(routePatch("waitlist", "/waitlist", "waitlist"));
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+
+    // The link lands between planning and executing — the reversal must still find it.
+    await writeFile(
+      abs,
+      `import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`,
+      "utf8",
+    );
+
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    expect(result.patchesReversed).toHaveLength(1);
+    expect(await readFile(abs, "utf8")).not.toContain("waitlist");
+  });
+
+  it("leaves a route repointed at the user's own handler, and says why", async () => {
+    const source = `import { Hono } from "hono";
+import { myWaitlist } from "./mine.js";
+
+const app = new Hono().route("/waitlist", myWaitlist);
+
+export default app;
+`;
+    const abs = await writeEntry(source);
+    const manifest = emptyManifest();
+    const patch = routePatch("waitlist", "/waitlist", "waitlist");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    // The line is the user's now, so it survives — but the record still goes, because
+    // the module is being uninstalled either way.
+    expect(await readFile(abs, "utf8")).toBe(source);
+    expect(result.patchesReversed).toEqual([]);
+    expect(result.patchesDropped).toEqual([patch]);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.reason).toContain("myWaitlist");
+    expect(manifest.patches).toEqual([]);
+  });
+
+  it("untracks each entry as it is handled, so a mid-run failure matches disk", async () => {
+    const abs = await writeEntry(`import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`);
+    const broken = "apps/api/src/broken.ts";
+    const manifest = emptyManifest();
+    const good = routePatch("waitlist", "/waitlist", "waitlist");
+    const bad: ManifestPatch = {
+      module: "waitlist",
+      file: broken,
+      patch: {
+        file: broken,
+        kind: "chained-route",
+        exportName: "default",
+        path: "/waitlist",
+        call: "waitlist",
+        import: { name: "waitlist", from: "./routes/waitlist.js" },
+      },
+    };
+    manifest.patches.push(good, bad);
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    // Plan while the second target is a readable file, so the failure lands in execute's
+    // loop rather than in the plan's preview. Then swap it for a directory: `pathExists`
+    // still says yes and the read throws EISDIR. Any mid-loop I/O failure would do; this
+    // one needs no mocking.
+    const secondTarget = join(root, ...broken.split("/"));
+    await writeFile(secondTarget, "export default {};\n", "utf8");
+    const plan = await build("waitlist", config, manifest, lock);
+    await rm(secondTarget);
+    await mkdir(secondTarget, { recursive: true });
+
+    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow();
+
+    // The first entry was reversed on disk, so it must not still be tracked; the second
+    // never completed, so it must be. `runRemove` saves the manifest from a `finally`.
+    expect(await readFile(abs, "utf8")).not.toContain("/waitlist");
+    expect(manifest.patches).toEqual([bad]);
+  });
+
+  it("refuses a patch target reached through a symlink, touching nothing outside the root", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "saasaloy-remove-outside-"));
+    const secret = join(outside, "secret.ts");
+    const original = `export const secret = "untouched";\n`;
+    await writeFile(secret, original, "utf8");
+
+    // A hand-edited or corrupt manifest names an in-root path; the path is a symlink out.
+    const linkAbs = join(root, ...ENTRY_TARGET.split("/"));
+    await mkdir(dirname(linkAbs), { recursive: true });
+    await symlink(secret, linkAbs);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(routePatch("waitlist", "/waitlist", "waitlist"));
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+
+    // Planning reads the target to preview the reversal, so it refuses first — the earliest
+    // point at which the link is visible, and before any write could happen.
+    await expect(build("waitlist", config, manifest, lock)).rejects.toThrow(/symlink/);
+    expect(await readFile(secret, "utf8")).toBe(original);
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("refuses at execute too, when the link appears after the plan was built", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "saasaloy-remove-outside-"));
+    const secret = join(outside, "secret.ts");
+    const original = `export const secret = "untouched";\n`;
+    await writeFile(secret, original, "utf8");
+
+    const abs = await writeEntry(`import { Hono } from "hono";
+import { waitlist } from "./routes/waitlist.js";
+
+const app = new Hono().route("/waitlist", waitlist);
+
+export default app;
+`);
+    const manifest = emptyManifest();
+    manifest.patches.push(routePatch("waitlist", "/waitlist", "waitlist"));
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("waitlist", config, manifest, lock);
+
+    // Swap the real file for a link out of the project between plan and execute. Execute
+    // re-checks rather than trusting the plan, so the write never follows it.
+    await rm(abs);
+    await symlink(secret, abs);
+
+    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow(
+      /symlink/,
+    );
+    expect(await readFile(secret, "utf8")).toBe(original);
+    await rm(outside, { recursive: true, force: true });
   });
 });
 

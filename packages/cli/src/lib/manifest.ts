@@ -15,10 +15,11 @@ export interface ManagedEntry {
   hash: string;
 }
 
-// A structural config patch that actually landed on disk, recorded so `remove` can
-// warn the user which files it can't clean up (reversal is the follow-up issue —
-// see the `PlannedPatch` comment in applier.ts). Not itself reversible from this
-// record alone; `patch` is the op as authored, kept for a future reverse-patcher.
+// A structural config patch that actually landed on disk, recorded so `remove` can undo
+// it — or, for a kind with no inverse yet, warn the user which file it can't clean up
+// (see the `PlannedPatch` comment in applier.ts). `patch` is the op as authored, which is
+// what `reversePatch` reads: a `chained-route` entry is reversible from this record alone,
+// the other kinds wait on issue #36.
 export interface ManifestPatch {
   /** Name of the module that applied this patch. */
   module: string;
@@ -35,6 +36,30 @@ export interface Manifest {
 }
 
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
+
+/**
+ * Structural equality on the (module, file, patch) triple — good enough since both sides
+ * are parsed from the same registry-item.json descriptor, so key order is stable across a
+ * `--force` re-apply. `add` dedupes new entries with it; `remove` untracks with it, and
+ * needs the structural form rather than reference identity because the plan it walks and
+ * the manifest it edits can be separate loads of the same file.
+ */
+export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
+  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
+}
+
+/**
+ * Every module the tool has actually applied to this project, read off what it recorded.
+ * A name in `saasaloy.json` `installed[]` that is absent here came from the scaffold
+ * template (`web`) or a hand edit: the tool never installed it, so it has no descriptor,
+ * no lock entry, and nothing to say about conflicts.
+ */
+export function managedModules(manifest: Manifest): Set<string> {
+  const names = new Set<string>();
+  for (const entry of Object.values(manifest.managed)) names.add(entry.module);
+  for (const entry of manifest.patches) names.add(entry.module);
+  return names;
+}
 
 export function emptyManifest(): Manifest {
   return { managed: {}, links: {}, patches: [] };

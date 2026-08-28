@@ -24,6 +24,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | `dependencies[]` | ✅ merged into the root `package.json`'s `dependencies` (you run `pnpm install`) |
 | `devDependencies[]` | ✅ merged into the root `package.json`'s `devDependencies` (`@types/*`, build tooling) |
 | `dependsOn[]` | ✅ resolved recursively + topologically sorted |
+| `conflictsWith[]` | ✅ `add` refuses, before writing anything, when a module you name is already installed |
 | `envVars` | ✅ reported to the user (never written to files) |
 | `scaffolds[]` | ✅ births the workspace (root-relative files + registers its aliases into `saasaloy.json`) (ADR 0013) |
 | `patches` | ✅ applied by the config-patch engine — read file → codemod → write, idempotent (ADR 0019) |
@@ -32,8 +33,10 @@ Consequence to know while authoring: a **capability** whose files all live in `s
 `api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any
 `patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise
 such a module through the `.dev/` playground to see it end to end. A patch mutates a file another
-module owns, so patched files are **not** manifest-tracked as clean copies (reverse-patching on
-`remove` is #27); everything else the applier does is fully described by the descriptor.
+module owns, so patched files are **not** manifest-tracked as clean copies. `remove` reverses one
+patch kind, `chained-route`, and drops the other four with a warning telling the user to
+hand-revert them; generalising the inverse is #36. Everything else the applier does is fully
+described by the descriptor.
 
 ## Shape of a module
 
@@ -101,6 +104,13 @@ Field notes:
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
   skill/README rather than in `dependsOn`.
+- **`conflictsWith`** — modules this one refuses to sit beside, named the same way `dependsOn`
+  names them. Reach for it when two modules are genuinely mutually exclusive: two drivers behind
+  one capability's interface, two mailers a project can only pick one of. `add` refuses with a
+  message naming both modules, before it writes anything, and `--force` does not bypass it.
+  **Declare it on one side only.** The field is recorded into `saasaloy-lock.json`, so the refusal
+  fires in either install order, and declaring it on both sides buys nothing. `add` never
+  auto-resolves a conflict: it refuses and tells the user which `saasaloy remove` clears it.
 - **`dependencies` / `devDependencies`** — npm packages (distinct from `dependsOn`, which is
   *inter-module*), merged into the consumer's `dependencies` / `devDependencies` respectively —
   put `@types/*` and build tooling in `devDependencies[]`. **Both are exact-pinned `name@version`**
@@ -119,7 +129,31 @@ Field notes:
   `@ui`→`packages/ui/src`. Prefer alias targets that land in a convention folder (Step 3).
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
-- **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal.
+- **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal. Each op
+  names its own target `file` and a codemod `kind`; the engine defines the payload per kind:
+
+  | `kind` | What it does | Payload |
+  | --- | --- | --- |
+  | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array | `bindingType`, `entry`, `matchOn` |
+  | `package-json-dependency` | upserts one dependency into a `package.json` section | `section`, `name`, `range` |
+  | `package-json-script` | upserts one entry into a `package.json` `scripts` map | `name`, `value` |
+  | `plugin-array` | appends a call into a TS module's plugin array | `exportName`, `arrayProp`, `call`, `import` |
+  | `chained-route` | appends `.route(path, handler)` to a TS module's exported call chain | `exportName`, `path`, `call`, `import` |
+
+  Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
+  binding name, the dependency name, the script name, the callee, the route path), and an entry
+  already there is left exactly as the user last edited it, so a re-`add` is a byte-for-byte
+  no-op. `chained-route` is the only kind `remove` reverses, taking the link back out, and the
+  named import with it when the file no longer references the binding anywhere else; the other
+  four are dropped from the manifest with a warning until #36 generalises the inverse.
+
+  The match key locates an edit; it does not prove the edit is still yours. `chained-route`
+  checks identity on both sides, and **skips with a warning rather than guessing**: `add`
+  refuses when the entry file already binds your import's local name to a different module,
+  because wiring the route would point it at the wrong handler, and `remove` leaves the link
+  alone when the recorded path now routes to something other than your `call`. Both cases mean
+  a user owns that line. Design the module for the skip: `add` reports the file and the reason,
+  and records nothing, so the user wires it by hand.
 - **`agent.skills[]`** — skill folder(s) under this module (`skills/saasaloy-<name>`) copied into
   the consumer's `.claude/skills/saasaloy-<name>/` by `add` (see Step 4). Module skills are
   **always `saasaloy-`-prefixed** so they can't collide with the user's own installed skills.
@@ -173,8 +207,15 @@ file where a capability already auto-discovers it.
 
 Only when a change is genuinely structural — and no convention exists for it — use a **small,
 tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a plugin inserted into Better
-Auth's array. That's the 10%, not the spine. If you reach for a patch to edit another *module's*
-file, stop — add or use a convention instead.
+Auth's array, a `db:generate` command in the app's `package.json`. That's the 10%, not the spine.
+If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
+
+Registering a route is the one case where both options are open, so pick deliberately. `api`'s
+auto-glob is the default: drop the file, nothing is patched, and `remove` deletes it cleanly.
+Reach for the `chained-route` patch kind only when the entry file must name every route
+*statically*. A typed RPC client derives its types from `typeof app`, and a glob gives it nothing
+to read. That kind is the reversible one, so choosing it costs a codemod on the entry file rather
+than an edit `remove` cannot undo.
 
 ## Step 4 — Contribute agent context
 
@@ -235,7 +276,9 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] Every needed capability is in `dependsOn`; every npm import is exact-pinned in
       `dependencies`/`devDependencies` (`name@version`; `pnpm deps:update` fills versions).
 - [ ] Each `files[]` target uses a `@alias` and lands in a convention folder where possible.
-- [ ] `patches` is empty unless a change is genuinely structural (with a note on why).
+- [ ] `patches` is empty unless a change is genuinely structural (with a note on why), and each op
+      uses a `kind` the engine defines.
+- [ ] `conflictsWith` names any module this one is mutually exclusive with, on one side only.
 - [ ] `envVars` lists any required keys; no secrets baked into files.
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
