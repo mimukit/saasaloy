@@ -84,14 +84,19 @@ headers to prove it.
 // apps/api/src/routes/widgets.ts
 import { Hono } from "hono";
 import { getSession } from "@repo/auth/server";
-import { errorBody } from "@repo/validators/common";
 
 export const widgets = new Hono().get("/", async (c) => {
   const session = await getSession(c.req.raw);
-  if (!session) return c.json(errorBody("unauthorized", "sign in first"), 401);
+  if (!session) return c.json({ error: { code: "unauthorized", message: "sign in first" } }, 401);
   return c.json({ userId: session.user.id }, 200);
 });
 ```
+
+The error body is written out because `auth` depends on `api` and `database` only — a project can
+install auth without the `validators` module, and `@repo/validators` would not resolve. In a
+project that has it, write the same body as `errorBody("unauthorized", "sign in first")` from
+`@repo/validators/common`; the shape is identical either way, and it is the shape api's own error
+handler produces.
 
 `getSession` wraps `auth.api.getSession({ headers })` — the httpOnly cookie rides along on
 `c.req.raw` automatically. No route imports `better-auth` (ADR 0020); everything goes through
