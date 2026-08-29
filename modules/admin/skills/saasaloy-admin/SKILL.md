@@ -44,7 +44,9 @@ export const Route = createFileRoute("/widgets")({
 
 function Widgets() {
   const { data } = useQuery(widgetsQuery);
-  return <main className="mx-auto max-w-3xl px-6 py-10">{data.widgets.length} widgets</main>;
+  // `useQuery` types `data` as `T | undefined` and the repo compiles with `strict`, so read
+  // it through `?.` even when the loader has already filled the cache.
+  return <main className="mx-auto max-w-3xl px-6 py-10">{data?.widgets.length ?? 0} widgets</main>;
 }
 ```
 
@@ -73,19 +75,34 @@ fires. Three outcomes and no fourth:
 
 | Visitor | Outcome |
 |---|---|
-| Anonymous | `redirect({ to: "/login" })`, except on `/login` itself |
-| Signed in, `user.role !== "admin"` | `AccessDenied` renders **in place** |
+| Anonymous | `throw redirect({ to: "/login" })`, except on `/login` itself |
+| Signed in, `user.role !== "admin"` | `throw new NotAdminError(session)` → the root `errorComponent` renders `AccessDenied` **in place** |
 | Signed in, `user.role === "admin"` | the shell renders |
 
 The middle row is the one to keep. A non-admin holds a valid session, so redirecting them to
 `/login` sends them straight back the moment the guard reads it, and the address bar ping-pongs.
 They get a terminal panel with a sign-out button instead.
 
-`src/lib/auth.ts` owns the read. `loadSession()` shares one in-flight promise so a burst of
-navigations costs one round trip, and `forgetSession()` drops it. **Every code path that changes
-who is signed in calls `forgetSession()` before `router.invalidate()`** — invalidating first re-runs
-the guard against the stale cache and undoes the sign-in or sign-out that just happened. `login.tsx`
-and `components/sign-out-button.tsx` both show the order.
+**Every deny is a throw, and that is load-bearing.** `beforeLoad` runs before any loader, but only a
+throw ends the match; a `beforeLoad` that returns normally lets every matched route's `loader` run.
+So the non-admin case is a thrown `NotAdminError` (exported from `__root.tsx`) that the root route's
+`errorComponent` turns into the panel, not a role check inside the component. Deny it in the
+component instead and the loaders of the route the visitor asked for fire first, on their cookie,
+before the panel paints. Keep the check in `beforeLoad` and no child loader runs for anyone the
+guard turns away.
+
+This is a client-side gate over a server-side one, never in place of it. `apps/api` authorizes every
+request on the cookie it receives; the guard only stops this app from asking on a denied visitor's
+behalf.
+
+`src/lib/auth.ts` owns the read. `loadSession()` fetches once per page load and hands the same
+promise to every caller, so a burst of navigations costs one round trip; `forgetSession()` drops it.
+The memo has no expiry by design — a session revoked elsewhere stays cached until a sign-out or a
+reload, which shows up as api calls answering 401 under a shell that still paints, never as access
+a server denied. **Every code path that changes who is signed in calls `forgetSession()` before
+`router.invalidate()`** — invalidating first re-runs the guard against the stale cache and undoes
+the sign-in or sign-out that just happened. `login.tsx` and `components/sign-out-button.tsx` both
+show the order.
 
 The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on
 both halves (`admin()` server-side, `adminClient()` in `packages/auth/src/client.ts`). Drop the
@@ -232,8 +249,10 @@ files.
 - **One `hc` call, in `src/lib/api.ts`.** Import `api`; do not build a second client.
 - **One origin for api and auth**, from `src/lib/auth.ts`'s `apiBaseUrl`. A split origin loses the
   session cookie.
-- **The guard lives in `__root.tsx`'s `beforeLoad`**, and it is default-deny. Do not add a per-route
-  session check, and do not turn `AccessDenied` into a redirect.
+- **The guard lives in `__root.tsx`'s `beforeLoad`**, and it is default-deny. A per-route session
+  check is redundant, because every deny there is a throw and no child loader runs after one. Keep
+  it that way: a deny that returns instead of throwing silently re-opens the loaders it was meant to
+  stop. Do not turn `AccessDenied` into a redirect either.
 - **`forgetSession()` before `router.invalidate()`**, on every sign-in and sign-out path.
 - **Describe a request once with `queryOptions`**, prefetch in the loader, read with `useQuery`,
   refresh by invalidating the key.
