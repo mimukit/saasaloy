@@ -15,11 +15,13 @@
     "@repo/ui": "workspace:*",
     "@tanstack/react-query": "5.102.4",
     "@tanstack/react-router": "1.170.32",
+    "hono": "4.12.33",
     "lucide-react": "1.28.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
+    "@cloudflare/workers-types": "5.20260801.1",
     "@repo/api": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@tailwindcss/vite": "4.3.3",

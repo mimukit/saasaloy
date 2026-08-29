@@ -2,7 +2,13 @@
   "extends": "@repo/tsconfig/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
-    "types": ["vite/client"],
+    // `@cloudflare/workers-types` sits next to `vite/client` for one reason: src/lib/api.ts
+    // imports `AppType` from `@repo/api/client`, and resolving that type makes tsc read
+    // apps/api's whole source graph — including the auth handler it mounts, which imports
+    // `cloudflare:workers` and annotates a `D1Database`. Without these ambient types that
+    // graph fails to typecheck here even though not one byte of it reaches this bundle.
+    // Types only; there is no runtime dependency on the Workers runtime in this app.
+    "types": ["@cloudflare/workers-types", "vite/client"],
     // No `baseUrl` — TypeScript 7 removed it. A relative `paths` entry resolves
     // against this file's own directory, which is what `baseUrl: "."` used to mean.
     "paths": {

@@ -37,7 +37,7 @@ Create `modules/admin/registry-item.json` scaffolding `apps/admin`: `package.jso
 
 `src/lib/auth.ts` wraps `@repo/auth`'s client with `PUBLIC_API_URL`; `src/routes/login.tsx` renders the sign-in form with `@repo/ui` components; the root layout's `beforeLoad` requires an admin-role session and redirects everyone else to `/login` (signed-in non-admins get a denied state, not the shell). Sidebar shell with a user menu and sign-out. Verify in `.dev`: sign up, promote, sign in, guarded redirect for both anonymous and non-admin users, sign out, cookie behaviour across `:3001` → `:4000`.
 
-### Phase 4: typed data layer and dashboard seed (#87)
+### Phase 4: typed data layer and dashboard seed (#87) (built 2026-08-28)
 
 `src/lib/api.ts` exports the `hc<AppType>` client bound to `PUBLIC_API_URL` with `credentials: "include"`; QueryClient provider in `main.tsx`; `src/routes/index.tsx` dashboard calls `/health` through the client and renders the typed response. Document the loader + Query convention. Verify: dashboard renders live api data, and a deliberate schema change in the api surfaces as a type error in admin's `typecheck` (turbo runs it across workspaces, so CI inherits the check).
 
