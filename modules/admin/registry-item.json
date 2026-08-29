@@ -31,5 +31,8 @@
         { "path": "files/src/routes/index.tsx", "target": "src/routes/index.tsx" }
       ]
     }
-  ]
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-admin"]
+  }
 }
