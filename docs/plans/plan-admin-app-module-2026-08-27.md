@@ -41,7 +41,7 @@ Create `modules/admin/registry-item.json` scaffolding `apps/admin`: `package.jso
 
 `src/lib/api.ts` exports the `hc<AppType>` client bound to `PUBLIC_API_URL` with `credentials: "include"`; QueryClient provider in `main.tsx`; `src/routes/index.tsx` dashboard calls `/health` through the client and renders the typed response. Document the loader + Query convention. Verify: dashboard renders live api data, and a deliberate schema change in the api surfaces as a type error in admin's `typecheck` (turbo runs it across workspaces, so CI inherits the check).
 
-### Phase 5: skill, docs, and downstream conventions (#87)
+### Phase 5: skill, docs, and downstream conventions (#87) (built 2026-08-29)
 
 Write `skills/saasaloy-admin/SKILL.md`: the route-file drop convention, the role guard, the typed-client recipe, the `:3001`/`:4000` port and CORS story, the removal caveat for foreign route drops, and deploy. Update `modules/README.md` and the root README table (admin moves from promised to real). Verify: `pnpm deps:verify`, CLI test suite green.
 
