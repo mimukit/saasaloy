@@ -1,11 +1,33 @@
 import type { QueryClient } from "@tanstack/react-query";
-import { Outlet, createRootRouteWithContext, redirect } from "@tanstack/react-router";
+import {
+  type ErrorComponentProps,
+  ErrorComponent,
+  Outlet,
+  createRootRouteWithContext,
+  redirect,
+} from "@tanstack/react-router";
 
 import { AccessDenied } from "@admin/components/access-denied";
 import { AppShell } from "@admin/components/app-shell";
-import { isAdmin, loadSession } from "@admin/lib/auth";
+import { type AdminSession, isAdmin, loadSession } from "@admin/lib/auth";
 
 const LOGIN_PATH = "/login";
+
+/**
+ * Thrown by the guard for a signed-in account that does not carry the admin role. It is an
+ * error rather than a redirect on purpose: a throw stops the router before any child route's
+ * `loader` runs, and the root route's `errorComponent` turns it into a terminal panel. A
+ * redirect would bounce off the valid session and ping-pong the address bar.
+ */
+export class NotAdminError extends Error {
+  readonly session: AdminSession;
+
+  constructor(session: AdminSession) {
+    super("This account does not carry the admin role.");
+    this.name = "NotAdminError";
+    this.session = session;
+  }
+}
 
 /**
  * What every route's `beforeLoad` and `loader` is handed. `src/main.tsx` supplies the
@@ -24,15 +46,19 @@ export interface AdminRouterContext {
 // Default-deny, decided in three cases and nowhere else:
 //
 //   anonymous          → redirect to /login (except on /login itself, which would loop)
-//   signed in, no role → render AccessDenied in place; never redirect
+//   signed in, no role → throw NotAdminError; the errorComponent renders AccessDenied
 //   signed in as admin → render the shell
 //
 // The middle case is the one worth stating out loud. A non-admin holds a valid session, so
 // /login would immediately bounce them back and the browser would ping-pong. They get a
 // terminal screen with a sign-out button instead.
 //
-// The guard runs in `beforeLoad` rather than in the component, so a non-admin never
-// triggers a child route's loader: `beforeLoad` resolves top-down before any loader fires.
+// Every deny is a throw from `beforeLoad`, which is what makes the gate hold for data and
+// not only for pixels. `beforeLoad` resolves top-down and a throw ends the match, so no
+// child route's `loader` runs for a visitor this guard turns away — not for the anonymous
+// one and not for the signed-in non-admin. A component-level deny would let those loaders
+// fire first. The server still authorizes every request; this only stops admin-app code
+// from asking on a denied visitor's behalf.
 export const Route = createRootRouteWithContext<AdminRouterContext>()({
   beforeLoad: async ({ location }) => {
     const session = await loadSession();
@@ -43,27 +69,37 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
       throw redirect({ to: LOGIN_PATH });
     }
 
-    // Already signed in and asking for the login screen. Send them to the dashboard; if the
-    // account is not an admin, the component below turns that into AccessDenied, which is a
-    // stop rather than another hop.
+    // The role check comes before the login-page redirect, so a signed-in non-admin who
+    // opens /login is denied where they stand instead of being sent to / to be denied there.
+    if (!isAdmin(session)) throw new NotAdminError(session);
+
+    // Already signed in as an admin and asking for the login screen: nothing to do there.
     if (onLoginPage) throw redirect({ to: "/" });
 
     return { session };
   },
   component: RootLayout,
+  errorComponent: RootError,
 });
 
 function RootLayout() {
   const { session } = Route.useRouteContext();
 
-  // Only /login reaches this branch: every other path redirected in beforeLoad.
+  // Only /login reaches this branch: every other path redirected in beforeLoad. A non-admin
+  // never reaches this component at all — the guard threw before it rendered.
   if (!session) return <Outlet />;
-
-  if (!isAdmin(session)) return <AccessDenied session={session} />;
 
   return (
     <AppShell session={session}>
       <Outlet />
     </AppShell>
   );
+}
+
+// The root route's error boundary, and the second half of the guard. A NotAdminError is the
+// deny path, so it renders the panel rather than a stack trace; anything else is a real
+// failure and gets the router's own error screen.
+function RootError({ error }: ErrorComponentProps) {
+  if (error instanceof NotAdminError) return <AccessDenied session={error.session} />;
+  return <ErrorComponent error={error} />;
 }
