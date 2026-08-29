@@ -20,29 +20,44 @@ export function SignOutButton({
 }) {
   const router = useRouter();
   const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSignOut() {
     setPending(true);
+    setError(null);
     try {
       await auth.signOut();
       forgetSession();
       await router.invalidate();
       await router.navigate({ to: "/login" });
+    } catch {
+      // `signOut()` rejects rather than resolving with an error when the request never
+      // reaches the api. Say so: the session is still live, and a silent no-op on a
+      // sign-out button reads like the click was lost.
+      setError("Could not reach the api, so you are still signed in. Try again.");
     } finally {
       setPending(false);
     }
   }
 
   return (
-    <Button
-      variant={variant}
-      size="sm"
-      className="w-full justify-start"
-      disabled={pending}
-      onClick={handleSignOut}
-    >
-      <LogOutIcon data-icon="inline-start" />
-      {pending ? "Signing out…" : "Sign out"}
-    </Button>
+    <div className="flex flex-col gap-2">
+      <Button
+        variant={variant}
+        size="sm"
+        className="w-full justify-start"
+        disabled={pending}
+        onClick={handleSignOut}
+      >
+        <LogOutIcon data-icon="inline-start" />
+        {pending ? "Signing out…" : "Sign out"}
+      </Button>
+
+      {error ? (
+        <p role="alert" className="text-destructive text-sm">
+          {error}
+        </p>
+      ) : null}
+    </div>
   );
 }

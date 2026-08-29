@@ -30,22 +30,34 @@ function LoginScreen() {
     setError(null);
     setPending(true);
 
-    const { error: signInError } = await auth.signIn.email({ email, password });
+    try {
+      // Two different failures, and only one of them arrives as a value. A rejected password
+      // resolves with `{ error }`; a request that never reaches the api — down Worker, wrong
+      // PUBLIC_API_URL, CORS refusal — rejects instead, because better-auth leaves the fetch
+      // layer's `catchAllError` off. Without the catch below, that second case would leave
+      // the button stuck on "Signing in…" with nothing on screen to explain it.
+      const { error: signInError } = await auth.signIn.email({ email, password });
 
-    if (signInError) {
-      // better-auth answers a wrong password and an unknown address with the same message on
-      // purpose; repeating it verbatim keeps this screen from becoming an account oracle.
-      setError(signInError.message ?? "Sign-in failed. Check the email and password.");
+      if (signInError) {
+        // better-auth answers a wrong password and an unknown address with the same message on
+        // purpose; repeating it verbatim keeps this screen from becoming an account oracle.
+        setError(signInError.message ?? "Sign-in failed. Check the email and password.");
+        return;
+      }
+
+      // The cookie is set, so the cached session is now wrong. Drop it, re-run the root guard,
+      // and let it decide where this account may go — the shell for an admin, the denied panel
+      // for anyone else. This screen deliberately does not make that call.
+      forgetSession();
+      await router.invalidate();
+      await router.navigate({ to: "/" });
+    } catch {
+      setError(
+        "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev).",
+      );
+    } finally {
       setPending(false);
-      return;
     }
-
-    // The cookie is set, so the cached session is now wrong. Drop it, re-run the root guard,
-    // and let it decide where this account may go — the shell for an admin, the denied panel
-    // for anyone else. This screen deliberately does not make that call.
-    forgetSession();
-    await router.invalidate();
-    await router.navigate({ to: "/" });
   }
 
   return (
