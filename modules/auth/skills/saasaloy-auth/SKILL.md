@@ -168,7 +168,8 @@ The next authed request with that cookie gets `401` from `getSession`.
 ## `@auth/client` — framework-agnostic, for now
 
 `packages/auth/src/client.ts` wraps `createAuthClient` (ships inside `better-auth`, no new npm
-dep). React bindings wait for `add admin`; until then, any vanilla caller:
+dep). There are no React bindings and none are planned — `apps/admin` wraps this client in its own
+`src/lib/auth.ts`, and so does any other vanilla caller:
 
 ```ts
 import { createClient } from "@repo/auth/client";

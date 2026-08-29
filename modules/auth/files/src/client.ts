@@ -2,8 +2,9 @@ import { createAuthClient } from "better-auth/client";
 import { adminClient } from "better-auth/client/plugins";
 
 // Framework-agnostic client (`@auth/client`) — no new npm dep, `createAuthClient`
-// ships inside `better-auth` itself. React bindings wait for `add admin`; until then
-// any vanilla JS/TS caller (or a non-React framework) uses this directly.
+// ships inside `better-auth` itself. There are no React bindings and none are planned:
+// `apps/admin` calls this client directly from its own `src/lib/auth.ts`, and so does any
+// other vanilla JS/TS caller or non-React framework.
 //
 // `baseURL` is the API origin (e.g. https://api.x.com — same origin `BETTER_AUTH_URL`
 // points the server at); `basePath` must match the server's (`/auth`). `credentials:

@@ -20,6 +20,13 @@ is `api` (a capability — it carries `scaffolds[]`; see ADR 0013 for the scaffo
 capability built on a vendor SDK encapsulates it in the workspace it scaffolds — other workspaces
 import its exported utilities, never the vendor package (ADR 0020).
 
+`admin` is the capability that scaffolds `apps/admin` (`@repo/admin`): a TanStack Router + Vite SPA,
+built to static assets and served by a Worker with a single-page-application fallback. It
+`dependsOn` `api` and `auth`, gates every route on `session.user.role === "admin"` in the root
+layout's `beforeLoad`, and calls the api through `hc<AppType>` with `credentials: "include"`. Its
+extension point is a file drop: a feature module writes `src/routes/<feature>.tsx` and the router
+plugin registers it, no patch — the admin-side twin of the schema barrel.
+
 `validators` is the capability that scaffolds `packages/validators` (`@repo/validators`): shared Zod
 input schemas, one file per feature, with `zod` as the only runtime dependency. It `dependsOn` `api`
 and patches `@repo/validators` into `apps/api/package.json`, so api routes validate requests against
