@@ -62,6 +62,8 @@ the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
 in `src/content/`. `apps/web` pulls the theme in once, through the shared layout that
 imports `@repo/ui/globals.css`.
 
+`DESIGN.md` at the repository root records the token values and the rules behind them. Read it before you add or change UI.
+
 Primitives and blocks are reached by subpath — neither is re-exported from the package
 root, so importing one never drags in the rest. The root export is project-wide constants
 only (`siteName`):
@@ -98,8 +100,7 @@ Primitives are source you own. Edit them in place rather than wrapping them.
 **Swapping the whole theme for a preset.** The token set in
 `packages/ui/src/styles/globals.css` is shadcn's `neutral` with `cssVariables: true`, and
 any shadcn **`registry:style`** item is a drop-in replacement for it. The same
-`--filter … exec` form applies — there is no separate theme command, and no Saasaloy one
-either:
+`--filter … exec` form applies — there is no separate theme command:
 
 ```sh
 pnpm --filter @repo/ui exec shadcn add https://tweakcn.com/r/themes/modern-minimal.json
@@ -125,6 +126,8 @@ one works.
 template once; it never comes back to migrate it. A swapped theme is yours to maintain,
 including re-applying anything you had customised in `globals.css` that the preset
 overwrote. Diff the file after running the command rather than assuming.
+
+A preset swap invalidates `DESIGN.md`, which records the token values the old theme had. The `saasaloy-design` skill's `theme` flow runs the command above for you and re-derives the contract from the merged result, so prefer it over running the command by hand. Pick one or the other — running both applies the preset twice.
 
 Light/dark/system switching is unaffected by any of this — it keys off the `.dark` class,
 which every preset keeps.
@@ -223,8 +226,8 @@ that link, which is how a removed section loses its nav entry without editing a 
 the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: that file is
 inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 
-**Making this project yours.** Two skills ship with the base (linked at
-`.claude/skills/`, real files in `.agents/skills/`), and they run in order:
+**Making this project yours.** Three skills ship with the base (linked at
+`.claude/skills/`, real files in `.agents/skills/`). The first two run in order:
 
 1. **`saasaloy-setup`** asks ten questions about the product — starting with its name — and
    writes the answers to `docs/product-brief.md`. Every question carries sample answers you
@@ -234,6 +237,13 @@ inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 2. **`saasaloy-landing-copy`** turns that brief into the landing page's words. It drafts
    into `docs/landing-copy-draft.md` for you to review and edit, then writes
    `packages/ui/src/content/landing.ts` once you approve, then deletes the draft.
+
+The third has no place in that order, because it runs whenever the UI moves:
+
+3. **`saasaloy-design`** keeps `DESIGN.md` true. Its `theme` flow swaps the preset and
+   re-derives the contract; `update` re-derives after you change `globals.css` or add
+   components; `audit` reports where the code and the contract disagree. It reads the
+   product brief when one exists and never writes it.
 
 Invoke them rather than editing eight blocks by hand — and if you do edit by hand, keep the
 strings in the content module so the next pass finds them.
@@ -257,6 +267,7 @@ strings in the content module so the next pass finds them.
 
 ### ✅ Always Do
 
+- Read `DESIGN.md` before writing or changing UI
 - Run `pnpm typecheck` before committing code changes
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)

@@ -23,6 +23,7 @@
 // step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { dirname, join, relative, resolve } from "node:path";
@@ -38,6 +39,7 @@ const PRESET_URL = "https://tweakcn.com/r/themes/modern-minimal.json";
 const playground = join(root, ".dev/playground");
 const playgroundUi = join(playground, "packages/ui");
 const playgroundCss = join(playgroundUi, "src/styles/globals.css");
+const playgroundDesign = join(playground, "DESIGN.md");
 const playgroundComponentsJson = join(playgroundUi, "components.json");
 const playgroundDist = join(playground, "apps/web/dist");
 
@@ -87,6 +89,36 @@ function normalize(css: string): string {
   return css.replace(/\s+/g, "").replace(/(^|[^\d.])0\./g, "$1.");
 }
 
+// Alpha is optional in the syntax and defaults to 1, so an omitted alpha and an
+// explicit `/ 1` are the same color. Carry it through the comparison regardless:
+// dropping it makes an opacity change read as no change, which is the one thing
+// this script exists to catch.
+function parseOklch(value: string): [number, number, number, number] | undefined {
+  const match =
+    /^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\s*\)$/.exec(value);
+  if (!match?.[1] || !match[3] || !match[4]) return undefined;
+  const lightness = Number(match[1]) / (match[2] ? 100 : 1);
+  const alpha = match[5] === undefined ? 1 : Number(match[5]) / (match[6] ? 100 : 1);
+  return [lightness, Number(match[3]), Number(match[4]), alpha];
+}
+
+function sameColor(left: string, right: string): boolean {
+  const parsedLeft = parseOklch(left);
+  const parsedRight = parseOklch(right);
+  if (!parsedLeft || !parsedRight) return normalize(left) === normalize(right);
+  return parsedLeft.every((value, index) => Math.abs(value - parsedRight[index]!) <= 0.001);
+}
+
+function fingerprint(content: string): string {
+  return createHash("sha256").update(content).digest("hex").slice(0, 12);
+}
+
+function readRecordedFingerprint(design: string): string {
+  const match = /tokens sha256:([a-f0-9]{12}) of packages\/ui\/src\/styles\/globals\.css/.exec(design);
+  if (!match?.[1]) fail("DESIGN.md has no valid token fingerprint");
+  return match[1];
+}
+
 // The `--primary: <value>;` declared in a stylesheet's FIRST :root block.
 function readRootPrimary(css: string, source: string): string {
   const rootBlock = /:root\s*\{([\s\S]*?)\}/.exec(css);
@@ -102,7 +134,24 @@ step("scaffolding .dev/playground from the template");
 run("pnpm", ["run", "play:init"], "play:init");
 run("pnpm", ["-C", ".dev/playground", "install"], "playground install");
 
+let designBefore: string;
+try {
+  designBefore = await readFile(playgroundDesign, "utf8");
+} catch {
+  fail("the freshly scaffolded project has no DESIGN.md", "Expected " + relative(root, playgroundDesign) + ".");
+}
+run("pnpm", ["dlx", "@google/design.md", "lint", playgroundDesign], "DESIGN.md lint before preset");
+
 const cssBefore = await readFile(playgroundCss, "utf8");
+const recordedFingerprint = readRecordedFingerprint(designBefore);
+const fingerprintBefore = fingerprint(cssBefore);
+if (recordedFingerprint !== fingerprintBefore) {
+  fail(
+    "the freshly scaffolded DESIGN.md fingerprint does not match globals.css",
+    "recorded " + recordedFingerprint + ", computed " + fingerprintBefore,
+  );
+}
+step("DESIGN.md is present, lint-clean, and current at " + recordedFingerprint);
 const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf8");
 const basePrimary = readRootPrimary(cssBefore, "the freshly scaffolded globals.css");
 
@@ -120,6 +169,15 @@ run(
 
 const cssAfter = await readFile(playgroundCss, "utf8");
 const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf8");
+const fingerprintAfter = fingerprint(cssAfter);
+if (fingerprintAfter === recordedFingerprint) {
+  fail(
+    "the preset changed no bytes covered by the DESIGN.md fingerprint",
+    "The recorded and current fingerprints are both " + recordedFingerprint + ".",
+    "The audit drift check cannot prove staleness with this preset.",
+  );
+}
+step("DESIGN.md drift detected: " + recordedFingerprint + " → " + fingerprintAfter);
 
 // --- Assert the base's own rules survived the merge -------------------------------
 
@@ -161,7 +219,7 @@ for (const [label, pattern] of SINGLETON_BLOCKS) {
 }
 
 const presetPrimary = readRootPrimary(cssAfter, "globals.css after the preset");
-if (normalize(presetPrimary) === normalize(basePrimary)) {
+if (sameColor(presetPrimary, basePrimary)) {
   fail(
     `--primary is still the base value (${basePrimary}) after applying the preset`,
     "The merge preserved the file but changed no tokens, so this check proves nothing.",
@@ -173,26 +231,32 @@ step(`tokens swapped: --primary ${basePrimary} → ${presetPrimary}`);
 
 // --- Build, and assert the swapped token actually reached the output ---------------
 
+run(
+  "pnpm",
+  ["-C", ".dev/playground", "--filter", "@repo/web", "run", "clean"],
+  "playground web clean",
+);
 run("pnpm", ["-C", ".dev/playground", "build"], "playground build");
 run("node", ["scripts/verify-css.ts"], "verify-css");
 
 // Astro inlines small stylesheets straight into the page, so scan both extensions —
 // same reason verify-css does.
-const built = (await collectBuiltFiles(playgroundDist)).map(normalize).join("\n");
+const built = (await collectBuiltFiles(playgroundDist)).join("\n");
+const builtPrimary = readRootPrimary(built, "the built output");
 
 // Assert the preset's own value positively. A bare `--primary:` declaration only proves
 // the build emitted the token; any third value would satisfy it, and that is not what
 // the recipe promises.
-if (!built.includes(normalize(`--primary:${presetPrimary}`))) {
+if (!sameColor(builtPrimary, presetPrimary)) {
   fail(
     "the built CSS does not carry the preset --primary value",
     `Expected ${presetPrimary} under ${relative(root, playgroundDist)}.`,
-    "Either the build did not run, or it re-serialised the value in a way normalize()",
-    "does not yet flatten — check the built output before trusting this failure.",
+    "Either the build did not run, or it serialized the color outside sameColor()'s tolerance.",
+    "Check the built output before trusting this failure.",
   );
 }
 
-if (built.includes(normalize(`--primary:${basePrimary}`))) {
+if (sameColor(builtPrimary, basePrimary)) {
   fail(
     "the built CSS still carries the base --primary value",
     `Expected the preset's ${presetPrimary}, found the template's ${basePrimary}.`,

@@ -9,6 +9,7 @@ import {
   type PlannedFile,
 } from "../lib/applier.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
+import { planWritesUi } from "../lib/design.js";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
 import { loadManifest, managedModules, saveManifest } from "../lib/manifest.js";
@@ -291,6 +292,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     });
 
     summarizePlan(plan, requested, prereqs);
+
+    if (planWritesUi(plan)) {
+      log.info(
+        `This module writes ${pc.cyan("packages/ui/")}. Run ${pc.cyan("/saasaloy-design update")} after it applies.`,
+      );
+    }
 
     if (opts.diff) {
       for (const file of plan.files) {

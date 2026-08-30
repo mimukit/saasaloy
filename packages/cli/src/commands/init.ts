@@ -7,7 +7,7 @@ import pc from "picocolors";
 import type { LinkState } from "../lib/fs-utils.js";
 import { classifyLink, createDirLink, pathExists, readDirNames } from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
-import { copyTemplate } from "../lib/scaffold.js";
+import { copyTemplate, templateVars } from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
@@ -203,7 +203,7 @@ export async function runInit(argv: string[]): Promise<number> {
 
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
-  await copyTemplate(TEMPLATE_DIR, target, { PROJECT_NAME: projectName });
+  await copyTemplate(TEMPLATE_DIR, target, templateVars(projectName));
   s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`);
 
   const skills = await linkAgentSkills(target);

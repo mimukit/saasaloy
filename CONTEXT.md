@@ -91,6 +91,15 @@ A generated project that ships its agent context committed, so any agent tool op
 ### `AGENTS.md` / `CLAUDE.md`
 Committed **static** base files carrying the fixed common project rules; `CLAUDE.md` is a one-line `@AGENTS.md` import. Neither is generated.
 
+### `DESIGN.md`
+The committed design contract at a generated project's root. It pairs machine-readable tokens with the rationale and rules that agents use when they change UI.
+
+### Base-shipped skill
+Agent guidance copied by `init` because every generated project needs it. It differs from a module skill, which arrives only when `saasaloy add` installs its module.
+
+### Token fingerprint
+The first 12 hexadecimal characters of the SHA-256 hash for `packages/ui/src/styles/globals.css`, recorded in `DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
+
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._

@@ -26,6 +26,8 @@ saasaloy add billing        # pulls auth + Stripe
 
 ## UI components
 
+`DESIGN.md` records the project's design tokens and UI rules for people and agents.
+
 `packages/ui` ships a Tailwind 4 theme, a small set of [shadcn](https://ui.shadcn.com)
 primitives, and the marketing blocks the landing page is built from. Import primitives and
 blocks by subpath — neither is re-exported from the package root, which carries
