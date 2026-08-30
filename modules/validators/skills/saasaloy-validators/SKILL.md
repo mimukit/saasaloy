@@ -24,9 +24,7 @@ import { errorBody } from "@repo/validators/common";
 import { signupInput } from "@repo/validators/signup";
 import { Hono } from "hono";
 
-const signup = new Hono();
-
-signup.post(
+export const signup = new Hono().post(
   "/",
   zValidator("json", signupInput, (result, c) => {
     if (!result.success) {
@@ -40,9 +38,9 @@ signup.post(
     return c.json({ email: input.email, name: input.name }, 201);
   },
 );
-
-export default signup;
 ```
+
+One named export, one chained expression. Split the `.post()` into its own `signup.post(...)` statement and the exported type forgets the route, which empties it out of `AppType`. The name has to be an `export const`: the `chained-route` codemod writes `import { signup } from "./routes/signup"` and refuses a default import. See the `saasaloy-api` skill for the full route contract.
 
 `result.error.issues[0]` is possibly undefined under the template's tsconfig, so guard it rather than indexing straight into `.message`.
 

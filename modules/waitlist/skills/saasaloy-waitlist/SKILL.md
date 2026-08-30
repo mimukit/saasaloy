@@ -75,7 +75,7 @@ one of the two 400s ships as plain text.
 
 `packages/validators/src/waitlist.ts` exports `waitlistInput` and `WaitlistInput`. The route does
 not define a local `z.object`. The schema reuses `email` from `@repo/validators/common`, which
-trims and lowercases before parsing, so `A@B.com ` and `a@b.com` reach the unique column as the
+trims and lowercases before parsing, so `"A@B.com "` and `a@b.com` reach the unique column as the
 same value. Widen the accepted input by editing that file, not the route.
 
 ## `PUBLIC_API_URL`
