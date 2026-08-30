@@ -210,7 +210,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         cancel("remove cancelled");
         return 1;
       }
-      name = picked as string;
+      name = picked;
     }
 
     if (!config.installed.includes(name)) {

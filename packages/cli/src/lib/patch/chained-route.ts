@@ -52,7 +52,7 @@ export function insertChainedRoute(
     } // already routed
   }
 
-  const imports = mod.imports as unknown as ModuleImports;
+  const imports = mod.imports;
   if (insertBindingConflict(imports, patch)) {
     return source;
   } // wrong binding — never wire it
@@ -92,7 +92,7 @@ export function chainedRouteInsertRefusal(
       return undefined;
     } // already routed, not a refusal
   }
-  return insertBindingConflict(mod.imports as unknown as ModuleImports, patch);
+  return insertBindingConflict(mod.imports, patch);
 }
 
 /**
@@ -146,7 +146,7 @@ export function removeChainedRoute(
   // The link can read exactly as written while meaning something else: repointing the
   // import changes what `waitlist` resolves to without touching the `.route()` line. That
   // makes both the link and the import the user's, so neither is ours to delete.
-  if (removeBindingConflict(mod.imports as unknown as ModuleImports, patch)) {
+  if (removeBindingConflict(mod.imports, patch)) {
     return source;
   }
 
@@ -188,8 +188,7 @@ export function chainedRouteRemoveRefusal(
   for (const link of chainLinks(slot.node)) {
     if (isRouteLink(link, patch.path)) {
       return (
-        handlerDrift(link, patch) ??
-        removeBindingConflict(mod.imports as unknown as ModuleImports, patch)
+        handlerDrift(link, patch) ?? removeBindingConflict(mod.imports, patch)
       );
     }
   }
