@@ -76,10 +76,13 @@ export function createAuthState(): AuthState {
 // Where to send someone after they sign in. The value comes from the `redirect`
 // search param, which means it comes from the URL bar and an attacker can put
 // anything in it: `https://evil.com` and the protocol-relative `//evil.com` are both
-// values a naive `startsWith("/")` check would happily forward to. Anything that is
+// values a naive `startsWith("/")` check would happily forward to. `/\evil.com` is
+// the same attack wearing a backslash — the WHATWG URL parser treats `\` as `/` for
+// http(s), so it resolves to the same off-site origin `//` does. Anything that is
 // not a single-slash-prefixed path inside this app collapses to the dashboard.
 export function safeRedirect(target: string | undefined): string {
-  if (!target || !target.startsWith("/") || target.startsWith("//")) return "/";
+  if (!target || !target.startsWith("/")) return "/";
+  if (target[1] === "/" || target[1] === "\\") return "/";
   return target;
 }
 
