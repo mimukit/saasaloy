@@ -28,6 +28,10 @@ amendment carves out exactly one exception, and a new provider must land inside 
 - **Stateless third-party services may be multi-provider** when the capability owns the
   abstraction — sending email, sending an SMS. There is no migration; the endpoint is
   interchangeable.
+- A sink that isn't a third-party service at all — `logger-console` writes to the platform's own
+  log pipeline — sits comfortably *inside* the amendment rather than at its edge. It is stateless
+  and carries nothing to migrate; the test the amendment is really applying is "would swapping this
+  be a data migration?", not "is there a vendor?".
 
 A stateful capability can still offer a **choice made once, at install time**, without becoming
 multi-provider. That is a driver module, and `database-d1` / `database-postgres` are the only pair
@@ -92,8 +96,8 @@ one is its own module:
 
 ## Mode: `email`
 
-The only mode implemented today. Add a new mode here (`sms`, `kv`, …) when a second capability
-grows a provider interface; keep the shared rules above in one place and each mode concrete.
+Add a new mode here (`sms`, `kv`, …) when another capability grows a provider interface; keep the
+shared rules above in one place and each mode concrete.
 
 **Interface:** `EmailProvider` in `packages/email/src/provider.ts`.
 
@@ -166,13 +170,80 @@ cooldown and within-major gate as everything else (ADR 0016, amended for #85). T
 one place drift went unnoticed. It no longer is, which also means a patch missing `name`, `range`
 or a `section` naming a real dependency map now fails the run outright.
 
+## Mode: `logger`
+
+**Interface:** `LogProvider` in `packages/logger/src/provider.ts`. A log sink — `console`, and the
+`logger-pino` / remote-ingest providers that will follow.
+
+```ts
+import type { LoggerEnv, LogEvent, LogProvider } from "../provider";
+
+export function axiom(): LogProvider {
+  return {
+    name: "axiom", // the value LOGGER_PROVIDER must hold to select this provider
+    write(env: LoggerEnv, event: LogEvent): void {
+      // …hand the already-normalized event to the sink. No return value.
+    },
+  };
+}
+```
+
+The interface diverges from `email`'s in four ways, and each one is a way to get a `logger-<x>`
+wrong:
+
+- **`write` is synchronous and returns `void`.** Not `async`, not a `Promise`. A log call is not
+  something a caller awaits, and an async `write` would either force `await log.info(...)` at every
+  call site or leak a floating promise on a Worker that may be killed before it settles. A provider
+  that ships logs off-box owns its own **batching** behind this signature — one `fetch` per line is
+  a subrequest per line, and Workers cap subrequests per invocation. There is no `ExecutionContext`
+  argument today; widening later (`write(env, event, ctx?)`) is non-breaking, so don't invent one.
+- **There is no error type to normalize into.** No `LoggerError`, no `retryable`, no `providerCode`.
+  The core wraps every `write` in a `try/catch` and **swallows** whatever escapes, deliberately: a
+  logger that throws is a self-inflicted outage. The corollary is that a broken provider fails
+  *silently* — test it against a real sink, because nothing will tell you.
+- **The event arrives fully normalized.** The `LOG_LEVEL` threshold has already been applied, bound
+  and call-site fields are already merged, **redaction has already run**, `time` is stamped, and an
+  `Error` passed as `err` is already `{ name, message, stack, cause? }`. Don't re-filter by level,
+  don't re-serialize, and above all don't add a redaction pass of your own — the core owns it, and a
+  second one just costs CPU per line.
+- **A missing `LOGGER_PROVIDER` doesn't throw.** Unset selects the first registered provider, so
+  install order can decide which sink is live. Give the provider a `name` that reads well in a
+  config (`console`, `axiom`, `pino`) and document it in the capability's provider table.
+
+Descriptor — `logger-console` is the whole shape, and it is the minimal one (no dependency, no
+secret, no binding):
+
+```jsonc
+{
+  "name": "logger-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["logger"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    { "file": "packages/logger/src/index.ts", "kind": "plugin-array",
+      "exportName": "logger", "arrayProp": "providers", "call": "consoleLogger",
+      "import": { "name": "consoleLogger", "from": "./providers/console" } }
+  ],
+  "files": [{ "path": "files/console.ts", "target": "@logger/providers/console.ts" }],
+  "scaffolds": []
+}
+```
+
+An HTTP-ingest provider adds the `package-json-dependency` patch (into `packages/logger`'s own
+`package.json`, exact-pinned) and its `envVars`, exactly as `email-resend` does above.
+
+One non-obvious rule for this capability: **log the event object, don't `JSON.stringify` it**, if
+your sink is `console`. Workers Logs extracts and indexes the fields of a logged object; a
+pre-stringified line arrives as one opaque string that only a full-text match can find.
+
 ## Verify before you call it done
 
 The install path a provider must survive is a **clean project**, one command:
 
 ```sh
 pnpm play:reset
-cd .dev/playground && ./saasaloy add email-<provider>
+cd .dev/playground && ./saasaloy add email-<provider>   # or logger-<provider>
 ```
 
 That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches
