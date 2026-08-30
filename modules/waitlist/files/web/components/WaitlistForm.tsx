@@ -1,5 +1,6 @@
 import { hc } from "hono/client";
-import { useState, type FormEvent } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
 import type { AppType } from "@repo/api/client";
 import { Button } from "@repo/ui/components/button";

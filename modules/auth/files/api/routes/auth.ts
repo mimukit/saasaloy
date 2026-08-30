@@ -15,4 +15,6 @@ import { auth } from "@repo/auth/server";
 //
 // The export is named, not default: the codemod writes `import { authRoute } from
 // "./routes/auth"` and refuses to wire a link whose binding is a default import.
-export const authRoute = new Hono().on(["GET", "POST"], "/*", (c) => auth.handler(c.req.raw));
+export const authRoute = new Hono().on(["GET", "POST"], "/*", (c) =>
+  auth.handler(c.req.raw)
+);

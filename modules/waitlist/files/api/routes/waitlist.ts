@@ -1,5 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
-import { getDb, type DbBindings } from "@repo/db/client";
+import { getDb } from "@repo/db/client";
+import type { DbBindings } from "@repo/db/client";
 import { waitlist as waitlistTable } from "@repo/db/schema/waitlist";
 import { errorBody } from "@repo/validators/common";
 import { waitlistInput } from "@repo/validators/waitlist";
@@ -27,7 +28,9 @@ export const waitlist = new Hono<{ Bindings: DbBindings }>().post(
   zValidator("json", waitlistInput, (result, c) => {
     if (!result.success) {
       const issue = result.error.issues[0];
-      const message = issue ? `${issue.path.join(".")}: ${issue.message}` : "invalid request body";
+      const message = issue
+        ? `${issue.path.join(".")}: ${issue.message}`
+        : "invalid request body";
       return c.json(errorBody("invalid_input", message), 400);
     }
   }),
@@ -38,10 +41,13 @@ export const waitlist = new Hono<{ Bindings: DbBindings }>().post(
     // Idempotent: a duplicate email is a conflict Drizzle silently no-ops, not an error —
     // the visitor sees the same 201 response, no membership leak. A 409 here would tell an
     // unauthenticated caller whether an address is already on the list.
-    await db.insert(waitlistTable).values({ email, createdAt: new Date() }).onConflictDoNothing();
+    await db
+      .insert(waitlistTable)
+      .values({ email, createdAt: new Date() })
+      .onConflictDoNothing();
 
     // Pass the status explicitly. `hc` keys the response type by status code, so an omitted
     // `201` leaves the caller with a looser type than the route actually has.
     return c.json({ ok: true }, 201);
-  },
+  }
 );
