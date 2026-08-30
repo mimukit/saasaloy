@@ -140,6 +140,10 @@ vite.config.ts.timestamp-*
 count.txt
 todos.json
 routeTree.gen.ts
+# ...except the copy the admin module ships. It is scaffold source, not build output:
+# a consumer needs it on disk before Vite has ever run, or `tsc --noEmit` fails on a
+# fresh checkout. Regenerate it by running `pnpm build` in .dev/playground's apps/admin.
+!modules/admin/files/src/routeTree.gen.ts
 
 # DynamoDB Local
 .dynamodb/

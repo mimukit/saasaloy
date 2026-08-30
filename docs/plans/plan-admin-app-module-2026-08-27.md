@@ -25,23 +25,23 @@ The README promises an `admin` capability (`apps/admin`, TanStack Router + Vite 
 
 Reuse `apps/web`'s package.json and wrangler.jsonc as the scaffold template (scripts, `clean`, static-assets deploy), `@repo/ui` for Tailwind 4.3 + shadcn components, `@repo/auth/client` for sessions, and the `package-json-dependency` patch kind for the workspace deps. The `create-module` skill authors the descriptor.
 
-### Phase 1: auth module gains the admin role (#87)
+### Phase 1: auth module gains the admin role (#87) (built 2026-08-28)
 
 Enable better-auth's `admin` plugin in `packages/auth`'s server config and client; add the role column to the auth schema (new migration via the database flow); document the first-admin promotion one-liner in the auth SKILL.md. Verify in `.dev`: a promoted user's session carries `role: "admin"`.
 
-### Phase 2: module descriptor and app scaffold (#87)
+### Phase 2: module descriptor and app scaffold (#87) (built 2026-08-28)
 
 Create `modules/admin/registry-item.json` scaffolding `apps/admin`: `package.json` (`@repo/admin`, react 19.2, TanStack Router/plugin/Query, `@repo/ui`, type-only `@repo/api` and `@repo/auth` devDependencies, `clean`, `dev` on `:3001` strictPort, `build`, `deploy`, `typecheck`), `vite.config.ts` (react + router-plugin + tailwind + `envPrefix: "PUBLIC_"`), `wrangler.jsonc` (static assets, SPA fallback), `tsconfig.json`, `index.html`, `src/main.tsx`, `src/routes/__root.tsx`. Verify: `saasaloy add admin` in `.dev` scaffolds, `pnpm dev` serves the shell on `:3001`, `pnpm build` + `wrangler deploy --dry-run` pass.
 
-### Phase 3: guarded shell (#87)
+### Phase 3: guarded shell (#87) (built 2026-08-28)
 
 `src/lib/auth.ts` wraps `@repo/auth`'s client with `PUBLIC_API_URL`; `src/routes/login.tsx` renders the sign-in form with `@repo/ui` components; the root layout's `beforeLoad` requires an admin-role session and redirects everyone else to `/login` (signed-in non-admins get a denied state, not the shell). Sidebar shell with a user menu and sign-out. Verify in `.dev`: sign up, promote, sign in, guarded redirect for both anonymous and non-admin users, sign out, cookie behaviour across `:3001` → `:4000`.
 
-### Phase 4: typed data layer and dashboard seed (#87)
+### Phase 4: typed data layer and dashboard seed (#87) (built 2026-08-28)
 
 `src/lib/api.ts` exports the `hc<AppType>` client bound to `PUBLIC_API_URL` with `credentials: "include"`; QueryClient provider in `main.tsx`; `src/routes/index.tsx` dashboard calls `/health` through the client and renders the typed response. Document the loader + Query convention. Verify: dashboard renders live api data, and a deliberate schema change in the api surfaces as a type error in admin's `typecheck` (turbo runs it across workspaces, so CI inherits the check).
 
-### Phase 5: skill, docs, and downstream conventions (#87)
+### Phase 5: skill, docs, and downstream conventions (#87) (built 2026-08-29)
 
 Write `skills/saasaloy-admin/SKILL.md`: the route-file drop convention, the role guard, the typed-client recipe, the `:3001`/`:4000` port and CORS story, the removal caveat for foreign route drops, and deploy. Update `modules/README.md` and the root README table (admin moves from promised to real). Verify: `pnpm deps:verify`, CLI test suite green.
 

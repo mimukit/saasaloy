@@ -1,0 +1,59 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "admin",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api", "auth"],
+  "dependencies": [],
+  "envVars": {
+    "PUBLIC_API_URL": "Origin the admin SPA calls for api and auth requests (e.g. https://api.x.com). Falls back to http://localhost:4000 in dev. The `PUBLIC_` prefix is what vite.config.ts exposes to the browser bundle."
+  },
+  "patches": [],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "apps/admin",
+      "aliases": { "@admin": "apps/admin/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
+        { "path": "files/vite.config.ts", "target": "vite.config.ts" },
+        { "path": "files/index.html", "target": "index.html" },
+        { "path": "files/src/main.tsx", "target": "src/main.tsx" },
+        {
+          "path": "files/src/routeTree.gen.ts",
+          "target": "src/routeTree.gen.ts"
+        },
+        { "path": "files/src/lib/auth.ts", "target": "src/lib/auth.ts" },
+        { "path": "files/src/lib/api.ts", "target": "src/lib/api.ts" },
+        {
+          "path": "files/src/components/app-shell.tsx",
+          "target": "src/components/app-shell.tsx"
+        },
+        {
+          "path": "files/src/components/access-denied.tsx",
+          "target": "src/components/access-denied.tsx"
+        },
+        {
+          "path": "files/src/components/sign-out-button.tsx",
+          "target": "src/components/sign-out-button.tsx"
+        },
+        {
+          "path": "files/src/routes/__root.tsx",
+          "target": "src/routes/__root.tsx"
+        },
+        {
+          "path": "files/src/routes/login.tsx",
+          "target": "src/routes/login.tsx"
+        },
+        {
+          "path": "files/src/routes/index.tsx",
+          "target": "src/routes/index.tsx"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-admin"]
+  }
+}

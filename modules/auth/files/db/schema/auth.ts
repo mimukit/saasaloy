@@ -2,7 +2,8 @@ import { sql } from "drizzle-orm";
 import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // Hand-authored Drizzle snapshot of Better Auth's core schema (user/session/account/
-// verification), pinned to better-auth@1.6.23 (packages/auth/package.json) — NOT
+// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.6.25
+// (packages/auth/package.json) — NOT
 // generated at `add` time (no exec, deterministic, `--diff`-able; see the auth plan's
 // "Auth schema" decision). Column-for-column against that version's
 // `getAuthTables()` (@better-auth/core/db) plus its Drizzle-adapter SQLite type
@@ -10,7 +11,12 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // {mode:"timestamp_ms"} — NOT "timestamp": Better Auth's default date values are
 // millisecond epoch integers, so "timestamp" (seconds) would silently corrupt every
 // date). A `better-auth` version bump implies re-verifying this file against the new
-// version's schema — fix the snapshot, not the adapter config, on mismatch.
+// version's schema — fix the snapshot, not the adapter config, on mismatch. The admin
+// fields come from that plugin's own `schema` export (`better-auth/plugins`, admin/
+// schema.ts) and are marked inline below; re-verify them on a bump too. Note the
+// Drizzle *property* name is what the adapter matches (`banReason`), not the SQL column
+// name (`ban_reason`) — the adapter does no case conversion, so renaming a property
+// silently detaches the field.
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this
 // file into `packages/db/src/schema/` means database's existing barrel + migration
@@ -34,6 +40,14 @@ export const user = sqliteTable("user", {
     .notNull()
     .default(createdAtDefault)
     .$onUpdate(() => new Date()),
+  // --- admin plugin (`admin()` in packages/auth/src/auth.ts) ---
+  // Nullable on purpose: the plugin writes the default role `"user"` in its own
+  // create hook, so a DB-level default would only mask a plugin that got removed.
+  // `role` is the single field the admin app's guard reads (`role === "admin"`).
+  role: text("role"),
+  banned: integer("banned", { mode: "boolean" }).default(false),
+  banReason: text("ban_reason"),
+  banExpires: timestampMs("ban_expires"),
 });
 
 export const session = sqliteTable(
@@ -52,6 +66,9 @@ export const session = sqliteTable(
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
+    // --- admin plugin --- set only while an admin impersonates this user; the
+    // plugin hides impersonated sessions from `listSessions` by reading it.
+    impersonatedBy: text("impersonated_by"),
   },
   (table) => [index("session_user_id_idx").on(table.userId)]
 );
