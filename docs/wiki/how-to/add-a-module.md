@@ -31,6 +31,10 @@ Before writing anything, `add` prints what it intends to do:
   ships an agent skill.
 - **Config patches** — edits to files another module already owns.
 
+When the plan writes into `packages/ui/`, `add` also reminds you to run the
+`/saasaloy-design update` skill afterwards, because those writes can invalidate the
+project's `DESIGN.md`.
+
 Then it asks `Proceed?`. Answer no and nothing is written.
 
 Run `add` with no module name and you get a picker over the registry instead.
@@ -120,4 +124,4 @@ rough edges in that model are tracked in
 - [Architecture](../architecture.md) for what the applier does with hashes and aliases
 - [Reference](../reference.md#saasaloy-add) for the full flag list
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`0f8b7a7` on 2026-08-30._

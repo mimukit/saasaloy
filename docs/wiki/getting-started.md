@@ -83,11 +83,13 @@ my-app/
   apps/web/            Astro landing page (port 3000)
   packages/ui/         shared React + Tailwind components
   packages/tsconfig/   shared TypeScript configs
+  DESIGN.md            the design contract, derived from what packages/ui ships
   saasaloy.json        alias map + the list of installed modules
   turbo.json
 ```
 
-That is the whole base: a landing page and the two packages it leans on. There is no API,
+That is the whole base: a landing page, the two packages it leans on, and a design
+contract (`DESIGN.md`, kept current by the bundled `saasaloy-design` skill). There is no API,
 no database and no auth yet, on purpose. Those are modules, and you install the ones you
 need.
 
@@ -109,4 +111,4 @@ cd /path/to/saasaloy
 pnpm cli:unlink
 ```
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`0f8b7a7` on 2026-08-30._

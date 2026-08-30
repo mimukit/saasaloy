@@ -10,6 +10,11 @@ pages:
       - packages/cli/package.json
       - packages/cli/src/commands/init.ts
       - packages/cli/templates/base/**
+  - path: modules.md
+    mode: reference
+    documents:
+      - modules/*/registry-item.json
+      - modules/README.md
   - path: how-to/add-a-module.md
     mode: how-to
     documents:
