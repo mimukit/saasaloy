@@ -279,6 +279,10 @@ export default defineConfig({
       ],
       plugins: ["vitest"],
       rules: {
+        // A test that asserts on help output has to swap `console.log` for a capture
+        // and swap it back. That is the assertion, not stray debug output, and the
+        // rule cannot tell the two apart.
+        "no-console": "off",
         "vitest/max-expects": "off",
         "vitest/require-top-level-describe": "off",
       },
@@ -286,10 +290,11 @@ export default defineConfig({
 
     // --- no-console exemptions ---------------------------------------------
     // Terminal UX is the product here: @clack/prompts + picocolors write to the
-    // console by design (ADR 0009). Note this is `index.ts` only — every other
-    // file under packages/cli/src goes through lib/logger.ts.
+    // console by design (ADR 0009). Note this is the entrypoint pair only —
+    // `index.ts` bootstraps and `cli.ts` prints help and the unknown-command error.
+    // Every other file under packages/cli/src goes through lib/logger.ts.
     {
-      files: ["packages/cli/src/index.ts"],
+      files: ["packages/cli/src/index.ts", "packages/cli/src/cli.ts"],
       rules: { "no-console": "off" },
     },
     // Maintainer tooling — these scripts *are* their output.

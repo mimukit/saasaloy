@@ -1,68 +1,9 @@
 #!/usr/bin/env node
-// saasaloy CLI entrypoint. Thin dispatcher; each command lives in commands/.
-// Roadmap (docs/plans/plan-saasaloy-build-spec-2026-07-21.md): Phase 0 `init`, Phase 1 `add`/`list`.
+// saasaloy CLI entrypoint. Bootstrap only: it resolves an exit code and hands it to
+// process.exit. Argument dispatch lives in cli.ts and the command registry in
+// commands/index.ts, so both can be imported by a test without running the CLI.
 
-import pc from "picocolors";
-import { runAdd } from "./commands/add.js";
-import { runInit } from "./commands/init.js";
-import { runList } from "./commands/list.js";
-import { runRemove } from "./commands/remove.js";
-
-interface Command {
-  describe: string;
-  run: (argv: string[]) => Promise<number> | number;
-}
-
-const COMMANDS: Record<string, Command> = {
-  add: {
-    describe: "apply a module into the current project (resolves dependsOn)",
-    run: runAdd,
-  },
-  init: {
-    describe:
-      "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
-    run: runInit,
-  },
-  list: {
-    describe: "list available modules",
-    run: runList,
-  },
-  remove: {
-    describe: "undo a module's applied files via the manifest (offline)",
-    run: runRemove,
-  },
-};
-
-function printHelp(): void {
-  console.log(
-    `${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`
-  );
-  console.log(
-    `${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`
-  );
-  console.log(pc.bold("Commands:"));
-  for (const [name, command] of Object.entries(COMMANDS)) {
-    console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
-  }
-}
-
-async function main(argv: string[]): Promise<number> {
-  const [name, ...rest] = argv;
-
-  if (!name || name === "--help" || name === "-h" || name === "help") {
-    printHelp();
-    return 0;
-  }
-
-  const command = COMMANDS[name];
-  if (!command) {
-    console.error(`${pc.red("Unknown command:")} ${name}\n`);
-    printHelp();
-    return 1;
-  }
-
-  return command.run(rest);
-}
+import { main } from "./cli.js";
 
 main(process.argv.slice(2)).then(
   (code) => process.exit(code),

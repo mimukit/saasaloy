@@ -34,7 +34,7 @@ import {
 import type { RegistrySource } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
-import { wrapForNote } from "../lib/tui.js";
+import { isInteractive, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -260,6 +260,15 @@ export async function runAdd(argv: string[]): Promise<number> {
     // No module named (bare `add`, or `owner/repo` with no module) → pick from the source.
     let requested = coord.module;
     if (!requested) {
+      // No terminal to pick in (CI, piped stdin, `saasaloy add | cat`) means the prompt
+      // below could never be answered — it would hang the pipeline. Say what was missing
+      // instead, before the registry is even fetched.
+      if (!isInteractive()) {
+        cancel(
+          `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
+        );
+        return 1;
+      }
       const available = await source.listModules();
       if (available.length === 0) {
         cancel(`No modules found in ${source.label}.`);
