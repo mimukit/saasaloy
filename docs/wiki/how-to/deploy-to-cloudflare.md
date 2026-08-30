@@ -92,8 +92,8 @@ them under **Env vars to set**, and `modules/<name>/registry-item.json` is the s
 
 `BETTER_AUTH_SECRET` is a Workers secret rather than a plain variable — it falls back to
 Better Auth's dev default locally with a console warning, and is required in production.
-Set secrets with `wrangler secret put` against the Worker that reads them, not in
-`wrangler.jsonc`, so they stay out of the repo.
+Set secrets with `pnpm --filter @repo/api exec wrangler secret put BETTER_AUTH_SECRET`
+against the Worker that reads them, not in `wrangler.jsonc`, so they stay out of the repo.
 
 ## What Saasaloy does not do
 
