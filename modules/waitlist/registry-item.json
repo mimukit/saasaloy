@@ -2,12 +2,35 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "waitlist",
   "type": "saasaloy:feature",
-  "dependsOn": ["api", "database"],
+  "dependsOn": ["api", "database", "validators"],
   "dependencies": [],
   "envVars": {
     "PUBLIC_API_URL": "Base URL of the api Worker the form posts to (defaults to http://localhost:4000 in dev)."
   },
-  "patches": [],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/waitlist",
+      "call": "waitlist",
+      "import": { "name": "waitlist", "from": "./routes/waitlist" }
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "hono",
+      "range": "4.12.33"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/api",
+      "range": "workspace:*"
+    }
+  ],
   "files": [
     {
       "path": "files/api/routes/waitlist.ts",
@@ -16,6 +39,10 @@
     {
       "path": "files/db/schema/waitlist.ts",
       "target": "@db/schema/waitlist.ts"
+    },
+    {
+      "path": "files/validators/waitlist.ts",
+      "target": "@validators/waitlist.ts"
     },
     {
       "path": "files/web/components/WaitlistForm.tsx",

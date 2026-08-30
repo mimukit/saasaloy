@@ -1,46 +1,177 @@
 ---
 name: saasaloy-api
-description: Runbook for the api capability — Hono on Cloudflare Workers with file-based route registration. Use when adding, changing, or debugging routes in apps/api, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, or deploying it. Covers the routes/ auto-glob convention, the mount-relative path rule, and how features add their own wrangler bindings.
+description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, and how features add their own wrangler bindings.
 ---
 
 # api — Hono on Cloudflare Workers
 
 `apps/api` is the backend spine, shared by `web` and `admin`. It's a [Hono](https://hono.dev)
 app running on Cloudflare Workers, built and served with Vite via `@cloudflare/vite-plugin` (so
-`vite dev` runs the real `workerd` runtime locally). Its defining convention is **file-based route
-registration**: a route is a file you drop into `src/routes/`, never an edit to the entry.
+`vite dev` runs the real `workerd` runtime locally). Its defining convention is the **statically
+chained route table**: every mounted route is one `.route()` link in a single expression in
+`src/index.ts`, and the type of that expression is exported as `AppType`.
 
-## Add a route (the core convention)
+The chain is what makes the api typed end to end. A client built with `hc<AppType>` reads every
+path, request body, and per-status response shape straight off that type. A route discovered at
+build time by scanning a folder carries none of that, which is why registration is an edit to the
+chain rather than a file drop.
 
-Create `src/routes/<feature>.ts` that **default-exports a Hono sub-app named after the service**:
+## The entry, in shape
+
+```ts
+// src/index.ts
+export const base: Hono<{ Bindings: Bindings; Variables: Variables }> = new Hono<{
+  Bindings: Bindings;
+  Variables: Variables;
+}>()
+  .use("*", cors({ /* … */ }))
+  .use("*", requestCorrelation) // binds c.get("log") — see Logging, below
+  .onError((err, c) => { /* every thrown error leaves as the error envelope */ });
+
+const app = base.route("/health", health);
+
+export type AppType = typeof app;
+export default app;
+```
+
+Two bindings, and the split between them is the point:
+
+- **`base`** carries app-wide middleware and anything whose routes must stay opaque to the
+  client, such as a catch-all auth handler. Its type annotation is written out on purpose. That
+  freezes `base` at `Hono<{ Bindings: Bindings; Variables: Variables }>`, so mounting on it cannot widen `AppType`.
+- **`app`** is the typed chain. Everything a caller should see through `hc` goes here.
+
+**Keep every app-wide middleware as a link in `base`'s chain**, not as a `base.use("*", …)`
+statement underneath. A `chained-route` patch with `exportName: "base"` appends to that
+initializer, and Hono runs the handlers a request matches in registration order. Written as a
+statement, the middleware would register *after* the catch-all it is meant to wrap: `/auth`
+responses would come back with no CORS headers, and `c.get("log")` would be undefined inside that
+handler.
+
+## Add a route
+
+Two steps. The handler is still a file; only its registration changed.
+
+**1. Write `src/routes/<feature>.ts` as one chained expression**, under a named export that
+matches the file:
 
 ```ts
 // src/routes/widgets.ts  →  mounted at /widgets
 import { Hono } from "hono";
 
-const widgets = new Hono();
-
-widgets.get("/", (c) => c.json({ widgets: [] })); // GET  /widgets
-widgets.post("/", (c) => c.json({ created: true })); // POST /widgets
-widgets.get("/:id", (c) => c.json({ id: c.req.param("id") })); // GET  /widgets/:id
-
-export default widgets;
+export const widgets = new Hono()
+  .get("/", (c) => c.json({ widgets: [] }, 200)) //         GET  /widgets
+  .post("/", (c) => c.json({ created: true }, 201)) //      POST /widgets
+  .get("/:id", (c) => c.json({ id: c.req.param("id") }, 200)); // GET /widgets/:id
 ```
 
-That's the whole step. `src/index.ts` uses `import.meta.glob("./routes/*.ts", { eager: true })`
-to discover every route file **at build time** (Workers has no runtime filesystem) and mounts each
-under `/<basename>`. Nothing in the entry is edited when you add a route.
+**Named, not default.** The `chained-route` codemod writes a named import for the handler and
+refuses to wire a link whose binding resolves to a default import, so `export default widgets`
+leaves the route unmountable by patch.
+
+**2. Add the link to the chain** in `src/index.ts`:
+
+```ts
+import { widgets } from "./routes/widgets";
+
+const app = base.route("/health", health).route("/widgets", widgets);
+```
+
+A module does step 2 through a **`chained-route` patch** in its `registry-item.json`, not by hand:
+
+```json
+{
+  "kind": "chained-route",
+  "file": "apps/api/src/index.ts",
+  "exportName": "default",
+  "path": "/widgets",
+  "call": "widgets",
+  "import": { "name": "widgets", "from": "./routes/widgets" }
+}
+```
+
+`saasaloy add` appends the link and its import; `saasaloy remove` takes both back out, leaving the
+file byte-identical to its pre-add state. `exportName: "default"` resolves through
+`export default app` to the `const app = …` declarator, so the chain is edited and the export line
+is untouched. Use `exportName: "base"` for a handler that must stay out of `AppType`.
+
+### Keep the chain unbroken
+
+The chain is a type, not a style. These two are not equivalent:
+
+```ts
+const widgets = new Hono().get("/", handler); // ✅ the type carries GET /widgets
+```
+
+```ts
+const widgets = new Hono();
+widgets.get("/", handler); // ❌ `typeof widgets` forgot the route
+```
+
+The second form still serves the request at runtime and still typechecks. It just hands the
+client an empty type, so `api.widgets.$get()` stops existing with no error anywhere in `apps/api`.
+The same holds in `src/index.ts`: a route mounted with a bare `app.route(...)` statement is
+invisible to `AppType`.
+
+### Pass the status code explicitly
+
+`c.json(body, 200)` and `c.json(body)` differ on the client. `hc` keys the response type by status,
+so an omitted code leaves the caller with a looser type than the route actually has. Write the
+code every time, on the success path as well as the error path.
 
 ### The one rule that trips people up: paths are relative to the mount
 
-A route file is mounted at `/<filename>`, so its internal paths are **relative to that mount**:
+A route file is mounted at the `path` its chain link gives, so its internal paths are **relative to
+that mount**:
 
 - `widgets.get("/")` → `GET /widgets` ✅
 - `widgets.get("/widgets")` → `GET /widgets/widgets` ❌ (double prefix)
 
 Name the Hono instance after the file (`const widgets = new Hono()`) so the file reads clearly.
-Folder is **flat** — one level of `routes/*.ts`. To nest, nest *inside* a sub-app
-(`widgets.route("/archived", archivedSub)`), not with subdirectories.
+The folder is **flat**, one level of `routes/*.ts`. To nest, nest *inside* a sub-app
+(`.route("/archived", archivedSub)`), not with subdirectories.
+
+## The typed client
+
+`apps/api` exposes one type-only export, `@repo/api/client`, which re-exports `AppType` and
+nothing else. `package.json` maps it under a `types` condition alone, so there is no runtime entry
+and the Worker never enters a browser bundle.
+
+Each consumer owns its own three-line client:
+
+```ts
+import { hc } from "hono/client";
+import type { AppType } from "@repo/api/client";
+
+const api = hc<AppType>(import.meta.env.PUBLIC_API_URL ?? "http://localhost:4000");
+
+const res = await api.health.$get();
+const body = await res.json(); // { status: string }
+```
+
+A consumer needs `hono` and `@repo/api` in its `package.json`. A module that adds a caller adds
+both through `package-json-dependency` patches.
+
+### What a wide chain costs to typecheck
+
+Measured 2026-08-28 on the reference dev box (6-core Intel Haswell container, Node 24.19.0,
+TypeScript 7.0.2), with 30 synthetic routes generated alongside `health`. Each synthetic route
+chains a `GET /`, a `GET /:id`, and a `zValidator("json", …)` `POST /`, so the numbers include zod
+inference rather than bare handlers.
+
+| What | 1 route | 31 routes |
+|---|---|---|
+| `apps/api` alone (`tsc --noEmit`) | **0.59 s** | **1.02 s** |
+| Whole project (`pnpm exec turbo run typecheck --force`) | **6.6 s** | **7.2 s** |
+
+Roughly **14 ms per route**, and adding a file that calls `hc<AppType>` against the 31-route chain
+cost nothing measurable on top (1.05 s). Reproduce it by generating the routes and their chain
+links in `apps/api`, then timing `tsc --noEmit` in that workspace.
+
+So a single shared `AppType` is the right default, and it stays right well past the route count any
+of these projects has. If a chain ever does get expensive, the mitigation is a **per-feature
+client**: export a narrower type for one slice of the chain and point that feature's `hc` at it,
+rather than splitting the api. Reach for it on a measured number, not a hunch.
 
 ## Bindings: use `c.env`, never `process.env`
 
@@ -58,8 +189,8 @@ Base `api` ships **zero bindings**. A capability or feature that needs one:
    `d1_databases` entry from `database`, an `r2_buckets` entry from `storage`.
 2. **Extends the `Bindings` type** where its code reads the binding.
 
-Adding a binding is the one genuinely structural edit to `api`'s scaffold; everything else is a
-pure file-drop into `routes/`.
+Adding a binding is a structural edit to `api`'s scaffold, the same class of edit as adding a link
+to the chain.
 
 ## Logging: `c.get("log")`, never `console.log`
 
@@ -82,9 +213,7 @@ can't import the entry's types without creating a cycle.
 import { Hono } from "hono";
 import type { LoggerVariables } from "@repo/logger";
 
-const widgets = new Hono<{ Variables: LoggerVariables }>();
-
-widgets.post("/", async (c) => {
+const widgets = new Hono<{ Variables: LoggerVariables }>().post("/", async (c) => {
   const log = c.get("log");
   log.info("creating widget", { plan: "pro" }); // → one line, carrying this request's requestId
   try {
@@ -93,7 +222,7 @@ widgets.post("/", async (c) => {
     log.error("widget creation failed", { err }); // `err` is serialized, not `{}`
     throw err;
   }
-  return c.json({ ok: true });
+  return c.json({ ok: true }, 201);
 });
 
 export default widgets;
@@ -124,6 +253,29 @@ shared `{ error: { code, message } }` envelope from `@repo/validators/common`. S
 Keep the three layers apart: request shapes in `@repo/validators`, database column shapes in
 `packages/db`, HTTP wiring here in `apps/api`.
 
+## Errors: one envelope, including the ones you did not throw
+
+`base` ends in an `onError` handler, and it is there because a route cannot cover every error it
+answers with. A `zValidator` failure hook returns the envelope for a body that *parses* and fails
+the schema. A body that does not parse never reaches the hook: Hono's json validator throws
+`HTTPException(400, "Malformed JSON in request body")` first, and an unhandled `HTTPException`
+answers as **plain text**. That is a second 400 shape behind one declared type, and `hc` publishes
+only the first — a caller branching on `res.status === 400` and calling `res.json()` would throw.
+
+The handler converts every `HTTPException` to `{ error: { code, message } }` with the status it
+carried, and any other throw to a 500 with a fixed message (the real error goes to `console.error`,
+because it can carry a binding value or a query). A sub-app mounted with `.route()` inherits the
+handler, so a route module writes no error plumbing of its own.
+
+`apps/api` writes the envelope out by hand instead of importing `errorBody` from
+`@repo/validators/common`, because `validators` declares `dependsOn: ["api"]` — the dependency runs
+one way. The two shapes are identical and each names the other. Change one, change the other.
+
+Two things the handler does **not** cover. A 404 for an unrouted path goes through Hono's
+`notFound` handler, not this one, and still answers as plain text — no declared type covers an
+unrouted path, so nothing lies. And a handler that *returns* a response is untouched; only throws
+land here.
+
 ## Run it locally
 
 ```sh
@@ -131,8 +283,8 @@ pnpm --filter @repo/api dev       # vite dev → serves on workerd, hot-reloads 
 curl http://localhost:4000/health # → {"status":"ok"}
 ```
 
-`vite dev` runs the actual Workers runtime, so local behavior matches the edge closely. Add a
-route file and it appears on the next request with no restart of the config.
+`vite dev` runs the actual Workers runtime, so local behavior matches the edge closely. Editing a
+route file is picked up on the next request with no restart.
 
 ## Ports are fixed, on purpose
 
@@ -151,9 +303,10 @@ Because `wrangler.jsonc` pins the same `4000`, `wrangler dev` is a drop-in swap 
 
 ## CORS lives here, in the spine
 
-`src/index.ts` mounts credentialed `hono/cors` for the whole app: the `origin` callback reflects
-the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or, when that's unset, in
-`DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are incompatible.
+`src/index.ts` mounts credentialed `hono/cors` on `base` for the whole app: the `origin` callback
+reflects the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or, when that's
+unset, in `DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are
+incompatible.
 
 **Keep `server.cors: false` in `vite.config.ts`.** Vite's own dev CORS middleware otherwise
 intercepts CORS in two ways that both mislead: it reflects `Access-Control-Allow-Origin` for
@@ -178,9 +331,15 @@ Deployment of all services is centralized in the future **`infra`** capability (
 
 ## Conventions to honor
 
-- **Never edit `src/index.ts` to register a route** — drop a `routes/*.ts` file; the glob finds it.
-- **One route file = one mounted prefix**, named after the file. Keep the folder flat.
+- **Register a route with a `chained-route` patch**, not a file drop. The entry is edited on
+  purpose, and `saasaloy remove` reverses the edit.
+- **Build every sub-app as one unbroken chain.** A statement-per-route file typechecks and serves
+  correctly while handing the client an empty type.
+- **Pass the status code to `c.json`** on every path, success included.
+- **One route file = one mounted prefix**, named after the file, under a named `export const`.
+  Keep the folder flat.
 - **Internal paths are mount-relative** (`get("/")` for the index of the mount).
+- **Mount on `base`, not on the chain**, when a handler must stay out of `AppType`.
 - **`c.env` for bindings, never `process.env`.**
 - **`c.get("log")` for logging, never `console.log`** — a bare console call is unlevelled and
   uncorrelated, and it bypasses redaction.

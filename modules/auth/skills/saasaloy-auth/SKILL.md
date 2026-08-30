@@ -85,20 +85,26 @@ headers to prove it.
 import { Hono } from "hono";
 import { getSession } from "@repo/auth/server";
 
-const widgets = new Hono();
-
-widgets.get("/", async (c) => {
+export const widgets = new Hono().get("/", async (c) => {
   const session = await getSession(c.req.raw);
-  if (!session) return c.json({ error: "unauthorized" }, 401);
-  return c.json({ userId: session.user.id });
+  if (!session) return c.json({ error: { code: "unauthorized", message: "sign in first" } }, 401);
+  return c.json({ userId: session.user.id }, 200);
 });
-
-export default widgets;
 ```
+
+The error body is written out because `auth` depends on `api` and `database` only — a project can
+install auth without the `validators` module, and `@repo/validators` would not resolve. In a
+project that has it, write the same body as `errorBody("unauthorized", "sign in first")` from
+`@repo/validators/common`; the shape is identical either way, and it is the shape api's own error
+handler produces.
 
 `getSession` wraps `auth.api.getSession({ headers })` — the httpOnly cookie rides along on
 `c.req.raw` automatically. No route imports `better-auth` (ADR 0020); everything goes through
 `@repo/auth/server`.
+
+Note the shape: one named `export const`, one chained expression, an explicit status on every
+`c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the
+exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0023).
 
 ## Revocation: delete the session row
 

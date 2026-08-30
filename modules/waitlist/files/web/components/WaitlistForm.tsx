@@ -1,6 +1,8 @@
+import { hc } from "hono/client";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
+import type { AppType } from "@repo/api/client";
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
@@ -13,6 +15,12 @@ import { Label } from "@repo/ui/components/label";
 // saasaloy-waitlist skill for the production value.
 const API_BASE = import.meta.env.PUBLIC_API_URL ?? "http://localhost:4000";
 
+// The consumer's own three-line client. `AppType` is api's route chain, so `api.waitlist`
+// and the body it takes come from the route file itself — rename the path or change the
+// schema and this call stops typechecking. `@repo/api/client` is a types-only export, so
+// nothing of the Worker reaches this bundle.
+const api = hc<AppType>(API_BASE);
+
 type Status = "idle" | "submitting" | "success" | "error";
 
 export default function WaitlistForm() {
@@ -23,11 +31,10 @@ export default function WaitlistForm() {
     event.preventDefault();
     setStatus("submitting");
     try {
-      const res = await fetch(`${API_BASE}/waitlist`, {
-        body: JSON.stringify({ email }),
-        headers: { "Content-Type": "application/json" },
-        method: "POST",
-      });
+      // 201 on success, 400 with `{ error: { code, message } }` when the address is
+      // rejected. `res.ok` covers both, so a duplicate address lands on "success" the
+      // same as a first-time one.
+      const res = await api.waitlist.$post({ json: { email } });
       setStatus(res.ok ? "success" : "error");
     } catch {
       setStatus("error");

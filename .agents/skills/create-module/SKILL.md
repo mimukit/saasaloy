@@ -89,7 +89,16 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
     { "path": "files/web/components/WaitlistForm.tsx",  "target": "@web/components/WaitlistForm.tsx" }
   ],
   "envVars": {},                              // env keys the module needs (documented for the user)
-  "patches": [],                              // waitlist needs none — pure file-drop via conventions
+  "patches": [                                // a route file is dropped, but registered by patch
+    {
+      "file": "apps/api/src/index.ts",        // project-relative POSIX path, no @alias
+      "kind": "chained-route",
+      "exportName": "default",                // the exported chain — followed to `const app = …`
+      "path": "/waitlist",                    // also the match key for the inverse
+      "call": "waitlist",
+      "import": { "name": "waitlist", "from": "./routes/waitlist" }
+    }
+  ],
   "agent": {                                  // AI context this module contributes (see Step 4)
     "skills": ["skills/saasaloy-waitlist"]    //   skill folder(s) copied into .claude/skills/ by `add`
   }
@@ -198,8 +207,9 @@ Convention-based extension points are what make granular modules safe: **no modu
 another module's internals**, so there's no drift-seam. A feature adds behavior by dropping a
 file where a capability already auto-discovers it.
 
-- **`api`** scaffolds `apps/api` with **file-based route registration** — a `routes/` folder the
-  Hono entry auto-globs. Add a route = drop `files/api/routes/<feature>.ts` → `@api/routes/<feature>.ts`.
+- **`api`** scaffolds `apps/api` with a **statically chained route table** in `src/index.ts`. Add a
+  route in two parts: drop `files/api/routes/<feature>.ts` → `@api/routes/<feature>.ts`, then
+  register it with a `chained-route` patch (below). The drop alone mounts nothing.
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
 - **Landing-facing UI** drops into `apps/web` (`@web/...`); shared components into `packages/ui`
@@ -210,12 +220,25 @@ tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a plugin inse
 Auth's array, a `db:generate` command in the app's `package.json`. That's the 10%, not the spine.
 If you reach for a patch to edit another *module's* file, stop — add or use a convention instead.
 
-Registering a route is the one case where both options are open, so pick deliberately. `api`'s
-auto-glob is the default: drop the file, nothing is patched, and `remove` deletes it cleanly.
-Reach for the `chained-route` patch kind only when the entry file must name every route
-*statically*. A typed RPC client derives its types from `typeof app`, and a glob gives it nothing
-to read. That kind is the reversible one, so choosing it costs a codemod on the entry file rather
-than an edit `remove` cannot undo.
+**Registering a route is the exception to that rule, and it is not optional.** `apps/api` used to
+glob `routes/*.ts`, so a drop was enough; it no longer does. `src/index.ts` now names every route
+in one `.route()` chain, because `hc<AppType>` reads its paths, inputs and response shapes off
+`typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler
+file **and** adds one `chained-route` patch. The drop on its own leaves a file nothing imports.
+ADR 0023 records the trade.
+
+The patch kind is the reversible one, which is what makes this affordable: `saasaloy remove` takes
+the link and its import back out, and the entry file comes back byte-identical. Two rules for the
+descriptor:
+
+- **`exportName` names the export in the *target* file, not in your route file.** Use
+  `"default"` for a typed route — that is `apps/api/src/index.ts`'s `export default app`, which
+  the codemod follows to `const app = …` so `AppType` picks the link up. Use `"base"` only for a
+  mount that must stay *out* of `AppType`, such as an opaque catch-all like `auth`'s.
+- **Your route file exports its sub-app by name, as one chained expression.** `export const
+  <feature> = new Hono().get(...)`, matching `import.name`. The codemod refuses to wire a link
+  whose binding resolves to a default import, and a broken-up chain exports a type that has
+  forgotten its own routes.
 
 ## Step 4 — Contribute agent context
 
@@ -259,9 +282,12 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 ## Conventions to honor
 
 - **Feature modules never AST-patch another module's internals.** Extend via the
-  convention-based drop points instead: a route file into `apps/api/routes/`, a table into
-  `packages/db/schema/`, a UI component into `apps/web`. Only genuinely structural edits
-  (a D1 binding, a Better Auth plugin) use small, tested AST patches.
+  convention-based drop points instead: a table into `packages/db/schema/`, a UI component
+  into `apps/web`. Only genuinely structural edits (a D1 binding, a Better Auth plugin) use
+  small, tested AST patches.
+- **A route is the exception: drop the handler, then register it with a `chained-route`
+  patch.** `apps/api/src/index.ts` names every route statically so `AppType` carries them;
+  nothing globs `routes/` (ADR 0023).
 - **Contribute agent context by shipping a skill folder**, not editing shared ones: an
   `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
   never append to the committed `AGENTS.md`/`CLAUDE.md`.

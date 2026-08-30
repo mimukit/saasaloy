@@ -11,6 +11,14 @@
   },
   "patches": [
     {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "base",
+      "path": "/auth",
+      "call": "authRoute",
+      "import": { "name": "authRoute", "from": "./routes/auth" }
+    },
+    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
