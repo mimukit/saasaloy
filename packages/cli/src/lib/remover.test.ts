@@ -1,11 +1,22 @@
-import { lstat, mkdir, mkdtemp, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import {
+  lstat,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { pathExists } from "./fs-utils.js";
-import { emptyLock, type Lockfile } from "./lock.js";
-import { emptyManifest, type Manifest, type ManifestPatch } from "./manifest.js";
-import { buildRemovePlan, executeRemovePlan, type RemovePlan } from "./remover.js";
+import { emptyLock } from "./lock.js";
+import type { Lockfile } from "./lock.js";
+import { emptyManifest } from "./manifest.js";
+import type { Manifest, ManifestPatch } from "./manifest.js";
+import { buildRemovePlan, executeRemovePlan } from "./remover.js";
+import type { RemovePlan } from "./remover.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // The undo side of the applier split (issue #27): `buildRemovePlan` classifies each
@@ -31,11 +42,11 @@ async function writeManaged(
   manifest: Manifest,
   target: string,
   content: string,
-  module = "auth",
+  module = "auth"
 ): Promise<void> {
   const abs = join(root, ...target.split("/"));
   await mkdir(dirname(abs), { recursive: true });
-  await writeFile(abs, content, "utf8");
+  await writeFile(abs, content, "utf-8");
   const { hashContent } = await import("./fs-utils.js");
   manifest.managed[target] = { module, hash: hashContent(content) };
 }
@@ -44,7 +55,7 @@ async function build(
   name: string,
   config: SaasaloyConfig,
   manifest: Manifest,
-  lock: Lockfile,
+  lock: Lockfile
 ): Promise<RemovePlan> {
   return buildRemovePlan({ root, name, config, manifest, lock });
 }
@@ -52,24 +63,43 @@ async function build(
 describe("buildRemovePlan — file classification", () => {
   it("classifies a hash-clean managed file as delete", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "export const x = 1;\n");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "export const x = 1;\n"
+    );
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.files).toHaveLength(1);
-    expect(plan.files[0]).toMatchObject({ target: "apps/api/src/routes/auth.ts", action: "delete" });
+    expect(plan.files[0]).toMatchObject({
+      target: "apps/api/src/routes/auth.ts",
+      action: "delete",
+    });
   });
 
   it("classifies a hand-edited managed file as drift", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "export const x = 1;\n");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "export const x = 1;\n"
+    );
     // Hand-edit after the manifest hash was recorded.
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "export const x = 2; // hand-edited\n", "utf8");
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
+      "export const x = 2; // hand-edited\n",
+      "utf-8"
+    );
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.files[0]?.action).toBe("drift");
   });
 
   it("classifies an already-gone managed file as missing", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "export const x = 1;\n");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "export const x = 1;\n"
+    );
     await rm(join(root, "apps/api/src/routes/auth.ts"));
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.files[0]?.action).toBe("missing");
@@ -77,57 +107,94 @@ describe("buildRemovePlan — file classification", () => {
 
   it("only picks up files owned by the named module — unmanaged/other-module files untouched", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
-    await writeManaged(manifest, "apps/api/src/routes/billing.ts", "billing\n", "billing");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/billing.ts",
+      "billing\n",
+      "billing"
+    );
     // A file the manifest never tracked at all.
     await mkdir(join(root, "apps/api/src"), { recursive: true });
-    await writeFile(join(root, "apps/api/src/hand-written.ts"), "hand\n", "utf8");
+    await writeFile(
+      join(root, "apps/api/src/hand-written.ts"),
+      "hand\n",
+      "utf-8"
+    );
 
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
-    expect(plan.files.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(plan.files.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
   });
 });
 
 describe("buildRemovePlan — dependents", () => {
   it("refuses via named dependents when an installed module's lock dependsOn names this one", async () => {
-    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "billing"] };
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["auth", "billing"],
+    };
     const lock: Lockfile = {
       ...emptyLock(),
       modules: {
         auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) },
-        billing: { source: "s/r", ref: "main", resolved: "b".repeat(40), dependsOn: ["auth"] },
+        billing: {
+          source: "s/r",
+          ref: "main",
+          resolved: "b".repeat(40),
+          dependsOn: ["auth"],
+        },
       },
     };
     const plan = await build("auth", config, emptyManifest(), lock);
-    expect(plan.dependents).toEqual(["billing"]);
+    expect(plan.dependents).toStrictEqual(["billing"]);
   });
 
   it("has no dependents when nothing installed depends on the module", async () => {
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = {
       ...emptyLock(),
-      modules: { auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) } },
+      modules: {
+        auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) },
+      },
     };
     const plan = await build("auth", config, emptyManifest(), lock);
-    expect(plan.dependents).toEqual([]);
+    expect(plan.dependents).toStrictEqual([]);
   });
 
   it("warns (missingLockEntries) when an installed module has no lock entry", async () => {
-    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "mystery"] };
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["auth", "mystery"],
+    };
     const lock: Lockfile = {
       ...emptyLock(),
-      modules: { auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) } },
+      modules: {
+        auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) },
+      },
     };
     const plan = await build("auth", config, emptyManifest(), lock);
-    expect(plan.missingLockEntries).toEqual(["mystery"]);
+    expect(plan.missingLockEntries).toStrictEqual(["mystery"]);
   });
 });
 
 describe("buildRemovePlan — links", () => {
   async function skillManifest(module = "auth"): Promise<Manifest> {
     const manifest = emptyManifest();
-    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "# runbook\n", module);
-    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/saasaloy-auth";
+    await writeManaged(
+      manifest,
+      ".agents/skills/saasaloy-auth/SKILL.md",
+      "# runbook\n",
+      module
+    );
+    manifest.links[".agents/skills/saasaloy-auth"] =
+      ".claude/skills/saasaloy-auth";
     return manifest;
   }
 
@@ -159,7 +226,7 @@ describe("buildRemovePlan — links", () => {
     const manifest = await skillManifest();
     const linkAbs = join(root, ".claude/skills/saasaloy-auth");
     await mkdir(linkAbs, { recursive: true });
-    await writeFile(join(linkAbs, "SKILL.md"), "hand-written\n", "utf8");
+    await writeFile(join(linkAbs, "SKILL.md"), "hand-written\n", "utf-8");
 
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.links[0]?.action).toBe("conflict");
@@ -178,17 +245,29 @@ describe("buildRemovePlan — patches", () => {
     const authPatch: ManifestPatch = {
       module: "auth",
       file: "apps/api/wrangler.jsonc",
-      patch: { file: "apps/api/wrangler.jsonc", kind: "wrangler-binding", bindingType: "kv_namespaces", entry: { binding: "SESSIONS" } },
+      patch: {
+        file: "apps/api/wrangler.jsonc",
+        kind: "wrangler-binding",
+        bindingType: "kv_namespaces",
+        entry: { binding: "SESSIONS" },
+      },
     };
     const billingPatch: ManifestPatch = {
       module: "billing",
       file: "apps/api/wrangler.jsonc",
-      patch: { file: "apps/api/wrangler.jsonc", kind: "wrangler-binding", bindingType: "kv_namespaces", entry: { binding: "INVOICES" } },
+      patch: {
+        file: "apps/api/wrangler.jsonc",
+        kind: "wrangler-binding",
+        bindingType: "kv_namespaces",
+        entry: { binding: "INVOICES" },
+      },
     };
     manifest.patches.push(authPatch, billingPatch);
 
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
-    expect(plan.patches).toEqual([{ entry: authPatch, action: "drop", diff: "" }]);
+    expect(plan.patches).toStrictEqual([
+      { entry: authPatch, action: "drop", diff: "" },
+    ]);
   });
 
   it("previews a reversible patch as a diff, writing nothing", async () => {
@@ -202,7 +281,7 @@ export default app;
 `;
     const abs = join(root, ...target.split("/"));
     await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, source, "utf8");
+    await writeFile(abs, source, "utf-8");
 
     const manifest = emptyManifest();
     manifest.patches.push({
@@ -218,13 +297,18 @@ export default app;
       },
     });
 
-    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    const plan = await build(
+      "waitlist",
+      { aliases: {}, installed: ["waitlist"] },
+      manifest,
+      emptyLock()
+    );
     expect(plan.patches[0]?.action).toBe("revert");
     // `--diff` promises the edit, not a label: the removed link has to be in there.
     expect(plan.patches[0]?.diff).toContain(target);
     expect(plan.patches[0]?.diff).toContain('.route("/waitlist", waitlist)');
     // Planning is read-only.
-    expect(await readFile(abs, "utf8")).toBe(source);
+    await expect(readFile(abs, "utf-8")).resolves.toBe(source);
   });
 
   it("classifies a patch the inverse refuses, with the reason and no diff", async () => {
@@ -240,7 +324,7 @@ const app = new Hono().route("/waitlist", myWaitlist);
 
 export default app;
 `,
-      "utf8",
+      "utf-8"
     );
 
     const manifest = emptyManifest();
@@ -257,7 +341,12 @@ export default app;
       },
     });
 
-    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    const plan = await build(
+      "waitlist",
+      { aliases: {}, installed: ["waitlist"] },
+      manifest,
+      emptyLock()
+    );
     expect(plan.patches[0]?.action).toBe("refused");
     expect(plan.patches[0]?.diff).toBe("");
     expect(plan.patches[0]?.reason).toContain("myWaitlist");
@@ -279,7 +368,12 @@ export default app;
       },
     });
 
-    const plan = await build("waitlist", { aliases: {}, installed: ["waitlist"] }, manifest, emptyLock());
+    const plan = await build(
+      "waitlist",
+      { aliases: {}, installed: ["waitlist"] },
+      manifest,
+      emptyLock()
+    );
     expect(plan.patches[0]?.action).toBe("gone");
     expect(plan.patches[0]?.diff).toBe("");
   });
@@ -288,43 +382,92 @@ export default app;
 describe("executeRemovePlan — file deletion", () => {
   it("deletes hash-clean files and untracks them, leaving unmanaged files untouched", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
     await mkdir(join(root, "apps/api/src"), { recursive: true });
-    await writeFile(join(root, "apps/api/src/hand-written.ts"), "hand\n", "utf8");
+    await writeFile(
+      join(root, "apps/api/src/hand-written.ts"),
+      "hand\n",
+      "utf-8"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(join(root, "apps/api/src/routes/auth.ts"))).toBe(false);
+    await expect(
+      pathExists(join(root, "apps/api/src/routes/auth.ts"))
+    ).resolves.toBeFalsy();
     expect(manifest.managed["apps/api/src/routes/auth.ts"]).toBeUndefined();
-    expect(result.deleted.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.deleted.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
     // The hand-written file the manifest never attributed to us survives untouched.
-    expect(await readFile(join(root, "apps/api/src/hand-written.ts"), "utf8")).toBe("hand\n");
+    await expect(
+      readFile(join(root, "apps/api/src/hand-written.ts"), "utf-8")
+    ).resolves.toBe("hand\n");
   });
 
   it("leaves a drifted file on disk and untracked when not confirmed for deletion", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "hand-edited\n", "utf8");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
+      "hand-edited\n",
+      "utf-8"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(join(root, "apps/api/src/routes/auth.ts"))).toBe(true);
-    expect(await readFile(join(root, "apps/api/src/routes/auth.ts"), "utf8")).toBe("hand-edited\n");
+    await expect(
+      pathExists(join(root, "apps/api/src/routes/auth.ts"))
+    ).resolves.toBeTruthy();
+    await expect(
+      readFile(join(root, "apps/api/src/routes/auth.ts"), "utf-8")
+    ).resolves.toBe("hand-edited\n");
     expect(manifest.managed["apps/api/src/routes/auth.ts"]).toBeUndefined();
-    expect(result.driftSurvivors.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.driftSurvivors.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
     expect(result.deleted).toHaveLength(0);
   });
 
   it("deletes a drifted file when the caller confirms it via deleteDrifted", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "hand-edited\n", "utf8");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
+      "hand-edited\n",
+      "utf-8"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
@@ -337,22 +480,38 @@ describe("executeRemovePlan — file deletion", () => {
       deleteDrifted: new Set(["apps/api/src/routes/auth.ts"]),
     });
 
-    expect(await pathExists(join(root, "apps/api/src/routes/auth.ts"))).toBe(false);
-    expect(result.deleted.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    await expect(
+      pathExists(join(root, "apps/api/src/routes/auth.ts"))
+    ).resolves.toBeFalsy();
+    expect(result.deleted.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
     expect(result.driftSurvivors).toHaveLength(0);
   });
 
   it("untracks a missing file without erroring", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
     await rm(join(root, "apps/api/src/routes/auth.ts"));
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(result.missingUntracked.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.missingUntracked.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
     expect(manifest.managed["apps/api/src/routes/auth.ts"]).toBeUndefined();
   });
 });
@@ -360,8 +519,14 @@ describe("executeRemovePlan — file deletion", () => {
 describe("executeRemovePlan — links", () => {
   it("removes a correct symlink and drops its manifest entry", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "# runbook\n", "auth");
-    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/saasaloy-auth";
+    await writeManaged(
+      manifest,
+      ".agents/skills/saasaloy-auth/SKILL.md",
+      "# runbook\n",
+      "auth"
+    );
+    manifest.links[".agents/skills/saasaloy-auth"] =
+      ".claude/skills/saasaloy-auth";
     const targetAbs = join(root, ".agents/skills/saasaloy-auth");
     const linkAbs = join(root, ".claude/skills/saasaloy-auth");
     await mkdir(dirname(linkAbs), { recursive: true });
@@ -370,27 +535,43 @@ describe("executeRemovePlan — links", () => {
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(linkAbs)).toBe(false);
+    await expect(pathExists(linkAbs)).resolves.toBeFalsy();
     expect(manifest.links[".agents/skills/saasaloy-auth"]).toBeUndefined();
     expect(result.linksRemoved).toHaveLength(1);
   });
 
   it("leaves a conflicting symlink path untouched but still drops the manifest entry", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "# runbook\n", "auth");
-    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/saasaloy-auth";
+    await writeManaged(
+      manifest,
+      ".agents/skills/saasaloy-auth/SKILL.md",
+      "# runbook\n",
+      "auth"
+    );
+    manifest.links[".agents/skills/saasaloy-auth"] =
+      ".claude/skills/saasaloy-auth";
     const linkAbs = join(root, ".claude/skills/saasaloy-auth");
     await mkdir(linkAbs, { recursive: true });
-    await writeFile(join(linkAbs, "SKILL.md"), "hand-written\n", "utf8");
+    await writeFile(join(linkAbs, "SKILL.md"), "hand-written\n", "utf-8");
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect((await lstat(linkAbs)).isDirectory()).toBe(true);
+    expect((await lstat(linkAbs)).isDirectory()).toBeTruthy();
     expect(manifest.links[".agents/skills/saasaloy-auth"]).toBeUndefined();
     expect(result.linkConflicts).toHaveLength(1);
   });
@@ -402,23 +583,38 @@ describe("executeRemovePlan — patches", () => {
     const authPatch: ManifestPatch = {
       module: "auth",
       file: "apps/api/wrangler.jsonc",
-      patch: { file: "apps/api/wrangler.jsonc", kind: "wrangler-binding", bindingType: "kv_namespaces", entry: { binding: "SESSIONS" } },
+      patch: {
+        file: "apps/api/wrangler.jsonc",
+        kind: "wrangler-binding",
+        bindingType: "kv_namespaces",
+        entry: { binding: "SESSIONS" },
+      },
     };
     const billingPatch: ManifestPatch = {
       module: "billing",
       file: "apps/api/wrangler.jsonc",
-      patch: { file: "apps/api/wrangler.jsonc", kind: "wrangler-binding", bindingType: "kv_namespaces", entry: { binding: "INVOICES" } },
+      patch: {
+        file: "apps/api/wrangler.jsonc",
+        kind: "wrangler-binding",
+        bindingType: "kv_namespaces",
+        entry: { binding: "INVOICES" },
+      },
     };
     manifest.patches.push(authPatch, billingPatch);
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(result.patchesDropped).toEqual([authPatch]);
-    expect(result.patchesReversed).toEqual([]);
-    expect(manifest.patches).toEqual([billingPatch]);
+    expect(result.patchesDropped).toStrictEqual([authPatch]);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(manifest.patches).toStrictEqual([billingPatch]);
   });
 
   // #83 Phase 4: the new `package-json-script` kind has no inverse either, so `remove`
@@ -426,10 +622,11 @@ describe("executeRemovePlan — patches", () => {
   // here means #36 has to change this test deliberately when it generalises reversal.
   it("leaves a package-json-script command on disk and drops the record", async () => {
     const target = "apps/api/package.json";
-    const source = '{\n  "name": "@app/api",\n  "scripts": {\n    "db:generate": "drizzle-kit generate"\n  }\n}\n';
+    const source =
+      '{\n  "name": "@app/api",\n  "scripts": {\n    "db:generate": "drizzle-kit generate"\n  }\n}\n';
     const abs = join(root, ...target.split("/"));
     await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, source, "utf8");
+    await writeFile(abs, source, "utf-8");
 
     const manifest = emptyManifest();
     const patch: ManifestPatch = {
@@ -447,12 +644,17 @@ describe("executeRemovePlan — patches", () => {
     const config: SaasaloyConfig = { aliases: {}, installed: ["database"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("database", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(result.patchesReversed).toEqual([]);
-    expect(result.patchesDropped).toEqual([patch]);
-    expect(await readFile(abs, "utf8")).toBe(source);
-    expect(manifest.patches).toEqual([]);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchesDropped).toStrictEqual([patch]);
+    await expect(readFile(abs, "utf-8")).resolves.toBe(source);
+    expect(manifest.patches).toStrictEqual([]);
   });
 });
 
@@ -461,7 +663,11 @@ describe("executeRemovePlan — patches", () => {
 describe("executeRemovePlan — chained-route reversal", () => {
   const ENTRY_TARGET = "apps/api/src/index.ts";
 
-  function routePatch(module: string, path: string, call: string): ManifestPatch {
+  function routePatch(
+    module: string,
+    path: string,
+    call: string
+  ): ManifestPatch {
     return {
       module,
       file: ENTRY_TARGET,
@@ -481,7 +687,7 @@ describe("executeRemovePlan — chained-route reversal", () => {
   async function writeEntry(content: string): Promise<string> {
     const abs = join(root, ...ENTRY_TARGET.split("/"));
     await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, content, "utf8");
+    await writeFile(abs, content, "utf-8");
     return abs;
   }
 
@@ -501,15 +707,20 @@ export default app;
     const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    const after = await readFile(abs, "utf8");
+    const after = await readFile(abs, "utf-8");
     expect(after).not.toContain("waitlist");
     expect(after).toContain("const app = new Hono();");
     expect(after).toContain("export type AppType = typeof app;");
-    expect(result.patchesReversed).toEqual([patch]);
-    expect(result.patchesDropped).toEqual([]);
-    expect(manifest.patches).toEqual([]);
+    expect(result.patchesReversed).toStrictEqual([patch]);
+    expect(result.patchesDropped).toStrictEqual([]);
+    expect(manifest.patches).toStrictEqual([]);
   });
 
   it("leaves another module's link in the same chain alone", async () => {
@@ -524,19 +735,22 @@ export default app;
     const manifest = emptyManifest();
     manifest.patches.push(
       routePatch("waitlist", "/waitlist", "waitlist"),
-      routePatch("billing", "/billing", "billing"),
+      routePatch("billing", "/billing", "billing")
     );
 
-    const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist", "billing"] };
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["waitlist", "billing"],
+    };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
     await executeRemovePlan(plan, { root, config, manifest, lock });
 
-    const after = await readFile(abs, "utf8");
+    const after = await readFile(abs, "utf-8");
     expect(after).toContain('.route("/billing", billing)');
     expect(after).toContain('from "./routes/billing.js"');
     expect(after).not.toContain("/waitlist");
-    expect(manifest.patches.map((p) => p.module)).toEqual(["billing"]);
+    expect(manifest.patches.map((p) => p.module)).toStrictEqual(["billing"]);
   });
 
   it("drops without reverting when the link was already hand-removed", async () => {
@@ -554,11 +768,16 @@ export default app;
     const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await readFile(abs, "utf8")).toBe(source);
-    expect(result.patchesReversed).toEqual([]);
-    expect(result.patchesDropped).toEqual([patch]);
+    await expect(readFile(abs, "utf-8")).resolves.toBe(source);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchesDropped).toStrictEqual([patch]);
   });
 
   it("drops without reverting when the target file is gone", async () => {
@@ -569,10 +788,15 @@ export default app;
     const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(result.patchesReversed).toEqual([]);
-    expect(result.patchesDropped).toEqual([patch]);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchesDropped).toStrictEqual([patch]);
   });
 
   it("reverses against fresh disk content, not the content at plan time", async () => {
@@ -599,12 +823,17 @@ const app = new Hono().route("/waitlist", waitlist);
 
 export default app;
 `,
-      "utf8",
+      "utf-8"
     );
 
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
     expect(result.patchesReversed).toHaveLength(1);
-    expect(await readFile(abs, "utf8")).not.toContain("waitlist");
+    await expect(readFile(abs, "utf-8")).resolves.not.toContain("waitlist");
   });
 
   it("leaves a route repointed at the user's own handler, and says why", async () => {
@@ -623,16 +852,21 @@ export default app;
     const config: SaasaloyConfig = { aliases: {}, installed: ["waitlist"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
     // The line is the user's now, so it survives — but the record still goes, because
     // the module is being uninstalled either way.
-    expect(await readFile(abs, "utf8")).toBe(source);
-    expect(result.patchesReversed).toEqual([]);
-    expect(result.patchesDropped).toEqual([patch]);
+    await expect(readFile(abs, "utf-8")).resolves.toBe(source);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchesDropped).toStrictEqual([patch]);
     expect(result.patchRefusals).toHaveLength(1);
     expect(result.patchRefusals[0]?.reason).toContain("myWaitlist");
-    expect(manifest.patches).toEqual([]);
+    expect(manifest.patches).toStrictEqual([]);
   });
 
   it("untracks each entry as it is handled, so a mid-run failure matches disk", async () => {
@@ -667,24 +901,26 @@ export default app;
     // still says yes and the read throws EISDIR. Any mid-loop I/O failure would do; this
     // one needs no mocking.
     const secondTarget = join(root, ...broken.split("/"));
-    await writeFile(secondTarget, "export default {};\n", "utf8");
+    await writeFile(secondTarget, "export default {};\n", "utf-8");
     const plan = await build("waitlist", config, manifest, lock);
     await rm(secondTarget);
     await mkdir(secondTarget, { recursive: true });
 
-    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow();
+    await expect(
+      executeRemovePlan(plan, { root, config, manifest, lock })
+    ).rejects.toThrow(Error);
 
     // The first entry was reversed on disk, so it must not still be tracked; the second
     // never completed, so it must be. `runRemove` saves the manifest from a `finally`.
-    expect(await readFile(abs, "utf8")).not.toContain("/waitlist");
-    expect(manifest.patches).toEqual([bad]);
+    await expect(readFile(abs, "utf-8")).resolves.not.toContain("/waitlist");
+    expect(manifest.patches).toStrictEqual([bad]);
   });
 
   it("refuses a patch target reached through a symlink, touching nothing outside the root", async () => {
     const outside = await mkdtemp(join(tmpdir(), "saasaloy-remove-outside-"));
     const secret = join(outside, "secret.ts");
     const original = `export const secret = "untouched";\n`;
-    await writeFile(secret, original, "utf8");
+    await writeFile(secret, original, "utf-8");
 
     // A hand-edited or corrupt manifest names an in-root path; the path is a symlink out.
     const linkAbs = join(root, ...ENTRY_TARGET.split("/"));
@@ -699,8 +935,10 @@ export default app;
 
     // Planning reads the target to preview the reversal, so it refuses first — the earliest
     // point at which the link is visible, and before any write could happen.
-    await expect(build("waitlist", config, manifest, lock)).rejects.toThrow(/symlink/);
-    expect(await readFile(secret, "utf8")).toBe(original);
+    await expect(build("waitlist", config, manifest, lock)).rejects.toThrow(
+      /symlink/
+    );
+    await expect(readFile(secret, "utf-8")).resolves.toBe(original);
     await rm(outside, { recursive: true, force: true });
   });
 
@@ -708,7 +946,7 @@ export default app;
     const outside = await mkdtemp(join(tmpdir(), "saasaloy-remove-outside-"));
     const secret = join(outside, "secret.ts");
     const original = `export const secret = "untouched";\n`;
-    await writeFile(secret, original, "utf8");
+    await writeFile(secret, original, "utf-8");
 
     const abs = await writeEntry(`import { Hono } from "hono";
 import { waitlist } from "./routes/waitlist.js";
@@ -729,10 +967,10 @@ export default app;
     await rm(abs);
     await symlink(secret, abs);
 
-    await expect(executeRemovePlan(plan, { root, config, manifest, lock })).rejects.toThrow(
-      /symlink/,
-    );
-    expect(await readFile(secret, "utf8")).toBe(original);
+    await expect(
+      executeRemovePlan(plan, { root, config, manifest, lock })
+    ).rejects.toThrow(/symlink/);
+    await expect(readFile(secret, "utf-8")).resolves.toBe(original);
     await rm(outside, { recursive: true, force: true });
   });
 });
@@ -740,43 +978,77 @@ export default app;
 describe("executeRemovePlan — empty-dir pruning", () => {
   it("prunes a capability's scaffolded workspace once every file under it is gone", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/reports/package.json", "{}\n", "reports");
-    await writeManaged(manifest, "apps/reports/src/index.ts", "export default {};\n", "reports");
+    await writeManaged(
+      manifest,
+      "apps/reports/package.json",
+      "{}\n",
+      "reports"
+    );
+    await writeManaged(
+      manifest,
+      "apps/reports/src/index.ts",
+      "export default {};\n",
+      "reports"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["reports"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("reports", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(join(root, "apps/reports"))).toBe(false);
+    await expect(pathExists(join(root, "apps/reports"))).resolves.toBeFalsy();
     // `apps/` itself was only holding this one workspace, so it empties out too —
     // pruning climbs until the first non-empty ancestor, never past the project root.
-    expect(result.prunedDirs.sort()).toEqual(["apps", "apps/reports", "apps/reports/src"].sort());
-    expect(await pathExists(root)).toBe(true);
+    expect(result.prunedDirs.toSorted()).toStrictEqual(
+      ["apps", "apps/reports", "apps/reports/src"].toSorted()
+    );
+    await expect(pathExists(root)).resolves.toBeTruthy();
   });
 
   it("stops at the first non-empty ancestor and never prunes the project root", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/reports/src/index.ts", "export default {};\n", "reports");
+    await writeManaged(
+      manifest,
+      "apps/reports/src/index.ts",
+      "export default {};\n",
+      "reports"
+    );
     // A sibling file under apps/reports/ that isn't ours — keeps the workspace dir alive.
-    await writeFile(join(root, "apps/reports/README.md"), "hi\n", "utf8");
+    await writeFile(join(root, "apps/reports/README.md"), "hi\n", "utf-8");
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["reports"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("reports", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(join(root, "apps/reports"))).toBe(true);
-    expect(await pathExists(join(root, "apps/reports/README.md"))).toBe(true);
+    await expect(pathExists(join(root, "apps/reports"))).resolves.toBeTruthy();
+    await expect(
+      pathExists(join(root, "apps/reports/README.md"))
+    ).resolves.toBeTruthy();
     // `apps/reports/src` emptied out and is pruned, but README.md keeps its parent alive.
-    expect(result.prunedDirs).toEqual(["apps/reports/src"]);
+    expect(result.prunedDirs).toStrictEqual(["apps/reports/src"]);
   });
 });
 
 describe("executeRemovePlan — dangling aliases", () => {
   it("drops an alias whose prefix directory vanished with the workspace", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/reports/src/index.ts", "export default {};\n", "reports");
+    await writeManaged(
+      manifest,
+      "apps/reports/src/index.ts",
+      "export default {};\n",
+      "reports"
+    );
 
     const config: SaasaloyConfig = {
       aliases: { "@reports": "apps/reports/src" },
@@ -784,17 +1056,27 @@ describe("executeRemovePlan — dangling aliases", () => {
     };
     const lock: Lockfile = emptyLock();
     const plan = await build("reports", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
     expect(config.aliases["@reports"]).toBeUndefined();
-    expect(result.droppedAliases).toEqual(["@reports"]);
+    expect(result.droppedAliases).toStrictEqual(["@reports"]);
   });
 
   it("keeps an alias whose prefix directory still exists", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/reports/src/index.ts", "export default {};\n", "reports");
+    await writeManaged(
+      manifest,
+      "apps/reports/src/index.ts",
+      "export default {};\n",
+      "reports"
+    );
     // Another file under the alias prefix that isn't ours keeps it alive.
-    await writeFile(join(root, "apps/reports/src/keep.ts"), "keep\n", "utf8");
+    await writeFile(join(root, "apps/reports/src/keep.ts"), "keep\n", "utf-8");
 
     const config: SaasaloyConfig = {
       aliases: { "@reports": "apps/reports/src" },
@@ -802,19 +1084,32 @@ describe("executeRemovePlan — dangling aliases", () => {
     };
     const lock: Lockfile = emptyLock();
     const plan = await build("reports", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
     expect(config.aliases["@reports"]).toBe("apps/reports/src");
-    expect(result.droppedAliases).toEqual([]);
+    expect(result.droppedAliases).toStrictEqual([]);
   });
 });
 
 describe("executeRemovePlan — state reconciliation", () => {
   it("drops the module from installed[] and deletes its lock entry", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
 
-    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "billing"] };
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["auth", "billing"],
+    };
     const lock: Lockfile = {
       ...emptyLock(),
       modules: {
@@ -825,7 +1120,7 @@ describe("executeRemovePlan — state reconciliation", () => {
     const plan = await build("auth", config, manifest, lock);
     await executeRemovePlan(plan, { root, config, manifest, lock });
 
-    expect(config.installed).toEqual(["billing"]);
+    expect(config.installed).toStrictEqual(["billing"]);
     expect(lock.modules.auth).toBeUndefined();
     expect(lock.modules.billing).toBeDefined();
   });
@@ -848,23 +1143,33 @@ describe("buildRemovePlan — path containment", () => {
   ])("refuses a managed key with %s", async (_label, badTarget) => {
     const manifest = emptyManifest();
     manifest.managed[badTarget] = { module: "auth", hash: "0".repeat(64) };
-    await expect(build("auth", emptyConfig(), manifest, emptyLock())).rejects.toThrow(
-      /Refusing to resolve/,
-    );
+    await expect(
+      build("auth", emptyConfig(), manifest, emptyLock())
+    ).rejects.toThrow(/Refusing to resolve/);
   });
 
   it("refuses a link path that escapes the project root", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "s\n", "auth");
-    manifest.links[".agents/skills/saasaloy-auth"] = "../../../tmp/evil-link";
-    await expect(build("auth", emptyConfig(), manifest, emptyLock())).rejects.toThrow(
-      /Refusing to resolve/,
+    await writeManaged(
+      manifest,
+      ".agents/skills/saasaloy-auth/SKILL.md",
+      "s\n",
+      "auth"
     );
+    manifest.links[".agents/skills/saasaloy-auth"] = "../../../tmp/evil-link";
+    await expect(
+      build("auth", emptyConfig(), manifest, emptyLock())
+    ).rejects.toThrow(/Refusing to resolve/);
   });
 
   it("still accepts an ordinary nested project-relative key", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.files[0]).toMatchObject({ action: "delete" });
   });
@@ -875,7 +1180,12 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
   // Anything edited in that window is user-owned content, whatever the plan said.
   it("spares a clean file edited after planning, instead of deleting it", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
@@ -883,21 +1193,41 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
     expect(plan.files[0]).toMatchObject({ action: "delete" });
 
     // The user edits while the confirm prompt is up.
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "edited during prompt\n", "utf8");
-
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
-
-    expect(await readFile(join(root, "apps/api/src/routes/auth.ts"), "utf8")).toBe(
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
       "edited during prompt\n",
+      "utf-8"
     );
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(
+      readFile(join(root, "apps/api/src/routes/auth.ts"), "utf-8")
+    ).resolves.toBe("edited during prompt\n");
     expect(result.deleted).toHaveLength(0);
-    expect(result.driftSurvivors.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.driftSurvivors.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
   });
 
   it("spares a confirmed drift file whose content changed again after the confirm", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "hand-edited\n", "utf8");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
+      "hand-edited\n",
+      "utf-8"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
@@ -905,7 +1235,11 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
     expect(plan.files[0]).toMatchObject({ action: "drift" });
 
     // Confirmed deleting "hand-edited\n" — then it changed again.
-    await writeFile(join(root, "apps/api/src/routes/auth.ts"), "edited yet again\n", "utf8");
+    await writeFile(
+      join(root, "apps/api/src/routes/auth.ts"),
+      "edited yet again\n",
+      "utf-8"
+    );
 
     const result = await executeRemovePlan(plan, {
       root,
@@ -915,49 +1249,83 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
       deleteDrifted: new Set(["apps/api/src/routes/auth.ts"]),
     });
 
-    expect(await readFile(join(root, "apps/api/src/routes/auth.ts"), "utf8")).toBe(
-      "edited yet again\n",
-    );
+    await expect(
+      readFile(join(root, "apps/api/src/routes/auth.ts"), "utf-8")
+    ).resolves.toBe("edited yet again\n");
     expect(result.deleted).toHaveLength(0);
-    expect(result.driftSurvivors.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.driftSurvivors.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
   });
 
   it("reports a file deleted after planning as missing rather than failing", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
     await rm(join(root, "apps/api/src/routes/auth.ts"));
 
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
     expect(result.deleted).toHaveLength(0);
-    expect(result.missingUntracked.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    expect(result.missingUntracked.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
   });
 
   it("still deletes a file left untouched between plan and execute", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n", "auth");
+    await writeManaged(
+      manifest,
+      "apps/api/src/routes/auth.ts",
+      "auth\n",
+      "auth"
+    );
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
     const plan = await build("auth", config, manifest, lock);
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await pathExists(join(root, "apps/api/src/routes/auth.ts"))).toBe(false);
-    expect(result.deleted.map((f) => f.target)).toEqual(["apps/api/src/routes/auth.ts"]);
+    await expect(
+      pathExists(join(root, "apps/api/src/routes/auth.ts"))
+    ).resolves.toBeFalsy();
+    expect(result.deleted.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
   });
 
   it("leaves a link replaced by a real file after planning untouched, as a conflict", async () => {
     const manifest = emptyManifest();
-    await writeManaged(manifest, ".agents/skills/saasaloy-auth/SKILL.md", "skill\n", "auth");
+    await writeManaged(
+      manifest,
+      ".agents/skills/saasaloy-auth/SKILL.md",
+      "skill\n",
+      "auth"
+    );
     const targetAbs = join(root, ".agents/skills/saasaloy-auth");
     const linkAbs = join(root, ".claude/skills/saasaloy-auth");
     await mkdir(dirname(linkAbs), { recursive: true });
     await symlink(targetAbs, linkAbs, "dir");
-    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/saasaloy-auth";
+    manifest.links[".agents/skills/saasaloy-auth"] =
+      ".claude/skills/saasaloy-auth";
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
@@ -966,13 +1334,20 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
 
     // The user swaps the symlink for a real file of their own after planning.
     await rm(linkAbs);
-    await writeFile(linkAbs, "mine now\n", "utf8");
+    await writeFile(linkAbs, "mine now\n", "utf-8");
 
-    const result = await executeRemovePlan(plan, { root, config, manifest, lock });
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
 
-    expect(await readFile(linkAbs, "utf8")).toBe("mine now\n");
+    await expect(readFile(linkAbs, "utf-8")).resolves.toBe("mine now\n");
     expect(result.linksRemoved).toHaveLength(0);
-    expect(result.linkConflicts.map((l) => l.path)).toEqual([".claude/skills/saasaloy-auth"]);
-    expect((await lstat(linkAbs)).isSymbolicLink()).toBe(false);
+    expect(result.linkConflicts.map((l) => l.path)).toStrictEqual([
+      ".claude/skills/saasaloy-auth",
+    ]);
+    expect((await lstat(linkAbs)).isSymbolicLink()).toBeFalsy();
   });
 });

@@ -20,14 +20,17 @@ const NO_SCRIPTS = `{
 }
 `;
 
-describe("upsertPackageJsonScript", () => {
+describe(upsertPackageJsonScript, () => {
   it("adds a new script to an existing scripts map, keeping prior entries", () => {
     const out = upsertPackageJsonScript(PACKAGE_JSON, {
       name: "db:generate",
       value: "drizzle-kit generate",
     });
     const parsed = JSON.parse(out) as { scripts: Record<string, string> };
-    expect(parsed.scripts).toEqual({ build: "tsup", "db:generate": "drizzle-kit generate" });
+    expect(parsed.scripts).toStrictEqual({
+      build: "tsup",
+      "db:generate": "drizzle-kit generate",
+    });
   });
 
   it("creates the scripts map fresh when it doesn't exist yet", () => {
@@ -35,8 +38,11 @@ describe("upsertPackageJsonScript", () => {
       name: "clean",
       value: "rimraf dist",
     });
-    const parsed = JSON.parse(out) as { scripts: Record<string, string>; name: string };
-    expect(parsed.scripts).toEqual({ clean: "rimraf dist" });
+    const parsed = JSON.parse(out) as {
+      scripts: Record<string, string>;
+      name: string;
+    };
+    expect(parsed.scripts).toStrictEqual({ clean: "rimraf dist" });
     // The rest of the document survives the fresh-map insertion.
     expect(parsed.name).toBe("@repo/api");
   });
@@ -69,7 +75,10 @@ describe("upsertPackageJsonScript", () => {
   }
 }
 `;
-    const out = upsertPackageJsonScript(emptied, { name: "clean", value: "rimraf dist" });
+    const out = upsertPackageJsonScript(emptied, {
+      name: "clean",
+      value: "rimraf dist",
+    });
     expect(out).toBe(emptied);
   });
 
@@ -79,9 +88,12 @@ describe("upsertPackageJsonScript", () => {
   "scripts": null
 }
 `;
-    const out = upsertPackageJsonScript(bogus, { name: "clean", value: "rimraf dist" });
+    const out = upsertPackageJsonScript(bogus, {
+      name: "clean",
+      value: "rimraf dist",
+    });
     const parsed = JSON.parse(out) as { scripts: Record<string, string> };
-    expect(parsed.scripts).toEqual({ clean: "rimraf dist" });
+    expect(parsed.scripts).toStrictEqual({ clean: "rimraf dist" });
   });
 
   it("preserves formatting (2-space indent) of the surrounding document", () => {
@@ -94,8 +106,12 @@ describe("upsertPackageJsonScript", () => {
   });
 
   it("honours a tab-indented document", () => {
-    const tabbed = '{\n\t"name": "@repo/api",\n\t"scripts": {\n\t\t"build": "tsup"\n\t}\n}\n';
-    const out = upsertPackageJsonScript(tabbed, { name: "clean", value: "rimraf dist" });
+    const tabbed =
+      '{\n\t"name": "@repo/api",\n\t"scripts": {\n\t\t"build": "tsup"\n\t}\n}\n';
+    const out = upsertPackageJsonScript(tabbed, {
+      name: "clean",
+      value: "rimraf dist",
+    });
     expect(out).toContain('\t\t"clean"');
   });
 
@@ -103,6 +119,8 @@ describe("upsertPackageJsonScript", () => {
   // the `!root` guard only fires on a source with no parseable node at all. Matches
   // upsertPackageJsonDependency, which leans on the same guard.
   it("returns a source with no parseable root unchanged", () => {
-    expect(upsertPackageJsonScript("", { name: "clean", value: "rimraf dist" })).toBe("");
+    expect(
+      upsertPackageJsonScript("", { name: "clean", value: "rimraf dist" })
+    ).toBe("");
   });
 });

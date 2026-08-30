@@ -256,11 +256,52 @@ strings in the content module so the next pass finds them.
 - **Types/Interfaces**: PascalCase (`User`, `ApiResponse`)
 - **Files**: kebab-case for components (`user-profile.tsx`), camelCase for utilities (`utils.ts`)
 
+## Linting, Formatting, and Commit Hooks
+
+The linter is **[oxlint](https://oxc.rs)** configured from
+**[Ultracite](https://www.ultracite.ai)**'s presets, with **Prettier** and **Stylelint**
+owning formatting. All four run from `oxlint.config.mjs`, `prettier.config.js` and
+`stylelint.config.js` at the root — there is no shared config package, because oxlint
+cannot consume one (`extends` takes file paths, JSON only).
+
+- `pnpm lint` — the gate. Four passes, in order:
+  1. `lint:types` — oxlint with `--type-aware` over `packages/ui/src`
+  2. `lint:code` — oxlint over everything, no type information
+  3. `lint:css` — Stylelint over `**/*.css`
+  4. `format:check` — `prettier --check .`
+- `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over
+  `packages/ui/src`, the plain one over everything, then Stylelint. **Never** add
+  `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
+- `pnpm format` — `prettier --write .`
+- `pnpm typecheck` — `tsc`, and it must pass before you commit.
+
+**Why the type-aware pass is scoped and the plain one is not.** `--type-aware` is a
+global CLI switch, so the split is by invocation rather than by config. It stays off
+`.astro` because `apps/web/tsconfig.json` includes the build-generated
+`.astro/types.d.ts`, which would make `astro sync` a prerequisite of every `pnpm lint`,
+including on a fresh clone. Do not merge the two passes.
+
+**Markdown is not formatted.** `.prettierignore` excludes `**/*.md` because Ultracite's
+Prettier config sets `proseWrap: "never"`, which would collapse every hand-wrapped
+paragraph — this file included — into a single line.
+
+**Commit hooks are installed by husky** on your first `pnpm install` (`prepare: "husky"`),
+and they need a `.git` directory, which `saasaloy init` creates for you:
+
+- `pre-commit` runs **lint-staged** over staged files only — oxlint `--fix`, Stylelint
+  `--fix`, Prettier `--write`. It skips the type-aware pass on purpose: that one needs the
+  whole project graph, which defeats staged-file scoping.
+- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages
+  must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`.
+
+Bypass in a genuine emergency with `git commit --no-verify`, or `HUSKY=0` to skip every
+hook (which is also how you keep hooks out of CI).
+
 ## Testing Instructions
 
 - Run type checking: `pnpm typecheck` (must pass before commits)
-- Run linting: `pnpm lint` (auto-fixes where possible)
-- Format check: `pnpm format` (auto-formats all files)
+- Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
+- Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
 - Run tests: `pnpm test` (when test scripts are added)
 
 ## Boundaries
@@ -272,16 +313,17 @@ strings in the content module so the next pass finds them.
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)
 - Use TypeScript strict mode (no `any` without explicit reason)
-- Use workspace package names (`@repo/ui`, `@repo/eslint-config`) for imports
+- Use workspace package names (`@repo/ui`, `@repo/tsconfig`) for imports
 
 ### ⚠️ Ask First
 
 - Adding new dependencies (especially to root `package.json`)
 - Modifying Turborepo configuration (`turbo.json`)
 - Changing TypeScript strictness settings
-- Modifying Husky hooks or commitlint rules
+- Modifying the husky hooks (`.husky/`), `lint-staged.config.js`, or `commitlint.config.js`
 - Creating new workspace packages
-- Changing Prettier or ESLint configurations
+- Changing `oxlint.config.mjs`, `prettier.config.js`, or `stylelint.config.js` — including
+  turning a rule off. Suppress the one occurrence with a comment that says why instead
 - Database schema changes or migrations
 - CI/CD workflow modifications (`.github/workflows/`)
 
@@ -292,7 +334,8 @@ strings in the content module so the next pass finds them.
 - Commit secrets, API keys, or environment variables
 - Modify `node_modules/` or `pnpm-lock.yaml` manually (use `pnpm install`)
 - Remove or disable TypeScript strict mode
-- Remove or disable lint-staged or commitlint hooks
+- Remove or disable the lint-staged or commitlint hooks, or commit with `--no-verify`
+  as a habit rather than an emergency
 - Use `any` type without explicit `@ts-expect-error` or `@ts-ignore` with justification
 - Break the workspace structure (don't move packages outside `apps/*` or `packages/*`)
 - Commit without running type checks and linting

@@ -7,10 +7,9 @@
 // Run `pnpm play:init` once first, then this in one terminal and `pnpm play:dev` in another.
 import { watch } from "node:fs";
 import { spawn } from "node:child_process";
-import { fileURLToPath } from "node:url";
-import { dirname, resolve } from "node:path";
+import { resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 const templateDir = resolve(root, "packages/cli/templates/base");
 const cli = resolve(root, "packages/cli/dist/index.js");
 const target = ".dev/playground";
@@ -25,7 +24,10 @@ function rescaffold() {
     return;
   }
   running = true;
-  const child = spawn("node", [cli, "init", target, "--force"], { cwd: root, stdio: "inherit" });
+  const child = spawn("node", [cli, "init", target, "--force"], {
+    cwd: root,
+    stdio: "inherit",
+  });
   child.on("exit", () => {
     running = false;
     if (queued) {
@@ -40,7 +42,11 @@ console.log(`[watch] re-scaffolding -> ${target} on change (Ctrl-C to stop)`);
 rescaffold();
 
 watch(templateDir, { recursive: true }, (_event, filename) => {
-  if (filename) console.log(`[watch] changed: ${filename}`);
-  if (timer) clearTimeout(timer);
+  if (filename) {
+    console.log(`[watch] changed: ${filename}`);
+  }
+  if (timer) {
+    clearTimeout(timer);
+  }
   timer = setTimeout(rescaffold, 150);
 });

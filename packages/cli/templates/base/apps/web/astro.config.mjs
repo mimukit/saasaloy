@@ -31,7 +31,7 @@ export default defineConfig({
       // alias only drives the CLI's file-placement when a module's files[] target
       // `@web/...`; this is what makes the dropped source's own `@web/...` imports
       // (e.g. a sections/*.astro importing @web/components/*) actually resolve.
-      alias: { "@web": fileURLToPath(new URL("./src", import.meta.url)) },
+      alias: { "@web": fileURLToPath(new URL("src", import.meta.url)) },
     },
   },
 });

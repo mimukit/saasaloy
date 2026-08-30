@@ -60,16 +60,23 @@ export function PricingTable({
   const [annual, setAnnual] = useState(false);
 
   return (
-    <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20">
+    <section
+      id={id}
+      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
+    >
       <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{title}</h2>
-        <p className="mt-4 text-base text-pretty text-muted-foreground">{description}</p>
+        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          {title}
+        </h2>
+        <p className="text-muted-foreground mt-4 text-base text-pretty">
+          {description}
+        </p>
 
         <div className="mt-8 flex items-center justify-center gap-3">
           <div
             role="group"
             aria-label={ui.pricing.billingPeriodLabel}
-            className="inline-flex items-center gap-1 rounded-xl border border-border p-1"
+            className="border-border inline-flex items-center gap-1 rounded-xl border p-1"
           >
             <Button
               size="sm"
@@ -96,7 +103,10 @@ export function PricingTable({
         {tiers.map((tier) => {
           const price = annual ? tier.annualPrice : tier.monthlyPrice;
           return (
-            <Card key={tier.id} className={cn("h-full", tier.featured && "ring-2 ring-primary")}>
+            <Card
+              key={tier.id}
+              className={cn("h-full", tier.featured && "ring-primary ring-2")}
+            >
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle>{tier.name}</CardTitle>
@@ -110,10 +120,13 @@ export function PricingTable({
                   <span className="text-3xl font-semibold tracking-tight">
                     {price === null
                       ? ui.pricing.customPrice
-                      : interpolate(ui.pricing.price, { currencySymbol, price })}
+                      : interpolate(ui.pricing.price, {
+                          currencySymbol,
+                          price,
+                        })}
                   </span>
                   {price !== null && (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="text-muted-foreground text-sm">
                       {annual ? ui.pricing.perMonthAnnual : ui.pricing.perMonth}
                     </span>
                   )}
@@ -121,8 +134,14 @@ export function PricingTable({
 
                 <ul className="mt-6 flex flex-col gap-2.5">
                   {tier.features.map((feature) => (
-                    <li key={feature} className="flex items-start gap-2 text-sm">
-                      <CheckIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
+                    <li
+                      key={feature}
+                      className="flex items-start gap-2 text-sm"
+                    >
+                      <CheckIcon
+                        aria-hidden="true"
+                        className="mt-0.5 size-4 shrink-0"
+                      />
                       <span className="text-muted-foreground">{feature}</span>
                     </li>
                   ))}
@@ -133,8 +152,10 @@ export function PricingTable({
                 <a
                   href={tier.ctaHref}
                   className={cn(
-                    buttonVariants({ variant: tier.featured ? "default" : "outline" }),
-                    "w-full",
+                    buttonVariants({
+                      variant: tier.featured ? "default" : "outline",
+                    }),
+                    "w-full"
                   )}
                 >
                   {tier.ctaLabel}

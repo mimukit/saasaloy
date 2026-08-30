@@ -34,17 +34,28 @@ export function Faq({
   items = landing.faq.items,
 }: FaqProps) {
   return (
-    <section id={id} className="mx-auto w-full max-w-3xl scroll-mt-20 px-6 py-20">
+    <section
+      id={id}
+      className="mx-auto w-full max-w-3xl scroll-mt-20 px-6 py-20"
+    >
       <div className="text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">{title}</h2>
-        <p className="mt-4 text-base text-pretty text-muted-foreground">{description}</p>
+        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
+          {title}
+        </h2>
+        <p className="text-muted-foreground mt-4 text-base text-pretty">
+          {description}
+        </p>
       </div>
 
       <Accordion className="mt-12">
         {items.map((item) => (
           <AccordionItem key={item.id}>
-            <AccordionTrigger className="text-base">{item.question}</AccordionTrigger>
-            <AccordionContent className="text-muted-foreground">{item.answer}</AccordionContent>
+            <AccordionTrigger className="text-base">
+              {item.question}
+            </AccordionTrigger>
+            <AccordionContent className="text-muted-foreground">
+              {item.answer}
+            </AccordionContent>
           </AccordionItem>
         ))}
       </Accordion>

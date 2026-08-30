@@ -89,7 +89,9 @@ export interface LoggerRegistry {
  *
  * `apps/api`'s middleware is what actually sets it.
  */
-export type LoggerVariables = { log: Logger };
+export interface LoggerVariables {
+  log: Logger;
+}
 
 /**
  * Build the provider registry. The `providers` array is the patch point every
@@ -98,7 +100,9 @@ export type LoggerVariables = { log: Logger };
 export function defineLogger(config: LoggerConfig): LoggerRegistry {
   const providers = config.providers;
   const redactKeys = new Set(
-    [...DEFAULT_REDACT_KEYS, ...(config.redact ?? [])].map((key) => key.toLowerCase()),
+    [...DEFAULT_REDACT_KEYS, ...(config.redact ?? [])].map((key) =>
+      key.toLowerCase()
+    )
   );
 
   return {
@@ -109,10 +113,18 @@ export function defineLogger(config: LoggerConfig): LoggerRegistry {
       const threshold = LEVELS[level];
 
       function build(bound: LogFields): Logger {
-        function emit(eventLevel: LogLevel, message: string, fields?: LogFields): void {
-          if (LEVELS[eventLevel] < threshold) return;
+        function emit(
+          eventLevel: LogLevel,
+          message: string,
+          fields?: LogFields
+        ): void {
+          if (LEVELS[eventLevel] < threshold) {
+            return;
+          }
           // No provider registered: a silent no-op, never a throw. See `selectProvider`.
-          if (!provider) return;
+          if (!provider) {
+            return;
+          }
 
           // Normalization lives *inside* the boundary, not above it: a caller's `fields` can
           // carry a throwing getter or a proxy, so the spread, the error flattening and the
@@ -131,7 +143,9 @@ export function defineLogger(config: LoggerConfig): LoggerRegistry {
               time: new Date().toISOString(),
               fields: redact(merged, redactKeys),
             };
-            if (err) event.err = err;
+            if (err) {
+              event.err = err;
+            }
 
             provider.write(env, event);
           } catch {
@@ -172,9 +186,11 @@ export function defineLogger(config: LoggerConfig): LoggerRegistry {
  */
 function selectProvider(
   providers: LogProvider[],
-  selected: string | undefined,
+  selected: string | undefined
 ): LogProvider | undefined {
-  if (!selected) return providers[0];
+  if (!selected) {
+    return providers[0];
+  }
 
   const provider = providers.find((p) => p.name === selected);
   if (!provider) {
@@ -183,7 +199,9 @@ function selectProvider(
       registered.length > 0
         ? `Registered providers: ${registered.join(", ")}.`
         : "No providers are registered — install one, e.g. `saasaloy add logger-console`.";
-    throw new Error(`LOGGER_PROVIDER is "${selected}", which is not registered. ${known}`);
+    throw new Error(
+      `LOGGER_PROVIDER is "${selected}", which is not registered. ${known}`
+    );
   }
   return provider;
 }
@@ -199,8 +217,12 @@ function selectProvider(
  */
 function parseLevel(value: string | undefined): LogLevel {
   const normalized = value?.trim().toLowerCase();
-  if (!normalized) return DEFAULT_LEVEL;
-  return Object.hasOwn(LEVELS, normalized) ? (normalized as LogLevel) : DEFAULT_LEVEL;
+  if (!normalized) {
+    return DEFAULT_LEVEL;
+  }
+  return Object.hasOwn(LEVELS, normalized)
+    ? (normalized as LogLevel)
+    : DEFAULT_LEVEL;
 }
 
 /**
@@ -211,14 +233,21 @@ function parseLevel(value: string | undefined): LogLevel {
  */
 function takeError(fields: LogFields): SerializedError | undefined {
   const value = fields.err;
-  if (!(value instanceof Error)) return undefined;
+  if (!(value instanceof Error)) {
+    return undefined;
+  }
   delete fields.err;
   return serializeError(value, true);
 }
 
 function serializeError(error: Error, withCause: boolean): SerializedError {
-  const serialized: SerializedError = { name: error.name, message: error.message };
-  if (error.stack) serialized.stack = error.stack;
+  const serialized: SerializedError = {
+    name: error.name,
+    message: error.message,
+  };
+  if (error.stack) {
+    serialized.stack = error.stack;
+  }
   // Exactly one level of `cause`. A cause chain can be arbitrarily long or cyclic, and an
   // unbounded walk inside a log call is CPU a request pays for.
   if (withCause && error.cause instanceof Error) {
@@ -246,7 +275,10 @@ function redact(fields: LogFields, keys: Set<string>): LogFields {
   return out;
 }
 
-function redactShallow(value: Record<string, unknown>, keys: Set<string>): Record<string, unknown> {
+function redactShallow(
+  value: Record<string, unknown>,
+  keys: Set<string>
+): Record<string, unknown> {
   const out: Record<string, unknown> = {};
   for (const [key, nested] of Object.entries(value)) {
     out[key] = keys.has(key.toLowerCase()) ? REDACTED : nested;
@@ -255,7 +287,9 @@ function redactShallow(value: Record<string, unknown>, keys: Set<string>): Recor
 }
 
 function isPlainObject(value: unknown): value is Record<string, unknown> {
-  if (typeof value !== "object" || value === null) return false;
+  if (typeof value !== "object" || value === null) {
+    return false;
+  }
   const proto: unknown = Object.getPrototypeOf(value);
   return proto === Object.prototype || proto === null;
 }

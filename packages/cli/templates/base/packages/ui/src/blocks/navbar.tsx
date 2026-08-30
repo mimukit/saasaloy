@@ -52,10 +52,14 @@ export function Navbar({
   // toggle — the panel unmounts under the user's cursor otherwise, dropping focus to
   // the document and sending the next Tab to the top of the page.
   useEffect(() => {
-    if (!open) return;
+    if (!open) {
+      return;
+    }
 
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") return;
+      if (event.key !== "Escape") {
+        return;
+      }
       setOpen(false);
       toggleRef.current?.focus();
     }
@@ -67,18 +71,21 @@ export function Navbar({
   }, [open]);
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/60 bg-background/80 backdrop-blur">
+    <header className="border-border/60 bg-background/80 sticky top-0 z-50 w-full border-b backdrop-blur">
       <div className="mx-auto flex h-14 w-full max-w-6xl items-center justify-between gap-6 px-6">
         <a href="/" className="text-sm font-semibold tracking-tight">
           {siteName}
         </a>
 
-        <nav aria-label={ui.navbar.mainNavLabel} className="hidden items-center gap-6 md:flex">
+        <nav
+          aria-label={ui.navbar.mainNavLabel}
+          className="hidden items-center gap-6 md:flex"
+        >
           {links.map((link) => (
             <a
               key={link.href}
               href={link.href}
-              className="text-sm text-muted-foreground transition-colors hover:text-foreground"
+              className="text-muted-foreground hover:text-foreground text-sm transition-colors"
             >
               {link.label}
             </a>
@@ -86,7 +93,13 @@ export function Navbar({
         </nav>
 
         <div className="flex items-center gap-2">
-          <a href={ctaHref} className={cn(buttonVariants({ size: "sm" }), "hidden md:inline-flex")}>
+          <a
+            href={ctaHref}
+            className={cn(
+              buttonVariants({ size: "sm" }),
+              "hidden md:inline-flex"
+            )}
+          >
             {ctaLabel}
           </a>
           {/* The one interactive control in the header. The panel below is rendered
@@ -108,7 +121,10 @@ export function Navbar({
       </div>
 
       {open && (
-        <div id="navbar-mobile-menu" className="border-t border-border/60 md:hidden">
+        <div
+          id="navbar-mobile-menu"
+          className="border-border/60 border-t md:hidden"
+        >
           <nav
             aria-label={ui.navbar.mobileNavLabel}
             className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-6 py-4"
@@ -118,7 +134,7 @@ export function Navbar({
                 key={link.href}
                 href={link.href}
                 onClick={() => setOpen(false)}
-                className="rounded-lg px-2 py-2 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-2 py-2 text-sm transition-colors"
               >
                 {link.label}
               </a>

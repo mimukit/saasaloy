@@ -27,26 +27,43 @@ export interface CtaProps {
   secondaryAction?: CtaAction | null;
 }
 
+// Hoisted out of the parameter list: an object literal written as a default prop is a
+// fresh object on every render, which defeats memoization downstream. Both labels and
+// both destinations still come from the content module — only the wrapper is stable.
+const DEFAULT_PRIMARY_ACTION: CtaAction = {
+  label: landing.cta.primaryActionLabel,
+  href: landing.cta.primaryActionHref,
+};
+const DEFAULT_SECONDARY_ACTION: CtaAction = {
+  label: landing.cta.secondaryActionLabel,
+  href: landing.cta.secondaryActionHref,
+};
+
 export function Cta({
   id = "cta",
   siteName = "Acme",
   title = landing.cta.title,
   description = interpolate(landing.cta.description, { siteName }),
-  primaryAction = { label: landing.cta.primaryActionLabel, href: landing.cta.primaryActionHref },
-  secondaryAction = {
-    label: landing.cta.secondaryActionLabel,
-    href: landing.cta.secondaryActionHref,
-  },
+  primaryAction = DEFAULT_PRIMARY_ACTION,
+  secondaryAction = DEFAULT_SECONDARY_ACTION,
 }: CtaProps) {
   return (
-    <section id={id} className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20">
-      <div className="flex flex-col items-center gap-6 rounded-2xl bg-muted px-6 py-16 text-center ring-1 ring-foreground/10">
+    <section
+      id={id}
+      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
+    >
+      <div className="bg-muted ring-foreground/10 flex flex-col items-center gap-6 rounded-2xl px-6 py-16 text-center ring-1">
         <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
           {title}
         </h2>
-        <p className="max-w-xl text-base text-pretty text-muted-foreground">{description}</p>
+        <p className="text-muted-foreground max-w-xl text-base text-pretty">
+          {description}
+        </p>
         <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
-          <a href={primaryAction.href} className={cn(buttonVariants({ size: "lg" }))}>
+          <a
+            href={primaryAction.href}
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
             {primaryAction.label}
             <ArrowRightIcon data-icon="inline-end" />
           </a>

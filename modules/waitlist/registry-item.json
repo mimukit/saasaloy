@@ -9,11 +9,26 @@
   },
   "patches": [],
   "files": [
-    { "path": "files/api/routes/waitlist.ts", "target": "@api/routes/waitlist.ts" },
-    { "path": "files/db/schema/waitlist.ts", "target": "@db/schema/waitlist.ts" },
-    { "path": "files/web/components/WaitlistForm.tsx", "target": "@web/components/WaitlistForm.tsx" },
-    { "path": "files/web/sections/waitlist.astro", "target": "@web/sections/waitlist.astro" },
-    { "path": "files/web/types/waitlist-env.d.ts", "target": "@web/types/waitlist-env.d.ts" }
+    {
+      "path": "files/api/routes/waitlist.ts",
+      "target": "@api/routes/waitlist.ts"
+    },
+    {
+      "path": "files/db/schema/waitlist.ts",
+      "target": "@db/schema/waitlist.ts"
+    },
+    {
+      "path": "files/web/components/WaitlistForm.tsx",
+      "target": "@web/components/WaitlistForm.tsx"
+    },
+    {
+      "path": "files/web/sections/waitlist.astro",
+      "target": "@web/sections/waitlist.astro"
+    },
+    {
+      "path": "files/web/types/waitlist-env.d.ts",
+      "target": "@web/types/waitlist-env.d.ts"
+    }
   ],
   "agent": {
     "skills": ["skills/saasaloy-waitlist"]

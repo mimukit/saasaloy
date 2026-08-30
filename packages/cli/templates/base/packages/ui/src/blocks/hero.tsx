@@ -27,13 +27,25 @@ export interface HeroProps {
   secondaryAction?: HeroAction | null;
 }
 
+// Hoisted out of the parameter list: an object literal written as a default prop is a
+// fresh object on every render, which defeats memoization downstream. The labels still
+// come from the content module — only the wrapper object is stable.
+const DEFAULT_PRIMARY_ACTION: HeroAction = {
+  label: landing.hero.primaryActionLabel,
+  href: "#cta",
+};
+const DEFAULT_SECONDARY_ACTION: HeroAction = {
+  label: landing.hero.secondaryActionLabel,
+  href: "#pricing",
+};
+
 export function Hero({
   siteName = "Acme",
   eyebrow = landing.hero.eyebrow,
   title = landing.hero.title,
   description = interpolate(landing.hero.description, { siteName }),
-  primaryAction = { label: landing.hero.primaryActionLabel, href: "#cta" },
-  secondaryAction = { label: landing.hero.secondaryActionLabel, href: "#pricing" },
+  primaryAction = DEFAULT_PRIMARY_ACTION,
+  secondaryAction = DEFAULT_SECONDARY_ACTION,
 }: HeroProps) {
   return (
     <section className="mx-auto w-full max-w-6xl px-6 py-24 sm:py-32">
@@ -46,11 +58,14 @@ export function Hero({
         <h1 className="text-4xl font-semibold tracking-tight text-balance sm:text-5xl md:text-6xl">
           {title}
         </h1>
-        <p className="mt-6 max-w-2xl text-base text-pretty text-muted-foreground sm:text-lg">
+        <p className="text-muted-foreground mt-6 max-w-2xl text-base text-pretty sm:text-lg">
           {description}
         </p>
         <div className="mt-10 flex flex-col items-center gap-3 sm:flex-row">
-          <a href={primaryAction.href} className={cn(buttonVariants({ size: "lg" }))}>
+          <a
+            href={primaryAction.href}
+            className={cn(buttonVariants({ size: "lg" }))}
+          >
             {primaryAction.label}
             <ArrowRightIcon data-icon="inline-end" />
           </a>

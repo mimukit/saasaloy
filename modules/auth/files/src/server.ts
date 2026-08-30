@@ -1,6 +1,6 @@
 import { auth } from "./auth";
 
-export { auth };
+export { auth } from "./auth";
 
 // The protected-route recipe: read the session off any inbound Request's headers
 // (the httpOnly cookie rides along automatically), return null when there isn't one.

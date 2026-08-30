@@ -1,4 +1,10 @@
-import { applyEdits, findNodeAtLocation, getNodeValue, modify, parseTree } from "jsonc-parser";
+import {
+  applyEdits,
+  findNodeAtLocation,
+  getNodeValue,
+  modify,
+  parseTree,
+} from "jsonc-parser";
 import { inferFormatting } from "./jsonc.js";
 
 // `jsonc-parser` edits for package.json `scripts` entries — the sibling of
@@ -24,22 +30,36 @@ export interface PackageJsonScript {
  *   (never clobber a command the user may have edited, matching
  *   `upsertPackageJsonDependency`).
  */
-export function upsertPackageJsonScript(source: string, patch: PackageJsonScript): string {
+export function upsertPackageJsonScript(
+  source: string,
+  patch: PackageJsonScript
+): string {
   const root = parseTree(source);
-  if (!root) return source; // unparseable — leave it to the caller/validator to surface
+  if (!root) {
+    return source;
+  } // unparseable — leave it to the caller/validator to surface
 
   const formattingOptions = inferFormatting(source);
   const scriptsNode = findNodeAtLocation(root, ["scripts"]);
 
   if (scriptsNode?.type === "object") {
     const existing = getNodeValue(scriptsNode) as Record<string, unknown>;
-    if (Object.prototype.hasOwnProperty.call(existing, patch.name)) return source;
+    if (Object.hasOwn(existing, patch.name)) {
+      return source;
+    }
 
-    const edits = modify(source, ["scripts", patch.name], patch.value, { formattingOptions });
+    const edits = modify(source, ["scripts", patch.name], patch.value, {
+      formattingOptions,
+    });
     return applyEdits(source, edits);
   }
 
   // No `scripts` (or a non-object value) at that key — create it fresh.
-  const edits = modify(source, ["scripts"], { [patch.name]: patch.value }, { formattingOptions });
+  const edits = modify(
+    source,
+    ["scripts"],
+    { [patch.name]: patch.value },
+    { formattingOptions }
+  );
   return applyEdits(source, edits);
 }

@@ -13,8 +13,12 @@ export function planWritesUi(plan: Pick<Plan, "files" | "patches">): boolean {
   const writesFile = plan.files.some(
     (file) =>
       (file.action === "create" || file.action === "overwrite") &&
-      file.target.startsWith(UI_PREFIX),
+      file.target.startsWith(UI_PREFIX)
   );
-  if (writesFile) return true;
-  return plan.patches.some((patch) => patch.action === "apply" && patch.file.startsWith(UI_PREFIX));
+  if (writesFile) {
+    return true;
+  }
+  return plan.patches.some(
+    (patch) => patch.action === "apply" && patch.file.startsWith(UI_PREFIX)
+  );
 }

@@ -20,7 +20,8 @@ const { title, description } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     {description && <meta name="description" content={description} />}
-    {/*
+    {
+      /*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
       paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
       from bundling it into a deferred module, which would defeat the whole point —
@@ -31,7 +32,8 @@ const { title, description } = Astro.props;
       `[data-theme-toggle]` on the page through one delegated listener. That is why
       @repo/ui/blocks/theme-toggle needs no client directive. Do not inline a second
       resolver here, and do not turn this into an import.
-    */}
+    */
+    }
     <script is:inline set:html={THEME_INIT_SCRIPT} />
   </head>
   <body class="bg-background text-foreground min-h-dvh font-sans antialiased">

@@ -16,12 +16,13 @@ const Ajv2020 = AjvDefault as unknown as typeof AjvDefault.default;
 // against the JSON Schema documents in ../schemas so a typo fails fast with a clear
 // error rather than surfacing as a mysterious applier crash later (build spec §3.2/§3.3).
 
-export type SchemaName = "saasaloy" | "manifest" | "registry-item" | "saasaloy-lock";
+export type SchemaName =
+  "saasaloy" | "manifest" | "registry-item" | "saasaloy-lock";
 
 const SCHEMA_FILES: Record<SchemaName, string> = {
-  saasaloy: "saasaloy.schema.json",
   manifest: "manifest.schema.json",
   "registry-item": "registry-item.schema.json",
+  saasaloy: "saasaloy.schema.json",
   "saasaloy-lock": "saasaloy-lock.schema.json",
 };
 
@@ -32,16 +33,16 @@ const SCHEMA_DIR_CANDIDATES = ["../schemas", "../../schemas"];
 let schemaDirPromise: Promise<string> | undefined;
 
 async function schemaDir(): Promise<string> {
-  if (!schemaDirPromise) {
-    schemaDirPromise = (async () => {
-      for (const candidate of SCHEMA_DIR_CANDIDATES) {
-        const dir = fileURLToPath(new URL(candidate, import.meta.url));
-        if (await pathExists(join(dir, "registry-item.schema.json"))) return dir;
+  schemaDirPromise ??= (async () => {
+    for (const candidate of SCHEMA_DIR_CANDIDATES) {
+      const dir = fileURLToPath(new URL(candidate, import.meta.url));
+      if (await pathExists(join(dir, "registry-item.schema.json"))) {
+        return dir;
       }
-      // Fall back to the packaged location for a sensible ENOENT message.
-      return fileURLToPath(new URL("../schemas", import.meta.url));
-    })();
-  }
+    }
+    // Fall back to the packaged location for a sensible ENOENT message.
+    return fileURLToPath(new URL("../schemas", import.meta.url));
+  })();
   return schemaDirPromise;
 }
 
@@ -58,20 +59,25 @@ const validators = new Map<SchemaName, ValidateFunction>();
 
 async function getValidator(name: SchemaName): Promise<ValidateFunction> {
   const cached = validators.get(name);
-  if (cached) return cached;
+  if (cached) {
+    return cached;
+  }
   const schema = JSON.parse(
-    await readFile(join(await schemaDir(), SCHEMA_FILES[name]), "utf8"),
+    await readFile(join(await schemaDir(), SCHEMA_FILES[name]), "utf-8")
   ) as object;
-  const validate = ajv.compile(schema);
-  validators.set(name, validate);
-  return validate;
+  const validator = ajv.compile(schema);
+  validators.set(name, validator);
+  return validator;
 }
 
 /** Validate `data` against a named schema, returning clear messages on failure. */
-export async function validate(name: SchemaName, data: unknown): Promise<ValidationResult> {
+export async function validate(
+  name: SchemaName,
+  data: unknown
+): Promise<ValidationResult> {
   const fn = await getValidator(name);
-  const valid = fn(data) === true;
-  return { valid, errors: valid ? [] : (fn.errors ?? []).map(formatError) };
+  const valid = fn(data);
+  return { errors: valid ? [] : (fn.errors ?? []).map(formatError), valid };
 }
 
 // Turn an Ajv error into a single readable line. The default `message` omits the
@@ -80,16 +86,19 @@ export async function validate(name: SchemaName, data: unknown): Promise<Validat
 function formatError(err: ErrorObject): string {
   const where = err.instancePath || "(root)";
   switch (err.keyword) {
-    case "additionalProperties":
+    case "additionalProperties": {
       return `${where}: unexpected property "${String(err.params.additionalProperty)}"`;
-    case "required":
+    }
+    case "required": {
       return `${where}: missing required property "${String(err.params.missingProperty)}"`;
+    }
     case "enum": {
       const allowed = (err.params.allowedValues as unknown[]).join(", ");
       return `${where}: ${err.message ?? "is invalid"} (${allowed})`;
     }
-    default:
+    default: {
       return `${where}: ${err.message ?? "is invalid"}`;
+    }
   }
 }
 
@@ -143,7 +152,9 @@ export interface RegistryItem {
   agent?: RegistryAgent;
 }
 
-export function validateSaasaloyConfig(data: unknown): Promise<ValidationResult> {
+export function validateSaasaloyConfig(
+  data: unknown
+): Promise<ValidationResult> {
   return validate("saasaloy", data);
 }
 

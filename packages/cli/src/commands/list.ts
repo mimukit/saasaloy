@@ -4,8 +4,8 @@ import {
   createRegistrySource,
   parseCoordinate,
   REGISTRY_ENV,
-  type RegistrySource,
 } from "../lib/registry.js";
+import type { RegistrySource } from "../lib/registry.js";
 
 // `saasaloy list [owner/repo[@ref]]` — enumerate the modules a registry offers, the same
 // seam `add`'s picker reads from. With no argument it lists the default repo (or the local
@@ -15,16 +15,14 @@ import {
 export async function runList(argv: string[]): Promise<number> {
   intro(pc.bgCyan(pc.black(" saasaloy list ")));
 
-  const positional = argv.filter((arg) => !arg.startsWith("-"));
-
   let source: RegistrySource | undefined;
   try {
-    const coord = parseCoordinate(positional[0]);
+    const coord = parseCoordinate(argv.find((arg) => !arg.startsWith("-")));
     source = createRegistrySource(coord);
     if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
       note(
         `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`,
-        pc.yellow("Warning"),
+        pc.yellow("Warning")
       );
     }
 
@@ -35,7 +33,10 @@ export async function runList(argv: string[]): Promise<number> {
       return 0;
     }
 
-    note(modules.map((name) => pc.cyan(name)).join("\n"), `Modules ${pc.dim(`(${source.label})`)}`);
+    note(
+      modules.map((name) => pc.cyan(name)).join("\n"),
+      `Modules ${pc.dim(`(${source.label})`)}`
+    );
     outro(pc.dim(`${modules.length} module${modules.length === 1 ? "" : "s"}`));
     return 0;
   } catch (error) {

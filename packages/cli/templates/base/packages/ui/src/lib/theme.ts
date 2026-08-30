@@ -29,8 +29,8 @@ export const THEME_ORDER: readonly Theme[] = ["light", "dark", "system"];
 // has to carry the action. THEME_INIT_SCRIPT keeps this current as the state cycles, so
 // the block's static aria-label and this map must not drift; both read it from here.
 export const THEME_LABELS: Record<Theme, string> = {
-  light: "Theme: light. Switch to dark.",
   dark: "Theme: dark. Switch to system.",
+  light: "Theme: light. Switch to dark.",
   system: "Theme: system. Switch to light.",
 };
 
@@ -50,15 +50,20 @@ export function getStoredTheme(): Theme {
 
 /** Collapse a choice to the palette to paint. `system` asks the OS. */
 export function resolveTheme(theme: Theme): ResolvedTheme {
-  if (theme === "light" || theme === "dark") return theme;
+  if (theme === "light" || theme === "dark") {
+    return theme;
+  }
   return window.matchMedia(OS_DARK_QUERY).matches ? "dark" : "light";
 }
 
 /** Persist a choice and apply it: storage, `data-theme`, and the `.dark` class. */
 export function setTheme(theme: Theme): void {
   try {
-    if (theme === "system") localStorage.removeItem(THEME_STORAGE_KEY);
-    else localStorage.setItem(THEME_STORAGE_KEY, theme);
+    if (theme === "system") {
+      localStorage.removeItem(THEME_STORAGE_KEY);
+    } else {
+      localStorage.setItem(THEME_STORAGE_KEY, theme);
+    }
   } catch {
     // Unwritable storage costs persistence, not the current page.
   }

@@ -33,10 +33,9 @@ export interface EmailRegistry {
  * `email-<provider>` module appends to — see `src/index.ts`.
  */
 export function defineEmail(config: EmailConfig): EmailRegistry {
-  const providers = config.providers;
+  const { providers } = config;
 
   return {
-    providers,
     create(env: EmailEnv): EmailClient {
       const provider = selectProvider(providers, env.EMAIL_PROVIDER);
 
@@ -58,15 +57,22 @@ export function defineEmail(config: EmailConfig): EmailRegistry {
             // `TypeError` from a failed `fetch` reaching the caller would break the
             // `EmailError` contract `provider.ts` promises. Re-throw a well-formed error
             // untouched; wrap anything else, keeping the original in `cause`.
-            if (error instanceof EmailError) throw error;
-            throw new EmailError("provider_error", `${provider.name}: send failed`, {
-              retryable: false,
-              cause: error,
-            });
+            if (error instanceof EmailError) {
+              throw error;
+            }
+            throw new EmailError(
+              "provider_error",
+              `${provider.name}: send failed`,
+              {
+                retryable: false,
+                cause: error,
+              }
+            );
           }
         },
       };
     },
+    providers,
   };
 }
 
@@ -76,7 +82,10 @@ export function defineEmail(config: EmailConfig): EmailRegistry {
  * failure are worse than a throw: a production deploy that quietly stops sending, and
  * a test run that quietly starts.
  */
-function selectProvider(providers: EmailProvider[], selected: string | undefined): EmailProvider {
+function selectProvider(
+  providers: EmailProvider[],
+  selected: string | undefined
+): EmailProvider {
   const registered = providers.map((p) => p.name);
   const known =
     registered.length > 0
@@ -89,7 +98,9 @@ function selectProvider(providers: EmailProvider[], selected: string | undefined
 
   const provider = providers.find((p) => p.name === selected);
   if (!provider) {
-    throw new Error(`EMAIL_PROVIDER is "${selected}", which is not registered. ${known}`);
+    throw new Error(
+      `EMAIL_PROVIDER is "${selected}", which is not registered. ${known}`
+    );
   }
   return provider;
 }
@@ -100,14 +111,22 @@ function resolve(env: EmailEnv, message: EmailMessage): ResolvedEmailMessage {
     throw new EmailError(
       "invalid_message",
       "No sender address: set EMAIL_FROM, or pass `from` on the message. It must be an " +
-        "address on a domain your provider is allowed to send from.",
+        "address on a domain your provider is allowed to send from."
     );
   }
 
   const to = Array.isArray(message.to) ? message.to : [message.to];
   if (to.length === 0) {
-    throw new EmailError("invalid_message", "No recipients: `to` must hold at least one address.");
+    throw new EmailError(
+      "invalid_message",
+      "No recipients: `to` must hold at least one address."
+    );
   }
 
-  return { ...message, to, from, text: message.text ?? deriveText(message.html) };
+  return {
+    ...message,
+    from,
+    text: message.text ?? deriveText(message.html),
+    to,
+  };
 }

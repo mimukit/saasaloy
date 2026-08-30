@@ -19,10 +19,10 @@ import { schema } from "./schema";
 // `DATABASE_URL` is the default (a Workers secret in production, `.dev.vars` locally) and
 // `HYPERDRIVE` only exists once you opt into a Hyperdrive binding. See the
 // `saasaloy-database-postgres` skill.
-export type DbBindings = {
+export interface DbBindings {
   DATABASE_URL?: string;
   HYPERDRIVE?: { connectionString: string };
-};
+}
 
 /**
  * Pick the connection string for this request: the Hyperdrive binding when it is present,
@@ -42,7 +42,7 @@ export function resolveConnectionString(env: DbBindings): string {
   if (!url) {
     throw new Error(
       "No Postgres connection. Set DATABASE_URL (apps/api/.dev.vars locally, " +
-        "`wrangler secret put DATABASE_URL` in production) or bind HYPERDRIVE.",
+        "`wrangler secret put DATABASE_URL` in production) or bind HYPERDRIVE."
     );
   }
   return url;
@@ -78,6 +78,9 @@ export function resolveConnectionString(env: DbBindings): string {
  *   }
  */
 export function getDb(env: DbBindings) {
-  const sql = postgres(resolveConnectionString(env), { max: 5, fetch_types: false });
+  const sql = postgres(resolveConnectionString(env), {
+    max: 5,
+    fetch_types: false,
+  });
   return drizzle(sql, { schema });
 }

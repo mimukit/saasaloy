@@ -23,8 +23,14 @@
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/src/schema.ts", "target": "src/schema.ts" },
-        { "path": "files/src/schema/.gitkeep", "target": "src/schema/.gitkeep" },
-        { "path": "files/src/repositories/.gitkeep", "target": "src/repositories/.gitkeep" }
+        {
+          "path": "files/src/schema/.gitkeep",
+          "target": "src/schema/.gitkeep"
+        },
+        {
+          "path": "files/src/repositories/.gitkeep",
+          "target": "src/repositories/.gitkeep"
+        }
       ]
     }
   ],

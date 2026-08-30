@@ -10,13 +10,13 @@ export const auth = betterAuth({
 `;
 
 const STRIPE = {
-  exportName: "auth",
   arrayProp: "plugins",
   call: "stripe",
-  import: { name: "stripe", from: "@better-auth/stripe" },
+  exportName: "auth",
+  import: { from: "@better-auth/stripe", name: "stripe" },
 } as const;
 
-describe("insertIntoPluginArray", () => {
+describe(insertIntoPluginArray, () => {
   it("pushes the call into the array and adds its named import", () => {
     const out = insertIntoPluginArray(AUTH, STRIPE);
     expect(out).toContain("stripe()");
@@ -43,6 +43,15 @@ export const auth = betterAuth({ plugins: [stripe()] });
     const out = insertIntoPluginArray(AUTH, STRIPE);
     const imports = out.match(/@better-auth\/stripe/g) ?? [];
     expect(imports).toHaveLength(1);
+  });
+
+  it("emits Prettier-compatible output: spaced import braces and a final newline", () => {
+    // The scaffolded project runs `prettier --check .` as part of its own `pnpm lint`,
+    // so recast's defaults (`{stripe}` and no trailing newline) would make every
+    // `saasaloy add` leave the project failing its gate.
+    const out = insertIntoPluginArray(AUTH, STRIPE);
+    expect(out).toContain('import { stripe } from "@better-auth/stripe";');
+    expect(out.endsWith("\n")).toBeTruthy();
   });
 
   it("creates the array when the target property is absent", () => {

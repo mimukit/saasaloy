@@ -20,7 +20,10 @@
         { "path": "files/src/index.ts", "target": "src/index.ts" },
         { "path": "files/src/define.ts", "target": "src/define.ts" },
         { "path": "files/src/provider.ts", "target": "src/provider.ts" },
-        { "path": "files/src/providers/.gitkeep", "target": "src/providers/.gitkeep" }
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
       ]
     }
   ],

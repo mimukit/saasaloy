@@ -14,27 +14,32 @@ interface Command {
 }
 
 const COMMANDS: Record<string, Command> = {
-  init: {
-    describe: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
-    run: runInit,
-  },
   add: {
     describe: "apply a module into the current project (resolves dependsOn)",
     run: runAdd,
   },
-  remove: {
-    describe: "undo a module's applied files via the manifest (offline)",
-    run: runRemove,
+  init: {
+    describe:
+      "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
+    run: runInit,
   },
   list: {
     describe: "list available modules",
     run: runList,
   },
+  remove: {
+    describe: "undo a module's applied files via the manifest (offline)",
+    run: runRemove,
+  },
 };
 
 function printHelp(): void {
-  console.log(`${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`);
-  console.log(`${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`);
+  console.log(
+    `${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`
+  );
+  console.log(
+    `${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`
+  );
   console.log(pc.bold("Commands:"));
   for (const [name, command] of Object.entries(COMMANDS)) {
     console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
@@ -64,5 +69,5 @@ main(process.argv.slice(2)).then(
   (error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
-  },
+  }
 );

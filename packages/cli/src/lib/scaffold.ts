@@ -19,20 +19,22 @@ export function templateVars(projectName: string): TemplateVars {
 export async function copyTemplate(
   srcDir: string,
   destDir: string,
-  vars: TemplateVars,
+  vars: TemplateVars
 ): Promise<string[]> {
   const written: string[] = [];
   await mkdir(destDir, { recursive: true });
   const entries = await readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
     const srcPath = join(srcDir, entry.name);
-    const outName = entry.name.startsWith("_") ? `.${entry.name.slice(1)}` : entry.name;
+    const outName = entry.name.startsWith("_")
+      ? `.${entry.name.slice(1)}`
+      : entry.name;
     const destPath = join(destDir, outName);
     if (entry.isDirectory()) {
       written.push(...(await copyTemplate(srcPath, destPath, vars)));
     } else if (entry.isFile()) {
-      const raw = await readFile(srcPath, "utf8");
-      await writeFile(destPath, applyVars(raw, vars), "utf8");
+      const raw = await readFile(srcPath, "utf-8");
+      await writeFile(destPath, applyVars(raw, vars), "utf-8");
       written.push(destPath);
     }
   }
@@ -40,5 +42,8 @@ export async function copyTemplate(
 }
 
 function applyVars(content: string, vars: TemplateVars): string {
-  return content.replace(/\{\{(\w+)\}\}/g, (match, key: string) => vars[key] ?? match);
+  return content.replaceAll(
+    /\{\{(\w+)\}\}/g,
+    (match, key: string) => vars[key] ?? match
+  );
 }

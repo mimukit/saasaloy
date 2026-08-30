@@ -2,10 +2,24 @@ import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { cancel, intro, isCancel, note, outro, select, spinner, text } from "@clack/prompts";
+import {
+  cancel,
+  intro,
+  isCancel,
+  note,
+  outro,
+  select,
+  spinner,
+  text,
+} from "@clack/prompts";
 import pc from "picocolors";
 import type { LinkState } from "../lib/fs-utils.js";
-import { classifyLink, createDirLink, pathExists, readDirNames } from "../lib/fs-utils.js";
+import {
+  classifyLink,
+  createDirLink,
+  pathExists,
+  readDirNames,
+} from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
 import { copyTemplate, templateVars } from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
@@ -18,7 +32,9 @@ import { stripAnsi, wrapForNote } from "../lib/tui.js";
 // added later via `saasaloy add`, which copies their own skills in.
 
 // Bundled at <pkg>/templates/base; at runtime import.meta.url is <pkg>/dist/index.js.
-const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url));
+const TEMPLATE_DIR = fileURLToPath(
+  new URL("../templates/base", import.meta.url)
+);
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -28,7 +44,9 @@ const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 // report *why*. pnpm writes its `ERR_PNPM_*` diagnostics to stdout, not stderr,
 // so we keep both. Never throws — failures come back as { ok: false } so init
 // can carry on regardless.
-function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }> {
+function runPnpmInstall(
+  cwd: string
+): Promise<{ ok: boolean; message?: string }> {
   return new Promise((resolvePromise) => {
     // On Windows pnpm is `pnpm.cmd`, which bare spawn won't resolve — go via the shell there.
     const child = spawn("pnpm", ["install"], {
@@ -53,10 +71,13 @@ function runPnpmInstall(cwd: string): Promise<{ ok: boolean; message?: string }>
         resolvePromise({ ok: true });
       } else {
         // Prefer pnpm's own diagnostics (stderr, then stdout); fall back to the code.
-        const details = [stderr.trim(), stdout.trim()].filter(Boolean).join("\n");
+        const details = [stderr.trim(), stdout.trim()]
+          .filter(Boolean)
+          .join("\n");
         resolvePromise({
           ok: false,
-          message: details || `pnpm install exited with code ${code ?? "unknown"}`,
+          message:
+            details || `pnpm install exited with code ${code ?? "unknown"}`,
         });
       }
     });
@@ -118,7 +139,7 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
     result.unreadable = errorMessage(error);
     return result;
   }
-  for (const name of names.sort(bySkillOrder)) {
+  for (const name of names.toSorted(bySkillOrder)) {
     const linkAbs = join(target, ".claude", "skills", name);
     const targetAbs = join(skillsDir, name);
     // classifyLink can reject after its lstat succeeds (the readlink behind it), so it
@@ -150,12 +171,11 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
 }
 
 export async function runInit(argv: string[]): Promise<number> {
-  const positional = argv.filter((arg) => !arg.startsWith("-"));
   const force = argv.includes("--force");
   // Skip the install prompt entirely and never run pnpm install — for scripted/CI
   // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
   const noInstall = argv.includes("--no-install");
-  let nameArg = positional[0];
+  let nameArg = argv.find((arg) => !arg.startsWith("-"));
 
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
 
@@ -166,12 +186,17 @@ export async function runInit(argv: string[]): Promise<number> {
       placeholder: "my-app (use `.` for the current directory)",
       validate: (value) => {
         const trimmed = value?.trim() ?? "";
-        if (!trimmed) return "Enter a project name (or `.` for the current directory).";
+        if (!trimmed) {
+          return "Enter a project name (or `.` for the current directory).";
+        }
         // Mirror the arg path: name is the basename of the resolved target.
         const name = basename(resolve(process.cwd(), trimmed));
         if (!NAME_PATTERN.test(name)) {
           return "Use lowercase letters, digits, and hyphens (e.g. my-app).";
         }
+        // clack accepts a value only on an explicit `undefined`, and consistent-return
+        // rejects a bare `return`.
+        // oxlint-disable-next-line unicorn/no-useless-undefined
         return undefined;
       },
     });
@@ -188,7 +213,7 @@ export async function runInit(argv: string[]): Promise<number> {
 
   if (!NAME_PATTERN.test(projectName)) {
     cancel(
-      `Invalid project name "${projectName}". Use lowercase letters, digits, and hyphens (e.g. my-app).`,
+      `Invalid project name "${projectName}". Use lowercase letters, digits, and hyphens (e.g. my-app).`
     );
     return 1;
   }
@@ -196,7 +221,9 @@ export async function runInit(argv: string[]): Promise<number> {
   if (await pathExists(target)) {
     const entries = (await readdir(target)).filter((e) => e !== ".git");
     if (entries.length > 0 && !force) {
-      cancel(`Directory ${nameArg} is not empty. Re-run with --force to scaffold into it anyway.`);
+      cancel(
+        `Directory ${nameArg} is not empty. Re-run with --force to scaffold into it anyway.`
+      );
       return 1;
     }
   }
@@ -204,36 +231,39 @@ export async function runInit(argv: string[]): Promise<number> {
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   await copyTemplate(TEMPLATE_DIR, target, templateVars(projectName));
-  s.stop(`Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`);
+  s.stop(
+    `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
+  );
 
   const skills = await linkAgentSkills(target);
   if (skills.linked.length > 0) {
     const lines = skills.linked.map(
-      (name) => `${pc.cyan(`.claude/skills/${name}`)} ${pc.dim(`→ .agents/skills/${name}`)}`,
+      (name) =>
+        `${pc.cyan(`.claude/skills/${name}`)} ${pc.dim(`→ .agents/skills/${name}`)}`
     );
     note(
       wrapForNote(
-        `${lines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`,
+        `${lines.join("\n")}\n\n${pc.dim("Symlinked for Claude Code — the skill files live in `.agents/skills/`.")}`
       ),
-      "Skill links",
+      "Skill links"
     );
   }
   if (skills.unreadable) {
     logger.warn(
       `Couldn't read ${pc.cyan(".agents/skills")}: ${skills.unreadable} ` +
-        `${pc.dim("(the skill files are still there — fix the permissions and re-run init to link them)")}.`,
+        `${pc.dim("(the skill files are still there — fix the permissions and re-run init to link them)")}.`
     );
   }
   for (const name of skills.conflicts) {
     logger.warn(
       `Skill link ${pc.cyan(`.claude/skills/${name}`)} already exists and isn't ours — ` +
-        `left untouched ${pc.dim("(remove it, then re-run to link the skill)")}.`,
+        `left untouched ${pc.dim("(remove it, then re-run to link the skill)")}.`
     );
   }
   for (const failure of skills.failures) {
     logger.warn(
       `Couldn't link skill ${pc.cyan(failure.name)}: ${failure.message} ` +
-        `${pc.dim("(the skill files are still in `.agents/skills/`)")}.`,
+        `${pc.dim("(the skill files are still in `.agents/skills/`)")}.`
     );
   }
 
@@ -260,7 +290,9 @@ export async function runInit(argv: string[]): Promise<number> {
     } else {
       // Don't break the flow — report and let the user finish it by hand.
       install.stop(pc.yellow("pnpm install did not finish"));
-      logger.warn(`Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`);
+      logger.warn(
+        `Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`
+      );
       if (result.message) {
         // Show pnpm's own diagnostics inside a box, tail-trimmed and soft-wrapped to
         // the terminal width so a long line (e.g. a registry URL) can't break the rail.
@@ -279,13 +311,15 @@ export async function runInit(argv: string[]): Promise<number> {
   }
 
   const steps = [
-    nameArg !== "." ? `cd ${nameArg}` : null,
+    nameArg === "." ? null : `cd ${nameArg}`,
     installed ? null : "pnpm install",
     `pnpm dev                     ${pc.dim("# run dev servers")}`,
     // The skills the base ships are the fastest way to make the scaffold yours, and an
     // owner who never opens AGENTS.md would otherwise not know they exist.
     // Pad to the same column the commands above comment at (`pnpm dev` + 21 spaces).
-    ...skills.linked.map((name) => `${`/${name}`.padEnd(29)}${pc.dim("# in Claude Code")}`),
+    ...skills.linked.map(
+      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in Claude Code")}`
+    ),
   ]
     .filter((line): line is string => line !== null)
     .map((line) => pc.cyan(line))

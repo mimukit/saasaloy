@@ -19,7 +19,10 @@
         { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
         { "path": "files/vite.config.ts", "target": "vite.config.ts" },
         { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/routes/health.ts", "target": "src/routes/health.ts" }
+        {
+          "path": "files/src/routes/health.ts",
+          "target": "src/routes/health.ts"
+        }
       ]
     }
   ],

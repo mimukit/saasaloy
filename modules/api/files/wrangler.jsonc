@@ -8,7 +8,7 @@
   // `Access-Control-Allow-Origin` for every loopback origin, which masks the Worker's
   // own CORS allowlist. Test CORS against `wrangler dev`.
   "dev": {
-    "port": 4000
+    "port": 4000,
   },
   // Workers Logs: what makes `console.*` output (everything `@repo/logger`'s console
   // provider writes) queryable in the dashboard, with fields indexed rather than
@@ -19,8 +19,8 @@
   // logger's, which is why no module knob duplicates it.
   "observability": {
     "enabled": true,
-    "head_sampling_rate": 1
-  }
+    "head_sampling_rate": 1,
+  },
   // No bindings in the base `api` module. Capabilities and features that need a
   // D1 database, R2 bucket, KV namespace, or Queue patch this file to add their own
   // binding (via the jsonc-parser patch engine) — see the `saasaloy-api` skill.

@@ -18,7 +18,11 @@ export interface WelcomeProps {
   ctaUrl: string;
 }
 
-export const welcome: EmailTemplate<WelcomeProps> = ({ name, appName, ctaUrl }) => {
+export const welcome: EmailTemplate<WelcomeProps> = ({
+  name,
+  appName,
+  ctaUrl,
+}) => {
   // Validated, not merely escaped. The `html` tag below escapes every interpolation,
   // which stops markup — but a `javascript:` URL has no markup in it to escape and
   // would reach the inbox as a working link. Any template dropping a caller's value
@@ -28,13 +32,13 @@ export const welcome: EmailTemplate<WelcomeProps> = ({ name, appName, ctaUrl }) 
   return {
     subject: `Welcome to ${appName}`,
     html: layout({
-      title: `Welcome to ${appName}`,
-      preheader: `Your ${appName} account is ready.`,
       content: html`
-        <h1 style="font-size:22px;line-height:1.3;margin:0 0 16px;">Welcome, ${name}.</h1>
+        <h1 style="font-size:22px;line-height:1.3;margin:0 0 16px;">
+          Welcome, ${name}.
+        </h1>
         <p style="margin:0 0 24px;">
-          Your ${appName} account is ready. There's nothing else to set up — pick up where
-          you left off whenever you like.
+          Your ${appName} account is ready. There's nothing else to set up —
+          pick up where you left off whenever you like.
         </p>
         <p style="margin:0 0 24px;">
           <a
@@ -43,10 +47,14 @@ export const welcome: EmailTemplate<WelcomeProps> = ({ name, appName, ctaUrl }) 
             >Open ${appName}</a
           >
         </p>
-        <p style="margin:0;">If you didn't create this account, you can ignore this email.</p>
+        <p style="margin:0;">
+          If you didn't create this account, you can ignore this email.
+        </p>
       `,
-      footer: html`You're receiving this because someone signed up for ${appName} with this
-      address.`,
+      footer: html`You're receiving this because someone signed up for
+      ${appName} with this address.`,
+      preheader: `Your ${appName} account is ready.`,
+      title: `Welcome to ${appName}`,
     }),
     // No `text` here on purpose: the core derives it from the HTML above, so every
     // message goes out multipart without this template being written twice. Add

@@ -3,13 +3,17 @@ import {
   chainedRouteRemoveRefusal,
   insertChainedRoute,
   removeChainedRoute,
-  type ChainedRoute,
 } from "./chained-route.js";
+import type { ChainedRoute } from "./chained-route.js";
 import { toDiff } from "./diff.js";
-import { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
-import { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
-import { upsertPackageJsonScript, type PackageJsonScript } from "./pkg-json-script.js";
-import { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
+import { upsertWranglerBinding } from "./jsonc.js";
+import type { WranglerBinding } from "./jsonc.js";
+import { upsertPackageJsonDependency } from "./pkg-json.js";
+import type { PackageJsonDependency } from "./pkg-json.js";
+import { upsertPackageJsonScript } from "./pkg-json-script.js";
+import type { PackageJsonScript } from "./pkg-json-script.js";
+import { insertIntoPluginArray } from "./ts-module.js";
+import type { PluginArrayInsert } from "./ts-module.js";
 
 // The config-patch engine (build spec §3.4): the ~10% of module application that isn't
 // a pure file-drop. Small, well-tested AST codemods the applier (#6) invokes for
@@ -27,8 +31,14 @@ export {
 } from "./chained-route.js";
 export { toDiff } from "./diff.js";
 export { upsertWranglerBinding, type WranglerBinding } from "./jsonc.js";
-export { upsertPackageJsonDependency, type PackageJsonDependency } from "./pkg-json.js";
-export { upsertPackageJsonScript, type PackageJsonScript } from "./pkg-json-script.js";
+export {
+  upsertPackageJsonDependency,
+  type PackageJsonDependency,
+} from "./pkg-json.js";
+export {
+  upsertPackageJsonScript,
+  type PackageJsonScript,
+} from "./pkg-json-script.js";
 export { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
@@ -62,7 +72,11 @@ export interface PatchResult {
  * (`--dry-run`/`--diff`) or commit as it sees fit. Idempotent — a patch already
  * present yields `changed: false` and an empty diff.
  */
-export function applyPatch(source: string, patch: Patch, filename: string): PatchResult {
+export function applyPatch(
+  source: string,
+  patch: Patch,
+  filename: string
+): PatchResult {
   const content = applyCodemod(source, patch);
   const changed = content !== source;
   return {
@@ -75,16 +89,21 @@ export function applyPatch(source: string, patch: Patch, filename: string): Patc
 
 function applyCodemod(source: string, patch: Patch): string {
   switch (patch.kind) {
-    case "wrangler-binding":
+    case "wrangler-binding": {
       return upsertWranglerBinding(source, patch);
-    case "package-json-dependency":
+    }
+    case "package-json-dependency": {
       return upsertPackageJsonDependency(source, patch);
-    case "package-json-script":
+    }
+    case "package-json-script": {
       return upsertPackageJsonScript(source, patch);
-    case "plugin-array":
+    }
+    case "plugin-array": {
       return insertIntoPluginArray(source, patch);
-    case "chained-route":
+    }
+    case "chained-route": {
       return insertChainedRoute(source, patch);
+    }
     default: {
       const exhaustive: never = patch;
       throw new Error(`unknown patch kind: ${JSON.stringify(exhaustive)}`);
@@ -96,7 +115,10 @@ function applyCodemod(source: string, patch: Patch): string {
 // issue #83 scoped its reversal deliberately, and the general mechanism across every kind
 // is issue #36's. `remove` drops-and-warns for every kind absent from this table, and both
 // `isReversibleKind` and `reversePatch` read it, so adding an inverse is one edit.
-type Inverse<K extends PatchKind> = (source: string, patch: Extract<Patch, { kind: K }>) => string;
+type Inverse<K extends PatchKind> = (
+  source: string,
+  patch: Extract<Patch, { kind: K }>
+) => string;
 
 const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
   "chained-route": removeChainedRoute,
@@ -114,16 +136,25 @@ export function isReversibleKind(kind: string): boolean {
  * a patch already reversed yields `changed: false` and an empty diff, which is what
  * keeps a hand-reverted file from being force-edited.
  */
-export function reversePatch(source: string, patch: Patch, filename: string): PatchResult | undefined {
-  const inverse = INVERSES[patch.kind] as ((source: string, patch: Patch) => string) | undefined;
-  if (!inverse) return undefined;
+export function reversePatch(
+  source: string,
+  patch: Patch,
+  filename: string
+): PatchResult | undefined {
+  const inverse = INVERSES[patch.kind] as
+    ((source: string, patch: Patch) => string) | undefined;
+  if (!inverse) {
+    return undefined;
+  }
   const content = inverse(source, patch);
   const changed = content !== source;
   return {
     content,
     changed,
     diff: toDiff(source, content, filename),
-    reason: changed ? undefined : refusalReason(REVERSAL_REFUSALS, source, patch),
+    reason: changed
+      ? undefined
+      : refusalReason(REVERSAL_REFUSALS, source, patch),
   };
 }
 
@@ -135,7 +166,7 @@ export function reversePatch(source: string, patch: Patch, filename: string): Pa
 // reporting. Asking costs a second parse, so both callers ask only when nothing changed.
 type Refusal<K extends PatchKind> = (
   source: string,
-  patch: Extract<Patch, { kind: K }>,
+  patch: Extract<Patch, { kind: K }>
 ) => string | undefined;
 
 const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
@@ -149,8 +180,9 @@ const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
 function refusalReason(
   table: { [K in PatchKind]?: Refusal<K> },
   source: string,
-  patch: Patch,
+  patch: Patch
 ): string | undefined {
-  const ask = table[patch.kind] as ((source: string, patch: Patch) => string | undefined) | undefined;
+  const ask = table[patch.kind] as
+    ((source: string, patch: Patch) => string | undefined) | undefined;
   return ask?.(source, patch);
 }

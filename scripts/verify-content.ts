@@ -30,10 +30,9 @@
 // tsconfig.scripts.json.
 
 import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 
 const BASE_UI = "packages/cli/templates/base/packages/ui";
 const BLOCKS_DIR = join(root, BASE_UI, "src/blocks");
@@ -42,7 +41,10 @@ const CONTENT_MODULE = join(root, BASE_UI, "src/content/landing.ts");
 // the tab title and meta description, and both now read from `landing.meta`. Rules A and C
 // apply to Astro frontmatter and markup unchanged, and rule B reads the template markup the
 // same way it reads JSX.
-const LANDING_PAGE = join(root, "packages/cli/templates/base/apps/web/src/pages/index.astro");
+const LANDING_PAGE = join(
+  root,
+  "packages/cli/templates/base/apps/web/src/pages/index.astro"
+);
 
 // The attributes whose value a screen reader or a tooltip reads out loud. Any literal
 // here is user-visible even when it is a single word, so rule C ignores the prose test.
@@ -56,14 +58,20 @@ interface Finding {
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`verify-content: ${message}`);
-  for (const line of detail) console.error(`  ${line}`);
+  for (const line of detail) {
+    console.error(`  ${line}`);
+  }
   process.exit(1);
 }
 
 /** 1-based line number of `index` in `source`. */
 function lineOf(source: string, index: number): number {
   let line = 1;
-  for (let i = 0; i < index; i++) if (source[i] === "\n") line++;
+  for (let i = 0; i < index; i++) {
+    if (source[i] === "\n") {
+      line++;
+    }
+  }
   return line;
 }
 
@@ -75,16 +83,20 @@ function lineOf(source: string, index: number): number {
  */
 function stripComments(source: string): string {
   let out = "";
-  for (let i = 0; i < source.length; ) {
+  for (let i = 0; i < source.length;) {
     const two = source.slice(i, i + 2);
     if (two === "//") {
-      while (i < source.length && source[i] !== "\n") i++;
+      while (i < source.length && source[i] !== "\n") {
+        i++;
+      }
       continue;
     }
     if (two === "/*") {
       const end = source.indexOf("*/", i + 2);
       const stop = end === -1 ? source.length : end + 2;
-      for (let j = i; j < stop; j++) out += source[j] === "\n" ? "\n" : " ";
+      for (let j = i; j < stop; j++) {
+        out += source[j] === "\n" ? "\n" : " ";
+      }
       i = stop;
       continue;
     }
@@ -97,7 +109,9 @@ function stripComments(source: string): string {
         out += source[i];
         if (source[i] === "\\") {
           i++;
-          if (i < source.length) out += source[i];
+          if (i < source.length) {
+            out += source[i];
+          }
           i++;
           continue;
         }
@@ -124,11 +138,15 @@ function blankCall(source: string, from: number): string {
     if (char === '"' || char === "'" || char === "`") {
       const quote = char;
       i++;
-      while (i < source.length && source[i] !== quote) i += source[i] === "\\" ? 2 : 1;
+      while (i < source.length && source[i] !== quote) {
+        i += source[i] === "\\" ? 2 : 1;
+      }
       i++;
       continue;
     }
-    if (char === "(") depth++;
+    if (char === "(") {
+      depth++;
+    }
     if (char === ")") {
       depth--;
       if (depth === 0) {
@@ -138,24 +156,26 @@ function blankCall(source: string, from: number): string {
     }
     i++;
   }
-  const blanked = source
-    .slice(from, i)
-    .replace(/[^\n]/g, " ");
+  const blanked = source.slice(from, i).replaceAll(/[^\n]/g, " ");
   return source.slice(0, from) + blanked + source.slice(i);
 }
 
 /** Blank `className=`/`class=` values and every `cn(…)` argument list. */
 function stripClassNames(source: string): string {
-  let out = source.replace(
+  let out = source.replaceAll(
     /\b(?:className|class)\s*=\s*(?:"[^"]*"|'[^']*')/g,
-    (match) => match.replace(/[^\n]/g, " "),
+    (match) => match.replaceAll(/[^\n]/g, " ")
   );
   for (;;) {
     const at = out.search(/\bcn\s*\(/);
-    if (at === -1) break;
+    if (at === -1) {
+      break;
+    }
     const open = out.indexOf("(", at);
     const next = blankCall(out, open);
-    if (next === out) break;
+    if (next === out) {
+      break;
+    }
     out = next;
   }
   return out;
@@ -164,16 +184,27 @@ function stripClassNames(source: string): string {
 /** Replace each string/template literal's contents with spaces, keeping the quotes. */
 function blankLiterals(source: string): string {
   return source
-    .replace(/"[^"\n]*"/g, (m) => `"${" ".repeat(Math.max(0, m.length - 2))}"`)
-    .replace(/'[^'\n]*'/g, (m) => `'${" ".repeat(Math.max(0, m.length - 2))}'`)
-    .replace(/`[^`]*`/g, (m) => "`" + m.slice(1, -1).replace(/[^\n]/g, " ") + "`");
+    .replaceAll(
+      /"[^"\n]*"/g,
+      (m) => `"${" ".repeat(Math.max(0, m.length - 2))}"`
+    )
+    .replaceAll(
+      /'[^'\n]*'/g,
+      (m) => `'${" ".repeat(Math.max(0, m.length - 2))}'`
+    )
+    .replaceAll(
+      /`[^`]*`/g,
+      (m) => `\`${m.slice(1, -1).replaceAll(/[^\n]/g, " ")}\``
+    );
 }
 
 // Prose, for rule A: it has letters, and it is either more than one word or ends like a
 // sentence. That is what separates `"Start building today"` and `"Save 20%"` from the
 // structural literals a block legitimately holds — `"cta"`, `"#pricing"`, `"icon-sm"`, `"$"`.
 function isProse(value: string): boolean {
-  if (!/[A-Za-z]/.test(value)) return false;
+  if (!/[A-Za-z]/.test(value)) {
+    return false;
+  }
   return /\s/.test(value) || /[.?!]$/.test(value.trim());
 }
 
@@ -184,7 +215,11 @@ function findProseLiterals(source: string): Finding[] {
     for (const match of source.matchAll(pattern)) {
       const value = match[1] ?? "";
       if (isProse(value)) {
-        findings.push({ rule: "A prose string literal", line: lineOf(source, match.index), text: value });
+        findings.push({
+          rule: "A prose string literal",
+          line: lineOf(source, match.index),
+          text: value,
+        });
       }
     }
   }
@@ -194,7 +229,11 @@ function findProseLiterals(source: string): Finding[] {
   for (const match of source.matchAll(/`([^`]*)`/g)) {
     const statics = (match[1] ?? "").split(/\$\{[^}]*\}/).join(" ");
     if (/[A-Za-z]{2,}/.test(statics)) {
-      findings.push({ rule: "A template-literal message", line: lineOf(source, match.index), text: match[1] ?? "" });
+      findings.push({
+        rule: "A template-literal message",
+        line: lineOf(source, match.index),
+        text: match[1] ?? "",
+      });
     }
   }
   return findings;
@@ -207,22 +246,39 @@ function findJsxText(source: string): Finding[] {
   // keeps `useState<Foo>(null);` and `(link) => link.label` out of the results.
   for (const match of source.matchAll(/(?<![=!<>-])>([^<>]*)</g)) {
     const text = (match[1] ?? "").trim();
-    if (!/[A-Za-z]/.test(text)) continue;
-    if (/[;(){}="'`[\]]/.test(text)) continue;
-    findings.push({ rule: "B text in JSX", line: lineOf(source, match.index), text });
+    if (!/[A-Za-z]/.test(text)) {
+      continue;
+    }
+    if (/[;(){}="'`[\]]/.test(text)) {
+      continue;
+    }
+    findings.push({
+      rule: "B text in JSX",
+      line: lineOf(source, match.index),
+      text,
+    });
   }
   return findings;
 }
 
 function findSpokenLiterals(source: string): Finding[] {
   const findings: Finding[] = [];
-  const pattern = new RegExp(`\\b(${SPOKEN_ATTRIBUTES.join("|")})\\s*=\\s*("([^"]*)"|'([^']*)')`, "g");
+  const pattern = new RegExp(
+    `\\b(${SPOKEN_ATTRIBUTES.join("|")})\\s*=\\s*("([^"]*)"|'([^']*)')`,
+    "g"
+  );
   for (const match of source.matchAll(pattern)) {
     const value = match[3] ?? match[4] ?? "";
-    if (!/[A-Za-z]/.test(value)) continue;
+    if (!/[A-Za-z]/.test(value)) {
+      continue;
+    }
     // `aria-hidden="true"` and friends are state, not speech — but these four attributes
     // only ever carry words a person hears or reads.
-    findings.push({ rule: `C ${match[1]} literal`, line: lineOf(source, match.index), text: value });
+    findings.push({
+      rule: `C ${match[1]} literal`,
+      line: lineOf(source, match.index),
+      text: value,
+    });
   }
   return findings;
 }
@@ -244,11 +300,13 @@ function scan(source: string): Finding[] {
   return scanAll(source)
     .filter((finding) => {
       const key = `${finding.line}:${finding.text}`;
-      if (seen.has(key)) return false;
+      if (seen.has(key)) {
+        return false;
+      }
       seen.add(key);
       return true;
     })
-    .sort((a, b) => a.line - b.line);
+    .toSorted((a, b) => a.line - b.line);
 }
 
 // ---- Guard the guard -------------------------------------------------------------------
@@ -265,7 +323,10 @@ function scan(source: string): Finding[] {
 // `scanAll`, because `scan`'s dedupe keeps only the first rule to reach a given line+text.
 const MUST_FLAG = [
   ["A", 'const title = "Start building today";'],
-  ["A", 'const d = `${siteName} gives your product a front door.`;'],
+  // Not an unintended placeholder: this is a source-code sample, and the `${…}` has to stay
+  // uninterpolated for the fixture to exercise the template-literal branch of rule A.
+  // oxlint-disable-next-line no-template-curly-in-string
+  ["A", "const d = `${siteName} gives your product a front door.`;"],
   ["B", "<Badge>Most popular</Badge>"],
   ["B", '<Button\n  size="sm"\n>\n  Monthly\n</Button>'],
   ["C", '<nav aria-label="Main" />'],
@@ -280,17 +341,20 @@ const MUST_PASS = [
   '<Button size="icon-sm" variant="ghost" data-icon="inline-end" aria-hidden="true" />',
   "const toggleRef = useRef<HTMLButtonElement>(null);",
   'const links = all.filter((link) => link.label !== "");',
+  // Same as the MUST_FLAG fixture above: a source-code sample whose placeholders must stay
+  // literal, here to prove composition without words is *not* flagged.
+  // oxlint-disable-next-line no-template-curly-in-string
   "const price = `${currencySymbol}${amount}`;",
-  '// A comment with real sentences in it. It should never be flagged.',
-  '<p>{interpolate(ui.footer.copyright, { year, siteName })}</p>',
+  "// A comment with real sentences in it. It should never be flagged.",
+  "<p>{interpolate(ui.footer.copyright, { year, siteName })}</p>",
 ];
 
 for (const [rule, sample] of MUST_FLAG) {
   if (!scanAll(sample).some((finding) => finding.rule.startsWith(rule))) {
     fail(
       `self-test: rule ${rule} no longer flags its own example`,
-      sample.replace(/\n/g, " ⏎ "),
-      "The scanner is broken, so a clean run would prove nothing. Fix scripts/verify-content.ts.",
+      sample.replaceAll("\n", " ⏎ "),
+      "The scanner is broken, so a clean run would prove nothing. Fix scripts/verify-content.ts."
     );
   }
 }
@@ -301,7 +365,7 @@ for (const sample of MUST_PASS) {
       "self-test: the scanner flags a shape blocks are allowed to contain",
       sample,
       ...findings.map((f) => `${f.rule}: ${JSON.stringify(f.text)}`),
-      "Loosen scripts/verify-content.ts rather than editing the block.",
+      "Loosen scripts/verify-content.ts rather than editing the block."
     );
   }
 }
@@ -310,27 +374,30 @@ for (const sample of MUST_PASS) {
 
 let contentModule: string;
 try {
-  contentModule = await readFile(CONTENT_MODULE, "utf8");
+  contentModule = await readFile(CONTENT_MODULE, "utf-8");
 } catch {
   contentModule = "";
 }
-if (!contentModule.includes("export const landing") || !contentModule.includes("export const ui")) {
+if (
+  !contentModule.includes("export const landing") ||
+  !contentModule.includes("export const ui")
+) {
   fail(
     `${relative(root, CONTENT_MODULE)} is missing its \`landing\` / \`ui\` exports`,
     "Every block reads its copy from there. Without it there is nowhere for a string to go,",
-    "and this check would pass a template that has no content module at all.",
+    "and this check would pass a template that has no content module at all."
   );
 }
 
 const blockFiles = (await readdir(BLOCKS_DIR).catch(() => []))
   .filter((name) => name.endsWith(".tsx"))
-  .sort()
+  .toSorted()
   .map((name) => join(BLOCKS_DIR, name));
 
 if (blockFiles.length === 0) {
   fail(
     `no .tsx blocks found under ${relative(root, BLOCKS_DIR)}`,
-    "Either the blocks moved and this script needs updating, or the template lost them.",
+    "Either the blocks moved and this script needs updating, or the template lost them."
   );
 }
 
@@ -338,15 +405,17 @@ const scanFiles = [...blockFiles, LANDING_PAGE];
 
 const offenders: string[] = [];
 for (const file of scanFiles) {
-  const source = await readFile(file, "utf8").catch(() => null);
+  const source = await readFile(file, "utf-8").catch(() => null);
   if (source === null) {
     fail(
       `${relative(root, file)} is missing`,
-      "Either it moved and this script needs updating, or the template lost it.",
+      "Either it moved and this script needs updating, or the template lost it."
     );
   }
   for (const finding of scan(source)) {
-    offenders.push(`${relative(root, file)}:${finding.line}  ${finding.rule} — ${JSON.stringify(finding.text)}`);
+    offenders.push(
+      `${relative(root, file)}:${finding.line}  ${finding.rule} — ${JSON.stringify(finding.text)}`
+    );
   }
 }
 
@@ -357,11 +426,11 @@ if (offenders.length > 0) {
     "",
     `Move each one into ${relative(root, CONTENT_MODULE)} — \`landing.*\` for marketing copy,`,
     "`ui.*` for chrome and accessibility labels — and read it from there.",
-    "Interpolate with `interpolate()` from packages/ui/src/lib/interpolate.ts; never a template literal.",
+    "Interpolate with `interpolate()` from packages/ui/src/lib/interpolate.ts; never a template literal."
   );
 }
 
 console.log(
   `verify-content: ${blockFiles.length} block(s) + ${relative(root, LANDING_PAGE)} clean — ` +
-    `no prose literal, JSX text or spoken label outside ${relative(root, CONTENT_MODULE)}.`,
+    `no prose literal, JSX text or spoken label outside ${relative(root, CONTENT_MODULE)}.`
 );

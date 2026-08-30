@@ -29,8 +29,14 @@
         { "path": "files/src/define.ts", "target": "src/define.ts" },
         { "path": "files/src/provider.ts", "target": "src/provider.ts" },
         { "path": "files/src/render.ts", "target": "src/render.ts" },
-        { "path": "files/src/templates/welcome.ts", "target": "src/templates/welcome.ts" },
-        { "path": "files/src/providers/.gitkeep", "target": "src/providers/.gitkeep" }
+        {
+          "path": "files/src/templates/welcome.ts",
+          "target": "src/templates/welcome.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
       ]
     }
   ],

@@ -29,17 +29,20 @@ export function consoleLogger(): LogProvider {
 
     write(_env: LoggerEnv, event: LogEvent): void {
       switch (event.level) {
-        case "warn":
+        case "warn": {
           console.warn(event);
           break;
+        }
         case "error":
-        case "fatal":
+        case "fatal": {
           // `fatal` has no separate console method, and inventing one would only cost the
           // platform's severity mapping. The level stays on the event either way.
           console.error(event);
           break;
-        default:
+        }
+        default: {
           console.log(event);
+        }
       }
     },
   };

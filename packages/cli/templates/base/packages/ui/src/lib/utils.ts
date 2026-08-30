@@ -1,4 +1,5 @@
-import { clsx, type ClassValue } from "clsx";
+import { clsx } from "clsx";
+import type { ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 
 // The canonical shadcn `cn()`: clsx resolves conditionals/arrays into a class string,

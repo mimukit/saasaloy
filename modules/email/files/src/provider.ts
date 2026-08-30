@@ -105,7 +105,11 @@ export class EmailError extends Error {
   readonly retryable: boolean;
   readonly providerCode?: string;
 
-  constructor(code: EmailErrorCode, message: string, options: EmailErrorOptions = {}) {
+  constructor(
+    code: EmailErrorCode,
+    message: string,
+    options: EmailErrorOptions = {}
+  ) {
     super(message, { cause: options.cause });
     this.name = "EmailError";
     this.code = code;

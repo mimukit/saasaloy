@@ -22,12 +22,14 @@ const timestampMs = (name: string) => integer(name, { mode: "timestamp_ms" });
 const createdAtDefault = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 
 export const user = sqliteTable("user", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  email: text("email").notNull().unique(),
-  emailVerified: integer("email_verified", { mode: "boolean" }).notNull().default(false),
-  image: text("image"),
   createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
+  email: text("email").notNull().unique(),
+  emailVerified: integer("email_verified", { mode: "boolean" })
+    .notNull()
+    .default(false),
+  id: text("id").primaryKey(),
+  image: text("image"),
+  name: text("name").notNull(),
   updatedAt: timestampMs("updated_at")
     .notNull()
     .default(createdAtDefault)
@@ -37,60 +39,60 @@ export const user = sqliteTable("user", {
 export const session = sqliteTable(
   "session",
   {
-    id: text("id").primaryKey(),
-    expiresAt: timestampMs("expires_at").notNull(),
-    token: text("token").notNull().unique(),
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
+    expiresAt: timestampMs("expires_at").notNull(),
+    id: text("id").primaryKey(),
+    ipAddress: text("ip_address"),
+    token: text("token").notNull().unique(),
     updatedAt: timestampMs("updated_at")
       .notNull()
       .default(createdAtDefault)
       .$onUpdate(() => new Date()),
-    ipAddress: text("ip_address"),
     userAgent: text("user_agent"),
     userId: text("user_id")
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("session_user_id_idx").on(table.userId)],
+  (table) => [index("session_user_id_idx").on(table.userId)]
 );
 
 export const account = sqliteTable(
   "account",
   {
-    id: text("id").primaryKey(),
-    accountId: text("account_id").notNull(),
-    providerId: text("provider_id").notNull(),
-    userId: text("user_id")
-      .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
     accessToken: text("access_token"),
-    refreshToken: text("refresh_token"),
-    idToken: text("id_token"),
     accessTokenExpiresAt: timestampMs("access_token_expires_at"),
+    accountId: text("account_id").notNull(),
+    createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
+    id: text("id").primaryKey(),
+    idToken: text("id_token"),
+    password: text("password"),
+    providerId: text("provider_id").notNull(),
+    refreshToken: text("refresh_token"),
     refreshTokenExpiresAt: timestampMs("refresh_token_expires_at"),
     scope: text("scope"),
-    password: text("password"),
-    createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     updatedAt: timestampMs("updated_at")
       .notNull()
       .default(createdAtDefault)
       .$onUpdate(() => new Date()),
+    userId: text("user_id")
+      .notNull()
+      .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("account_user_id_idx").on(table.userId)],
+  (table) => [index("account_user_id_idx").on(table.userId)]
 );
 
 export const verification = sqliteTable(
   "verification",
   {
+    createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
+    expiresAt: timestampMs("expires_at").notNull(),
     id: text("id").primaryKey(),
     identifier: text("identifier").notNull(),
-    value: text("value").notNull(),
-    expiresAt: timestampMs("expires_at").notNull(),
-    createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     updatedAt: timestampMs("updated_at")
       .notNull()
       .default(createdAtDefault)
       .$onUpdate(() => new Date()),
+    value: text("value").notNull(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)],
+  (table) => [index("verification_identifier_idx").on(table.identifier)]
 );
