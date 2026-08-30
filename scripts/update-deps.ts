@@ -1,5 +1,8 @@
 // Maintainer dependency-update workflow for the files pnpm's own tooling can't see:
-// the base-template package.jsons and the module descriptors. These ship dependency
+// the base-template package.jsons and the module descriptors. Inside a descriptor that
+// means three sites, not two: `dependencies[]`, `devDependencies[]`, and the `range` on a
+// `package-json-dependency` patch, which is how a module pins a dep into a workspace
+// another module scaffolded. These ship dependency
 // versions to downstream projects but aren't pnpm workspace members, so `pnpm outdated`
 // / `pnpm update` never touch them — and because we pin EXACT versions, pnpm's
 // install-time `minimumReleaseAge` cooldown has nothing to resolve and never applies
@@ -71,8 +74,24 @@ interface Packument {
   versions: Record<string, unknown>;
 }
 
-type DepBucket = "dependencies" | "devDependencies";
+// A manifest declares deps in `dependencies` / `devDependencies` only, but a
+// `package-json-dependency` patch may name any of the four package.json sections, so the
+// bucket type covers all four. DEP_BUCKETS stays the two a manifest itself can declare.
+type DepBucket =
+  | "dependencies"
+  | "devDependencies"
+  | "peerDependencies"
+  | "optionalDependencies";
 const DEP_BUCKETS: readonly DepBucket[] = ["dependencies", "devDependencies"];
+
+function isDepBucket(value: unknown): value is DepBucket {
+  return (
+    value === "dependencies" ||
+    value === "devDependencies" ||
+    value === "peerDependencies" ||
+    value === "optionalDependencies"
+  );
+}
 
 /** How a version spec is written, which drives its status and what a write produces. */
 type SpecKind = "bare" | "exact" | "range";
@@ -83,6 +102,22 @@ interface Dep {
   name: string;
   spec: string;
   kind: SpecKind;
+  /**
+   * Index into a descriptor's `patches` array when the version lives on a
+   * `package-json-dependency` patch rather than in a dependency bucket. `undefined` for
+   * every bucket-declared dep, which is the common case.
+   */
+  patchIndex?: number;
+}
+
+/**
+ * Identity of a (manifest, dep) pair for de-duplication. The patch index is part of it:
+ * a descriptor may declare `foo` in `dependencies[]` AND patch `foo` into another
+ * workspace's package.json, and those are two independent pins to bump.
+ */
+function depKey(file: string, dep: Dep): string {
+  const source = dep.patchIndex === undefined ? "bucket" : `patch:${dep.patchIndex}`;
+  return `${file} ${source} ${dep.bucket} ${dep.name}`;
 }
 
 type ManifestKind = "package-json" | "registry-item";
@@ -468,12 +503,42 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
     }
   };
 
+  // A descriptor's THIRD dependency site: a `package-json-dependency` patch, which writes
+  // a version into a package.json some OTHER module scaffolded. It is the only way a
+  // module can pin a dep into a workspace it does not own (`database-d1` putting `wrangler`
+  // into packages/db, `database-postgres` putting `postgres` there), so a version parked
+  // here is shipped to downstream projects exactly like a `dependencies[]` entry — and
+  // would otherwise never reach the cooldown gate this script exists to be (ADR 0016).
+  const pushPatches = () => {
+    const patches = json.patches;
+    if (patches === undefined || patches === null) return;
+    if (!Array.isArray(patches)) {
+      throw new Error(`${manifest.file}: "patches" must be an array`);
+    }
+    for (const [patchIndex, patch] of patches.entries()) {
+      if (!isRecord(patch) || patch.kind !== "package-json-dependency") continue;
+      const { section, name, range } = patch;
+      // A malformed patch fails the run loudly rather than dropping its pin: the applier
+      // would reject it too, and skipping it here is how a version goes ungated.
+      if (!isDepBucket(section) || typeof name !== "string" || typeof range !== "string") {
+        throw new Error(
+          `${manifest.file}: patches[${patchIndex}] (package-json-dependency) needs a ` +
+            `string "name", a string "range", and a "section" naming a package.json ` +
+            `dependency map`,
+        );
+      }
+      if (isSkippedName(name) || isSkippedSpec(range)) continue;
+      deps.push({ bucket: section, name, spec: range, kind: classifySpec(range), patchIndex });
+    }
+  };
+
   if (manifest.kind === "package-json") {
     pushObject("dependencies");
     pushObject("devDependencies");
   } else {
     pushArray("dependencies");
     pushArray("devDependencies");
+    pushPatches();
   }
   return { file: manifest.file, kind: manifest.kind, json, deps };
 }
@@ -631,8 +696,25 @@ function groupKey(row: Row): GroupKey {
   }
 }
 
+// The trailing markers on a dep's name in the report: which bucket it lands in, and
+// whether it is a `package-json-dependency` patch rather than a bucket entry. Without the
+// patch marker a descriptor that both declares and patches the same package renders two
+// rows that read identically.
+function depTag(dep: Dep): string {
+  const bucket = dep.bucket === "dependencies" ? "" : ` ${SHORT_BUCKET[dep.bucket]}`;
+  const patch = dep.patchIndex === undefined ? "" : " patch";
+  return bucket || patch ? pc.dim(`${bucket}${patch}`) : "";
+}
+
+const SHORT_BUCKET: Record<DepBucket, string> = {
+  dependencies: "dep",
+  devDependencies: "dev",
+  peerDependencies: "peer",
+  optionalDependencies: "opt",
+};
+
 function renderRow(row: Row): string {
-  const dev = row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const dev = depTag(row.dep);
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
   if (row.status === "unresolved") {
@@ -652,7 +734,7 @@ function renderRow(row: Row): string {
 // for every dep with a newer major regardless of its within-major status, so a bump like
 // `astro 5 → 7` always surfaces in its own section (and its own picker group).
 function renderMajorRow(row: Row): string {
-  const dev = row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const dev = depTag(row.dep);
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
   const cur = row.dep.spec === "" ? pc.dim("(bare)") : row.dep.spec;
@@ -709,7 +791,7 @@ function buildCandidates(rows: Row[]): Candidate[] {
 
 // Picker label for a candidate: name [dev]  current → target (target colored by kind).
 function candidateLabel(c: Candidate): string {
-  const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const dev = depTag(c.row.dep);
   const cur = c.row.dep.spec === "" ? pc.dim("(bare)") : c.row.dep.spec;
   const tgt = c.kind === "major" ? pc.red(c.target) : colorTarget(c.row.dep.spec, c.target);
   return `${pc.cyan(c.row.dep.name)}${dev}  ${cur} ${pc.dim("→")} ${tgt}`;
@@ -719,7 +801,7 @@ function candidateLabel(c: Candidate): string {
 // what you're about to apply" list stays clearly legible (unlike the diff-style dimming of
 // the report/picker rows, which clack additionally dims when it echoes the submission).
 function selectionLine(c: Candidate): string {
-  const dev = c.row.dep.bucket === "devDependencies" ? pc.dim(" dev") : "";
+  const dev = depTag(c.row.dep);
   const cur = c.row.dep.spec === "" ? "(bare)" : c.row.dep.spec;
   const file = pc.dim(relative(root, c.row.manifest.file));
   const color =
@@ -958,7 +1040,7 @@ function printReport(rows: Row[], notes: string[]): void {
 async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promise<void> {
   const byKey = new Map<string, Candidate>();
   for (const c of toWrite) {
-    const key = `${c.row.manifest.file} ${c.row.dep.bucket} ${c.row.dep.name}`;
+    const key = depKey(c.row.manifest.file, c.row.dep);
     const prev = byKey.get(key);
     if (!prev || cmp(c.target, prev.target) > 0) byKey.set(key, c);
   }
@@ -979,7 +1061,16 @@ async function writeUpdates(manifests: Manifest[], toWrite: Candidate[]): Promis
     for (const c of fileCands) {
       const { dep } = c.row;
       const target = c.target;
-      if (manifest.kind === "package-json") {
+      if (dep.patchIndex !== undefined) {
+        // A `package-json-dependency` patch: the version is its `range`. The entry was read
+        // out of this same document and validated there, so it is present and a record.
+        const patches = json.patches;
+        const patch = Array.isArray(patches) ? patches[dep.patchIndex] : undefined;
+        if (!isRecord(patch)) {
+          throw new Error(`${manifest.file}: patches[${dep.patchIndex}] is not an object`);
+        }
+        patch.range = target;
+      } else if (manifest.kind === "package-json") {
         // The bucket was read out of this same document, so it is present and an object.
         // Throwing beats inventing a bucket in a manifest that never had one.
         const bucket = json[dep.bucket];

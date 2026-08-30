@@ -1,7 +1,7 @@
 {
   "extends": "@repo/tsconfig/base.json",
   "compilerOptions": {
-    "types": ["vite/client"]
+    "types": ["@cloudflare/workers-types", "vite/client"]
   },
   "include": ["src", "drizzle.config.ts"]
 }

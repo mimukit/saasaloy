@@ -69,6 +69,13 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
+`database-d1` and `database-postgres` are the pair that uses it today. They are **driver
+modules**, two implementations of the same capability's connection layer, and a project
+holds one or the other. The `database` core carries the tables, the schema barrel and
+`db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
+by removing one driver and adding the other, which moves no data
+([ADR 0023](../adr/adr-0023-database-driver-split-2026-08-28.md)).
+
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
 ## `saasaloy remove`

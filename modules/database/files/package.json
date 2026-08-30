@@ -10,20 +10,16 @@
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
     "db:generate": "drizzle-kit generate",
-    "db:migrate:local": "wrangler d1 migrations apply DB --local --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state",
-    "db:migrate:prod": "wrangler d1 migrations apply DB --remote --config ../../apps/api/wrangler.jsonc",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "drizzle-orm": "0.45.2"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260801.1",
     "@repo/tsconfig": "workspace:*",
     "drizzle-kit": "0.31.10",
     "rimraf": "6.1.3",
     "typescript": "7.0.2",
-    "vite": "8.2.0",
-    "wrangler": "4.118.0"
+    "vite": "8.2.0"
   }
 }

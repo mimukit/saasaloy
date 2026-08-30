@@ -114,10 +114,10 @@ template's `globals.css`, so a user who builds before their first `git init` is 
 
 Saasaloy ships dependency versions to downstream projects from two sets of files that
 **pnpm's own tooling can't see** — the base template (`packages/cli/templates/base/**/package.json`)
-and the module descriptors (`modules/*/registry-item.json` `dependencies[]` / `devDependencies[]`).
-They aren't pnpm workspace members, so `pnpm outdated` / `pnpm update` never touch them, and because
-we pin **exact** versions there's nothing for pnpm's install-time `minimumReleaseAge` cooldown to
-resolve either. A dedicated maintainer command owns these files:
+and the module descriptors (`modules/*/registry-item.json`). They aren't pnpm workspace members, so
+`pnpm outdated` / `pnpm update` never touch them, and because we pin **exact** versions there's
+nothing for pnpm's install-time `minimumReleaseAge` cooldown to resolve either. A dedicated
+maintainer command owns these files:
 
 ```sh
 pnpm deps:update    # interactive: grouped report → pick which bumps → confirm → write exact versions
@@ -131,6 +131,15 @@ bumps come **pre-checked**, majors are listed **unchecked**, and you tick the on
 confirm it writes the selected **exact** pins and stops — it never commits. The recommended flow is
 **`deps:update` → review the diff → `deps:verify` → commit**. `deps:check` is the read-only gate for
 CI/pre-push hooks, not the interactive path.
+
+**Three dependency sites per descriptor.** A `registry-item.json` parks a version in three places,
+and all three are scanned: `dependencies[]`, `devDependencies[]`, and the `range` of every
+`package-json-dependency` entry in `patches[]`. That third site is how a module pins a dep into a
+`package.json` a *different* module scaffolded — `database-d1` putting `wrangler` into
+`packages/db`, `database-postgres` putting `postgres` there. A pin parked in a patch reaches a
+downstream project exactly like a `dependencies[]` entry, so it goes through the same cooldown and
+within-major gate. A patch missing `name`, `range`, or a `section` naming a real dependency map
+fails the run rather than slipping past the gate.
 
 **Resolution policy** (see [ADR 0016](docs/adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
 per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores

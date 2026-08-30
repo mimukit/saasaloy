@@ -7,17 +7,6 @@
   "envVars": {},
   "patches": [
     {
-      "file": "apps/api/wrangler.jsonc",
-      "kind": "wrangler-binding",
-      "bindingType": "d1_databases",
-      "entry": {
-        "binding": "DB",
-        "database_name": "app-db",
-        "database_id": "local",
-        "migrations_dir": "../../packages/db/migrations"
-      }
-    },
-    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -33,8 +22,6 @@
       "files": [
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
-        { "path": "files/src/client.ts", "target": "src/client.ts" },
         { "path": "files/src/schema.ts", "target": "src/schema.ts" },
         { "path": "files/src/schema/.gitkeep", "target": "src/schema/.gitkeep" },
         { "path": "files/src/repositories/.gitkeep", "target": "src/repositories/.gitkeep" }

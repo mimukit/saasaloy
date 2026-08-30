@@ -1,8 +1,8 @@
 // The schema barrel — the convention feature modules extend by dropping a
 // `src/schema/<name>.ts` table file. It merges every table module under `src/schema/`
 // into one `schema` object at build time via Vite's `import.meta.glob`, which the api
-// Worker's Vite bundles (the only runtime where the D1 binding exists). `getDb` passes
-// this object to Drizzle so relational queries and `db.query.<table>` work.
+// Worker's Vite bundles (the only runtime that executes `import.meta.glob`). `getDb`
+// passes this object to Drizzle so relational queries and `db.query.<table>` work.
 //
 // Empty-safe: with no table files the glob is `{}` and `schema` is `{}` — the base
 // module ships zero tables, so `add database` alone leaves a clean, working barrel.
