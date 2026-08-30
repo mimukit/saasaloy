@@ -1,5 +1,13 @@
 // Shared helpers for clack terminal output, used by the commands' `note` boxes.
 
+/**
+ * Send a command's whole clack TUI to stderr, leaving stdout free for the one thing a
+ * caller might pipe. `saasaloy update` writes its merge plan to stdout, so
+ * `saasaloy update email | claude` has to work with no flag (issue #48, decision 9) —
+ * every clack function takes this as its options object.
+ */
+export const TUI_ON_STDERR = { output: process.stderr } as const;
+
 // pnpm (and our own picocolors output) embed SGR codes; strip them when measuring
 // or when a block needs recoloring uniformly (embedded resets cancel a wrapper color).
 // The control character is deliberate — this pattern exists to match ANSI escapes,

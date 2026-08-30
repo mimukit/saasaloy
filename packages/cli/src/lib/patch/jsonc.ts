@@ -88,6 +88,84 @@ export function upsertWranglerBinding(
   return applyEdits(source, edits);
 }
 
+/**
+ * What an already-present entry looks like when it *isn't* the one the descriptor
+ * wants — the signal `saasaloy update` needs to tell "already applied" apart from
+ * "the user edited the value we would have written" (issue #48, decision 1).
+ */
+export interface BindingMatch {
+  /** Which entry matched, as `<bindingType>[<matchOn>=<value>]`. */
+  key: string;
+  /** The entry as the document holds it today. */
+  current: unknown;
+  /** The entry the descriptor declares. */
+  wanted: unknown;
+}
+
+/**
+ * Find the entry `upsertWranglerBinding` would consider "already present" and report
+ * it when it differs from `patch.entry`. Returns `undefined` when nothing matches
+ * (the patch will apply) or when the match is byte-equal (a true idempotent re-run).
+ *
+ * A string `entry` is matched by plain equality, so a match is always identical —
+ * there is nothing to report.
+ */
+export function matchWranglerBinding(
+  source: string,
+  patch: WranglerBinding
+): BindingMatch | undefined {
+  const entry = patch.entry;
+  if (typeof entry === "string") {
+    return undefined;
+  }
+
+  const root = parseTree(source);
+  if (!root) {
+    return undefined;
+  }
+  const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
+  if (arrayNode?.type !== "array") {
+    return undefined;
+  }
+
+  const matchOn = patch.matchOn ?? "binding";
+  const wantedId = entry[matchOn];
+  for (const child of arrayNode.children ?? []) {
+    const value = getNodeValue(child) as unknown;
+    if (!isRecord(value) || value[matchOn] !== wantedId) {
+      continue;
+    }
+    if (sameValue(value, entry)) {
+      return undefined;
+    }
+    return {
+      key: `${patch.bindingType}[${matchOn}=${String(wantedId)}]`,
+      current: value,
+      wanted: entry,
+    };
+  }
+  return undefined;
+}
+
+// Order-insensitive structural equality. Both sides come from JSON, so a canonical
+// re-serialization with sorted keys is enough — and cheaper than a deep walk.
+function sameValue(a: unknown, b: unknown): boolean {
+  return canonical(a) === canonical(b);
+}
+
+function canonical(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
+  if (isRecord(value)) {
+    return `{${Object.keys(value)
+      .toSorted()
+      .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
+      .join(",")}}`;
+  }
+  return JSON.stringify(value) ?? "null";
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }

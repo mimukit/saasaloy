@@ -1,9 +1,10 @@
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
+import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import {
   classifyLink,
   createDirLink,
   hashContent,
+  listFilesRelative,
   pathExists,
 } from "./fs-utils.js";
 import { samePatchEntry } from "./manifest.js";
@@ -38,6 +39,8 @@ export interface PlannedFile {
   module: string;
   /** Absolute path of the source file inside the module folder. */
   source: string;
+  /** Module-relative POSIX source path (`files/lib/x.ts`) — recorded as the manifest's `from`. */
+  from: string;
   /** Project-relative POSIX path (manifest key + display). */
   target: string;
   /** Absolute destination path. */
@@ -121,21 +124,6 @@ export interface Plan {
   patches: PlannedPatch[];
 }
 
-// Recursively list files under a directory as paths relative to it (POSIX-joined).
-async function listFilesRelative(dir: string, prefix = ""): Promise<string[]> {
-  const entries = await readdir(dir, { withFileTypes: true });
-  const out: string[] = [];
-  for (const entry of entries) {
-    const rel = prefix ? posix.join(prefix, entry.name) : entry.name;
-    if (entry.isDirectory()) {
-      out.push(...(await listFilesRelative(join(dir, entry.name), rel)));
-    } else if (entry.isFile()) {
-      out.push(rel);
-    }
-  }
-  return out;
-}
-
 async function classify(
   targetAbs: string,
   target: string,
@@ -181,6 +169,7 @@ async function planModuleFile(
   return {
     module: module.item.name,
     source,
+    from: sourceRel,
     target,
     targetAbs,
     content,
@@ -414,6 +403,7 @@ export async function executePlan(
       manifest.managed[file.target] = {
         module: file.module,
         hash: file.newHash,
+        from: file.from,
       };
       written.push(file);
     } else {

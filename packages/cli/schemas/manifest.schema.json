@@ -28,6 +28,11 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "description": "sha256 hex digest of the file's content as written."
+          },
+          "from": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Module-relative POSIX source path this file was copied from (e.g. `files/lib/email.ts`). `update` uses it to fetch the same file at the old and new commit SHAs. Optional — entries written before this field shipped fall back to re-deriving the target from the module descriptor."
           }
         }
       }

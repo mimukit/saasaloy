@@ -102,6 +102,20 @@ describe(LocalRegistrySource, () => {
     });
   });
 
+  // `update` asks every source for a SHA and for intent; a working copy has neither,
+  // which is what stamps its merge plan "no merge base — local install" (issue #48).
+  it("resolves to the `local` sentinel instead of a commit SHA", async () => {
+    const source = new LocalRegistrySource(dir);
+    await expect(source.resolveSha()).resolves.toBe("local");
+  });
+
+  it("has no commit subjects to report", async () => {
+    const source = new LocalRegistrySource(dir);
+    await expect(
+      source.commitSubjects("modules/hello", "local", "local")
+    ).resolves.toStrictEqual([]);
+  });
+
   it("errors clearly on an unknown module", async () => {
     const source = new LocalRegistrySource(dir);
     await expect(source.readModule("missing", "hello-widget")).rejects.toThrow(

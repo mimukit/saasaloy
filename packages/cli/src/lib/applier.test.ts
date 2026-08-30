@@ -17,7 +17,7 @@ import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 import type { LoadedModule } from "./registry.js";
 import type { RegistryItem, SaasaloyConfig } from "./schema.js";
-import { validateRegistryItem } from "./schema.js";
+import { validateManifest, validateRegistryItem } from "./schema.js";
 
 // The scaffold applier: a capability's scaffolds[] must materialize a whole workspace —
 // files copied to workspace-root-relative targets, the declared alias registered into
@@ -241,6 +241,100 @@ describe("executePlan — scaffolds", () => {
     );
     // The conflicting file is not recorded as managed.
     expect(manifest.managed["apps/api/package.json"]).toBeUndefined();
+  });
+});
+
+// `update` has to map a managed file back to the module file it came from to fetch
+// that file at two SHAs. The hash alone can't do it, so every entry records the
+// module-relative source path it was copied from (issue #48, decision 2).
+describe("manifest `from` — module-relative provenance", () => {
+  it("records `from` for a scaffold file", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.managed["apps/api/src/index.ts"]).toMatchObject({
+      module: "api",
+      from: "files/src/index.ts",
+    });
+  });
+
+  it("records `from` for a files[] entry resolved through an alias", async () => {
+    const config: SaasaloyConfig = {
+      aliases: { "@api": "apps/api/src" },
+      installed: [],
+    };
+    const manifest = emptyManifest();
+    const mod = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [
+          {
+            path: "files/routes/waitlist.ts",
+            target: "@api/routes/waitlist.ts",
+          },
+        ],
+      },
+      { "files/routes/waitlist.ts": "export const route = 1;\n" }
+    );
+    const p = await plan({
+      install: ["waitlist"],
+      modules: [mod],
+      config,
+      manifest,
+    });
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.managed["apps/api/src/routes/waitlist.ts"]).toMatchObject({
+      from: "files/routes/waitlist.ts",
+    });
+  });
+
+  it("records `from` for a copied skill file", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await skillModule()],
+      config,
+      manifest,
+    });
+    await executePlan(p, root, config, manifest);
+
+    expect(
+      manifest.managed[".agents/skills/saasaloy-api/SKILL.md"]
+    ).toMatchObject({
+      from: "skills/saasaloy-api/SKILL.md",
+    });
+  });
+
+  it("passes schema validation with `from` present", async () => {
+    const result = await validateManifest({
+      managed: {
+        "apps/api/src/index.ts": {
+          module: "api",
+          hash: "a".repeat(64),
+          from: "files/src/index.ts",
+        },
+      },
+    });
+    expect(result.valid).toBeTruthy();
+  });
+
+  it("still validates a manifest written before `from` existed", async () => {
+    const result = await validateManifest({
+      managed: {
+        "apps/api/src/index.ts": { module: "api", hash: "a".repeat(64) },
+      },
+    });
+    expect(result.valid).toBeTruthy();
   });
 });
 
