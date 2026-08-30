@@ -4,11 +4,10 @@ import { basename, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { cancel, intro, isCancel, note, outro, select, spinner, text } from "@clack/prompts";
 import pc from "picocolors";
-import cliPackage from "../../package.json" with { type: "json" };
 import type { LinkState } from "../lib/fs-utils.js";
 import { classifyLink, createDirLink, pathExists, readDirNames } from "../lib/fs-utils.js";
 import { logger } from "../lib/logger.js";
-import { copyTemplate } from "../lib/scaffold.js";
+import { copyTemplate, templateVars } from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
@@ -23,10 +22,6 @@ const TEMPLATE_DIR = fileURLToPath(new URL("../templates/base", import.meta.url)
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
-
-export function templateVars(projectName: string): Record<string, string> {
-  return { PROJECT_NAME: projectName, CLI_VERSION: cliPackage.version };
-}
 
 // Run `pnpm install` in the scaffolded project. Output is buffered (not streamed)
 // so only the caller's spinner shows; both streams are captured so a failure can

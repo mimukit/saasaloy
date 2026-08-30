@@ -1,5 +1,6 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import cliPackage from "../../package.json" with { type: "json" };
 
 // Copy a template tree into a target dir, applying two conventions:
 //   - files named `_foo` become `.foo` (npm refuses to publish literal dotfiles
@@ -8,6 +9,12 @@ import { join } from "node:path";
 // All template files are UTF-8 text, so every file gets token substitution.
 
 export type TemplateVars = Record<string, string>;
+
+// The substitutions the base template expects. CLI_VERSION stamps the DESIGN.md
+// seed, so a generated contract records which CLI wrote it.
+export function templateVars(projectName: string): TemplateVars {
+  return { PROJECT_NAME: projectName, CLI_VERSION: cliPackage.version };
+}
 
 export async function copyTemplate(
   srcDir: string,

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { templateVars } from "./init.js";
+import { templateVars } from "./scaffold.js";
 
 describe("init template variables", () => {
   it("includes the CLI package version", () => {
