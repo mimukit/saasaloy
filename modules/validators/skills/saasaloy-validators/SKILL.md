@@ -15,7 +15,7 @@ One file per feature, directly under `src/`. A file named `src/waitlist.ts` is i
 
 ## Using a schema in an api route
 
-An api route validates with `zValidator` from `@hono/zod-validator` and reads the parsed value with `c.req.valid()`, which carries the schema's inferred type into the handler. Pass a hook as the third argument so the failure reply uses the shared envelope instead of Hono's default body.
+An api route validates with `zValidator` from `@hono/zod-validator` and reads the parsed value with `c.req.valid("json")`, naming the same target `zValidator` was given. That call carries the schema's inferred type into the handler. Pass a hook as the third argument so the failure reply uses the shared envelope instead of Hono's default body.
 
 ```ts
 // apps/api/src/routes/signup.ts

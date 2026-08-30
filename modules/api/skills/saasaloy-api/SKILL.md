@@ -116,9 +116,10 @@ what makes the output queryable in the dashboard — `head_sampling_rate` is its
 
 A route does not define its own input shape inline. The schema belongs in `packages/validators`
 (`@repo/validators/<feature>`), which the `validators` capability scaffolds, and the route wraps it
-with `zValidator` from `@hono/zod-validator`. `c.req.valid()` then carries the inferred type into
-the handler. Error bodies use the shared `{ error: { code, message } }` envelope from
-`@repo/validators/common`. See the `saasaloy-validators` skill for the full convention.
+with `zValidator` from `@hono/zod-validator`. `c.req.valid("json")` then carries the inferred type
+into the handler, with the target matching the one `zValidator` was given. Error bodies use the
+shared `{ error: { code, message } }` envelope from `@repo/validators/common`. See the
+`saasaloy-validators` skill for the full convention.
 
 Keep the three layers apart: request shapes in `@repo/validators`, database column shapes in
 `packages/db`, HTTP wiring here in `apps/api`.
