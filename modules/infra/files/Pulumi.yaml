@@ -1,0 +1,14 @@
+name: infra
+runtime: nodejs
+description: >-
+  Centralized deployment of every Saasaloy service via Pulumi (ADR 0021, Cloudflare-only v1). Discovers each service's wrangler.jsonc, translates its bindings into Cloudflare resources, and deploys the built Worker.
+# DIY backend, state committed in this workspace (ADR 0021) — PR-reviewable, no Pulumi
+# Cloud account required. A file:// backend path is resolved by Pulumi against the
+# current working directory, NOT this file's location — this only lands at
+# `infra/state/` because every documented way of running infra (`pnpm run
+# preview/deploy/destroy` from inside infra/, or `pnpm --filter @repo/infra <script>`
+# from the repo root) cwds into `infra/` before invoking `pulumi`. Upgrading to a
+# team-scale backend (e.g. R2 over its S3 API) only changes this one line — see the
+# saasaloy-infra skill.
+backend:
+  url: file://./state
