@@ -22,14 +22,9 @@ beforeAll(async () => {
   await writeFile(
     join(dir, "saasaloy.json"),
     JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
-    "utf8",
+    "utf-8"
   );
   process.chdir(dir);
-});
-
-afterAll(async () => {
-  process.chdir(ORIGINAL_CWD);
-  await rm(dir, { recursive: true, force: true });
 });
 
 afterEach(() => {
@@ -37,14 +32,19 @@ afterEach(() => {
   process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
 });
 
+afterAll(async () => {
+  process.chdir(ORIGINAL_CWD);
+  await rm(dir, { recursive: true, force: true });
+});
+
 // clack writes its rail straight to the stream; capture it to read the cancel message.
 function capture(): { lines: string[]; restore: () => void } {
   const lines: string[] = [];
-  const originalWrite = process.stdout.write;
-  process.stdout.write = ((chunk: string | Uint8Array) => {
+  const originalWrite = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk: string | Uint8Array) => {
     lines.push(stripAnsi(String(chunk)));
     return true;
-  }) as typeof process.stdout.write;
+  };
   return {
     lines,
     restore() {

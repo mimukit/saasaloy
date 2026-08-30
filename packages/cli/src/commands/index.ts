@@ -19,7 +19,8 @@ export type CommandRegistry = Record<string, Command>;
 // in mind. No explicit `order`/`group` field until the list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
   init: {
-    describe: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
+    describe:
+      "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
     run: runInit,
   },
   add: {

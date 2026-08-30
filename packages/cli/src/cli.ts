@@ -1,6 +1,11 @@
-import { cancel, isCancel as clackIsCancel, select as clackSelect } from "@clack/prompts";
+import {
+  cancel,
+  isCancel as clackIsCancel,
+  select as clackSelect,
+} from "@clack/prompts";
 import pc from "picocolors";
-import { COMMANDS, type CommandRegistry } from "./commands/index.js";
+import type { CommandRegistry } from "./commands/index.js";
+import { COMMANDS } from "./commands/index.js";
 import { isInteractive } from "./lib/tui.js";
 
 // Argument parsing and dispatch. Kept out of index.ts — which only bootstraps this and
@@ -22,8 +27,12 @@ export interface CliDeps {
 }
 
 export function printHelp(registry: CommandRegistry): void {
-  console.log(`${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`);
-  console.log(`${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`);
+  console.log(
+    `${pc.bold("saasaloy")} ${pc.dim("— composable SaaS accelerator for Cloudflare")}\n`
+  );
+  console.log(
+    `${pc.bold("Usage:")} saasaloy ${pc.cyan("<command>")} [options]\n`
+  );
   console.log(pc.bold("Commands:"));
   for (const [name, command] of Object.entries(registry)) {
     console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
@@ -53,14 +62,19 @@ async function pickCommand(deps: CliDeps): Promise<number> {
   // The options were mapped from this registry's own keys, so a miss can't happen; the
   // guard is what lets TypeScript narrow the lookup.
   const command = registry[picked];
-  if (!command) return 1;
+  if (!command) {
+    return 1;
+  }
   // Hand off with an empty argv: every command already asks for what it needs (`init`
   // prompts for a name, `add`/`remove` open their module pickers), so the picker
   // deliberately teaches itself nothing about any command's argument shape.
   return command.run([]);
 }
 
-export async function main(argv: string[], deps: Partial<CliDeps> = {}): Promise<number> {
+export async function main(
+  argv: string[],
+  deps: Partial<CliDeps> = {}
+): Promise<number> {
   const {
     registry = COMMANDS,
     select = clackSelect,

@@ -10,5 +10,5 @@ main(process.argv.slice(2)).then(
   (error: unknown) => {
     console.error(error instanceof Error ? error.message : error);
     process.exit(1);
-  },
+  }
 );

@@ -19,7 +19,7 @@ export function stripAnsi(text: string): string {
 // runners, `docker run` without -t, a pipe, `ssh host cmd`) already has no TTY, while a
 // developer with CI exported would silently lose every prompt in the CLI.
 export function isInteractive(): boolean {
-  return Boolean(process.stdin.isTTY && process.stdout.isTTY);
+  return process.stdin.isTTY && process.stdout.isTTY;
 }
 
 // Hard-wrap text to the terminal width so a `note` box can't overflow the rail.

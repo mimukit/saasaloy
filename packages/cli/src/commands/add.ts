@@ -264,7 +264,9 @@ export async function runAdd(argv: string[]): Promise<number> {
       // below could never be answered — it would hang the pipeline. Say what was missing
       // instead, before the registry is even fetched.
       if (!isInteractive()) {
-        cancel(`No module named and no terminal to pick one in — usage: \`${USAGE}\`.`);
+        cancel(
+          `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
+        );
         return 1;
       }
       const available = await source.listModules();

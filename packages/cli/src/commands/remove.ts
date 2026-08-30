@@ -205,7 +205,9 @@ export async function runRemove(argv: string[]): Promise<number> {
       // Same hazard as `add`: without a terminal this prompt can never be answered, so
       // it would hang rather than fail.
       if (!isInteractive()) {
-        cancel(`No module named and no terminal to pick one in — usage: \`${USAGE}\`.`);
+        cancel(
+          `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
+        );
         return 1;
       }
       const picked = await select({

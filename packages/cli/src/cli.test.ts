@@ -1,6 +1,8 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { main, printHelp, type SelectPrompt } from "./cli.js";
-import { COMMANDS, type Command, type CommandRegistry } from "./commands/index.js";
+import type { SelectPrompt } from "./cli.js";
+import { main, printHelp } from "./cli.js";
+import type { Command, CommandRegistry } from "./commands/index.js";
+import { COMMANDS } from "./commands/index.js";
 
 // Dispatch is exercised through the injected seam (`main(argv, deps)`) rather than a
 // module mock — the package mocks nothing anywhere else, and a parameter already gives
@@ -27,14 +29,14 @@ function capture(): Capture {
   const err: string[] = [];
   const originalLog = console.log;
   const originalError = console.error;
-  const originalWrite = process.stdout.write;
+  const originalWrite = process.stdout.write.bind(process.stdout);
   console.log = (...args: unknown[]) => {
     out.push(args.map(String).join(" "));
   };
   console.error = (...args: unknown[]) => {
     err.push(args.map(String).join(" "));
   };
-  process.stdout.write = (() => true) as typeof process.stdout.write;
+  process.stdout.write = () => true;
   return {
     out,
     err,
@@ -51,12 +53,12 @@ interface Recorded {
   calls: string[][];
 }
 
-function recordCommand(describe: string, code = 0): Recorded {
+function recordCommand(description: string, code = 0): Recorded {
   const calls: string[][] = [];
   return {
     calls,
     command: {
-      describe,
+      describe: description,
       run(argv: string[]) {
         calls.push(argv);
         return code;
@@ -99,7 +101,7 @@ afterEach(() => {
   add.calls.length = 0;
 });
 
-describe("printHelp", () => {
+describe(printHelp, () => {
   it("lists every command in the registry it is given", () => {
     const captured = capture();
     try {
@@ -129,14 +131,19 @@ describe("printHelp", () => {
 });
 
 describe("main — explicit help", () => {
-  for (const flag of ["--help", "-h", "help"]) {
-    it(`prints help and exits 0 for ${flag}, even on a TTY`, async () => {
+  it.each(["--help", "-h", "help"])(
+    "prints help and exits 0 for %s, even on a TTY",
+    async (flag) => {
       setTTY(true);
       const picker = recordSelect("init");
       const captured = capture();
       let code: number;
       try {
-        code = await main([flag], { registry, select: picker.select, isCancel });
+        code = await main([flag], {
+          registry,
+          select: picker.select,
+          isCancel,
+        });
       } finally {
         captured.restore();
       }
@@ -144,8 +151,8 @@ describe("main — explicit help", () => {
       expect(picker.calls).toHaveLength(0);
       expect(captured.out.join("\n")).toContain("Usage:");
       expect(init.calls).toHaveLength(0);
-    });
-  }
+    }
+  );
 });
 
 describe("main — dispatch", () => {
@@ -158,7 +165,7 @@ describe("main — dispatch", () => {
       captured.restore();
     }
     expect(code).toBe(7);
-    expect(add.calls).toEqual([["waitlist", "--dry-run"]]);
+    expect(add.calls).toStrictEqual([["waitlist", "--dry-run"]]);
   });
 
   it("errors, prints help and exits 1 on an unknown command — on a TTY too", async () => {
@@ -167,7 +174,11 @@ describe("main — dispatch", () => {
     const captured = capture();
     let code: number;
     try {
-      code = await main(["nope"], { registry, select: picker.select, isCancel });
+      code = await main(["nope"], {
+        registry,
+        select: picker.select,
+        isCancel,
+      });
     } finally {
       captured.restore();
     }
@@ -180,22 +191,26 @@ describe("main — dispatch", () => {
   // The registry is a plain object, so it inherits these from Object.prototype and each
   // one is truthy. Looked up without an own-key check they sail past the unknown-command
   // guard and blow up on `.run`, turning a typo into a stack trace.
-  for (const name of ["toString", "constructor", "valueOf", "hasOwnProperty", "__proto__"]) {
-    it(`treats the inherited property ${name} as an unknown command`, async () => {
-      const captured = capture();
-      let code: number;
-      try {
-        code = await main([name], { registry });
-      } finally {
-        captured.restore();
-      }
-      expect(code).toBe(1);
-      expect(captured.err.join("\n")).toContain(name);
-      expect(captured.out.join("\n")).toContain("Usage:");
-      expect(init.calls).toHaveLength(0);
-      expect(add.calls).toHaveLength(0);
-    });
-  }
+  it.each([
+    "toString",
+    "constructor",
+    "valueOf",
+    "hasOwnProperty",
+    "__proto__",
+  ])("treats the inherited property %s as an unknown command", async (name) => {
+    const captured = capture();
+    let code: number;
+    try {
+      code = await main([name], { registry });
+    } finally {
+      captured.restore();
+    }
+    expect(code).toBe(1);
+    expect(captured.err.join("\n")).toContain(name);
+    expect(captured.out.join("\n")).toContain("Usage:");
+    expect(init.calls).toHaveLength(0);
+    expect(add.calls).toHaveLength(0);
+  });
 });
 
 describe("main — bare invocation without a TTY", () => {
@@ -219,7 +234,7 @@ describe("main — bare invocation without a TTY", () => {
     }
 
     expect(code).toBe(0);
-    expect(captured.out).toEqual(expected.out);
+    expect(captured.out).toStrictEqual(expected.out);
     expect(picker.calls).toHaveLength(0);
     expect(init.calls).toHaveLength(0);
   });
@@ -251,12 +266,12 @@ describe("main — bare invocation on a TTY", () => {
       captured.restore();
     }
     expect(picker.calls).toHaveLength(1);
-    expect(picker.calls[0]?.options).toEqual(
+    expect(picker.calls[0]?.options).toStrictEqual(
       Object.keys(registry).map((name) => ({
         value: name,
         label: name,
         hint: registry[name]?.describe,
-      })),
+      }))
     );
   });
 
@@ -271,7 +286,7 @@ describe("main — bare invocation on a TTY", () => {
       captured.restore();
     }
     expect(code).toBe(7);
-    expect(add.calls).toEqual([[]]);
+    expect(add.calls).toStrictEqual([[]]);
   });
 
   it("prints no help above the picker — the option hints already carry it", async () => {
