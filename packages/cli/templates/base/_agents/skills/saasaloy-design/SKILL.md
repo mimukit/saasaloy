@@ -104,7 +104,11 @@ If the network or `pnpm dlx` is unavailable, continue with the fingerprint and l
 
 Read `docs/product-brief.md` first. Use its product, audience, differentiator, tone, and language answers. Do not ask those questions again.
 
-If the brief is absent, read `.agents/skills/saasaloy-setup/SKILL.md`. Ask its product questions and write `docs/product-brief.md` in its exact format before you discuss the theme.
+If the brief is absent, offer to run `saasaloy-setup`:
+
+> There's no `docs/product-brief.md`, so I'd be picking a theme for a product I know nothing about. `/saasaloy-setup` asks ten questions and leaves the brief behind; then this picks up where it stops. Want me to run it now?
+
+Invoke that skill rather than reading its files. Do **not** improvise your own interview, and do not write `docs/product-brief.md` yourself. `saasaloy-setup` owns the brief and its format, and two skills asking overlapping questions is how an owner answers the same thing twice.
 
 Ask only for design facts that the brief does not contain. Cover the color mood, the preset direction or registry URL, and the desired density.
 
