@@ -20,15 +20,36 @@
         { "path": "files/vite.config.ts", "target": "vite.config.ts" },
         { "path": "files/index.html", "target": "index.html" },
         { "path": "files/src/main.tsx", "target": "src/main.tsx" },
-        { "path": "files/src/routeTree.gen.ts", "target": "src/routeTree.gen.ts" },
+        {
+          "path": "files/src/routeTree.gen.ts",
+          "target": "src/routeTree.gen.ts"
+        },
         { "path": "files/src/lib/auth.ts", "target": "src/lib/auth.ts" },
         { "path": "files/src/lib/api.ts", "target": "src/lib/api.ts" },
-        { "path": "files/src/components/app-shell.tsx", "target": "src/components/app-shell.tsx" },
-        { "path": "files/src/components/access-denied.tsx", "target": "src/components/access-denied.tsx" },
-        { "path": "files/src/components/sign-out-button.tsx", "target": "src/components/sign-out-button.tsx" },
-        { "path": "files/src/routes/__root.tsx", "target": "src/routes/__root.tsx" },
-        { "path": "files/src/routes/login.tsx", "target": "src/routes/login.tsx" },
-        { "path": "files/src/routes/index.tsx", "target": "src/routes/index.tsx" }
+        {
+          "path": "files/src/components/app-shell.tsx",
+          "target": "src/components/app-shell.tsx"
+        },
+        {
+          "path": "files/src/components/access-denied.tsx",
+          "target": "src/components/access-denied.tsx"
+        },
+        {
+          "path": "files/src/components/sign-out-button.tsx",
+          "target": "src/components/sign-out-button.tsx"
+        },
+        {
+          "path": "files/src/routes/__root.tsx",
+          "target": "src/routes/__root.tsx"
+        },
+        {
+          "path": "files/src/routes/login.tsx",
+          "target": "src/routes/login.tsx"
+        },
+        {
+          "path": "files/src/routes/index.tsx",
+          "target": "src/routes/index.tsx"
+        }
       ]
     }
   ],

@@ -41,8 +41,10 @@ declare module "@tanstack/react-router" {
   }
 }
 
-const rootElement = document.getElementById("root");
-if (!rootElement) throw new Error('index.html is missing its <div id="root">.');
+const rootElement = document.querySelector("#root");
+if (!rootElement) {
+  throw new Error('index.html is missing its <div id="root">.');
+}
 
 // QueryClientProvider wraps RouterProvider. A loader reads the client from the router
 // context above and needs no provider, but every `useQuery` inside a route component
@@ -52,5 +54,5 @@ createRoot(rootElement).render(
     <QueryClientProvider client={queryClient}>
       <RouterProvider router={router} />
     </QueryClientProvider>
-  </StrictMode>,
+  </StrictMode>
 );

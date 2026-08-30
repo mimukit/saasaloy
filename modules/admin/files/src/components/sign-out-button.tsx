@@ -34,7 +34,9 @@ export function SignOutButton({
       // `signOut()` rejects rather than resolving with an error when the request never
       // reaches the api. Say so: the session is still live, and a silent no-op on a
       // sign-out button reads like the click was lost.
-      setError("Could not reach the api, so you are still signed in. Try again.");
+      setError(
+        "Could not reach the api, so you are still signed in. Try again."
+      );
     } finally {
       setPending(false);
     }

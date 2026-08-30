@@ -15,7 +15,9 @@ import { SignOutButton } from "@admin/components/sign-out-button";
 // The `to` values are checked against the generated route tree, so a nav entry pointing at
 // a route that does not exist fails `pnpm typecheck` instead of 404-ing at runtime. That is
 // the reason this list is written out rather than derived from the router at runtime.
-const NAV_ITEMS = [{ to: "/", label: "Overview", icon: LayoutDashboardIcon }] as const;
+const NAV_ITEMS = [
+  { to: "/", label: "Overview", icon: LayoutDashboardIcon },
+] as const;
 
 export function AppShell({
   session,
@@ -32,7 +34,10 @@ export function AppShell({
         </div>
         <Separator className="bg-sidebar-border" />
 
-        <nav aria-label="Admin sections" className="flex flex-1 flex-col gap-0.5 p-2">
+        <nav
+          aria-label="Admin sections"
+          className="flex flex-1 flex-col gap-0.5 p-2"
+        >
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
             <Link
               key={to}
@@ -44,7 +49,7 @@ export function AppShell({
               className={cn(
                 "text-muted-foreground flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
                 "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                "aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:font-medium",
+                "aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:font-medium"
               )}
             >
               <Icon className="size-4 shrink-0" />
@@ -57,8 +62,12 @@ export function AppShell({
             dropdown yet, and a backoffice sidebar has room to show the account outright. */}
         <div className="border-sidebar-border border-t p-2">
           <div className="px-2 py-1.5">
-            <p className="truncate text-sm font-medium">{session.user.name || session.user.email}</p>
-            <p className="text-muted-foreground truncate text-xs">{session.user.email}</p>
+            <p className="truncate text-sm font-medium">
+              {session.user.name || session.user.email}
+            </p>
+            <p className="text-muted-foreground truncate text-xs">
+              {session.user.email}
+            </p>
           </div>
           <SignOutButton />
         </div>

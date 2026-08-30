@@ -1,10 +1,17 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { type ErrorComponentProps, createFileRoute } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
+import type { ErrorComponentProps } from "@tanstack/react-router";
 import { RefreshCwIcon } from "lucide-react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@repo/ui/components/card";
 
 import { api } from "@admin/lib/api";
 
@@ -23,7 +30,9 @@ const healthQuery = queryOptions({
   queryKey: ["health"],
   queryFn: async () => {
     const res = await api.health.$get();
-    if (!res.ok) throw new Error(`The api answered ${res.status}.`);
+    if (!res.ok) {
+      throw new Error(`The api answered ${res.status}.`);
+    }
     // Typed from apps/api's route chain, not asserted here. Change what
     // src/routes/health.ts returns and this call site is where the compiler complains.
     return res.json();
@@ -55,7 +64,9 @@ function Dashboard() {
       <div className="mb-6 flex items-center justify-between gap-4">
         <div>
           <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground text-sm">Live data from the api Worker.</p>
+          <p className="text-muted-foreground text-sm">
+            Live data from the api Worker.
+          </p>
         </div>
         <Button
           variant="outline"
@@ -63,7 +74,9 @@ function Dashboard() {
           disabled={isFetching}
           // Invalidation, not `refetch()`: marking the key stale refreshes every screen
           // holding this query, and it is the same call a mutation's `onSuccess` makes.
-          onClick={() => queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })}
+          onClick={() =>
+            queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })
+          }
         >
           <RefreshCwIcon data-icon="inline-start" />
           {isFetching ? "Refreshing…" : "Refresh"}
@@ -75,8 +88,9 @@ function Dashboard() {
           <CardTitle>Api health</CardTitle>
           <CardDescription>
             <code className="font-mono">GET /health</code>, called through{" "}
-            <code className="font-mono">hc&lt;AppType&gt;</code>. The response is typed by the
-            route file in apps/api, so a schema change there fails this app's typecheck.
+            <code className="font-mono">hc&lt;AppType&gt;</code>. The response
+            is typed by the route file in apps/api, so a schema change there
+            fails this app&#39;s typecheck.
           </CardDescription>
         </CardHeader>
         <CardContent className="flex items-center gap-2 text-sm">
@@ -98,8 +112,8 @@ function DashboardError({ error, reset }: ErrorComponentProps) {
         <CardHeader>
           <CardTitle>The api did not answer</CardTitle>
           <CardDescription>
-            {error.message} Check that apps/api is running on the origin PUBLIC_API_URL names
-            (http://localhost:4000 in dev).
+            {error.message} Check that apps/api is running on the origin
+            PUBLIC_API_URL names (http://localhost:4000 in dev).
           </CardDescription>
         </CardHeader>
         <CardContent>

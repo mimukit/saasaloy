@@ -1,6 +1,12 @@
 import { ShieldAlertIcon } from "lucide-react";
 
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@repo/ui/components/card";
 
 import type { AdminSession } from "@admin/lib/auth";
 import { SignOutButton } from "@admin/components/sign-out-button";
@@ -18,8 +24,9 @@ export function AccessDenied({ session }: { session: AdminSession }) {
           <ShieldAlertIcon className="text-muted-foreground size-5" />
           <CardTitle>This account cannot open the admin app</CardTitle>
           <CardDescription>
-            You are signed in as {session.user.email}, but the account does not carry the admin
-            role. Ask an existing admin to grant it, then sign in again.
+            You are signed in as {session.user.email}, but the account does not
+            carry the admin role. Ask an existing admin to grant it, then sign
+            in again.
           </CardDescription>
         </CardHeader>
         <CardContent>

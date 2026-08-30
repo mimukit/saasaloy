@@ -1,8 +1,15 @@
 import { createFileRoute, useRouter } from "@tanstack/react-router";
-import { type FormEvent, useState } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
 import { Button } from "@repo/ui/components/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@repo/ui/components/card";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 
@@ -36,12 +43,17 @@ function LoginScreen() {
       // PUBLIC_API_URL, CORS refusal — rejects instead, because better-auth leaves the fetch
       // layer's `catchAllError` off. Without the catch below, that second case would leave
       // the button stuck on "Signing in…" with nothing on screen to explain it.
-      const { error: signInError } = await auth.signIn.email({ email, password });
+      const { error: signInError } = await auth.signIn.email({
+        email,
+        password,
+      });
 
       if (signInError) {
         // better-auth answers a wrong password and an unknown address with the same message on
         // purpose; repeating it verbatim keeps this screen from becoming an account oracle.
-        setError(signInError.message ?? "Sign-in failed. Check the email and password.");
+        setError(
+          signInError.message ?? "Sign-in failed. Check the email and password."
+        );
         return;
       }
 
@@ -53,7 +65,7 @@ function LoginScreen() {
       await router.navigate({ to: "/" });
     } catch {
       setError(
-        "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev).",
+        "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev)."
       );
     } finally {
       setPending(false);
@@ -65,7 +77,9 @@ function LoginScreen() {
       <Card className="w-full">
         <CardHeader>
           <CardTitle>Sign in</CardTitle>
-          <CardDescription>The admin app is open to admin accounts only.</CardDescription>
+          <CardDescription>
+            The admin app is open to admin accounts only.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">

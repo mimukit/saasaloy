@@ -33,7 +33,7 @@ export default defineConfig({
     // Mirrors saasaloy.json's `@admin` alias (apps/admin/src). That alias only drives
     // the CLI's file placement when a module's files[] target `@admin/...`; this entry
     // is what makes the dropped source's own `@admin/...` imports actually resolve.
-    alias: { "@admin": fileURLToPath(new URL("./src", import.meta.url)) },
+    alias: { "@admin": fileURLToPath(new URL("src", import.meta.url)) },
   },
   // Fixed dev port. The api Worker's CORS allowlist and better-auth's `trustedOrigins`
   // both hardcode http://localhost:3001, so this port cannot be allowed to drift.

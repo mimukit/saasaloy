@@ -1,15 +1,16 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  type ErrorComponentProps,
   ErrorComponent,
   Outlet,
   createRootRouteWithContext,
   redirect,
 } from "@tanstack/react-router";
+import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import { AccessDenied } from "@admin/components/access-denied";
 import { AppShell } from "@admin/components/app-shell";
-import { type AdminSession, isAdmin, loadSession } from "@admin/lib/auth";
+import { isAdmin, loadSession } from "@admin/lib/auth";
+import type { AdminSession } from "@admin/lib/auth";
 
 const LOGIN_PATH = "/login";
 
@@ -65,16 +66,22 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
     const onLoginPage = location.pathname === LOGIN_PATH;
 
     if (!session) {
-      if (onLoginPage) return { session: null };
+      if (onLoginPage) {
+        return { session: null };
+      }
       throw redirect({ to: LOGIN_PATH });
     }
 
     // The role check comes before the login-page redirect, so a signed-in non-admin who
     // opens /login is denied where they stand instead of being sent to / to be denied there.
-    if (!isAdmin(session)) throw new NotAdminError(session);
+    if (!isAdmin(session)) {
+      throw new NotAdminError(session);
+    }
 
     // Already signed in as an admin and asking for the login screen: nothing to do there.
-    if (onLoginPage) throw redirect({ to: "/" });
+    if (onLoginPage) {
+      throw redirect({ to: "/" });
+    }
 
     return { session };
   },
@@ -87,7 +94,9 @@ function RootLayout() {
 
   // Only /login reaches this branch: every other path redirected in beforeLoad. A non-admin
   // never reaches this component at all — the guard threw before it rendered.
-  if (!session) return <Outlet />;
+  if (!session) {
+    return <Outlet />;
+  }
 
   return (
     <AppShell session={session}>
@@ -100,6 +109,8 @@ function RootLayout() {
 // deny path, so it renders the panel rather than a stack trace; anything else is a real
 // failure and gets the router's own error screen.
 function RootError({ error }: ErrorComponentProps) {
-  if (error instanceof NotAdminError) return <AccessDenied session={error.session} />;
+  if (error instanceof NotAdminError) {
+    return <AccessDenied session={error.session} />;
+  }
   return <ErrorComponent error={error} />;
 }

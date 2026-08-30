@@ -7,8 +7,8 @@
   // without it, a request for /login returns a 404 because no such file exists in dist/.
   "assets": {
     "directory": "./dist",
-    "not_found_handling": "single-page-application"
-  }
+    "not_found_handling": "single-page-application",
+  },
   // No bindings. The admin app is a browser bundle: it reaches the database and the
   // session through apps/api over HTTP, never through a binding of its own.
 }
