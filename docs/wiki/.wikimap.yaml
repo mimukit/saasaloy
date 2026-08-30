@@ -27,6 +27,16 @@ pages:
     documents:
       - packages/cli/src/commands/remove.ts
       - packages/cli/src/lib/remover.ts
+  - path: how-to/deploy-to-cloudflare.md
+    mode: how-to
+    documents:
+      - packages/cli/templates/base/apps/web/wrangler.jsonc
+      - packages/cli/templates/base/apps/web/package.json
+      - modules/api/files/wrangler.jsonc
+      - modules/api/files/package.json
+      - modules/database/files/package.json
+      - modules/database/registry-item.json
+      - modules/*/registry-item.json
   - path: how-to/contribute-a-module.md
     mode: how-to
     documents:

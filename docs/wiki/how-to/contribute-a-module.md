@@ -55,7 +55,11 @@ SAASALOY_REGISTRY_DIR=/path/to/your/saasaloy/modules saasaloy add my-module --di
 
 Use an absolute path: a relative one resolves against the directory you run `add` from,
 not against your checkout. Run it from the throwaway project, not from the checkout — the
-tool repo is not a Saasaloy project, so `add` there cancels with `No saasaloy.json found`.
+tool repo is not a Saasaloy project, so `add` there cancels:
+
+```text
+No saasaloy.json found in <dir>. Run `saasaloy init` first, or cd into a Saasaloy project.
+```
 
 The local source wins over any `owner/repo` coordinate, and the CLI says so when both are
 present.
@@ -89,4 +93,4 @@ live here. Third-party module identity is still moving:
 named. The grammar as it stands today is in
 [the reference](../reference.md#module-coordinates).
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`1b27579` on 2026-08-30._

@@ -48,8 +48,11 @@ gone in a scripted run, delete them yourself afterwards.
 
 ## Modules other modules depend on
 
+Installing `waitlist` pulled in `api` and `database`, so those two now have a dependent.
+Removing one of them directly is refused:
+
 ```text
-waitlist is still depended on by billing — refusing (use --force to remove it anyway).
+database is still depended on by waitlist — refusing (use --force to remove it anyway).
 ```
 
 Dependents are read from each installed module's `dependsOn` in `saasaloy-lock.json`.
@@ -84,4 +87,4 @@ does not touch:
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`1b27579` on 2026-08-30._
