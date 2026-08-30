@@ -111,4 +111,4 @@ tooling against your Worker, not something this repo wraps.
 - [Add a module](add-a-module.md) — installing `api` and `database` in the first place.
 - [Architecture](../architecture.md) — why the CLI stops at copying files in.
 
-_Verified against `main`@`1989275` on 2026-08-16._
+_Verified against `main`@`1b27579` on 2026-08-30._

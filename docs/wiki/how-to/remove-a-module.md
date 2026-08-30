@@ -87,4 +87,4 @@ does not touch:
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`1989275` on 2026-08-16._
+_Verified against `main`@`1b27579` on 2026-08-30._
