@@ -668,6 +668,51 @@ async function readRepoPins(): Promise<Map<string, string>> {
   return pins;
 }
 
+// --- Cross-manifest divergence (informational) -------------------------------
+// One dep name pinned at two different versions across the manifests scanned in this run.
+// The updater resolves each manifest independently, so nothing here forces them together;
+// the note exists so a maintainer sees the split instead of discovering it in a scaffold.
+// Full versions are compared, not majors: `zod 4.4.3` next to `zod 4.5.0` is still a split.
+function buildDivergenceNotes(rows: Row[]): string[] {
+  const bySpec = new Map<string, Map<string, Set<string>>>(); // name → spec → files
+  for (const { manifest, dep } of rows) {
+    // a range or a bare spec has no single version to compare
+    if (dep.kind !== "exact") {
+      continue;
+    }
+    let specs = bySpec.get(dep.name);
+    if (!specs) {
+      specs = new Map<string, Set<string>>();
+      bySpec.set(dep.name, specs);
+    }
+    // A Set, because one manifest can list the same dep in `dependencies` and
+    // `devDependencies` at the same spec; the path must appear once.
+    const files = specs.get(dep.spec);
+    if (files) {
+      files.add(relative(root, manifest.file));
+    } else {
+      specs.set(dep.spec, new Set([relative(root, manifest.file)]));
+    }
+  }
+
+  const notes: string[] = [];
+  for (const name of [...bySpec.keys()].toSorted()) {
+    const specs = bySpec.get(name)!;
+    if (specs.size < 2) {
+      continue;
+    }
+    // `cmp` returns 0 for any two specs `parseSemver` rejects (two prerelease pins,
+    // say), so fall back to a lexical tiebreak to keep the note's order stable.
+    const parts = [...specs.keys()]
+      .toSorted((a, b) => cmp(a, b) || a.localeCompare(b))
+      .map(
+        (spec) => `${spec} (${[...specs.get(spec)!].toSorted().join(", ")})`
+      );
+    notes.push(`${name}: diverges across manifests — ${parts.join(" vs ")}.`);
+  }
+  return notes;
+}
+
 // --- Report + write ----------------------------------------------------------
 const STATUS_LABEL: Record<Status, string> = {
   "bare→pinned": "bare→pinned",
@@ -1073,6 +1118,9 @@ async function main(): Promise<void> {
       );
     }
   }
+
+  // Informational: the same dep name pinned at two versions across the scanned manifests.
+  notes.push(...buildDivergenceNotes(rows));
 
   printReport(rows, notes);
 

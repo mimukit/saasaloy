@@ -112,6 +112,18 @@ route, prefer `c.get("log")`; a fresh `createLogger` there loses the request id.
 what makes the output queryable in the dashboard — `head_sampling_rate` is its cost dial. The
 `saasaloy-logger` skill covers levels, redaction, reading logs, and writing another provider.
 
+## Request validation lives in `@repo/validators`
+
+A route does not define its own input shape inline. The schema belongs in `packages/validators`
+(`@repo/validators/<feature>`), which the `validators` capability scaffolds, and the route wraps it
+with `zValidator` from `@hono/zod-validator`. `c.req.valid("json")` then carries the inferred type
+into the handler, with the target matching the one `zValidator` was given. Error bodies use the
+shared `{ error: { code, message } }` envelope from `@repo/validators/common`. See the
+`saasaloy-validators` skill for the full convention.
+
+Keep the three layers apart: request shapes in `@repo/validators`, database column shapes in
+`packages/db`, HTTP wiring here in `apps/api`.
+
 ## Run it locally
 
 ```sh
@@ -173,3 +185,4 @@ Deployment of all services is centralized in the future **`infra`** capability (
 - **`c.get("log")` for logging, never `console.log`** — a bare console call is unlevelled and
   uncorrelated, and it bypasses redaction.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
+- **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
