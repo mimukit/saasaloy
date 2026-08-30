@@ -1,5 +1,5 @@
-import { mkdir, writeFile } from "node:fs/promises";
-import { dirname, isAbsolute, resolve } from "node:path";
+import { mkdir, realpath, writeFile } from "node:fs/promises";
+import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
   cancel,
   confirm,
@@ -11,8 +11,8 @@ import {
 } from "@clack/prompts";
 import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
-import { loadLock, saveLock } from "../lib/lock.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
+import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -23,7 +23,7 @@ import {
 } from "../lib/registry.js";
 import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
-import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import {
   buildUpdatePlan,
@@ -81,16 +81,21 @@ function parseArgs(argv: string[]): Options {
       continue;
     }
     // Accept both `--ref v2` and `--ref=v2`; a value flag with nothing after it is a
-    // usage error, not a silently-empty ref.
+    // usage error, not a silently-empty ref. In the space-separated form the next token
+    // must not itself be a flag, or `--ref --dry-run` pins the ref to "--dry-run" and
+    // reaches the registry with it instead of reporting the usage error.
     const eq = arg.indexOf("=");
     const flag = eq === -1 ? arg : arg.slice(0, eq);
     if (VALUE_FLAGS.has(flag)) {
-      const value = eq === -1 ? argv[++i] : arg.slice(eq + 1);
-      if (value) {
-        values[flag] = value;
-      } else {
+      const next = eq === -1 ? argv[i + 1] : arg.slice(eq + 1);
+      if (!next || (eq === -1 && next.startsWith("-"))) {
         unknown.push(`${flag} (missing value)`);
+        continue;
       }
+      if (eq === -1) {
+        i++;
+      }
+      values[flag] = next;
       continue;
     }
     if (!KNOWN_FLAGS.has(arg)) {
@@ -278,6 +283,49 @@ function skipReason(comparison: ModuleComparison, preview = false): string {
   }
 }
 
+// The three files Saasaloy owns. `--out` writes after the ledger saves, so a path
+// pointing at one of these replaces real state with merge-plan prose and breaks the
+// next command. Refuse the path up front rather than at the write.
+const STATE_FILES = [CONFIG_FILE, LOCK_FILE, MANIFEST_FILE];
+
+/** Why `--out <path>` is refused, or `undefined` when the path is safe to write. */
+async function stateFileRefusal(
+  root: string,
+  out: string | undefined
+): Promise<undefined | string> {
+  if (!out) {
+    return undefined;
+  }
+  const target = await canonicalPath(resolvePlanOut(out));
+  for (const file of STATE_FILES) {
+    if ((await canonicalPath(resolve(root, file))) === target) {
+      return `Refusing to write the merge plan to ${pc.cyan(out)} — that is Saasaloy's own ${pc.cyan(file)}. Pick another path.`;
+    }
+  }
+  return undefined;
+}
+
+// Compare through realpath, not lexically: `/var/…` is a symlink to `/private/var/…` on
+// macOS, so two absolute paths naming the same file can differ character for character
+// and a lexical check would wave the state file through. A path that isn't on disk yet
+// still has a real parent, and one that has neither is already lexically resolved.
+async function canonicalPath(path: string): Promise<string> {
+  try {
+    return await realpath(path);
+  } catch {
+    try {
+      return join(await realpath(dirname(path)), basename(path));
+    } catch {
+      return path;
+    }
+  }
+}
+
+/** `--out <path>` resolved against the working directory, the one place that mapping lives. */
+function resolvePlanOut(out: string): string {
+  return isAbsolute(out) ? out : resolve(process.cwd(), out);
+}
+
 /** Emit the merge plan: `--out <path>` when given, otherwise stdout — and nothing else ever. */
 async function emitMergePlan(
   document: string,
@@ -287,7 +335,7 @@ async function emitMergePlan(
     process.stdout.write(document);
     return;
   }
-  const target = isAbsolute(out) ? out : resolve(process.cwd(), out);
+  const target = resolvePlanOut(out);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, document, "utf-8");
   log.success(`Merge plan written to ${pc.cyan(out)}`, TUI_ON_STDERR);
@@ -344,6 +392,12 @@ export async function runUpdate(argv: string[]): Promise<number> {
       error instanceof Error ? error.message : String(error),
       TUI_ON_STDERR
     );
+    return 1;
+  }
+
+  const outRefusal = await stateFileRefusal(root, opts.out);
+  if (outRefusal) {
+    cancel(outRefusal, TUI_ON_STDERR);
     return 1;
   }
 
@@ -582,23 +636,37 @@ export async function runUpdate(argv: string[]): Promise<number> {
       }
     }
 
-    let result: UpdateResult;
-    try {
-      result = await executeUpdatePlan(plan, {
-        root,
-        config,
-        manifest,
-        lock,
-        pkg,
-      });
-    } finally {
-      // Record whatever actually landed even if a mid-plan write failed — the ledger
-      // must describe the real on-disk state (`add`'s invariant; #49 owns real
-      // transactionality for both commands).
-      await saveManifest(root, manifest);
-      await saveConfig(root, config);
-      await saveLock(root, lock);
+    // Capture the outcome rather than letting it throw, so the ledger writes below
+    // still run on the failure path and the original error still wins afterwards.
+    const outcome = await executeUpdatePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+      pkg,
+    }).then(
+      (value) => ({ ok: true as const, value }),
+      (error: unknown) => ({ ok: false as const, error })
+    );
+
+    // Record whatever actually landed even if a mid-plan write failed — the ledger must
+    // describe the real on-disk state (`add`'s invariant; #49 owns real transactionality
+    // for both commands). All three are attempted together: awaiting them in sequence
+    // would let a failed manifest save skip the config and lock, which is the same
+    // partial ledger this step exists to prevent.
+    const saves = await Promise.allSettled([
+      saveManifest(root, manifest),
+      saveConfig(root, config),
+      saveLock(root, lock),
+    ]);
+    if (!outcome.ok) {
+      throw outcome.error;
     }
+    const failedSave = saves.find((save) => save.status === "rejected");
+    if (failedSave) {
+      throw failedSave.reason;
+    }
+    const result: UpdateResult = outcome.value;
 
     reportResult(result);
 
