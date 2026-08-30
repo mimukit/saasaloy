@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import type { Plan } from "./applier.js";
 import { planWritesUi } from "./design.js";
 
-function planFile(target: string, action: Plan["files"][number]["action"]): Plan["files"][number] {
+function planFile(
+  target: string,
+  action: Plan["files"][number]["action"]
+): Plan["files"][number] {
   return {
     target,
     action,
@@ -17,7 +20,7 @@ function planFile(target: string, action: Plan["files"][number]["action"]): Plan
 
 function planPatch(
   file: string,
-  action: Plan["patches"][number]["action"],
+  action: Plan["patches"][number]["action"]
 ): Plan["patches"][number] {
   return {
     file,
@@ -29,21 +32,29 @@ function planPatch(
   };
 }
 
-function plan(parts: Partial<Pick<Plan, "files" | "patches">>): Pick<Plan, "files" | "patches"> {
+function plan(
+  parts: Partial<Pick<Plan, "files" | "patches">>
+): Pick<Plan, "files" | "patches"> {
   return { files: parts.files ?? [], patches: parts.patches ?? [] };
 }
 
 describe("add design update notice", () => {
   it("detects a file that the plan writes under packages/ui", () => {
     expect(
-      planWritesUi(plan({ files: [planFile("packages/ui/src/components/banner.tsx", "create")] })),
-    ).toBe(true);
+      planWritesUi(
+        plan({
+          files: [planFile("packages/ui/src/components/banner.tsx", "create")],
+        })
+      )
+    ).toBeTruthy();
   });
 
   it("detects a patch that the plan applies under packages/ui", () => {
-    expect(planWritesUi(plan({ patches: [planPatch("packages/ui/package.json", "apply")] }))).toBe(
-      true,
-    );
+    expect(
+      planWritesUi(
+        plan({ patches: [planPatch("packages/ui/package.json", "apply")] })
+      )
+    ).toBeTruthy();
   });
 
   it("ignores held and unrelated files", () => {
@@ -55,9 +66,9 @@ describe("add design update notice", () => {
             planFile("packages/ui-kit/src/banner.tsx", "create"),
             planFile("apps/web/src/pages/index.astro", "overwrite"),
           ],
-        }),
-      ),
-    ).toBe(false);
+        })
+      )
+    ).toBeFalsy();
   });
 
   it("ignores patches that do not write under packages/ui", () => {
@@ -69,8 +80,8 @@ describe("add design update notice", () => {
             planPatch("packages/ui/tsconfig.json", "missing"),
             planPatch("apps/web/package.json", "apply"),
           ],
-        }),
-      ),
-    ).toBe(false);
+        })
+      )
+    ).toBeFalsy();
   });
 });

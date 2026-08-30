@@ -68,6 +68,9 @@ app.use(
 app.use("*", async (c, next) => {
   const requestId = c.req.header("cf-ray") ?? crypto.randomUUID();
   c.set("log", createLogger(c.env).child({ requestId }));
+  // `next` is Hono's downstream continuation, not a Node error-first callback; returning
+  // it would end the middleware before the response phase.
+  // oxlint-disable-next-line node/callback-return
   await next();
 });
 

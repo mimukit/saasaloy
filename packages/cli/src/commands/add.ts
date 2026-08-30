@@ -331,7 +331,7 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     if (planWritesUi(plan)) {
       log.info(
-        `This module writes ${pc.cyan("packages/ui/")}. Run ${pc.cyan("/saasaloy-design update")} after it applies.`,
+        `This module writes ${pc.cyan("packages/ui/")}. Run ${pc.cyan("/saasaloy-design update")} after it applies.`
       );
     }
 

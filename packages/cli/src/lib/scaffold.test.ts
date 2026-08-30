@@ -3,7 +3,7 @@ import { templateVars } from "./scaffold.js";
 
 describe("init template variables", () => {
   it("includes the CLI package version", () => {
-    expect(templateVars("demo-app")).toEqual({
+    expect(templateVars("demo-app")).toStrictEqual({
       PROJECT_NAME: "demo-app",
       CLI_VERSION: "0.0.0",
     });

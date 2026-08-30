@@ -115,7 +115,8 @@ interface Dep {
  * workspace's package.json, and those are two independent pins to bump.
  */
 function depKey(file: string, dep: Dep): string {
-  const source = dep.patchIndex === undefined ? "bucket" : `patch:${dep.patchIndex}`;
+  const source =
+    dep.patchIndex === undefined ? "bucket" : `patch:${dep.patchIndex}`;
   return `${file} ${source} ${dep.bucket} ${dep.name}`;
 }
 
@@ -557,24 +558,40 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   // would otherwise never reach the cooldown gate this script exists to be (ADR 0016).
   const pushPatches = () => {
     const patches = json.patches;
-    if (patches === undefined || patches === null) return;
+    if (patches === undefined || patches === null) {
+      return;
+    }
     if (!Array.isArray(patches)) {
-      throw new Error(`${manifest.file}: "patches" must be an array`);
+      throw new TypeError(`${manifest.file}: "patches" must be an array`);
     }
     for (const [patchIndex, patch] of patches.entries()) {
-      if (!isRecord(patch) || patch.kind !== "package-json-dependency") continue;
+      if (!isRecord(patch) || patch.kind !== "package-json-dependency") {
+        continue;
+      }
       const { section, name, range } = patch;
       // A malformed patch fails the run loudly rather than dropping its pin: the applier
       // would reject it too, and skipping it here is how a version goes ungated.
-      if (!isDepBucket(section) || typeof name !== "string" || typeof range !== "string") {
+      if (
+        !isDepBucket(section) ||
+        typeof name !== "string" ||
+        typeof range !== "string"
+      ) {
         throw new Error(
           `${manifest.file}: patches[${patchIndex}] (package-json-dependency) needs a ` +
             `string "name", a string "range", and a "section" naming a package.json ` +
-            `dependency map`,
+            `dependency map`
         );
       }
-      if (isSkippedName(name) || isSkippedSpec(range)) continue;
-      deps.push({ bucket: section, name, spec: range, kind: classifySpec(range), patchIndex });
+      if (isSkippedName(name) || isSkippedSpec(range)) {
+        continue;
+      }
+      deps.push({
+        bucket: section,
+        name,
+        spec: range,
+        kind: classifySpec(range),
+        patchIndex,
+      });
     }
   };
 
@@ -788,7 +805,8 @@ function groupKey(row: Row): GroupKey {
 // patch marker a descriptor that both declares and patches the same package renders two
 // rows that read identically.
 function depTag(dep: Dep): string {
-  const bucket = dep.bucket === "dependencies" ? "" : ` ${SHORT_BUCKET[dep.bucket]}`;
+  const bucket =
+    dep.bucket === "dependencies" ? "" : ` ${SHORT_BUCKET[dep.bucket]}`;
   const patch = dep.patchIndex === undefined ? "" : " patch";
   return bucket || patch ? pc.dim(`${bucket}${patch}`) : "";
 }
@@ -1222,9 +1240,13 @@ async function writeUpdates(
         // A `package-json-dependency` patch: the version is its `range`. The entry was read
         // out of this same document and validated there, so it is present and a record.
         const patches = json.patches;
-        const patch = Array.isArray(patches) ? patches[dep.patchIndex] : undefined;
+        const patch = Array.isArray(patches)
+          ? patches[dep.patchIndex]
+          : undefined;
         if (!isRecord(patch)) {
-          throw new Error(`${manifest.file}: patches[${dep.patchIndex}] is not an object`);
+          throw new Error(
+            `${manifest.file}: patches[${dep.patchIndex}] is not an object`
+          );
         }
         patch.range = target;
       } else if (manifest.kind === "package-json") {

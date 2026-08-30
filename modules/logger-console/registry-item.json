@@ -18,6 +18,8 @@
       }
     }
   ],
-  "files": [{ "path": "files/console.ts", "target": "@logger/providers/console.ts" }],
+  "files": [
+    { "path": "files/console.ts", "target": "@logger/providers/console.ts" }
+  ],
   "scaffolds": []
 }

@@ -25,10 +25,9 @@
 import { spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readdir, readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
-import { dirname, join, relative, resolve } from "node:path";
+import { join, relative, resolve } from "node:path";
 
-const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
+const root = resolve(import.meta.dirname, "..");
 
 // tweakcn serves the widest catalogue of `registry:style` items, and its URL shape is
 // stable and versionless. The mechanism under test is the registry item, not the host —
@@ -66,7 +65,9 @@ const SINGLETON_BLOCKS: readonly [label: string, pattern: RegExp][] = [
 
 function fail(message: string, ...detail: string[]): never {
   console.error(`verify-preset: ${message}`);
-  for (const line of detail) console.error(`  ${line}`);
+  for (const line of detail) {
+    console.error(`  ${line}`);
+  }
   process.exit(1);
 }
 
@@ -78,35 +79,50 @@ function step(message: string): void {
 // failing pnpm/shadcn reports itself in full rather than through a summary of ours.
 function run(command: string, args: readonly string[], label: string): void {
   const result = spawnSync(command, args, { cwd: root, stdio: "inherit" });
-  if (result.error) fail(`${label} could not start`, String(result.error));
-  if (result.status !== 0) fail(`${label} failed`, `exit code ${String(result.status)}`);
+  if (result.error) {
+    fail(`${label} could not start`, String(result.error));
+  }
+  if (result.status !== 0) {
+    fail(`${label} failed`, `exit code ${String(result.status)}`);
+  }
 }
 
 // CSS values survive the build re-serialised: `oklch(0.205 0 0)` comes back as
 // `oklch(.205 0 0)`, whitespace collapses, and the declaration may be inlined into HTML.
 // Compare on a shape that ignores all of it.
 function normalize(css: string): string {
-  return css.replace(/\s+/g, "").replace(/(^|[^\d.])0\./g, "$1.");
+  return css.replaceAll(/\s+/g, "").replaceAll(/(^|[^\d.])0\./g, "$1.");
 }
 
 // Alpha is optional in the syntax and defaults to 1, so an omitted alpha and an
 // explicit `/ 1` are the same color. Carry it through the comparison regardless:
 // dropping it makes an opacity change read as no change, which is the one thing
 // this script exists to catch.
-function parseOklch(value: string): [number, number, number, number] | undefined {
+function parseOklch(
+  value: string
+): [number, number, number, number] | undefined {
   const match =
-    /^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\s*\)$/.exec(value);
-  if (!match?.[1] || !match[3] || !match[4]) return undefined;
+    /^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\s*\)$/.exec(
+      value
+    );
+  if (!match?.[1] || !match[3] || !match[4]) {
+    return undefined;
+  }
   const lightness = Number(match[1]) / (match[2] ? 100 : 1);
-  const alpha = match[5] === undefined ? 1 : Number(match[5]) / (match[6] ? 100 : 1);
+  const alpha =
+    match[5] === undefined ? 1 : Number(match[5]) / (match[6] ? 100 : 1);
   return [lightness, Number(match[3]), Number(match[4]), alpha];
 }
 
 function sameColor(left: string, right: string): boolean {
   const parsedLeft = parseOklch(left);
   const parsedRight = parseOklch(right);
-  if (!parsedLeft || !parsedRight) return normalize(left) === normalize(right);
-  return parsedLeft.every((value, index) => Math.abs(value - parsedRight[index]!) <= 0.001);
+  if (!parsedLeft || !parsedRight) {
+    return normalize(left) === normalize(right);
+  }
+  return parsedLeft.every(
+    (value, index) => Math.abs(value - parsedRight[index]!) <= 0.001
+  );
 }
 
 function fingerprint(content: string): string {
@@ -114,17 +130,26 @@ function fingerprint(content: string): string {
 }
 
 function readRecordedFingerprint(design: string): string {
-  const match = /tokens sha256:([a-f0-9]{12}) of packages\/ui\/src\/styles\/globals\.css/.exec(design);
-  if (!match?.[1]) fail("DESIGN.md has no valid token fingerprint");
+  const match =
+    /tokens sha256:([a-f0-9]{12}) of packages\/ui\/src\/styles\/globals\.css/.exec(
+      design
+    );
+  if (!match?.[1]) {
+    fail("DESIGN.md has no valid token fingerprint");
+  }
   return match[1];
 }
 
 // The `--primary: <value>;` declared in a stylesheet's FIRST :root block.
 function readRootPrimary(css: string, source: string): string {
   const rootBlock = /:root\s*\{([\s\S]*?)\}/.exec(css);
-  if (!rootBlock?.[1]) fail(`no :root block in ${source}`);
+  if (!rootBlock?.[1]) {
+    fail(`no :root block in ${source}`);
+  }
   const primary = /--primary:\s*([^;]+);/.exec(rootBlock[1]);
-  if (!primary?.[1]) fail(`no --primary declaration in ${source}'s :root block`);
+  if (!primary?.[1]) {
+    fail(`no --primary declaration in ${source}'s :root block`);
+  }
   return primary[1].trim();
 }
 
@@ -136,24 +161,34 @@ run("pnpm", ["-C", ".dev/playground", "install"], "playground install");
 
 let designBefore: string;
 try {
-  designBefore = await readFile(playgroundDesign, "utf8");
+  designBefore = await readFile(playgroundDesign, "utf-8");
 } catch {
-  fail("the freshly scaffolded project has no DESIGN.md", "Expected " + relative(root, playgroundDesign) + ".");
+  fail(
+    "the freshly scaffolded project has no DESIGN.md",
+    `Expected ${relative(root, playgroundDesign)}.`
+  );
 }
-run("pnpm", ["dlx", "@google/design.md", "lint", playgroundDesign], "DESIGN.md lint before preset");
+run(
+  "pnpm",
+  ["dlx", "@google/design.md", "lint", playgroundDesign],
+  "DESIGN.md lint before preset"
+);
 
-const cssBefore = await readFile(playgroundCss, "utf8");
+const cssBefore = await readFile(playgroundCss, "utf-8");
 const recordedFingerprint = readRecordedFingerprint(designBefore);
 const fingerprintBefore = fingerprint(cssBefore);
 if (recordedFingerprint !== fingerprintBefore) {
   fail(
     "the freshly scaffolded DESIGN.md fingerprint does not match globals.css",
-    "recorded " + recordedFingerprint + ", computed " + fingerprintBefore,
+    `recorded ${recordedFingerprint}, computed ${fingerprintBefore}`
   );
 }
-step("DESIGN.md is present, lint-clean, and current at " + recordedFingerprint);
-const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf8");
-const basePrimary = readRootPrimary(cssBefore, "the freshly scaffolded globals.css");
+step(`DESIGN.md is present, lint-clean, and current at ${recordedFingerprint}`);
+const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf-8");
+const basePrimary = readRootPrimary(
+  cssBefore,
+  "the freshly scaffolded globals.css"
+);
 
 // --- Run the documented recipe ---------------------------------------------------
 
@@ -163,21 +198,29 @@ step(`applying preset ${PRESET_URL}`);
 // the same `exec` form the template's AGENTS.md documents, aimed at the playground.
 run(
   "pnpm",
-  ["--dir", ".dev/playground/packages/ui", "exec", "shadcn", "add", PRESET_URL, "--yes"],
-  "shadcn add",
+  [
+    "--dir",
+    ".dev/playground/packages/ui",
+    "exec",
+    "shadcn",
+    "add",
+    PRESET_URL,
+    "--yes",
+  ],
+  "shadcn add"
 );
 
-const cssAfter = await readFile(playgroundCss, "utf8");
-const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf8");
+const cssAfter = await readFile(playgroundCss, "utf-8");
+const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf-8");
 const fingerprintAfter = fingerprint(cssAfter);
 if (fingerprintAfter === recordedFingerprint) {
   fail(
     "the preset changed no bytes covered by the DESIGN.md fingerprint",
-    "The recorded and current fingerprints are both " + recordedFingerprint + ".",
-    "The audit drift check cannot prove staleness with this preset.",
+    `The recorded and current fingerprints are both ${recordedFingerprint}.`,
+    "The audit drift check cannot prove staleness with this preset."
   );
 }
-step("DESIGN.md drift detected: " + recordedFingerprint + " → " + fingerprintAfter);
+step(`DESIGN.md drift detected: ${recordedFingerprint} → ${fingerprintAfter}`);
 
 // --- Assert the base's own rules survived the merge -------------------------------
 
@@ -185,7 +228,7 @@ if (cssAfter === cssBefore) {
   fail(
     "shadcn add left globals.css untouched",
     `The preset at ${PRESET_URL} applied nothing — the URL may have moved, or shadcn`,
-    "no longer treats a registry:style item as a theme swap. Check its output above.",
+    "no longer treats a registry:style item as a theme swap. Check its output above."
   );
 }
 
@@ -194,7 +237,7 @@ if (componentsJsonAfter !== componentsJsonBefore) {
     "shadcn add rewrote components.json",
     "ADR 0022 fixes `style` at init because the CLI cannot change it later; a preset",
     "moving that field would silently re-base the project's primitives.",
-    `See ${relative(root, playgroundComponentsJson)}.`,
+    `See ${relative(root, playgroundComponentsJson)}.`
   );
 }
 
@@ -204,7 +247,7 @@ if (missing.length > 0) {
     `${String(missing.length)} hand-written rule(s) did not survive the preset merge`,
     ...missing,
     "shadcn now overwrites globals.css rather than merging into it. Either pin shadcn",
-    "back, or stop documenting the in-place recipe in the template's AGENTS.md.",
+    "back, or stop documenting the in-place recipe in the template's AGENTS.md."
   );
 }
 
@@ -213,7 +256,7 @@ for (const [label, pattern] of SINGLETON_BLOCKS) {
   if (count !== 1) {
     fail(
       `expected exactly one \`${label}\` block after the merge, found ${String(count)}`,
-      "A duplicated block wins by source order and drops whatever the first one declared.",
+      "A duplicated block wins by source order and drops whatever the first one declared."
     );
   }
 }
@@ -223,7 +266,7 @@ if (sameColor(presetPrimary, basePrimary)) {
   fail(
     `--primary is still the base value (${basePrimary}) after applying the preset`,
     "The merge preserved the file but changed no tokens, so this check proves nothing.",
-    "Pick a preset whose palette differs from the template's, or suspect shadcn.",
+    "Pick a preset whose palette differs from the template's, or suspect shadcn."
   );
 }
 
@@ -234,7 +277,7 @@ step(`tokens swapped: --primary ${basePrimary} → ${presetPrimary}`);
 run(
   "pnpm",
   ["-C", ".dev/playground", "--filter", "@repo/web", "run", "clean"],
-  "playground web clean",
+  "playground web clean"
 );
 run("pnpm", ["-C", ".dev/playground", "build"], "playground build");
 run("node", ["scripts/verify-css.ts"], "verify-css");
@@ -252,7 +295,7 @@ if (!sameColor(builtPrimary, presetPrimary)) {
     "the built CSS does not carry the preset --primary value",
     `Expected ${presetPrimary} under ${relative(root, playgroundDist)}.`,
     "Either the build did not run, or it serialized the color outside sameColor()'s tolerance.",
-    "Check the built output before trusting this failure.",
+    "Check the built output before trusting this failure."
   );
 }
 
@@ -261,13 +304,13 @@ if (sameColor(builtPrimary, basePrimary)) {
     "the built CSS still carries the base --primary value",
     `Expected the preset's ${presetPrimary}, found the template's ${basePrimary}.`,
     "globals.css was swapped but the build did not pick it up — suspect a stale",
-    "Turborepo cache in the playground (play:init runs `git init` for exactly this).",
+    "Turborepo cache in the playground (play:init runs `git init` for exactly this)."
   );
 }
 
 console.log(
   `verify-preset: preset ${PRESET_URL} applied cleanly — base rules intact, ` +
-    `--primary swapped to ${presetPrimary} in the built output.`,
+    `--primary swapped to ${presetPrimary} in the built output.`
 );
 
 // Read every built .css/.html file. Declared after use on purpose: the assertions above
@@ -280,13 +323,17 @@ async function collectBuiltFiles(dir: string): Promise<string[]> {
   } catch {
     fail(
       `no built output under ${relative(root, dir)}`,
-      "The playground build did not emit anything where this script expects it.",
+      "The playground build did not emit anything where this script expects it."
     );
   }
   for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    if (!entry.name.endsWith(".css") && !entry.name.endsWith(".html")) continue;
-    contents.push(await readFile(join(entry.parentPath, entry.name), "utf8"));
+    if (!entry.isFile()) {
+      continue;
+    }
+    if (!entry.name.endsWith(".css") && !entry.name.endsWith(".html")) {
+      continue;
+    }
+    contents.push(await readFile(join(entry.parentPath, entry.name), "utf-8"));
   }
   if (contents.length === 0) {
     fail(`no built CSS or HTML under ${relative(root, dir)}`);

@@ -2,7 +2,12 @@ import { defineLogger } from "./define";
 import type { LoggerEnv } from "./provider";
 
 export { defineLogger } from "./define";
-export type { Logger, LoggerConfig, LoggerRegistry, LoggerVariables } from "./define";
+export type {
+  Logger,
+  LoggerConfig,
+  LoggerRegistry,
+  LoggerVariables,
+} from "./define";
 export type {
   LogEvent,
   LogFields,
