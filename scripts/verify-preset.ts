@@ -89,11 +89,17 @@ function normalize(css: string): string {
   return css.replace(/\s+/g, "").replace(/(^|[^\d.])0\./g, "$1.");
 }
 
-function parseOklch(value: string): [number, number, number] | undefined {
-  const match = /^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/[^)]+)?\)$/.exec(value);
+// Alpha is optional in the syntax and defaults to 1, so an omitted alpha and an
+// explicit `/ 1` are the same color. Carry it through the comparison regardless:
+// dropping it makes an opacity change read as no change, which is the one thing
+// this script exists to catch.
+function parseOklch(value: string): [number, number, number, number] | undefined {
+  const match =
+    /^oklch\(\s*([\d.]+)(%)?\s+([\d.]+)\s+([\d.]+)(?:\s*\/\s*([\d.]+)(%)?)?\s*\)$/.exec(value);
   if (!match?.[1] || !match[3] || !match[4]) return undefined;
   const lightness = Number(match[1]) / (match[2] ? 100 : 1);
-  return [lightness, Number(match[3]), Number(match[4])];
+  const alpha = match[5] === undefined ? 1 : Number(match[5]) / (match[6] ? 100 : 1);
+  return [lightness, Number(match[3]), Number(match[4]), alpha];
 }
 
 function sameColor(left: string, right: string): boolean {
