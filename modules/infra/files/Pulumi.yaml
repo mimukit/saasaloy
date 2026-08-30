@@ -1,9 +1,7 @@
 name: infra
 runtime: nodejs
 description: >-
-  Centralized deployment of every Saasaloy service via Pulumi (ADR 0021, Cloudflare-only
-  v1). Discovers each service's wrangler.jsonc, translates its bindings into Cloudflare
-  resources, and deploys the built Worker.
+  Centralized deployment of every Saasaloy service via Pulumi (ADR 0021, Cloudflare-only v1). Discovers each service's wrangler.jsonc, translates its bindings into Cloudflare resources, and deploys the built Worker.
 # DIY backend, state committed in this workspace (ADR 0021) — PR-reviewable, no Pulumi
 # Cloud account required. A file:// backend path is resolved by Pulumi against the
 # current working directory, NOT this file's location — this only lands at

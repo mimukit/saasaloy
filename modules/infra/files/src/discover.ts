@@ -1,12 +1,12 @@
 import { readFile, readdir } from "node:fs/promises";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
-import { parse, printParseErrorCode, type ParseError } from "jsonc-parser";
+import { join } from "node:path";
+import { parse, printParseErrorCode } from "jsonc-parser";
+import type { ParseError } from "jsonc-parser";
 
 // Repo root is two levels up from `infra/src/` (`infra/` sits at the repo root, a
 // sibling of `apps/` and `packages/` — see `modules/infra/registry-item.json`'s
 // `scaffolds[].workspace: "infra"`).
-const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
+const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SERVICE_ROOTS = ["apps", "packages"];
 
 export interface WranglerConfig {
@@ -15,12 +15,12 @@ export interface WranglerConfig {
   compatibility_date?: string;
   compatibility_flags?: string[];
   vars?: Record<string, string>;
-  d1_databases?: Array<{
+  d1_databases?: {
     binding: string;
     database_name: string;
     database_id: string;
     migrations_dir?: string;
-  }>;
+  }[];
   [key: string]: unknown;
 }
 
@@ -55,8 +55,10 @@ export async function discoverServices(): Promise<DiscoveredService[]> {
     for (const entry of entries) {
       const dir = join(rootDir, entry);
       const configPath = join(dir, "wrangler.jsonc");
-      const source = await readFile(configPath, "utf8").catch(() => null);
-      if (source === null) continue; // no wrangler.jsonc — not a deployable service
+      const source = await readFile(configPath, "utf-8").catch(() => null);
+      if (source === null) {
+        continue;
+      } // no wrangler.jsonc — not a deployable service
 
       // jsonc-parser's `parse` is lenient by default — on malformed input it returns a
       // best-effort partial object rather than `undefined`, so checking the return value
@@ -68,11 +70,13 @@ export async function discoverServices(): Promise<DiscoveredService[]> {
       const [first] = errors;
       if (first) {
         throw new Error(
-          `infra: ${configPath} is not valid JSON(C) — ${printParseErrorCode(first.error)} at offset ${first.offset} — fix it before deploying.`,
+          `infra: ${configPath} is not valid JSON(C) — ${printParseErrorCode(first.error)} at offset ${first.offset} — fix it before deploying.`
         );
       }
       if (!config || typeof config !== "object") {
-        throw new Error(`infra: ${configPath} is not valid JSON(C) — fix it before deploying.`);
+        throw new Error(
+          `infra: ${configPath} is not valid JSON(C) — fix it before deploying.`
+        );
       }
 
       services.push({ name: config.name ?? entry, dir, config });

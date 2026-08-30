@@ -18,7 +18,8 @@ const INFRA_CREDENTIAL_PREFIXES = ["PULUMI_", "CLOUDFLARE_"];
 
 function isInfraCredential(key: string): boolean {
   return (
-    INFRA_CREDENTIAL_KEYS.has(key) || INFRA_CREDENTIAL_PREFIXES.some((prefix) => key.startsWith(prefix))
+    INFRA_CREDENTIAL_KEYS.has(key) ||
+    INFRA_CREDENTIAL_PREFIXES.some((prefix) => key.startsWith(prefix))
   );
 }
 
@@ -32,16 +33,21 @@ function isInfraCredential(key: string): boolean {
  * also skipped, unconditionally — those belong to the deploy tooling, never to a
  * deployed Worker. Everything else in `.env` is treated as a secret for that service.
  */
-export async function pushSecrets(service: DiscoveredService, envPath = ".env"): Promise<void> {
-  const source = await readFile(envPath, "utf8").catch(() => null);
+export async function pushSecrets(
+  service: DiscoveredService,
+  envPath = ".env"
+): Promise<void> {
+  const source = await readFile(envPath, "utf-8").catch(() => null);
   if (source === null) {
-    console.log(`infra: no ${envPath} found — skipping secrets for ${service.name}.`);
+    console.log(
+      `infra: no ${envPath} found — skipping secrets for ${service.name}.`
+    );
     return;
   }
 
   const varKeys = new Set(Object.keys(service.config.vars ?? {}));
   const entries = parseEnv(source).filter(
-    ([key]) => !varKeys.has(key) && !isInfraCredential(key),
+    ([key]) => !varKeys.has(key) && !isInfraCredential(key)
   );
 
   for (const [key, value] of entries) {
@@ -50,21 +56,27 @@ export async function pushSecrets(service: DiscoveredService, envPath = ".env"):
   }
 }
 
-function parseEnv(source: string): Array<[string, string]> {
-  const entries: Array<[string, string]> = [];
+function parseEnv(source: string): [string, string][] {
+  const entries: [string, string][] = [];
   for (const line of source.split("\n")) {
     const trimmed = line.trim();
-    if (!trimmed || trimmed.startsWith("#")) continue;
+    if (!trimmed || trimmed.startsWith("#")) {
+      continue;
+    }
 
     const eq = trimmed.indexOf("=");
-    if (eq === -1) continue;
+    if (eq === -1) {
+      continue;
+    }
 
     const key = trimmed.slice(0, eq).trim();
     let value = trimmed.slice(eq + 1).trim();
     const quoted =
       (value.startsWith('"') && value.endsWith('"')) ||
       (value.startsWith("'") && value.endsWith("'"));
-    if (quoted) value = value.slice(1, -1);
+    if (quoted) {
+      value = value.slice(1, -1);
+    }
 
     entries.push([key, value]);
   }
@@ -81,8 +93,15 @@ function putSecret(dir: string, key: string, value: string): Promise<void> {
     });
     child.on("error", reject);
     child.on("exit", (code) => {
-      if (code === 0) resolve();
-      else reject(new Error(`infra: "wrangler secret put ${key}" failed (exit ${code}) in ${dir}`));
+      if (code === 0) {
+        resolve();
+      } else {
+        reject(
+          new Error(
+            `infra: "wrangler secret put ${key}" failed (exit ${code}) in ${dir}`
+          )
+        );
+      }
     });
     child.stdin.write(value);
     child.stdin.end();

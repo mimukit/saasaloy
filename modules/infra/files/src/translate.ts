@@ -38,7 +38,7 @@ export interface ServiceResources {
  */
 export async function toResources(
   service: DiscoveredService,
-  accountId: pulumi.Input<string>,
+  accountId: pulumi.Input<string>
 ): Promise<ServiceResources> {
   const { name, dir, config } = service;
 
@@ -49,10 +49,12 @@ export async function toResources(
   const bindings: cloudflare.types.input.WorkersScriptBinding[] = [];
 
   for (const key of Object.keys(config)) {
-    if (NON_BINDING_KEYS.has(key)) continue;
+    if (NON_BINDING_KEYS.has(key)) {
+      continue;
+    }
 
     switch (key) {
-      case "d1_databases":
+      case "d1_databases": {
         for (const entry of config.d1_databases ?? []) {
           const db = new cloudflare.D1Database(`${name}-${entry.binding}`, {
             accountId,
@@ -62,13 +64,20 @@ export async function toResources(
           bindings.push({ name: entry.binding, type: "d1", databaseId: db.id });
         }
         break;
-      case "vars":
+      }
+      case "vars": {
         for (const [varName, value] of Object.entries(config.vars ?? {})) {
-          bindings.push({ name: varName, type: "plain_text", text: String(value) });
+          bindings.push({
+            name: varName,
+            type: "plain_text",
+            text: String(value),
+          });
         }
         break;
-      default:
+      }
+      default: {
         throw new Error(`infra doesn't support '${key}' yet`);
+      }
     }
   }
 
@@ -113,24 +122,28 @@ async function buildService(dir: string): Promise<void> {
 // starts code-splitting.
 async function readBundle(
   dir: string,
-  config: WranglerConfig,
+  config: WranglerConfig
 ): Promise<{ content: string; contentSha256: string }> {
   const outDir = join(dir, "dist", config.name ?? "");
   const manifestPath = join(outDir, "wrangler.json");
-  const manifestSource = await readFile(manifestPath, "utf8").catch(() => null);
+  const manifestSource = await readFile(manifestPath, "utf-8").catch(
+    () => null
+  );
   if (manifestSource === null) {
     throw new Error(
       `infra: no build output at ${manifestPath} — run the service's build first, or see ` +
-        `the saasaloy-infra skill if @cloudflare/vite-plugin's output shape has changed.`,
+        `the saasaloy-infra skill if @cloudflare/vite-plugin's output shape has changed.`
     );
   }
 
   const manifest = JSON.parse(manifestSource) as { main?: string };
   if (!manifest.main) {
-    throw new Error(`infra: ${manifestPath} has no "main" entry — can't locate the built Worker.`);
+    throw new Error(
+      `infra: ${manifestPath} has no "main" entry — can't locate the built Worker.`
+    );
   }
 
-  const content = await readFile(join(outDir, manifest.main), "utf8");
+  const content = await readFile(join(outDir, manifest.main), "utf-8");
   const contentSha256 = createHash("sha256").update(content).digest("hex");
   return { content, contentSha256 };
 }

@@ -13,7 +13,7 @@ const accountId = process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID;
 if (!accountId) {
   throw new Error(
     "infra: CLOUDFLARE_DEFAULT_ACCOUNT_ID is not set — see the saasaloy-infra skill's " +
-      "credentials setup before running preview/deploy.",
+      "credentials setup before running preview/deploy."
   );
 }
 
@@ -21,7 +21,7 @@ const services = await discoverServices();
 
 if (services.length === 0) {
   console.log(
-    "infra: no service wrangler.jsonc found under apps/ or packages/ — nothing to deploy yet.",
+    "infra: no service wrangler.jsonc found under apps/ or packages/ — nothing to deploy yet."
   );
 }
 
@@ -30,7 +30,7 @@ const deployed = await Promise.all(
     const { script } = await toResources(service, accountId);
     await pushSecrets(service);
     return [service.name, script.scriptName] as const;
-  }),
+  })
 );
 
 // Stack outputs — one Cloudflare script name per deployed service. Combine with the
