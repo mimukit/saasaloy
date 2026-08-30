@@ -10,8 +10,12 @@
 # CONTRIBUTING.md, or the template's AGENTS.md and that CodeRabbit has no way to
 # infer from the code alone.
 reviews:
-  auto_review: false # Disables default auto-scans
-  request_review_label: "ai-review" # Only reviews when this label is added
+  # No review runs on its own. `enabled: false` plus a positive label match means
+  # CodeRabbit reviews a PR only after someone adds the `ai-review` label.
+  auto_review:
+    enabled: false
+    labels:
+      - "ai-review"
   path_filters:
     # Manual QA reports are committed back to the PR after the run, as a record of
     # a human test pass. Re-reviewing them adds nothing.
