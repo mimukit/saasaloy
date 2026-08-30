@@ -51,7 +51,6 @@ async function writeManaged(
   const abs = join(root, ...target.split("/"));
   await mkdir(dirname(abs), { recursive: true });
   await writeFile(abs, content, "utf-8");
-  const { hashContent } = await import("./fs-utils.js");
   manifest.managed[target] = { module, hash: hashContent(content) };
 }
 
@@ -66,7 +65,7 @@ async function build(
 
 // The one definition of "is this still the file Saasaloy put there?", shared with
 // `update`'s delete side (updater.ts) so the two commands can't disagree about drift.
-describe("classifyTrackedFile", () => {
+describe(classifyTrackedFile, () => {
   it("calls a file whose hash still matches safe to delete", () => {
     expect(classifyTrackedFile("v1\n", hashContent("v1\n"))).toBe("delete");
   });

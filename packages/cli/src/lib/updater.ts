@@ -1,13 +1,24 @@
 import { mkdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
-import { buildPlan, executePlan, type LinkAction, type Plan, type PlannedLink } from "./applier.js";
-import { classifyLink, createDirLink, hashContent, listFilesRelative, pathExists, resolveWithinRoot } from "./fs-utils.js";
+import { buildPlan, executePlan } from "./applier.js";
+import type { LinkAction, Plan, PlannedLink } from "./applier.js";
+import {
+  classifyLink,
+  createDirLink,
+  hashContent,
+  listFilesRelative,
+  pathExists,
+  resolveWithinRoot,
+} from "./fs-utils.js";
 import type { Lockfile, LockModule } from "./lock.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
-import { applyPatch, type PatchMatch } from "./patch/index.js";
-import { type DepChange, type PackageJson, parseDep, writeDeps } from "./pkg-json.js";
+import { applyPatch } from "./patch/index.js";
+import type { PatchMatch } from "./patch/index.js";
+import { parseDep, writeDeps } from "./pkg-json.js";
+import type { DepChange, PackageJson } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
-import { classifyTrackedFile, type FileRemoveAction } from "./remover.js";
+import { classifyTrackedFile } from "./remover.js";
+import type { FileRemoveAction } from "./remover.js";
 import { resolveTarget } from "./saasaloy-config.js";
 import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 
@@ -45,7 +56,8 @@ const DB_SCHEMA_FALLBACK = "packages/db/src/schema/";
  *   local         — installed from a working copy; nothing to re-resolve
  *   unresolvable  — no lock entry, or the source couldn't be reached
  */
-export type UpdateStatus = "current" | "outdated" | "pinned" | "local" | "unresolvable";
+export type UpdateStatus =
+  "current" | "outdated" | "pinned" | "local" | "unresolvable";
 
 export interface ModuleComparison {
   name: string;
@@ -99,7 +111,9 @@ function short(sha: string): string {
  * unreachable source becomes an `unresolvable` row so one dead repo can't block the rest
  * (decision 14).
  */
-export async function compareInstalled(args: CompareInstalledArgs): Promise<ModuleComparison[]> {
+export async function compareInstalled(
+  args: CompareInstalledArgs
+): Promise<ModuleComparison[]> {
   const { installed, lock, resolveRef, overrideRef, registryOverride } = args;
   const out: ModuleComparison[] = [];
 
@@ -113,7 +127,8 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
         current: "unknown",
         latest: "unknown",
         status: "unresolvable",
-        detail: "no lock entry — reinstall it with `saasaloy add` to record its provenance",
+        detail:
+          "no lock entry — reinstall it with `saasaloy add` to record its provenance",
       });
       continue;
     }
@@ -141,7 +156,8 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
         current: entry.resolved,
         latest: entry.resolved,
         status: "local",
-        detail: "installed from a working copy — set SAASALOY_REGISTRY_DIR to update it",
+        detail:
+          "installed from a working copy — set SAASALOY_REGISTRY_DIR to update it",
       });
       continue;
     }
@@ -164,7 +180,8 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
     const ref = overrideRef ?? entry.ref;
     try {
       const latest = await resolveRef(name, entry, ref);
-      const status: UpdateStatus = latest === entry.resolved ? "current" : "outdated";
+      const status: UpdateStatus =
+        latest === entry.resolved ? "current" : "outdated";
       out.push({
         name,
         source: entry.source,
@@ -174,7 +191,9 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
         status,
         // An `outdated` module rewrites `ref` as part of moving `resolved`; only a
         // `current` one needs the ref move called out on its own.
-        ...(status === "current" && ref !== entry.ref ? { refRewrite: true } : {}),
+        ...(status === "current" && ref !== entry.ref
+          ? { refRewrite: true }
+          : {}),
       });
     } catch (error) {
       out.push({
@@ -200,14 +219,25 @@ export async function compareInstalled(args: CompareInstalledArgs): Promise<Modu
  * untouched by construction: it already holds the SHA the new ref resolves to.
  * Returns the names actually rewritten.
  */
-export function recordRefRewrites(lock: Lockfile, comparisons: ModuleComparison[]): string[] {
+export function recordRefRewrites(
+  lock: Lockfile,
+  comparisons: ModuleComparison[]
+): string[] {
   const rewritten: string[] = [];
   for (const comparison of comparisons) {
-    if (!comparison.refRewrite) continue;
+    if (!comparison.refRewrite) {
+      continue;
+    }
     const entry = lock.modules[comparison.name];
     // Same guard executeUpdatePlan uses: a comparison against a different source isn't
     // describing this entry's ref.
-    if (!entry || entry.ref === comparison.ref || entry.source !== comparison.source) continue;
+    if (
+      !entry ||
+      entry.ref === comparison.ref ||
+      entry.source !== comparison.source
+    ) {
+      continue;
+    }
     entry.ref = comparison.ref;
     rewritten.push(comparison.name);
   }
@@ -399,14 +429,22 @@ interface ModuleFileRef {
 
 /** Modules that have applied a config patch to this file, per the manifest's record. */
 function patchersOf(manifest: Manifest, target: string): string[] {
-  return [...new Set(manifest.patches.filter((p) => p.file === target).map((p) => p.module))];
+  return [
+    ...new Set(
+      manifest.patches.filter((p) => p.file === target).map((p) => p.module)
+    ),
+  ];
 }
 
 /** Aliases a module's scaffolds register — needed to resolve its own file targets. */
-function scaffoldAliases(mod: LoadedModule | undefined): Record<string, string> {
+function scaffoldAliases(
+  mod: LoadedModule | undefined
+): Record<string, string> {
   const out: Record<string, string> = {};
   for (const scaffold of mod?.item.scaffolds ?? []) {
-    for (const [alias, prefix] of Object.entries(scaffold.aliases ?? {})) out[alias] = prefix;
+    for (const [alias, prefix] of Object.entries(scaffold.aliases ?? {})) {
+      out[alias] = prefix;
+    }
   }
   return out;
 }
@@ -419,7 +457,7 @@ function scaffoldAliases(mod: LoadedModule | undefined): Record<string, string> 
  */
 async function listModuleFiles(
   mod: LoadedModule,
-  aliases: Record<string, string>,
+  aliases: Record<string, string>
 ): Promise<Map<string, ModuleFileRef>> {
   const out = new Map<string, ModuleFileRef>();
   const add = (from: string, target: string): void => {
@@ -438,7 +476,10 @@ async function listModuleFiles(
     const folderName = posix.basename(skillRel);
     const skillDir = joinModulePath(mod.dir, skillRel);
     for (const rel of await listFilesRelative(skillDir)) {
-      add(posix.join(skillRel, rel), posix.join(".agents/skills", folderName, rel));
+      add(
+        posix.join(skillRel, rel),
+        posix.join(".agents/skills", folderName, rel)
+      );
     }
   }
   return out;
@@ -452,26 +493,40 @@ function joinModulePath(dir: string, relPosix: string): string {
 }
 
 async function readIfPresent(abs: string): Promise<string | undefined> {
-  return (await pathExists(abs)) ? readFile(abs, "utf8") : undefined;
+  return (await pathExists(abs)) ? readFile(abs, "utf-8") : undefined;
 }
 
-export async function buildUpdatePlan(args: BuildUpdatePlanArgs): Promise<UpdatePlan> {
+export async function buildUpdatePlan(
+  args: BuildUpdatePlanArgs
+): Promise<UpdatePlan> {
   const { root, config, manifest, lock, inputs, pkg } = args;
 
   // Scoped to what this run looked at, so `update email` doesn't editorialize about an
   // unrelated module the base template registered without a lock entry.
-  const missingLockEntries = (args.considered ?? config.installed).filter((name) => !lock.modules[name]);
+  const missingLockEntries = (args.considered ?? config.installed).filter(
+    (name) => !lock.modules[name]
+  );
   const modules: ModuleUpdatePlan[] = [];
   const touched: string[] = [];
 
   for (const item of inputs) {
-    const plan = await planOneModule({ root, config, manifest, input: item, pkg: pkg ?? null });
+    const plan = await planOneModule({
+      root,
+      config,
+      manifest,
+      input: item,
+      pkg: pkg ?? null,
+    });
     modules.push(plan);
     for (const file of plan.files) {
-      if (file.action !== "skip" && file.action !== "unchanged") touched.push(file.target);
+      if (file.action !== "skip" && file.action !== "unchanged") {
+        touched.push(file.target);
+      }
     }
     for (const file of plan.removals) {
-      if (file.action !== "delete-missing") touched.push(file.target);
+      if (file.action !== "delete-missing") {
+        touched.push(file.target);
+      }
     }
   }
 
@@ -482,7 +537,8 @@ export async function buildUpdatePlan(args: BuildUpdatePlanArgs): Promise<Update
     ? `${config.aliases[DB_ALIAS].replace(/\/$/, "")}/schema/`
     : DB_SCHEMA_FALLBACK;
   const migrationCommand =
-    config.installed.includes(DATABASE_MODULE) && touched.some((t) => t.startsWith(schemaPrefix))
+    config.installed.includes(DATABASE_MODULE) &&
+    touched.some((t) => t.startsWith(schemaPrefix))
       ? MIGRATION_COMMAND
       : undefined;
 
@@ -514,7 +570,10 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   // declares — otherwise a brand-new capability's files can't be placed.
   const prereqAliases: Record<string, string> = {};
   for (const prereqName of input.prereqs?.order ?? []) {
-    Object.assign(prereqAliases, scaffoldAliases(input.prereqs?.modules.get(prereqName)));
+    Object.assign(
+      prereqAliases,
+      scaffoldAliases(input.prereqs?.modules.get(prereqName))
+    );
   }
   const aliasView = {
     ...config.aliases,
@@ -528,15 +587,22 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
 
   const files: PlannedUpdateFile[] = [];
   for (const ref of theirsFiles.values()) {
-    const theirsContent = await readFile(ref.abs, "utf8");
+    const theirsContent = await readFile(ref.abs, "utf-8");
     const baseRef = baseFiles?.get(ref.target);
-    const baseContent = baseRef ? await readFile(baseRef.abs, "utf8") : undefined;
+    const baseContent = baseRef
+      ? await readFile(baseRef.abs, "utf-8")
+      : undefined;
     const targetAbs = resolveWithinRoot(root, ref.target);
     const managed = manifest.managed[ref.target];
     const owned = managed?.module === name ? managed : undefined;
     const mine = await readIfPresent(targetAbs);
 
-    const action = classifyUpdate(baseContent, theirsContent, mine, owned?.hash);
+    const action = classifyUpdate(
+      baseContent,
+      theirsContent,
+      mine,
+      owned?.hash
+    );
     const patchedBy = patchersOf(manifest, ref.target);
     files.push({
       module: name,
@@ -557,7 +623,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   // manifest is the record of what we actually put there.
   const removals: PlannedUpdateFile[] = [];
   for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (entry.module !== name || theirsFiles.has(target)) continue;
+    if (entry.module !== name || theirsFiles.has(target)) {
+      continue;
+    }
     const targetAbs = resolveWithinRoot(root, target);
     const mine = await readIfPresent(targetAbs);
     const baseRef = baseFiles?.get(target);
@@ -567,20 +635,27 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       target,
       targetAbs,
       action: DELETE_ACTION[classifyTrackedFile(mine, entry.hash)],
-      base: baseRef ? await readFile(baseRef.abs, "utf8") : undefined,
+      base: baseRef ? await readFile(baseRef.abs, "utf-8") : undefined,
       mine,
     });
   }
 
   const links = await planLinks(root, theirs);
-  const patches = await planPatches(root, name, theirs.item.patches ?? [], files);
+  const patches = await planPatches(
+    root,
+    name,
+    theirs.item.patches ?? [],
+    files
+  );
   const deps = planDepChanges(base, theirs, pkg);
 
   // A `dependsOn` the new version introduces is folded into this same plan rather than
   // left for the user to install by hand (decision 11).
   let prereqPlan: Plan | undefined;
   const prereqDependsOn: Record<string, string[]> = {};
-  const prereqNames = (input.prereqs?.order ?? []).filter((n) => !config.installed.includes(n));
+  const prereqNames = (input.prereqs?.order ?? []).filter(
+    (n) => !config.installed.includes(n)
+  );
   if (prereqNames.length > 0 && input.prereqs) {
     prereqPlan = await buildPlan({
       root,
@@ -592,7 +667,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     });
     for (const prereq of prereqNames) {
       const dependsOn = input.prereqs.modules.get(prereq)?.item.dependsOn;
-      if (dependsOn && dependsOn.length > 0) prereqDependsOn[prereq] = dependsOn;
+      if (dependsOn && dependsOn.length > 0) {
+        prereqDependsOn[prereq] = dependsOn;
+      }
     }
   }
 
@@ -614,7 +691,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     prereqNames,
     ...(prereqPlan ? { prereqPlan } : {}),
     prereqDependsOn,
-    ...(theirs.item.dependsOn && theirs.item.dependsOn.length > 0 ? { dependsOn: theirs.item.dependsOn } : {}),
+    ...(theirs.item.dependsOn && theirs.item.dependsOn.length > 0
+      ? { dependsOn: theirs.item.dependsOn }
+      : {}),
     needsMerge,
   };
 }
@@ -628,16 +707,27 @@ function classifyUpdate(
   base: string | undefined,
   theirs: string,
   mine: string | undefined,
-  managedHash: string | undefined,
+  managedHash: string | undefined
 ): UpdateFileAction {
-  if (base !== undefined && base === theirs) return "skip";
-  if (mine === undefined) return managedHash === undefined ? "create" : "restore";
-  if (mine === theirs) return "unchanged";
-  if (managedHash === undefined) return "conflict";
+  if (base !== undefined && base === theirs) {
+    return "skip";
+  }
+  if (mine === undefined) {
+    return managedHash === undefined ? "create" : "restore";
+  }
+  if (mine === theirs) {
+    return "unchanged";
+  }
+  if (managedHash === undefined) {
+    return "conflict";
+  }
   return hashContent(mine) === managedHash ? "overwrite" : "drift";
 }
 
-async function planLinks(root: string, theirs: LoadedModule): Promise<PlannedLink[]> {
+async function planLinks(
+  root: string,
+  theirs: LoadedModule
+): Promise<PlannedLink[]> {
   const links: PlannedLink[] = [];
   for (const skillRel of theirs.item.agent?.skills ?? []) {
     const folderName = posix.basename(skillRel);
@@ -646,8 +736,20 @@ async function planLinks(root: string, theirs: LoadedModule): Promise<PlannedLin
     const pathAbs = resolveWithinRoot(root, path);
     const targetAbs = resolveWithinRoot(root, target);
     const state = await classifyLink(pathAbs, targetAbs);
-    const action: LinkAction = state === "missing" ? "create" : state === "correct" ? "exists" : "conflict";
-    links.push({ module: theirs.item.name, path, pathAbs, target, targetAbs, action });
+    const action: LinkAction =
+      state === "missing"
+        ? "create"
+        : state === "correct"
+          ? "exists"
+          : "conflict";
+    links.push({
+      module: theirs.item.name,
+      path,
+      pathAbs,
+      target,
+      targetAbs,
+      action,
+    });
   }
   return links;
 }
@@ -662,7 +764,7 @@ async function planPatches(
   root: string,
   module: string,
   ops: RegistryPatch[],
-  files: PlannedUpdateFile[],
+  files: PlannedUpdateFile[]
 ): Promise<PlannedUpdatePatch[]> {
   const out: PlannedUpdatePatch[] = [];
   for (const op of ops) {
@@ -671,9 +773,18 @@ async function planPatches(
     // file the same update rewrites reads the new bytes (same rule as buildPlan).
     const planned = files.find((f) => f.target === op.file);
     const source =
-      planned && WRITABLE.has(planned.action) ? planned.theirs : ((await readIfPresent(fileAbs)) ?? planned?.theirs);
+      planned && WRITABLE.has(planned.action)
+        ? planned.theirs
+        : ((await readIfPresent(fileAbs)) ?? planned?.theirs);
     if (source === undefined) {
-      out.push({ module, file: op.file, fileAbs, patch: op, action: "missing", diff: "" });
+      out.push({
+        module,
+        file: op.file,
+        fileAbs,
+        patch: op,
+        action: "missing",
+        diff: "",
+      });
       continue;
     }
     const { content, changed, diff, matched } = applyPatch(source, op, op.file);
@@ -699,9 +810,15 @@ interface PlannedDeps {
 }
 
 /** `name -> version` for one descriptor revision, per bucket. */
-function pinsOf(mod: LoadedModule | undefined, dev: boolean): Map<string, string> {
-  const specs = (dev ? mod?.item.devDependencies : mod?.item.dependencies) ?? [];
-  return new Map(specs.map((spec) => [parseDep(spec).name, parseDep(spec).version]));
+function pinsOf(
+  mod: LoadedModule | undefined,
+  dev: boolean
+): Map<string, string> {
+  const specs =
+    (dev ? mod?.item.devDependencies : mod?.item.dependencies) ?? [];
+  return new Map(
+    specs.map((spec) => [parseDep(spec).name, parseDep(spec).version])
+  );
 }
 
 /**
@@ -713,17 +830,21 @@ function pinsOf(mod: LoadedModule | undefined, dev: boolean): Map<string, string
 function planDepChanges(
   base: LoadedModule | undefined,
   theirs: LoadedModule,
-  pkg: PackageJson | null,
+  pkg: PackageJson | null
 ): PlannedDeps {
   const depAdds: DepChange[] = [];
   const devDepAdds: DepChange[] = [];
   const depBumps: DepBump[] = [];
   const depConflicts: string[] = [];
-  if (!pkg) return { depAdds, devDepAdds, depBumps, depConflicts };
+  if (!pkg) {
+    return { depAdds, devDepAdds, depBumps, depConflicts };
+  }
 
   for (const dev of [false, true]) {
     const bucket = dev ? (pkg.devDependencies ?? {}) : (pkg.dependencies ?? {});
-    const otherBucket = dev ? (pkg.dependencies ?? {}) : (pkg.devDependencies ?? {});
+    const otherBucket = dev
+      ? (pkg.dependencies ?? {})
+      : (pkg.devDependencies ?? {});
     const basePins = pinsOf(base, dev);
 
     for (const [name, wanted] of pinsOf(theirs, dev)) {
@@ -737,13 +858,22 @@ function planDepChanges(
         (dev ? devDepAdds : depAdds).push({ name, version: wanted });
         continue;
       }
-      if (current === wanted) continue;
+      if (current === wanted) {
+        continue;
+      }
 
       const basePin = basePins.get(name);
       if (basePin !== undefined && basePin !== wanted && current === basePin) {
-        depBumps.push({ name, from: current, to: wanted, dev: inDeclaredBucket ? dev : !dev });
+        depBumps.push({
+          name,
+          from: current,
+          to: wanted,
+          dev: inDeclaredBucket ? dev : !dev,
+        });
       } else {
-        depConflicts.push(`${name}: package.json already has ${current}, ignoring ${wanted}`);
+        depConflicts.push(
+          `${name}: package.json already has ${current}, ignoring ${wanted}`
+        );
       }
     }
   }
@@ -800,7 +930,10 @@ async function stillMatches(file: PlannedUpdateFile): Promise<boolean> {
   return now === file.mine;
 }
 
-export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArgs): Promise<UpdateResult> {
+export async function executeUpdatePlan(
+  plan: UpdatePlan,
+  args: ExecuteUpdateArgs
+): Promise<UpdateResult> {
   const { root, config, manifest, lock } = args;
   const result: UpdateResult = {
     written: [],
@@ -833,7 +966,9 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
     let clean = !mod.needsMerge;
 
     for (const file of mod.files) {
-      if (!WRITABLE.has(file.action) || file.theirs === undefined) continue;
+      if (!WRITABLE.has(file.action) || file.theirs === undefined) {
+        continue;
+      }
       if (!(await stillMatches(file))) {
         result.lateDrift.push(file);
         clean = false;
@@ -846,7 +981,7 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
         result.refreshed.push(file);
       } else {
         await mkdir(dirname(file.targetAbs), { recursive: true });
-        await writeFile(file.targetAbs, file.theirs, "utf8");
+        await writeFile(file.targetAbs, file.theirs, "utf-8");
         result.written.push(file);
       }
       manifest.managed[file.target] = {
@@ -858,14 +993,14 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
 
     for (const file of mod.removals) {
       if (file.action === "delete") {
-        if (!(await stillMatches(file))) {
+        if (await stillMatches(file)) {
+          await rmPath(file.targetAbs, { force: true });
+          result.deleted.push(file);
+        } else {
           // Edited while the confirmation was up — the delete was authorized for
           // different bytes, so it doesn't authorize removing these.
           result.driftSurvivors.push(file);
           clean = false;
-        } else {
-          await rmPath(file.targetAbs, { force: true });
-          result.deleted.push(file);
         }
       } else if (file.action === "delete-drift") {
         result.driftSurvivors.push(file);
@@ -886,13 +1021,21 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
       }
       // Re-apply against fresh disk state, never the preview — the engine is idempotent,
       // so a patch that already landed is a clean no-op.
-      const source = await readFile(p.fileAbs, "utf8");
+      const source = await readFile(p.fileAbs, "utf-8");
       const { content, changed } = applyPatch(source, p.patch, p.file);
-      if (!changed) continue;
-      await writeFile(p.fileAbs, content, "utf8");
+      if (!changed) {
+        continue;
+      }
+      await writeFile(p.fileAbs, content, "utf-8");
       result.patched.push(p);
-      const entry: ManifestPatch = { module: p.module, file: p.file, patch: p.patch };
-      if (!manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
+      const entry: ManifestPatch = {
+        module: p.module,
+        file: p.file,
+        patch: p.patch,
+      };
+      if (
+        !manifest.patches.some((existing) => samePatchEntry(existing, entry))
+      ) {
         manifest.patches.push(entry);
       }
     }
@@ -902,13 +1045,18 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
         result.linkConflicts.push(link);
         continue;
       }
-      if (link.action === "create") await createDirLink(link.pathAbs, link.targetAbs);
+      if (link.action === "create") {
+        await createDirLink(link.pathAbs, link.targetAbs);
+      }
       manifest.links[link.target] = link.path;
       result.links.push(link);
     }
 
     for (const bump of mod.depBumps) {
-      (bump.dev ? devBumpsAsDeps : bumpsAsDeps).push({ name: bump.name, version: bump.to });
+      (bump.dev ? devBumpsAsDeps : bumpsAsDeps).push({
+        name: bump.name,
+        version: bump.to,
+      });
     }
 
     // Move `resolved` only for a module that fully landed. While anything still needs
@@ -928,7 +1076,11 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
       // out for merge — otherwise the user would have to repeat `--ref` on the re-run
       // the merge plan tells them to do (decision 10).
       const entry = lock.modules[mod.name];
-      if (entry && entry.ref !== mod.comparison.ref && mod.comparison.source === entry.source) {
+      if (
+        entry &&
+        entry.ref !== mod.comparison.ref &&
+        mod.comparison.source === entry.source
+      ) {
         entry.ref = mod.comparison.ref;
         result.refsRecorded.push(mod.name);
       }
@@ -948,7 +1100,13 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
   const pkg = args.pkg;
   const allAdds = plan.modules.flatMap((m) => m.depAdds);
   const allDevAdds = plan.modules.flatMap((m) => m.devDepAdds);
-  if (pkg && (allAdds.length > 0 || allDevAdds.length > 0 || bumpsAsDeps.length > 0 || devBumpsAsDeps.length > 0)) {
+  if (
+    pkg &&
+    (allAdds.length > 0 ||
+      allDevAdds.length > 0 ||
+      bumpsAsDeps.length > 0 ||
+      devBumpsAsDeps.length > 0)
+  ) {
     const added = [...allAdds, ...bumpsAsDeps];
     const devAdded = [...allDevAdds, ...devBumpsAsDeps];
     // `writeDeps` merges by key, so an existing pin is rewritten in place — which is
@@ -961,5 +1119,9 @@ export async function executeUpdatePlan(plan: UpdatePlan, args: ExecuteUpdateArg
 }
 
 function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
-  return a.module === b.module && a.file === b.file && JSON.stringify(a.patch) === JSON.stringify(b.patch);
+  return (
+    a.module === b.module &&
+    a.file === b.file &&
+    JSON.stringify(a.patch) === JSON.stringify(b.patch)
+  );
 }

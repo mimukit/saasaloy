@@ -106,12 +106,14 @@ describe(LocalRegistrySource, () => {
   // which is what stamps its merge plan "no merge base — local install" (issue #48).
   it("resolves to the `local` sentinel instead of a commit SHA", async () => {
     const source = new LocalRegistrySource(dir);
-    expect(await source.resolveSha()).toBe("local");
+    await expect(source.resolveSha()).resolves.toBe("local");
   });
 
   it("has no commit subjects to report", async () => {
     const source = new LocalRegistrySource(dir);
-    expect(await source.commitSubjects("modules/hello", "local", "local")).toEqual([]);
+    await expect(
+      source.commitSubjects("modules/hello", "local", "local")
+    ).resolves.toStrictEqual([]);
   });
 
   it("errors clearly on an unknown module", async () => {

@@ -61,7 +61,11 @@ export interface RegistrySource {
    * (force-push, deleted tag, rate limit, local source), so a merge plan degrades to
    * diff-only instead of failing.
    */
-  commitSubjects(modulePath: string, baseSha: string, headSha: string): Promise<string[]>;
+  commitSubjects(
+    modulePath: string,
+    baseSha: string,
+    headSha: string
+  ): Promise<string[]>;
   /** Drop any temp working dirs created while fetching. No-op for a local source. */
   cleanup?(): Promise<void>;
 }
@@ -206,7 +210,11 @@ export class LocalRegistrySource implements RegistrySource {
     return "local";
   }
 
-  async commitSubjects(_modulePath: string, _baseSha: string, _headSha: string): Promise<string[]> {
+  async commitSubjects(
+    _modulePath: string,
+    _baseSha: string,
+    _headSha: string
+  ): Promise<string[]> {
     return [];
   }
 
@@ -319,14 +327,20 @@ export class RemoteRegistrySource implements RegistrySource {
   // two queries: `compare` gives the commits between the SHAs, `commits?path=` gives
   // the ones touching the module. Both are reported best-effort — the merge plan is
   // still useful without intent, and an update must never fail over a changelog.
-  async commitSubjects(modulePath: string, baseSha: string, headSha: string): Promise<string[]> {
-    if (baseSha === headSha) return [];
+  async commitSubjects(
+    modulePath: string,
+    baseSha: string,
+    headSha: string
+  ): Promise<string[]> {
+    if (baseSha === headSha) {
+      return [];
+    }
     try {
       const between = await this.api<{ commits?: CommitEntry[] }>(
-        `/repos/${this.owner}/${this.repo}/compare/${baseSha}...${headSha}`,
+        `/repos/${this.owner}/${this.repo}/compare/${baseSha}...${headSha}`
       );
       const touching = await this.api<CommitEntry[]>(
-        `/repos/${this.owner}/${this.repo}/commits?sha=${headSha}&path=${encodeURIComponent(modulePath)}&per_page=100`,
+        `/repos/${this.owner}/${this.repo}/commits?sha=${headSha}&path=${encodeURIComponent(modulePath)}&per_page=100`
       );
       const touchingShas = new Set(touching.map((c) => c.sha));
       return (between.commits ?? [])

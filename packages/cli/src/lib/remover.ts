@@ -33,8 +33,13 @@ export type FileRemoveAction = "delete" | "drift" | "missing";
  * `delete`/`delete-drift`/`delete-missing` — one definition of "is this still the file
  * Saasaloy put there?" for both commands.
  */
-export function classifyTrackedFile(content: string | undefined, manifestHash: string): FileRemoveAction {
-  if (content === undefined) return "missing";
+export function classifyTrackedFile(
+  content: string | undefined,
+  manifestHash: string
+): FileRemoveAction {
+  if (content === undefined) {
+    return "missing";
+  }
   return hashContent(content) === manifestHash ? "delete" : "drift";
 }
 

@@ -123,12 +123,15 @@ export function applyPatch(
 // is matched by the call expression itself, so a match is always an exact re-run.
 function matchExisting(source: string, patch: Patch): PatchMatch | undefined {
   switch (patch.kind) {
-    case "wrangler-binding":
+    case "wrangler-binding": {
       return matchWranglerBinding(source, patch);
-    case "package-json-dependency":
+    }
+    case "package-json-dependency": {
       return matchPackageJsonDependency(source, patch);
-    default:
+    }
+    default: {
       return undefined;
+    }
   }
 }
 

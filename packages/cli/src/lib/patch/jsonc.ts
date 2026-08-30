@@ -110,22 +110,39 @@ export interface BindingMatch {
  * A string `entry` is matched by plain equality, so a match is always identical —
  * there is nothing to report.
  */
-export function matchWranglerBinding(source: string, patch: WranglerBinding): BindingMatch | undefined {
+export function matchWranglerBinding(
+  source: string,
+  patch: WranglerBinding
+): BindingMatch | undefined {
   const entry = patch.entry;
-  if (typeof entry === "string") return undefined;
+  if (typeof entry === "string") {
+    return undefined;
+  }
 
   const root = parseTree(source);
-  if (!root) return undefined;
+  if (!root) {
+    return undefined;
+  }
   const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
-  if (arrayNode?.type !== "array") return undefined;
+  if (arrayNode?.type !== "array") {
+    return undefined;
+  }
 
   const matchOn = patch.matchOn ?? "binding";
   const wantedId = entry[matchOn];
   for (const child of arrayNode.children ?? []) {
     const value = getNodeValue(child) as unknown;
-    if (!isRecord(value) || value[matchOn] !== wantedId) continue;
-    if (sameValue(value, entry)) return undefined;
-    return { key: `${patch.bindingType}[${matchOn}=${String(wantedId)}]`, current: value, wanted: entry };
+    if (!isRecord(value) || value[matchOn] !== wantedId) {
+      continue;
+    }
+    if (sameValue(value, entry)) {
+      return undefined;
+    }
+    return {
+      key: `${patch.bindingType}[${matchOn}=${String(wantedId)}]`,
+      current: value,
+      wanted: entry,
+    };
   }
   return undefined;
 }
@@ -137,10 +154,12 @@ function sameValue(a: unknown, b: unknown): boolean {
 }
 
 function canonical(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
+  if (Array.isArray(value)) {
+    return `[${value.map(canonical).join(",")}]`;
+  }
   if (isRecord(value)) {
     return `{${Object.keys(value)
-      .sort()
+      .toSorted()
       .map((key) => `${JSON.stringify(key)}:${canonical(value[key])}`)
       .join(",")}}`;
   }

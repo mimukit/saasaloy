@@ -79,16 +79,28 @@ export function upsertPackageJsonDependency(
  */
 export function matchPackageJsonDependency(
   source: string,
-  patch: PackageJsonDependency,
+  patch: PackageJsonDependency
 ): { key: string; current: unknown; wanted: unknown } | undefined {
   const root = parseTree(source);
-  if (!root) return undefined;
+  if (!root) {
+    return undefined;
+  }
   const sectionNode = findNodeAtLocation(root, [patch.section]);
-  if (sectionNode?.type !== "object") return undefined;
+  if (sectionNode?.type !== "object") {
+    return undefined;
+  }
 
   const existing = getNodeValue(sectionNode) as Record<string, unknown>;
-  if (!Object.prototype.hasOwnProperty.call(existing, patch.name)) return undefined;
+  if (!Object.hasOwn(existing, patch.name)) {
+    return undefined;
+  }
   const current = existing[patch.name];
-  if (current === patch.range) return undefined;
-  return { key: `${patch.section}[${patch.name}]`, current, wanted: patch.range };
+  if (current === patch.range) {
+    return undefined;
+  }
+  return {
+    key: `${patch.section}[${patch.name}]`,
+    current,
+    wanted: patch.range,
+  };
 }

@@ -1,6 +1,14 @@
 import { mkdir, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-import { cancel, confirm, intro, isCancel, log, note, outro } from "@clack/prompts";
+import {
+  cancel,
+  confirm,
+  intro,
+  isCancel,
+  log,
+  note,
+  outro,
+} from "@clack/prompts";
 import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
 import { loadLock, saveLock } from "../lib/lock.js";
@@ -10,11 +18,10 @@ import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   createRegistrySource,
-  type LoadedModule,
   REGISTRY_ENV,
   RemoteRegistrySource,
-  type RegistrySource,
 } from "../lib/registry.js";
+import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
@@ -22,14 +29,16 @@ import {
   buildUpdatePlan,
   compareInstalled,
   executeUpdatePlan,
-  type ModuleComparison,
-  type ModuleUpdateInput,
-  type ModuleUpdatePlan,
-  type PlannedUpdateFile,
   recordRefRewrites,
-  type UpdateFileAction,
-  type UpdatePlan,
-  type UpdateResult,
+} from "../lib/updater.js";
+import type {
+  ModuleComparison,
+  ModuleUpdateInput,
+  ModuleUpdatePlan,
+  PlannedUpdateFile,
+  UpdateFileAction,
+  UpdatePlan,
+  UpdateResult,
 } from "../lib/updater.js";
 
 // `saasaloy update [<module>]` — re-resolve each installed module's ref, apply what can
@@ -57,7 +66,8 @@ interface Options {
 
 const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y"]);
 const VALUE_FLAGS = new Set(["--ref", "--out"]);
-const USAGE = "saasaloy update [<module>] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
+const USAGE =
+  "saasaloy update [<module>] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -76,11 +86,16 @@ function parseArgs(argv: string[]): Options {
     const flag = eq === -1 ? arg : arg.slice(0, eq);
     if (VALUE_FLAGS.has(flag)) {
       const value = eq === -1 ? argv[++i] : arg.slice(eq + 1);
-      if (!value) unknown.push(`${flag} (missing value)`);
-      else values[flag] = value;
+      if (value) {
+        values[flag] = value;
+      } else {
+        unknown.push(`${flag} (missing value)`);
+      }
       continue;
     }
-    if (!KNOWN_FLAGS.has(arg)) unknown.push(arg);
+    if (!KNOWN_FLAGS.has(arg)) {
+      unknown.push(arg);
+    }
   }
   unknown.push(...positional.slice(1));
 
@@ -110,7 +125,10 @@ const ACTION_LABEL: Record<UpdateFileAction, string> = {
 
 // Actions worth a line in the summary — `skip`/`unchanged` are counted, not listed, so
 // a big module doesn't bury the handful of paths that actually move.
-const QUIET: ReadonlySet<UpdateFileAction> = new Set<UpdateFileAction>(["skip", "unchanged"]);
+const QUIET: ReadonlySet<UpdateFileAction> = new Set<UpdateFileAction>([
+  "skip",
+  "unchanged",
+]);
 
 // Cap a single file's diff so a big generated file can't flood the terminal (same cap as `add`).
 const MAX_DIFF_LINES = 60;
@@ -119,12 +137,15 @@ function renderDiff(file: PlannedUpdateFile): string {
   const lines = lineDiff(file.mine ?? "", file.theirs ?? "");
   const shown = lines.slice(0, MAX_DIFF_LINES).map((line) => {
     switch (line.kind) {
-      case "add":
+      case "add": {
         return pc.green(`+ ${line.text}`);
-      case "del":
+      }
+      case "del": {
         return pc.red(`- ${line.text}`);
-      default:
+      }
+      default: {
         return pc.dim(`  ${line.text}`);
+      }
     }
   });
   if (lines.length > MAX_DIFF_LINES) {
@@ -145,16 +166,26 @@ function summarizeModule(mod: ModuleUpdatePlan): string[] {
     lines.push(pc.dim(`  no merge base — ${mod.noMergeBase}`));
   }
   for (const name of mod.prereqNames) {
-    lines.push(`  ${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`);
+    lines.push(
+      `  ${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`
+    );
   }
   for (const file of [...mod.files, ...mod.removals]) {
-    if (QUIET.has(file.action)) continue;
+    if (QUIET.has(file.action)) {
+      continue;
+    }
     lines.push(`  ${ACTION_LABEL[file.action]}  ${file.target}`);
   }
-  const quiet = [...mod.files, ...mod.removals].filter((f) => QUIET.has(f.action)).length;
-  if (quiet > 0) lines.push(pc.dim(`  ${quiet} file(s) already up to date`));
+  const quiet = [...mod.files, ...mod.removals].filter((f) =>
+    QUIET.has(f.action)
+  ).length;
+  if (quiet > 0) {
+    lines.push(pc.dim(`  ${quiet} file(s) already up to date`));
+  }
   for (const bump of mod.depBumps) {
-    lines.push(`  ${pc.cyan("bump")}  ${bump.name} ${pc.dim(`${bump.from} → ${bump.to}`)}`);
+    lines.push(
+      `  ${pc.cyan("bump")}  ${bump.name} ${pc.dim(`${bump.from} → ${bump.to}`)}`
+    );
   }
   for (const dep of [...mod.depAdds, ...mod.devDepAdds]) {
     lines.push(`  ${pc.green("dep")}  ${dep.name}@${dep.version}`);
@@ -165,21 +196,26 @@ function summarizeModule(mod: ModuleUpdatePlan): string[] {
 function summarizePlan(plan: UpdatePlan): void {
   const lines: string[] = [];
   for (const mod of plan.modules) {
-    lines.push(...summarizeModule(mod));
-    lines.push("");
+    lines.push(...summarizeModule(mod), "");
   }
   const merging = plan.modules.reduce(
     (n, m) =>
       n +
-      m.files.filter((f) => f.action === "drift" || f.action === "conflict").length +
+      m.files.filter((f) => f.action === "drift" || f.action === "conflict")
+        .length +
       m.removals.filter((f) => f.action === "delete-drift").length,
-    0,
+    0
   );
   const writing = plan.modules.reduce(
     (n, m) =>
       n +
-      m.files.filter((f) => !QUIET.has(f.action) && f.action !== "drift" && f.action !== "conflict").length,
-    0,
+      m.files.filter(
+        (f) =>
+          !QUIET.has(f.action) &&
+          f.action !== "drift" &&
+          f.action !== "conflict"
+      ).length,
+    0
   );
   lines.push(pc.dim(`${writing} file(s) to apply, ${merging} needing merge`));
   note(wrapForNote(lines.join("\n")), "Plan", TUI_ON_STDERR);
@@ -187,7 +223,10 @@ function summarizePlan(plan: UpdatePlan): void {
   // A module with no lock entry already arrives here as an `unresolvable` comparison
   // carrying that reason, so `plan.missingLockEntries` isn't reported a second time.
   for (const comparison of plan.skipped) {
-    log.info(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`, TUI_ON_STDERR);
+    log.info(
+      `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`,
+      TUI_ON_STDERR
+    );
   }
   for (const mod of plan.modules) {
     for (const conflict of mod.depConflicts) {
@@ -197,7 +236,7 @@ function summarizePlan(plan: UpdatePlan): void {
       if (patch.action === "missing") {
         log.warn(
           `Config patch target ${pc.cyan(patch.file)} is missing — ${patch.patch.kind} not applied.`,
-          TUI_ON_STDERR,
+          TUI_ON_STDERR
         );
       }
     }
@@ -205,16 +244,18 @@ function summarizePlan(plan: UpdatePlan): void {
   if (plan.migrationCommand) {
     note(
       wrapForNote(
-        `${pc.cyan(plan.migrationCommand)}\n\n${pc.dim("The update changed the database schema — run this to regenerate migrations.")}`,
+        `${pc.cyan(plan.migrationCommand)}\n\n${pc.dim("The update changed the database schema — run this to regenerate migrations.")}`
       ),
       "Migrations",
-      TUI_ON_STDERR,
+      TUI_ON_STDERR
     );
   }
   note(
-    wrapForNote(`${pc.cyan(plan.verifyCommand)}\n\n${pc.dim("Named, not run — an update usually precedes `pnpm install`.")}`),
+    wrapForNote(
+      `${pc.cyan(plan.verifyCommand)}\n\n${pc.dim("Named, not run — an update usually precedes `pnpm install`.")}`
+    ),
     "Verify with",
-    TUI_ON_STDERR,
+    TUI_ON_STDERR
   );
 }
 
@@ -222,34 +263,42 @@ function skipReason(comparison: ModuleComparison, preview = false): string {
   switch (comparison.status) {
     case "current": {
       const at = `already at ${short(comparison.current)}`;
-      if (!comparison.refRewrite) return at;
+      if (!comparison.refRewrite) {
+        return at;
+      }
       // The SHA didn't move but the ref did — say so, or "already at <sha7>" would read
       // as though `--ref` had been ignored.
       return preview
         ? `${at} — \`--ref\` would move the lock onto \`${comparison.ref}\``
         : `${at} — now tracking \`${comparison.ref}\``;
     }
-    default:
+    default: {
       return comparison.detail ?? comparison.status;
+    }
   }
 }
 
 /** Emit the merge plan: `--out <path>` when given, otherwise stdout — and nothing else ever. */
-async function emitMergePlan(document: string, out: string | undefined): Promise<void> {
+async function emitMergePlan(
+  document: string,
+  out: string | undefined
+): Promise<void> {
   if (!out) {
     process.stdout.write(document);
     return;
   }
   const target = isAbsolute(out) ? out : resolve(process.cwd(), out);
   await mkdir(dirname(target), { recursive: true });
-  await writeFile(target, document, "utf8");
+  await writeFile(target, document, "utf-8");
   log.success(`Merge plan written to ${pc.cyan(out)}`, TUI_ON_STDERR);
 }
 
 /** `owner/repo` → the two halves, or undefined when the lock's source isn't a remote slug. */
 function splitSlug(slug: string): [string, string] | undefined {
   const [owner, repo, ...rest] = slug.split("/");
-  if (!owner || !repo || rest.length > 0) return undefined;
+  if (!owner || !repo || rest.length > 0) {
+    return undefined;
+  }
   return [owner, repo];
 }
 
@@ -258,13 +307,19 @@ export async function runUpdate(argv: string[]): Promise<number> {
   intro(pc.bgCyan(pc.black(" saasaloy update ")), TUI_ON_STDERR);
 
   if (opts.unknown.length > 0) {
-    cancel(`Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`, TUI_ON_STDERR);
+    cancel(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      TUI_ON_STDERR
+    );
     return 1;
   }
   // A bare `update --ref v2` would silently move every module onto one ref, which is
   // never what someone means — the unpin is per module by construction (decision 10).
   if (opts.ref && !opts.name) {
-    cancel(`\`--ref\` needs an explicit module — usage: \`${USAGE}\`.`, TUI_ON_STDERR);
+    cancel(
+      `\`--ref\` needs an explicit module — usage: \`${USAGE}\`.`,
+      TUI_ON_STDERR
+    );
     return 1;
   }
 
@@ -273,7 +328,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
   let yes = opts.yes;
   if (!yes && !process.stdout.isTTY) {
     yes = true;
-    log.info("stdout isn't a terminal — proceeding as if `--yes` were given.", TUI_ON_STDERR);
+    log.info(
+      "stdout isn't a terminal — proceeding as if `--yes` were given.",
+      TUI_ON_STDERR
+    );
   }
 
   let root: string;
@@ -282,14 +340,20 @@ export async function runUpdate(argv: string[]): Promise<number> {
     root = await findProjectRoot();
     config = await loadConfig(root);
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error), TUI_ON_STDERR);
+    cancel(
+      error instanceof Error ? error.message : String(error),
+      TUI_ON_STDERR
+    );
     return 1;
   }
 
   const sources: RegistrySource[] = [];
   try {
     if (opts.name && !config.installed.includes(opts.name)) {
-      cancel(`${pc.cyan(opts.name)} isn't installed — nothing to update.`, TUI_ON_STDERR);
+      cancel(
+        `${pc.cyan(opts.name)} isn't installed — nothing to update.`,
+        TUI_ON_STDERR
+      );
       return 1;
     }
     const targets = opts.name ? [opts.name] : config.installed;
@@ -308,9 +372,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const remote = (slug: string, ref: string): RemoteRegistrySource => {
       const key = `${slug}@${ref}`;
       const cached = resolvers.get(key);
-      if (cached) return cached;
+      if (cached) {
+        return cached;
+      }
       const parts = splitSlug(slug);
-      if (!parts) throw new Error(`Lock entry source "${slug}" isn't an owner/repo coordinate.`);
+      if (!parts) {
+        throw new Error(
+          `Lock entry source "${slug}" isn't an owner/repo coordinate.`
+        );
+      }
       const source = new RemoteRegistrySource(parts[0], parts[1], ref);
       resolvers.set(key, source);
       sources.push(source);
@@ -327,7 +397,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
           `${REGISTRY_ENV} is set, so ${fromRemote.join(", ")} will be updated from that working ` +
             `copy rather than ${pc.cyan(lock.modules[fromRemote[0]!]?.source ?? "the registry")} — ` +
             `${pc.dim("there is no merge base for a working copy")}.`,
-          TUI_ON_STDERR,
+          TUI_ON_STDERR
         );
       }
     }
@@ -351,7 +421,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
         await saveLock(root, lock);
       }
       for (const comparison of skipped) {
-        log.info(`${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison, preview)}`)}`, TUI_ON_STDERR);
+        log.info(
+          `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison, preview)}`)}`,
+          TUI_ON_STDERR
+        );
       }
       outro(pc.green("Everything is up to date."), TUI_ON_STDERR);
       return 0;
@@ -369,11 +442,17 @@ export async function runUpdate(argv: string[]): Promise<number> {
         const theirsSource = registryOverride
           ? createRegistrySource({})
           : remote(comparison.source, comparison.latest);
-        if (registryOverride) sources.push(theirsSource);
+        if (registryOverride) {
+          sources.push(theirsSource);
+        }
 
         const graph = await resolveGraph(theirsSource, comparison.name);
         const theirs = graph.modules.get(comparison.name);
-        if (!theirs) throw new Error(`${comparison.name} isn't in the registry at ${short(comparison.latest)}.`);
+        if (!theirs) {
+          throw new Error(
+            `${comparison.name} isn't in the registry at ${short(comparison.latest)}.`
+          );
+        }
 
         let base: LoadedModule | undefined;
         let noMergeBase: string | undefined;
@@ -381,11 +460,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
           noMergeBase = "local install";
         } else {
           try {
-            base = await remote(comparison.source, comparison.current).readModule(comparison.name);
+            base = await remote(
+              comparison.source,
+              comparison.current
+            ).readModule(comparison.name);
           } catch (error) {
             // A force-pushed branch, a deleted tag, a repo gone private — the clean path
             // has already been decided, so refusing here would leave the user worse off.
-            noMergeBase = error instanceof Error ? error.message : String(error);
+            noMergeBase =
+              error instanceof Error ? error.message : String(error);
           }
         }
 
@@ -394,7 +477,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
             ? await theirsSource.commitSubjects(
                 `modules/${comparison.name}`,
                 comparison.current,
-                comparison.latest,
+                comparison.latest
               )
             : [];
 
@@ -404,7 +487,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
           ...(base ? { base } : {}),
           ...(noMergeBase ? { noMergeBase } : {}),
           intent,
-          prereqs: { order: graph.order.filter((n) => n !== comparison.name), modules: graph.modules },
+          prereqs: {
+            order: graph.order.filter((n) => n !== comparison.name),
+            modules: graph.modules,
+          },
         });
       } catch (error) {
         skipped.push({
@@ -420,8 +506,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
       for (const comparison of skipped) {
         // Only a fetch failure is a warning here — a `current` module is just news.
         const line = `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`;
-        if (comparison.status === "unresolvable") log.warn(line, TUI_ON_STDERR);
-        else log.info(line, TUI_ON_STDERR);
+        if (comparison.status === "unresolvable") {
+          log.warn(line, TUI_ON_STDERR);
+        } else {
+          log.info(line, TUI_ON_STDERR);
+        }
       }
       outro(pc.yellow("Nothing could be updated."), TUI_ON_STDERR);
       return 1;
@@ -429,7 +518,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     const pkg = await readRootPackageJson(root);
     if (!pkg) {
-      log.warn("No package.json at the project root — dependency pins won't be updated.", TUI_ON_STDERR);
+      log.warn(
+        "No package.json at the project root — dependency pins won't be updated.",
+        TUI_ON_STDERR
+      );
     }
     const plan = await buildUpdatePlan({
       root,
@@ -445,9 +537,18 @@ export async function runUpdate(argv: string[]): Promise<number> {
     summarizePlan(plan);
 
     if (opts.diff) {
-      for (const file of [...plan.modules.flatMap((m) => m.files), ...plan.modules.flatMap((m) => m.removals)]) {
-        if (QUIET.has(file.action)) continue;
-        note(renderDiff(file), `${ACTION_LABEL[file.action]}  ${file.target}`, TUI_ON_STDERR);
+      for (const file of [
+        ...plan.modules.flatMap((m) => m.files),
+        ...plan.modules.flatMap((m) => m.removals),
+      ]) {
+        if (QUIET.has(file.action)) {
+          continue;
+        }
+        note(
+          renderDiff(file),
+          `${ACTION_LABEL[file.action]}  ${file.target}`,
+          TUI_ON_STDERR
+        );
       }
     }
 
@@ -455,8 +556,17 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // `--out`. The merge plan still renders to stdout so the preview is complete.
     if (opts.dryRun || opts.diff) {
       const preview = renderMergePlan(plan);
-      if (preview) process.stdout.write(preview);
-      outro(pc.dim(opts.diff ? "diff only — nothing applied" : "dry run — nothing applied"), TUI_ON_STDERR);
+      if (preview) {
+        process.stdout.write(preview);
+      }
+      outro(
+        pc.dim(
+          opts.diff
+            ? "diff only — nothing applied"
+            : "dry run — nothing applied"
+        ),
+        TUI_ON_STDERR
+      );
       return 0;
     }
 
@@ -474,7 +584,13 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     let result: UpdateResult;
     try {
-      result = await executeUpdatePlan(plan, { root, config, manifest, lock, pkg });
+      result = await executeUpdatePlan(plan, {
+        root,
+        config,
+        manifest,
+        lock,
+        pkg,
+      });
     } finally {
       // Record whatever actually landed even if a mid-plan write failed — the ledger
       // must describe the real on-disk state (`add`'s invariant; #49 owns real
@@ -496,11 +612,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
           pc.dim(
             opts.out
               ? "Hand that file to an agent — your edits were left untouched."
-              : "That merge plan is on stdout — pipe it to an agent. Your edits were left untouched.",
-          ),
+              : "That merge plan is on stdout — pipe it to an agent. Your edits were left untouched."
+          )
         ),
         "Needs merge",
-        TUI_ON_STDERR,
+        TUI_ON_STDERR
       );
     }
 
@@ -509,11 +625,16 @@ export async function runUpdate(argv: string[]): Promise<number> {
     outro(summarizeOutcome(plan, result), TUI_ON_STDERR);
     return 0;
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error), TUI_ON_STDERR);
+    cancel(
+      error instanceof Error ? error.message : String(error),
+      TUI_ON_STDERR
+    );
     return 1;
   } finally {
     // Each remote source extracted its modules to a temp dir; drop them all.
-    for (const source of sources) await source.cleanup?.();
+    for (const source of sources) {
+      await source.cleanup?.();
+    }
   }
 }
 
@@ -523,9 +644,15 @@ function summarizeOutcome(plan: UpdatePlan, result: UpdateResult): string {
   const merging = plan.modules.filter((m) => m.needsMerge).map((m) => m.name);
   const applied =
     changed > 0
-      ? `Updated ${[...new Set([...result.written, ...result.deleted].map((f) => f.module))]
+      ? `Updated ${[
+          ...new Set(
+            [...result.written, ...result.deleted].map((f) => f.module)
+          ),
+        ]
           .map((n) => pc.bold(n))
-          .join(", ")} ${pc.dim(`(${result.written.length} written, ${result.deleted.length} removed)`)}`
+          .join(
+            ", "
+          )} ${pc.dim(`(${result.written.length} written, ${result.deleted.length} removed)`)}`
       : "";
 
   if (merging.length === 0) {
@@ -534,14 +661,19 @@ function summarizeOutcome(plan: UpdatePlan, result: UpdateResult): string {
   const names = merging.map((n) => pc.bold(n)).join(", ");
   const verb = merging.length === 1 ? "needs" : "need";
   const merge = pc.yellow(
-    applied ? `${names} still ${verb} a merge — see the plan above.` : `${names} ${verb} a merge — see the plan above.`,
+    applied
+      ? `${names} still ${verb} a merge — see the plan above.`
+      : `${names} ${verb} a merge — see the plan above.`
   );
   return applied ? `${pc.green(applied)} ${merge}` : merge;
 }
 
 function reportResult(result: UpdateResult): void {
   for (const name of result.prereqsInstalled) {
-    log.step(`${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`, TUI_ON_STDERR);
+    log.step(
+      `${pc.green("install")}  ${pc.cyan(name)} ${pc.dim("(new prerequisite)")}`,
+      TUI_ON_STDERR
+    );
   }
   for (const file of result.written) {
     log.step(`${ACTION_LABEL[file.action]}  ${file.target}`, TUI_ON_STDERR);
@@ -550,31 +682,48 @@ function reportResult(result: UpdateResult): void {
     log.step(`${pc.red("delete")}  ${file.target}`, TUI_ON_STDERR);
   }
   for (const file of result.untracked) {
-    log.step(`${pc.dim("untrack")}  ${file.target} ${pc.dim("(already gone)")}`, TUI_ON_STDERR);
+    log.step(
+      `${pc.dim("untrack")}  ${file.target} ${pc.dim("(already gone)")}`,
+      TUI_ON_STDERR
+    );
   }
   for (const patch of result.patched) {
-    log.step(`${pc.green("patch")}  ${patch.file} ${pc.dim(`— ${patch.patch.kind}`)}`, TUI_ON_STDERR);
+    log.step(
+      `${pc.green("patch")}  ${patch.file} ${pc.dim(`— ${patch.patch.kind}`)}`,
+      TUI_ON_STDERR
+    );
   }
   for (const link of result.linkConflicts) {
-    log.warn(`Skill link ${pc.cyan(link.path)} left untouched — not ours to replace.`, TUI_ON_STDERR);
+    log.warn(
+      `Skill link ${pc.cyan(link.path)} left untouched — not ours to replace.`,
+      TUI_ON_STDERR
+    );
   }
   for (const dep of result.depsWritten) {
     log.step(`${pc.cyan("dep")}  ${dep.name}@${dep.version}`, TUI_ON_STDERR);
   }
   if (result.lateDrift.length > 0) {
-    const lines = result.lateDrift.map((f) => `  ${pc.yellow("kept")}  ${f.target}`).join("\n");
+    const lines = result.lateDrift
+      .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
+      .join("\n");
     note(
-      wrapForNote(`${lines}\n\n${pc.dim("Edited while the plan was open — left alone rather than overwritten.")}`),
+      wrapForNote(
+        `${lines}\n\n${pc.dim("Edited while the plan was open — left alone rather than overwritten.")}`
+      ),
       "Changed under us",
-      TUI_ON_STDERR,
+      TUI_ON_STDERR
     );
   }
   if (result.driftSurvivors.length > 0) {
-    const lines = result.driftSurvivors.map((f) => `  ${pc.yellow("kept")}  ${f.target}`).join("\n");
+    const lines = result.driftSurvivors
+      .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
+      .join("\n");
     note(
-      wrapForNote(`${lines}\n\n${pc.dim("Hand-edited — left on disk, now untracked.")}`),
+      wrapForNote(
+        `${lines}\n\n${pc.dim("Hand-edited — left on disk, now untracked.")}`
+      ),
       "Drift survivors",
-      TUI_ON_STDERR,
+      TUI_ON_STDERR
     );
   }
 }

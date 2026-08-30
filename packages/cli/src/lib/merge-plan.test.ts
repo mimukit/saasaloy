@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest";
 import { renderMergePlan } from "./merge-plan.js";
-import type { ModuleComparison, ModuleUpdatePlan, PlannedUpdateFile, UpdatePlan } from "./updater.js";
+import type {
+  ModuleComparison,
+  ModuleUpdatePlan,
+  PlannedUpdateFile,
+  UpdatePlan,
+} from "./updater.js";
 import { VERIFY_COMMAND } from "./updater.js";
 
 // The differentiating artifact (CONTEXT.md): natural-language intent + target files +
@@ -10,7 +15,9 @@ import { VERIFY_COMMAND } from "./updater.js";
 const OLD_SHA = "a".repeat(40);
 const NEW_SHA = "b".repeat(40);
 
-function comparison(overrides: Partial<ModuleComparison> = {}): ModuleComparison {
+function comparison(
+  overrides: Partial<ModuleComparison> = {}
+): ModuleComparison {
   return {
     name: "email",
     source: "mimukit/saasaloy",
@@ -36,7 +43,9 @@ function file(overrides: Partial<PlannedUpdateFile> = {}): PlannedUpdateFile {
   };
 }
 
-function modulePlan(overrides: Partial<ModuleUpdatePlan> = {}): ModuleUpdatePlan {
+function modulePlan(
+  overrides: Partial<ModuleUpdatePlan> = {}
+): ModuleUpdatePlan {
   return {
     name: "email",
     comparison: comparison(),
@@ -56,7 +65,10 @@ function modulePlan(overrides: Partial<ModuleUpdatePlan> = {}): ModuleUpdatePlan
   };
 }
 
-function plan(modules: ModuleUpdatePlan[], overrides: Partial<UpdatePlan> = {}): UpdatePlan {
+function plan(
+  modules: ModuleUpdatePlan[],
+  overrides: Partial<UpdatePlan> = {}
+): UpdatePlan {
   return {
     modules,
     skipped: [],
@@ -67,27 +79,45 @@ function plan(modules: ModuleUpdatePlan[], overrides: Partial<UpdatePlan> = {}):
   };
 }
 
-describe("renderMergePlan", () => {
+describe(renderMergePlan, () => {
   it("opens one `## <module>` section per module that drifted", () => {
     const doc = renderMergePlan(
       plan([
         modulePlan({ files: [file()] }),
-        modulePlan({ name: "auth", comparison: comparison({ name: "auth" }), files: [file({ module: "auth" })] }),
-      ]),
+        modulePlan({
+          name: "auth",
+          comparison: comparison({ name: "auth" }),
+          files: [file({ module: "auth" })],
+        }),
+      ])
     );
     expect(doc).toContain("## email");
     expect(doc).toContain("## auth");
   });
 
   it("omits a module that needs no merge", () => {
-    const doc = renderMergePlan(plan([modulePlan({ needsMerge: false }), modulePlan({ name: "auth", comparison: comparison({ name: "auth" }), files: [file({ module: "auth" })] })]));
+    const doc = renderMergePlan(
+      plan([
+        modulePlan({ needsMerge: false }),
+        modulePlan({
+          name: "auth",
+          comparison: comparison({ name: "auth" }),
+          files: [file({ module: "auth" })],
+        }),
+      ])
+    );
     expect(doc).not.toContain("## email");
     expect(doc).toContain("## auth");
   });
 
   it("carries the commit subjects as intent", () => {
     const doc = renderMergePlan(
-      plan([modulePlan({ intent: ["fix(email): retry on 429", "feat(email): add reply-to"], files: [file()] })]),
+      plan([
+        modulePlan({
+          intent: ["fix(email): retry on 429", "feat(email): add reply-to"],
+          files: [file()],
+        }),
+      ])
     );
     expect(doc).toContain("fix(email): retry on 429");
     expect(doc).toContain("feat(email): add reply-to");
@@ -123,7 +153,7 @@ describe("renderMergePlan", () => {
           noMergeBase: "local install",
           files: [file({ base: undefined })],
         }),
-      ]),
+      ])
     );
     expect(doc).toContain("no merge base — local install");
     expect(doc).toContain("**theirs → mine**");
@@ -133,7 +163,9 @@ describe("renderMergePlan", () => {
 
   it("marks an untracked collision as a new file, rendered two-way", () => {
     const doc = renderMergePlan(
-      plan([modulePlan({ files: [file({ action: "conflict", base: undefined })] })]),
+      plan([
+        modulePlan({ files: [file({ action: "conflict", base: undefined })] }),
+      ])
     );
     expect(doc).toMatch(/new file collides with yours/i);
     expect(doc).toContain("theirs → mine");
@@ -143,7 +175,9 @@ describe("renderMergePlan", () => {
   // one on disk was simply never tracked), and the three-way diffs are rendered right
   // below this paragraph — so it must not claim the comparison is two-way.
   it("does not claim there is no base for a conflict that has one", () => {
-    const doc = renderMergePlan(plan([modulePlan({ files: [file({ action: "conflict" })] })]));
+    const doc = renderMergePlan(
+      plan([modulePlan({ files: [file({ action: "conflict" })] })])
+    );
     expect(doc).not.toMatch(/there is no base for it/i);
     expect(doc).not.toMatch(/this is a two-way comparison/i);
     expect(doc).toContain("**base → theirs**");
@@ -157,7 +191,7 @@ describe("renderMergePlan", () => {
           files: [],
           removals: [file({ action: "delete-drift", theirs: undefined })],
         }),
-      ]),
+      ])
     );
     expect(doc).toMatch(/dropped this file/i);
     expect(doc).toMatch(/still (here|on disk)/i);
@@ -189,7 +223,7 @@ describe("renderMergePlan", () => {
             },
           ],
         }),
-      ]),
+      ])
     );
     expect(doc).toContain("apps/api/wrangler.jsonc");
     expect(doc).toContain("d1_databases[binding=DB]");
@@ -200,7 +234,13 @@ describe("renderMergePlan", () => {
   // the next update. Saying which module patched it keeps the document honest about why.
   it("names the module whose config patch also touched a drifted file", () => {
     const doc = renderMergePlan(
-      plan([modulePlan({ files: [file({ target: "apps/api/package.json", patchedBy: ["email"] })] })]),
+      plan([
+        modulePlan({
+          files: [
+            file({ target: "apps/api/package.json", patchedBy: ["email"] }),
+          ],
+        }),
+      ])
     );
     expect(doc).toMatch(/also applied a config patch/i);
     expect(doc).toContain("`email`");
@@ -235,7 +275,7 @@ describe("renderMergePlan", () => {
           comparison: comparison({ name: "auth", current: "c".repeat(40) }),
           files: [file({ module: "auth" })],
         }),
-      ]),
+      ])
     );
     expect(doc).toMatch(/each module's lock entry stays on the base SHA/i);
   });
@@ -248,7 +288,9 @@ describe("renderMergePlan", () => {
 
   it("names the migration command when the update touched a db schema", () => {
     const doc = renderMergePlan(
-      plan([modulePlan({ files: [file()] })], { migrationCommand: "pnpm --filter @repo/db db:generate" }),
+      plan([modulePlan({ files: [file()] })], {
+        migrationCommand: "pnpm --filter @repo/db db:generate",
+      })
     );
     expect(doc).toContain("pnpm --filter @repo/db db:generate");
   });
@@ -261,9 +303,16 @@ describe("renderMergePlan", () => {
     const doc = renderMergePlan(
       plan([
         modulePlan({
-          files: [file({ target: "docs/guide.md", base: "a\n", theirs: "```ts\ncode\n```\n", mine: "b\n" })],
+          files: [
+            file({
+              target: "docs/guide.md",
+              base: "a\n",
+              theirs: "```ts\ncode\n```\n",
+              mine: "b\n",
+            }),
+          ],
         }),
-      ]),
+      ])
     );
     // A longer fence keeps the embedded ``` from ending the block early.
     expect(doc).toContain("````");

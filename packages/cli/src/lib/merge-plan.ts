@@ -1,5 +1,10 @@
 import { toDiff } from "./patch/diff.js";
-import type { ModuleUpdatePlan, PlannedUpdateFile, PlannedUpdatePatch, UpdatePlan } from "./updater.js";
+import type {
+  ModuleUpdatePlan,
+  PlannedUpdateFile,
+  PlannedUpdatePatch,
+  UpdatePlan,
+} from "./updater.js";
 
 // The artifact the whole feature exists for (build spec §2.9, CONTEXT.md): for every
 // file `update` refused to overwrite, a structured, agent-consumable merge plan —
@@ -13,11 +18,16 @@ import type { ModuleUpdatePlan, PlannedUpdateFile, PlannedUpdatePatch, UpdatePla
 /** Render the merge plan for everything that drifted, or `""` when nothing did. */
 export function renderMergePlan(plan: UpdatePlan): string {
   const modules = plan.modules.filter((m) => m.needsMerge);
-  if (modules.length === 0) return "";
+  if (modules.length === 0) {
+    return "";
+  }
 
   const fileCount = modules.reduce(
-    (total, m) => total + m.files.filter(isMergeFile).length + m.removals.filter(isMergeFile).length,
-    0,
+    (total, m) =>
+      total +
+      m.files.filter(isMergeFile).length +
+      m.removals.filter(isMergeFile).length,
+    0
   );
 
   const out: string[] = [
@@ -40,7 +50,11 @@ export function renderMergePlan(plan: UpdatePlan): string {
 
 /** Only the states that actually need a human or an agent — the merge plan's whole subject. */
 function isMergeFile(file: PlannedUpdateFile): boolean {
-  return file.action === "drift" || file.action === "conflict" || file.action === "delete-drift";
+  return (
+    file.action === "drift" ||
+    file.action === "conflict" ||
+    file.action === "delete-drift"
+  );
 }
 
 function countLabel(n: number, noun: string): string {
@@ -48,32 +62,38 @@ function countLabel(n: number, noun: string): string {
 }
 
 function renderModule(mod: ModuleUpdatePlan): string[] {
-  const out: string[] = [`## ${mod.name}`, ""];
+  const out: string[] = [`## ${mod.name}`, "", "### Intent", ""];
 
-  out.push("### Intent", "");
   if (mod.intent.length > 0) {
-    out.push("What changed upstream, from the commits touching this module:", "");
-    for (const subject of mod.intent) out.push(`- ${subject}`);
+    out.push(
+      "What changed upstream, from the commits touching this module:",
+      ""
+    );
+    for (const subject of mod.intent) {
+      out.push(`- ${subject}`);
+    }
   } else {
     out.push(
-      "No commit subjects could be read for this range" +
-        (mod.noMergeBase ? ` (${mod.noMergeBase})` : "") +
-        " — read the diffs below to infer what the module intended.",
+      `No commit subjects could be read for this range${
+        mod.noMergeBase ? ` (${mod.noMergeBase})` : ""
+      } — read the diffs below to infer what the module intended.`
     );
   }
-  out.push("");
-
-  out.push("### Provenance", "");
-  out.push(`- Module: \`${mod.name}\``);
-  out.push(`- Source: \`${mod.comparison.source}\``);
-  out.push(`- Ref: \`${mod.comparison.ref}\``);
-  out.push(`- Base (your version): \`${mod.comparison.current}\``);
-  out.push(`- Theirs (new version): \`${mod.comparison.latest}\``);
+  out.push(
+    "",
+    "### Provenance",
+    "",
+    `- Module: \`${mod.name}\``,
+    `- Source: \`${mod.comparison.source}\``,
+    `- Ref: \`${mod.comparison.ref}\``,
+    `- Base (your version): \`${mod.comparison.current}\``,
+    `- Theirs (new version): \`${mod.comparison.latest}\``
+  );
   if (mod.noMergeBase) {
     out.push(
       `- **no merge base — ${mod.noMergeBase}**: the original file can't be refetched, so the ` +
         "diffs below are two-way (theirs vs. yours) and you must judge which side each " +
-        "difference came from.",
+        "difference came from."
     );
   }
   out.push("");
@@ -82,20 +102,27 @@ function renderModule(mod: ModuleUpdatePlan): string[] {
   const droppedFiles = mod.removals.filter(isMergeFile);
   if (mergeFiles.length > 0 || droppedFiles.length > 0) {
     out.push("### Files to merge", "");
-    for (const file of mergeFiles) out.push(...renderFile(file));
-    for (const file of droppedFiles) out.push(...renderDroppedFile(file));
+    for (const file of mergeFiles) {
+      out.push(...renderFile(file));
+    }
+    for (const file of droppedFiles) {
+      out.push(...renderDroppedFile(file));
+    }
   }
 
   const movedPatches = mod.patches.filter((p) => p.matched !== undefined);
   if (movedPatches.length > 0) {
-    out.push("### Config patches that moved", "");
     out.push(
+      "### Config patches that moved",
+      "",
       "These config edits were skipped: the key the module identifies its entry by is already " +
         "present, holding a value that isn't the one the new version declares. That is almost " +
         "always a setting you changed on purpose, so nothing was written.",
-      "",
+      ""
     );
-    for (const patch of movedPatches) out.push(...renderPatch(patch));
+    for (const patch of movedPatches) {
+      out.push(...renderPatch(patch));
+    }
   }
 
   return out;
@@ -108,8 +135,12 @@ const ACTION_HEADING: Record<string, string> = {
 };
 
 function renderFile(file: PlannedUpdateFile): string[] {
-  const out: string[] = [`#### \`${file.target}\``, ""];
-  out.push(`Source in the module: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`, "");
+  const out: string[] = [
+    `#### \`${file.target}\``,
+    "",
+    `Source in the module: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`,
+    "",
+  ];
 
   if (file.action === "conflict") {
     out.push(
@@ -122,7 +153,7 @@ function renderFile(file: PlannedUpdateFile): string[] {
             "applied. The module's own older version of the file is available and is used as " +
             "the base below — but the on-disk file was never tracked against it, so treat it as " +
             "independent work rather than as edits on top of that base.",
-      "",
+      ""
     );
   }
 
@@ -131,7 +162,7 @@ function renderFile(file: PlannedUpdateFile): string[] {
       `Note: \`${file.patchedBy.join("`, `")}\` also applied a config patch to this file. Part of ` +
         "the difference below is that patch rather than an edit anyone made by hand — keep those " +
         "lines when you merge.",
-      "",
+      ""
     );
   }
 
@@ -139,37 +170,50 @@ function renderFile(file: PlannedUpdateFile): string[] {
   const theirs = file.theirs ?? "";
   const mine = file.mine ?? "";
 
-  if (base !== undefined) {
-    out.push("**base → theirs** (what the module changed):", "");
-    out.push(...fenced(toDiff(base, theirs, file.target), "diff"));
-    out.push("**base → mine** (what you changed):", "");
-    out.push(...fenced(toDiff(base, mine, file.target), "diff"));
+  if (base === undefined) {
+    out.push(
+      "**theirs → mine** (no base available — two-way):",
+      "",
+      ...fenced(toDiff(theirs, mine, file.target), "diff")
+    );
   } else {
-    out.push("**theirs → mine** (no base available — two-way):", "");
-    out.push(...fenced(toDiff(theirs, mine, file.target), "diff"));
+    out.push(
+      "**base → theirs** (what the module changed):",
+      "",
+      ...fenced(toDiff(base, theirs, file.target), "diff"),
+      "**base → mine** (what you changed):",
+      "",
+      ...fenced(toDiff(base, mine, file.target), "diff")
+    );
   }
   return out;
 }
 
 function renderDroppedFile(file: PlannedUpdateFile): string[] {
-  const out: string[] = [`#### \`${file.target}\``, ""];
-  out.push(
+  const out: string[] = [
+    `#### \`${file.target}\``,
+    "",
     `Source in the module: \`${file.from}\`. The new version of the module dropped this file, ` +
       "but you had edited it — so it was left exactly as it is and is now yours alone " +
       "(Saasaloy no longer tracks it). Your edits are still here; decide whether the work " +
       "they represent still belongs in the project now the module no longer ships it.",
     "",
-  );
+  ];
   if (file.base !== undefined && file.mine !== undefined) {
-    out.push("**base → mine** (what you changed before it was dropped):", "");
-    out.push(...fenced(toDiff(file.base, file.mine, file.target), "diff"));
+    out.push(
+      "**base → mine** (what you changed before it was dropped):",
+      "",
+      ...fenced(toDiff(file.base, file.mine, file.target), "diff")
+    );
   }
   return out;
 }
 
 function renderPatch(patch: PlannedUpdatePatch): string[] {
   const matched = patch.matched;
-  if (!matched) return [];
+  if (!matched) {
+    return [];
+  }
   return [
     `#### \`${patch.file}\` — \`${patch.patch.kind}\``,
     "",
@@ -187,15 +231,20 @@ function renderPatch(patch: PlannedUpdatePatch): string[] {
  * and generically when a bare `update` collected several.
  */
 function lockStaysOn(plan: UpdatePlan): string {
-  const bases = [...new Set(plan.modules.filter((m) => m.needsMerge).map((m) => m.comparison.current))];
+  const bases = [
+    ...new Set(
+      plan.modules.filter((m) => m.needsMerge).map((m) => m.comparison.current)
+    ),
+  ];
   return bases.length === 1
     ? `the lock stays on \`${bases[0]}\``
     : "each module's lock entry stays on the base SHA named in its Provenance section";
 }
 
 function renderInstructions(plan: UpdatePlan): string[] {
-  const out: string[] = ["## Instructions", ""];
-  out.push(
+  const out: string[] = [
+    "## Instructions",
+    "",
     "You are reconciling two sets of changes to the same files: the module's (base → theirs) " +
       "and the user's (base → mine). Work file by file.",
     "",
@@ -220,13 +269,16 @@ function renderInstructions(plan: UpdatePlan): string[] {
       "nothing to diff against, which is why the merge is yours to keep, not Saasaloy's to " +
       "record.",
     "",
-  );
-
-  out.push("## Verification", "");
-  out.push("Run these after merging — `saasaloy update` deliberately runs nothing itself:", "");
-  out.push(`- \`${plan.verifyCommand}\``);
+    "## Verification",
+    "",
+    "Run these after merging — `saasaloy update` deliberately runs nothing itself:",
+    "",
+    `- \`${plan.verifyCommand}\``,
+  ];
   if (plan.migrationCommand) {
-    out.push(`- \`${plan.migrationCommand}\` — the update changed the database schema`);
+    out.push(
+      `- \`${plan.migrationCommand}\` — the update changed the database schema`
+    );
   }
   out.push("");
   return out;
@@ -238,7 +290,10 @@ function renderInstructions(plan: UpdatePlan): string[] {
  * fence would end the block early and corrupt the document an agent reads.
  */
 function fenced(content: string, language: string): string[] {
-  const longest = [...content.matchAll(/`{3,}/g)].reduce((max, m) => Math.max(max, m[0].length), 0);
+  let longest = 0;
+  for (const match of content.matchAll(/`{3,}/g)) {
+    longest = Math.max(longest, match[0].length);
+  }
   const fence = "`".repeat(Math.max(3, longest + 1));
   return [`${fence}${language}`, content.replace(/\n$/, ""), fence, ""];
 }

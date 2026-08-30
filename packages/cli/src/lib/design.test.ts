@@ -11,6 +11,7 @@ function planFile(
     action,
     content: "",
     module: "test",
+    from: "files/source",
     source: "/tmp/source",
     targetAbs: "/tmp/target",
     newHash: "hash",

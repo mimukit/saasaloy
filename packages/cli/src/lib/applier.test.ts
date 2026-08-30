@@ -251,7 +251,12 @@ describe("manifest `from` — module-relative provenance", () => {
   it("records `from` for a scaffold file", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();
-    const p = await plan({ install: ["api"], modules: [await apiCapability()], config, manifest });
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
     await executePlan(p, root, config, manifest);
 
     expect(manifest.managed["apps/api/src/index.ts"]).toMatchObject({
@@ -261,14 +266,30 @@ describe("manifest `from` — module-relative provenance", () => {
   });
 
   it("records `from` for a files[] entry resolved through an alias", async () => {
-    const config: SaasaloyConfig = { aliases: { "@api": "apps/api/src" }, installed: [] };
+    const config: SaasaloyConfig = {
+      aliases: { "@api": "apps/api/src" },
+      installed: [],
+    };
     const manifest = emptyManifest();
     const mod = await writeModule(
       "waitlist",
-      { type: "saasaloy:feature", files: [{ path: "files/routes/waitlist.ts", target: "@api/routes/waitlist.ts" }] },
-      { "files/routes/waitlist.ts": "export const route = 1;\n" },
+      {
+        type: "saasaloy:feature",
+        files: [
+          {
+            path: "files/routes/waitlist.ts",
+            target: "@api/routes/waitlist.ts",
+          },
+        ],
+      },
+      { "files/routes/waitlist.ts": "export const route = 1;\n" }
     );
-    const p = await plan({ install: ["waitlist"], modules: [mod], config, manifest });
+    const p = await plan({
+      install: ["waitlist"],
+      modules: [mod],
+      config,
+      manifest,
+    });
     await executePlan(p, root, config, manifest);
 
     expect(manifest.managed["apps/api/src/routes/waitlist.ts"]).toMatchObject({
@@ -279,10 +300,17 @@ describe("manifest `from` — module-relative provenance", () => {
   it("records `from` for a copied skill file", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();
-    const p = await plan({ install: ["api"], modules: [await skillModule()], config, manifest });
+    const p = await plan({
+      install: ["api"],
+      modules: [await skillModule()],
+      config,
+      manifest,
+    });
     await executePlan(p, root, config, manifest);
 
-    expect(manifest.managed[".agents/skills/saasaloy-api/SKILL.md"]).toMatchObject({
+    expect(
+      manifest.managed[".agents/skills/saasaloy-api/SKILL.md"]
+    ).toMatchObject({
       from: "skills/saasaloy-api/SKILL.md",
     });
   });
@@ -290,17 +318,23 @@ describe("manifest `from` — module-relative provenance", () => {
   it("passes schema validation with `from` present", async () => {
     const result = await validateManifest({
       managed: {
-        "apps/api/src/index.ts": { module: "api", hash: "a".repeat(64), from: "files/src/index.ts" },
+        "apps/api/src/index.ts": {
+          module: "api",
+          hash: "a".repeat(64),
+          from: "files/src/index.ts",
+        },
       },
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBeTruthy();
   });
 
   it("still validates a manifest written before `from` existed", async () => {
     const result = await validateManifest({
-      managed: { "apps/api/src/index.ts": { module: "api", hash: "a".repeat(64) } },
+      managed: {
+        "apps/api/src/index.ts": { module: "api", hash: "a".repeat(64) },
+      },
     });
-    expect(result.valid).toBe(true);
+    expect(result.valid).toBeTruthy();
   });
 });
 
