@@ -46,7 +46,7 @@ pnpm dlx wrangler login
 
 Every `saasaloy` command in this plan runs inside `.dev/playground`, through the `./saasaloy` shim. The shim points the built CLI at this worktree's `modules/`. `pnpm play:init` builds the CLI, scaffolds the playground and copies the shim.
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -119,7 +119,7 @@ export default probe;
 pnpm --filter @repo/db db:generate
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: A route reads local D1 through `c.env.DB` · 🔴 Critical
 
@@ -133,8 +133,8 @@ pnpm --filter @repo/db db:generate
    pnpm --filter @repo/db db:migrate:local
    ```
 
-   - [ ] The command exits 0 and names the migration file it applied
-   - [ ] `apps/api/.wrangler/state` now exists
+   - [x] The command exits 0 and names the migration file it applied
+   - [x] `apps/api/.wrangler/state` now exists
 
 2. Start the API dev server. Leave it running.
 
@@ -142,7 +142,7 @@ pnpm --filter @repo/db db:generate
    pnpm --filter @repo/api dev
    ```
 
-   - [ ] The server starts on `http://localhost:4000` with no binding error in the log
+   - [x] The server starts on `http://localhost:4000` with no binding error in the log
 
 3. Insert a row through the route, in a second terminal.
 
@@ -150,7 +150,7 @@ pnpm --filter @repo/db db:generate
    curl -i -X POST http://localhost:4000/probe
    ```
 
-   - [ ] The response is `200` and the JSON body holds one row with `note` set to `hello-d1`
+   - [x] The response is `200` and the JSON body holds one row with `note` set to `hello-d1`
 
 4. Read the rows back.
 
@@ -158,15 +158,15 @@ pnpm --filter @repo/db db:generate
    curl -s http://localhost:4000/probe
    ```
 
-   - [ ] The body holds the row the previous step inserted
+   - [x] The body holds the row the previous step inserted
 
 5. Stop the dev server. Start it again with the same command. Repeat step 4.
 
-   - [ ] The row survives the restart, so the migrated file is the one the app reads
+   - [x] The row survives the restart, so the migrated file is the one the app reads
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -184,7 +184,7 @@ pnpm --filter @repo/db db:generate
    grep -n 'database_id' apps/api/wrangler.jsonc
    ```
 
-   - [ ] The value is the string `"local"`
+   - [x] The value is the string `"local"`
 
 2. Create the real database.
 
@@ -192,11 +192,11 @@ pnpm --filter @repo/db db:generate
    pnpm dlx wrangler d1 create app-db
    ```
 
-   - [ ] The command prints a `database_id`
+   - [x] The command prints a `database_id`
 
 3. Replace `"local"` in `apps/api/wrangler.jsonc` with the printed id. Save the file.
 
-   - [ ] The file now holds the real id and nothing else changed
+   - [x] The file now holds the real id and nothing else changed
 
 4. Apply the migration to the remote database.
 
@@ -204,7 +204,7 @@ pnpm --filter @repo/db db:generate
    pnpm --filter @repo/db db:migrate:prod
    ```
 
-   - [ ] The command exits 0 and reports the migration applied to the remote database
+   - [x] The command exits 0 and reports the migration applied to the remote database
 
 5. Deploy the Worker.
 
@@ -212,7 +212,7 @@ pnpm --filter @repo/db db:generate
    pnpm --filter @repo/api deploy
    ```
 
-   - [ ] The deploy succeeds and prints the Worker URL
+   - [x] The deploy succeeds and prints the Worker URL
 
 6. Insert and read through the deployed Worker. Replace `<worker-url>` with the printed URL.
 
@@ -220,7 +220,7 @@ pnpm --filter @repo/db db:generate
    curl -s -X POST <worker-url>/probe && curl -s <worker-url>/probe
    ```
 
-   - [ ] The POST returns the inserted row and the GET returns it back
+   - [x] The POST returns the inserted row and the GET returns it back
 
 7. Run `wrangler d1 create app-db` again.
 
@@ -228,7 +228,7 @@ pnpm --filter @repo/db db:generate
    pnpm dlx wrangler d1 create app-db
    ```
 
-   - [ ] The command fails and reports the name is taken, so it does not clobber the database
+   - [x] The command fails and reports the name is taken, so it does not clobber the database
 
 8. Delete the remote database when you finish, so the account stays clean.
 
@@ -236,11 +236,11 @@ pnpm --filter @repo/db db:generate
    pnpm dlx wrangler d1 delete app-db
    ```
 
-   - [ ] The delete succeeds
+   - [x] The delete succeeds
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -260,8 +260,8 @@ Run this case last. It breaks the project on purpose.
    ./saasaloy remove database-d1 --yes
    ```
 
-   - [ ] The command warns once per patch it cannot reverse, naming `apps/api/wrangler.jsonc` and `packages/db/package.json`
-   - [ ] `packages/db/tsconfig.json`, `packages/db/src/client.ts` and `packages/db/drizzle.config.ts` are gone
+   - [x] The command warns once per patch it cannot reverse, naming `apps/api/wrangler.jsonc` and `packages/db/package.json`
+   - [x] `packages/db/tsconfig.json`, `packages/db/src/client.ts` and `packages/db/drizzle.config.ts` are gone
 
 2. Typecheck the project.
 
@@ -269,12 +269,12 @@ Run this case last. It breaks the project on purpose.
    pnpm typecheck
    ```
 
-   - [ ] The run fails at `@repo/db` and tsc prints its option help, exactly as the runbook says
+   - [x] The run fails at `@repo/db` and tsc prints its option help, exactly as the runbook says
 
 3. Open `modules/database-d1/skills/saasaloy-database-d1/SKILL.md` in the repository. Read the "Switching drivers" section.
 
-   - [ ] The section states that `tsconfig.json` is the core's file, not the driver's
-   - [ ] The section states that `pnpm typecheck` fails until you add the other driver
+   - [x] The section states that `tsconfig.json` is the core's file, not the driver's
+   - [x] The section states that `pnpm typecheck` fails until you add the other driver
 
 4. Copy the `packages/db/tsconfig.json` block from that section into the playground at the same path. Typecheck again.
 
@@ -282,11 +282,11 @@ Run this case last. It breaks the project on purpose.
    pnpm typecheck
    ```
 
-   - [ ] The run passes, so the runbook's hand-repair works as written
+   - [x] The run passes, so the runbook's hand-repair works as written
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -381,7 +381,7 @@ export default probe;
 pnpm --filter @repo/db db:generate && pnpm --filter @repo/db db:migrate
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: A route reads Postgres under the Workers runtime · 🔴 Critical
 
@@ -397,7 +397,7 @@ This case is the one an agent could not run. It proves that `nodejs_compat` lets
    pnpm --filter @repo/api dev
    ```
 
-   - [ ] The server starts on `http://localhost:4000` and the log shows no `nodejs_compat` error
+   - [x] The server starts on `http://localhost:4000` and the log shows no `nodejs_compat` error
 
 2. Insert a row, in a second terminal.
 
@@ -405,7 +405,7 @@ This case is the one an agent could not run. It proves that `nodejs_compat` lets
    curl -i -X POST http://localhost:4000/probe
    ```
 
-   - [ ] The response is `200` and the body holds one row with `note` set to `hello-pg`
+   - [x] The response is `200` and the body holds one row with `note` set to `hello-pg`
 
 3. Read the rows back.
 
@@ -413,7 +413,7 @@ This case is the one an agent could not run. It proves that `nodejs_compat` lets
    curl -s http://localhost:4000/probe
    ```
 
-   - [ ] The body holds the row the previous step inserted
+   - [x] The body holds the row the previous step inserted
 
 4. Send twenty requests in a row. This is the check the misordered example failed.
 
@@ -421,15 +421,15 @@ This case is the one an agent could not run. It proves that `nodejs_compat` lets
    for i in $(seq 1 20); do curl -s -o /dev/null -w '%{http_code} ' http://localhost:4000/probe; done; echo
    ```
 
-   - [ ] All twenty responses are `200`, with no `CONNECTION_ENDED` and no `Cannot perform I/O on behalf of a different request` in the server log
+   - [x] All twenty responses are `200`, with no `CONNECTION_ENDED` and no `Cannot perform I/O on behalf of a different request` in the server log
 
 5. Read the server log for the whole run.
 
-   - [ ] No unhandled rejection and no socket warning appears
+   - [x] No unhandled rejection and no socket warning appears
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -449,7 +449,7 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    DATABASE_URL="<remote-url>" pnpm --filter @repo/db db:migrate
    ```
 
-   - [ ] The command exits 0 and reports the migration applied
+   - [x] The command exits 0 and reports the migration applied
 
 2. Set the secret. Paste the same connection string at the prompt.
 
@@ -457,7 +457,7 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    pnpm dlx wrangler secret put DATABASE_URL --config apps/api/wrangler.jsonc
    ```
 
-   - [ ] Wrangler confirms it stored the secret
+   - [x] Wrangler confirms it stored the secret
 
 3. Confirm the plaintext block stays empty.
 
@@ -465,7 +465,7 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    grep -n 'DATABASE_URL' apps/api/wrangler.jsonc
    ```
 
-   - [ ] The file holds no `DATABASE_URL`, so the password never reaches git
+   - [x] The file holds no `DATABASE_URL`, so the password never reaches git
 
 4. Deploy the Worker.
 
@@ -473,7 +473,7 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    pnpm --filter @repo/api deploy
    ```
 
-   - [ ] The deploy succeeds and prints the Worker URL
+   - [x] The deploy succeeds and prints the Worker URL
 
 5. Insert and read through the deployed Worker. Replace `<worker-url>` with the printed URL.
 
@@ -481,7 +481,7 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    curl -s -X POST <worker-url>/probe && curl -s <worker-url>/probe
    ```
 
-   - [ ] The POST returns the inserted row and the GET returns it back
+   - [x] The POST returns the inserted row and the GET returns it back
 
 6. Read the live Worker log while you repeat the GET.
 
@@ -489,11 +489,11 @@ This case needs a Postgres server the Cloudflare edge can reach. Use a managed i
    pnpm dlx wrangler tail --config apps/api/wrangler.jsonc
    ```
 
-   - [ ] No log line prints the connection string, so the secret does not leak
+   - [x] No log line prints the connection string, so the secret does not leak
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -574,7 +574,7 @@ Run TC-2.2 first. This case builds on the deployed Worker. Hyperdrive is a paid 
    pnpm --filter @repo/db db:generate && pnpm --filter @repo/db db:migrate
    ```
 
-   - [ ] The generate step reports two tables and the migrate step exits 0
+   - [x] The generate step reports two tables and the migrate step exits 0
 
 3. Add a route that reads the barrel by name. Write `apps/api/src/routes/barrel.ts` with this content.
 
@@ -602,11 +602,11 @@ Run TC-2.2 first. This case builds on the deployed Worker. Hyperdrive is a paid 
    curl -s http://localhost:4000/barrel
    ```
 
-   - [ ] The body names both `probe` and `note`, so the glob merged both table files
+   - [x] The body names both `probe` and `note`, so the glob merged both table files
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
