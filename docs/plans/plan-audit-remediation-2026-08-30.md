@@ -122,7 +122,7 @@ existing suite stays green.
 Verifiable by: `add database-postgres` then `add auth` refuses with a clear message; `add database`
 alone either refuses or prompts for a driver.
 
-### Phase 3: Fail-closed auth secret (#98)
+### Phase 3: Fail-closed auth secret (#98) (built 2026-08-31)
 
 Small, separable, and security-relevant, so it does not wait behind the refactor.
 

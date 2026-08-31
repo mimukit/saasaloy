@@ -5,8 +5,8 @@
   "dependsOn": ["api", "database", "database-d1"],
   "dependencies": [],
   "envVars": {
-    "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Falls back to Better Auth's dev default locally (console warning); required in prod.",
-    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com). Used as the auth baseURL and to derive the cookie domain.",
+    "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws at startup when it is unset, unless BETTER_AUTH_URL names a loopback host.",
+    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop.",
     "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
   },
   "patches": [
@@ -44,6 +44,7 @@
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/src/auth.ts", "target": "src/auth.ts" },
+        { "path": "files/src/env.ts", "target": "src/env.ts" },
         { "path": "files/src/server.ts", "target": "src/server.ts" },
         { "path": "files/src/client.ts", "target": "src/client.ts" }
       ]

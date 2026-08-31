@@ -95,10 +95,13 @@ no `.env` file and sets nothing on Cloudflare. What the shipped modules declare:
 Each descriptor carries a description of what its variables are for; `saasaloy add` shows
 them under **Env vars to set**, and `modules/<name>/registry-item.json` is the source.
 
-`BETTER_AUTH_SECRET` is a Workers secret rather than a plain variable — it falls back to
-Better Auth's dev default locally with a console warning, and is required in production.
-Set secrets with `pnpm --filter @repo/api exec wrangler secret put BETTER_AUTH_SECRET`
-against the Worker that reads them, not in `wrangler.jsonc`, so they stay out of the repo.
+`BETTER_AUTH_SECRET` is a Workers secret rather than a plain variable, and `auth` fails
+closed on it: the package throws at startup when the secret is unset, so a Worker never
+serves sessions signed with Better Auth's published development key. The only exception
+is a `BETTER_AUTH_URL` that names a loopback host, which is what keeps the local
+`wrangler dev` loop keyless. Set secrets with
+`pnpm --filter @repo/api exec wrangler secret put BETTER_AUTH_SECRET` against the Worker
+that reads them, not in `wrangler.jsonc`, so they stay out of the repo.
 
 ## Or install `infra` and deploy everything at once
 

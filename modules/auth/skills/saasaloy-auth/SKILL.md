@@ -66,12 +66,27 @@ the feature's own files.
 
 | Var | What | Prod | Local |
 |---|---|---|---|
-| `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Falls back to Better Auth's dev default (console warning) |
-| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) |
+| `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Optional, but only when `BETTER_AUTH_URL` is a loopback origin |
+| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) — **set it**, it is what opens the keyless path |
 | `COOKIE_DOMAIN` | Explicit cookie domain | `.x.com` (cross-subdomain) | Leave unset (host-only) |
 
-Local dev is **keyless** — every var above has a safe default, so `wrangler dev` works with zero
-config. Misconfigured prod fails **visibly** rather than silently: an origin missing from
+### The secret fails closed
+
+`packages/auth/src/env.ts` reads `BETTER_AUTH_SECRET` at module load and **throws** when it is
+unset. Better Auth's fallback key is published in its own source, so a Worker signing sessions with
+it accepts a cookie anyone can forge, and the only signal is one console warning printed on a cold
+start. Throwing takes the Worker down on its first request instead.
+
+The one way out is narrow and explicit: `BETTER_AUTH_URL` must name a loopback host (`localhost`,
+`127.0.0.1`, `[::1]`). The match is exact, so `localhost.attacker.example` and `127.0.0.1.nip.io`
+do not open it. An **unset** `BETTER_AUTH_URL` does not open it either — a production Worker whose
+secrets were never set looks exactly like that, which is the case this rule exists to catch.
+
+So local dev is keyless but not configless: put one line in `apps/api/.dev.vars` —
+`BETTER_AUTH_URL=http://localhost:4000` — and `wrangler dev` runs with no secret. Everywhere else,
+set the secret with `wrangler secret put BETTER_AUTH_SECRET`.
+
+Misconfigured prod fails **visibly** rather than silently: an origin missing from
 `CORS_ORIGINS` gets no `Access-Control-Allow-Origin` header, so the browser refuses to hand the
 response to the page, and Better Auth's `trustedOrigins` (fed from the same var) additionally
 answers `403 INVALID_ORIGIN` on state-changing calls. Two independent layers — see below.
@@ -79,7 +94,8 @@ answers `403 INVALID_ORIGIN` on state-changing calls. Two independent layers —
 ### The cookie-domain rule
 
 1. `COOKIE_DOMAIN` set → used verbatim, `advanced.crossSubDomainCookies.enabled: true`.
-2. Unset, `BETTER_AUTH_URL` host is `localhost`/`127.0.0.1` → host-only cookie (no `Domain` attr).
+2. Unset, `BETTER_AUTH_URL` host is a loopback host (`localhost`/`127.0.0.1`/`[::1]`) → host-only
+   cookie (no `Domain` attr).
 3. Unset, host starts `api.` **and the remainder still contains a dot** → strips to the apex
    (`api.x.com` → `.x.com`), cross-subdomain. A host like `api.dev`, whose apex would strip to a
    bare TLD, falls through to rule 4 instead — browsers reject a TLD-only cookie domain outright.
