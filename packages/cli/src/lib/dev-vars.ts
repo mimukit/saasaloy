@@ -1,6 +1,10 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix } from "node:path";
-import { pathExists, resolveWithinRoot } from "./fs-utils.js";
+import {
+  assertNoSymlinkPath,
+  pathExists,
+  resolveWithinRoot,
+} from "./fs-utils.js";
 
 // `apps/api/.dev.vars.example` — the checked-in template a developer copies to
 // `.dev.vars` before `wrangler dev`. The base's `_gitignore` has carved out an
@@ -119,14 +123,22 @@ export async function writeDevVarsExample(
     return undefined;
   }
   const abs = resolveWithinRoot(root, target);
-  const existing = (await pathExists(abs))
-    ? parseDevVars(await readFile(abs, "utf-8"))
-    : {};
+  // `resolveWithinRoot` proves the path is lexically inside the project; the read and the
+  // write below both follow links, so a planted symlink on any component would carry them
+  // outside it. Refuse before either (#98), matching `applier` and `remover`.
+  await assertNoSymlinkPath(root, abs);
+  // One read, reused for the parse and the compare. Reading twice would compare the
+  // rendered content against a file that may have changed since the values were parsed
+  // out of it, and then overwrite that change with content rendered from the stale copy.
+  const before = (await pathExists(abs))
+    ? await readFile(abs, "utf-8")
+    : undefined;
+  const existing = before === undefined ? {} : parseDevVars(before);
   if (Object.keys(envVars).length === 0 && Object.keys(existing).length === 0) {
     return undefined;
   }
   const content = renderDevVarsExample({ devVars, envVars, existing });
-  if ((await pathExists(abs)) && (await readFile(abs, "utf-8")) === content) {
+  if (before === content) {
     return undefined;
   }
   await mkdir(dirname(abs), { recursive: true });

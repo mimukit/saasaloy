@@ -1,4 +1,11 @@
-import { mkdtemp, mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdtemp,
+  mkdir,
+  readFile,
+  rm,
+  symlink,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -147,6 +154,28 @@ describe(writeDevVarsExample, () => {
       root,
     });
     expect(written).toBeUndefined();
+  });
+
+  // #98 Phase 1. `resolveWithinRoot` proves only that the path *string* is inside the
+  // project; a symlink planted at the target carries the write out of it.
+  it("refuses to write through a symlinked target", async () => {
+    const outside = await mkdtemp(join(tmpdir(), "saasaloy-devvars-out-"));
+    try {
+      const secret = join(outside, "stolen.env");
+      await writeFile(secret, "UNTOUCHED=1\n", "utf-8");
+      await symlink(secret, join(root, "apps", "api", DEV_VARS_EXAMPLE));
+      await expect(
+        writeDevVarsExample({
+          aliases,
+          devVars: {},
+          envVars: { EMAIL_FROM: "Default sender address." },
+          root,
+        })
+      ).rejects.toThrow(/symlink/i);
+      await expect(readFile(secret, "utf-8")).resolves.toBe("UNTOUCHED=1\n");
+    } finally {
+      await rm(outside, { force: true, recursive: true });
+    }
   });
 
   it("writes nothing when no module declares a variable", async () => {
