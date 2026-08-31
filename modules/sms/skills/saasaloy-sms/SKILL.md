@@ -155,7 +155,7 @@ The rules, which are not the ones most people carry in their head:
 | | Single message | Each part of a longer one |
 |---|---|---|
 | **GSM-7** (plain Latin text) | 160 septets | **153** |
-| **UCS-2** (anything else) | 70 characters | **67** |
+| **UCS-2** (anything else) | 70 UTF-16 code units | **67** |
 
 - **The concatenated figures are lower** because a User Data Header telling the handset how to
   reassemble the parts eats the difference. 161 characters is two parts of 153, not 160 + 1.
@@ -288,52 +288,62 @@ export function twilio(): SmsProvider {
       }
 
       const accountSid = String(env.TWILIO_ACCOUNT_SID ?? "");
-      let response: Response;
-      try {
-        response = await fetch(
-          `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
-          {
-            method: "POST",
-            headers: {
-              "content-type": "application/x-www-form-urlencoded",
-              authorization: `Basic ${btoa(`${accountSid}:${String(env.TWILIO_AUTH_TOKEN ?? "")}`)}`,
+
+      // One recipient per request: this API takes a single `To`, so send one request per
+      // entry in `message.to`. The loop is sequential and a failure stops it, which is a
+      // partial-failure policy you must own: recipients before the failure already have
+      // the message, recipients after it don't, and the thrown `SmsError` names neither.
+      // If your project fans out to many recipients, decide here what that state means.
+      let sid = "";
+      for (const to of message.to) {
+        let response: Response;
+        try {
+          response = await fetch(
+            `https://api.twilio.com/2010-04-01/Accounts/${accountSid}/Messages.json`,
+            {
+              method: "POST",
+              headers: {
+                "content-type": "application/x-www-form-urlencoded",
+                authorization: `Basic ${btoa(`${accountSid}:${String(env.TWILIO_AUTH_TOKEN ?? "")}`)}`,
+              },
+              body: new URLSearchParams({
+                To: to,
+                From: message.from,
+                Body: message.body,
+              }),
+              // Bound the call. Without this a hung provider holds the Worker's response
+              // open until the platform kills it, and the caller gets no `SmsError` at all.
+              signal: AbortSignal.timeout(10_000),
             },
-            // One recipient per request: this API takes a single `To`. Loop in the
-            // provider and decide what a partial failure means for your project.
-            body: new URLSearchParams({
-              To: message.to[0] ?? "",
-              From: message.from,
-              Body: message.body,
-            }),
-            // Bound the call. Without this a hung provider holds the Worker's response
-            // open until the platform kills it, and the caller gets no `SmsError` at all.
-            signal: AbortSignal.timeout(10_000),
-          },
-        );
-      } catch (cause) {
-        // The request never completed — a timeout, DNS, TLS, a dropped connection. NOT
-        // retryable, unlike the email equivalent: the message may already have been
-        // accepted, and a second send is a second charge and a second buzz.
-        throw new SmsError("provider_error", "twilio: request failed or timed out", {
-          retryable: false,
-          cause,
-        });
+          );
+        } catch (cause) {
+          // The request never completed — a timeout, DNS, TLS, a dropped connection. NOT
+          // retryable, unlike the email equivalent: the message may already have been
+          // accepted, and a second send is a second charge and a second buzz.
+          throw new SmsError("provider_error", "twilio: request failed or timed out", {
+            retryable: false,
+            cause,
+          });
+        }
+
+        const body = (await response.json().catch(() => ({}))) as { sid?: string; code?: number };
+
+        if (!response.ok) {
+          throw new SmsError("provider_error", `twilio: ${response.status}`, {
+            // Confirmed non-acceptance: safe to retry.
+            retryable: response.status === 429 || response.status >= 500,
+            providerCode: body.code === undefined ? String(response.status) : String(body.code),
+          });
+        }
+
+        // Don't take the cast's word for it — `SmsResult.messageId` is a string, and
+        // returning `undefined` here would break that contract silently.
+        if (!body.sid) throw new SmsError("provider_error", "twilio: response carried no sid");
+        sid = body.sid;
       }
 
-      const body = (await response.json().catch(() => ({}))) as { sid?: string; code?: number };
-
-      if (!response.ok) {
-        throw new SmsError("provider_error", `twilio: ${response.status}`, {
-          // Confirmed non-acceptance: safe to retry.
-          retryable: response.status === 429 || response.status >= 500,
-          providerCode: body.code === undefined ? String(response.status) : String(body.code),
-        });
-      }
-
-      // Don't take the cast's word for it — `SmsResult.messageId` is a string, and
-      // returning `undefined` here would break that contract silently.
-      if (!body.sid) throw new SmsError("provider_error", "twilio: response carried no sid");
-      return { messageId: body.sid };
+      // `SmsResult` carries one id; for a multi-recipient send this is the last one.
+      return { messageId: sid };
     },
   };
 }
