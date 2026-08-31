@@ -57,7 +57,7 @@ is applied.
 `auth` and `waitlist` ship SQLite payloads — `sqliteTable` tables, and `provider: "sqlite"` in
 `auth`'s Better Auth config — so both declare `dependsOn: ["database-d1"]`. On a project running
 `database-postgres`, `add auth` is refused by the conflict check rather than installing files that
-fail at `pnpm typecheck` later. Dialect-neutral payloads are the end state; ADR 0023's amendment
+fail at `pnpm typecheck` later. Dialect-neutral payloads are the end state; ADR 0026's amendment
 records the retraction and the follow-up. A Postgres project writes its own tables and routes in the
 meantime, and everything below this line works the same on either driver.
 

@@ -1,4 +1,6 @@
-# 0023 — API routes register by patch, not by file-drop
+# 0028 — API routes register by patch, not by file-drop
+
+> Renumbered from 0023 to 0028 on 2026-08-31 (issue [#98](https://github.com/mimukit/saasaloy/issues/98)). Five records shared 0023, so a bare "ADR 0023" citation named none of them. A document dated before that day cites this record as ADR 0023.
 
 `modules/api` mounted routes by scanning a directory: `src/index.ts` ran `import.meta.glob("./routes/*.ts", { eager: true })` and called `app.route("/" + basename, module.default)` for each hit. A module added a route by dropping one file into `@api/routes/` and touching nothing else. That is the cheapest authoring story available, and it gives a caller nothing. The mounted app's type is a bare `Hono`, so `hc<typeof app>` infers no paths, no request bodies, and no response shapes, and every consumer falls back to a hand-written `fetch` against a string URL. **Route registration therefore moves to the `chained-route` patch kind** (#83): `apps/api/src/index.ts` names every route in one `.route()` call chain, exports the resulting type as `AppType`, and `saasaloy add` inserts a module's link and its import rather than relying on a scan. Settled while grilling issue #86.
 

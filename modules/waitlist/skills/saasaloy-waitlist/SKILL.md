@@ -28,7 +28,7 @@ Cannot add waitlist — module conflict:
 That is the intended answer, and `--force` does not bypass it. Before it, the install went through
 and the project failed later at `pnpm typecheck`, with a dialect error naming neither module. Porting
 the table to `drizzle-orm/pg-core` by hand is not the fix; the dialect-neutral rewrite is tracked
-against ADR 0023's amendment. A Postgres project writes its own waitlist table and route, using this
+against ADR 0026's amendment. A Postgres project writes its own waitlist table and route, using this
 module's route and form as the worked example.
 
 ## What it drops, and where

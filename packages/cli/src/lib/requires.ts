@@ -9,7 +9,7 @@ import type { SaasaloyConfig } from "./schema.js";
 // exclusive drivers needs: `database` scaffolds `packages/db` and declares the `./client`
 // export, but the file behind that export ships in `database-d1` or `database-postgres`.
 // Installing the core alone leaves a project whose `@repo/db/client` import resolves to
-// nothing, and nothing said so at `add` time (#98, ADR 0023's amendment).
+// nothing, and nothing said so at `add` time (#98, ADR 0026's amendment).
 //
 // So the descriptor gains `requiresOneOf`: a list of modules, exactly one of which has to
 // be present. "Present" means installed already, or arriving in this same resolved graph —

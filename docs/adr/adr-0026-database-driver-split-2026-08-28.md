@@ -1,4 +1,6 @@
-# 0023 — The `database` capability splits into a neutral core plus mutually exclusive drivers
+# 0026 — The `database` capability splits into a neutral core plus mutually exclusive drivers
+
+> Renumbered from 0023 to 0026 on 2026-08-31 (issue [#98](https://github.com/mimukit/saasaloy/issues/98)). Five records shared 0023, so a bare "ADR 0023" citation named none of them. A document dated before that day cites this record as ADR 0023.
 
 `database` becomes three modules. `modules/database` is the driver-neutral core, a `saasaloy:capability` with `dependsOn: ["api"]` that scaffolds `packages/db` with `package.json`, `tsconfig.json`, `src/schema.ts`, `src/schema/` and `src/repositories/`, and keeps only the `db:generate` script plus the `drizzle-orm` and `drizzle-kit` pins. It ships no `client.ts`, no `drizzle.config.ts` and no wrangler binding. Those come from a **driver**: `modules/database-d1` or `modules/database-postgres`, both typed `saasaloy:feature` with `dependsOn: ["database"]`, each naming the other in the descriptor's `conflictsWith` field so a project can only ever hold one. Cloudflare D1 stays the default. Settled while building issue [#85](https://github.com/mimukit/saasaloy/issues/85).
 

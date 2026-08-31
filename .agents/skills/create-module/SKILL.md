@@ -235,7 +235,7 @@ glob `routes/*.ts`, so a drop was enough; it no longer does. `src/index.ts` now 
 in one `.route()` chain, because `hc<AppType>` reads its paths, inputs and response shapes off
 `typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler
 file **and** adds one `chained-route` patch. The drop on its own leaves a file nothing imports.
-ADR 0023 records the trade.
+ADR 0028 records the trade.
 
 The patch kind is the reversible one, which is what makes this affordable: `saasaloy remove` takes
 the link and its import back out, and the entry file comes back byte-identical. Two rules for the
@@ -297,7 +297,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   small, tested AST patches.
 - **A route is the exception: drop the handler, then register it with a `chained-route`
   patch.** `apps/api/src/index.ts` names every route statically so `AppType` carries them;
-  nothing globs `routes/` (ADR 0023).
+  nothing globs `routes/` (ADR 0028).
 - **Contribute agent context by shipping a skill folder**, not editing shared ones: an
   `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
   never append to the committed `AGENTS.md`/`CLAUDE.md`.

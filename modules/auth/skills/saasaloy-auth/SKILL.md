@@ -33,7 +33,7 @@ Cannot add auth — module conflict:
 The refusal is deliberate and `--force` does not bypass it. Before it existed the install went
 through and the project failed later at `pnpm typecheck`, with a dialect error naming neither
 module. Making the payload dialect-neutral is the end state, not a workaround you apply by hand;
-ADR 0023's amendment records the retraction and the follow-up. Everything below assumes D1, and the
+ADR 0026's amendment records the retraction and the follow-up. Everything below assumes D1, and the
 `saasaloy-database-d1` skill owns the connection and the migrate commands.
 
 ## The plugin-array patch point (read this before adding billing/teams)
@@ -145,7 +145,7 @@ handler produces.
 
 Note the shape: one named `export const`, one chained expression, an explicit status on every
 `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the
-exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0023).
+exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028).
 
 ## Roles and the first admin
 
@@ -270,4 +270,4 @@ pnpm --filter @repo/db db:migrate:local  # applies to local D1
   a D1 read per request.
 - **D1 is a hard requirement, not a default.** Don't swap `sqliteTable` for `pgTable` or flip
   `provider: "sqlite"` to make this run on `database-postgres`; the two edits have to land together
-  with the migrations, and that is the dialect-neutral rewrite ADR 0023's amendment defers.
+  with the migrations, and that is the dialect-neutral rewrite ADR 0026's amendment defers.

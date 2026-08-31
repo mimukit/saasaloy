@@ -177,7 +177,7 @@ describe("registry-item schema — requiresOneOf", () => {
   });
 });
 
-// The first-party wiring these two fields exist for (#98, ADR 0023's amendment). The
+// The first-party wiring these two fields exist for (#98, ADR 0026's amendment). The
 // descriptors are read off disk rather than restated here, so an edit that unpicks the
 // driver split fails a test instead of shipping.
 

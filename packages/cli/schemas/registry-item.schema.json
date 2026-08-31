@@ -41,7 +41,7 @@
     },
     "requiresOneOf": {
       "type": "array",
-      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers (e.g. `database` naming `database-d1` and `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal. Use `dependsOn` for a single hard prerequisite; this field exists for a choice, so it takes at least two names (#98, ADR 0023).",
+      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers (e.g. `database` naming `database-d1` and `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal. Use `dependsOn` for a single hard prerequisite; this field exists for a choice, so it takes at least two names (#98, ADR 0026).",
       "uniqueItems": true,
       "minItems": 2,
       "items": {

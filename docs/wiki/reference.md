@@ -82,11 +82,11 @@ project holds exactly one: `requiresOneOf` on the core stops it at zero, `confli
 each driver stops it at two. The `database` core carries the tables, the schema barrel and
 `db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
 by removing one driver and adding the other, which moves no data
-([ADR 0023](../adr/adr-0023-database-driver-split-2026-08-28.md)).
+([ADR 0026](../adr/adr-0026-database-driver-split-2026-08-28.md)).
 
 `auth` and `waitlist` ship SQLite payloads and declare `dependsOn: ["database-d1"]`, so on
 a project running `database-postgres` both are refused by the conflict check. That is a
-stopgap until their payloads are dialect-neutral; see ADR 0023's 2026-08-31 amendment.
+stopgap until their payloads are dialect-neutral; see ADR 0026's 2026-08-31 amendment.
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 

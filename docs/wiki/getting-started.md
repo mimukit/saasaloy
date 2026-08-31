@@ -5,9 +5,10 @@ on disk, and its landing page running at `http://localhost:3000`.
 
 ## Before you begin
 
-- **Node 24.13.0 or newer.** `packages/cli` declares `"node": ">=24.13.0"`, and
-  `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node fails the install
-  rather than breaking later. The repo's `.nvmrc` pins `v24.18.0` if you use `nvm`.
+- **Node 24.13.0 or newer.** The root `package.json`, `packages/cli`, the base template and
+  `.nvmrc` all say 24.13.0, and `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node
+  fails the install rather than breaking later. `nvm use` picks the floor up from `.nvmrc`, which
+  is also the version CI runs.
 - **pnpm 11 or newer.** The repo is pinned to `pnpm@11.14.0`.
 - **git**, to clone the repo.
 

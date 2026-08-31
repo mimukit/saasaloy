@@ -45,7 +45,7 @@ non-zero exit, and the capability names both in `requiresOneOf` so `add` will no
 installed with no driver behind it. A driver also outgrows the provider shape on purpose. It carries `scaffolds[]` and
 replaces files the capability would otherwise own (`packages/db/src/client.ts`,
 `drizzle.config.ts`, `tsconfig.json`). It ships its own skill too, because a project installs
-exactly one driver and the two runbooks share almost nothing. See ADR 0023.
+exactly one driver and the two runbooks share almost nothing. See ADR 0026.
 
 The `database` trio is the worked example. The core (`database`) scaffolds `packages/db` with the
 schema barrel, the repository layer and `db:generate`, and knows no dialect. `database-d1` adds the

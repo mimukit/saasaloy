@@ -317,6 +317,11 @@ export default defineConfig({
       rules: {
         "vitest/no-import-node-test": "off",
         "vitest/prefer-importing-vitest-globals": "off",
+        // `safeUrl`'s job is to refuse `javascript:alert(...)`, so the test that proves
+        // it has to write that URL out. Splitting the literal to dodge the rule would
+        // hide the one string the assertion is about. Off for these files only; it stays
+        // on for every payload file we ship.
+        "no-script-url": "off",
       },
     },
 

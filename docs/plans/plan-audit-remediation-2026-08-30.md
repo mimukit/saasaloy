@@ -18,7 +18,7 @@ schema does not close the gap either: `files[].target` matches `^@[a-z0-9][a-z0-
 coordinate form (`owner/repo/name`), so this is a reachable path, not a theoretical one.
 
 **The driver split landed in `database` and stopped there.** [ADR
-0023](../adr/adr-0023-database-driver-split-2026-08-28.md) split the core from `database-d1` and
+0023](../adr/adr-0026-database-driver-split-2026-08-28.md) split the core from `database-d1` and
 `database-postgres` and claimed `auth` and `waitlist` need no branch. The shipped payloads
 contradict it: `modules/auth/files/src/auth.ts` types `DB: D1Database` and passes
 `provider: "sqlite"`, and both `auth` and `waitlist` declare their tables with `sqliteTable`. Neither

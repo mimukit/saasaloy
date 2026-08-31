@@ -242,7 +242,7 @@ Cannot add auth — module conflict:
 
 That refusal is the point. Before it the install went through and the project failed later at
 `pnpm typecheck`, with a dialect error naming neither module. Dialect-neutral payloads are the end
-state and are tracked separately; ADR 0023's amendment records that. Until they land, a Postgres
+state and are tracked separately; ADR 0026's amendment records that. Until they land, a Postgres
 project writes its own tables against `drizzle-orm/pg-core` and its own routes, which is what the
 rest of this skill covers.
 

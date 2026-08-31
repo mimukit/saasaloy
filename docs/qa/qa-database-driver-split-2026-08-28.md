@@ -742,7 +742,7 @@ S=modules/database-postgres/skills/saasaloy-database-postgres/SKILL.md && grep -
 Assert the ADR (C11).
 
 ```sh
-grep -ln 'conflictsWith' docs/adr/*.md && grep -n 'ADR 0001\|single-provider\|stateful' docs/adr/adr-0023-database-driver-split-2026-08-28.md
+grep -ln 'conflictsWith' docs/adr/*.md && grep -n 'ADR 0001\|single-provider\|stateful' docs/adr/adr-0026-database-driver-split-2026-08-28.md
 ```
 
 Assert the documentation tables (C12).
@@ -769,7 +769,7 @@ Results:
 - ✅ C8 → `db:generate` emitted `migrations/0000_material_viper.sql` for one table. `db:migrate` reported `migrations applied successfully!`. The round trip through the unmodified `src/client.ts` and repository inserted one row and read the same value back. The container's `drizzle.__drizzle_migrations` held exactly one row. The container was removed and `docker ps -a` is empty.
 - ✅ C9 → `envVars.DATABASE_URL` is a non-empty string. The descriptor patches are `wrangler-binding` on `apps/api/wrangler.jsonc`, `package-json-script` `db:migrate` set to `drizzle-kit migrate`, and `package-json-dependency` entries pinning `postgres` to `3.4.9` and `@types/node` to `26.1.2`. The installed `packages/db/package.json` shows all three.
 - ✅ C10 → frontmatter `name: saasaloy-database-postgres`. Counts: `.dev.vars` 7, `wrangler secret put DATABASE_URL` 1, `HYPERDRIVE` 5. Sections present at lines 45, 67, 159 and 194.
-- ✅ C11 → `docs/adr/adr-0023-database-driver-split-2026-08-28.md` exists and is the only ADR naming `conflictsWith`. It cites ADR 0001's 2026-08-04 amendment and argues the carve-out for a stateful capability. `docs/adr/` keeps no index file, so that clause of the check has nothing to satisfy.
+- ✅ C11 → `docs/adr/adr-0026-database-driver-split-2026-08-28.md` exists and is the only ADR naming `conflictsWith`. It cites ADR 0001's 2026-08-04 amendment and argues the carve-out for a stateful capability. `docs/adr/` keeps no index file, so that clause of the check has nothing to satisfy.
 - ✅ C12 → `modules/README.md:28,37-39` describes the driver shape and names both modules. `README.md:16` reads `| Database | Drizzle, on D1 (SQLite) or Postgres |`, `README.md:37` names both drivers, and `README.md:51` adds the `database-postgres` row. No `comming soon` remains, and every surviving `D1` mention is driver-scoped.
 - ✅ C13 → issue #91, `feat(cli): make cross-module file collisions a general error`, is open. `pnpm deps:verify` exited 0 at this commit on the conductor's run and was not re-run here. The second half of C13, the link from the pull request body to issue #91, cannot be checked yet because no pull request exists.
 
