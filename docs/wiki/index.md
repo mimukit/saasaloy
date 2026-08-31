@@ -5,7 +5,7 @@ demand. The scaffolded base is a landing page and a UI package; the API, databas
 and product features arrive later, one `saasaloy add` at a time, as files you own and can
 edit.
 
-The CLI ships four commands: `init`, `add`, `remove`, `list`. Nothing else exists yet.
+The CLI ships five commands: `init`, `add`, `update`, `remove`, `list`. Nothing else exists yet.
 
 Two things worth knowing before you pick a page:
 

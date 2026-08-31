@@ -14,7 +14,7 @@ This repository is a monorepo.
 
 - We use [Turborepo]([https://turbo.build/repo](https://turbo.build/repo)) as our build system.
 
-- We use [changesets]([https://github.com/changesets/changesets](https://github.com/changesets/changesets)) for managing releases.
+- We do not use changesets, and there is no release process yet: the CLI is not published to npm, and installing it means cloning this repo and linking the built binary. [#46](https://github.com/mimukit/saasaloy/issues/46) tracks the publish and will bring a release flow with it.
 
 ## Manual QA: the `.dev/playground`
 

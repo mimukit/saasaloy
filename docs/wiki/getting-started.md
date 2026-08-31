@@ -33,7 +33,8 @@ Check it worked:
 saasaloy --help
 ```
 
-You should see the four commands: `init`, `add`, `remove`, `list`. If the shell can't find
+You should see the five commands: `init`, `add`, `update`, `remove`, `list`, and the
+global `--help`/`--version` flags below them. If the shell can't find
 `saasaloy`, pnpm's global bin directory isn't on your `PATH` — `pnpm setup` puts it there.
 
 Link from one checkout only. The global bin points at a single

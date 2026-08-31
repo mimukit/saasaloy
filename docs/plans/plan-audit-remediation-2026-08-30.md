@@ -162,7 +162,7 @@ Four defects in one command, worth one pass.
   secret updates silently while `add` prints a note.
 - Validate the manifest and lock on load with the existing `validateManifest` / `validateLock`.
 
-### Phase 6: DX papercuts and doc truth (#98)
+### Phase 6: DX papercuts and doc truth (#98) (built 2026-08-31)
 
 Independent, individually small, collectively the difference between a tool that feels finished and
 one that does not.
