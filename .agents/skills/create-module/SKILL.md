@@ -25,6 +25,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | `devDependencies[]` | ✅ merged into the root `package.json`'s `devDependencies` (`@types/*`, build tooling) |
 | `dependsOn[]` | ✅ resolved recursively + topologically sorted |
 | `conflictsWith[]` | ✅ `add` refuses, before writing anything, when a module you name is already installed |
+| `requiresOneOf[]` | ✅ `add` refuses when none of the modules you name is installed or in the same graph; on a terminal it prompts for one instead |
 | `envVars` | ✅ reported to the user (never written to files) |
 | `scaffolds[]` | ✅ births the workspace (root-relative files + registers its aliases into `saasaloy.json`) (ADR 0013) |
 | `patches` | ✅ applied by the config-patch engine — read file → codemod → write, idempotent (ADR 0019) |
@@ -120,6 +121,15 @@ Field notes:
   **Declare it on one side only.** The field is recorded into `saasaloy-lock.json`, so the refusal
   fires in either install order, and declaring it on both sides buys nothing. `add` never
   auto-resolves a conflict: it refuses and tells the user which `saasaloy remove` clears it.
+- **`requiresOneOf`** — a list of modules, exactly one of which has to be present. Use it when this
+  module is incomplete on its own and several modules could complete it: `database` scaffolds
+  `packages/db` and declares the `./client` export, but the file behind that export ships in
+  `database-d1` or `database-postgres`. `add` counts an option as present when it is already
+  installed or arrives in the same resolved graph, so naming a driver directly satisfies the core
+  with no prompt. When nothing satisfies it, an interactive `add` offers the list as a picker and a
+  non-interactive one refuses and names the options. It takes **at least two** names — one hard
+  prerequisite is `dependsOn`. Pair it with `conflictsWith` on the options themselves: this field
+  stops a project at zero, `conflictsWith` stops it at two.
 - **`dependencies` / `devDependencies`** — npm packages (distinct from `dependsOn`, which is
   *inter-module*), merged into the consumer's `dependencies` / `devDependencies` respectively —
   put `@types/*` and build tooling in `devDependencies[]`. **Both are exact-pinned `name@version`**
@@ -225,7 +235,7 @@ glob `routes/*.ts`, so a drop was enough; it no longer does. `src/index.ts` now 
 in one `.route()` chain, because `hc<AppType>` reads its paths, inputs and response shapes off
 `typeof app`, and a glob gives that type nothing to carry. So a route module drops its handler
 file **and** adds one `chained-route` patch. The drop on its own leaves a file nothing imports.
-ADR 0023 records the trade.
+ADR 0028 records the trade.
 
 The patch kind is the reversible one, which is what makes this affordable: `saasaloy remove` takes
 the link and its import back out, and the entry file comes back byte-identical. Two rules for the
@@ -287,7 +297,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   small, tested AST patches.
 - **A route is the exception: drop the handler, then register it with a `chained-route`
   patch.** `apps/api/src/index.ts` names every route statically so `AppType` carries them;
-  nothing globs `routes/` (ADR 0023).
+  nothing globs `routes/` (ADR 0028).
 - **Contribute agent context by shipping a skill folder**, not editing shared ones: an
   `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
   never append to the committed `AGENTS.md`/`CLAUDE.md`.
@@ -305,6 +315,8 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] `patches` is empty unless a change is genuinely structural (with a note on why), and each op
       uses a `kind` the engine defines.
 - [ ] `conflictsWith` names any module this one is mutually exclusive with, on one side only.
+- [ ] `requiresOneOf` names the modules that complete this one, if it ships an extension point some
+      other module has to fill (two names minimum).
 - [ ] `envVars` lists any required keys; no secrets baked into files.
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).

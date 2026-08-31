@@ -3,7 +3,7 @@
 Modules are granular and split into two tiers: **capability modules** (`api`, `database`, `auth`, `admin`, `email`, …) scaffold an app/package and establish convention-based extension points; **feature modules** (`waitlist`, `billing`, `teams`, …) extend those capabilities by dropping files into their conventions and declaring `dependsOn`. Granularity is required because real MVP stages need different subsets — a landing page's first feature might be a waitlist needing `api` + `database` but explicitly not auth or admin. See build-spec [§2.7](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
-accepted (amended 2026-08-28 by [ADR 0023](adr-0023-routes-register-by-chained-route-patch-2026-08-28.md) — the "`routes/` folder the Hono entry auto-globs" example below no longer holds; an api route now registers through the `chained-route` patch. The two-tier split and the schema-barrel convention are unchanged.)
+accepted (amended 2026-08-28 by [ADR 0028](adr-0028-routes-register-by-chained-route-patch-2026-08-28.md) — the "`routes/` folder the Hono entry auto-globs" example below no longer holds; an api route now registers through the `chained-route` patch. The two-tier split and the schema-barrel convention are unchanged.)
 
 ## Considered Options
 - A monolithic `add app` — rejected: it forces auth/admin onto stages that don't need them.

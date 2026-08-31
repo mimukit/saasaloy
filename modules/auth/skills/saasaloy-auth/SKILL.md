@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, protecting a route with getSession, promoting the first admin or checking a user's role, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, or debugging cookie/CORS/session issues.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, protecting a route with getSession, promoting the first admin or checking a user's role, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why `add auth` is refused on a Postgres project.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -10,6 +10,31 @@ no other workspace depends on `better-auth` directly. `apps/api` gets a thin `ro
 that forwards to `auth.handler`; `packages/db` gets a hand-authored schema snapshot. Sessions are
 **DB-backed httpOnly cookies**, not JWTs (build-spec §2.5 / ADR 0004): a D1 read per request is
 negligible, and sessions are instantly revocable by deleting the row.
+
+## This module needs the `database-d1` driver
+
+`auth` is SQLite-only today, in two places that have to agree: `packages/db/src/schema/auth.ts`
+builds its tables with `sqliteTable` from `drizzle-orm/sqlite-core`, and
+`packages/auth/src/auth.ts` hands `drizzleAdapter` a `provider: "sqlite"`. Neither works against
+`database-postgres`.
+
+So the descriptor declares `dependsOn: ["api", "database", "database-d1"]`. Two consequences:
+
+- `saasaloy add auth` on a fresh project installs `database-d1` along the way. You do not add the
+  driver first, and you are not asked which one to use.
+- `saasaloy add auth` on a project already running `database-postgres` is **refused**, because each
+  driver names the other in `conflictsWith`:
+
+```
+Cannot add auth — module conflict:
+  database-d1 (required by auth) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
+```
+
+The refusal is deliberate and `--force` does not bypass it. Before it existed the install went
+through and the project failed later at `pnpm typecheck`, with a dialect error naming neither
+module. Making the payload dialect-neutral is the end state, not a workaround you apply by hand;
+ADR 0026's amendment records the retraction and the follow-up. Everything below assumes D1, and the
+`saasaloy-database-d1` skill owns the connection and the migrate commands.
 
 ## The plugin-array patch point (read this before adding billing/teams)
 
@@ -41,12 +66,27 @@ the feature's own files.
 
 | Var | What | Prod | Local |
 |---|---|---|---|
-| `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Falls back to Better Auth's dev default (console warning) |
-| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) |
+| `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Optional, but only when `BETTER_AUTH_URL` is a loopback origin |
+| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) — **set it**, it is what opens the keyless path |
 | `COOKIE_DOMAIN` | Explicit cookie domain | `.x.com` (cross-subdomain) | Leave unset (host-only) |
 
-Local dev is **keyless** — every var above has a safe default, so `wrangler dev` works with zero
-config. Misconfigured prod fails **visibly** rather than silently: an origin missing from
+### The secret fails closed
+
+`packages/auth/src/env.ts` reads `BETTER_AUTH_SECRET` at module load and **throws** when it is
+unset. Better Auth's fallback key is published in its own source, so a Worker signing sessions with
+it accepts a cookie anyone can forge, and the only signal is one console warning printed on a cold
+start. Throwing takes the Worker down on its first request instead.
+
+The one way out is narrow and explicit: `BETTER_AUTH_URL` must name a loopback host (`localhost`,
+`127.0.0.1`, `[::1]`). The match is exact, so `localhost.attacker.example` and `127.0.0.1.nip.io`
+do not open it. An **unset** `BETTER_AUTH_URL` does not open it either — a production Worker whose
+secrets were never set looks exactly like that, which is the case this rule exists to catch.
+
+So local dev is keyless but not configless: put one line in `apps/api/.dev.vars` —
+`BETTER_AUTH_URL=http://localhost:4000` — and `wrangler dev` runs with no secret. Everywhere else,
+set the secret with `wrangler secret put BETTER_AUTH_SECRET`.
+
+Misconfigured prod fails **visibly** rather than silently: an origin missing from
 `CORS_ORIGINS` gets no `Access-Control-Allow-Origin` header, so the browser refuses to hand the
 response to the page, and Better Auth's `trustedOrigins` (fed from the same var) additionally
 answers `403 INVALID_ORIGIN` on state-changing calls. Two independent layers — see below.
@@ -54,7 +94,8 @@ answers `403 INVALID_ORIGIN` on state-changing calls. Two independent layers —
 ### The cookie-domain rule
 
 1. `COOKIE_DOMAIN` set → used verbatim, `advanced.crossSubDomainCookies.enabled: true`.
-2. Unset, `BETTER_AUTH_URL` host is `localhost`/`127.0.0.1` → host-only cookie (no `Domain` attr).
+2. Unset, `BETTER_AUTH_URL` host is a loopback host (`localhost`/`127.0.0.1`/`[::1]`) → host-only
+   cookie (no `Domain` attr).
 3. Unset, host starts `api.` **and the remainder still contains a dot** → strips to the apex
    (`api.x.com` → `.x.com`), cross-subdomain. A host like `api.dev`, whose apex would strip to a
    bare TLD, falls through to rule 4 instead — browsers reject a TLD-only cookie domain outright.
@@ -104,7 +145,7 @@ handler produces.
 
 Note the shape: one named `export const`, one chained expression, an explicit status on every
 `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the
-exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0023).
+exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028).
 
 ## Roles and the first admin
 
@@ -227,3 +268,6 @@ pnpm --filter @repo/db db:migrate:local  # applies to local D1
 - **CORS is api's job.** Don't add CORS handling here; reuse `CORS_ORIGINS`.
 - **Sessions are DB-backed; `cookieCache` stays off** — revocability over the marginal latency of
   a D1 read per request.
+- **D1 is a hard requirement, not a default.** Don't swap `sqliteTable` for `pgTable` or flip
+  `provider: "sqlite"` to make this run on `database-postgres`; the two edits have to land together
+  with the migrations, and that is the dialect-neutral rewrite ADR 0026's amendment defers.

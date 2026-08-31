@@ -1,6 +1,8 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
+import { validateManifest } from "./schema.js";
 import type { RegistryPatch } from "./schema.js";
 
 // `.saasaloy/manifest.json` records every file a module applied — copied source
@@ -59,23 +61,6 @@ export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
   );
 }
 
-/**
- * Every module the tool has actually applied to this project, read off what it recorded.
- * A name in `saasaloy.json` `installed[]` that is absent here came from the scaffold
- * template (`web`) or a hand edit: the tool never installed it, so it has no descriptor,
- * no lock entry, and nothing to say about conflicts.
- */
-export function managedModules(manifest: Manifest): Set<string> {
-  const names = new Set<string>();
-  for (const entry of Object.values(manifest.managed)) {
-    names.add(entry.module);
-  }
-  for (const entry of manifest.patches) {
-    names.add(entry.module);
-  }
-  return names;
-}
-
 export function emptyManifest(): Manifest {
   return { links: {}, managed: {}, patches: [] };
 }
@@ -85,7 +70,28 @@ export async function loadManifest(root: string): Promise<Manifest> {
   if (!(await pathExists(file))) {
     return emptyManifest();
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Manifest>;
+  // A half-written file parses as nothing at all, which is as invalid as a bad hash and
+  // takes the same exit code. Left to throw, `SyntaxError` reaches `exitCodeFor` as a
+  // plain failure (1) and never names the file it came from.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(file, "utf-8"));
+  } catch (error) {
+    throw new RefusalError(
+      `${MANIFEST_FILE} is invalid:\n  ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+  // This file decides whether a target is safe to overwrite, so a hash that isn't a
+  // digest or a half-written entry has to stop the command rather than reach the applier
+  // as a typed object that lies about its shape (#98). Same posture as `loadConfig`.
+  const result = await validateManifest(raw);
+  if (!result.valid) {
+    throw new RefusalError(
+      `${MANIFEST_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
+    );
+  }
+  const parsed = raw as Partial<Manifest>;
   return {
     links: parsed.links ?? {},
     managed: parsed.managed ?? {},

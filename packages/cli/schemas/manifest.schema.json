@@ -73,7 +73,14 @@
               },
               "kind": {
                 "type": "string",
-                "enum": ["wrangler-binding", "plugin-array"]
+                "enum": [
+                  "wrangler-binding",
+                  "package-json-dependency",
+                  "package-json-script",
+                  "plugin-array",
+                  "chained-route"
+                ],
+                "description": "Which codemod applied this patch. Must list exactly the kinds registry-item.schema.json accepts — the applier records here whatever a descriptor authored, so a kind missing from this enum makes the next `loadManifest` refuse a manifest the tool itself wrote (#98). `schema.test.ts` asserts the two enums and the `Patch` union agree."
               }
             },
             "description": "The op as authored (kind + payload + file), re-applicable at execute time."

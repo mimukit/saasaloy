@@ -1,15 +1,20 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, join, posix } from "node:path";
+import { dirname, posix } from "node:path";
 import {
+  assertNoSymlinkPath,
   classifyLink,
   createDirLink,
   hashContent,
+  joinModulePath,
   listFilesRelative,
   pathExists,
+  readIfPresent,
+  resolveWithinRoot,
 } from "./fs-utils.js";
 import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
+import type { PatchMatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
 import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
@@ -28,11 +33,21 @@ import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 export type FileAction =
   "create" | "overwrite" | "unchanged" | "drift" | "conflict";
 
-// Actions that are safe to write; drift/conflict are held back for a merge.
-const WRITABLE: ReadonlySet<FileAction> = new Set<FileAction>([
+// Actions safe to apply without a human in the loop; drift/conflict are held back
+// for a merge. This is also the set whose content the patch preview reads, since each
+// of these leaves the planned bytes on disk.
+const SAFE: ReadonlySet<FileAction> = new Set<FileAction>([
   "create",
   "overwrite",
   "unchanged",
+]);
+
+// Of the safe actions, the ones that need an actual write. `unchanged` means disk
+// already holds these exact bytes, so rewriting it would churn the file's mtime for
+// nothing — its manifest entry is still refreshed (#98, matching `executeUpdatePlan`).
+const WRITABLE: ReadonlySet<FileAction> = new Set<FileAction>([
+  "create",
+  "overwrite",
 ]);
 
 export interface PlannedFile {
@@ -85,6 +100,10 @@ export interface PlannedPatch {
   diff: string;
   /** The would-be content after the patch; undefined when the target is missing. */
   content?: string;
+  /** Set when the patch's identity already exists at a different value — the user edited
+   *  what we would have written. `update` reports these into its merge plan; `add`
+   *  ignores it (issue #48, decision 1). */
+  matched?: PatchMatch;
 }
 
 // A `.claude/skills/<name>` symlink pointing at the real, committed `.agents/skills/<name>`
@@ -116,12 +135,137 @@ export interface Plan {
   devDependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
   envVars: Record<string, string>;
+  /** Union of the local-dev values declared for those vars — written into `.dev.vars.example`. */
+  devVars: Record<string, string>;
   /** Aliases the installed scaffolds register into saasaloy.json (applied by executePlan). */
   aliases: Record<string, string>;
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
   aliasConflicts: string[];
   /** Structural config patches to apply (previewed against the would-be on-disk state). */
   patches: PlannedPatch[];
+}
+
+/** A file one revision of a module ships: where it comes from and where it lands. */
+export interface ModuleFileRef {
+  /** Module-relative POSIX source path (`files/lib/x.ts`) — the manifest's `from`. */
+  from: string;
+  /** Project-relative POSIX target path. */
+  target: string;
+  /** Absolute path of the source file inside the module folder. */
+  abs: string;
+}
+
+/**
+ * Every file a module ships, keyed by its project-relative target — `files[]`, each
+ * scaffold's workspace files, and each `agent.skills` folder expanded.
+ *
+ * The one place those three rules live. `buildPlan` walks it to plan an `add`, and
+ * `buildUpdatePlan` walks it at two SHAs to diff a module against itself, so `update`
+ * always sees exactly the set `add` would have written. Each engine carried its own copy
+ * of these rules until #98, which is how the write-path guards drifted apart.
+ */
+export async function listModuleFiles(
+  mod: LoadedModule,
+  aliases: Record<string, string>
+): Promise<Map<string, ModuleFileRef>> {
+  const out = new Map<string, ModuleFileRef>();
+  const record = (from: string, target: string): void => {
+    out.set(target, { from, target, abs: joinModulePath(mod.dir, from) });
+  };
+
+  for (const file of mod.item.files ?? []) {
+    record(file.path, resolveTarget(aliases, file.target));
+  }
+  for (const scaffold of mod.item.scaffolds ?? []) {
+    for (const file of scaffold.files) {
+      record(file.path, posix.join(scaffold.workspace, file.target));
+    }
+  }
+  for (const skillRel of mod.item.agent?.skills ?? []) {
+    const folderName = posix.basename(skillRel);
+    for (const rel of await listFilesRelative(
+      joinModulePath(mod.dir, skillRel)
+    )) {
+      record(
+        posix.join(skillRel, rel),
+        posix.join(".agents/skills", folderName, rel)
+      );
+    }
+  }
+  return out;
+}
+
+/** True for a target under the `.agents/skills/` namespace an `agent.skills` folder fills. */
+function isSkillTarget(target: string): boolean {
+  return target.startsWith(".agents/skills/");
+}
+
+/**
+ * A file this run plans to lay down, as the patch preview needs to see it: the content,
+ * and whether that content actually reaches disk. A held-back file keeps whatever is
+ * there, so its planned content is only a last resort.
+ */
+export interface PatchSourceFile {
+  /** The content this run would write; `undefined` when the module dropped the file. */
+  content?: string;
+  /** True when this run leaves that content on disk. */
+  landsOnDisk: boolean;
+}
+
+export interface PreviewPatchesArgs {
+  root: string;
+  /** Module that authored these ops — recorded on each preview. */
+  module: string;
+  ops: RegistryPatch[];
+  /** Files this run plans, keyed by project-relative target. */
+  planned: ReadonlyMap<string, PatchSourceFile>;
+}
+
+/**
+ * Preview a module's config patches against the state this run will leave behind.
+ *
+ * Shared by `buildPlan` and `buildUpdatePlan` (#98): both resolve a patch's source the
+ * same three ways — a file this run writes, else what is on disk, else a held-back
+ * file's planned content — and both need the preview to be pure, because `--dry-run`
+ * and `--diff` render it without writing. Only genuinely-absent targets are `missing`.
+ * Both engines re-apply against fresh disk state at execute time; this is the preview,
+ * never the source of truth for the write.
+ */
+export async function previewPatches(
+  args: PreviewPatchesArgs
+): Promise<PlannedPatch[]> {
+  const { root, module, ops, planned } = args;
+  const out: PlannedPatch[] = [];
+  for (const op of ops) {
+    const fileAbs = resolveWithinRoot(root, op.file);
+    const plannedFile = planned.get(op.file);
+    const source = plannedFile?.landsOnDisk
+      ? plannedFile.content
+      : ((await readIfPresent(fileAbs)) ?? plannedFile?.content);
+    if (source === undefined) {
+      out.push({
+        module,
+        file: op.file,
+        fileAbs,
+        patch: op,
+        action: "missing",
+        diff: "",
+      });
+      continue;
+    }
+    const { content, changed, diff, matched } = applyPatch(source, op, op.file);
+    out.push({
+      module,
+      file: op.file,
+      fileAbs,
+      patch: op,
+      action: changed ? "apply" : "unchanged",
+      diff,
+      content,
+      ...(matched ? { matched } : {}),
+    });
+  }
+  return out;
 }
 
 async function classify(
@@ -150,33 +294,33 @@ async function classify(
 
 async function planModuleFile(
   module: LoadedModule,
-  sourceRel: string,
-  target: string,
+  ref: ModuleFileRef,
   root: string,
-  manifest: Manifest,
-  isSkill: boolean
+  manifest: Manifest
 ): Promise<PlannedFile> {
-  const source = join(module.dir, sourceRel);
-  const content = await readFile(source, "utf-8");
+  const content = await readFile(ref.abs, "utf-8");
   const newHash = hashContent(content);
-  const targetAbs = join(root, ...target.split("/"));
+  // `add` is the one engine whose input is an untrusted remote descriptor, so the target
+  // is resolved under the same guard `remover` and `updater` use on their state files
+  // (#98). `join()` normalizes a `..` away silently; this refuses it instead.
+  const targetAbs = resolveWithinRoot(root, ref.target);
   const { action, oldContent } = await classify(
     targetAbs,
-    target,
+    ref.target,
     newHash,
     manifest
   );
   return {
     module: module.item.name,
-    source,
-    from: sourceRel,
-    target,
+    source: ref.abs,
+    from: ref.from,
+    target: ref.target,
     targetAbs,
     content,
     newHash,
     action,
     oldContent,
-    isSkill,
+    isSkill: isSkillTarget(ref.target),
   };
 }
 
@@ -191,11 +335,20 @@ export interface BuildPlanArgs {
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const { root, install, alreadyInstalled, modules, config, manifest } = args;
-  const files: PlannedFile[] = [];
+  // Keyed by project-relative target, because two modules in one run can ship the same
+  // file: `database` and its driver `database-d1`/`database-postgres` both scaffold
+  // `packages/db/tsconfig.json`. Planned as two entries they both classify `create` off
+  // an empty disk, the core's copy lands first, and `stillMatches` then reads this run's
+  // own bytes and drops the driver's copy as late drift — so the driver's tsconfig never
+  // arrived and `packages/db` lost the `types` the driver needs (#98). `install` is
+  // topological, so the last planner is the most specific one: let it win, and plan one
+  // entry per target.
+  const byTarget = new Map<string, PlannedFile>();
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const devDependencies: string[] = [];
   const envVars: Record<string, string> = {};
+  const devVars: Record<string, string> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
   // files[] can resolve against a capability's brand-new alias even when both install in
@@ -226,51 +379,30 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     }
     const { item } = mod;
 
-    for (const file of item.files ?? []) {
-      const target = resolveTarget(aliasView, file.target);
-      files.push(
-        await planModuleFile(mod, file.path, target, root, manifest, false)
-      );
+    // One enumeration for all three rules — `files[]`, each scaffold's workspace files,
+    // and each `agent.skills` folder — shared with `update` (#98). A scaffold file's
+    // target is workspace-relative and a skill file's lands under `.agents/skills/`;
+    // from here every one of them is an ordinary managed file, classified and recorded
+    // alike, so create/drift/conflict and `remove` all come for free.
+    for (const ref of (await listModuleFiles(mod, aliasView)).values()) {
+      const planned = await planModuleFile(mod, ref, root, manifest);
+      // Re-key rather than overwrite in place, so the surviving entry is listed under
+      // the module that actually writes it.
+      byTarget.delete(planned.target);
+      byTarget.set(planned.target, planned);
     }
 
-    // A capability's scaffolds[] births a whole workspace: each file's target is
-    // relative to the workspace root, so join it onto the workspace dir to get the
-    // project-relative path. From there it's an ordinary managed file — classified and
-    // recorded like any other, so create/drift/conflict and `remove` all come for free.
-    for (const scaffold of item.scaffolds ?? []) {
-      for (const file of scaffold.files) {
-        const target = posix.join(scaffold.workspace, file.target);
-        files.push(
-          await planModuleFile(mod, file.path, target, root, manifest, false)
-        );
-      }
-    }
-
-    // `agent.skills` folders land as real, committed files under `.agents/skills/<folder>/…`
-    // (readable by every AI agent, not just Claude Code) — each recorded in the manifest so
-    // `remove` can undo it. A `.claude/skills/<folder>` symlink then points back at them so
-    // Claude Code still discovers the skill (ADR 0015).
+    // The skill files themselves are real, committed files under `.agents/skills/<folder>/…`,
+    // readable by every AI agent rather than only Claude Code. A `.claude/skills/<folder>`
+    // symlink points back at them so Claude Code still discovers the skill (ADR 0015).
     for (const skillRel of item.agent?.skills ?? []) {
-      const skillDir = join(mod.dir, skillRel);
       const folderName = posix.basename(skillRel);
-      const skillFiles = await listFilesRelative(skillDir);
-      for (const rel of skillFiles) {
-        const target = posix.join(".agents/skills", folderName, rel);
-        files.push(
-          await planModuleFile(
-            mod,
-            posix.join(skillRel, rel),
-            target,
-            root,
-            manifest,
-            true
-          )
-        );
-      }
       const linkPath = posix.join(".claude/skills", folderName);
       const linkTarget = posix.join(".agents/skills", folderName);
-      const pathAbs = join(root, ...linkPath.split("/"));
-      const targetAbs = join(root, ...linkTarget.split("/"));
+      // Both sides are engine-built from a descriptor-supplied folder name, so both go
+      // through the guard — the name is the untrusted part (#98).
+      const pathAbs = resolveWithinRoot(root, linkPath);
+      const targetAbs = resolveWithinRoot(root, linkTarget);
       const state = await classifyLink(pathAbs, targetAbs);
       links.push({
         module: name,
@@ -293,53 +425,34 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const dep of item.devDependencies ?? []) {
       devDependencies.push(dep);
     }
+    for (const [key, value] of Object.entries(item.devVars ?? {})) {
+      devVars[key] = value;
+    }
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
     }
   }
 
+  const files = [...byTarget.values()];
+
   // Plan patches after every file is collected, so an op targeting a file another module
-  // scaffolds this same run previews against that file's *would-be* content, not disk. The
-  // engine is pure, so we can compute the diff up front for `--dry-run`/`--diff`; executePlan
-  // re-applies against fresh disk state (below) — the source of truth for the actual write.
+  // scaffolds this same run previews against that file's *would-be* content, not disk.
+  const planned = new Map<string, PatchSourceFile>(
+    files.map((f) => [
+      f.target,
+      { content: f.content, landsOnDisk: SAFE.has(f.action) },
+    ])
+  );
   const patches: PlannedPatch[] = [];
   for (const name of install) {
-    for (const op of modules.get(name)?.item.patches ?? []) {
-      const fileAbs = join(root, ...op.file.split("/"));
-      // A writable planned file lands on disk before the patch runs, so preview against it.
-      // Otherwise fall back to disk (a held-back file keeps its content; or `api` from a
-      // prior run). Only genuinely-absent targets are `missing`.
-      const planned = files.find((f) => f.target === op.file);
-      let source: string | undefined;
-      if (planned && WRITABLE.has(planned.action)) {
-        source = planned.content;
-      } else if (await pathExists(fileAbs)) {
-        source = await readFile(fileAbs, "utf-8");
-      } else {
-        source = planned?.content;
-      }
-      if (source === undefined) {
-        patches.push({
-          module: name,
-          file: op.file,
-          fileAbs,
-          patch: op,
-          action: "missing",
-          diff: "",
-        });
-        continue;
-      }
-      const { content, changed, diff } = applyPatch(source, op, op.file);
-      patches.push({
+    patches.push(
+      ...(await previewPatches({
+        root,
         module: name,
-        file: op.file,
-        fileAbs,
-        patch: op,
-        action: changed ? "apply" : "unchanged",
-        diff,
-        content,
-      });
-    }
+        ops: modules.get(name)?.item.patches ?? [],
+        planned,
+      }))
+    );
   }
 
   return {
@@ -349,6 +462,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     links,
     dependencies,
     devDependencies,
+    devVars,
     envVars,
     aliases,
     aliasConflicts,
@@ -358,6 +472,10 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
 
 export interface ApplyResult {
   written: PlannedFile[];
+  /** Files already byte-identical to what we'd write — manifest refreshed, disk untouched. */
+  refreshed: PlannedFile[];
+  /** Planned-writable files edited between planning and the write — left alone. */
+  lateDrift: PlannedFile[];
   /** drift + conflict files, held back for the merge path. */
   heldBack: PlannedFile[];
   /** `.claude/skills` symlinks created or already correct, recorded in the manifest. */
@@ -379,6 +497,17 @@ export interface PatchRefusal {
   reason: string;
 }
 
+/**
+ * Whether a planned file still looks the way it did when the plan was built. The
+ * confirmation prompt sits between the two and can stay open indefinitely, so the
+ * verdict is re-earned immediately before the write — the same reason `remover.ts`
+ * re-checks before deleting and `updater.ts` before overwriting (#98). A planned
+ * `create` matches only while its path is still empty.
+ */
+async function stillMatches(file: PlannedFile): Promise<boolean> {
+  return (await readIfPresent(file.targetAbs)) === file.oldContent;
+}
+
 // Write the safe files, record each in the manifest with its content hash, and mark
 // the modules installed. Drift/conflict files are left on disk untouched and returned
 // so the caller can emit an AI-merge plan (the non-deterministic seam, build spec §2.9).
@@ -389,6 +518,8 @@ export async function executePlan(
   manifest: Manifest
 ): Promise<ApplyResult> {
   const written: PlannedFile[] = [];
+  const refreshed: PlannedFile[] = [];
+  const lateDrift: PlannedFile[] = [];
   const heldBack: PlannedFile[] = [];
   const links: PlannedLink[] = [];
   const linkConflicts: PlannedLink[] = [];
@@ -397,18 +528,34 @@ export async function executePlan(
   const patchRefusals: PatchRefusal[] = [];
 
   for (const file of plan.files) {
+    if (!SAFE.has(file.action)) {
+      heldBack.push(file);
+      continue;
+    }
+    if (!(await stillMatches(file))) {
+      // Edited while the confirmation was up — the plan the user approved described
+      // different bytes, so it doesn't authorize overwriting these.
+      lateDrift.push(file);
+      continue;
+    }
     if (WRITABLE.has(file.action)) {
+      // `resolveWithinRoot` proved the path is lexically inside the project; `writeFile`
+      // still follows links, so a planted symlink on any component would carry the write
+      // outside it. Refuse before creating the parent dirs (#98), matching `remover`.
+      await assertNoSymlinkPath(root, file.targetAbs);
       await mkdir(dirname(file.targetAbs), { recursive: true });
       await writeFile(file.targetAbs, file.content, "utf-8");
-      manifest.managed[file.target] = {
-        module: file.module,
-        hash: file.newHash,
-        from: file.from,
-      };
       written.push(file);
     } else {
-      heldBack.push(file);
+      // `unchanged`: disk already holds these exact bytes. Its manifest entry is still
+      // refreshed — that is how a file installed before `from` existed acquires one.
+      refreshed.push(file);
     }
+    manifest.managed[file.target] = {
+      module: file.module,
+      hash: file.newHash,
+      from: file.from,
+    };
   }
 
   // Apply structural patches after the file writes, so an op targeting a freshly-scaffolded
@@ -421,6 +568,8 @@ export async function executePlan(
       patchConflicts.push(p);
       continue;
     }
+    // The read below follows links just as the write does, so guard before either (#98).
+    await assertNoSymlinkPath(root, p.fileAbs);
     const source = await readFile(p.fileAbs, "utf-8");
     const { content, changed, reason } = applyPatch(source, p.patch, p.file);
     if (changed) {
@@ -455,6 +604,9 @@ export async function executePlan(
       continue;
     }
     if (link.action === "create") {
+      // Only the `create` leg writes. An `exists` link is our own symlink at the final
+      // component, which the guard would (correctly) refuse, so it is not asked (#98).
+      await assertNoSymlinkPath(root, link.pathAbs);
       await createDirLink(link.pathAbs, link.targetAbs);
     }
     manifest.links[link.target] = link.path;
@@ -478,6 +630,8 @@ export async function executePlan(
 
   return {
     written,
+    refreshed,
+    lateDrift,
     heldBack,
     links,
     linkConflicts,

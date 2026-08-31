@@ -69,13 +69,10 @@ export function resolveConnectionString(env: DbBindings): string {
  *
  * Close the connection when the response is done, so a socket does not linger for the rest
  * of the isolate's life. `end()` runs as soon as it is called, and postgres.js rejects every
- * query issued after it, so schedule it in a `finally` after the last `await`:
+ * query issued after it, so schedule it in a `finally` after the last `await`.
  *
- *   try {
- *     return c.json(await listWaitlist(db));
- *   } finally {
- *     c.executionCtx.waitUntil(db.$client.end());
- *   }
+ * `withDb` below does exactly that. Prefer it in a route and call `getDb` directly only
+ * where there is no request context to hand it.
  */
 export function getDb(env: DbBindings) {
   const sql = postgres(resolveConnectionString(env), {
@@ -83,4 +80,56 @@ export function getDb(env: DbBindings) {
     fetch_types: false,
   });
   return drizzle(sql, { schema });
+}
+
+/** The Drizzle client this driver hands a repository. */
+export type Db = ReturnType<typeof getDb>;
+
+/**
+ * The part of a Hono `Context` `withDb` reads. Structural on purpose: `packages/db` stays
+ * free of a `hono` dependency, and any request context carrying an `env` and a
+ * `waitUntil` fits.
+ */
+export interface DbRequestContext {
+  env: DbBindings;
+  executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
+}
+
+/**
+ * Open a connection for one request, run `body`, and close the socket afterwards.
+ *
+ * Closing is the whole point. `getDb` opens a real TCP socket per request, and a route
+ * that forgets `db.$client.end()` leaks one for the rest of the isolate's life. Written by
+ * hand that is a `try`/`finally` in every handler; here it is one wrapper:
+ *
+ *   waitlist.get("/", (c) => withDb(c, async (db) => c.json(await listWaitlist(db))));
+ *
+ * The close is scheduled on `executionCtx.waitUntil`, so the response is not held while
+ * the socket drains. `end()` starts the moment `body` settles, and postgres.js rejects
+ * every query issued after it, so read everything you need inside `body` — never return the
+ * `db`, a lazy query builder, or an unawaited promise out of it.
+ *
+ * Hono throws when it has no execution context to give, which is what `app.request()` does
+ * in a unit test. That is caught: the connection still closes, it just closes without the
+ * runtime holding the isolate open for it.
+ */
+export async function withDb<T>(
+  c: DbRequestContext,
+  body: (db: Db) => Promise<T>
+): Promise<T> {
+  const db = getDb(c.env);
+  try {
+    return await body(db);
+  } finally {
+    // Detach the rejection first. `end()` runs now either way, and an unobserved rejection
+    // would take the isolate down rather than the request that caused it.
+    const closed = db.$client.end().catch(() => {
+      // The socket is going away regardless; there is no caller left to tell.
+    });
+    try {
+      c.executionCtx.waitUntil(closed);
+    } catch {
+      // No execution context — nothing to keep alive on. The socket still closes.
+    }
+  }
 }

@@ -1,0 +1,51 @@
+# The gate every push and pull request has to clear. It runs the same four scripts
+# a contributor runs locally, in the same order, so a green local tree is a green
+# CI run and the two never disagree about what "passing" means.
+#
+# `deps:verify` is deliberately absent. It scaffolds .dev/playground and installs it
+# from the network, which is minutes of work and a third-party outage away from a red
+# build on a change that touched none of it. It belongs on a schedule, not on a push.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# A pull request pushed to twice does not need the first run's answer. Cancel it and
+# keep the branch's own pushes serialised by ref.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version` key: the action reads `packageManager` from package.json, so the
+      # pinned pnpm here and the one Corepack gives a contributor stay the same.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      # `--frozen-lockfile` is the point of this step: a package.json edited without
+      # its lockfile fails here rather than resolving to something nobody tested.
+      - run: pnpm install --frozen-lockfile
+
+      # Four passes: type-aware oxlint, plain oxlint, Stylelint, prettier --check.
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      # The CLI's vitest run reports coverage; the table lands in this log.
+      - run: pnpm test
+
+      - run: pnpm verify:content

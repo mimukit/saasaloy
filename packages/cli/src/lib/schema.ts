@@ -106,6 +106,14 @@ function formatError(err: ErrorObject): string {
 
 export interface SaasaloyConfig {
   aliases: Record<string, string>;
+  /**
+   * The base app `saasaloy init` scaffolded (`web`). It is not a module: the tool never
+   * applied it, so it has no descriptor, no manifest entry and no lock entry. Until #98
+   * the template listed it in `installed[]` and every engine carried an excuse for the
+   * one name in that list it could say nothing about. Optional so a project scaffolded
+   * before the field existed still validates; `loadConfig` migrates it.
+   */
+  base?: string;
   installed: string[];
 }
 
@@ -141,12 +149,16 @@ export interface RegistryItem {
   dependsOn?: string[];
   /** Modules this one refuses to sit beside; `add` refuses rather than installing both. Recorded in the lockfile so the check works in either install order. */
   conflictsWith?: string[];
+  /** Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers. `add` refuses when none is installed or in the resolved graph, and offers the list as a prompt on a terminal. */
+  requiresOneOf?: string[];
   /** npm deps merged into the consumer's `dependencies`. Exact-pinned `name@version` (bare/range rejected by the schema). */
   dependencies?: string[];
   /** npm deps merged into the consumer's `devDependencies` (`@types/*`, build tooling). Same exact-pin form; a name in both buckets lands in `dependencies` only. */
   devDependencies?: string[];
   files?: RegistryFile[];
   envVars?: Record<string, string>;
+  /** Local-dev values for a subset of `envVars`, pre-filled into `.dev.vars.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
+  devVars?: Record<string, string>;
   patches?: RegistryPatch[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;

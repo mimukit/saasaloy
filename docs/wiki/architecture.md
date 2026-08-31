@@ -28,6 +28,7 @@ reusable machinery under `lib/`, split into seams:
 | Applier | `lib/applier.ts` | plan file writes, classify each against the manifest, execute the safe ones |
 | Remover | `lib/remover.ts` | the same plan/execute split, in reverse, offline |
 | Conflicts | `lib/conflicts.ts` | the `conflictsWith` check, read from descriptors and the lock |
+| Requirements | `lib/requires.ts` | the `requiresOneOf` check — a capability naming the drivers one of which must be present |
 | Design | `lib/design.ts` | detect a plan that writes `packages/ui/`, so `add` can flag the design contract |
 | Patch engine | `lib/patch/` | structural edits to JSONC, `package.json` and TypeScript modules |
 | Schemas | `lib/schema.ts` | ajv validation of every descriptor and state file |
@@ -122,7 +123,7 @@ with a later module
 ([ADR 0022](../adr/adr-0022-design-layer-ships-in-the-base-2026-08-06.md)), and so does its
 written contract: a seeded `DESIGN.md` plus a `saasaloy-design` skill that re-derives it
 when the UI changes
-([ADR 0023](../adr/adr-0023-design-contract-ships-in-the-base-2026-08-28.md)). `add` plays
+([ADR 0027](../adr/adr-0027-design-contract-ships-in-the-base-2026-08-28.md)). `add` plays
 along: when a module's plan writes into `packages/ui/`, it prints a reminder to re-run the
 skill. Everything
 churny is a module you install when you need it, which is what keeps an unused capability

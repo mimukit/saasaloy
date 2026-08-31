@@ -338,7 +338,7 @@ hook (which is also how you keep hooks out of CI).
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
-- Run tests: `pnpm test` (when test scripts are added)
+- There is no `pnpm test` at the root, and no workspace declares a `test` script. The base ships no test runner: pick one and add it per workspace when you have something to test.
 
 ## Boundaries
 

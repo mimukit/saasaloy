@@ -36,7 +36,7 @@ amendment carves out exactly one exception, and a new provider must land inside 
 A stateful capability can still offer a **choice made once, at install time**, without becoming
 multi-provider. That is a driver module, and `database-d1` / `database-postgres` are the only pair
 today. It is a different shape with its own rules, so if that is what you are writing, stop here
-and read ADR 0023 instead.
+and read ADR 0026 instead.
 
 Also check that a real interface already exists. Provider modules only work where a capability has
 scaffolded a workspace with a `providers` registry to append to. Inventing that interface is
@@ -64,7 +64,7 @@ Five rules hold for every mode:
    codemod (`packages/cli/src/lib/patch/ts-module.ts`), unchanged — it adds the import and appends
    the call idempotently. Dropping the file registers nothing; nothing scans `providers/`. That
    split is now the registry-wide rule rather than a provider quirk — an `api` route registers the
-   same way, through the `chained-route` patch (ADR 0023) — so a target file that is a **statically
+   same way, through the `chained-route` patch (ADR 0028) — so a target file that is a **statically
    named list** is what you should expect at every extension point.
 5. **The npm dependency, if any, goes in the *capability's* `package.json`** through a
    `package-json-dependency` patch — never the descriptor's `dependencies[]` (which merges into the
@@ -80,7 +80,7 @@ near-identical runbooks.
 > each ship a skill folder, carry `scaffolds[]`, and replace files the capability would otherwise
 > own. They can do that because they exclude each other with `conflictsWith`, so a project installs
 > exactly one and receives exactly one runbook. That is a **driver module**, recorded in
-> [ADR 0023](../../../docs/adr/adr-0023-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
+> [ADR 0026](../../../docs/adr/adr-0026-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
 > a licence to grow a provider. If your module is mutually exclusive with a sibling, read that ADR.
 > If it is one of several that coexist behind an interface, every rule on this page still binds
 > you.

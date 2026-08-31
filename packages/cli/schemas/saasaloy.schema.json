@@ -23,6 +23,11 @@
         "description": "Project-relative path prefix (POSIX separators, no leading slash)."
       }
     },
+    "base": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The base app `saasaloy init` scaffolded (e.g. `web`). It is not a module: the tool never applied it, it has no descriptor and no lock entry, so it never takes part in dependsOn resolution or conflict checks. Absent in a project scaffolded before this field existed; `saasaloy` migrates such a project on its next write."
+    },
     "installed": {
       "type": "array",
       "description": "Modules present in this project. Grows as `saasaloy add` runs; drives dependsOn resolution.",

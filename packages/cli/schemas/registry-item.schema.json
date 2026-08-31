@@ -39,6 +39,16 @@
         "pattern": "^[a-z0-9][a-z0-9-]*$"
       }
     },
+    "requiresOneOf": {
+      "type": "array",
+      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers (e.g. `database` naming `database-d1` and `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal. Use `dependsOn` for a single hard prerequisite; this field exists for a choice, so it takes at least two names (#98, ADR 0026).",
+      "uniqueItems": true,
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
     "dependencies": {
       "type": "array",
       "description": "npm packages merged into the consumer's `dependencies`. Each must be exact-pinned `name@version` (e.g. zod@4.0.5) — bare names and ranges are rejected; `pnpm deps:update` fills/refreshes the versions.",
@@ -68,12 +78,14 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "description": "Source path relative to the module folder (e.g. files/api/routes/waitlist.ts)."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Source path relative to the module folder (e.g. files/api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
           },
           "target": {
             "type": "string",
             "pattern": "^@[a-z0-9][a-z0-9-]*/.+",
-            "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts)."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
           }
         }
       }
@@ -81,6 +93,16 @@
     "envVars": {
       "type": "object",
       "description": "Environment variables the module needs: NAME → human description (or default/placeholder).",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "devVars": {
+      "type": "object",
+      "description": "Local-development values for a subset of `envVars`: NAME → the value `saasaloy add` pre-fills into the generated `apps/api/.dev.vars.example`. Only for a value that is the same on every machine and is not a secret (a loopback URL, a fixed port). Every key here must also appear in `envVars`; a key absent here is written with an empty value for the owner to fill in.",
       "propertyNames": {
         "pattern": "^[A-Z][A-Z0-9_]*$"
       },
@@ -99,7 +121,8 @@
             "type": "string",
             "minLength": 1,
             "pattern": "^[^/@]",
-            "description": "Project-relative POSIX path of the file to patch (e.g. apps/api/wrangler.jsonc). No leading slash or @alias."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Project-relative POSIX path of the file to patch (e.g. apps/api/wrangler.jsonc). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .eslintrc.json is fine."
           },
           "kind": {
             "type": "string",
@@ -219,13 +242,15 @@
                 "path": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Source path relative to the module folder (e.g. files/src/index.ts)."
+                  "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+                  "description": "Source path relative to the module folder (e.g. files/src/index.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .dev.vars.example is fine."
                 },
                 "target": {
                   "type": "string",
                   "minLength": 1,
                   "pattern": "^[^/@]",
-                  "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias."
+                  "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+                  "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .dev.vars.example is fine."
                 }
               }
             }

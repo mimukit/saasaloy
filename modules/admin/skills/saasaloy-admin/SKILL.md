@@ -152,6 +152,10 @@ The fix is nearly always in `apps/api` (or in another ambient type this app must
 change to `src/lib/api.ts`. The entry is types only; there is no runtime dependency on the Workers
 runtime in this app.
 
+### Why the two TanStack Router pins carry different numbers
+
+`@tanstack/react-router` is pinned at `1.170.32` and `@tanstack/router-plugin` at `1.168.35`, which reads like drift and is not. TanStack releases the two on independent version lines, and `router-plugin@1.168.35` names `"@tanstack/react-router": "^1.170.32"` in its own `peerDependencies` — the pins are the matching pair, they just do not share a number. Do not "fix" the mismatch by inventing a `router-plugin@1.170.32`; no such release exists. Check the plugin's `peerDependencies` against the router pin instead, and move both together when `pnpm deps:update` offers a bump.
+
 ## Loader + Query, and why both
 
 `src/main.tsx` creates one `QueryClient` at module scope and puts it on the **router context**, so a

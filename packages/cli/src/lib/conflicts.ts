@@ -41,9 +41,10 @@ export interface ConflictReport {
    * indistinguishable from one whose module declares no conflicts, so it can't be
    * flagged here — this covers the gap that is actually visible.
    *
-   * Only modules the tool actually installed appear here (see `managed`). The scaffold
-   * template puts `web` in `installed[]` and never gives it a lock entry, and reporting
-   * that on every add would be noise no user can act on.
+   * Every name in `installed[]` is a module `saasaloy add` applied, so every one of them
+   * belongs here when its lock entry is missing. The base app is no longer in that list:
+   * it has its own `base` field (#98), which is what retired the `managed` allowlist this
+   * report used to need.
    */
   missingLockEntries: string[];
 }
@@ -53,14 +54,6 @@ export interface DetectConflictsArgs {
   graph: Graph;
   config: SaasaloyConfig;
   lock: Lockfile;
-  /**
-   * Modules the tool has recorded in `.saasaloy/manifest.json` (`managedModules`). Only
-   * these can be reported as missing a lock entry: a name in `installed[]` the tool never
-   * applied has no descriptor to declare a conflict, and "re-add it" is advice that
-   * cannot be followed for the template's own `web`. Omit it to check every installed
-   * name — `add` always passes it.
-   */
-  managed?: ReadonlySet<string>;
 }
 
 // Order-independent key, so a pair both sides declare is reported once. The separator is
@@ -71,7 +64,7 @@ function pairKey(a: string, b: string): string {
 }
 
 export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
-  const { graph, config, lock, managed } = args;
+  const { graph, config, lock } = args;
   const installed = new Set(config.installed);
   const conflicts: ModuleConflict[] = [];
   const seen = new Set<string>();
@@ -118,11 +111,7 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
     }
     const entry = lock.modules[name];
     if (!entry) {
-      // Silent for anything the tool never installed — the scaffold's `web`, or a hand
-      // edit. There is no descriptor behind it, so there is no conflict to miss.
-      if (!managed || managed.has(name)) {
-        missingLockEntries.push(name);
-      }
+      missingLockEntries.push(name);
       continue;
     }
     for (const other of entry.conflictsWith ?? []) {
@@ -135,10 +124,26 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
   return { conflicts, missingLockEntries };
 }
 
+/**
+ * Which command is reporting. `update` runs the same check because a new version can
+ * introduce a `dependsOn` on a second driver, and installing it as a prerequisite would
+ * land the exact pair `add` refuses (#98).
+ */
+export type ConflictAction = "add" | "update";
+
+const GERUND: Record<ConflictAction, string> = {
+  add: "adding",
+  update: "updating",
+};
+
 // One conflict as a sentence: both module names, which side declared it, and the way out.
 // `requested` is what the user typed, so a conflict raised by a transitive prerequisite
 // says so rather than naming a module the user never mentioned.
-function describe(conflict: ModuleConflict, requested: string): string {
+function describe(
+  conflict: ModuleConflict,
+  requested: string,
+  action: ConflictAction
+): string {
   const { declaredBy, conflictsWith, installed } = conflict;
 
   if (!installed) {
@@ -146,7 +151,7 @@ function describe(conflict: ModuleConflict, requested: string): string {
       declaredBy === requested
         ? declaredBy
         : `${declaredBy} (required by ${requested})`;
-    return `${first} declares a conflict with ${conflictsWith}, and adding ${requested} installs both. Add only one of them.`;
+    return `${first} declares a conflict with ${conflictsWith}, and ${GERUND[action]} ${requested} installs both. Add only one of them.`;
   }
 
   const incoming = installed === declaredBy ? conflictsWith : declaredBy;
@@ -161,13 +166,15 @@ function describe(conflict: ModuleConflict, requested: string): string {
   return `${sentence}. Run \`saasaloy remove ${installed}\` first.`;
 }
 
-/** The refusal `add` prints. One line per conflicting pair, under a heading. */
+/** The refusal `add` and `update` print. One line per conflicting pair, under a heading. */
 export function formatConflicts(
   conflicts: ModuleConflict[],
-  requested: string
+  requested: string,
+  action: ConflictAction = "add"
 ): string {
-  const heading = `Cannot add ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
-  return [heading, ...conflicts.map((c) => `  ${describe(c, requested)}`)].join(
-    "\n"
-  );
+  const heading = `Cannot ${action} ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
+  return [
+    heading,
+    ...conflicts.map((c) => `  ${describe(c, requested, action)}`),
+  ].join("\n");
 }

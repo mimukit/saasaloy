@@ -1,0 +1,94 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
+import { describe, expect, it } from "vitest";
+import { PATCH_KINDS } from "./patch/index.js";
+import type { PatchKind } from "./patch/index.js";
+import { validateManifest, validateRegistryItem } from "./schema.js";
+
+// #98 fix round. Two schemas describe the same patch op: `registry-item.schema.json`
+// validates it as authored, `manifest.schema.json` validates it as recorded. The
+// applier copies the authored op straight into the manifest, so a kind one accepts and
+// the other rejects makes `saasaloy add` write a manifest the next `loadManifest`
+// refuses. That is exactly what shipped, and nothing failed. These tests hold both
+// enums to `PATCH_KINDS`, so the next divergence fails here instead of in a project.
+
+async function readSchema(name: string): Promise<Record<string, unknown>> {
+  const path = fileURLToPath(new URL(`../../schemas/${name}`, import.meta.url));
+  return JSON.parse(await readFile(path, "utf-8")) as Record<string, unknown>;
+}
+
+function kindEnum(schema: unknown, path: readonly string[]): string[] {
+  let node: unknown = schema;
+  for (const key of path) {
+    node = (node as Record<string, unknown> | undefined)?.[key];
+  }
+  const values = (node as { enum?: string[] } | undefined)?.enum;
+  if (!values) {
+    throw new Error(`no enum at ${path.join(".")}`);
+  }
+  return values.toSorted();
+}
+
+describe("patch-kind enums agree across both schemas", () => {
+  it("registry-item.schema.json lists exactly the engine's kinds", async () => {
+    const schema = await readSchema("registry-item.schema.json");
+    expect(
+      kindEnum(schema, ["properties", "patches", "items", "properties", "kind"])
+    ).toStrictEqual([...PATCH_KINDS]);
+  });
+
+  it("manifest.schema.json lists exactly the engine's kinds", async () => {
+    const schema = await readSchema("manifest.schema.json");
+    expect(
+      kindEnum(schema, [
+        "properties",
+        "patches",
+        "items",
+        "properties",
+        "patch",
+        "properties",
+        "kind",
+      ])
+    ).toStrictEqual([...PATCH_KINDS]);
+  });
+});
+
+// One authored op per kind. `Record<PatchKind, …>` keeps this exhaustive: a new kind
+// with no sample here fails typecheck rather than silently going untested.
+const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
+  "chained-route": {
+    exportName: "default",
+    path: "/waitlist",
+    call: "waitlist",
+    import: { name: "waitlist", from: "./routes/waitlist.js" },
+  },
+  "package-json-dependency": { name: "zod", version: "4.4.3" },
+  "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
+  "plugin-array": {
+    exportName: "auth",
+    property: "plugins",
+    insert: "organization()",
+  },
+  "wrangler-binding": { array: "d1_databases", binding: "DB" },
+};
+
+// A kind the descriptor may author has to survive the round trip into the manifest.
+// Both validators run against the same op so neither can quietly narrow the set.
+describe.each(PATCH_KINDS)("patch kind %s", (kind) => {
+  it("validates in a registry item and in a manifest", async () => {
+    const op = { file: "apps/api/package.json", kind, ...SAMPLE_OPS[kind] };
+    await expect(
+      validateRegistryItem({
+        name: "sample",
+        type: "saasaloy:feature",
+        patches: [op],
+      })
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      validateManifest({
+        managed: {},
+        patches: [{ module: "sample", file: op.file, patch: op }],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+});

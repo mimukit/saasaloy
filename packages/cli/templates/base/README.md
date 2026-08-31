@@ -20,9 +20,13 @@ pnpm --filter @repo/web run deploy    # wrangler deploy (Cloudflare Workers stat
 ## Add features
 
 ```sh
-saasaloy add waitlist       # pulls api + database
-saasaloy add billing        # pulls auth + Stripe
+saasaloy add waitlist       # pulls api, logger, validators, database and a driver
+saasaloy add auth           # pulls api, database and a driver
+saasaloy list               # what the registry offers, and what you already have
 ```
+
+`saasaloy list` names every installable module and marks the ones this project already has.
+`saasaloy add <name> --dry-run` shows exactly what one would write before it writes it.
 
 ## UI components
 

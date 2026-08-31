@@ -13,7 +13,10 @@ import {
   upsertPackageJsonDependency,
 } from "./pkg-json.js";
 import type { PackageJsonDependency } from "./pkg-json.js";
-import { upsertPackageJsonScript } from "./pkg-json-script.js";
+import {
+  packageJsonScriptRefusal,
+  upsertPackageJsonScript,
+} from "./pkg-json-script.js";
 import type { PackageJsonScript } from "./pkg-json-script.js";
 import { insertIntoPluginArray } from "./ts-module.js";
 import type { PluginArrayInsert } from "./ts-module.js";
@@ -45,6 +48,7 @@ export {
   type PackageJsonDependency,
 } from "./pkg-json.js";
 export {
+  packageJsonScriptRefusal,
   upsertPackageJsonScript,
   type PackageJsonScript,
 } from "./pkg-json-script.js";
@@ -59,6 +63,23 @@ export type Patch =
   | ({ kind: "chained-route" } & ChainedRoute);
 
 export type PatchKind = Patch["kind"];
+
+// The `Patch` union at runtime. `Record<PatchKind, true>` is exhaustive in both
+// directions: a kind added to the union without a key here fails typecheck, and a key
+// that names no kind is an excess property. `PATCH_KINDS` is what `schema.test.ts`
+// holds both JSON Schemas to, so the enums can't drift apart again (#98).
+const PATCH_KIND_KEYS: Record<PatchKind, true> = {
+  "chained-route": true,
+  "package-json-dependency": true,
+  "package-json-script": true,
+  "plugin-array": true,
+  "wrangler-binding": true,
+};
+
+/** Every patch kind the engine applies, sorted. */
+export const PATCH_KINDS: readonly PatchKind[] = (
+  Object.keys(PATCH_KIND_KEYS) as PatchKind[]
+).toSorted();
 
 /**
  * An entry the codemod found under the identity it matches on, holding a value other
@@ -212,6 +233,8 @@ export function reversePatch(
 // name instead of skipping in silence. Only `chained-route` can refuse today: the other
 // four kinds only ever no-op because their edit is already present, which is not worth
 // reporting. Asking costs a second parse, so both callers ask only when nothing changed.
+// `package-json-script` joined the forward table in #98: it refuses an install-lifecycle
+// key outright, and a refusal a user never sees is a security hole that reads as a typo.
 type Refusal<K extends PatchKind> = (
   source: string,
   patch: Extract<Patch, { kind: K }>
@@ -219,6 +242,7 @@ type Refusal<K extends PatchKind> = (
 
 const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteInsertRefusal,
+  "package-json-script": packageJsonScriptRefusal,
 };
 
 const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {

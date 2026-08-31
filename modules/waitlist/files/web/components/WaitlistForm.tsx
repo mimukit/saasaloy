@@ -23,20 +23,51 @@ const api = hc<AppType>(API_BASE);
 
 type Status = "idle" | "submitting" | "success" | "error";
 
+// What the api returns when it refuses: `{ error: { code, message } }`, built by
+// `errorBody` in `@repo/validators/common`. The shape is checked structurally rather than
+// with the zod schema, because `@repo/validators` is an api-side workspace and apps/web
+// does not depend on it — importing the schema here would pull zod into the browser
+// bundle to read one string.
+function envelopeMessage(body: unknown): string | undefined {
+  if (typeof body !== "object" || body === null || !("error" in body)) {
+    return undefined;
+  }
+  const { error } = body as { error: unknown };
+  if (typeof error !== "object" || error === null || !("message" in error)) {
+    return undefined;
+  }
+  const { message } = error as { message: unknown };
+  return typeof message === "string" && message.length > 0
+    ? message
+    : undefined;
+}
+
+const GENERIC_ERROR = "Something went wrong — try again.";
+
 export default function WaitlistForm() {
   const [email, setEmail] = useState("");
   const [status, setStatus] = useState<Status>("idle");
+  const [message, setMessage] = useState(GENERIC_ERROR);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setStatus("submitting");
     try {
       // 201 on success, 400 with `{ error: { code, message } }` when the address is
-      // rejected. `res.ok` covers both, so a duplicate address lands on "success" the
-      // same as a first-time one.
+      // rejected. The route builds that envelope on purpose, so read it: telling someone
+      // their address is malformed is worth more than "something went wrong" (#98).
       const res = await api.waitlist.$post({ json: { email } });
-      setStatus(res.ok ? "success" : "error");
+      if (res.ok) {
+        setStatus("success");
+        return;
+      }
+      // A refusal that carries no envelope — a proxy's 502, an empty body — falls back
+      // to the generic line rather than showing the user a parse failure.
+      const body: unknown = await res.json().catch(() => null);
+      setMessage(envelopeMessage(body) ?? GENERIC_ERROR);
+      setStatus("error");
     } catch {
+      setMessage(GENERIC_ERROR);
       setStatus("error");
     }
   }
@@ -80,7 +111,7 @@ export default function WaitlistForm() {
       </div>
       {status === "error" && (
         <p role="alert" className="text-destructive text-sm">
-          Something went wrong — try again.
+          {message}
         </p>
       )}
     </form>

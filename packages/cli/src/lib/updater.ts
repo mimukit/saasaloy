@@ -1,25 +1,29 @@
 import { mkdir, readFile, rm as rmPath, writeFile } from "node:fs/promises";
-import { dirname, join, posix } from "node:path";
-import { buildPlan, executePlan } from "./applier.js";
-import type { LinkAction, Plan, PlannedLink } from "./applier.js";
+import { dirname, posix } from "node:path";
+import {
+  buildPlan,
+  executePlan,
+  listModuleFiles,
+  previewPatches,
+} from "./applier.js";
+import type { LinkAction, Plan, PlannedLink, PlannedPatch } from "./applier.js";
 import {
   classifyLink,
   createDirLink,
   hashContent,
-  listFilesRelative,
   pathExists,
+  readIfPresent,
   resolveWithinRoot,
 } from "./fs-utils.js";
 import type { Lockfile, LockModule } from "./lock.js";
+import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
-import type { PatchMatch } from "./patch/index.js";
 import { parseDep, writeDeps } from "./pkg-json.js";
 import type { DepChange, PackageJson } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
 import { classifyTrackedFile } from "./remover.js";
 import type { FileRemoveAction } from "./remover.js";
-import { resolveTarget } from "./saasaloy-config.js";
 import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy update` (issue #48), mirroring the buildPlan/
@@ -321,19 +325,13 @@ export interface PlannedUpdateFile {
   patchedBy?: string[];
 }
 
-export interface PlannedUpdatePatch {
-  module: string;
-  /** Project-relative POSIX path of the file being patched. */
-  file: string;
-  fileAbs: string;
-  patch: RegistryPatch;
-  /** `apply` writes it, `unchanged` is a no-op, `missing` has no target file. */
-  action: "apply" | "unchanged" | "missing";
-  diff: string;
-  content?: string;
-  /** Set when the patch's identity already exists at a different value → merge plan (decision 1). */
-  matched?: PatchMatch;
-}
+/**
+ * A config patch bound to a concrete target file, previewed. Identical to `add`'s
+ * `PlannedPatch` because one helper builds both (#98): `apply` writes it, `unchanged` is
+ * a no-op, `missing` has no target file, and `matched` is the collision that routes it
+ * into the merge plan (decision 1).
+ */
+export type PlannedUpdatePatch = PlannedPatch;
 
 /** A pin the module owns that moved between the two descriptor revisions (decision 8). */
 export interface DepBump {
@@ -368,8 +366,23 @@ export interface ModuleUpdatePlan {
   prereqPlan?: Plan;
   /** Each prerequisite's own `dependsOn`, so its lock entry stays self-describing. */
   prereqDependsOn: Record<string, string[]>;
+  /** Each prerequisite's own `conflictsWith`, for the same reason. */
+  prereqConflictsWith: Record<string, string[]>;
   /** The new version's own `dependsOn`, written into the lock entry. */
   dependsOn?: string[];
+  /**
+   * The new version's own `conflictsWith`, written into the lock entry. The descriptor is
+   * gone once the update lands, so the lock is the only offline record of what this
+   * module refuses to sit beside — drop it here and the next `add` stops refusing a
+   * second driver (#98).
+   */
+  conflictsWith?: string[];
+  /**
+   * Env vars the new version requires that the old one did not — named before the
+   * confirmation, or a version that starts requiring a secret updates in silence. With no
+   * merge base there is nothing to diff against, so the whole set is reported.
+   */
+  newEnvVars: Record<string, string>;
   /** True when anything about this module routes to the merge plan. */
   needsMerge: boolean;
 }
@@ -417,16 +430,6 @@ export interface BuildUpdatePlanArgs {
   pkg?: PackageJson | null;
 }
 
-/** A file one revision of a module ships: where it comes from and where it lands. */
-interface ModuleFileRef {
-  /** Module-relative POSIX source path. */
-  from: string;
-  /** Project-relative POSIX target path. */
-  target: string;
-  /** Absolute path inside the module folder. */
-  abs: string;
-}
-
 /** Modules that have applied a config patch to this file, per the manifest's record. */
 function patchersOf(manifest: Manifest, target: string): string[] {
   return [
@@ -447,53 +450,6 @@ function scaffoldAliases(
     }
   }
   return out;
-}
-
-/**
- * Every file one revision of a module ships, keyed by its project-relative target —
- * `files[]`, each scaffold's workspace files, and each `agent.skills` folder expanded.
- * Deliberately the same three rules `buildPlan` applies, so `update` sees exactly the
- * set `add` would have written.
- */
-async function listModuleFiles(
-  mod: LoadedModule,
-  aliases: Record<string, string>
-): Promise<Map<string, ModuleFileRef>> {
-  const out = new Map<string, ModuleFileRef>();
-  const add = (from: string, target: string): void => {
-    out.set(target, { from, target, abs: joinModulePath(mod.dir, from) });
-  };
-
-  for (const file of mod.item.files ?? []) {
-    add(file.path, resolveTarget(aliases, file.target));
-  }
-  for (const scaffold of mod.item.scaffolds ?? []) {
-    for (const file of scaffold.files) {
-      add(file.path, posix.join(scaffold.workspace, file.target));
-    }
-  }
-  for (const skillRel of mod.item.agent?.skills ?? []) {
-    const folderName = posix.basename(skillRel);
-    const skillDir = joinModulePath(mod.dir, skillRel);
-    for (const rel of await listFilesRelative(skillDir)) {
-      add(
-        posix.join(skillRel, rel),
-        posix.join(".agents/skills", folderName, rel)
-      );
-    }
-  }
-  return out;
-}
-
-// A module folder is a temp dir or a local checkout — outside the project root, so
-// `resolveWithinRoot` doesn't apply. Its source paths are descriptor-authored POSIX,
-// joined with the platform separator for reading.
-function joinModulePath(dir: string, relPosix: string): string {
-  return join(dir, ...relPosix.split("/"));
-}
-
-async function readIfPresent(abs: string): Promise<string | undefined> {
-  return (await pathExists(abs)) ? readFile(abs, "utf-8") : undefined;
 }
 
 export async function buildUpdatePlan(
@@ -653,6 +609,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   // left for the user to install by hand (decision 11).
   let prereqPlan: Plan | undefined;
   const prereqDependsOn: Record<string, string[]> = {};
+  const prereqConflictsWith: Record<string, string[]> = {};
   const prereqNames = (input.prereqs?.order ?? []).filter(
     (n) => !config.installed.includes(n)
   );
@@ -666,9 +623,14 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       manifest,
     });
     for (const prereq of prereqNames) {
-      const dependsOn = input.prereqs.modules.get(prereq)?.item.dependsOn;
+      const prereqItem = input.prereqs.modules.get(prereq)?.item;
+      const dependsOn = prereqItem?.dependsOn;
       if (dependsOn && dependsOn.length > 0) {
         prereqDependsOn[prereq] = dependsOn;
+      }
+      const conflictsWith = prereqItem?.conflictsWith;
+      if (conflictsWith && conflictsWith.length > 0) {
+        prereqConflictsWith[prereq] = conflictsWith;
       }
     }
   }
@@ -691,11 +653,37 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     prereqNames,
     ...(prereqPlan ? { prereqPlan } : {}),
     prereqDependsOn,
+    prereqConflictsWith,
     ...(theirs.item.dependsOn && theirs.item.dependsOn.length > 0
       ? { dependsOn: theirs.item.dependsOn }
       : {}),
+    ...(theirs.item.conflictsWith && theirs.item.conflictsWith.length > 0
+      ? { conflictsWith: theirs.item.conflictsWith }
+      : {}),
+    newEnvVars: newEnvVars(base, theirs),
     needsMerge,
   };
+}
+
+/**
+ * Env vars `theirs` requires that `base` did not. `base` absent means the run has no
+ * merge base at all (a local install, a force-pushed branch), so nothing can be called
+ * old — the whole set is returned rather than staying quiet about a secret the project
+ * may now need.
+ */
+function newEnvVars(
+  base: LoadedModule | undefined,
+  theirs: LoadedModule
+): Record<string, string> {
+  const known = new Set(Object.keys(base?.item.envVars ?? {}));
+  const out: Record<string, string> = {};
+  for (const [key, description] of Object.entries(theirs.item.envVars ?? {})) {
+    if (base && known.has(key)) {
+      continue;
+    }
+    out[key] = description;
+  }
+  return out;
 }
 
 /**
@@ -755,51 +743,30 @@ async function planLinks(
 }
 
 /**
- * Re-apply each of the new version's patches, idempotently. The interesting outcome is
- * `matched`: the patch is a no-op *because* its identity already holds a different
- * value — the user edited what we would have written — which routes it to the merge
- * plan as prose rather than silently doing nothing (decision 1).
+ * Re-apply each of the new version's patches, idempotently, against the content this run
+ * will leave behind — so a patch aimed at a file the same update rewrites reads the new
+ * bytes. `previewPatches` is the same helper `buildPlan` uses (#98). The interesting
+ * outcome is `matched`: the patch is a no-op *because* its identity already holds a
+ * different value — the user edited what we would have written — which routes it to the
+ * merge plan as prose rather than silently doing nothing (decision 1).
  */
-async function planPatches(
+function planPatches(
   root: string,
   module: string,
   ops: RegistryPatch[],
   files: PlannedUpdateFile[]
 ): Promise<PlannedUpdatePatch[]> {
-  const out: PlannedUpdatePatch[] = [];
-  for (const op of ops) {
-    const fileAbs = resolveWithinRoot(root, op.file);
-    // Preview against the content this run will leave behind, so a patch aimed at a
-    // file the same update rewrites reads the new bytes (same rule as buildPlan).
-    const planned = files.find((f) => f.target === op.file);
-    const source =
-      planned && WRITABLE.has(planned.action)
-        ? planned.theirs
-        : ((await readIfPresent(fileAbs)) ?? planned?.theirs);
-    if (source === undefined) {
-      out.push({
-        module,
-        file: op.file,
-        fileAbs,
-        patch: op,
-        action: "missing",
-        diff: "",
-      });
-      continue;
-    }
-    const { content, changed, diff, matched } = applyPatch(source, op, op.file);
-    out.push({
-      module,
-      file: op.file,
-      fileAbs,
-      patch: op,
-      action: changed ? "apply" : "unchanged",
-      diff,
-      content,
-      ...(matched ? { matched } : {}),
-    });
-  }
-  return out;
+  return previewPatches({
+    root,
+    module,
+    ops,
+    planned: new Map(
+      files.map((f) => [
+        f.target,
+        { content: f.theirs, landsOnDisk: WRITABLE.has(f.action) },
+      ])
+    ),
+  });
 }
 
 interface PlannedDeps {
@@ -1068,6 +1035,7 @@ export async function executeUpdatePlan(
         ref: mod.comparison.ref,
         resolved: mod.comparison.latest,
         ...(mod.dependsOn ? { dependsOn: mod.dependsOn } : {}),
+        ...(mod.conflictsWith ? { conflictsWith: mod.conflictsWith } : {}),
       };
       result.lockMoved.push(mod.name);
     } else {
@@ -1088,11 +1056,13 @@ export async function executeUpdatePlan(
     // A prerequisite installed here is pinned to the same SHA as the module that needs it.
     for (const prereq of mod.prereqPlan?.install ?? []) {
       const dependsOn = mod.prereqDependsOn[prereq];
+      const conflictsWith = mod.prereqConflictsWith[prereq];
       lock.modules[prereq] = {
         source: mod.comparison.source,
         ref: mod.comparison.ref,
         resolved: mod.comparison.latest,
         ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+        ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
       };
     }
   }
@@ -1116,12 +1086,4 @@ export async function executeUpdatePlan(
   }
 
   return result;
-}
-
-function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
-  return (
-    a.module === b.module &&
-    a.file === b.file &&
-    JSON.stringify(a.patch) === JSON.stringify(b.patch)
-  );
 }

@@ -20,9 +20,13 @@ import {
   pathExists,
   readDirNames,
 } from "../lib/fs-utils.js";
+import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { logger } from "../lib/logger.js";
 import { copyTemplate, templateVars } from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
+import type { CommandHelp } from "../lib/usage.js";
+import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
 // + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
@@ -39,17 +43,70 @@ const TEMPLATE_DIR = fileURLToPath(
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
-// Run `pnpm install` in the scaffolded project. Output is buffered (not streamed)
+interface Options {
+  name?: string;
+  force: boolean;
+  noInstall: boolean;
+  noGit: boolean;
+  /** Flags we don't know and extra positionals — reported, never silently ignored. */
+  unknown: string[];
+}
+
+const KNOWN_FLAGS = new Set([
+  "--force",
+  "--no-install",
+  "--no-git",
+  "--help",
+  "-h",
+]);
+const USAGE = "saasaloy init [<name>] [--force] [--no-install] [--no-git]";
+const HELP: CommandHelp = {
+  name: "init",
+  describe: DESCRIPTIONS.init,
+  usage: USAGE,
+  flags: {
+    "--force": "scaffold into a directory that is not empty",
+    "--no-install": "never run pnpm install, and never ask",
+    "--no-git": "do not run git init in the new project",
+  },
+};
+
+function parseArgs(argv: string[]): Options {
+  const positional: string[] = [];
+  const unknown: string[] = [];
+  for (const arg of argv) {
+    if (!arg.startsWith("-")) {
+      positional.push(arg);
+    } else if (!KNOWN_FLAGS.has(arg)) {
+      unknown.push(arg);
+    }
+  }
+  unknown.push(...positional.slice(1));
+  return {
+    force: argv.includes("--force"),
+    name: positional[0],
+    // Skip the install prompt entirely and never run pnpm install — for scripted/CI
+    // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
+    noInstall: argv.includes("--no-install"),
+    noGit: argv.includes("--no-git"),
+    unknown,
+  };
+}
+
+interface RunResult {
+  ok: boolean;
+  message?: string;
+}
+
+// Run one child process in the scaffolded project. Output is buffered (not streamed)
 // so only the caller's spinner shows; both streams are captured so a failure can
 // report *why*. pnpm writes its `ERR_PNPM_*` diagnostics to stdout, not stderr,
 // so we keep both. Never throws — failures come back as { ok: false } so init
 // can carry on regardless.
-function runPnpmInstall(
-  cwd: string
-): Promise<{ ok: boolean; message?: string }> {
+function run(command: string, args: string[], cwd: string): Promise<RunResult> {
   return new Promise((resolvePromise) => {
     // On Windows pnpm is `pnpm.cmd`, which bare spawn won't resolve — go via the shell there.
-    const child = spawn("pnpm", ["install"], {
+    const child = spawn(command, args, {
       cwd,
       stdio: ["ignore", "pipe", "pipe"],
       shell: process.platform === "win32",
@@ -77,11 +134,35 @@ function runPnpmInstall(
         resolvePromise({
           ok: false,
           message:
-            details || `pnpm install exited with code ${code ?? "unknown"}`,
+            details ||
+            `${command} ${args.join(" ")} exited with code ${code ?? "unknown"}`,
         });
       }
     });
   });
+}
+
+function runPnpmInstall(cwd: string): Promise<RunResult> {
+  return run("pnpm", ["install"], cwd);
+}
+
+// Make the scaffold a git repository. ADR 0024, CONTRIBUTING and the QA plans all say
+// `init` does this, and until #98 none of them was true: husky's `prepare` hook has no
+// repository to install into, and turbo falls back to a global cache key that can serve
+// a stale build of a previous template. Skipped when the target already sits inside a
+// working tree — `saasaloy init .` inside an existing repo must not nest a second one.
+async function initGitRepo(
+  cwd: string
+): Promise<{ created: boolean; message?: string }> {
+  const inside = await run("git", ["rev-parse", "--is-inside-work-tree"], cwd);
+  if (inside.ok) {
+    return { created: false };
+  }
+  const result = await run("git", ["init"], cwd);
+  if (!result.ok) {
+    return { created: false, message: result.message ?? "git init failed" };
+  }
+  return { created: true };
 }
 
 interface SkillLinkResult {
@@ -171,13 +252,27 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
 }
 
 export async function runInit(argv: string[]): Promise<number> {
-  const force = argv.includes("--force");
-  // Skip the install prompt entirely and never run pnpm install — for scripted/CI
-  // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
-  const noInstall = argv.includes("--no-install");
-  let nameArg = argv.find((arg) => !arg.startsWith("-"));
+  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
+    printCommandHelp(HELP);
+    return EXIT_OK;
+  }
+
+  const { force, noInstall, noGit } = opts;
+  let nameArg = opts.name;
 
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
+
+  // `init` ignored every flag it did not know, while `add`/`remove`/`update` rejected
+  // theirs — so `saasaloy init app --forse` scaffolded into a non-empty directory and
+  // said nothing. One rule now (#98).
+  if (opts.unknown.length > 0) {
+    cancel(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    );
+    return EXIT_REFUSED;
+  }
 
   // No name given — ask for it rather than erroring out.
   if (!nameArg) {
@@ -202,7 +297,7 @@ export async function runInit(argv: string[]): Promise<number> {
     });
     if (isCancel(answer)) {
       cancel("init cancelled");
-      return 1;
+      return EXIT_FAILURE;
     }
     nameArg = answer.trim();
   }
@@ -215,7 +310,7 @@ export async function runInit(argv: string[]): Promise<number> {
     cancel(
       `Invalid project name "${projectName}". Use lowercase letters, digits, and hyphens (e.g. my-app).`
     );
-    return 1;
+    return EXIT_REFUSED;
   }
 
   if (await pathExists(target)) {
@@ -224,7 +319,7 @@ export async function runInit(argv: string[]): Promise<number> {
       cancel(
         `Directory ${nameArg} is not empty. Re-run with --force to scaffold into it anyway.`
       );
-      return 1;
+      return EXIT_REFUSED;
     }
   }
 
@@ -234,6 +329,20 @@ export async function runInit(argv: string[]): Promise<number> {
   s.stop(
     `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
   );
+
+  // Before the install: husky's `prepare` script runs during `pnpm install` and needs a
+  // repository to install its hooks into.
+  if (!noGit) {
+    const git = await initGitRepo(target);
+    if (git.created) {
+      logger.step(`Initialized a git repository ${pc.dim("(git init)")}.`);
+    } else if (git.message) {
+      logger.warn(
+        `Couldn't run ${pc.cyan("git init")}: ${git.message} ` +
+          `${pc.dim("(the scaffold is fine — run it yourself)")}.`
+      );
+    }
+  }
 
   const skills = await linkAgentSkills(target);
   if (skills.linked.length > 0) {
@@ -327,5 +436,5 @@ export async function runInit(argv: string[]): Promise<number> {
 
   note(steps, "Next steps");
   outro(pc.green(`🎉 Created ${projectName} successfully.`));
-  return 0;
+  return EXIT_OK;
 }

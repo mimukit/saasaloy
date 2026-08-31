@@ -1,7 +1,6 @@
-import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SelectPrompt } from "./cli.js";
-import { main, printHelp } from "./cli.js";
+import { main, printHelp, readVersion } from "./cli.js";
 import type { Command, CommandRegistry } from "./commands/index.js";
 import { COMMANDS } from "./commands/index.js";
 
@@ -103,6 +102,20 @@ afterEach(() => {
 });
 
 describe(printHelp, () => {
+  it("names the exit codes and the debug switch", () => {
+    const captured = capture();
+    try {
+      printHelp(COMMANDS);
+    } finally {
+      captured.restore();
+    }
+    const text = captured.out.join("\n");
+    expect(text).toContain("Exit codes:");
+    expect(text).toContain("refused");
+    expect(text).toContain("SAASALOY_DEBUG");
+    expect(text).toContain("--version");
+  });
+
   it("lists every command in the registry it is given", () => {
     const captured = capture();
     try {
@@ -156,37 +169,6 @@ describe("main — explicit help", () => {
   );
 });
 
-describe("main — version", () => {
-  it.each(["--version", "-v", "version"])(
-    "prints the package.json version and exits 0 for %s",
-    async (flag) => {
-      setTTY(true);
-      const picker = recordSelect("init");
-      const captured = capture();
-      let code: number;
-      try {
-        code = await main([flag], {
-          registry,
-          select: picker.select,
-          isCancel,
-        });
-      } finally {
-        captured.restore();
-      }
-      expect(code).toBe(0);
-      expect(picker.calls).toHaveLength(0);
-      expect(captured.out).toStrictEqual([
-        (
-          JSON.parse(
-            await readFile(new URL("../package.json", import.meta.url), "utf-8")
-          ) as { version: string }
-        ).version,
-      ]);
-      expect(init.calls).toHaveLength(0);
-    }
-  );
-});
-
 describe("main — dispatch", () => {
   it("runs a known command with the remaining argv and returns its code", async () => {
     const captured = capture();
@@ -200,7 +182,7 @@ describe("main — dispatch", () => {
     expect(add.calls).toStrictEqual([["waitlist", "--dry-run"]]);
   });
 
-  it("errors, prints help and exits 1 on an unknown command — on a TTY too", async () => {
+  it("errors, prints help and exits 2 on an unknown command — on a TTY too", async () => {
     setTTY(true);
     const picker = recordSelect("init");
     const captured = capture();
@@ -214,7 +196,7 @@ describe("main — dispatch", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.err.join("\n")).toContain("nope");
     expect(captured.out.join("\n")).toContain("Usage:");
     expect(picker.calls).toHaveLength(0);
@@ -237,7 +219,7 @@ describe("main — dispatch", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.err.join("\n")).toContain(name);
     expect(captured.out.join("\n")).toContain("Usage:");
     expect(init.calls).toHaveLength(0);
@@ -346,5 +328,29 @@ describe("main — bare invocation on a TTY", () => {
     expect(code).toBe(1);
     expect(init.calls).toHaveLength(0);
     expect(add.calls).toHaveLength(0);
+  });
+});
+
+// A bug report that cannot name the build is a bug report nobody can reproduce, and
+// until #98 there was no `--version` handler at all.
+describe("main — version", () => {
+  it.each(["--version", "-v", "version"])(
+    "prints the package version for %s and exits 0",
+    async (flag) => {
+      const captured = capture();
+      let code: number;
+      try {
+        code = await main([flag], { registry });
+      } finally {
+        captured.restore();
+      }
+      expect(code).toBe(0);
+      expect(captured.out.join("\n").trim()).toBe(await readVersion());
+      expect(init.calls).toHaveLength(0);
+    }
+  );
+
+  it("reads a real version off the package, not a placeholder", async () => {
+    await expect(readVersion()).resolves.toMatch(/^\d+\.\d+\.\d+/);
   });
 });

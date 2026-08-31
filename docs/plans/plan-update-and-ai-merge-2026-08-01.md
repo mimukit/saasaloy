@@ -2,6 +2,8 @@
 
 Grilled: 2026-08-06
 
+> **Revised 2026-08-31 ([#98](https://github.com/mimukit/saasaloy/issues/98)).** Decision 9's clause "a non-TTY stdout implies `--yes`" is retracted. The merge plan owns stdout, so `saasaloy update email | claude` and `saasaloy update | tee log` are both redirected stdout, and reading that as "a script is driving me" made the second one overwrite every clean file unconfirmed. The confirmation now gates on **stdin**: no terminal there and no `--yes` refuses with exit 2. The rest of decision 9 stands. The record below is left as it was written.
+
 > Tracked in [#48](https://github.com/mimukit/saasaloy/issues/48) (single issue — all phases folded),
 > under the [#17](https://github.com/mimukit/saasaloy/issues/17) umbrella whose scope this plan
 > absorbs and expands.
@@ -66,7 +68,7 @@ The first block predates the grill; the second was settled on 2026-08-06.
 | 6 | **A tracked file is missing from disk** | Restore it — classify as `create`, exactly as `add` does — and list it in the confirmation summary as `restore  <path>` so a deliberate deleter sees it before confirming. Dropping the entry instead would silently un-manage the file, and the next `update` couldn't tell it from a `conflict`. |
 | 7 | **Where the merge plan goes** | **stdout by default**, `--out <path>` to write it to disk. Nothing is invented in the user's repo and `saasaloy update email \| claude` works with no flag. |
 | 8 | **A changed dependency pin** | Bump only pins the module owns *and* the user hasn't touched: base's descriptor vs theirs says which pins the module moved, and the current `package.json` value matching base's proves it wasn't overridden. Reported as `bump  hono 4.6.3 → 4.7.1`. Anything else keeps `planDeps`'s existing conflict warning. |
-| 9 | **stdout hygiene** | The merge plan owns stdout; every clack frame and prompt goes to **stderr**, and a non-TTY stdout implies `--yes`. Implementation risk: clack v1.7's stream override needs verifying per function, and `note`/`log` may need a thin wrapper — fall back to suppressing the TUI entirely on a non-TTY stdout if it can't be redirected cleanly. |
+| 9 | **stdout hygiene** (partly retracted, see the note above) | The merge plan owns stdout; every clack frame and prompt goes to **stderr**, and a non-TTY stdout implies `--yes`. Implementation risk: clack v1.7's stream override needs verifying per function, and `note`/`log` may need a thin wrapper — fall back to suppressing the TUI entirely on a non-TTY stdout if it can't be redirected cleanly. |
 | 10 | **Re-resolving a pinned ref** | Re-resolve the lock's recorded `ref`. A `ref` that is itself a SHA is frozen by definition → `pinned at <sha7> — nothing to update`, and `--ref <branch\|tag>` is the explicit way to move it, rewriting `ref` alongside `resolved` so the unpin is recorded. |
 | 11 | **A new `dependsOn`** | Fold the new prerequisite into the update plan — `resolveGraph()` already computes the closure — shown as `install (new prerequisite)` under the same confirmation, pinned to the same SHA, with its own lock entry. |
 | 12 | **Migration regeneration** | Print `pnpm --filter @repo/db db:generate` in the summary; never shell out. `update` can't assume pnpm is on PATH or that install has run, and Phase 5 shouldn't be what makes `update` fail on someone's machine. |

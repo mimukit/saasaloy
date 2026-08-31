@@ -2,6 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { downloadTemplate } from "giget";
+import { RefusalError } from "./exit.js";
 import { pathExists, readDirNames } from "./fs-utils.js";
 import type { RegistryItem } from "./schema.js";
 import { validateRegistryItem } from "./schema.js";
@@ -106,7 +107,9 @@ export function parseCoordinate(input?: string): Coordinate {
     const afterRef = slash === -1 ? "" : afterAt.slice(slash + 1);
     rest = afterRef ? `${beforeAt}/${afterRef}` : beforeAt;
     if (!ref) {
-      throw new Error(`Malformed coordinate "${input}" — empty ref after "@".`);
+      throw new RefusalError(
+        `Malformed coordinate "${input}" — empty ref after "@".`
+      );
     }
   }
 
@@ -122,7 +125,7 @@ export function parseCoordinate(input?: string): Coordinate {
     return { owner: segs[0], repo: segs[1], ref, module: segs[2] };
   }
 
-  throw new Error(
+  throw new RefusalError(
     `Malformed coordinate "${input}" — expected "name", "owner/repo", or "owner/repo[@ref]/name".`
   );
 }
@@ -154,20 +157,32 @@ export async function loadModuleFolder(
   const file = join(dir, "registry-item.json");
   if (!(await pathExists(file))) {
     const because = requiredBy ? ` (required by ${requiredBy})` : "";
-    throw new Error(
+    // Refused, not failed: the coordinate names something the registry does not have,
+    // so a retry cannot help (#98's 0/1/2 scheme).
+    throw new RefusalError(
       `Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`
     );
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // A truncated or hand-edited descriptor threw a bare SyntaxError that named no module
+  // and exited 1. It is bad input, not a transient failure, so it refuses with the name.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  } catch (error) {
+    throw new RefusalError(
+      `Module "${name}" has an unreadable descriptor: ${file} is not valid JSON.`,
+      { cause: error }
+    );
+  }
   const result = await validateRegistryItem(parsed);
   if (!result.valid) {
-    throw new Error(
+    throw new RefusalError(
       `Module "${name}" has an invalid descriptor:\n  ${result.errors.join("\n  ")}`
     );
   }
   const item = parsed as RegistryItem;
   if (item.name !== name) {
-    throw new Error(
+    throw new RefusalError(
       `Module folder "${name}" declares name "${item.name}" — the folder and descriptor name must match.`
     );
   }
@@ -220,7 +235,7 @@ export class LocalRegistrySource implements RegistrySource {
 
   private async assertExists(): Promise<void> {
     if (!(await pathExists(this.dir))) {
-      throw new Error(`${REGISTRY_ENV}=${this.dir} does not exist.`);
+      throw new RefusalError(`${REGISTRY_ENV}=${this.dir} does not exist.`);
     }
   }
 }
@@ -228,6 +243,51 @@ export class LocalRegistrySource implements RegistrySource {
 // --- Remote source (GitHub, default) --------------------------------------------
 
 const GITHUB_API = "https://api.github.com";
+
+// Every GitHub call gets one. Without it a connection that opens and then stalls — a
+// captive portal, a half-dead proxy — hangs `saasaloy add` with no output and no way
+// out but Ctrl-C (#98). Fifteen seconds is far above a healthy round trip and far below
+// a person's patience. No retry: a failure here is reported with the offline escape
+// hatch below, which is faster than waiting through a second attempt.
+const FETCH_TIMEOUT_MS = 15_000;
+
+// The module download gets a longer one. It is a tarball over a link the API calls never
+// touch, so 15s would fail a healthy fetch on a slow connection, and giget 3.3.0 takes
+// neither a timeout nor an AbortSignal — the race below can only stop *waiting* on the
+// download, not stop the download itself. That is enough: the files land in a temp dir
+// this process deletes, and the point is that `saasaloy add` never hangs with no output.
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * Reject when `work` outruns `ms`. The work keeps running; only the wait ends. Used where
+ * the underlying call exposes no cancellation of its own.
+ */
+async function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  what: string
+): Promise<T> {
+  // The loser of the race still settles. Without a handler of its own, a rejection
+  // arriving after the deadline is an unhandled rejection, which takes the process down
+  // instead of the message below.
+  work.catch(() => {
+    // Reported by the race, or irrelevant because the deadline already won.
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${what} did not finish in ${ms / 1000}s`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The line every network failure ends with, so the offline path is never a secret. */
+export const OFFLINE_HINT = `Set ${REGISTRY_ENV} to a local \`modules/\` checkout to work offline.`;
 
 // GITHUB_TOKEN (or GIGET_AUTH) lifts the 60→5000 req/hr limit and unlocks private repos.
 // Read at call time so tests and long-lived processes can set it after import.
@@ -270,19 +330,23 @@ export class RemoteRegistrySource implements RegistrySource {
     this.tempDirs.push(parent);
     const dir = join(parent, name);
     try {
-      await downloadTemplate(
-        `github:${this.owner}/${this.repo}/modules/${name}#${sha}`,
-        {
-          auth: authToken(),
-          dir,
-          force: true,
-        }
+      await withDeadline(
+        downloadTemplate(
+          `github:${this.owner}/${this.repo}/modules/${name}#${sha}`,
+          {
+            auth: authToken(),
+            dir,
+            force: true,
+          }
+        ),
+        DOWNLOAD_TIMEOUT_MS,
+        `Download of module "${name}"`
       );
     } catch (error) {
       const because = requiredBy ? ` (required by ${requiredBy})` : "";
       const detail = error instanceof Error ? error.message : String(error);
       throw new Error(
-        `Could not fetch module "${name}"${because} from ${this.owner}/${this.repo} — ${detail}`,
+        `Could not fetch module "${name}"${because} from ${this.owner}/${this.repo} — ${detail}. ${OFFLINE_HINT}`,
         { cause: error }
       );
     }
@@ -402,25 +466,40 @@ export class RemoteRegistrySource implements RegistrySource {
   }
 
   private async apiText(path: string, accept: string): Promise<string> {
-    const res = await fetch(`${GITHUB_API}${path}`, {
-      headers: this.headers(accept),
-    });
+    let res: Response;
+    try {
+      res = await fetch(`${GITHUB_API}${path}`, {
+        headers: this.headers(accept),
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      });
+    } catch (error) {
+      // A timeout arrives as a TimeoutError and everything else (DNS, TLS, refused
+      // connection) as a TypeError; both read the same to a user, and both are worth
+      // pointing at the offline path. The original is kept as `cause` so
+      // SAASALOY_DEBUG can print it.
+      const timedOut = error instanceof Error && error.name === "TimeoutError";
+      throw new Error(
+        `Could not reach GitHub for ${this.owner}/${this.repo} (${path})` +
+          `${timedOut ? ` — no response in ${FETCH_TIMEOUT_MS / 1000}s` : ""}. ${OFFLINE_HINT}`,
+        { cause: error }
+      );
+    }
     if (!res.ok) {
       if (
         res.status === 403 &&
         res.headers.get("x-ratelimit-remaining") === "0"
       ) {
         throw new Error(
-          `GitHub API rate limit hit for ${this.owner}/${this.repo}. Set GITHUB_TOKEN to raise it.`
+          `GitHub API rate limit hit for ${this.owner}/${this.repo}. Set GITHUB_TOKEN to raise it. ${OFFLINE_HINT}`
         );
       }
       if (res.status === 404) {
-        throw new Error(
-          `Not found on GitHub: ${this.owner}/${this.repo} (${path}).`
+        throw new RefusalError(
+          `Not found on GitHub: ${this.owner}/${this.repo} (${path}). ${OFFLINE_HINT}`
         );
       }
       throw new Error(
-        `GitHub API error ${res.status} for ${this.owner}/${this.repo} (${path}).`
+        `GitHub API error ${res.status} for ${this.owner}/${this.repo} (${path}). ${OFFLINE_HINT}`
       );
     }
     return res.text();

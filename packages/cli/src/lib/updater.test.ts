@@ -9,6 +9,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { buildPlan } from "./applier.js";
 import { hashContent, pathExists } from "./fs-utils.js";
 import { emptyLock } from "./lock.js";
 import type { Lockfile, LockModule } from "./lock.js";
@@ -1255,5 +1256,319 @@ describe(executeUpdatePlan, () => {
       dependencies: Record<string, string>;
     };
     expect(written.dependencies.hono).toBe("4.7.1");
+  });
+});
+
+// #98 Phase 4. `add` and `update` used to carry their own copy of "which files does this
+// module ship?" and "what would this patch do?". The copies drifted — the write-path
+// guards landed in one engine and not the other, which is the finding this phase closes.
+// One helper now serves both, and these assert the agreement rather than either engine
+// on its own. A third engine, `remove`, works from the manifest these two write, so it
+// agrees by construction.
+describe("add and update agree (#98)", () => {
+  // Every enumeration rule at once: an aliased files[] entry, a scaffold workspace, and
+  // an agent.skills folder.
+  const everyRule = {
+    type: "saasaloy:capability" as const,
+    files: [{ path: "files/lib/email.ts", target: "@api/lib/email.ts" }],
+    scaffolds: [
+      {
+        workspace: "packages/mail",
+        aliases: { "@mail": "packages/mail/src" },
+        files: [
+          { path: "files/pkg.json", target: "package.json" },
+          { path: "files/send.ts", target: "src/send.ts" },
+        ],
+      },
+    ],
+    agent: { skills: ["skills/saasaloy-email"] },
+  };
+
+  const everyRuleFiles = {
+    "files/lib/email.ts": "export const send = 1;\n",
+    "files/pkg.json": '{ "name": "@repo/mail" }\n',
+    "files/send.ts": "export const impl = 1;\n",
+    "skills/saasaloy-email/SKILL.md": "# email\n",
+    "skills/saasaloy-email/reference/api.md": "# api\n",
+  };
+
+  it("enumerates the same files from the same module", async () => {
+    const mod = await writeModule("new", "email", everyRule, everyRuleFiles);
+    const cfg = config();
+
+    const addPlan = await buildPlan({
+      root,
+      install: ["email"],
+      alreadyInstalled: [],
+      modules: new Map([["email", mod]]),
+      config: cfg,
+      manifest: emptyManifest(),
+    });
+    const updatePlan = await build({
+      config: cfg,
+      inputs: [input({ theirs: mod })],
+    });
+
+    const targets = [
+      ".agents/skills/saasaloy-email/SKILL.md",
+      ".agents/skills/saasaloy-email/reference/api.md",
+      "apps/api/src/lib/email.ts",
+      "packages/mail/package.json",
+      "packages/mail/src/send.ts",
+    ];
+    expect(addPlan.files.map((f) => f.target).toSorted()).toStrictEqual(
+      targets
+    );
+    expect(
+      updatePlan.modules[0]?.files.map((f) => f.target).toSorted()
+    ).toStrictEqual(targets);
+    // And the provenance each records, which is what maps a managed file back to its
+    // source when the other engine next reads it.
+    expect(
+      addPlan.files.map((f) => `${f.target} ${f.from}`).toSorted()
+    ).toStrictEqual(
+      updatePlan.modules[0]?.files
+        .map((f) => `${f.target} ${f.from}`)
+        .toSorted()
+    );
+  });
+
+  // The interesting preview case for both engines: the patch targets a file the same run
+  // writes, so it has to read the would-be content rather than disk.
+  it("previews a patch against a file the same run writes", async () => {
+    const item = {
+      type: "saasaloy:capability" as const,
+      files: [{ path: "files/wrangler.jsonc", target: "@api/wrangler.jsonc" }],
+      patches: [
+        {
+          file: "apps/api/src/wrangler.jsonc",
+          kind: "wrangler-binding" as const,
+          bindingType: "d1_databases",
+          entry: { binding: "DB", database_id: "local" },
+        },
+      ],
+    };
+    const mod = await writeModule("new", "email", item, {
+      "files/wrangler.jsonc": '{\n  "name": "api"\n}\n',
+    });
+    const cfg = config();
+
+    const addPlan = await buildPlan({
+      root,
+      install: ["email"],
+      alreadyInstalled: [],
+      modules: new Map([["email", mod]]),
+      config: cfg,
+      manifest: emptyManifest(),
+    });
+    const updatePlan = await build({
+      config: cfg,
+      inputs: [input({ theirs: mod })],
+    });
+
+    expect(addPlan.patches[0]?.action).toBe("apply");
+    expect(addPlan.patches[0]?.content).toContain("d1_databases");
+    expect(updatePlan.modules[0]?.patches[0]).toStrictEqual(addPlan.patches[0]);
+  });
+
+  // The other branch: no planned file, nothing on disk. Both have to say `missing`
+  // rather than inventing a file to patch.
+  it("reports the same missing patch target", async () => {
+    const item = {
+      type: "saasaloy:feature" as const,
+      files: [],
+      patches: [
+        {
+          file: "apps/api/wrangler.jsonc",
+          kind: "wrangler-binding" as const,
+          bindingType: "d1_databases",
+          entry: { binding: "DB", database_id: "local" },
+        },
+      ],
+    };
+    const mod = await writeModule("new", "email", item, {});
+    const cfg = config();
+
+    const addPlan = await buildPlan({
+      root,
+      install: ["email"],
+      alreadyInstalled: [],
+      modules: new Map([["email", mod]]),
+      config: cfg,
+      manifest: emptyManifest(),
+    });
+    const updatePlan = await build({
+      config: cfg,
+      inputs: [input({ theirs: mod })],
+    });
+
+    expect(addPlan.patches[0]?.action).toBe("missing");
+    expect(updatePlan.modules[0]?.patches[0]).toStrictEqual(addPlan.patches[0]);
+  });
+});
+
+// #98 Phase 5. `update` used to drop two things the descriptor carries: the module's
+// `conflictsWith` list, which the lock is the only offline record of, and its `envVars`,
+// so a version that started requiring a secret updated without saying so.
+describe("buildUpdatePlan — conflictsWith and envVars (#98)", () => {
+  it("carries the new version's conflictsWith into the plan", async () => {
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        conflictsWith: ["email-ses"],
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs })] });
+    expect(plan.modules[0]?.conflictsWith).toStrictEqual(["email-ses"]);
+  });
+
+  it("writes conflictsWith back into the lock entry it moves", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", conflictsWith: ["email-ses"], files: [] },
+      {}
+    );
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    await executeUpdatePlan(plan, { root, ...state });
+    // Without this the driver-exclusion check degrades on the very next `add`: the
+    // descriptor is gone by then, and the lock is the only place the list survives.
+    expect(state.lock.modules.email).toMatchObject({
+      resolved: NEW_SHA,
+      conflictsWith: ["email-ses"],
+    });
+  });
+
+  it("gives a new prerequisite's lock entry its own conflictsWith", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", dependsOn: ["queue-a"], files: [] },
+      {}
+    );
+    const queue = await writeModule(
+      "new",
+      "queue-a",
+      {
+        type: "saasaloy:capability",
+        conflictsWith: ["queue-b"],
+        files: [],
+      },
+      {}
+    );
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    const plan = await build({
+      ...state,
+      inputs: [
+        input({
+          theirs,
+          base,
+          prereqs: {
+            order: ["queue-a"],
+            modules: new Map([["queue-a", queue]]),
+          },
+        }),
+      ],
+    });
+
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.lock.modules["queue-a"]).toMatchObject({
+      conflictsWith: ["queue-b"],
+    });
+  });
+
+  it("reports only the env vars the new version added", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: { RESEND_API_KEY: "Resend API key" },
+        files: [],
+      },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: {
+          RESEND_API_KEY: "Resend API key",
+          EMAIL_WEBHOOK_SECRET: "Signs inbound webhooks",
+        },
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({
+      EMAIL_WEBHOOK_SECRET: "Signs inbound webhooks",
+    });
+  });
+
+  it("reports every env var when there is no merge base to diff against", async () => {
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: { RESEND_API_KEY: "Resend API key" },
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({
+      inputs: [input({ theirs, noMergeBase: "local install" })],
+    });
+    // No base means no way to tell new from old, and a silently-missing secret is the
+    // worse failure — so the whole set is named.
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({
+      RESEND_API_KEY: "Resend API key",
+    });
+  });
+
+  it("reports nothing when the env var set didn't move", async () => {
+    const envVars = { RESEND_API_KEY: "Resend API key" };
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", envVars, files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", envVars, files: [] },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({});
   });
 });

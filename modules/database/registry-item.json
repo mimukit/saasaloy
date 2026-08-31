@@ -3,6 +3,7 @@
   "name": "database",
   "type": "saasaloy:capability",
   "dependsOn": ["api"],
+  "requiresOneOf": ["database-d1", "database-postgres"],
   "dependencies": [],
   "envVars": {},
   "patches": [

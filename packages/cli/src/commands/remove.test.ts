@@ -65,7 +65,7 @@ describe("runRemove without a module name", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("saasaloy remove [<module>]");
   });
 
@@ -79,7 +79,7 @@ describe("runRemove without a module name", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("saasaloy remove [<module>]");
   });
 });

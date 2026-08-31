@@ -5,9 +5,10 @@ on disk, and its landing page running at `http://localhost:3000`.
 
 ## Before you begin
 
-- **Node 24.13.0 or newer.** `packages/cli` declares `"node": ">=24.13.0"`, and
-  `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node fails the install
-  rather than breaking later. The repo's `.nvmrc` pins `v24.18.0` if you use `nvm`.
+- **Node 24.13.0 or newer.** The root `package.json`, `packages/cli`, the base template and
+  `.nvmrc` all say 24.13.0, and `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node
+  fails the install rather than breaking later. `nvm use` picks the floor up from `.nvmrc`, which
+  is also the version CI runs.
 - **pnpm 11 or newer.** The repo is pinned to `pnpm@11.14.0`.
 - **git**, to clone the repo.
 
@@ -32,7 +33,8 @@ Check it worked:
 saasaloy --help
 ```
 
-You should see the four commands: `init`, `add`, `remove`, `list`. If the shell can't find
+You should see the five commands: `init`, `add`, `update`, `remove`, `list`, and the
+global `--help`/`--version` flags below them. If the shell can't find
 `saasaloy`, pnpm's global bin directory isn't on your `PATH` — `pnpm setup` puts it there.
 
 Link from one checkout only. The global bin points at a single

@@ -1,4 +1,6 @@
-# 0023 Design contract ships in the base
+# 0027 — Design contract ships in the base
+
+> Renumbered from 0023 to 0027 on 2026-08-31 (issue [#98](https://github.com/mimukit/saasaloy/issues/98)). Five records shared 0023, so a bare "ADR 0023" citation named none of them. A document dated before that day cites this record as ADR 0023.
 
 Every generated project already receives the same design layer, but agents have no stable statement of its tokens or intent. The base now includes a seeded `DESIGN.md` and a base-shipped `saasaloy-design` skill because every project needs the contract before any optional module arrives.
 

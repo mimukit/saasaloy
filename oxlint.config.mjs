@@ -299,13 +299,45 @@ export default defineConfig({
       },
     },
 
+    // --- Module payload tests run on node:test, not vitest -----------------
+    // `pnpm test:modules` runs `modules/*/files/**/*.test.ts` under `node --test`,
+    // because vite cannot transform a payload file: it loads a tsconfig for every
+    // file, and a payload's `tsconfig.json` extends `@repo/tsconfig/base.json`,
+    // which resolves only inside a scaffolded project. See CONTRIBUTING.md.
+    //
+    // So these two rules are pointing the file at a runner it cannot use. Nothing
+    // else in Ultracite's vitest block is turned off: the assertion-shape rules
+    // above still apply, and they read `describe`/`it` the same either way. This
+    // is an override glob rather than an inline directive because the CLI copies
+    // files out of `modules/*/files/`, and a directive in one of them would land
+    // in a user's project.
+    {
+      files: ["modules/*/files/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
+        // `safeUrl`'s job is to refuse `javascript:alert(...)`, so the test that proves
+        // it has to write that URL out. Splitting the literal to dodge the rule would
+        // hide the one string the assertion is about. Off for these files only; it stays
+        // on for every payload file we ship.
+        "no-script-url": "off",
+      },
+    },
+
     // --- no-console exemptions ---------------------------------------------
     // Terminal UX is the product here: @clack/prompts + picocolors write to the
-    // console by design (ADR 0009). Note this is the entrypoint pair only —
-    // `index.ts` bootstraps and `cli.ts` prints help and the unknown-command error.
+    // console by design (ADR 0009). Note this is the help surface only — `index.ts`
+    // bootstraps, `cli.ts` prints the top-level help and the unknown-command error,
+    // and `lib/usage.ts` prints one command's `--help`. Help is plain stdout on
+    // purpose: it has to survive a pipe into a pager, which a clack rail does not.
     // Every other file under packages/cli/src goes through lib/logger.ts.
     {
-      files: ["packages/cli/src/index.ts", "packages/cli/src/cli.ts"],
+      files: [
+        "packages/cli/src/index.ts",
+        "packages/cli/src/cli.ts",
+        "packages/cli/src/lib/usage.ts",
+      ],
       rules: { "no-console": "off" },
     },
     // Maintainer tooling — these scripts *are* their output.

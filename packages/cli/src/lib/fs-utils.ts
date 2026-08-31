@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   readdir,
+  readFile,
   readlink,
   symlink,
 } from "node:fs/promises";
@@ -16,6 +17,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { RefusalError } from "./exit.js";
 
 /** sha256 hex digest of a string — used to fingerprint managed files in the manifest. */
 export function hashContent(content: string): string {
@@ -31,13 +33,18 @@ export function hashContent(content: string): string {
  * `..` segment, which is how a corrupt or hand-edited manifest turns into a delete
  * outside the project. Reject the shape up front rather than trusting the result.
  *
+ * @param hint appended to the refusal, naming where the bad path came from.
  * @throws {Error} if the path is absolute, contains a `..`/`.`/empty segment, carries a
  *   platform-specific separator, or otherwise escapes `root`.
  */
-export function resolveWithinRoot(root: string, relPosixPath: string): string {
+export function resolveWithinRoot(
+  root: string,
+  relPosixPath: string,
+  hint = "This usually means the state file that recorded it is corrupt or was hand-edited."
+): string {
   const reject = (why: string): never => {
-    throw new Error(
-      `Refusing to resolve ${JSON.stringify(relPosixPath)}: ${why}. This usually means the state file that recorded it is corrupt or was hand-edited.`
+    throw new RefusalError(
+      `Refusing to resolve ${JSON.stringify(relPosixPath)}: ${why}. ${hint}`
     );
   };
 
@@ -98,7 +105,7 @@ export async function assertNoSymlinkPath(
       return; // not on disk yet — nothing here can be followed
     }
     if (stat.isSymbolicLink()) {
-      throw new Error(
+      throw new RefusalError(
         `Refusing to touch ${JSON.stringify(rel.split(sep).join("/"))}: ${JSON.stringify(segment)} is a symlink, and following it would leave the project root. This usually means the state file that recorded the path is corrupt or was hand-edited.`
       );
     }
@@ -149,6 +156,30 @@ export async function readDirNames(dir: string): Promise<string[]> {
     }
     throw error;
   }
+}
+
+/**
+ * Resolve a descriptor-authored POSIX source path under a module folder.
+ *
+ * A module folder is a temp dir or a local checkout, so it is the root here rather than
+ * the project. The path itself comes from an untrusted `registry-item.json`: Phase 1
+ * guarded every write *target* and left the read side on a bare `join`, which normalizes
+ * a `..` away silently, so `"path": "../../../etc/passwd"` with an in-root target copied
+ * a host file into the project. Same guard, module folder as the root (#98).
+ *
+ * @throws {RefusalError} if the source path escapes the module folder.
+ */
+export function joinModulePath(dir: string, relPosix: string): string {
+  return resolveWithinRoot(
+    dir,
+    relPosix,
+    "A module's source paths must stay inside the module folder; this descriptor is malformed or hostile."
+  );
+}
+
+/** The file's content, or `undefined` when nothing is at that path. */
+export async function readIfPresent(abs: string): Promise<string | undefined> {
+  return (await pathExists(abs)) ? readFile(abs, "utf-8") : undefined;
 }
 
 /** True if the path exists (file, dir, or symlink). */

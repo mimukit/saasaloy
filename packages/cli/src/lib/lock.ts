@@ -1,8 +1,10 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import type { ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
+import { validateLock } from "./schema.js";
 
 // `saasaloy-lock.json` records, for every installed module, the registry source it came
 // from and the exact commit SHA it resolved to — the npm-style lock to `saasaloy.json`'s
@@ -41,7 +43,28 @@ export async function loadLock(root: string): Promise<Lockfile> {
   if (!(await pathExists(file))) {
     return emptyLock();
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Lockfile>;
+  // Unparseable JSON is the same invalid state as a schema miss, so it takes the same
+  // exit code. Left to throw, `SyntaxError` reaches `exitCodeFor` as a plain failure (1)
+  // and never names the file it came from.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(file, "utf-8"));
+  } catch (error) {
+    throw new RefusalError(
+      `${LOCK_FILE} is invalid:\n  ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
+  // The lock is what `update` diffs against and what `add` reads a module's
+  // `conflictsWith` back out of, so an entry with no `resolved` SHA or an unknown
+  // `lockfileVersion` has to stop the command here (#98). Same posture as `loadConfig`.
+  const result = await validateLock(raw);
+  if (!result.valid) {
+    throw new RefusalError(
+      `${LOCK_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
+    );
+  }
+  const parsed = raw as Partial<Lockfile>;
   return {
     $schema: parsed.$schema ?? LOCK_SCHEMA_URL,
     lockfileVersion: parsed.lockfileVersion ?? LOCKFILE_VERSION,

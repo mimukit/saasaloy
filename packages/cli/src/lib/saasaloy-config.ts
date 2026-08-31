@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import type { SaasaloyConfig } from "./schema.js";
 import { validateSaasaloyConfig } from "./schema.js";
@@ -18,18 +19,41 @@ export type LoadedConfig = SaasaloyConfig & { $schema?: string };
 export async function loadConfig(root: string): Promise<LoadedConfig> {
   const file = join(root, CONFIG_FILE);
   if (!(await pathExists(file))) {
-    throw new Error(
+    throw new RefusalError(
       `No ${CONFIG_FILE} found in ${root}. Run \`saasaloy init\` first, or cd into a Saasaloy project.`
     );
   }
   const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
   const result = await validateSaasaloyConfig(parsed);
   if (!result.valid) {
-    throw new Error(
+    throw new RefusalError(
       `${CONFIG_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
     );
   }
-  return parsed as LoadedConfig;
+  return migrateBase(parsed as LoadedConfig);
+}
+
+/**
+ * The base app moved out of `installed[]` and into its own `base` field (#98). A project
+ * scaffolded before that still lists `web` as if the tool had applied it, which is what
+ * forced every engine to carry a "except the template's own `web`" branch. Lift it here,
+ * once, on load: from this point on `installed[]` holds only modules `saasaloy add` put
+ * there, and the next `saveConfig` persists the corrected shape.
+ *
+ * Only `web` is lifted. It is the one name the template ever wrote, and guessing at any
+ * other would silently unmanage a real module.
+ */
+const LEGACY_BASE = "web";
+
+export function migrateBase(config: LoadedConfig): LoadedConfig {
+  if (config.base !== undefined || !config.installed.includes(LEGACY_BASE)) {
+    return config;
+  }
+  return {
+    ...config,
+    base: LEGACY_BASE,
+    installed: config.installed.filter((name) => name !== LEGACY_BASE),
+  };
 }
 
 export async function saveConfig(
@@ -49,14 +73,16 @@ export function resolveTarget(
 ): string {
   const slash = target.indexOf("/");
   if (slash === -1) {
-    throw new Error(`Malformed target "${target}" — expected "@alias/rest".`);
+    throw new RefusalError(
+      `Malformed target "${target}" — expected "@alias/rest".`
+    );
   }
   const alias = target.slice(0, slash);
   const rest = target.slice(slash + 1);
   const base = aliases[alias];
   if (base === undefined) {
     const known = Object.keys(aliases).join(", ") || "(none)";
-    throw new Error(
+    throw new RefusalError(
       `Unknown alias "${alias}" in target "${target}". Known aliases: ${known}.`
     );
   }

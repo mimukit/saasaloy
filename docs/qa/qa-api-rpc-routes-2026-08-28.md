@@ -683,7 +683,7 @@ node -e 'const d=require("./modules/auth/registry-item.json");console.log(JSON.s
 ls docs/adr/ | tail -2
 ```
 
-- ✅ C13 → `adr-0023-routes-register-by-chained-route-patch-2026-08-28.md` exists, next to ADR 0022. Its headings match ADR 0022's, it is marked `accepted — amends ADR 0005`, and it names four rejected alternatives.
+- ✅ C13 → `adr-0028-routes-register-by-chained-route-patch-2026-08-28.md` exists, next to ADR 0022. Its headings match ADR 0022's, it is marked `accepted — amends ADR 0005`, and it names four rejected alternatives.
 
 ```sh
 grep -rn "auto-glob\|routes/\*.ts\|file-based route" .agents/skills/ packages/cli/templates/base/AGENTS.md && diff -r .agents/skills .claude/skills
