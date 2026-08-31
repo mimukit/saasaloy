@@ -131,7 +131,7 @@ Small, separable, and security-relevant, so it does not wait behind the refactor
   with a well-known key. Throw outside local dev instead of warning.
 - Add unit tests for `deriveCookieDomain` here, since the file is already open.
 
-### Phase 4: Unify the three engines (#98)
+### Phase 4: Unify the three engines (#98) (built 2026-08-31)
 
 The structural fix. It removes the duplication that produced the Phase 1 drift.
 
