@@ -136,7 +136,11 @@ describe("upsertPackageJsonScript — install-lifecycle denylist", () => {
     "preinstall",
     "install",
     "postinstall",
+    // npm wraps every script it runs in a pre/post pair, so these two run on the same
+    // `npm install` that runs `prepare` itself.
+    "preprepare",
     "prepare",
+    "postprepare",
     "prepublish",
     "prepublishOnly",
   ];

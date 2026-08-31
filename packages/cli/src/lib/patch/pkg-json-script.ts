@@ -27,11 +27,16 @@ export interface PackageJsonScript {
 // `pnpm install` (#98). The denylist is exact plus the `prepublish*` family, and the
 // codemod refuses rather than upserting. `install:deps` and `preparse` are ordinary
 // names and stay allowed, which is why the check is equality, not a prefix scan.
+// npm generates a `pre`/`post` pair around every script it runs, so blocking `prepare`
+// without `preprepare` and `postprepare` leaves two keys that run on the same
+// `npm install`.
 const LIFECYCLE_SCRIPTS: ReadonlySet<string> = new Set([
   "install",
   "postinstall",
+  "postprepare",
   "preinstall",
   "prepare",
+  "preprepare",
 ]);
 
 function isLifecycleScript(name: string): boolean {
