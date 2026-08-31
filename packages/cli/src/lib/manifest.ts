@@ -70,7 +70,18 @@ export async function loadManifest(root: string): Promise<Manifest> {
   if (!(await pathExists(file))) {
     return emptyManifest();
   }
-  const raw = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // A half-written file parses as nothing at all, which is as invalid as a bad hash and
+  // takes the same exit code. Left to throw, `SyntaxError` reaches `exitCodeFor` as a
+  // plain failure (1) and never names the file it came from.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(file, "utf-8"));
+  } catch (error) {
+    throw new RefusalError(
+      `${MANIFEST_FILE} is invalid:\n  ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
   // This file decides whether a target is safe to overwrite, so a hash that isn't a
   // digest or a half-written entry has to stop the command rather than reach the applier
   // as a typed object that lies about its shape (#98). Same posture as `loadConfig`.

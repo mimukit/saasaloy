@@ -43,7 +43,18 @@ export async function loadLock(root: string): Promise<Lockfile> {
   if (!(await pathExists(file))) {
     return emptyLock();
   }
-  const raw = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // Unparseable JSON is the same invalid state as a schema miss, so it takes the same
+  // exit code. Left to throw, `SyntaxError` reaches `exitCodeFor` as a plain failure (1)
+  // and never names the file it came from.
+  let raw: unknown;
+  try {
+    raw = JSON.parse(await readFile(file, "utf-8"));
+  } catch (error) {
+    throw new RefusalError(
+      `${LOCK_FILE} is invalid:\n  ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error }
+    );
+  }
   // The lock is what `update` diffs against and what `add` reads a module's
   // `conflictsWith` back out of, so an entry with no `resolved` SHA or an unknown
   // `lockfileVersion` has to stop the command here (#98). Same posture as `loadConfig`.

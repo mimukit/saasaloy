@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { RefusalError } from "./exit.js";
 import { emptyLock, loadLock, saveLock, upsertLock } from "./lock.js";
 import type { LoadedModule, ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -172,6 +173,16 @@ describe("loadLock — validation on load", () => {
 
   afterAll(async () => {
     await rm(bad, { recursive: true, force: true });
+  });
+
+  // A half-written file parses as nothing at all. Left to `JSON.parse`, the SyntaxError
+  // reaches `exitCodeFor` as a plain failure (1) and never names the file.
+  it("refuses a lock that isn't valid JSON, as a refusal", async () => {
+    await writeFile(join(bad, "saasaloy-lock.json"), '{"modules": {', "utf-8");
+    await expect(loadLock(bad)).rejects.toThrow(RefusalError);
+    await expect(loadLock(bad)).rejects.toThrow(
+      /saasaloy-lock\.json is invalid/
+    );
   });
 
   it("refuses a lock entry missing its resolved SHA, naming the property", async () => {

@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { RefusalError } from "./exit.js";
 import { emptyManifest, loadManifest, saveManifest } from "./manifest.js";
 import type { ManifestPatch } from "./manifest.js";
 import { PATCH_KINDS } from "./patch/index.js";
@@ -42,6 +43,20 @@ describe("loadManifest — validation on load", () => {
     } finally {
       await rm(missing, { recursive: true, force: true });
     }
+  });
+
+  // A half-written file parses as nothing at all. Left to `JSON.parse`, the SyntaxError
+  // reaches `exitCodeFor` as a plain failure (1) and never names the file.
+  it("refuses a manifest that isn't valid JSON, as a refusal", async () => {
+    await writeFile(
+      join(root, ".saasaloy", "manifest.json"),
+      '{"managed": {',
+      "utf-8"
+    );
+    await expect(loadManifest(root)).rejects.toThrow(RefusalError);
+    await expect(loadManifest(root)).rejects.toThrow(
+      /manifest\.json is invalid/
+    );
   });
 
   it("refuses a managed entry with no content hash, naming the property", async () => {
