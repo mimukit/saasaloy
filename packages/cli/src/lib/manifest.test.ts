@@ -3,6 +3,8 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { emptyManifest, loadManifest, saveManifest } from "./manifest.js";
+import type { ManifestPatch } from "./manifest.js";
+import { PATCH_KINDS } from "./patch/index.js";
 
 // #98 Phase 5. `.saasaloy/manifest.json` decides whether a file is safe to overwrite, so
 // a corrupted one is the difference between a clean update and a clobbered hand edit.
@@ -70,6 +72,21 @@ describe("loadManifest — validation on load", () => {
       hash: HASH,
       from: "files/x.ts",
     };
+    await saveManifest(root, manifest);
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
+  // The applier records whatever kind a descriptor authored. Until the fix round the
+  // manifest schema listed two of the five, so the first `add` that applied a
+  // `package-json-dependency` wrote a file the next `add`/`remove`/`update` refused.
+  // Every kind now survives save → load (#98).
+  it.each(PATCH_KINDS)("round-trips a recorded %s patch", async (kind) => {
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "database",
+      file: "apps/api/package.json",
+      patch: { file: "apps/api/package.json", kind } as ManifestPatch["patch"],
+    });
     await saveManifest(root, manifest);
     await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
   });

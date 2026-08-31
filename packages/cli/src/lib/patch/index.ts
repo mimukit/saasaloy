@@ -64,6 +64,23 @@ export type Patch =
 
 export type PatchKind = Patch["kind"];
 
+// The `Patch` union at runtime. `Record<PatchKind, true>` is exhaustive in both
+// directions: a kind added to the union without a key here fails typecheck, and a key
+// that names no kind is an excess property. `PATCH_KINDS` is what `schema.test.ts`
+// holds both JSON Schemas to, so the enums can't drift apart again (#98).
+const PATCH_KIND_KEYS: Record<PatchKind, true> = {
+  "chained-route": true,
+  "package-json-dependency": true,
+  "package-json-script": true,
+  "plugin-array": true,
+  "wrangler-binding": true,
+};
+
+/** Every patch kind the engine applies, sorted. */
+export const PATCH_KINDS: readonly PatchKind[] = (
+  Object.keys(PATCH_KIND_KEYS) as PatchKind[]
+).toSorted();
+
 /**
  * An entry the codemod found under the identity it matches on, holding a value other
  * than the one the descriptor declares — i.e. the user edited what we would have
