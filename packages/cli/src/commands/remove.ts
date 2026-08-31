@@ -182,8 +182,8 @@ function summarizeRemovePlan(
     );
   }
 
-  // `chained-route` is the one kind with an inverse, so it's listed as work rather than
-  // warned about; what actually happened is reported post-execute (#83, #36).
+  // A kind with an inverse is listed as work rather than warned about; what actually
+  // happened is reported post-execute (#83, #36).
   const reversible = plan.patches.filter((p) => p.action !== "drop");
   if (reversible.length > 0) {
     const patchLines = reversible.map(

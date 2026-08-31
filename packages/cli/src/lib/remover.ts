@@ -75,7 +75,7 @@ export interface PlannedRemoveLink {
 //   revert  — a reversible kind with an edit still there → `diff` previews the undo
 //   refused — the inverse declined it; the line is the user's now → `reason` says why
 //   gone    — nothing left to undo (target file absent, or already hand-reverted)
-//   drop    — a kind with no inverse yet (#36) → the record goes, the edit stays
+//   drop    — a kind with no inverse (the two `package.json` ones) → record goes, edit stays
 export type PatchRemoveAction = "revert" | "refused" | "gone" | "drop";
 
 export interface PlannedRemovePatch {
@@ -93,9 +93,9 @@ export interface RemovePlan {
   files: PlannedRemoveFile[];
   links: PlannedRemoveLink[];
   /** This module's entries in manifest.patches, each classified against fresh disk state.
-   *  Every entry is dropped on execute; a `chained-route` entry is also *reversed* on disk
-   *  first (the one kind with an inverse — see `reversePatch`), and `diff` previews that
-   *  reversal so `--dry-run`/`--diff` show the edit rather than only labelling it. */
+   *  Every entry is dropped on execute; an entry of a reversible kind is also *reversed*
+   *  on disk first (see `reversePatch`), and `diff` previews that reversal so
+   *  `--dry-run`/`--diff` show the edit rather than only labelling it. */
   patches: PlannedRemovePatch[];
   /** Installed modules whose lock `dependsOn` names this module — block removal
    *  without `--force`. */
@@ -271,10 +271,12 @@ export interface RemoveResult {
   linksRemoved: PlannedRemoveLink[];
   /** Symlinks left untouched because something else occupies their path. */
   linkConflicts: PlannedRemoveLink[];
-  /** Patch entries actually undone on disk — a `chained-route` link and its import. */
+  /** Patch entries actually undone on disk — a route link, a wrangler binding, a plugin
+   *  array element, each with the import it needed. */
   patchesReversed: ManifestPatch[];
-  /** Patch entries untracked without being undone: a kind with no inverse yet (#36),
-   *  a target file that's gone, a link already hand-reverted, or a refusal. The command warns. */
+  /** Patch entries untracked without being undone: a kind with no inverse (the two
+   *  `package.json` ones), a target file that's gone, an edit already hand-reverted, or a
+   *  refusal. The command warns. */
   patchesDropped: ManifestPatch[];
   /** The subset of `patchesDropped` the inverse codemod actively declined, each with its
    *  reason — a route the user repointed at their own handler, say. Separates "there was
@@ -427,13 +429,13 @@ export async function executeRemovePlan(
     delete manifest.links[link.target];
   }
 
-  // Reverse what can be reversed, then untrack every entry either way. Only
-  // `chained-route` has an inverse today (#83); the rest stay report-only until #36
-  // generalises the mechanism, and the command warns naming each file.
+  // Reverse what can be reversed, then untrack every entry either way. The three kinds
+  // that edit a config file have an inverse (#83, #36); the two `package.json` kinds stay
+  // report-only, and the command warns naming each file.
   //
   // Read fresh disk content rather than trusting the plan, mirroring what `executePlan`
   // does forward: the file may have been hand-edited since the plan was built. The
-  // codemod is a no-op when the link it recorded is already gone, so a hand-reverted
+  // codemod is a no-op when the edit it recorded is already gone, so a hand-reverted
   // file is untracked and warned about instead of force-edited.
   const patchesReversed: ManifestPatch[] = [];
   const patchesDropped: ManifestPatch[] = [];
