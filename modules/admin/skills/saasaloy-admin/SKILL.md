@@ -75,7 +75,7 @@ fires. Three outcomes and no fourth:
 
 | Visitor | Outcome |
 |---|---|
-| Anonymous | `throw redirect({ to: "/login" })`, except on `/login` itself |
+| Anonymous | `throw redirect({ to: "/login", search: { redirect: location.href } })`, except on `/login` itself |
 | Signed in, `user.role !== "admin"` | `throw new NotAdminError(session)` → the root `errorComponent` renders `AccessDenied` **in place** |
 | Signed in, `user.role === "admin"` | the shell renders |
 
@@ -138,6 +138,15 @@ show the order.
 The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on both halves (`admin()` server-side, `adminClient()` in `packages/auth/src/client.ts`). Drop the client half and `session.user.role` stops being typed.
 
 **The first account to sign up becomes the admin.** A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` writes `role: "admin"` when the `user` table is still empty, so a fresh project reaches this shell without SQL. Every account after it keeps the plugin's `"user"` default and lands on `AccessDenied`. Sign-up is open, so claim that first slot the moment the api answers; if somebody beat you to it, the `wrangler d1 execute` one-liner in the `saasaloy-auth` skill flips the row. That skill owns the rule and the recovery path both.
+
+**A deep link survives the login hop.** The guard records the path it turned an anonymous visitor
+away from as `?redirect=` on `/login`, and `login.tsx` navigates there after `forgetSession()` and
+`router.invalidate()`. `src/lib/redirect.ts` decides whether that value may be used, and it has two
+gates: `toInternalPath` rejects anything a browser could read as another origin (`//host`, `/\host`,
+an absolute url, a control character), and `resolveDestination` then asks the router itself, through
+`getMatchedRoutes(pathname)`, whether a route claims the path. Either failure falls back to `/`. A
+new screen needs nothing here — it is in the generated route tree, so it is already a valid
+destination.
 
 There is deliberately **no sign-up route** here. An admin account is made by promoting an existing
 user, never by self-service at the backoffice door.

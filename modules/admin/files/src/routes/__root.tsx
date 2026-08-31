@@ -69,7 +69,13 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
       if (onLoginPage) {
         return { session: null };
       }
-      throw redirect({ to: LOGIN_PATH });
+      // Carry where they were going, so login.tsx can send them there instead of to /.
+      // `href` is the pathname with its search and hash, which is what a deep link into a
+      // filtered list needs. login.tsx re-validates it; nothing here trusts it.
+      throw redirect({
+        to: LOGIN_PATH,
+        search: { redirect: location.href },
+      });
     }
 
     // The role check comes before the login-page redirect, so a signed-in non-admin who

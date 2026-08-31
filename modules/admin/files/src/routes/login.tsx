@@ -14,6 +14,7 @@ import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 
 import { auth, forgetSession } from "@admin/lib/auth";
+import { resolveDestination, toInternalPath } from "@admin/lib/redirect";
 
 // The only route outside the shell. `__root.tsx`'s guard lets it render while anonymous and
 // redirects away from it while signed in, so this file never has to check a session itself.
@@ -22,11 +23,19 @@ import { auth, forgetSession } from "@admin/lib/auth";
 // There is deliberately no sign-up here: an admin account is created by promoting an
 // existing user (see the auth module's skill), never by self-service at the backoffice door.
 export const Route = createFileRoute("/login")({
+  // `redirect` is where the root guard turned an anonymous visitor away from. It is raw
+  // address-bar input, so it is narrowed to a path on this origin before it is ever a
+  // typed search param; a hostile value is dropped here and the screen behaves as if the
+  // visitor had opened /login directly.
+  validateSearch: (search: Record<string, unknown>): { redirect?: string } => ({
+    redirect: toInternalPath(search.redirect),
+  }),
   component: LoginScreen,
 });
 
 function LoginScreen() {
   const router = useRouter();
+  const search = Route.useSearch();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
@@ -62,7 +71,17 @@ function LoginScreen() {
       // for anyone else. This screen deliberately does not make that call.
       forgetSession();
       await router.invalidate();
-      await router.navigate({ to: "/" });
+
+      // Back to the page the guard interrupted, or / when there was none. The second gate
+      // is the router's own route tree: `getMatchedRoutes` returns an undefined third
+      // element for a path no route claims, so a value that survived the shape check but
+      // names nothing real still lands on /. The guard runs again on arrival, so this
+      // navigation grants no access on its own.
+      const destination = resolveDestination(
+        search.redirect,
+        (pathname) => router.getMatchedRoutes(pathname)[2] !== undefined
+      );
+      await router.navigate({ href: destination });
     } catch {
       setError(
         "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev)."
