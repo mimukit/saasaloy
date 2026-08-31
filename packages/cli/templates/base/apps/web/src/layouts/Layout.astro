@@ -19,6 +19,16 @@ const { title, description } = Astro.props;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
+    {
+      /*
+      Explicit icon link, not the implicit /favicon.ico lookup. Without a link the
+      browser guesses /favicon.ico, and Chrome tags that guess `Sec-Fetch-Site:
+      cross-site`, which the Astro dev server blocks with a `[router]` warning
+      (astro/dist/vite-plugin-astro-server/sec-fetch.js). A declared same-origin
+      link never gets that treatment. Replace public/favicon.svg with the project mark.
+    */
+    }
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     {description && <meta name="description" content={description} />}
     {
       /*
