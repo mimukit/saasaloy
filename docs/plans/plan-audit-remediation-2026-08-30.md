@@ -76,7 +76,7 @@ What this reuses, rather than invents:
 - `conflictsWith` and `detectConflicts` already enforce driver exclusion for `add`; the driver work
   extends the existing mechanism rather than adding one.
 
-### Phase 0: CI gate
+### Phase 0: CI gate (#98)
 
 The cheapest phase and the one everything else leans on.
 
@@ -89,7 +89,7 @@ The cheapest phase and the one everything else leans on.
 
 Verifiable by: a red build on a deliberately broken lint rule.
 
-### Phase 1: Close the two write-path holes
+### Phase 1: Close the two write-path holes (#98)
 
 - Route every planned write in `applier.ts` through `resolveWithinRoot`: module file targets
   (`:162`), skill link paths (`:272`, `:273`), and patch files (`:308`).
@@ -103,7 +103,7 @@ Verifiable by: a red build on a deliberately broken lint rule.
 Verifiable by: a descriptor whose target escapes the root fails with a named refusal, and the
 existing suite stays green.
 
-### Phase 2: Close the driver split
+### Phase 2: Close the driver split (#98)
 
 - Declare `dependsOn: ["database-d1"]` on `auth` and `waitlist` so `add` refuses a mismatched driver
   instead of failing at typecheck. This is a stopgap; file a follow-up issue for dialect-neutral
@@ -122,7 +122,7 @@ existing suite stays green.
 Verifiable by: `add database-postgres` then `add auth` refuses with a clear message; `add database`
 alone either refuses or prompts for a driver.
 
-### Phase 3: Fail-closed auth secret
+### Phase 3: Fail-closed auth secret (#98)
 
 Small, separable, and security-relevant, so it does not wait behind the refactor.
 
@@ -131,7 +131,7 @@ Small, separable, and security-relevant, so it does not wait behind the refactor
   with a well-known key. Throw outside local dev instead of warning.
 - Add unit tests for `deriveCookieDomain` here, since the file is already open.
 
-### Phase 4: Unify the three engines
+### Phase 4: Unify the three engines (#98)
 
 The structural fix. It removes the duplication that produced the Phase 1 drift.
 
@@ -148,7 +148,7 @@ The structural fix. It removes the duplication that produced the Phase 1 drift.
   common mid-`add` failure then leaves no half-state. The full rollback journal stays deferred in
   [#49](https://github.com/mimukit/saasaloy/issues/49).
 
-### Phase 5: `update` command correctness
+### Phase 5: `update` command correctness (#98)
 
 Four defects in one command, worth one pass.
 
@@ -162,7 +162,7 @@ Four defects in one command, worth one pass.
   secret updates silently while `add` prints a note.
 - Validate the manifest and lock on load with the existing `validateManifest` / `validateLock`.
 
-### Phase 6: DX papercuts and doc truth
+### Phase 6: DX papercuts and doc truth (#98)
 
 Independent, individually small, collectively the difference between a tool that feels finished and
 one that does not.
