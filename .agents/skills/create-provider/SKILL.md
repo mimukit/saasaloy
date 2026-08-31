@@ -97,10 +97,12 @@ one is its own module:
 | `patches` → the capability's barrel | register | register |
 | `envVars` | none — the binding *is* the credential | the API key |
 
-## Mode: `email`
+One mode below per capability that owns a provider interface. The rules above hold for all of them;
+each mode covers only what is different. Add a mode (`kv`, `queue`, …) when a third capability grows
+an interface — and read the mode you're writing for, not the one you remember: `sms` and `email`
+look alike and disagree about `retryable`, which is the difference that costs money.
 
-Add a new mode here (`sms`, `kv`, …) when another capability grows a provider interface; keep the
-shared rules above in one place and each mode concrete.
+## Mode: `email`
 
 **Interface:** `EmailProvider` in `packages/email/src/provider.ts`.
 
@@ -239,6 +241,80 @@ An HTTP-ingest provider adds the `package-json-dependency` patch (into `packages
 One non-obvious rule for this capability: **log the event object, don't `JSON.stringify` it**, if
 your sink is `console`. Workers Logs extracts and indexes the fields of a logged object; a
 pre-stringified line arrives as one opaque string that only a full-text match can find.
+
+## Mode: `sms`
+
+**Interface:** `SmsProvider` in `packages/sms/src/provider.ts`. `sms-console` is the worked
+example; the capability's runbook is `modules/sms/skills/saasaloy-sms/SKILL.md`.
+
+Same descriptor shape as `email`'s HTTP flavour, and there is no binding flavour to choose between:
+Cloudflare has no SMS product, so every provider here is a REST call over `fetch` and none of them
+patches `wrangler.jsonc`.
+
+```ts
+import { SmsError } from "../provider";
+import type { ResolvedSmsMessage, SmsEnv, SmsProvider, SmsResult } from "../provider";
+
+export function twilio(): SmsProvider {
+  return {
+    name: "twilio", // the value SMS_PROVIDER must hold to select this provider
+    async send(env: SmsEnv, message: ResolvedSmsMessage): Promise<SmsResult> {
+      // …send, then return the service's own id
+      return { messageId: "…" };
+    },
+  };
+}
+```
+
+Three things differ from `email`, and a provider copied across gets each of them wrong:
+
+- **`retryable` is inverted, and the core enforces it.** Email treats an ambiguous failure — a
+  timeout, a dropped connection — as retryable, because the request may never have left and a
+  duplicate email is an annoyance. Here the message may already have been accepted and billed, and
+  a retry buzzes the phone twice and invalidates the one-time code the person is typing. **An
+  ambiguous failure is `retryable: false`; a timeout is explicitly non-retryable.** `SmsError`
+  honors `retryable: true` on `rate_limited` and `provider_error` only and silently drops it
+  elsewhere, so a copied `retryable: true` on a timeout is coerced rather than shipped — but write
+  it correctly, because the coercion is a backstop and not a design.
+- **`from` arrives optional and unvalidated.** The core validates every recipient against E.164 and
+  does nothing at all to `from`, because a sender may be a number, a short code, an alphanumeric id
+  or a pool id. If *your* provider requires a sender, check `message.from` yourself and raise
+  `invalid_message`. Don't push that requirement into the core; a pool-routed provider doesn't have
+  it.
+- **The message carries `estimatedSegments`.** It is the core's estimate, computed from the body.
+  Don't overwrite it with the vendor's count and don't add a field to `SmsResult` for one: Twilio
+  reports `num_segments: 0` for messages sent through a Messaging Service, so a provider figure is
+  missing in exactly the pooled case, and two numbers that disagree are worse than one.
+
+Failure codes are `invalid_number`, `unroutable`, `opted_out`, `account_error`, `rate_limited`,
+`message_too_long` and `provider_error` (`invalid_message` is the core's). Sender-not-owned, empty
+balance and missing geo permission all collapse into **`account_error`** — they are operator alerts
+with the same caller response, and `providerCode` keeps the vendor's own code for whoever fixes it.
+
+**Descriptor:**
+
+```jsonc
+{
+  "name": "sms-twilio",
+  "type": "saasaloy:feature",
+  "dependsOn": ["sms"],
+  "dependencies": [],
+  "envVars": { "TWILIO_ACCOUNT_SID": "…", "TWILIO_AUTH_TOKEN": "…" },
+  "patches": [
+    { "file": "packages/sms/src/index.ts", "kind": "plugin-array",
+      "exportName": "sms", "arrayProp": "providers", "call": "twilio",
+      "import": { "name": "twilio", "from": "./providers/twilio" } }
+  ],
+  "files": [{ "path": "files/twilio.ts", "target": "@sms/providers/twilio.ts" }],
+  "scaffolds": []
+}
+```
+
+Twilio publishes [test credentials](https://www.twilio.com/docs/iam/test-credentials) and magic
+numbers that exercise the live API with no purchased number and no charge — `+15005550006` as a
+valid `From`, and `To` numbers returning documented errors (21211 invalid, 21612 unroutable, 21610
+opted-out, 21408 no international permission). Use them to prove your code mapping instead of
+guessing at it.
 
 ## Verify before you call it done
 
