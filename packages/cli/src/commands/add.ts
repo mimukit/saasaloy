@@ -431,7 +431,20 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
     }
 
-    // Merge npm deps into the project root package.json (best-effort — never blocks the apply).
+    let result: ApplyResult;
+    try {
+      result = await executePlan(plan, root, config, manifest);
+    } finally {
+      // Record whatever actually landed even if a mid-plan write failed — a written
+      // file the manifest doesn't know about would classify as a conflict next run.
+      await saveManifest(root, manifest);
+      await saveConfig(root, config);
+    }
+
+    // Merge npm deps into the project root package.json (best-effort — never blocks the
+    // apply). This trails `executePlan` on purpose (#98): a mid-plan failure throws past
+    // here, so a run that wrote no files leaves no package.json advertising packages
+    // nothing installed. Rolling back what `executePlan` itself wrote is #49.
     const pkg = await readRootPackageJson(root);
     let depsAdded: string[] = [];
     const allDeps = [...plan.dependencies, ...plan.devDependencies];
@@ -455,16 +468,6 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
     }
 
-    let result: ApplyResult;
-    try {
-      result = await executePlan(plan, root, config, manifest);
-    } finally {
-      // Record whatever actually landed even if a mid-plan write failed — a written
-      // file the manifest doesn't know about would classify as a conflict next run.
-      await saveManifest(root, manifest);
-      await saveConfig(root, config);
-    }
-
     // Pin what was actually applied in the lockfile: source + ref + commit SHA per module
     // (ADR 0012). Only the freshly-installed modules — an already-installed dep keeps the
     // SHA it was fetched at, so the lock never misstates on-disk provenance.
@@ -472,6 +475,9 @@ export async function runAdd(argv: string[]): Promise<number> {
     await saveLock(root, lock);
 
     for (const file of result.written) {
+      log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
+    }
+    for (const file of result.refreshed) {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
     }
     for (const link of result.links) {
@@ -499,6 +505,17 @@ export async function runAdd(argv: string[]): Promise<number> {
     for (const r of result.patchRefusals) {
       log.warn(
         `Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}. Wire it by hand.`
+      );
+    }
+    if (result.lateDrift.length > 0) {
+      const lines = result.lateDrift
+        .map((f) => `  ${pc.yellow("kept")}  ${f.target}`)
+        .join("\n");
+      note(
+        wrapForNote(
+          `${lines}\n\n${pc.dim("Changed while the plan was open — left alone rather than overwritten.")}`
+        ),
+        "Changed under us"
       );
     }
     if (result.heldBack.length > 0) {
