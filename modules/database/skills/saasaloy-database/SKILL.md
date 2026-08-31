@@ -18,17 +18,48 @@ providers:
 | `database-d1`       | Cloudflare D1 (SQLite)      | `saasaloy-database-d1`         |
 | `database-postgres` | Postgres, over postgres.js  | `saasaloy-database-postgres`   |
 
-Install **exactly one**. Each driver declares the other in `conflictsWith`, so `add` refuses the
-second one rather than letting two clients fight over `src/client.ts`.
+Install **exactly one**, and you cannot skip the step. Two descriptor fields enforce that from both
+sides. Each driver names the other in `conflictsWith`, so `add` refuses a second one rather than
+letting two clients fight over `src/client.ts`. And this core declares
+`requiresOneOf: ["database-d1", "database-postgres"]`, so `add` will not leave a project holding the
+core alone, whose `@repo/db/client` import resolves to a file no module ever wrote.
+
+On a terminal, `add database` asks which one:
 
 ```sh
-saasaloy add database
+$ saasaloy add database
+◆  database needs one of these — pick one
+│  ● database-d1
+│  ○ database-postgres
+```
+
+Name the driver instead and the prompt never appears — the driver's own `dependsOn` pulls the core
+in, and the core's requirement is met by the driver arriving in the same run:
+
+```sh
 saasaloy add database-d1        # or: saasaloy add database-postgres
+```
+
+With `--yes`, or in a pipeline with no terminal, there is nothing to ask, so `add` refuses and names
+both options. That is a refusal by design, not a failure:
+
+```
+Cannot add database — unmet requirement:
+  database needs one of: database-d1, database-postgres, and none is installed. Run `saasaloy add database-d1` first, or pick another from that list.
 ```
 
 Read the driver's skill for anything the tables themselves don't decide: how the connection reaches
 a request handler, which bindings or environment variables it needs, and how a generated migration
 is applied.
+
+### D1 is the default, and two modules still require it
+
+`auth` and `waitlist` ship SQLite payloads — `sqliteTable` tables, and `provider: "sqlite"` in
+`auth`'s Better Auth config — so both declare `dependsOn: ["database-d1"]`. On a project running
+`database-postgres`, `add auth` is refused by the conflict check rather than installing files that
+fail at `pnpm typecheck` later. Dialect-neutral payloads are the end state; ADR 0023's amendment
+records the retraction and the follow-up. A Postgres project writes its own tables and routes in the
+meantime, and everything below this line works the same on either driver.
 
 ## Add a table (the core convention)
 
@@ -118,8 +149,10 @@ alias. A feature that needs `apps/api` to import from `packages/db` (like `waitl
 dependency added automatically: this module's `patches` includes a `package-json-dependency` op
 that upserts `"@repo/db": "workspace:*"` into `apps/api/package.json` at `add` time.
 
-Installing `database` on its own leaves the `./client` export pointing at a file that isn't there
-yet. That's expected, and it resolves the moment a driver lands.
+Installing `database` on its own would leave the `./client` export pointing at a file that isn't
+there. `requiresOneOf` is what stops that: `add` will not finish the core without a driver in the
+same run or already installed. A project that reaches that state got there by hand — adding the
+driver writes `src/client.ts` and the export resolves.
 
 ## Migrations: generate here, apply in the driver
 
@@ -151,6 +184,8 @@ explicit command you run.
 - **Column shapes live here; request validation lives in `@repo/validators`.**
 - **Keep the core neutral.** A connection, a dialect, a config file or a migrate script added here
   belongs in a driver module instead.
-- **One driver per project.** `conflictsWith` enforces it; switching means `saasaloy remove` on the
-  old driver first.
+- **Exactly one driver per project.** `requiresOneOf` on this core stops you at zero, `conflictsWith`
+  on each driver stops you at two; switching means `saasaloy remove` on the old driver first.
+- **`auth` and `waitlist` require `database-d1`.** Don't try to route around it — the payloads are
+  SQLite and the refusal is the honest answer until they are dialect-neutral.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.

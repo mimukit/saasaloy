@@ -2,7 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "auth",
   "type": "saasaloy:capability",
-  "dependsOn": ["api", "database"],
+  "dependsOn": ["api", "database", "database-d1"],
   "dependencies": [],
   "envVars": {
     "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Falls back to Better Auth's dev default locally (console warning); required in prod.",

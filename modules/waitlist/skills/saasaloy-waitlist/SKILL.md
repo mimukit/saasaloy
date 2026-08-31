@@ -7,8 +7,29 @@ description: Runbook for the waitlist feature — a landing-page email waitlist 
 
 `waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points
 `api`, `database`, `validators` and the base web template already established, and registers its
-route with one `chained-route` patch. It requires `dependsOn: ["api", "database", "validators"]`,
-resolved and installed automatically.
+route with one `chained-route` patch. It requires
+`dependsOn: ["api", "database", "database-d1", "validators"]`, resolved and installed automatically.
+
+## The `database-d1` requirement
+
+`packages/db/src/schema/waitlist.ts` builds its table with `sqliteTable` from
+`drizzle-orm/sqlite-core`, so this module is SQLite-only and names the D1 driver in `dependsOn`.
+A fresh `saasaloy add waitlist` therefore installs `database-d1` along the way, and never asks which
+driver to use.
+
+On a project already running `database-postgres`, `add waitlist` is **refused**, because the two
+drivers name each other in `conflictsWith`:
+
+```
+Cannot add waitlist — module conflict:
+  database-d1 (required by waitlist) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
+```
+
+That is the intended answer, and `--force` does not bypass it. Before it, the install went through
+and the project failed later at `pnpm typecheck`, with a dialect error naming neither module. Porting
+the table to `drizzle-orm/pg-core` by hand is not the fix; the dialect-neutral rewrite is tracked
+against ADR 0023's amendment. A Postgres project writes its own waitlist table and route, using this
+module's route and form as the worked example.
 
 ## What it drops, and where
 
@@ -120,6 +141,8 @@ If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worke
   `saasaloy-database` skill. Never auto-migrate.
 - **Duplicate email → 201, not error.** Don't change this to a 409 without reconsidering the
   membership-leak tradeoff above.
+- **D1 is a hard requirement.** The table is `sqliteTable`, so don't rewrite it as `pgTable` to get
+  this running on `database-postgres` — see the section above.
 - **No email-confirmation flow ships here.** Optional `email`-module integration is a follow-up
   (no resolver support yet for optional `dependsOn`); this module's `dependsOn` is a hard
-  requirement on `api` + `database` + `validators` only.
+  requirement on `api` + `database` + `database-d1` + `validators` only.
