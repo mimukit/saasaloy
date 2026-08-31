@@ -18,11 +18,21 @@ import { adminClient } from "better-auth/client/plugins";
 // instead of casting. It also exposes the admin endpoints (`client.admin.listUsers`,
 // `setRole`, `banUser`, `impersonateUser`); the server still authorizes every one of
 // them, so shipping it to a non-admin browser grants nothing.
+function definePlugins<T>(config: T): T {
+  return config;
+}
+
+// Module-scope patch point, not a value to move into `createClient`. The
+// `plugin-array` codemod needs this exact `export const <name> = <fn>({ plugins: [...] })`
+// shape so feature modules can add their client plugins. Keep the array literal here,
+// and never omit it, even when no client plugin ships by default.
+export const authClientPlugins = definePlugins({ plugins: [adminClient()] });
+
 export function createClient(baseURL: string) {
   return createAuthClient({
     basePath: "/auth",
     baseURL,
     fetchOptions: { credentials: "include" },
-    plugins: [adminClient()],
+    ...authClientPlugins,
   });
 }
