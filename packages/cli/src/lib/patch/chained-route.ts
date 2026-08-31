@@ -1,4 +1,11 @@
 import { builders, generateCode, parseModule } from "magicast";
+import {
+  describeBinding,
+  foreignBinding,
+  isReferenced,
+  keepTerminator,
+} from "./ts-ast.js";
+import type { ModuleImports } from "./ts-ast.js";
 
 // `magicast` codemod for a chained-call router entry file — Hono's RPC shape, where
 // `const app = new Hono().route("/x", x)` is the exported chain a client derives
@@ -199,52 +206,8 @@ export function chainedRouteRemoveRefusal(
 // Both directions key on the route path, and a path is not proof of ownership. These two
 // answer "is this link, or this binding, still the one the manifest recorded?" — the check
 // that keeps a patch from clobbering a hand edit that happens to sit at the same path.
-
-/** Structural view of magicast's import proxy: local name → what it binds. */
-type ModuleImports = Record<
-  string,
-  { imported?: unknown; from?: unknown } | undefined
->;
-
-/**
- * The binding currently held by the patch's local name, when it is not the recorded one.
- *
- * magicast keys imports by *local* name, so `patch.import.name in mod.imports` proves only
- * that something holds the name — not that it is the binding this patch needs. Both
- * directions care: `insert` would wire the route to the wrong handler, and `remove` would
- * delete an import line the user rewrote. Compare the local name, the imported name, and
- * the source. An unbound name is not a conflict; it is the ordinary case.
- */
-function foreignBinding(
-  imports: ModuleImports,
-  want: ChainedRoute["import"]
-): { imported: string; from: string } | undefined {
-  const held = imports[want.name];
-  if (!held) {
-    return undefined;
-  }
-
-  const imported = typeof held.imported === "string" ? held.imported : "";
-  const from = typeof held.from === "string" ? held.from : "";
-  if (imported === want.name && from === want.from) {
-    return undefined;
-  }
-  return { imported, from };
-}
-
-/** "…is imported as a default import from "./legacy.js"" — the shared half of both reasons. */
-function describeBinding(
-  name: string,
-  held: { imported: string; from: string }
-): string {
-  const bound =
-    held.imported === "*"
-      ? "as a namespace import"
-      : held.imported === "default"
-        ? "as a default import"
-        : `as ${JSON.stringify(held.imported)}`;
-  return `${JSON.stringify(name)} is imported ${bound} from ${JSON.stringify(held.from)}`;
-}
+// `foreignBinding` and `describeBinding` are in ts-ast.ts: ts-module.ts's inverse asks the
+// same question of the same import proxy, so only the message text differs.
 
 function insertBindingConflict(
   imports: ModuleImports,
@@ -303,67 +266,6 @@ function dottedName(node: AstNode): string | undefined {
   return object === undefined
     ? undefined
     : `${object}.${(member.property as Identifier).name}`;
-}
-
-// recast reprints the whole program, and its printer drops a trailing newline the source
-// had. Untouched bytes must stay untouched, so put the terminator back — an add→remove
-// round trip is then byte-identical to the file the user started with.
-function keepTerminator(source: string, code: string): string {
-  if (source.endsWith("\n") && !code.endsWith("\n")) {
-    return `${code}\n`;
-  }
-  if (!source.endsWith("\n") && code.endsWith("\n")) {
-    return code.slice(0, -1);
-  }
-  return code;
-}
-
-// Does any non-import part of the program still read `name`? Walks the plain-object AST
-// rather than pulling in a visitor, since the only question is whether an `Identifier`
-// with this name survives outside the import declarations and outside member/property
-// positions (`x.waitlist` is not a use of `waitlist`).
-function isReferenced(program: Program, name: string): boolean {
-  let found = false;
-
-  function walk(node: unknown, key?: string): void {
-    if (found || node === null || typeof node !== "object") {
-      return;
-    }
-    if (Array.isArray(node)) {
-      for (const child of node) {
-        walk(child);
-      }
-      return;
-    }
-    const record = node as Record<string, unknown> & { type?: string };
-    if (typeof record.type !== "string") {
-      return;
-    }
-    if (record.type === "ImportDeclaration") {
-      return;
-    } // the import itself is not a use
-    if (record.type === "Identifier") {
-      // Skip a name in a non-reference slot: `a.name`, `{ name: … }`, `function name()`.
-      if (key !== "property" && key !== "key" && record.name === name) {
-        found = true;
-      }
-      return;
-    }
-    for (const [childKey, value] of Object.entries(record)) {
-      // recast hangs its own bookkeeping off these; walking them re-walks the whole file.
-      if (
-        childKey === "loc" ||
-        childKey === "comments" ||
-        childKey === "original"
-      ) {
-        continue;
-      }
-      walk(value, childKey);
-    }
-  }
-
-  walk(program.body);
-  return found;
 }
 
 // --- AST shapes -------------------------------------------------------------------
