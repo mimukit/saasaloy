@@ -165,7 +165,11 @@ export class SmsError extends Error {
   readonly retryable: boolean;
   readonly providerCode?: string;
 
-  constructor(code: SmsErrorCode, message: string, options: SmsErrorOptions = {}) {
+  constructor(
+    code: SmsErrorCode,
+    message: string,
+    options: SmsErrorOptions = {}
+  ) {
     super(message, { cause: options.cause });
     this.name = "SmsError";
     this.code = code;

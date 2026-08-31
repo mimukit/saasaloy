@@ -25,7 +25,7 @@ export interface SmsSegmentation {
  */
 const GSM7_BASIC = new Set(
   "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?" +
-    "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà",
+    "¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà"
 );
 
 /**
@@ -95,8 +95,15 @@ export function countSegments(body: string): number {
  * indivisible, so one that would straddle a boundary moves whole into the next part and
  * leaves a septet (or a code unit) unused behind it. 153 tildes is three parts, not two.
  */
-function countParts(costs: number[], units: number, single: number, part: number): number {
-  if (units <= single) return 1;
+function countParts(
+  costs: number[],
+  units: number,
+  single: number,
+  part: number
+): number {
+  if (units <= single) {
+    return 1;
+  }
 
   let parts = 1;
   let used = 0;

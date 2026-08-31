@@ -1,4 +1,9 @@
-import type { ResolvedSmsMessage, SmsEnv, SmsProvider, SmsResult } from "../provider";
+import type {
+  ResolvedSmsMessage,
+  SmsEnv,
+  SmsProvider,
+  SmsResult,
+} from "../provider";
 
 // The development provider: writes the message to the Worker's log and returns a synthetic
 // id. No account, no API key, no purchased number, and no A2P 10DLC registration — which

@@ -1,6 +1,12 @@
 import { SmsError } from "./provider";
 import { countSegments } from "./segments";
-import type { SmsEnv, SmsMessage, SmsProvider, SmsResult, ResolvedSmsMessage } from "./provider";
+import type {
+  SmsEnv,
+  SmsMessage,
+  SmsProvider,
+  SmsResult,
+  ResolvedSmsMessage,
+} from "./provider";
 
 // The provider registry and the `createSms(env)` factory behind it. This file holds
 // everything that is true of *every* provider — selection, recipient validation, sender
@@ -62,14 +68,20 @@ export function defineSms(config: SmsConfig): SmsRegistry {
             // `TypeError` from a failed `fetch` reaching the caller would break the
             // `SmsError` contract `provider.ts` promises. Re-throw a well-formed error
             // untouched; wrap anything else, keeping the original in `cause`.
-            if (error instanceof SmsError) throw error;
-            throw new SmsError("provider_error", `${provider.name}: send failed`, {
-              // Not retryable, even though the wrapped failure is usually a network one.
-              // On this channel an ambiguous failure may already have been accepted and
-              // billed, and re-sending buzzes the phone twice — see `provider.ts`.
-              retryable: false,
-              cause: error,
-            });
+            if (error instanceof SmsError) {
+              throw error;
+            }
+            throw new SmsError(
+              "provider_error",
+              `${provider.name}: send failed`,
+              {
+                // Not retryable, even though the wrapped failure is usually a network one.
+                // On this channel an ambiguous failure may already have been accepted and
+                // billed, and re-sending buzzes the phone twice — see `provider.ts`.
+                retryable: false,
+                cause: error,
+              }
+            );
           }
         },
       };
@@ -83,7 +95,10 @@ export function defineSms(config: SmsConfig): SmsRegistry {
  * worse than a throw: a production deploy that quietly stops sending, and a test run that
  * quietly starts.
  */
-function selectProvider(providers: SmsProvider[], selected: string | undefined): SmsProvider {
+function selectProvider(
+  providers: SmsProvider[],
+  selected: string | undefined
+): SmsProvider {
   const registered = providers.map((p) => p.name);
   const known =
     registered.length > 0
@@ -96,7 +111,9 @@ function selectProvider(providers: SmsProvider[], selected: string | undefined):
 
   const provider = providers.find((p) => p.name === selected);
   if (!provider) {
-    throw new Error(`SMS_PROVIDER is "${selected}", which is not registered. ${known}`);
+    throw new Error(
+      `SMS_PROVIDER is "${selected}", which is not registered. ${known}`
+    );
   }
   return provider;
 }
@@ -104,7 +121,10 @@ function selectProvider(providers: SmsProvider[], selected: string | undefined):
 function resolve(env: SmsEnv, message: SmsMessage): ResolvedSmsMessage {
   const to = Array.isArray(message.to) ? message.to : [message.to];
   if (to.length === 0) {
-    throw new SmsError("invalid_message", "No recipients: `to` must hold at least one number.");
+    throw new SmsError(
+      "invalid_message",
+      "No recipients: `to` must hold at least one number."
+    );
   }
 
   for (const number of to) {
@@ -112,14 +132,17 @@ function resolve(env: SmsEnv, message: SmsMessage): ResolvedSmsMessage {
       throw new SmsError(
         "invalid_message",
         `"${number}" is not an E.164 number. Recipients must be written as a "+", the ` +
-          "country code and the national number, digits only — e.g. \"+14155550123\". This " +
-          "package validates the shape and never rewrites it; normalize before you call it.",
+          'country code and the national number, digits only — e.g. "+14155550123". This ' +
+          "package validates the shape and never rewrites it; normalize before you call it."
       );
     }
   }
 
   if (message.body.length === 0) {
-    throw new SmsError("invalid_message", "Empty body: there is nothing to send.");
+    throw new SmsError(
+      "invalid_message",
+      "Empty body: there is nothing to send."
+    );
   }
 
   // `from` is passed through exactly as given, including when it resolves to `undefined`:
@@ -127,5 +150,10 @@ function resolve(env: SmsEnv, message: SmsMessage): ResolvedSmsMessage {
   // sender raises `invalid_message` from its own `send()`. See `provider.ts`.
   const from = message.from ?? env.SMS_FROM;
 
-  return { ...message, to, from, estimatedSegments: countSegments(message.body) };
+  return {
+    ...message,
+    to,
+    from,
+    estimatedSegments: countSegments(message.body),
+  };
 }
