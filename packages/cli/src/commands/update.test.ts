@@ -255,6 +255,30 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     ]);
   });
 
+  it("refuses a pair that arrives across two separate prerequisite graphs", async () => {
+    // Neither graph alone holds both drivers, so the per-module check passes twice and
+    // only the combined pass sees the pair.
+    await state(["alpha", "beta"], { alpha: localEntry, beta: localEntry });
+    await descriptor("alpha", { dependsOn: ["driver-a"] });
+    await descriptor("beta", { dependsOn: ["driver-b"] });
+    await descriptor("driver-a", { conflictsWith: ["driver-b"] });
+    await descriptor("driver-b", {});
+
+    const [code, output] = await runCaptured(["--yes"]);
+    expect(code).toBe(2);
+    expect(output).toContain("module conflict");
+    expect(output).toContain("driver-a");
+    expect(output).toContain("driver-b");
+    // Refused before anything landed: the lock still records only what was installed.
+    const lock = JSON.parse(
+      await readFile(join(project, "saasaloy-lock.json"), "utf-8")
+    ) as { modules: Record<string, unknown> };
+    expect(Object.keys(lock.modules).toSorted()).toStrictEqual([
+      "alpha",
+      "beta",
+    ]);
+  });
+
   it("lets a non-conflicting update through", async () => {
     await state(["widget", "driver-a"], {
       widget: localEntry,

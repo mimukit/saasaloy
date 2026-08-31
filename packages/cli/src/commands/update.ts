@@ -30,6 +30,7 @@ import {
   RemoteRegistrySource,
 } from "../lib/registry.js";
 import type { LoadedModule, RegistrySource } from "../lib/registry.js";
+import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
@@ -549,6 +550,8 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // confirmation, so a refusal here has to stop the run, not one module of it.
     const conflictRefusals: string[] = [];
     const missingLockEntries = new Set<string>();
+    // Every graph that resolved, kept for the combined check below.
+    const resolvedGraphs: Graph[] = [];
     for (const comparison of outdated) {
       // One module's fetch failing is that module's problem: a dead tarball, a renamed
       // dependency, a network blip. It is reported and skipped, never fatal, so a bare
@@ -569,6 +572,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
           );
         }
 
+        resolvedGraphs.push(graph);
         const report = detectConflicts({ graph, config, lock });
         for (const name of report.missingLockEntries) {
           missingLockEntries.add(name);
@@ -624,6 +628,35 @@ export async function runUpdate(argv: string[]): Promise<number> {
           status: "unresolvable",
           detail: error instanceof Error ? error.message : String(error),
         });
+      }
+    }
+
+    // The per-module pass above cannot see a pair that arrives across two graphs: one
+    // outdated module's new version pulls in one driver, another's pulls in the other,
+    // and neither graph alone holds both. Union every resolved graph and check once more,
+    // before any plan is built or written (#98).
+    if (conflictRefusals.length === 0 && resolvedGraphs.length > 1) {
+      const merged: Graph = { order: [], modules: new Map() };
+      for (const graph of resolvedGraphs) {
+        for (const [name, mod] of graph.modules) {
+          if (!merged.modules.has(name)) {
+            merged.modules.set(name, mod);
+            merged.order.push(name);
+          }
+        }
+      }
+      const report = detectConflicts({ graph: merged, config, lock });
+      for (const name of report.missingLockEntries) {
+        missingLockEntries.add(name);
+      }
+      if (report.conflicts.length > 0) {
+        conflictRefusals.push(
+          formatConflicts(
+            report.conflicts,
+            outdated.map((c) => c.name).join(", "),
+            "update"
+          )
+        );
       }
     }
 
