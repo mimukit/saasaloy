@@ -27,3 +27,6 @@ pnpm-debug.log*
 # Claude Code skill links — regenerated per-machine by `saasaloy init` and `saasaloy add`.
 # The real skill files are committed under .agents/skills/.
 .claude/skills/
+
+# Turborepo task cache
+.turbo
