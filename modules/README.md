@@ -39,9 +39,10 @@ surface that provider needs (a binding, an npm dep, a secret). It ships no skill
 capability's skill documents it. See `.agents/skills/create-provider/`.
 
 A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several
-providers coexist behind one interface and a runtime env var picks one; only one driver may be
-installed, and each names the other in `conflictsWith` so `saasaloy add` refuses the second with a
-non-zero exit. A driver also outgrows the provider shape on purpose. It carries `scaffolds[]` and
+providers coexist behind one interface and a runtime env var picks one; a project holds exactly one
+driver. Each driver names the other in `conflictsWith` so `saasaloy add` refuses the second with a
+non-zero exit, and the capability names both in `requiresOneOf` so `add` will not leave the core
+installed with no driver behind it. A driver also outgrows the provider shape on purpose. It carries `scaffolds[]` and
 replaces files the capability would otherwise own (`packages/db/src/client.ts`,
 `drizzle.config.ts`, `tsconfig.json`). It ships its own skill too, because a project installs
 exactly one driver and the two runbooks share almost nothing. See ADR 0023.

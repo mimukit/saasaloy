@@ -28,6 +28,7 @@ reusable machinery under `lib/`, split into seams:
 | Applier | `lib/applier.ts` | plan file writes, classify each against the manifest, execute the safe ones |
 | Remover | `lib/remover.ts` | the same plan/execute split, in reverse, offline |
 | Conflicts | `lib/conflicts.ts` | the `conflictsWith` check, read from descriptors and the lock |
+| Requirements | `lib/requires.ts` | the `requiresOneOf` check — a capability naming the drivers one of which must be present |
 | Design | `lib/design.ts` | detect a plan that writes `packages/ui/`, so `add` can flag the design contract |
 | Patch engine | `lib/patch/` | structural edits to JSONC, `package.json` and TypeScript modules |
 | Schemas | `lib/schema.ts` | ajv validation of every descriptor and state file |

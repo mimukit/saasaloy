@@ -103,7 +103,7 @@ Verifiable by: a red build on a deliberately broken lint rule.
 Verifiable by: a descriptor whose target escapes the root fails with a named refusal, and the
 existing suite stays green.
 
-### Phase 2: Close the driver split (#98)
+### Phase 2: Close the driver split (#98) (built 2026-08-31)
 
 - Declare `dependsOn: ["database-d1"]` on `auth` and `waitlist` so `add` refuses a mismatched driver
   instead of failing at typecheck. This is a stopgap; file a follow-up issue for dialect-neutral

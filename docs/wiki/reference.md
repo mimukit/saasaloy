@@ -69,12 +69,24 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
-`database-d1` and `database-postgres` are the pair that uses it today. They are **driver
-modules**, two implementations of the same capability's connection layer, and a project
-holds one or the other. The `database` core carries the tables, the schema barrel and
+A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
+be present. `add` counts an option as present when it is already installed or arrives in
+the same resolved graph. When none is, an interactive run offers the list as a picker and
+adds what you choose to the plan; `--yes` or a run with no terminal exits 1 and names the
+options instead of choosing for you. `database` declares it, so the core can never land on
+a project with no driver behind its `@repo/db/client` export.
+
+`database-d1` and `database-postgres` are the pair both fields point at today. They are
+**driver modules**, two implementations of the same capability's connection layer, and a
+project holds exactly one: `requiresOneOf` on the core stops it at zero, `conflictsWith` on
+each driver stops it at two. The `database` core carries the tables, the schema barrel and
 `db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
 by removing one driver and adding the other, which moves no data
 ([ADR 0023](../adr/adr-0023-database-driver-split-2026-08-28.md)).
+
+`auth` and `waitlist` ship SQLite payloads and declare `dependsOn: ["database-d1"]`, so on
+a project running `database-postgres` both are refused by the conflict check. That is a
+stopgap until their payloads are dialect-neutral; see ADR 0023's 2026-08-31 amendment.
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
