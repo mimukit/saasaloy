@@ -80,7 +80,7 @@ describe("runAdd without a module name", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("saasaloy add [<module>");
   });
 
@@ -94,7 +94,7 @@ describe("runAdd without a module name", () => {
     } finally {
       captured.restore();
     }
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("saasaloy add [<module>");
   });
 });
@@ -168,7 +168,8 @@ describe("runAdd — dependency write ordering (#98)", () => {
       captured.restore();
     }
 
-    expect(code).toBe(1);
+    // The symlink guard is a refusal, not a crash — exit 2 (#98's 0/1/2 scheme).
+    expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("symlink");
     await expect(
       readFile(join(project, "package.json"), "utf-8")

@@ -99,6 +99,16 @@
         "type": "string"
       }
     },
+    "devVars": {
+      "type": "object",
+      "description": "Local-development values for a subset of `envVars`: NAME → the value `saasaloy add` pre-fills into the generated `apps/api/.dev.vars.example`. Only for a value that is the same on every machine and is not a secret (a loopback URL, a fixed port). Every key here must also appear in `envVars`; a key absent here is written with an empty value for the owner to fill in.",
+      "propertyNames": {
+        "pattern": "^[A-Z][A-Z0-9_]*$"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
     "patches": {
       "type": "array",
       "description": "Structural config patches applied at `add` time by the patch engine (issue #7). A flat array where each op names its own target `file` and codemod `kind` (wrangler.jsonc bindings, package.json dependency merges, package.json script entries, Better Auth plugin-array insertions, router chain `.route()` links); kind-specific payload fields are defined by the engine. An empty array means no patches (ADR 0019).",

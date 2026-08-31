@@ -135,6 +135,8 @@ export interface Plan {
   devDependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
   envVars: Record<string, string>;
+  /** Union of the local-dev values declared for those vars — written into `.dev.vars.example`. */
+  devVars: Record<string, string>;
   /** Aliases the installed scaffolds register into saasaloy.json (applied by executePlan). */
   aliases: Record<string, string>;
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
@@ -338,6 +340,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const dependencies: string[] = [];
   const devDependencies: string[] = [];
   const envVars: Record<string, string> = {};
+  const devVars: Record<string, string> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
   // files[] can resolve against a capability's brand-new alias even when both install in
@@ -410,6 +413,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const dep of item.devDependencies ?? []) {
       devDependencies.push(dep);
     }
+    for (const [key, value] of Object.entries(item.devVars ?? {})) {
+      devVars[key] = value;
+    }
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
     }
@@ -442,6 +448,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     links,
     dependencies,
     devDependencies,
+    devVars,
     envVars,
     aliases,
     aliasConflicts,

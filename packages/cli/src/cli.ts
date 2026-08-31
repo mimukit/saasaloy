@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import {
   cancel,
   isCancel as clackIsCancel,
@@ -7,6 +8,7 @@ import {
 import pc from "picocolors";
 import type { CommandRegistry } from "./commands/index.js";
 import { COMMANDS } from "./commands/index.js";
+import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "./lib/exit.js";
 import { isInteractive } from "./lib/tui.js";
 
 // Argument parsing and dispatch. Kept out of index.ts — which only bootstraps this and
@@ -50,6 +52,43 @@ export function printHelp(registry: CommandRegistry): void {
   for (const [name, command] of Object.entries(registry)) {
     console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
   }
+  console.log(`\n${pc.bold("Options:")}`);
+  console.log(
+    `  ${pc.cyan("-h, --help".padEnd(14))} ${pc.dim("show this help, or a command's own usage")}`
+  );
+  console.log(
+    `  ${pc.cyan("-v, --version".padEnd(14))} ${pc.dim("print the installed saasaloy version")}`
+  );
+  console.log(`\n${pc.bold("Exit codes:")}`);
+  console.log(
+    `  ${pc.cyan("0".padEnd(14))} ${pc.dim("done, or you answered no to the confirm")}`
+  );
+  console.log(
+    `  ${pc.cyan("1".padEnd(14))} ${pc.dim("something failed, or you cancelled")}`
+  );
+  console.log(
+    `  ${pc.cyan("2".padEnd(14))} ${pc.dim("saasaloy refused: bad usage, a conflict, an unmet requirement")}`
+  );
+  console.log(
+    `\n${pc.dim("Set SAASALOY_DEBUG=1 to print the full cause chain behind a failure.")}`
+  );
+}
+
+// The version comes off the package's own package.json rather than a build-time
+// constant, so a bug report names the build that is actually installed. At runtime
+// import.meta.url is <pkg>/dist/index.js and under vitest it is <pkg>/src/cli.ts, so
+// `../package.json` resolves to <pkg>/package.json either way.
+export async function readVersion(): Promise<string> {
+  try {
+    const file = fileURLToPath(new URL("../package.json", import.meta.url));
+    const parsed = JSON.parse(await readFile(file, "utf-8")) as {
+      version?: unknown;
+    };
+    return typeof parsed.version === "string" ? parsed.version : "unknown";
+  } catch {
+    // A missing or unreadable package.json is not worth failing `--version` over.
+    return "unknown";
+  }
 }
 
 // Bare invocation on a terminal: show what the tool can do and run the choice, rather
@@ -70,13 +109,13 @@ async function pickCommand(deps: CliDeps): Promise<number> {
   });
   if (isCancel(picked)) {
     cancel("cancelled");
-    return 1;
+    return EXIT_FAILURE;
   }
   // The options were mapped from this registry's own keys, so a miss can't happen; the
   // guard is what lets TypeScript narrow the lookup.
   const command = registry[picked];
   if (!command) {
-    return 1;
+    return EXIT_FAILURE;
   }
   // Hand off with an empty argv: every command already asks for what it needs (`init`
   // prompts for a name, `add`/`remove` open their module pickers), so the picker
@@ -103,7 +142,13 @@ export async function main(
   // Explicit help is never the picker, on a TTY as much as anywhere.
   if (name === "--help" || name === "-h" || name === "help") {
     printHelp(registry);
-    return 0;
+    return EXIT_OK;
+  }
+
+  // `--version` before dispatch, so it answers even when the project is unscaffolded.
+  if (name === "--version" || name === "-v" || name === "version") {
+    console.log(await readVersion());
+    return EXIT_OK;
   }
 
   if (!name) {
@@ -111,7 +156,7 @@ export async function main(
     // printed before the picker existed. A prompt nobody can answer would hang.
     if (!isInteractive()) {
       printHelp(registry);
-      return 0;
+      return EXIT_OK;
     }
     return pickCommand({ registry, select, isCancel });
   }
@@ -124,7 +169,8 @@ export async function main(
   if (!command) {
     console.error(`${pc.red("Unknown command:")} ${name}\n`);
     printHelp(registry);
-    return 1;
+    // Bad usage is a refusal, not a failure — nothing broke, the input was wrong.
+    return EXIT_REFUSED;
   }
 
   return command.run(rest);

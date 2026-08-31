@@ -8,6 +8,7 @@ import {
   outro,
   select,
 } from "@clack/prompts";
+import { posix } from "node:path";
 import pc from "picocolors";
 import { buildPlan, executePlan } from "../lib/applier.js";
 import type {
@@ -17,11 +18,19 @@ import type {
   PlannedFile,
 } from "../lib/applier.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
+import {
+  EXIT_FAILURE,
+  EXIT_OK,
+  EXIT_REFUSED,
+  exitCodeFor,
+  formatFailure,
+} from "../lib/exit.js";
 import { planWritesUi } from "../lib/design.js";
+import { DEV_VARS_EXAMPLE, writeDevVarsExample } from "../lib/dev-vars.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
-import { loadManifest, managedModules, saveManifest } from "../lib/manifest.js";
+import { loadManifest, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
@@ -39,6 +48,9 @@ import {
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
+import type { CommandHelp } from "../lib/usage.js";
+import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -55,9 +67,28 @@ interface Options {
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y", "--force"]);
+const KNOWN_FLAGS = new Set([
+  "--dry-run",
+  "--diff",
+  "--yes",
+  "-y",
+  "--force",
+  "--help",
+  "-h",
+]);
 const USAGE =
   "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]";
+const HELP: CommandHelp = {
+  name: "add",
+  describe: DESCRIPTIONS.add,
+  usage: USAGE,
+  flags: {
+    "--dry-run": "show the plan and write nothing",
+    "--diff": "show a per-file diff and write nothing",
+    "-y, --yes": "skip the confirmation prompt",
+    "--force": "re-apply a module that is already installed",
+  },
+};
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -213,7 +244,58 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   }
 }
 
+/**
+ * The closing box: where the module's procedure is written down, and what the project
+ * still needs from the operator. `add waitlist` used to end at "Applied" while the
+ * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
+ * printed at plan time had scrolled away behind the confirmation (#98).
+ *
+ * There is deliberately no `nextSteps` field on the descriptor. The skill is the single
+ * source of a module's procedure; a second copy in the descriptor would drift from it,
+ * and this box points at the skill rather than paraphrasing it.
+ */
+function printNextSteps(
+  plan: Plan,
+  result: ApplyResult,
+  devVarsPath: string | undefined
+): void {
+  const lines: string[] = [];
+
+  const skills = result.links
+    .map((link) => posix.basename(link.path))
+    .toSorted();
+  if (skills.length > 0) {
+    lines.push(
+      `Read the module's own procedure — in Claude Code, run ${skills
+        .map((name) => pc.cyan(`/${name}`))
+        .join(" or ")}.`
+    );
+  }
+
+  const envKeys = Object.keys(plan.envVars).toSorted();
+  if (envKeys.length > 0) {
+    lines.push(
+      `Set ${envKeys.map((key) => pc.cyan(key)).join(", ")}.`,
+      devVarsPath
+        ? `${pc.cyan(devVarsPath)} lists each one with its description — copy it to ${pc.cyan(".dev.vars")} and fill it in.`
+        : pc.dim("Each one is described in the plan above.")
+    );
+  }
+
+  if (lines.length === 0) {
+    return;
+  }
+  note(wrapForNote(lines.join("\n\n")), "Next steps");
+}
+
 export async function runAdd(argv: string[]): Promise<number> {
+  // Help is answered before the intro rail opens, so it reads as plain output a person
+  // can pipe into a pager rather than as a clack box.
+  if (wantsHelp(argv)) {
+    printCommandHelp(HELP);
+    return EXIT_OK;
+  }
+
   const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy add ")));
 
@@ -221,15 +303,15 @@ export async function runAdd(argv: string[]): Promise<number> {
     cancel(
       `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
     );
-    return 1;
+    return EXIT_REFUSED;
   }
 
   let coord: ReturnType<typeof parseCoordinate>;
   try {
     coord = parseCoordinate(opts.name);
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error));
-    return 1;
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
   }
 
   let root: string;
@@ -238,8 +320,8 @@ export async function runAdd(argv: string[]): Promise<number> {
     root = await findProjectRoot();
     config = await loadConfig(root);
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error));
-    return 1;
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
   }
 
   let plan: Plan;
@@ -275,20 +357,33 @@ export async function runAdd(argv: string[]): Promise<number> {
         cancel(
           `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
         );
-        return 1;
+        return EXIT_REFUSED;
       }
-      const available = await source.listModules();
-      if (available.length === 0) {
+      const offered = await source.listModules();
+      if (offered.length === 0) {
         cancel(`No modules found in ${source.label}.`);
-        return 1;
+        return EXIT_REFUSED;
+      }
+      // Picking something already installed took the user through a plan preview to
+      // "Nothing to do", which reads as a bug in the picker rather than an answer.
+      // `--force` re-applies one, and that path names the module explicitly (#98).
+      const installed = new Set(config.installed);
+      const available = offered.filter((n) => !installed.has(n));
+      if (available.length === 0) {
+        note(
+          `Every module in ${source.label} is already installed.`,
+          "Nothing to add"
+        );
+        outro(pc.dim("use `saasaloy add <module> --force` to re-apply one"));
+        return EXIT_OK;
       }
       const picked = await select({
-        message: `Pick a module to add ${pc.dim(`(from ${source.label})`)}`,
+        message: `Pick a module to add ${pc.dim(`(from ${source.label}, ${installed.size} already installed)`)}`,
         options: available.map((n) => ({ label: n, value: n })),
       });
       if (isCancel(picked)) {
         cancel("add cancelled");
-        return 1;
+        return EXIT_FAILURE;
       }
       requested = picked;
     }
@@ -303,7 +398,7 @@ export async function runAdd(argv: string[]): Promise<number> {
       // `--yes` means "don't ask me", not "choose a driver for my project", and a
       // pipeline has no terminal to answer in. Both refuse and name the options.
       cancel(formatMissingRequirements(unmet, requested));
-      return 1;
+      return EXIT_REFUSED;
     }
     // One prompt per unmet requirement, re-checked after each pick: a single driver can
     // satisfy two capabilities, and a picked module may declare a requirement of its own.
@@ -324,14 +419,14 @@ export async function runAdd(argv: string[]): Promise<number> {
       });
       if (isCancel(picked)) {
         cancel("add cancelled");
-        return 1;
+        return EXIT_FAILURE;
       }
       graph = mergeGraph(graph, await resolveGraph(source, picked));
       unmet = detectMissingRequirements({ config, graph });
     }
     if (unmet.length > 0) {
       cancel(formatMissingRequirements(unmet, requested));
-      return 1;
+      return EXIT_REFUSED;
     }
 
     prereqs = graph.order.filter((n) => n !== requested);
@@ -339,14 +434,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     // Mutually exclusive modules are refused before anything is written, and `--force`
     // doesn't bypass it — force means "re-apply this module", not "install it anyway".
     const manifest = await loadManifest(root);
-    const conflicts = detectConflicts({
-      graph,
-      config,
-      lock,
-      // Only modules this tool applied. The scaffold template lists `web` in `installed[]`
-      // and never writes it a lock entry, so checking every name warns on every add.
-      managed: managedModules(manifest),
-    });
+    const conflicts = detectConflicts({ graph, config, lock });
     if (conflicts.missingLockEntries.length > 0) {
       log.warn(
         `No lock entry for ${conflicts.missingLockEntries.map((m) => pc.cyan(m)).join(", ")} — ` +
@@ -355,7 +443,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     if (conflicts.conflicts.length > 0) {
       cancel(formatConflicts(conflicts.conflicts, requested));
-      return 1;
+      return EXIT_REFUSED;
     }
 
     const install = graph.order.filter(
@@ -372,7 +460,7 @@ export async function runAdd(argv: string[]): Promise<number> {
         "Nothing to do"
       );
       outro(pc.dim("use --force to re-apply"));
-      return 0;
+      return EXIT_OK;
     }
 
     plan = await buildPlan({
@@ -416,18 +504,18 @@ export async function runAdd(argv: string[]): Promise<number> {
             : "dry run — nothing applied"
         )
       );
-      return 0;
+      return EXIT_OK;
     }
 
     if (!opts.yes) {
       const proceed = await confirm({ message: "Proceed?" });
       if (isCancel(proceed)) {
         cancel("add cancelled");
-        return 1;
+        return EXIT_FAILURE;
       }
       if (!proceed) {
         outro(pc.dim("aborted — nothing applied"));
-        return 0;
+        return EXIT_OK;
       }
     }
 
@@ -538,15 +626,33 @@ export async function runAdd(argv: string[]): Promise<number> {
       );
     }
 
+    // The env vars printed at plan time, several boxes and a confirmation ago. Write
+    // them where the project can keep them, and say where that is (#98).
+    let devVarsPath: string | undefined;
+    try {
+      devVarsPath = await writeDevVarsExample({
+        aliases: config.aliases,
+        devVars: plan.devVars,
+        envVars: plan.envVars,
+        root,
+      });
+    } catch (error) {
+      // Best-effort, like the dependency merge: an unwritable example file must not
+      // undo an apply that already landed.
+      log.warn(`Couldn't write ${DEV_VARS_EXAMPLE} — ${formatFailure(error)}.`);
+    }
+
+    printNextSteps(plan, result, devVarsPath);
+
     outro(
       pc.green(
         `Applied ${plan.install.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
       )
     );
-    return 0;
+    return EXIT_OK;
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error));
-    return 1;
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
   } finally {
     // A remote source extracts each module to a temp dir; drop them once applied.
     await source?.cleanup?.();

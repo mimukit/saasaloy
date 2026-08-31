@@ -322,11 +322,17 @@ export default defineConfig({
 
     // --- no-console exemptions ---------------------------------------------
     // Terminal UX is the product here: @clack/prompts + picocolors write to the
-    // console by design (ADR 0009). Note this is the entrypoint pair only —
-    // `index.ts` bootstraps and `cli.ts` prints help and the unknown-command error.
+    // console by design (ADR 0009). Note this is the help surface only — `index.ts`
+    // bootstraps, `cli.ts` prints the top-level help and the unknown-command error,
+    // and `lib/usage.ts` prints one command's `--help`. Help is plain stdout on
+    // purpose: it has to survive a pipe into a pager, which a clack rail does not.
     // Every other file under packages/cli/src goes through lib/logger.ts.
     {
-      files: ["packages/cli/src/index.ts", "packages/cli/src/cli.ts"],
+      files: [
+        "packages/cli/src/index.ts",
+        "packages/cli/src/cli.ts",
+        "packages/cli/src/lib/usage.ts",
+      ],
       rules: { "no-console": "off" },
     },
     // Maintainer tooling — these scripts *are* their output.

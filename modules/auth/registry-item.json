@@ -9,6 +9,9 @@
     "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop.",
     "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
   },
+  "devVars": {
+    "BETTER_AUTH_URL": "http://localhost:4000"
+  },
   "patches": [
     {
       "file": "apps/api/src/index.ts",

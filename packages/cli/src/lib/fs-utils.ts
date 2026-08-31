@@ -17,6 +17,7 @@ import {
   resolve,
   sep,
 } from "node:path";
+import { RefusalError } from "./exit.js";
 
 /** sha256 hex digest of a string — used to fingerprint managed files in the manifest. */
 export function hashContent(content: string): string {
@@ -37,7 +38,7 @@ export function hashContent(content: string): string {
  */
 export function resolveWithinRoot(root: string, relPosixPath: string): string {
   const reject = (why: string): never => {
-    throw new Error(
+    throw new RefusalError(
       `Refusing to resolve ${JSON.stringify(relPosixPath)}: ${why}. This usually means the state file that recorded it is corrupt or was hand-edited.`
     );
   };
@@ -99,7 +100,7 @@ export async function assertNoSymlinkPath(
       return; // not on disk yet — nothing here can be followed
     }
     if (stat.isSymbolicLink()) {
-      throw new Error(
+      throw new RefusalError(
         `Refusing to touch ${JSON.stringify(rel.split(sep).join("/"))}: ${JSON.stringify(segment)} is a symlink, and following it would leave the project root. This usually means the state file that recorded the path is corrupt or was hand-edited.`
       );
     }

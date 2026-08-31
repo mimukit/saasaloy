@@ -70,20 +70,20 @@ async function runCaptured(argv: string[]): Promise<[number, string]> {
 describe("runUpdate value flags", () => {
   it("rejects `--ref` when the next token is another flag", async () => {
     const [code, output] = await runCaptured(["email", "--ref", "--dry-run"]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("--ref (missing value)");
   });
 
   it("rejects `--ref` at the end of the argv", async () => {
     const [code, output] = await runCaptured(["email", "--ref"]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("--ref (missing value)");
   });
 
   it("still accepts the inline `--ref=<value>` form", async () => {
     // Reaches the "needs an explicit module" guard, which proves the ref was parsed.
     const [code, output] = await runCaptured(["--ref=v2"]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("`--ref` needs an explicit module");
   });
 });
@@ -95,7 +95,7 @@ describe("runUpdate --out", () => {
     [join(".saasaloy", "manifest.json")],
   ])("refuses to write the merge plan over %s", async (target) => {
     const [code, output] = await runCaptured(["--out", target]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("Refusing to write the merge plan");
   });
 
@@ -104,7 +104,7 @@ describe("runUpdate --out", () => {
       "--out",
       join(dir, "saasaloy-lock.json"),
     ]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("Refusing to write the merge plan");
   });
 });
@@ -140,7 +140,7 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     process.stdin.isTTY = false;
     process.stdout.isTTY = false;
     const [code, output] = await runCaptured([]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("No terminal to confirm in");
     // It refuses before the registry is reached, which is what keeps this test offline.
     expect(output).not.toContain("Nothing installed");
@@ -150,7 +150,7 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     process.stdin.isTTY = false;
     process.stdout.isTTY = true;
     const [code, output] = await runCaptured([]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("No terminal to confirm in");
   });
 
@@ -241,7 +241,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     await descriptor("driver-b", { conflictsWith: ["driver-a"] });
 
     const [code, output] = await runCaptured(["widget", "--yes"]);
-    expect(code).toBe(1);
+    expect(code).toBe(2);
     expect(output).toContain("module conflict");
     expect(output).toContain("driver-a");
     expect(output).toContain("saasaloy remove driver-a");

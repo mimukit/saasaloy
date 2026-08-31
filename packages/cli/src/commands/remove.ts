@@ -10,6 +10,13 @@ import {
 } from "@clack/prompts";
 import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
+import {
+  EXIT_FAILURE,
+  EXIT_OK,
+  EXIT_REFUSED,
+  exitCodeFor,
+  formatFailure,
+} from "../lib/exit.js";
 import { loadLock, saveLock } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
 import { isReversibleKind } from "../lib/patch/index.js";
@@ -24,6 +31,9 @@ import type {
 } from "../lib/remover.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
+import type { CommandHelp } from "../lib/usage.js";
+import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy remove <module>` — the local undo, mirroring `add`'s clack UX and flag
 // surface. Fully offline: the plan derives entirely from manifest.json,
@@ -40,9 +50,28 @@ interface Options {
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y", "--force"]);
+const KNOWN_FLAGS = new Set([
+  "--dry-run",
+  "--diff",
+  "--yes",
+  "-y",
+  "--force",
+  "--help",
+  "-h",
+]);
 const USAGE =
   "saasaloy remove [<module>] [--dry-run] [--diff] [--yes] [--force]";
+const HELP: CommandHelp = {
+  name: "remove",
+  describe: DESCRIPTIONS.remove,
+  usage: USAGE,
+  flags: {
+    "--dry-run": "show the plan and delete nothing",
+    "--diff": "show what each deletion removes, and delete nothing",
+    "-y, --yes": "skip the confirmation prompt (drifted files are kept)",
+    "--force": "remove even while another module depends on it",
+  },
+};
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -174,6 +203,11 @@ function summarizeRemovePlan(
 }
 
 export async function runRemove(argv: string[]): Promise<number> {
+  if (wantsHelp(argv)) {
+    printCommandHelp(HELP);
+    return EXIT_OK;
+  }
+
   const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy remove ")));
 
@@ -181,7 +215,7 @@ export async function runRemove(argv: string[]): Promise<number> {
     cancel(
       `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
     );
-    return 1;
+    return EXIT_REFUSED;
   }
 
   let root: string;
@@ -190,8 +224,8 @@ export async function runRemove(argv: string[]): Promise<number> {
     root = await findProjectRoot();
     config = await loadConfig(root);
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error));
-    return 1;
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
   }
 
   try {
@@ -200,7 +234,7 @@ export async function runRemove(argv: string[]): Promise<number> {
       if (config.installed.length === 0) {
         note("Nothing installed.", "Nothing to do");
         outro(pc.dim("0 modules"));
-        return 0;
+        return EXIT_OK;
       }
       // Same hazard as `add`: without a terminal this prompt can never be answered, so
       // it would hang rather than fail.
@@ -208,7 +242,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         cancel(
           `No module named and no terminal to pick one in — usage: \`${USAGE}\`.`
         );
-        return 1;
+        return EXIT_REFUSED;
       }
       const picked = await select({
         message: "Pick a module to remove",
@@ -216,14 +250,14 @@ export async function runRemove(argv: string[]): Promise<number> {
       });
       if (isCancel(picked)) {
         cancel("remove cancelled");
-        return 1;
+        return EXIT_FAILURE;
       }
       name = picked;
     }
 
     if (!config.installed.includes(name)) {
       cancel(`${pc.cyan(name)} isn't installed — nothing to remove.`);
-      return 1;
+      return EXIT_REFUSED;
     }
 
     const manifest = await loadManifest(root);
@@ -235,7 +269,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         `${pc.cyan(name)} is still depended on by ${plan.dependents.join(", ")} — refusing ` +
           `${pc.dim("(use --force to remove it anyway)")}.`
       );
-      return 1;
+      return EXIT_REFUSED;
     }
 
     summarizeRemovePlan(plan, name, opts.yes);
@@ -269,7 +303,7 @@ export async function runRemove(argv: string[]): Promise<number> {
             : "dry run — nothing removed"
         )
       );
-      return 0;
+      return EXIT_OK;
     }
 
     // Drift is sacred: confirm per file before deleting hand-edited content.
@@ -286,7 +320,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         });
         if (isCancel(proceed)) {
           cancel("remove cancelled");
-          return 1;
+          return EXIT_FAILURE;
         }
         if (proceed) {
           deleteDrifted.add(file.target);
@@ -298,11 +332,11 @@ export async function runRemove(argv: string[]): Promise<number> {
       const proceed = await confirm({ message: "Proceed?" });
       if (isCancel(proceed)) {
         cancel("remove cancelled");
-        return 1;
+        return EXIT_FAILURE;
       }
       if (!proceed) {
         outro(pc.dim("aborted — nothing removed"));
-        return 0;
+        return EXIT_OK;
       }
     }
 
@@ -387,9 +421,9 @@ export async function runRemove(argv: string[]): Promise<number> {
         `Removed ${pc.bold(name)} ${pc.dim(`(${result.deleted.length} files)`)}`
       )
     );
-    return 0;
+    return EXIT_OK;
   } catch (error) {
-    cancel(error instanceof Error ? error.message : String(error));
-    return 1;
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
   }
 }

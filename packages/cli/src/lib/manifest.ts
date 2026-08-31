@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import { validateManifest } from "./schema.js";
 import type { RegistryPatch } from "./schema.js";
@@ -60,23 +61,6 @@ export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
   );
 }
 
-/**
- * Every module the tool has actually applied to this project, read off what it recorded.
- * A name in `saasaloy.json` `installed[]` that is absent here came from the scaffold
- * template (`web`) or a hand edit: the tool never installed it, so it has no descriptor,
- * no lock entry, and nothing to say about conflicts.
- */
-export function managedModules(manifest: Manifest): Set<string> {
-  const names = new Set<string>();
-  for (const entry of Object.values(manifest.managed)) {
-    names.add(entry.module);
-  }
-  for (const entry of manifest.patches) {
-    names.add(entry.module);
-  }
-  return names;
-}
-
 export function emptyManifest(): Manifest {
   return { links: {}, managed: {}, patches: [] };
 }
@@ -92,7 +76,7 @@ export async function loadManifest(root: string): Promise<Manifest> {
   // as a typed object that lies about its shape (#98). Same posture as `loadConfig`.
   const result = await validateManifest(raw);
   if (!result.valid) {
-    throw new Error(
+    throw new RefusalError(
       `${MANIFEST_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
     );
   }

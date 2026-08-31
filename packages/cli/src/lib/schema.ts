@@ -106,6 +106,14 @@ function formatError(err: ErrorObject): string {
 
 export interface SaasaloyConfig {
   aliases: Record<string, string>;
+  /**
+   * The base app `saasaloy init` scaffolded (`web`). It is not a module: the tool never
+   * applied it, so it has no descriptor, no manifest entry and no lock entry. Until #98
+   * the template listed it in `installed[]` and every engine carried an excuse for the
+   * one name in that list it could say nothing about. Optional so a project scaffolded
+   * before the field existed still validates; `loadConfig` migrates it.
+   */
+  base?: string;
   installed: string[];
 }
 
@@ -149,6 +157,8 @@ export interface RegistryItem {
   devDependencies?: string[];
   files?: RegistryFile[];
   envVars?: Record<string, string>;
+  /** Local-dev values for a subset of `envVars`, pre-filled into `.dev.vars.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
+  devVars?: Record<string, string>;
   patches?: RegistryPatch[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;

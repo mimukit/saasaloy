@@ -1,4 +1,5 @@
 import { runAdd } from "./add.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 import { runInit } from "./init.js";
 import { runList } from "./list.js";
 import { runRemove } from "./remove.js";
@@ -19,26 +20,9 @@ export type CommandRegistry = Record<string, Command>;
 // undo → browse), and it is the order both help and the picker render. Append with that
 // in mind. No explicit `order`/`group` field until the list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
-  init: {
-    describe:
-      "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
-    run: runInit,
-  },
-  add: {
-    describe: "apply a module into the current project (resolves dependsOn)",
-    run: runAdd,
-  },
-  update: {
-    describe:
-      "re-apply modules at a newer ref, with a merge plan for anything you edited",
-    run: runUpdate,
-  },
-  remove: {
-    describe: "undo a module's applied files via the manifest (offline)",
-    run: runRemove,
-  },
-  list: {
-    describe: "list available modules",
-    run: runList,
-  },
+  init: { describe: DESCRIPTIONS.init, run: runInit },
+  add: { describe: DESCRIPTIONS.add, run: runAdd },
+  update: { describe: DESCRIPTIONS.update, run: runUpdate },
+  remove: { describe: DESCRIPTIONS.remove, run: runRemove },
+  list: { describe: DESCRIPTIONS.list, run: runList },
 };

@@ -41,9 +41,10 @@ export interface ConflictReport {
    * indistinguishable from one whose module declares no conflicts, so it can't be
    * flagged here — this covers the gap that is actually visible.
    *
-   * Only modules the tool actually installed appear here (see `managed`). The scaffold
-   * template puts `web` in `installed[]` and never gives it a lock entry, and reporting
-   * that on every add would be noise no user can act on.
+   * Every name in `installed[]` is a module `saasaloy add` applied, so every one of them
+   * belongs here when its lock entry is missing. The base app is no longer in that list:
+   * it has its own `base` field (#98), which is what retired the `managed` allowlist this
+   * report used to need.
    */
   missingLockEntries: string[];
 }
@@ -53,14 +54,6 @@ export interface DetectConflictsArgs {
   graph: Graph;
   config: SaasaloyConfig;
   lock: Lockfile;
-  /**
-   * Modules the tool has recorded in `.saasaloy/manifest.json` (`managedModules`). Only
-   * these can be reported as missing a lock entry: a name in `installed[]` the tool never
-   * applied has no descriptor to declare a conflict, and "re-add it" is advice that
-   * cannot be followed for the template's own `web`. Omit it to check every installed
-   * name — `add` always passes it.
-   */
-  managed?: ReadonlySet<string>;
 }
 
 // Order-independent key, so a pair both sides declare is reported once. The separator is
@@ -71,7 +64,7 @@ function pairKey(a: string, b: string): string {
 }
 
 export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
-  const { graph, config, lock, managed } = args;
+  const { graph, config, lock } = args;
   const installed = new Set(config.installed);
   const conflicts: ModuleConflict[] = [];
   const seen = new Set<string>();
@@ -118,11 +111,7 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
     }
     const entry = lock.modules[name];
     if (!entry) {
-      // Silent for anything the tool never installed — the scaffold's `web`, or a hand
-      // edit. There is no descriptor behind it, so there is no conflict to miss.
-      if (!managed || managed.has(name)) {
-        missingLockEntries.push(name);
-      }
+      missingLockEntries.push(name);
       continue;
     }
     for (const other of entry.conflictsWith ?? []) {

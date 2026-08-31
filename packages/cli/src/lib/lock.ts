@@ -1,5 +1,6 @@
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import type { ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -48,7 +49,7 @@ export async function loadLock(root: string): Promise<Lockfile> {
   // `lockfileVersion` has to stop the command here (#98). Same posture as `loadConfig`.
   const result = await validateLock(raw);
   if (!result.valid) {
-    throw new Error(
+    throw new RefusalError(
       `${LOCK_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
     );
   }

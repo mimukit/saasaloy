@@ -214,22 +214,23 @@ describe("detectConflicts — reverse direction (installed module declared it)",
     expect(report.missingLockEntries).toStrictEqual([]);
   });
 
-  it("stays silent about an installed name the tool never applied (the template's web)", () => {
+  // The base app used to sit in `installed[]`, which is why this report once needed a
+  // `managed` allowlist to stay quiet about it. It has its own `base` field now (#98),
+  // so `installed[]` holds only modules `add` applied and every one of them is checked.
+  it("says nothing when every installed module has a lock entry", () => {
     const report = detectConflicts({
       graph: graph(mod("database-d1")),
-      config: config("web", "api"),
+      config: config("api"),
       lock: lockFor(mod("api")),
-      managed: new Set(["api"]), // `web` comes from the scaffold, not from `add`
     });
     expect(report.missingLockEntries).toStrictEqual([]);
   });
 
-  it("still reports a managed module that lost its lock entry", () => {
+  it("reports an installed module that lost its lock entry", () => {
     const report = detectConflicts({
       graph: graph(mod("database-d1")),
-      config: config("web", "api"),
+      config: config("api"),
       lock: emptyLock(),
-      managed: new Set(["api"]),
     });
     expect(report.missingLockEntries).toStrictEqual(["api"]);
   });

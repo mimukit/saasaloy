@@ -12,13 +12,15 @@ import {
 import pc from "picocolors";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
-import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
 import {
-  loadManifest,
-  managedModules,
-  MANIFEST_FILE,
-  saveManifest,
-} from "../lib/manifest.js";
+  EXIT_FAILURE,
+  EXIT_OK,
+  EXIT_REFUSED,
+  exitCodeFor,
+  formatFailure,
+} from "../lib/exit.js";
+import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
+import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -31,6 +33,9 @@ import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
+import type { CommandHelp } from "../lib/usage.js";
+import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { DESCRIPTIONS } from "./descriptions.js";
 import {
   buildUpdatePlan,
   compareInstalled,
@@ -70,10 +75,29 @@ interface Options {
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--dry-run", "--diff", "--yes", "-y"]);
+const KNOWN_FLAGS = new Set([
+  "--dry-run",
+  "--diff",
+  "--yes",
+  "-y",
+  "--help",
+  "-h",
+]);
 const VALUE_FLAGS = new Set(["--ref", "--out"]);
 const USAGE =
   "saasaloy update [<module>] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
+const HELP: CommandHelp = {
+  name: "update",
+  describe: DESCRIPTIONS.update,
+  usage: USAGE,
+  flags: {
+    "--ref <ref>": "update one module to this branch, tag, or SHA",
+    "--out <path>": "write the merge plan to a file instead of stdout",
+    "--dry-run": "show the plan and write nothing",
+    "--diff": "show a per-file diff and write nothing",
+    "-y, --yes": "skip the confirmation prompt",
+  },
+};
 
 function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -372,6 +396,11 @@ function splitSlug(slug: string): [string, string] | undefined {
 }
 
 export async function runUpdate(argv: string[]): Promise<number> {
+  if (wantsHelp(argv)) {
+    printCommandHelp(HELP);
+    return EXIT_OK;
+  }
+
   const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy update ")), TUI_ON_STDERR);
 
@@ -380,7 +409,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
       `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
       TUI_ON_STDERR
     );
-    return 1;
+    return EXIT_REFUSED;
   }
   // A bare `update --ref v2` would silently move every module onto one ref, which is
   // never what someone means — the unpin is per module by construction (decision 10).
@@ -389,7 +418,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
       `\`--ref\` needs an explicit module — usage: \`${USAGE}\`.`,
       TUI_ON_STDERR
     );
-    return 1;
+    return EXIT_REFUSED;
   }
 
   let root: string;
@@ -398,17 +427,14 @@ export async function runUpdate(argv: string[]): Promise<number> {
     root = await findProjectRoot();
     config = await loadConfig(root);
   } catch (error) {
-    cancel(
-      error instanceof Error ? error.message : String(error),
-      TUI_ON_STDERR
-    );
-    return 1;
+    cancel(formatFailure(error), TUI_ON_STDERR);
+    return exitCodeFor(error);
   }
 
   const outRefusal = await stateFileRefusal(root, opts.out);
   if (outRefusal) {
     cancel(outRefusal, TUI_ON_STDERR);
-    return 1;
+    return EXIT_REFUSED;
   }
 
   // The merge plan goes to stdout, so `saasaloy update email | claude` is the designed
@@ -424,7 +450,8 @@ export async function runUpdate(argv: string[]): Promise<number> {
       "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview.",
       TUI_ON_STDERR
     );
-    return 1;
+    // Refused by design, like every other bad-usage exit here (#98's 0/1/2 scheme).
+    return EXIT_REFUSED;
   }
 
   const sources: RegistrySource[] = [];
@@ -434,13 +461,13 @@ export async function runUpdate(argv: string[]): Promise<number> {
         `${pc.cyan(opts.name)} isn't installed — nothing to update.`,
         TUI_ON_STDERR
       );
-      return 1;
+      return EXIT_REFUSED;
     }
     const targets = opts.name ? [opts.name] : config.installed;
     if (targets.length === 0) {
       note("Nothing installed.", "Nothing to do", TUI_ON_STDERR);
       outro(pc.dim("0 modules"), TUI_ON_STDERR);
-      return 0;
+      return EXIT_OK;
     }
 
     const manifest = await loadManifest(root);
@@ -506,7 +533,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
         );
       }
       outro(pc.green("Everything is up to date."), TUI_ON_STDERR);
-      return 0;
+      return EXIT_OK;
     }
 
     // Fetch each outdated module twice — at the new SHA (theirs) and at the SHA the lock
@@ -521,7 +548,6 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // confirmation, so a refusal here has to stop the run, not one module of it.
     const conflictRefusals: string[] = [];
     const missingLockEntries = new Set<string>();
-    const managed = managedModules(manifest);
     for (const comparison of outdated) {
       // One module's fetch failing is that module's problem: a dead tarball, a renamed
       // dependency, a network blip. It is reported and skipped, never fatal, so a bare
@@ -542,14 +568,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
           );
         }
 
-        const report = detectConflicts({
-          graph,
-          config,
-          lock,
-          // Only modules this tool applied, same as `add`: the scaffold template lists
-          // `web` in `installed[]` and never writes it a lock entry.
-          managed,
-        });
+        const report = detectConflicts({ graph, config, lock });
         for (const name of report.missingLockEntries) {
           missingLockEntries.add(name);
         }
@@ -616,7 +635,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
     }
     if (conflictRefusals.length > 0) {
       cancel(conflictRefusals.join("\n"), TUI_ON_STDERR);
-      return 1;
+      return EXIT_REFUSED;
     }
 
     // Everything outdated failed to fetch — there is no plan to summarize or confirm.
@@ -630,8 +649,9 @@ export async function runUpdate(argv: string[]): Promise<number> {
           log.info(line, TUI_ON_STDERR);
         }
       }
+      // Every candidate failed to fetch — a failure, not a refusal: a retry may work.
       outro(pc.yellow("Nothing could be updated."), TUI_ON_STDERR);
-      return 1;
+      return EXIT_FAILURE;
     }
 
     const pkg = await readRootPackageJson(root);
@@ -685,18 +705,18 @@ export async function runUpdate(argv: string[]): Promise<number> {
         ),
         TUI_ON_STDERR
       );
-      return 0;
+      return EXIT_OK;
     }
 
     if (!opts.yes) {
       const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
       if (isCancel(proceed)) {
         cancel("update cancelled", TUI_ON_STDERR);
-        return 1;
+        return EXIT_FAILURE;
       }
       if (!proceed) {
         outro(pc.dim("aborted — nothing applied"), TUI_ON_STDERR);
-        return 0;
+        return EXIT_OK;
       }
     }
 
@@ -755,13 +775,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // Drift routing to a merge plan is the designed outcome, not a failure — exit 0
     // whether or not anything was left for the agent to reconcile.
     outro(summarizeOutcome(plan, result), TUI_ON_STDERR);
-    return 0;
+    return EXIT_OK;
   } catch (error) {
-    cancel(
-      error instanceof Error ? error.message : String(error),
-      TUI_ON_STDERR
-    );
-    return 1;
+    cancel(formatFailure(error), TUI_ON_STDERR);
+    return exitCodeFor(error);
   } finally {
     // Each remote source extracted its modules to a temp dir; drop them all.
     for (const source of sources) {
