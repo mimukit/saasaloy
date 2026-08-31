@@ -135,10 +135,26 @@ export function detectConflicts(args: DetectConflictsArgs): ConflictReport {
   return { conflicts, missingLockEntries };
 }
 
+/**
+ * Which command is reporting. `update` runs the same check because a new version can
+ * introduce a `dependsOn` on a second driver, and installing it as a prerequisite would
+ * land the exact pair `add` refuses (#98).
+ */
+export type ConflictAction = "add" | "update";
+
+const GERUND: Record<ConflictAction, string> = {
+  add: "adding",
+  update: "updating",
+};
+
 // One conflict as a sentence: both module names, which side declared it, and the way out.
 // `requested` is what the user typed, so a conflict raised by a transitive prerequisite
 // says so rather than naming a module the user never mentioned.
-function describe(conflict: ModuleConflict, requested: string): string {
+function describe(
+  conflict: ModuleConflict,
+  requested: string,
+  action: ConflictAction
+): string {
   const { declaredBy, conflictsWith, installed } = conflict;
 
   if (!installed) {
@@ -146,7 +162,7 @@ function describe(conflict: ModuleConflict, requested: string): string {
       declaredBy === requested
         ? declaredBy
         : `${declaredBy} (required by ${requested})`;
-    return `${first} declares a conflict with ${conflictsWith}, and adding ${requested} installs both. Add only one of them.`;
+    return `${first} declares a conflict with ${conflictsWith}, and ${GERUND[action]} ${requested} installs both. Add only one of them.`;
   }
 
   const incoming = installed === declaredBy ? conflictsWith : declaredBy;
@@ -161,13 +177,15 @@ function describe(conflict: ModuleConflict, requested: string): string {
   return `${sentence}. Run \`saasaloy remove ${installed}\` first.`;
 }
 
-/** The refusal `add` prints. One line per conflicting pair, under a heading. */
+/** The refusal `add` and `update` print. One line per conflicting pair, under a heading. */
 export function formatConflicts(
   conflicts: ModuleConflict[],
-  requested: string
+  requested: string,
+  action: ConflictAction = "add"
 ): string {
-  const heading = `Cannot add ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
-  return [heading, ...conflicts.map((c) => `  ${describe(c, requested)}`)].join(
-    "\n"
-  );
+  const heading = `Cannot ${action} ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
+  return [
+    heading,
+    ...conflicts.map((c) => `  ${describe(c, requested, action)}`),
+  ].join("\n");
 }

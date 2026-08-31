@@ -300,6 +300,35 @@ describe(formatConflicts, () => {
     expect(text.split("\n")).toHaveLength(3);
     expect(text.split("\n")[0]).toBe("Cannot add a — module conflicts:");
   });
+
+  // #98 Phase 5. `update` runs the same check, because a new version's `dependsOn` can
+  // pull in a second driver as a prerequisite — so the refusal has to say `update`.
+  it("says which command refused when `update` is the caller", () => {
+    const text = formatConflicts(
+      [
+        {
+          declaredBy: "database-d1",
+          conflictsWith: "database-pg",
+          installed: "database-pg",
+        },
+      ],
+      "waitlist",
+      "update"
+    );
+    expect(text.split("\n")[0]).toBe(
+      "Cannot update waitlist — module conflict:"
+    );
+    expect(text).toContain("`saasaloy remove database-pg`");
+  });
+
+  it("says `updating` rather than `adding` when both modules arrive together", () => {
+    const text = formatConflicts(
+      [{ declaredBy: "database-d1", conflictsWith: "database-pg" }],
+      "bundle",
+      "update"
+    );
+    expect(text).toContain("updating bundle installs both");
+  });
 });
 
 const item = (conflictsWith: unknown) => ({

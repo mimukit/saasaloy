@@ -10,9 +10,15 @@ import {
   outro,
 } from "@clack/prompts";
 import pc from "picocolors";
+import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
-import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
+import {
+  loadManifest,
+  managedModules,
+  MANIFEST_FILE,
+  saveManifest,
+} from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -246,6 +252,21 @@ function summarizePlan(plan: UpdatePlan): void {
       }
     }
   }
+  // Named before the confirmation, in their own box, because a secret the new version
+  // started requiring is the one thing that breaks the project after a clean update and
+  // the one thing the file list can't tell you (#98).
+  const envVars = new Map<string, string>();
+  for (const mod of plan.modules) {
+    for (const [key, description] of Object.entries(mod.newEnvVars)) {
+      envVars.set(key, description);
+    }
+  }
+  if (envVars.size > 0) {
+    const envLines = [...envVars].map(
+      ([key, description]) => `${pc.cyan(key)} ${pc.dim(`— ${description}`)}`
+    );
+    note(wrapForNote(envLines.join("\n")), "Env vars to set", TUI_ON_STDERR);
+  }
   if (plan.migrationCommand) {
     note(
       wrapForNote(
@@ -371,17 +392,6 @@ export async function runUpdate(argv: string[]): Promise<number> {
     return 1;
   }
 
-  // Nothing is reading a prompt on the other side of a pipe, and stdout is where the
-  // merge plan goes — so a non-TTY stdout is a script, and a script implies `--yes`.
-  let yes = opts.yes;
-  if (!yes && !process.stdout.isTTY) {
-    yes = true;
-    log.info(
-      "stdout isn't a terminal — proceeding as if `--yes` were given.",
-      TUI_ON_STDERR
-    );
-  }
-
   let root: string;
   let config: Awaited<ReturnType<typeof loadConfig>>;
   try {
@@ -398,6 +408,22 @@ export async function runUpdate(argv: string[]): Promise<number> {
   const outRefusal = await stateFileRefusal(root, opts.out);
   if (outRefusal) {
     cancel(outRefusal, TUI_ON_STDERR);
+    return 1;
+  }
+
+  // The merge plan goes to stdout, so `saasaloy update email | claude` is the designed
+  // pipeline and a redirected stdout says nothing about who is watching. This command
+  // used to read it as "a script is driving me" and set `--yes` for itself, which made
+  // `saasaloy update | tee log` overwrite every clean file unconfirmed (#98). stdin is
+  // the stream the confirmation actually reads: no terminal there means the prompt can
+  // never be answered, so refuse and name the two ways forward. A preview writes nothing,
+  // so it is exempt.
+  const preview = opts.dryRun || opts.diff;
+  if (!opts.yes && !preview && !process.stdin.isTTY) {
+    cancel(
+      "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview.",
+      TUI_ON_STDERR
+    );
     return 1;
   }
 
@@ -470,7 +496,6 @@ export async function runUpdate(argv: string[]): Promise<number> {
       // `--ref` onto a tag that already points at the SHA the lock records moves no
       // files, but it is still the explicit unpin — record it here or the module stays
       // pinned forever. `--dry-run`/`--diff` preview only, so they write nothing.
-      const preview = opts.dryRun || opts.diff;
       if (!preview && recordRefRewrites(lock, comparisons).length > 0) {
         await saveLock(root, lock);
       }
@@ -488,6 +513,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // records (base). Refetching base is what makes a real three-way merge possible; a
     // base we can't reach degrades the document rather than failing the update.
     const inputs: ModuleUpdateInput[] = [];
+    // Mutually exclusive modules, checked the way `add` checks them (#98). A new version
+    // can introduce a `dependsOn` on a second driver, and `update` installs a new
+    // prerequisite as part of the same plan — so without this the command lands the exact
+    // pair `add` refuses. Collected across every module and reported once, before
+    // anything is written: `executeUpdatePlan` applies the whole plan under one
+    // confirmation, so a refusal here has to stop the run, not one module of it.
+    const conflictRefusals: string[] = [];
+    const missingLockEntries = new Set<string>();
+    const managed = managedModules(manifest);
     for (const comparison of outdated) {
       // One module's fetch failing is that module's problem: a dead tarball, a renamed
       // dependency, a network blip. It is reported and skipped, never fatal, so a bare
@@ -506,6 +540,24 @@ export async function runUpdate(argv: string[]): Promise<number> {
           throw new Error(
             `${comparison.name} isn't in the registry at ${short(comparison.latest)}.`
           );
+        }
+
+        const report = detectConflicts({
+          graph,
+          config,
+          lock,
+          // Only modules this tool applied, same as `add`: the scaffold template lists
+          // `web` in `installed[]` and never writes it a lock entry.
+          managed,
+        });
+        for (const name of report.missingLockEntries) {
+          missingLockEntries.add(name);
+        }
+        if (report.conflicts.length > 0) {
+          conflictRefusals.push(
+            formatConflicts(report.conflicts, comparison.name, "update")
+          );
+          continue;
         }
 
         let base: LoadedModule | undefined;
@@ -553,6 +605,18 @@ export async function runUpdate(argv: string[]): Promise<number> {
           detail: error instanceof Error ? error.message : String(error),
         });
       }
+    }
+
+    if (missingLockEntries.size > 0) {
+      log.warn(
+        `No lock entry for ${[...missingLockEntries].map((m) => pc.cyan(m)).join(", ")} — ` +
+          `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
+        TUI_ON_STDERR
+      );
+    }
+    if (conflictRefusals.length > 0) {
+      cancel(conflictRefusals.join("\n"), TUI_ON_STDERR);
+      return 1;
     }
 
     // Everything outdated failed to fetch — there is no plan to summarize or confirm.
@@ -608,10 +672,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     // --dry-run and --diff both preview only: nothing is written anywhere, including
     // `--out`. The merge plan still renders to stdout so the preview is complete.
-    if (opts.dryRun || opts.diff) {
-      const preview = renderMergePlan(plan);
-      if (preview) {
-        process.stdout.write(preview);
+    if (preview) {
+      const document = renderMergePlan(plan);
+      if (document) {
+        process.stdout.write(document);
       }
       outro(
         pc.dim(
@@ -624,7 +688,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
       return 0;
     }
 
-    if (!yes) {
+    if (!opts.yes) {
       const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
       if (isCancel(proceed)) {
         cancel("update cancelled", TUI_ON_STDERR);
