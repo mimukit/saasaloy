@@ -13,26 +13,26 @@
   "dependencies": {
     "@repo/auth": "workspace:*",
     "@repo/ui": "workspace:*",
-    "@tanstack/react-query": "5.102.4",
+    "@tanstack/react-query": "5.102.8",
     "@tanstack/react-router": "1.170.32",
-    "hono": "4.12.33",
-    "lucide-react": "1.28.0",
+    "hono": "4.13.5",
+    "lucide-react": "1.34.0",
     "react": "19.2.8",
     "react-dom": "19.2.8"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260801.1",
+    "@cloudflare/workers-types": "5.20260828.1",
     "@repo/api": "workspace:*",
     "@repo/tsconfig": "workspace:*",
     "@tailwindcss/vite": "4.3.3",
     "@tanstack/router-plugin": "1.168.35",
     "@types/react": "19.2.18",
-    "@types/react-dom": "19.2.4",
-    "@vitejs/plugin-react": "6.1.0",
+    "@types/react-dom": "19.2.5",
+    "@vitejs/plugin-react": "6.1.1",
     "rimraf": "6.1.3",
     "tailwindcss": "4.3.3",
     "typescript": "7.0.2",
-    "vite": "8.2.0",
-    "wrangler": "4.118.0"
+    "vite": "8.2.2",
+    "wrangler": "4.127.0"
   }
 }

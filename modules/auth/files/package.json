@@ -11,14 +11,14 @@
     "./client": "./src/client.ts"
   },
   "dependencies": {
-    "better-auth": "1.6.25",
+    "better-auth": "1.7.2",
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260801.1",
+    "@cloudflare/workers-types": "5.20260828.1",
     "@repo/tsconfig": "workspace:*",
     "rimraf": "6.1.3",
     "typescript": "7.0.2",
-    "vite": "8.2.0"
+    "vite": "8.2.2"
   }
 }

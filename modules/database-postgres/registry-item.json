@@ -33,16 +33,27 @@
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@types/node",
-      "range": "26.1.2"
+      "range": "26.4.0"
     }
   ],
-  "files": [{ "path": "files/src/client.ts", "target": "@db/client.ts" }],
+  "files": [
+    {
+      "path": "files/src/client.ts",
+      "target": "@db/client.ts"
+    }
+  ],
   "scaffolds": [
     {
       "workspace": "packages/db",
       "files": [
-        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" }
+        {
+          "path": "files/drizzle.config.ts",
+          "target": "drizzle.config.ts"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        }
       ]
     }
   ],

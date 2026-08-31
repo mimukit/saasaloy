@@ -35,23 +35,34 @@
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
-      "range": "5.20260801.1"
+      "range": "5.20260828.1"
     },
     {
       "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "wrangler",
-      "range": "4.118.0"
+      "range": "4.127.0"
     }
   ],
-  "files": [{ "path": "files/src/client.ts", "target": "@db/client.ts" }],
+  "files": [
+    {
+      "path": "files/src/client.ts",
+      "target": "@db/client.ts"
+    }
+  ],
   "scaffolds": [
     {
       "workspace": "packages/db",
       "files": [
-        { "path": "files/drizzle.config.ts", "target": "drizzle.config.ts" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" }
+        {
+          "path": "files/drizzle.config.ts",
+          "target": "drizzle.config.ts"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        }
       ]
     }
   ],

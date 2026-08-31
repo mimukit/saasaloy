@@ -9,14 +9,14 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@pulumi/cloudflare": "6.18.0",
-    "@pulumi/pulumi": "3.254.0",
+    "@pulumi/cloudflare": "6.20.0",
+    "@pulumi/pulumi": "3.259.0",
     "jsonc-parser": "3.3.1"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
-    "@types/node": "26.1.1",
+    "@types/node": "26.4.0",
     "typescript": "7.0.2",
-    "wrangler": "4.113.0"
+    "wrangler": "4.127.0"
   }
 }

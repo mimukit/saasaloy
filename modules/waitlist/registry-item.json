@@ -14,14 +14,17 @@
       "exportName": "default",
       "path": "/waitlist",
       "call": "waitlist",
-      "import": { "name": "waitlist", "from": "./routes/waitlist" }
+      "import": {
+        "name": "waitlist",
+        "from": "./routes/waitlist"
+      }
     },
     {
       "file": "apps/web/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "hono",
-      "range": "4.12.33"
+      "range": "4.13.5"
     },
     {
       "file": "apps/web/package.json",

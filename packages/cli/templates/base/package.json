@@ -23,11 +23,11 @@
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
-    "@commitlint/cli": "21.2.1",
-    "@commitlint/config-conventional": "21.2.0",
+    "@commitlint/cli": "21.2.2",
+    "@commitlint/config-conventional": "21.2.2",
     "husky": "9.1.7",
-    "lint-staged": "17.3.0",
-    "oxlint": "1.77.0",
+    "lint-staged": "17.4.1",
+    "oxlint": "1.80.0",
     "oxlint-tsgolint": "7.0.2001",
     "prettier": "3.9.6",
     "prettier-plugin-astro": "0.14.1",
@@ -37,8 +37,8 @@
     "stylelint-config-idiomatic-order": "10.0.0",
     "stylelint-config-standard": "40.0.0",
     "stylelint-prettier": "5.0.3",
-    "turbo": "2.10.8",
+    "turbo": "2.10.12",
     "typescript": "7.0.2",
-    "ultracite": "7.10.1"
+    "ultracite": "7.10.7"
   }
 }
