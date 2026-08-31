@@ -18,8 +18,10 @@ saasaloy <command> [options]
 | `remove` | undo a module's applied files via the manifest (offline) |
 | `list` | list the modules a registry offers, marking the ones installed here |
 
-`saasaloy`, `saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command
-list and exit 0. `saasaloy --version`, `-v` and `version` print the installed version.
+`saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command list and exit
+0. Bare `saasaloy` opens a picker over the same list on a terminal, and prints the list
+and exits 0 when there is no terminal to answer it — a pipe, or CI.
+`saasaloy --version`, `-v` and `version` print the installed version.
 Every command also answers its own `--help` with its usage and flags.
 
 `add`, `update` and `remove` are run from inside a project: they find the project root by

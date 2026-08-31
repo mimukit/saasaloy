@@ -52,7 +52,7 @@ Read the driver's skill for anything the tables themselves don't decide: how the
 a request handler, which bindings or environment variables it needs, and how a generated migration
 is applied.
 
-### D1 is the default, and two modules still require it
+## D1 is the default, and two modules still require it
 
 `auth` and `waitlist` ship SQLite payloads — `sqliteTable` tables, and `provider: "sqlite"` in
 `auth`'s Better Auth config — so both declare `dependsOn: ["database-d1"]`. On a project running

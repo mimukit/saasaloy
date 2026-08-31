@@ -5,8 +5,8 @@
   "dependsOn": ["api", "database", "database-d1"],
   "dependencies": [],
   "envVars": {
-    "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws at startup when it is unset, unless BETTER_AUTH_URL names a loopback host.",
-    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop.",
+    "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws while the Worker initializes when it is unset, unless BETTER_AUTH_URL names a loopback host.",
+    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it.",
     "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
   },
   "devVars": {

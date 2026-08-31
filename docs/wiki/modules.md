@@ -10,7 +10,7 @@ Every installable module in the default registry, in one place. This table is th
 | `validators` | capability | a `packages/validators` workspace holding the zod request schemas and the shared `{ error: { code, message } }` envelope, on `api` |
 | `database` | capability | a `packages/db` workspace with Drizzle ORM and `drizzle-kit`, on `api`. Ships no client: it names `database-d1` and `database-postgres` in `requiresOneOf`, so `add` makes you pick one |
 | `database-d1` | feature (driver) | the Cloudflare D1 client, `drizzle.config.ts` and wrangler binding. Conflicts with `database-postgres` |
-| `database-postgres` | feature (driver) | the Postgres client over `postgres.js`, a Hyperdrive-aware `getDb`, and a `withDb` middleware. Conflicts with `database-d1` |
+| `database-postgres` | feature (driver) | the Postgres client over `postgres.js`, a Hyperdrive-aware `getDb`, and a `withDb` callback helper that scopes a client to one handler and closes it. Conflicts with `database-d1` |
 | `auth` | capability | a `packages/auth` workspace wrapping Better Auth, on `api` + `database` + `database-d1`. The D1 pin is a stopgap until the payload is dialect-neutral ([ADR 0026](../adr/adr-0026-database-driver-split-2026-08-28.md)) |
 | `admin` | capability | an `apps/admin` TanStack Router SPA behind the auth session, on `api` + `auth` |
 | `email` | capability | a `packages/email` workspace with the provider interface, the escaping `html` tag and `safeUrl`, on `api` |

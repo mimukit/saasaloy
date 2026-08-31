@@ -96,7 +96,8 @@ Each descriptor carries a description of what its variables are for; `saasaloy a
 them under **Env vars to set**, and `modules/<name>/registry-item.json` is the source.
 
 `BETTER_AUTH_SECRET` is a Workers secret rather than a plain variable, and `auth` fails
-closed on it: the package throws at startup when the secret is unset, so a Worker never
+closed on it: the check runs at module scope, so the package throws while the Worker
+initializes when the secret is unset, which means a Worker never
 serves sessions signed with Better Auth's published development key. The only exception
 is a `BETTER_AUTH_URL` that names a loopback host, which is what keeps the local
 `wrangler dev` loop keyless. Set secrets with
