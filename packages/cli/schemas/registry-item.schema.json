@@ -73,7 +73,8 @@
           "target": {
             "type": "string",
             "pattern": "^@[a-z0-9][a-z0-9-]*/.+",
-            "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts)."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
           }
         }
       }
@@ -99,7 +100,8 @@
             "type": "string",
             "minLength": 1,
             "pattern": "^[^/@]",
-            "description": "Project-relative POSIX path of the file to patch (e.g. apps/api/wrangler.jsonc). No leading slash or @alias."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Project-relative POSIX path of the file to patch (e.g. apps/api/wrangler.jsonc). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .eslintrc.json is fine."
           },
           "kind": {
             "type": "string",
@@ -225,7 +227,8 @@
                   "type": "string",
                   "minLength": 1,
                   "pattern": "^[^/@]",
-                  "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias."
+                  "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+                  "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .dev.vars.example is fine."
                 }
               }
             }

@@ -1,11 +1,13 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join, posix } from "node:path";
 import {
+  assertNoSymlinkPath,
   classifyLink,
   createDirLink,
   hashContent,
   listFilesRelative,
   pathExists,
+  resolveWithinRoot,
 } from "./fs-utils.js";
 import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
@@ -159,7 +161,10 @@ async function planModuleFile(
   const source = join(module.dir, sourceRel);
   const content = await readFile(source, "utf-8");
   const newHash = hashContent(content);
-  const targetAbs = join(root, ...target.split("/"));
+  // `add` is the one engine whose input is an untrusted remote descriptor, so the target
+  // is resolved under the same guard `remover` and `updater` use on their state files
+  // (#98). `join()` normalizes a `..` away silently; this refuses it instead.
+  const targetAbs = resolveWithinRoot(root, target);
   const { action, oldContent } = await classify(
     targetAbs,
     target,
@@ -269,8 +274,10 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       }
       const linkPath = posix.join(".claude/skills", folderName);
       const linkTarget = posix.join(".agents/skills", folderName);
-      const pathAbs = join(root, ...linkPath.split("/"));
-      const targetAbs = join(root, ...linkTarget.split("/"));
+      // Both sides are engine-built from a descriptor-supplied folder name, so both go
+      // through the guard — the name is the untrusted part (#98).
+      const pathAbs = resolveWithinRoot(root, linkPath);
+      const targetAbs = resolveWithinRoot(root, linkTarget);
       const state = await classifyLink(pathAbs, targetAbs);
       links.push({
         module: name,
@@ -305,7 +312,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const patches: PlannedPatch[] = [];
   for (const name of install) {
     for (const op of modules.get(name)?.item.patches ?? []) {
-      const fileAbs = join(root, ...op.file.split("/"));
+      const fileAbs = resolveWithinRoot(root, op.file);
       // A writable planned file lands on disk before the patch runs, so preview against it.
       // Otherwise fall back to disk (a held-back file keeps its content; or `api` from a
       // prior run). Only genuinely-absent targets are `missing`.
@@ -398,6 +405,10 @@ export async function executePlan(
 
   for (const file of plan.files) {
     if (WRITABLE.has(file.action)) {
+      // `resolveWithinRoot` proved the path is lexically inside the project; `writeFile`
+      // still follows links, so a planted symlink on any component would carry the write
+      // outside it. Refuse before creating the parent dirs (#98), matching `remover`.
+      await assertNoSymlinkPath(root, file.targetAbs);
       await mkdir(dirname(file.targetAbs), { recursive: true });
       await writeFile(file.targetAbs, file.content, "utf-8");
       manifest.managed[file.target] = {
@@ -421,6 +432,8 @@ export async function executePlan(
       patchConflicts.push(p);
       continue;
     }
+    // The read below follows links just as the write does, so guard before either (#98).
+    await assertNoSymlinkPath(root, p.fileAbs);
     const source = await readFile(p.fileAbs, "utf-8");
     const { content, changed, reason } = applyPatch(source, p.patch, p.file);
     if (changed) {
@@ -455,6 +468,9 @@ export async function executePlan(
       continue;
     }
     if (link.action === "create") {
+      // Only the `create` leg writes. An `exists` link is our own symlink at the final
+      // component, which the guard would (correctly) refuse, so it is not asked (#98).
+      await assertNoSymlinkPath(root, link.pathAbs);
       await createDirLink(link.pathAbs, link.targetAbs);
     }
     manifest.links[link.target] = link.path;

