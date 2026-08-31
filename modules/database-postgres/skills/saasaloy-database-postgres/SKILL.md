@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (getDb(c.env)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, or opting into a Hyperdrive binding. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or working out why `add auth` is refused on a Postgres project. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -100,43 +100,55 @@ Cloudflare's local proxy, which is not a TLS endpoint; Cloudflare secures the ho
 database itself. **The local container** above serves no TLS. Both fail to connect if you force a
 mode on them, which is why this is a property of each URL and not a default in the client.
 
-## Read the DB from a route: `getDb(c.env)`
+## Read the DB from a route: `withDb(c, …)`
 
-Compose `DbBindings` into the route's Hono generic so `c.env` is typed with no patch to api's entry:
+Compose `DbBindings` into the route's Hono generic so `c.env` is typed with no patch to api's entry,
+then wrap the handler's body in `withDb`:
 
 ```ts
 // apps/api/src/routes/waitlist.ts
 import { Hono } from "hono";
-import { getDb, type DbBindings } from "@repo/db/client";
+import { withDb, type DbBindings } from "@repo/db/client";
 import { listWaitlist } from "@repo/db/repositories/waitlist";
 
 const waitlist = new Hono<{ Bindings: DbBindings }>();
 
-waitlist.get("/", async (c) => {
-  const db = getDb(c.env);
-  try {
-    return c.json(await listWaitlist(db));
-  } finally {
-    c.executionCtx.waitUntil(db.$client.end());
-  }
-});
+waitlist.get("/", (c) => withDb(c, async (db) => c.json(await listWaitlist(db))));
 
 export default waitlist;
 ```
 
-Two rules the D1 driver does not have:
+`withDb` opens the connection, runs your callback, and closes the socket on
+`c.executionCtx.waitUntil` afterwards. That last part is why it exists. This driver opens a real TCP
+socket per request, and a handler that forgets to close it leaks one for the rest of the isolate's
+life — a per-route obligation nobody remembers on the fiftieth route. Two rules the D1 driver does
+not have, both of which `withDb` keeps for you:
 
-- **Call `getDb` per request, never once per module.** A Workers isolate outlives the request that
+- **One connection per request, never one per module.** A Workers isolate outlives the request that
   created it, but an open socket does not. Reusing one client across requests throws
   `Cannot perform I/O on behalf of a different request`.
-- **Close the connection when the response is done**, with
-  `c.executionCtx.waitUntil(db.$client.end())`. `db.$client` is the underlying postgres.js instance.
-  Skip this and each request leaves a socket open for the rest of the isolate's life. Order matters:
-  `end()` runs the moment you call it, not when the promise you hand `waitUntil` settles, and
-  postgres.js rejects every query issued after it. Put the call in a `finally` after the last
-  `await`, as above, never on the line below `getDb`.
+- **Close it when the response is done.** `db.$client` is the underlying postgres.js instance and
+  `end()` runs the moment it is called, not when the promise settles.
 
-`getDb` passes the schema barrel to Drizzle, so `db.query.<table>` and relational queries work.
+The one rule `withDb` cannot keep for you: **read everything you need inside the callback.** `end()`
+starts as soon as the callback settles and postgres.js rejects every query issued after it, so
+returning the `db`, a lazy query builder, or an unawaited promise out of the callback gives the
+caller a connection that is already closing.
+
+`getDb(c.env)` is still exported and still the thing `withDb` calls. Reach for it directly only
+where there is no request context to hand over — a scheduled handler, a script — and then close the
+connection yourself:
+
+```ts
+const db = getDb(env);
+try {
+  await backfill(db);
+} finally {
+  await db.$client.end();
+}
+```
+
+Either way the schema barrel reaches Drizzle, so `db.query.<table>` and relational queries work.
 
 ## Tables are Postgres
 
@@ -214,6 +226,26 @@ the binding rather than through the pool, so local behavior is unchanged. And `d
 under Node against `DATABASE_URL`, not through the binding, so migrations always speak to the origin
 database.
 
+## `auth` and `waitlist` are D1-only today
+
+Both modules ship SQLite payloads: their tables use `sqliteTable` from `drizzle-orm/sqlite-core`, and
+`auth`'s Better Auth config passes `provider: "sqlite"` to the Drizzle adapter. Neither works on this
+driver.
+
+Both now declare `dependsOn: ["database-d1"]`, so on a Postgres project `add` refuses them by name:
+
+```
+$ saasaloy add auth
+Cannot add auth — module conflict:
+  database-d1 (required by auth) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
+```
+
+That refusal is the point. Before it the install went through and the project failed later at
+`pnpm typecheck`, with a dialect error naming neither module. Dialect-neutral payloads are the end
+state and are tracked separately; ADR 0023's amendment records that. Until they land, a Postgres
+project writes its own tables against `drizzle-orm/pg-core` and its own routes, which is what the
+rest of this skill covers.
+
 ## Switching drivers
 
 `database-postgres` and `database-d1` declare each other in `conflictsWith`, so `add` refuses the
@@ -254,8 +286,9 @@ put and are still `pg-core` — port them to `sqlite-core` yourself.
 
 - **`c.env` for the connection, never `process.env`** in `src/` — a Worker has no process.
   `drizzle.config.ts` is the one exception, and it runs under Node.
-- **One `getDb` per request, closed with `waitUntil(db.$client.end())`.** A shared client across
-  requests is a runtime error, not a slow path.
+- **`withDb(c, …)` in a route.** It opens one connection per request and closes it afterwards. A
+  shared client across requests is a runtime error, not a slow path, and a client nobody closes is a
+  leaked socket. Bare `getDb` is for code with no request context, and then you close it yourself.
 - **`DATABASE_URL` is a secret in production.** `wrangler secret put`, never `vars`.
 - **Tables import `drizzle-orm/pg-core`**, matching `dialect: "postgresql"` in `drizzle.config.ts`.
   Never hand-edit that config.
