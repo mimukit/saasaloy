@@ -314,6 +314,26 @@ export async function runAdd(argv: string[]): Promise<number> {
     return exitCodeFor(error);
   }
 
+  // The "Proceed?" confirm below reads stdin. With no terminal there it can never be
+  // answered, so `saasaloy add x </dev/null` printed the whole plan, took the closed
+  // stream as "no", and exited 0 having written nothing — a silent success. `update`
+  // already refuses in this situation; both commands now answer it the same way (#98).
+  // A preview writes nothing and needs no confirmation, so it is exempt. With no module
+  // named the picker's own non-interactive refusal below is the more specific message,
+  // so leave that case to it.
+  if (
+    coord.module &&
+    !opts.yes &&
+    !opts.dryRun &&
+    !opts.diff &&
+    !process.stdin.isTTY
+  ) {
+    cancel(
+      "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview."
+    );
+    return EXIT_REFUSED;
+  }
+
   let root: string;
   let config: Awaited<ReturnType<typeof loadConfig>>;
   try {

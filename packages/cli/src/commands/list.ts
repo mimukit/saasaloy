@@ -1,4 +1,5 @@
 import { cancel, intro, note, outro } from "@clack/prompts";
+import { join } from "node:path";
 import pc from "picocolors";
 import {
   EXIT_OK,
@@ -6,6 +7,7 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
+import { pathExists } from "../lib/fs-utils.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   createRegistrySource,
@@ -13,7 +15,7 @@ import {
   REGISTRY_ENV,
 } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
-import { loadConfig } from "../lib/saasaloy-config.js";
+import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -81,17 +83,23 @@ interface LocalProject {
  * What this project has, or nothing when `list` is run outside one. Listing a registry
  * from anywhere is the point of the command, so a missing `saasaloy.json` is not an error
  * here — it only means nothing can be marked.
+ *
+ * Test for the file rather than catching whatever `loadConfig` throws. A bare catch also
+ * swallowed a corrupt or schema-invalid `saasaloy.json`, so a project whose config would
+ * stop every other command read here as "not in a project" and quietly lost its installed
+ * marks. Only absence is tolerated; a file that is there and will not load is reported
+ * through the caller's own error path (#98).
  */
 async function localProject(): Promise<LocalProject> {
-  try {
-    const config = await loadConfig(await findProjectRoot());
-    return {
-      installed: new Set(config.installed),
-      ...(config.base === undefined ? {} : { base: config.base }),
-    };
-  } catch {
+  const root = await findProjectRoot();
+  if (!(await pathExists(join(root, CONFIG_FILE)))) {
     return { installed: new Set() };
   }
+  const config = await loadConfig(root);
+  return {
+    installed: new Set(config.installed),
+    ...(config.base === undefined ? {} : { base: config.base }),
+  };
 }
 
 export async function runList(argv: string[]): Promise<number> {
