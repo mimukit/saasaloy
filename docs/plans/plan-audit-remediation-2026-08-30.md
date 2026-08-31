@@ -76,7 +76,7 @@ What this reuses, rather than invents:
 - `conflictsWith` and `detectConflicts` already enforce driver exclusion for `add`; the driver work
   extends the existing mechanism rather than adding one.
 
-### Phase 0: CI gate (#98)
+### Phase 0: CI gate (#98) (built 2026-08-31)
 
 The cheapest phase and the one everything else leans on.
 
