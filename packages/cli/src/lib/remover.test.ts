@@ -15,6 +15,7 @@ import { emptyLock } from "./lock.js";
 import type { Lockfile } from "./lock.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
+import { applyPatch } from "./patch/index.js";
 import {
   buildRemovePlan,
   classifyTrackedFile,
@@ -263,22 +264,24 @@ describe("buildRemovePlan — patches", () => {
     const manifest = emptyManifest();
     const authPatch: ManifestPatch = {
       module: "auth",
-      file: "apps/api/wrangler.jsonc",
+      file: "apps/api/package.json",
       patch: {
-        file: "apps/api/wrangler.jsonc",
-        kind: "wrangler-binding",
-        bindingType: "kv_namespaces",
-        entry: { binding: "SESSIONS" },
+        file: "apps/api/package.json",
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/auth",
+        range: "workspace:*",
       },
     };
     const billingPatch: ManifestPatch = {
       module: "billing",
-      file: "apps/api/wrangler.jsonc",
+      file: "apps/api/package.json",
       patch: {
-        file: "apps/api/wrangler.jsonc",
-        kind: "wrangler-binding",
-        bindingType: "kv_namespaces",
-        entry: { binding: "INVOICES" },
+        file: "apps/api/package.json",
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/billing",
+        range: "workspace:*",
       },
     };
     manifest.patches.push(authPatch, billingPatch);
@@ -597,26 +600,31 @@ describe("executeRemovePlan — links", () => {
 });
 
 describe("executeRemovePlan — patches", () => {
+  // #36 gave the two config kinds an inverse and deliberately left the two `package.json`
+  // kinds alone: a dependency other code may already import is not ours to uninstall
+  // offline. This is the test that keeps that half of the contract honest.
   it("drops a kind with no inverse and reports it for the command to warn about", async () => {
     const manifest = emptyManifest();
     const authPatch: ManifestPatch = {
       module: "auth",
-      file: "apps/api/wrangler.jsonc",
+      file: "apps/api/package.json",
       patch: {
-        file: "apps/api/wrangler.jsonc",
-        kind: "wrangler-binding",
-        bindingType: "kv_namespaces",
-        entry: { binding: "SESSIONS" },
+        file: "apps/api/package.json",
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/auth",
+        range: "workspace:*",
       },
     };
     const billingPatch: ManifestPatch = {
       module: "billing",
-      file: "apps/api/wrangler.jsonc",
+      file: "apps/api/package.json",
       patch: {
-        file: "apps/api/wrangler.jsonc",
-        kind: "wrangler-binding",
-        bindingType: "kv_namespaces",
-        entry: { binding: "INVOICES" },
+        file: "apps/api/package.json",
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/billing",
+        range: "workspace:*",
       },
     };
     manifest.patches.push(authPatch, billingPatch);
@@ -636,9 +644,9 @@ describe("executeRemovePlan — patches", () => {
     expect(manifest.patches).toStrictEqual([billingPatch]);
   });
 
-  // #83 Phase 4: the new `package-json-script` kind has no inverse either, so `remove`
-  // must leave the command on disk rather than half-reverting it. Pinning the contract
-  // here means #36 has to change this test deliberately when it generalises reversal.
+  // #83 Phase 4: the `package-json-script` kind has no inverse either, so `remove` must
+  // leave the command on disk rather than half-reverting it. #36 generalised reversal to
+  // the two config kinds and left this one where it was, on purpose.
   it("leaves a package-json-script command on disk and drops the record", async () => {
     const target = "apps/api/package.json";
     const source =
@@ -677,8 +685,8 @@ describe("executeRemovePlan — patches", () => {
   });
 });
 
-// The one reversible patch kind (#83). Everything else stays drop-and-warn until #36
-// generalises the mechanism, so these tests pin the seam as much as the codemod.
+// The first reversible patch kind (#83); `wrangler-binding` and `plugin-array` joined it
+// in #36. These tests pin the seam as much as the codemod.
 describe("executeRemovePlan — chained-route reversal", () => {
   const ENTRY_TARGET = "apps/api/src/index.ts";
 
@@ -991,6 +999,303 @@ export default app;
     ).rejects.toThrow(/symlink/);
     await expect(readFile(secret, "utf-8")).resolves.toBe(original);
     await rm(outside, { recursive: true, force: true });
+  });
+});
+
+// The two config kinds #36 made reversible. Both patch a file another module owns — a
+// `wrangler.jsonc` the `api` layer wrote, a provider registry the capability wrote — which
+// is exactly why neither is manifest-managed and why the reversal has to be structural.
+describe("executeRemovePlan — wrangler-binding reversal", () => {
+  const WRANGLER_TARGET = "apps/api/wrangler.jsonc";
+
+  // What the `api` layer ships before any provider module patches it.
+  const PRISTINE = `{
+  // Cloudflare Worker config
+  "name": "api",
+  "compatibility_date": "2024-09-01"
+}
+`;
+
+  function bindingPatch(module: string): ManifestPatch {
+    return {
+      module,
+      file: WRANGLER_TARGET,
+      patch: {
+        file: WRANGLER_TARGET,
+        kind: "wrangler-binding",
+        bindingType: "send_email",
+        entry: { name: "EMAIL", destination_address: "ops@example.com" },
+        matchOn: "name",
+      },
+    };
+  }
+
+  async function writeWrangler(content: string): Promise<string> {
+    const abs = join(root, ...WRANGLER_TARGET.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, content, "utf-8");
+    return abs;
+  }
+
+  it("restores the pre-patch file when nothing touched it since", async () => {
+    const patched = applyPatch(
+      PRISTINE,
+      bindingPatch("email-cloudflare").patch,
+      WRANGLER_TARGET
+    );
+    expect(patched.changed).toBeTruthy();
+    const abs = await writeWrangler(patched.content);
+
+    const manifest = emptyManifest();
+    const patch = bindingPatch("email-cloudflare");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("revert");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(PRISTINE);
+    expect(result.patchesReversed).toStrictEqual([patch]);
+    expect(result.patchesDropped).toStrictEqual([]);
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("leaves a sibling module's binding in place", async () => {
+    const mine = bindingPatch("email-cloudflare");
+    const theirs: ManifestPatch = {
+      module: "database-d1",
+      file: WRANGLER_TARGET,
+      patch: {
+        file: WRANGLER_TARGET,
+        kind: "wrangler-binding",
+        bindingType: "d1_databases",
+        entry: { binding: "DB", database_name: "app-db" },
+      },
+    };
+    const both = applyPatch(
+      applyPatch(PRISTINE, theirs.patch, WRANGLER_TARGET).content,
+      mine.patch,
+      WRANGLER_TARGET
+    );
+    const abs = await writeWrangler(both.content);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(mine, theirs);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare", "database-d1"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    const after = await readFile(abs, "utf-8");
+    expect(after).not.toContain("EMAIL");
+    expect(after).toContain("app-db");
+    expect(after).toContain("// Cloudflare Worker config");
+    expect(manifest.patches).toStrictEqual([theirs]);
+  });
+
+  it("warns and skips a binding the user edited since it was applied", async () => {
+    const edited = `{
+  "name": "api",
+  "send_email": [
+    { "name": "EMAIL", "destination_address": "me@mine.dev" }
+  ]
+}
+`;
+    const abs = await writeWrangler(edited);
+
+    const manifest = emptyManifest();
+    const patch = bindingPatch("email-cloudflare");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("refused");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    // The entry is the user's now, so it survives — but the record still goes.
+    await expect(readFile(abs, "utf-8")).resolves.toBe(edited);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchRefusals).toHaveLength(1);
+    expect(result.patchRefusals[0]?.reason).toContain("send_email[name=EMAIL]");
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("reports a hand-reverted binding as gone rather than refused", async () => {
+    await writeWrangler(PRISTINE);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(bindingPatch("email-cloudflare"));
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("gone");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+    expect(result.patchRefusals).toStrictEqual([]);
+    expect(result.patchesDropped).toHaveLength(1);
+  });
+});
+
+describe("executeRemovePlan — plugin-array reversal", () => {
+  const EMAIL_TARGET = "packages/email/src/index.ts";
+
+  // What the `email` capability ships before any provider module patches it — including
+  // the empty `providers` array, which it writes itself and which must survive the undo.
+  const PRISTINE = `import { createEmail } from "./create.js";
+
+export const email = createEmail({
+  from: "noreply@example.com",
+  providers: [],
+});
+`;
+
+  function pluginPatch(module: string): ManifestPatch {
+    return {
+      module,
+      file: EMAIL_TARGET,
+      patch: {
+        file: EMAIL_TARGET,
+        kind: "plugin-array",
+        exportName: "email",
+        arrayProp: "providers",
+        call: "cloudflare",
+        import: { name: "cloudflare", from: "./providers/cloudflare.js" },
+      },
+    };
+  }
+
+  async function writeEmail(content: string): Promise<string> {
+    const abs = join(root, ...EMAIL_TARGET.split("/"));
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, content, "utf-8");
+    return abs;
+  }
+
+  it("restores the pre-patch file, import and all, when nothing touched it since", async () => {
+    const patched = applyPatch(
+      PRISTINE,
+      pluginPatch("email-cloudflare").patch,
+      EMAIL_TARGET
+    );
+    expect(patched.content).toContain("cloudflare()");
+    const abs = await writeEmail(patched.content);
+
+    const manifest = emptyManifest();
+    const patch = pluginPatch("email-cloudflare");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("revert");
+    expect(plan.patches[0]?.diff).toContain("cloudflare");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(PRISTINE);
+    expect(result.patchesReversed).toStrictEqual([patch]);
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("warns and skips a call the user configured since it was applied", async () => {
+    const edited = `import { createEmail } from "./create.js";
+import { cloudflare } from "./providers/cloudflare.js";
+
+export const email = createEmail({
+  providers: [cloudflare({ retries: 3 })],
+});
+`;
+    const abs = await writeEmail(edited);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(pluginPatch("email-cloudflare"));
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("refused");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(edited);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchRefusals[0]?.reason).toContain("cloudflare()");
+    expect(manifest.patches).toStrictEqual([]);
+  });
+
+  it("previews the reversal without writing, so --dry-run and --diff are honest", async () => {
+    const patched = applyPatch(
+      PRISTINE,
+      pluginPatch("email-cloudflare").patch,
+      EMAIL_TARGET
+    );
+    const abs = await writeEmail(patched.content);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(pluginPatch("email-cloudflare"));
+
+    const plan = await build(
+      "email-cloudflare",
+      { aliases: {}, installed: ["email-cloudflare"] },
+      manifest,
+      emptyLock()
+    );
+
+    expect(plan.patches[0]?.diff).toContain("-");
+    expect(plan.patches[0]?.diff).toContain(EMAIL_TARGET);
+    // Building a plan is pure: the file and the manifest are exactly as they were.
+    await expect(readFile(abs, "utf-8")).resolves.toBe(patched.content);
+    expect(manifest.patches).toHaveLength(1);
   });
 });
 
