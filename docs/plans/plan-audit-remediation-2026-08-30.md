@@ -89,7 +89,7 @@ The cheapest phase and the one everything else leans on.
 
 Verifiable by: a red build on a deliberately broken lint rule.
 
-### Phase 1: Close the two write-path holes (#98)
+### Phase 1: Close the two write-path holes (#98) (built 2026-08-31)
 
 - Route every planned write in `applier.ts` through `resolveWithinRoot`: module file targets
   (`:162`), skill link paths (`:272`, `:273`), and patch files (`:308`).
