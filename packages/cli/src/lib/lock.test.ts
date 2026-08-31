@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
@@ -158,5 +158,55 @@ describe("loadLock / saveLock", () => {
     const reloaded = await loadLock(root);
     expect(reloaded.lockfileVersion).toBe(1);
     expect(reloaded.modules).toStrictEqual(lock.modules);
+  });
+});
+
+// #98 Phase 5. `loadLock` used to trust whatever JSON it found: a hand-edited or
+// half-written lock reached the engines as a typed object that lied about its shape.
+describe("loadLock — validation on load", () => {
+  let bad: string;
+
+  beforeAll(async () => {
+    bad = await mkdtemp(join(tmpdir(), "saasaloy-lock-bad-"));
+  });
+
+  afterAll(async () => {
+    await rm(bad, { recursive: true, force: true });
+  });
+
+  it("refuses a lock entry missing its resolved SHA, naming the property", async () => {
+    await writeFile(
+      join(bad, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: { email: { source: "mimukit/saasaloy", ref: "main" } },
+      }),
+      "utf-8"
+    );
+    await expect(loadLock(bad)).rejects.toThrow(/"resolved"/);
+  });
+
+  it("refuses a lock at an unknown lockfileVersion", async () => {
+    await writeFile(
+      join(bad, "saasaloy-lock.json"),
+      JSON.stringify({ lockfileVersion: 99, modules: {} }),
+      "utf-8"
+    );
+    await expect(loadLock(bad)).rejects.toThrow(
+      /saasaloy-lock\.json is invalid/
+    );
+  });
+
+  it("still loads a valid lock", async () => {
+    await writeFile(
+      join(bad, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: { email: { ...PROVENANCE, conflictsWith: ["email-ses"] } },
+      }),
+      "utf-8"
+    );
+    const lock = await loadLock(bad);
+    expect(lock.modules.email?.conflictsWith).toStrictEqual(["email-ses"]);
   });
 });

@@ -1,6 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { pathExists } from "./fs-utils.js";
+import { validateManifest } from "./schema.js";
 import type { RegistryPatch } from "./schema.js";
 
 // `.saasaloy/manifest.json` records every file a module applied — copied source
@@ -85,7 +86,17 @@ export async function loadManifest(root: string): Promise<Manifest> {
   if (!(await pathExists(file))) {
     return emptyManifest();
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Manifest>;
+  const raw = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // This file decides whether a target is safe to overwrite, so a hash that isn't a
+  // digest or a half-written entry has to stop the command rather than reach the applier
+  // as a typed object that lies about its shape (#98). Same posture as `loadConfig`.
+  const result = await validateManifest(raw);
+  if (!result.valid) {
+    throw new Error(
+      `${MANIFEST_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
+    );
+  }
+  const parsed = raw as Partial<Manifest>;
   return {
     links: parsed.links ?? {},
     managed: parsed.managed ?? {},

@@ -3,6 +3,7 @@ import { join } from "node:path";
 import { pathExists } from "./fs-utils.js";
 import type { ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
+import { validateLock } from "./schema.js";
 
 // `saasaloy-lock.json` records, for every installed module, the registry source it came
 // from and the exact commit SHA it resolved to — the npm-style lock to `saasaloy.json`'s
@@ -41,7 +42,17 @@ export async function loadLock(root: string): Promise<Lockfile> {
   if (!(await pathExists(file))) {
     return emptyLock();
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as Partial<Lockfile>;
+  const raw = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // The lock is what `update` diffs against and what `add` reads a module's
+  // `conflictsWith` back out of, so an entry with no `resolved` SHA or an unknown
+  // `lockfileVersion` has to stop the command here (#98). Same posture as `loadConfig`.
+  const result = await validateLock(raw);
+  if (!result.valid) {
+    throw new Error(
+      `${LOCK_FILE} is invalid:\n  ${result.errors.join("\n  ")}`
+    );
+  }
+  const parsed = raw as Partial<Lockfile>;
   return {
     $schema: parsed.$schema ?? LOCK_SCHEMA_URL,
     lockfileVersion: parsed.lockfileVersion ?? LOCKFILE_VERSION,
