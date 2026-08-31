@@ -150,8 +150,8 @@ exported chain (`"exportName": "default"`), never by dropping the file and hopin
 ## Roles and the first admin
 
 Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a
-`role` column, writes `"user"` into it for every new sign-up, and treats `"admin"` as the
-privileged role. `apps/admin`'s guard reads exactly one thing:
+`role` column, writes `"user"` into it for every new sign-up (except the first one, see below),
+and treats `"admin"` as the privileged role. `apps/admin`'s guard reads exactly one thing:
 
 ```ts
 const { data } = await client.getSession();
@@ -162,10 +162,24 @@ if (data?.user.role !== "admin") { /* denied */ }
 the server plugin. Keep the pair: drop the client half and `session.user.role` goes back to
 being an unchecked cast.
 
-Nothing promotes the first admin for you, and nothing should — an endpoint that hands out the
-admin role is the one endpoint you cannot afford to get wrong. Sign up normally, then flip the
-row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in
-`packages/db`, which is what the relative paths are written against:
+### First user wins
+
+The first account to sign up on an empty `user` table gets `role: "admin"`. A
+`databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before
+the row is written, so it can only match on the very first sign-up; every account after that
+keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it
+is what makes `saasaloy add admin` usable without SQL.
+
+**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches
+`/signup` before you do becomes the admin, and on a deployed API with a public origin the window
+is real. Sign up yourself the moment the API answers its first request, then confirm with
+`select email, role from user`. Two sign-ups that land at the same instant both read an empty
+table and both become admin; that is accepted rather than locked, because a unique index on
+`role = 'admin'` would also block promoting a second admin later.
+
+If somebody else got there first, or you are promoting an account on a project that already has
+users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working
+directory in `packages/db`, which is what the relative paths are written against:
 
 ```sh
 # local D1 (the same SQLite `vite dev` serves from)

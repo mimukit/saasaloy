@@ -61,7 +61,7 @@ Add `hono` to `modules/auth/files/package.json` at the exact version `modules/ap
 
 Then give them a caller. `modules/admin` ships no api files today, so this phase adds the first: `files/api/routes/admin-users.ts`, a `GET /admin/users` sub-app that calls `requireAdmin` then `auth.api.listUsers`, registered with a `chained-route` patch on the exported chain (ADR 0028) so `hc<AppType>` types it. The route contract is the one `modules/waitlist/files/api/routes/waitlist.ts` documents: one named `export const`, one chained expression, an explicit status on every `c.json`.
 
-### Phase 2: first user wins
+### Phase 2: first user wins (built 2026-08-31)
 
 Add `databaseHooks` to `betterAuth({...})` in `modules/auth/files/src/auth.ts`. The `user.create.before` hook counts rows in `user` through the drizzle client already in scope (`getDb(authEnv.DB)`) and returns `{ data: { ...user, role: ADMIN_ROLE } }` on zero. Anything else returns the input untouched, so the plugin's `"user"` default applies.
 
