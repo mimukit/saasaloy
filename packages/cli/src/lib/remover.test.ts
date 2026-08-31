@@ -1297,6 +1297,51 @@ export const email = createEmail({
     await expect(readFile(abs, "utf-8")).resolves.toBe(patched.content);
     expect(manifest.patches).toHaveLength(1);
   });
+
+  // A target whose syntax a hand edit broke is still a hand-edited target, so it takes
+  // the same warn-and-skip route as a drifted one. The parser throws where the codemods
+  // can't catch it without giving up their pure `string => string` contract, so the
+  // remover catches it and names the file — a bare `Unexpected token (5:20)` abort tells
+  // a user nothing about which of the workspace's files to open.
+  it("refuses a target whose syntax is broken instead of aborting the whole remove", async () => {
+    const broken = `import { createEmail } from "./create.js";
+import { cloudflare } from "./providers/cloudflare.js";
+
+export const email = createEmail({
+  providers: [cloudflare()],
+});
+
+function alsoBroken( {{{
+`;
+    const abs = await writeEmail(broken);
+
+    const manifest = emptyManifest();
+    const patch = pluginPatch("email-cloudflare");
+    manifest.patches.push(patch);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["email-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("email-cloudflare", config, manifest, lock);
+    expect(plan.patches[0]?.action).toBe("refused");
+    expect(plan.patches[0]?.reason).toContain(EMAIL_TARGET);
+    expect(plan.patches[0]?.reason).toContain("does not parse");
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(broken);
+    expect(result.patchesReversed).toStrictEqual([]);
+    expect(result.patchesDropped).toStrictEqual([patch]);
+    expect(result.patchRefusals[0]?.reason).toContain(EMAIL_TARGET);
+    expect(manifest.patches).toStrictEqual([]);
+  });
 });
 
 describe("executeRemovePlan — empty-dir pruning", () => {

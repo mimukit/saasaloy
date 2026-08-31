@@ -11,6 +11,7 @@ import type { Lockfile } from "./lock.js";
 import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { isReversibleKind, reversePatch } from "./patch/index.js";
+import type { PatchResult } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy remove` — mirrors applier.ts's buildPlan/
@@ -73,7 +74,8 @@ export interface PlannedRemoveLink {
 
 // How a recorded config patch relates to what's on disk right now:
 //   revert  — a reversible kind with an edit still there → `diff` previews the undo
-//   refused — the inverse declined it; the line is the user's now → `reason` says why
+//   refused — the inverse declined it (the line is the user's now), or the file no longer
+//             parses at all → `reason` says which, and names the file
 //   gone    — nothing left to undo (target file absent, or already hand-reverted)
 //   drop    — a kind with no inverse (the two `package.json` ones) → record goes, edit stays
 export type PatchRemoveAction = "revert" | "refused" | "gone" | "drop";
@@ -236,7 +238,11 @@ async function previewPatchRemoval(
   await assertNoSymlinkPath(root, fileAbs);
 
   const source = await readFile(fileAbs, "utf-8");
-  const result = reversePatch(source, entry.patch, entry.file);
+  const attempt = tryReversePatch(source, entry);
+  if (!attempt.ok) {
+    return { entry, action: "refused", diff: "", reason: attempt.reason };
+  }
+  const result = attempt.result;
   if (result?.changed) {
     return { entry, action: "revert", diff: result.diff };
   }
@@ -244,6 +250,35 @@ async function previewPatchRemoval(
     return { entry, action: "refused", diff: "", reason: result.reason };
   }
   return { entry, action: "gone", diff: "" };
+}
+
+/** Either the codemod's own verdict, or the parser's complaint about the target file. */
+type ReversalAttempt =
+  { ok: true; result: PatchResult | undefined } | { ok: false; reason: string };
+
+/**
+ * `reversePatch` behind a guard. Every inverse parses the target file first, and both
+ * parsers throw on syntax they can't read — a state only a hand edit produces, which the
+ * remove contract routes to warn-and-skip, not to an aborted command. Turning the throw
+ * into a refusal reason keeps the codemods pure (`string => string`, no error channel)
+ * and names the file, so the warning says which of the workspace's files to open. Both
+ * the plan and the execute pass call this: the plan so a broken target is previewed as a
+ * refusal, the execute so a file broken *between* the two doesn't throw after files and
+ * links are already deleted.
+ */
+function tryReversePatch(
+  source: string,
+  entry: ManifestPatch
+): ReversalAttempt {
+  try {
+    return { ok: true, result: reversePatch(source, entry.patch, entry.file) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: `${entry.file} does not parse (${detail}) — fix the file, then hand-revert this patch`,
+    };
+  }
 }
 
 export interface ExecuteRemoveArgs {
@@ -450,12 +485,14 @@ export async function executeRemovePlan(
       // rather than reverse a patch into a file outside the root.
       await assertNoSymlinkPath(root, fileAbs);
       const source = await readFile(fileAbs, "utf-8");
-      const result = reversePatch(source, entry.patch, entry.file);
-      if (result?.changed) {
-        await writeFile(fileAbs, result.content, "utf-8");
+      const attempt = tryReversePatch(source, entry);
+      if (!attempt.ok) {
+        patchRefusals.push({ patch: entry, reason: attempt.reason });
+      } else if (attempt.result?.changed) {
+        await writeFile(fileAbs, attempt.result.content, "utf-8");
         reversed = true;
-      } else if (result?.reason !== undefined) {
-        patchRefusals.push({ patch: entry, reason: result.reason });
+      } else if (attempt.result?.reason !== undefined) {
+        patchRefusals.push({ patch: entry, reason: attempt.result.reason });
       }
     }
     (reversed ? patchesReversed : patchesDropped).push(entry);
