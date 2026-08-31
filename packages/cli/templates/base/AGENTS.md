@@ -14,6 +14,33 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
   a root-level workspace, not nested under `apps/*` or `packages/*` (it's neither an app nor a
   shared package)
 
+### Dev Port Map
+
+Every dev port in this repo is pinned, not assigned on the fly. The api Worker's CORS
+allow-list and the auth module's trusted origins hardcode the localhost origins, so a
+drifting port turns into an unexplained CORS rejection.
+
+| Workspace | Port | Dev URL | Pinned in |
+| --- | --- | --- | --- |
+| `apps/web` (Astro) | 3000 | `http://localhost:3000` | `apps/web/astro.config.mjs` (`server.port`) |
+| `apps/admin` (TanStack Start) | 3001 | `http://localhost:3001` | `apps/admin/vite.config.ts` (`server.port`, `strictPort`) |
+| `apps/api` (Hono on Workers) | 4000 | `http://localhost:4000` | `apps/api/wrangler.jsonc` (`dev.port`) |
+| Postgres (local, `database-postgres`) | 5432 | `postgres://postgres:postgres@127.0.0.1:5432/app` | `DATABASE_URL` in `.env` |
+
+The `apps/admin` and `apps/api` rows apply once you run `saasaloy add admin` or
+`saasaloy add api`.
+
+Rules for a new app or service:
+
+- **Take the next free port in the block** — `apps/*` count up from 3000, backend services
+  from 4000. Add a row to this table in the same change.
+- **Set `strictPort` (or the framework's equivalent).** A busy port must fail loudly. A
+  silent `+1` moves the app to an origin nothing allows.
+- **Name the origin, don't infer it.** A browser-side caller reads `PUBLIC_API_URL` and
+  falls back to `http://localhost:4000`; a server-side caller reads its own env var.
+- **Update both allow-lists when you add a browser origin**: `DEV_ORIGINS` in
+  `apps/api/src/index.ts` and `DEV_ORIGINS` in `packages/auth/src/auth.ts`.
+
 ### Workspace Commands
 
 - Filter to specific package: `pnpm --filter <package-name> <command>`
