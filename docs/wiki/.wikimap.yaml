@@ -15,6 +15,11 @@ pages:
     documents:
       - modules/*/registry-item.json
       - modules/README.md
+  - path: how-to/make-it-yours.md
+    mode: how-to
+    documents:
+      - packages/cli/templates/base/_agents/skills/**
+      - packages/cli/templates/base/AGENTS.md
   - path: how-to/add-a-module.md
     mode: how-to
     documents:

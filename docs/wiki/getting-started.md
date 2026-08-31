@@ -83,6 +83,7 @@ my-app/
   apps/web/            Astro landing page (port 3000)
   packages/ui/         shared React + Tailwind components
   packages/tsconfig/   shared TypeScript configs
+  .agents/skills/      three bundled agent skills (symlinked from .claude/skills/)
   DESIGN.md            the design contract, derived from what packages/ui ships
   saasaloy.json        alias map + the list of installed modules
   turbo.json
@@ -93,12 +94,29 @@ contract (`DESIGN.md`, kept current by the bundled `saasaloy-design` skill). The
 no database and no auth yet, on purpose. Those are modules, and you install the ones you
 need.
 
+## Make it yours
+
+The page you are looking at still sells a placeholder product, under a `siteName` that is
+just your directory name. The three skills in `.agents/skills/` exist to fix that, and the
+first two run in order:
+
+1. **`/saasaloy-setup`** interviews you about the product and writes
+   `docs/product-brief.md` — the context every other skill reads.
+2. **`/saasaloy-landing-copy`** turns that brief into the landing page's copy, through a
+   draft you review first.
+3. **`/saasaloy-design theme`** swaps the default theme for a registry preset and keeps
+   `DESIGN.md` true — run it whenever you want the look changed, not just now.
+
+[Make the project yours](how-to/make-it-yours.md) walks through all three.
+
 `saasaloy.json` is what marks this directory as a Saasaloy project. `saasaloy add` and
 `saasaloy remove` walk up from your working directory looking for it, so you can run them
 from any subdirectory.
 
 ## Next
 
+- [Make the project yours](how-to/make-it-yours.md) — the setup interview, the landing
+  copy, and the theme, via the bundled skills.
 - [Add a module](how-to/add-a-module.md) to install a feature, starting with
   `saasaloy list` to see what the registry offers.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
@@ -111,4 +129,4 @@ cd /path/to/saasaloy
 pnpm cli:unlink
 ```
 
-_Verified against `main`@`0f8b7a7` on 2026-08-30._
+_Verified against `main`@`a21fcce` on 2026-08-31._

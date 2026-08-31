@@ -21,6 +21,7 @@ Depends on what you installed:
 |---|---|---|---|
 | `apps/web` | the base, always present | `apps/web/wrangler.jsonc` | Astro's `dist/` as Workers static assets, no Worker code |
 | `apps/api` | `saasaloy add api` (or anything that depends on it) | `apps/api/wrangler.jsonc` | the Hono Worker at `src/index.ts` |
+| `apps/admin` | `saasaloy add admin` | `apps/admin/wrangler.jsonc` | the Vite-built admin SPA as Workers static assets |
 
 A project that only ran `saasaloy init` has exactly one thing to deploy.
 
@@ -83,8 +84,12 @@ no `.env` file and sets nothing on Cloudflare. What the shipped modules declare:
 | Module | Variables |
 |---|---|
 | `api` | `CORS_ORIGINS` |
+| `admin` | `PUBLIC_API_URL` |
 | `auth` | `BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`, `COOKIE_DOMAIN` |
 | `email` | `EMAIL_PROVIDER`, `EMAIL_FROM` |
+| `sms` | `SMS_PROVIDER`, `SMS_FROM` |
+| `logger` | `LOGGER_PROVIDER`, `LOG_LEVEL` |
+| `infra` | `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_DEFAULT_ACCOUNT_ID`, `PULUMI_CONFIG_PASSPHRASE` |
 | `waitlist` | `PUBLIC_API_URL` |
 
 Each descriptor carries a description of what its variables are for; `saasaloy add` shows
@@ -95,12 +100,28 @@ Better Auth's dev default locally with a console warning, and is required in pro
 Set secrets with `pnpm --filter @repo/api exec wrangler secret put BETTER_AUTH_SECRET`
 against the Worker that reads them, not in `wrangler.jsonc`, so they stay out of the repo.
 
+## Or install `infra` and deploy everything at once
+
+The manual per-workspace flow above is the default, but a centralized alternative exists:
+`saasaloy add infra` scaffolds a root-level `infra` workspace that discovers every
+deployable service in the repo and ships it through Pulumi:
+
+```bash
+pnpm --filter infra run preview   # pulumi preview
+pnpm --filter infra run deploy    # pulumi up
+```
+
+It needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_DEFAULT_ACCOUNT_ID` and
+`PULUMI_CONFIG_PASSPHRASE` set. Full detail — credentials, state, adding a service so infra
+picks it up — lives in the `saasaloy-infra` skill the module installs at
+`.agents/skills/saasaloy-infra/`.
+
 ## What Saasaloy does not do
 
-No pipeline, no environments, no orchestration. Deploying is two or three commands you run
-yourself, in an order you choose. The `database` module states the boundary outright:
-remote application is manual, and a centralized production deploy is left to a future
-`infra` capability that does not exist yet.
+Without `infra`, no pipeline, no environments, no orchestration: deploying is two or three
+commands you run yourself, in an order you choose. The `database` module states the
+boundary outright: remote migration application is manual, and nothing auto-migrates on
+boot.
 
 That also means there is no Saasaloy-side rollback. Reverting a bad deploy is Cloudflare's
 tooling against your Worker, not something this repo wraps.
@@ -111,4 +132,4 @@ tooling against your Worker, not something this repo wraps.
 - [Add a module](add-a-module.md) — installing `api` and `database` in the first place.
 - [Architecture](../architecture.md) — why the CLI stops at copying files in.
 
-_Verified against `main`@`1b27579` on 2026-08-30._
+_Verified against `main`@`a21fcce` on 2026-08-31._

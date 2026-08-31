@@ -39,6 +39,15 @@ Then it asks `Proceed?`. Answer no and nothing is written.
 
 Run `add` with no module name and you get a picker over the registry instead.
 
+## The skill that comes with it
+
+Every module installs a `saasaloy-<name>` agent skill alongside its files — real files in
+`.agents/skills/`, symlinked from `.claude/skills/` so Claude Code picks them up as slash
+commands. The skill is the module's runbook: `saasaloy-api` covers adding a route,
+`saasaloy-database` covers tables and migrations, `saasaloy-auth` covers sessions and
+roles. After an install, that skill is the manual for working inside what just landed, for
+you and for any agent in the project.
+
 ## Look before you leap
 
 ```bash
@@ -124,4 +133,4 @@ rough edges in that model are tracked in
 - [Architecture](../architecture.md) for what the applier does with hashes and aliases
 - [Reference](../reference.md#saasaloy-add) for the full flag list
 
-_Verified against `main`@`0f8b7a7` on 2026-08-30._
+_Verified against `main`@`a21fcce` on 2026-08-31._

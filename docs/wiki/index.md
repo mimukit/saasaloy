@@ -21,6 +21,8 @@ Two things worth knowing before you pick a page:
 You want a project scaffolded and features installed into it.
 
 - [Getting started](getting-started.md) — install the CLI, scaffold a project, run it.
+- [Make the project yours](how-to/make-it-yours.md) — the bundled skills that write the
+  product brief, the landing copy, and the theme.
 - [Modules](modules.md) — every module in the default registry, in one table.
 - [Add a module](how-to/add-a-module.md) — install a feature and its prerequisites.
 - [Remove a module](how-to/remove-a-module.md) — take one back out, and what stays behind.
@@ -50,4 +52,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`cfcb0fd` on 2026-08-30._
+_Verified against `main`@`a21fcce` on 2026-08-31._
