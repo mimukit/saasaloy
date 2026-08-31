@@ -240,14 +240,19 @@ describe(removeWranglerBinding, () => {
     expect(out).toContain("9f2c-real");
   });
 
-  it("leaves an unparseable document alone", () => {
-    const broken = `{ "name": "api",,, }`;
-    expect(
-      removeWranglerBinding(broken, {
-        bindingType: "d1_databases",
-        entry: { binding: "DB" },
-      })
-    ).toBe(broken);
+  it("leaves a document with no parse tree alone", () => {
+    // `parseTree` recovers from most malformed JSONC and still hands back a tree, so
+    // the `!root` guard needs an input it gives up on entirely. An empty file is one:
+    // `parseTree("")` is `undefined`. `{ "name": "api",,, }` is not — it parses to an
+    // object node and exits through the "no array of ours" branch instead.
+    for (const broken of ["", `{ "name": "api",,, }`]) {
+      expect(
+        removeWranglerBinding(broken, {
+          bindingType: "d1_databases",
+          entry: { binding: "DB" },
+        })
+      ).toBe(broken);
+    }
   });
 });
 
