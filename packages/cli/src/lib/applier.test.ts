@@ -1800,3 +1800,104 @@ describe("executePlan — plan-to-execute re-check (#98)", () => {
     expect(result.written).toStrictEqual([]);
   });
 });
+
+// #98 fix round. Two modules in one run can ship the same target: `database` and its
+// driver `database-d1` both scaffold `packages/db/tsconfig.json`. Planned twice they
+// both classified `create`, the core's copy landed first, and `stillMatches` then read
+// this run's own bytes and dropped the driver's copy as late drift — so `packages/db`
+// kept the core tsconfig and lost the `types` entry the driver needs.
+describe("a target two modules in one run both ship", () => {
+  it("lands the last planner's copy, not the first's", async () => {
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            aliases: { "@db": "packages/db/src" },
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["vite/client"] }\n' }
+    );
+    const driver = await writeModule(
+      "database-d1",
+      {
+        type: "saasaloy:capability",
+        dependsOn: ["database"],
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      {
+        "files/tsconfig.json":
+          '{ "types": ["@cloudflare/workers-types", "vite/client"] }\n',
+      }
+    );
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    // Topological order: the driver dependsOn the core, so it plans second.
+    const planned = await plan({
+      install: ["database", "database-d1"],
+      modules: [core, driver],
+      config,
+      manifest,
+    });
+
+    const entries = planned.files.filter(
+      (f) => f.target === "packages/db/tsconfig.json"
+    );
+    expect(entries).toHaveLength(1);
+    expect(entries[0]?.module).toBe("database-d1");
+
+    const result = await executePlan(planned, root, config, manifest);
+
+    expect(result.lateDrift).toStrictEqual([]);
+    await expect(
+      readFile(join(root, "packages", "db", "tsconfig.json"), "utf-8")
+    ).resolves.toBe(
+      '{ "types": ["@cloudflare/workers-types", "vite/client"] }\n'
+    );
+    expect(manifest.managed["packages/db/tsconfig.json"]?.module).toBe(
+      "database-d1"
+    );
+  });
+});
+
+// #98 fix round. Phase 1 guarded every write target and left the read side on a bare
+// `join`, which normalizes a `..` away. A third-party descriptor could therefore name a
+// source outside its own module folder and copy a host file into the project.
+describe("a descriptor source path that escapes the module folder", () => {
+  it("is refused before anything is read", async () => {
+    const secret = join(moduleRoot, "secret.txt");
+    await writeFile(secret, "not yours\n", "utf-8");
+    const mod = await writeModule("hostile", {
+      type: "saasaloy:feature",
+      files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
+    });
+
+    await expect(
+      plan({
+        install: ["hostile"],
+        modules: [mod],
+        config: { aliases: { "@api": "apps/api/src" }, installed: [] },
+      })
+    ).rejects.toThrow(/inside the module folder/);
+  });
+
+  it("fails the descriptor at authoring time too", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "hostile",
+        type: "saasaloy:feature",
+        files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
+      })
+    ).resolves.toMatchObject({ valid: false });
+  });
+});

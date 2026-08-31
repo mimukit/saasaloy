@@ -335,7 +335,15 @@ export interface BuildPlanArgs {
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const { root, install, alreadyInstalled, modules, config, manifest } = args;
-  const files: PlannedFile[] = [];
+  // Keyed by project-relative target, because two modules in one run can ship the same
+  // file: `database` and its driver `database-d1`/`database-postgres` both scaffold
+  // `packages/db/tsconfig.json`. Planned as two entries they both classify `create` off
+  // an empty disk, the core's copy lands first, and `stillMatches` then reads this run's
+  // own bytes and drops the driver's copy as late drift — so the driver's tsconfig never
+  // arrived and `packages/db` lost the `types` the driver needs (#98). `install` is
+  // topological, so the last planner is the most specific one: let it win, and plan one
+  // entry per target.
+  const byTarget = new Map<string, PlannedFile>();
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const devDependencies: string[] = [];
@@ -377,7 +385,11 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     // from here every one of them is an ordinary managed file, classified and recorded
     // alike, so create/drift/conflict and `remove` all come for free.
     for (const ref of (await listModuleFiles(mod, aliasView)).values()) {
-      files.push(await planModuleFile(mod, ref, root, manifest));
+      const planned = await planModuleFile(mod, ref, root, manifest);
+      // Re-key rather than overwrite in place, so the surviving entry is listed under
+      // the module that actually writes it.
+      byTarget.delete(planned.target);
+      byTarget.set(planned.target, planned);
     }
 
     // The skill files themselves are real, committed files under `.agents/skills/<folder>/…`,
@@ -420,6 +432,8 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       envVars[key] = value;
     }
   }
+
+  const files = [...byTarget.values()];
 
   // Plan patches after every file is collected, so an op targeting a file another module
   // scaffolds this same run previews against that file's *would-be* content, not disk.
