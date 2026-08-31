@@ -4,6 +4,7 @@ import {
   lstat,
   mkdir,
   readdir,
+  readFile,
   readlink,
   symlink,
 } from "node:fs/promises";
@@ -149,6 +150,22 @@ export async function readDirNames(dir: string): Promise<string[]> {
     }
     throw error;
   }
+}
+
+/**
+ * Join a descriptor-authored POSIX path onto a module folder.
+ *
+ * A module folder is a temp dir or a local checkout — outside the project root, so
+ * `resolveWithinRoot` doesn't apply to it. Its source paths are always POSIX, joined
+ * with the platform separator for reading.
+ */
+export function joinModulePath(dir: string, relPosix: string): string {
+  return join(dir, ...relPosix.split("/"));
+}
+
+/** The file's content, or `undefined` when nothing is at that path. */
+export async function readIfPresent(abs: string): Promise<string | undefined> {
+  return (await pathExists(abs)) ? readFile(abs, "utf-8") : undefined;
 }
 
 /** True if the path exists (file, dir, or symlink). */

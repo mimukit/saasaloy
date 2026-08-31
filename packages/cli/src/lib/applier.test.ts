@@ -5,7 +5,9 @@ import {
   readFile,
   readlink,
   rm,
+  stat,
   symlink,
+  utimes,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -1663,5 +1665,138 @@ describe("applier — install-lifecycle script refusal (#98)", () => {
     });
     const result = await executePlan(p, root, config, manifest);
     expect(result.patched).toHaveLength(1);
+  });
+});
+
+// #98 Phase 4. `add` was the one engine that trusted its own plan at write time: it
+// rewrote a file it had already classified `unchanged`, and it never re-read a target
+// between the confirmation prompt and the write. `remover.ts` and `updater.ts` both
+// re-check. These drive the two rules through the real buildPlan/executePlan pair.
+
+describe("executePlan — byte-identical files (#98)", () => {
+  // A far-past mtime survives a run that writes nothing and is replaced by one that
+  // writes, which is a sharper probe than comparing two timestamps taken seconds apart.
+  const STAMP = new Date("2001-01-01T00:00:00Z");
+
+  it("refreshes an unchanged file's manifest entry without rewriting it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiCapability()];
+    await executePlan(
+      await plan({ install: ["api"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    await utimes(abs, STAMP, STAMP);
+    // Drop the recorded `from` so the re-add has something to refresh: this is the
+    // manifest an install predating that field leaves behind.
+    const entry = manifest.managed["apps/api/src/index.ts"];
+    if (entry) {
+      delete entry.from;
+    }
+
+    const second = await plan({
+      install: ["api"],
+      modules: mods,
+      config,
+      manifest,
+    });
+    expect(second.files.every((f) => f.action === "unchanged")).toBeTruthy();
+
+    const result = await executePlan(second, root, config, manifest);
+
+    expect(result.written).toStrictEqual([]);
+    expect(result.refreshed.map((f) => f.target)).toContain(
+      "apps/api/src/index.ts"
+    );
+    expect((await stat(abs)).mtime.getTime()).toBe(STAMP.getTime());
+    expect(manifest.managed["apps/api/src/index.ts"]).toMatchObject({
+      module: "api",
+      from: "files/src/index.ts",
+    });
+  });
+
+  it("still writes a file whose content differs", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+    const result = await executePlan(p, root, config, manifest);
+    expect(result.written).toHaveLength(2);
+    expect(result.refreshed).toStrictEqual([]);
+  });
+});
+
+describe("executePlan — plan-to-execute re-check (#98)", () => {
+  it("leaves a planned `create` alone when something appeared at its path", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+
+    // The confirmation prompt is open for as long as the user takes; anything can land
+    // in the gap. These bytes were never offered for overwrite.
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, "// mine\n", "utf-8");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe("// mine\n");
+    expect(result.lateDrift.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/index.ts",
+    ]);
+    expect(result.written.map((f) => f.target)).toStrictEqual([
+      "apps/api/package.json",
+    ]);
+    expect(manifest.managed["apps/api/src/index.ts"]).toBeUndefined();
+  });
+
+  it("leaves a planned `overwrite` alone when the file was edited under it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiCapability()];
+    await executePlan(
+      await plan({ install: ["api"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    // Re-plan against an edited copy of what we wrote: hash still matches the manifest
+    // at plan time, so the plan says `overwrite` — then the user saves again.
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    const planned = await plan({
+      install: ["api"],
+      modules: mods,
+      config,
+      manifest,
+    });
+    const file = planned.files.find(
+      (f) => f.target === "apps/api/src/index.ts"
+    );
+    expect(file?.action).toBe("unchanged");
+    await writeFile(abs, "// edited while the prompt was up\n", "utf-8");
+
+    const result = await executePlan(planned, root, config, manifest);
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(
+      "// edited while the prompt was up\n"
+    );
+    expect(result.lateDrift.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/index.ts",
+    ]);
+    expect(result.written).toStrictEqual([]);
   });
 });
