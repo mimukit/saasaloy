@@ -396,12 +396,13 @@ function splitSlug(slug: string): [string, string] | undefined {
 }
 
 export async function runUpdate(argv: string[]): Promise<number> {
-  if (wantsHelp(argv)) {
+  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
 
-  const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy update ")), TUI_ON_STDERR);
 
   if (opts.unknown.length > 0) {

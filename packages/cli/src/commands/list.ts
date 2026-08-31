@@ -103,12 +103,13 @@ async function localProject(): Promise<LocalProject> {
 }
 
 export async function runList(argv: string[]): Promise<number> {
-  if (wantsHelp(argv)) {
+  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
 
-  const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy list ")));
 
   if (opts.unknown.length > 0) {

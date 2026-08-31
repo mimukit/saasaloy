@@ -252,12 +252,13 @@ async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
 }
 
 export async function runInit(argv: string[]): Promise<number> {
-  if (wantsHelp(argv)) {
+  // Parse before help answers, so a typo'd flag alongside `--help` still reports the typo.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
 
-  const opts = parseArgs(argv);
   const { force, noInstall, noGit } = opts;
   let nameArg = opts.name;
 

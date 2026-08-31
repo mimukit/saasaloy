@@ -289,14 +289,15 @@ function printNextSteps(
 }
 
 export async function runAdd(argv: string[]): Promise<number> {
-  // Help is answered before the intro rail opens, so it reads as plain output a person
-  // can pipe into a pager rather than as a clack box.
-  if (wantsHelp(argv)) {
+  // Parse before anything answers, so `--help --forse` reports the typo instead of
+  // printing help over it. Help is then answered before the intro rail opens, so it reads
+  // as plain output a person can pipe into a pager rather than as a clack box.
+  const opts = parseArgs(argv);
+  if (opts.unknown.length === 0 && wantsHelp(argv)) {
     printCommandHelp(HELP);
     return EXIT_OK;
   }
 
-  const opts = parseArgs(argv);
   intro(pc.bgCyan(pc.black(" saasaloy add ")));
 
   if (opts.unknown.length > 0) {
