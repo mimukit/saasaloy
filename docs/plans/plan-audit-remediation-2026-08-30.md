@@ -148,7 +148,7 @@ The structural fix. It removes the duplication that produced the Phase 1 drift.
   common mid-`add` failure then leaves no half-state. The full rollback journal stays deferred in
   [#49](https://github.com/mimukit/saasaloy/issues/49).
 
-### Phase 5: `update` command correctness (#98)
+### Phase 5: `update` command correctness (#98) (built 2026-08-31)
 
 Four defects in one command, worth one pass.
 
