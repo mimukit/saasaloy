@@ -15,10 +15,17 @@ export default {
   // be named here — including `.dev/`, the scaffolded playground, whose built
   // `_astro/*.css` is Tailwind's minified output and produces ~600 findings.
   // (The glob skips dot-directories today, which hides `.dev/`; do not rely on that.)
+  //
+  // `coverage/**` is here for the same reason: `pnpm test` runs vitest with
+  // `--coverage`, and any reporter that emits HTML drops third-party stylesheets
+  // under `packages/cli/coverage/`. The config asks for `lcovonly`, so nothing is
+  // written there today — this entry keeps `pnpm lint` green if someone adds the
+  // `html` reporter for a local read.
   ignoreFiles: [
     "**/node_modules/**",
     "**/dist/**",
     "**/build/**",
+    "**/coverage/**",
     "**/.astro/**",
     "**/.turbo/**",
     "**/.wrangler/**",
