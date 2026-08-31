@@ -47,6 +47,7 @@
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/src/auth.ts", "target": "src/auth.ts" },
+        { "path": "files/src/authorize.ts", "target": "src/authorize.ts" },
         { "path": "files/src/env.ts", "target": "src/env.ts" },
         { "path": "files/src/server.ts", "target": "src/server.ts" },
         { "path": "files/src/client.ts", "target": "src/client.ts" }
