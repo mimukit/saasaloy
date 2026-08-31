@@ -71,7 +71,7 @@ The warning goes in three places, because the failure is unrecoverable once a st
 - The descriptor's env-var output, which the CLI prints at `add` time and is the only one of the three that reaches the person running the command.
 - The auth skill, carrying both the warning and the `update user set role` recovery command that already ships there.
 
-### Phase 3: the schema snapshot
+### Phase 3: the schema snapshot (built 2026-08-31)
 
 Re-verify the four tables against `better-auth@1.7.2`'s `getAuthTables()` and its Drizzle SQLite type mapping, fix any column that moved, and correct the header to name `1.7.2`. If nothing moved, the change is the header alone, and that is still the point of the rule.
 
@@ -79,7 +79,7 @@ Add a test beside `env.test.ts` asserting that the version string in the snapsho
 
 This phase is independent of Phases 1 and 2 and can land first.
 
-### Phase 4: docs, skills and QA
+### Phase 4: docs, skills and QA (built 2026-08-31)
 
 - `modules/auth/skills/saasaloy-auth/SKILL.md` — add `requireSession`/`requireRole`/`requireAdmin` to "Protect a route", and rewrite "Roles and the first admin" so the first-user-wins hook is the primary path, the open-signup window is stated, and the wrangler SQL becomes the recovery path. Keep the "installed auth before this shipped needs a migration" paragraph.
 - `modules/admin/skills/saasaloy-admin/SKILL.md` — state that the SPA guard is the second half of a gate whose first half is `requireAdmin`, and that a new admin route wires both. Document `GET /admin/users` as the worked example.

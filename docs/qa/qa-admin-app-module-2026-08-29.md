@@ -2,10 +2,14 @@
 
 _Generated 2026-08-29 · against `e23c8a8` · covers issue #87: the `admin` capability module, its role-gated shell and typed dashboard, and the `admin` plugin the `auth` module gained_
 
+_Extended 2026-08-31 · for issue #97: the server-side gate in `@repo/auth/server`, the gated `GET /admin/users` route, and the hook that promotes the first sign-up to admin. Scenario 2 gains TC-2.4; Scenario 5 is new and runs last._
+
 ## Summary
 
 - `saasaloy add admin` scaffolds `apps/admin`, a TanStack Router + Vite SPA on port 3001. Its root route denies every visitor who does not hold `session.user.role === "admin"`. The dashboard reads `GET /health` from the api Worker on port 4000 through `hc<AppType>` and TanStack Query. The `auth` module now enables better-auth's `admin` plugin and carries the `role` column.
 - "Working" means an anonymous visitor lands on `/login`, a signed-in non-admin gets a terminal denied panel with no redirect loop, an admin gets the sidebar and the live `/health` value, and every failure says what went wrong on screen.
+- Issue #97 adds the half a browser cannot check. `@repo/auth/server` now exports `requireSession`, `requireRole` and `requireAdmin`, which throw an `HTTPException` that api's `onError` renders as `{ "error": { "code": ..., "message": ... } }`. `GET /admin/users` is the first route to call one. A `databaseHooks.user.create.before` hook promotes the first account on an empty `user` table to `admin`, so a fresh project reaches the shell without SQL.
+- For that half, "working" means the api itself answers `403` to a non-admin's cookie, and the first sign-up on a fresh project lands in the shell while the second lands on the denied panel.
 
 ## Overall result
 
@@ -22,7 +26,7 @@ True for the whole plan. Do this once, before Scenario 1.
 - **Branch under test:** `issue-87-add-the-auth-gated-admin-app-capability-module`, at commit `e23c8a8`.
 - **Machine:** a workstation with a graphical browser. Every case in this plan needs a real browser. The CI box has none, which is why these cases are here and not in the automated section.
 - **Toolchain:** Node 24.x, pnpm 11. Run every command from the repository root unless a step says otherwise.
-- **The playground is already staged.** `.dev/playground` holds `api`, `database`, `auth` and `admin`, installed and built, with the D1 migration applied. Do not run `pnpm play:reset`. A reset deletes the two seeded accounts and costs you the whole setup.
+- **The playground is already staged.** `.dev/playground` holds `api`, `database`, `auth` and `admin`, installed and built, with the D1 migration applied. Do not run `pnpm play:reset` before Scenario 5. A reset deletes the two seeded accounts and costs you the whole setup. Scenario 5 resets on purpose and is the last thing you run.
 - **URLs:** the admin app serves `http://localhost:3001`. The api Worker serves `http://localhost:4000`. Both ports use `strictPort`, so a busy port fails loudly instead of shifting.
 - **Accounts:** both live in the playground's local D1. The password is `Password123!` for both.
 
@@ -66,11 +70,17 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-2.1 | 2: signed in as the non-admin | A non-admin gets the denied panel, not the shell | 🔴 Critical |
 | TC-2.2 | 2: signed in as the non-admin | `/login` denies the non-admin where they stand | 🟡 Normal |
 | TC-2.3 | 2: signed in as the non-admin | Sign-out from the denied panel works | 🔴 Critical |
+| TC-2.4 | 2: signed in as the non-admin | The api refuses `GET /admin/users` to a non-admin cookie | 🔴 Critical |
 | TC-3.1 | 3: admin app up, api Worker stopped | Sign-in reports an unreachable api | 🟡 Normal |
 | TC-3.2 | 3: admin app up, api Worker stopped | The dashboard shows its error card and recovers | 🟡 Normal |
 | TC-3.3 | 3: admin app up, api Worker stopped | Sign-out says the session is still live | 🟢 Low |
 | TC-4.1 | 4: reading, no servers needed | The admin skill teaches the code that shipped | 🟡 Normal |
 | TC-4.2 | 4: reading, no servers needed | The README wording matches what admin does | 🟢 Low |
+| TC-5.1 | 5: a fresh project, empty `user` table | The first sign-up lands in the shell as the admin | 🔴 Critical |
+| TC-5.2 | 5: a fresh project, empty `user` table | The second sign-up gets the denied panel | 🔴 Critical |
+| TC-5.3 | 5: a fresh project, empty `user` table | Two near-simultaneous first sign-ups: count the admins | 🟡 Normal |
+
+Scenario 5 destroys the staged playground. Run it last, after every case above has a result.
 
 ## Scenario 1: both servers up, no session
 
@@ -285,7 +295,67 @@ This scenario proves the part of the gate that a session alone cannot pass. `use
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-**Reset.** Click "Sign out" in the sidebar. Close the private window.
+### TC-2.4: The api refuses `GET /admin/users` to a non-admin cookie · 🔴 Critical
+
+**Goal.** The refusal comes from the api Worker, not from the browser. This is the only case in the plan that proves it, because every case above it runs inside the SPA the guard already stops.
+
+Run these in a terminal, not the browser. `curl` carries no `beforeLoad`, so a route that relies on the SPA guard answers `200` here and passes every other case in this plan.
+
+**Steps**
+
+1. Sign the non-admin in and keep the cookie jar.
+
+```sh
+curl -s -o /dev/null -c /tmp/qa97-user.txt -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-in/email -d '{"email":"user@example.com","password":"Password123!"}'
+grep -c better-auth /tmp/qa97-user.txt
+```
+
+   - [ ] `grep` prints a number of 1 or more, so the jar holds a session cookie
+
+2. Call the gated route with that jar.
+
+```sh
+curl -i -b /tmp/qa97-user.txt -H "Origin: http://localhost:3001" http://localhost:4000/admin/users
+```
+
+   - [ ] The status line reads `HTTP/1.1 403 Forbidden`
+   - [ ] The body is exactly `{"error":{"code":"forbidden","message":"role required: admin"}}`
+     - a `200` with a user list is the defect this whole case exists to catch
+     - a `401` is wrong too: the caller is signed in, and a 401 sends the SPA to the login screen it just came from
+     - an HTML error page means `onError` did not render the `HTTPException`
+
+3. Repeat with no cookie at all.
+
+```sh
+curl -i -H "Origin: http://localhost:3001" http://localhost:4000/admin/users
+```
+
+   - [ ] The status line reads `HTTP/1.1 401 Unauthorized`
+   - [ ] The body is exactly `{"error":{"code":"unauthorized","message":"sign in first"}}`
+
+4. Sign the admin in and call the same route.
+
+```sh
+curl -s -o /dev/null -c /tmp/qa97-admin.txt -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-in/email -d '{"email":"admin@example.com","password":"Password123!"}'
+curl -i -b /tmp/qa97-admin.txt -H "Origin: http://localhost:3001" http://localhost:4000/admin/users
+```
+
+   - [ ] The status line reads `HTTP/1.1 200 OK`
+   - [ ] The body carries a `users` array and a `total` number
+   - [ ] Both seeded accounts appear, and each carries its `role`
+     - this is what makes step 2 a refusal rather than a broken route
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _what actually happened on a fail; why it was skipped_
+
+**Reset.** Click "Sign out" in the sidebar. Close the private window. Delete `/tmp/qa97-user.txt` and `/tmp/qa97-admin.txt`; both hold live session cookies.
 
 ## Scenario 3: admin app up, api Worker stopped
 
@@ -425,6 +495,197 @@ An agent confirmed that these documents exist and cover the named topics. A huma
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
+## Scenario 5: a fresh project, empty `user` table
+
+**Run this scenario last.** Its setup deletes `.dev/playground` and the two seeded accounts with it. Every case in Scenarios 1 to 4 must already have a result before you start.
+
+This scenario covers the hook that makes `saasaloy add admin` usable out of the box: `databaseHooks.user.create.before` in `packages/auth/src/auth.ts` writes `role: "admin"` when the `user` table is empty. Nothing else in this plan sees it, because Scenarios 1 to 4 run against a database that already has rows.
+
+Sign-up runs through the api with `curl`, not the browser. The admin app ships no sign-up route on purpose, and TC-5.3 needs two requests it can fire together.
+
+**Setup.** Run once, for every case in this scenario.
+
+1. Stop both dev servers with Ctrl-C. Wait for both prompts.
+2. Build a fresh project and install the modules.
+
+```sh
+pnpm play:reset
+.dev/playground/saasaloy add admin --yes
+pnpm -C .dev/playground install
+```
+
+3. Give the api its dev origin, so the keyless path opens.
+
+```sh
+printf 'BETTER_AUTH_URL=http://localhost:4000\n' >> .dev/playground/apps/api/.dev.vars
+```
+
+4. Create the tables.
+
+```sh
+pnpm -C .dev/playground --filter @repo/db db:generate
+pnpm -C .dev/playground --filter @repo/db db:migrate:local
+```
+
+5. Start both servers again, in their own terminals, with the Environment commands rewritten for the new playground.
+6. Confirm the `user` table exists and is empty. The command must print a header and no rows.
+
+```sh
+pnpm -C .dev/playground --filter @repo/db exec wrangler d1 execute DB --local \
+  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
+  --command "select email, role from user"
+```
+
+- [ ] Setup complete: `add admin` applied its files, the migration ran, `select` returns zero rows, and `curl -s http://localhost:4000/health` prints `{"status":"ok"}`
+
+### TC-5.1: The first sign-up lands in the shell as the admin · 🔴 Critical
+
+**Goal.** One sign-up on an empty table produces a working admin, with no SQL and no manual promotion.
+
+**Steps**
+
+1. Sign the first account up.
+
+```sh
+curl -s -i -c /tmp/qa97-first.txt -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-up/email \
+  -d '{"email":"first@example.com","password":"Password123!","name":"First"}'
+```
+
+   - [ ] The status line reads `HTTP/1.1 200 OK`
+
+2. Read the row back.
+
+```sh
+pnpm -C .dev/playground --filter @repo/db exec wrangler d1 execute DB --local \
+  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
+  --command "select email, role from user"
+```
+
+   - [ ] Exactly one row, `first@example.com`, with `role` = `admin`
+     - `user`, an empty cell or `NULL` means the hook did not fire, and TC-5.2 will pass for the wrong reason
+
+3. Open a private browser window at `http://localhost:3001/`. Sign in as `first@example.com` with `Password123!`.
+   - [ ] The shell opens: the sidebar reads "Admin", the "Overview" heading is on screen, and the "Api health" badge reads `ok`
+   - [ ] The denied panel does not appear at any point
+
+4. Call the gated route with the same account's cookie.
+
+```sh
+curl -i -b /tmp/qa97-first.txt -H "Origin: http://localhost:3001" http://localhost:4000/admin/users
+```
+
+   - [ ] The status line reads `HTTP/1.1 200 OK` and the body carries `first@example.com` with `"role":"admin"`
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _what actually happened on a fail; why it was skipped_
+
+### TC-5.2: The second sign-up gets the denied panel · 🔴 Critical
+
+**Goal.** The promotion fires once per project. Every account after the first is an ordinary user, in the database, in the browser and at the api.
+
+**Steps**
+
+1. Sign a second account up.
+
+```sh
+curl -s -i -c /tmp/qa97-second.txt -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-up/email \
+  -d '{"email":"second@example.com","password":"Password123!","name":"Second"}'
+```
+
+   - [ ] The status line reads `HTTP/1.1 200 OK`
+
+2. Read both rows back with the `select` command from TC-5.1 step 2.
+   - [ ] Two rows. `first@example.com` is still `admin` and `second@example.com` is `user`
+   - [ ] `first@example.com` was not demoted or rewritten
+
+3. Open a second private browser window at `http://localhost:3001/`. Sign in as `second@example.com` with `Password123!`.
+   - [ ] The denied panel is on screen, titled "This account cannot open the admin app", naming `second@example.com`
+   - [ ] No sidebar and no "Overview" heading appear, at any point
+
+4. Call the gated route with the second account's cookie.
+
+```sh
+curl -i -b /tmp/qa97-second.txt -H "Origin: http://localhost:3001" http://localhost:4000/admin/users
+```
+
+   - [ ] `HTTP/1.1 403 Forbidden`, body `{"error":{"code":"forbidden","message":"role required: admin"}}`
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _what actually happened on a fail; why it was skipped_
+
+### TC-5.3: Two near-simultaneous first sign-ups: count the admins · 🟡 Normal
+
+**Goal.** Record what the documented race actually does on this machine. Two requests that both read an empty table can both be promoted. That outcome is accepted, not locked, so this case measures rather than judges.
+
+**There is no failing count.** One admin and two admins are both valid results. Write the number down. The case fails only if the run errors out, or if zero admins come out of it.
+
+**Steps**
+
+1. Empty the tables. Sign-ups leave rows in `account` and `session` too, and a stale `account` row blocks re-using an address.
+
+```sh
+pnpm -C .dev/playground --filter @repo/db exec wrangler d1 execute DB --local \
+  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
+  --command "delete from session; delete from account; delete from user"
+```
+
+   - [ ] The `select` command from TC-5.1 step 2 returns zero rows
+
+2. Fire two sign-ups at once. The `&` puts the first in the background, so both requests are in flight together.
+
+```sh
+curl -s -o /tmp/qa97-race-a.json -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-up/email \
+  -d '{"email":"race-a@example.com","password":"Password123!","name":"Race A"}' &
+curl -s -o /tmp/qa97-race-b.json -H "Origin: http://localhost:3001" -H "Content-Type: application/json" \
+  -X POST http://localhost:4000/auth/sign-up/email \
+  -d '{"email":"race-b@example.com","password":"Password123!","name":"Race B"}'
+wait
+```
+
+   - [ ] Both commands finish and neither response file contains an `error` key
+
+3. Count the admins.
+
+```sh
+pnpm -C .dev/playground --filter @repo/db exec wrangler d1 execute DB --local \
+  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
+  --command "select email, role from user order by email"
+```
+
+   - [ ] Two rows are present
+   - [ ] **Record the count of `role = 'admin'` rows here: \_\_\_\_ (1 or 2)**
+   - [ ] At least one row reads `admin`
+     - zero admins is a real failure: an empty table produced no owner, and the project is unusable without SQL
+
+4. Repeat steps 1 to 3 twice more and record each count.
+   - [ ] **Run 2 admin count: \_\_\_\_**
+   - [ ] **Run 3 admin count: \_\_\_\_**
+
+5. If any run produced two admins, note it for the tracker. The mitigation is a follow-up issue, not a fix in this branch: a unique index on `role = 'admin'` would also block promoting a second admin later, which is why the race is documented instead of locked.
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _the three counts; anything else the run showed_
+
+**Reset.** Stop both dev servers. Delete `/tmp/qa97-*`; those files hold live session cookies. The playground is now a scratch project with test accounts in it, so run `pnpm play:destroy` when you are done.
+
 ## Automated verification (by AI agent)
 
 _Checks the agent ran itself, at commit `e23c8a8`, against the staged playground. No action needed from the tester; listed here for context and sign-off._
@@ -546,3 +807,5 @@ The agent stopped both dev servers when it finished. The tester starts them agai
 - **A session that dies mid-visit.** `loadSession()` memoises for the page load, so a revoked session keeps painting the shell until a reload while the api answers 401. That is a cosmetic lag and not a privilege, because the api authorizes each request on the cookie it receives. It is written down in `src/lib/auth.ts` and it is not tested here.
 - **A second `saasaloy add admin` over an edited file.** Whether the second add reports "needing merge" cleanly is untested.
 - **Concurrency and performance.** The dashboard reads one endpoint with one row of data, so neither dimension carries risk worth a case.
+- **The first-admin race under real load.** TC-5.3 fires two sign-ups from one shell on one machine. It records what happens; it does not establish how wide the window is on a deployed Worker with a public origin, where the two requests may land on different isolates. Treat its counts as an observation, not a bound.
+- **`account.issuer` on a project that upgraded.** The schema snapshot now carries the column better-auth 1.7.2 made required, and the auth skill documents the backfill. Every run in this plan starts from a fresh `add auth`, so the upgrade path itself is untested here.
