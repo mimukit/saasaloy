@@ -30,8 +30,8 @@ saasaloy remove waitlist --dry-run
 saasaloy remove waitlist --diff
 ```
 
-`--diff` shows a deletion diff per file, and for a `chained-route` patch the reversal it
-would apply to the entry file. Each patch is labelled by what will happen to it: `revert`
+`--diff` shows a deletion diff per file, and for a reversible patch the reversal it would
+apply to the patched file. Each patch is labelled by what will happen to it: `revert`
 when there is an edit to undo, `drift → left` when the line is yours now and the reason
 why, `already gone` when nothing is left to undo, and `untrack` for a patch kind `remove`
 cannot reverse.
@@ -63,21 +63,27 @@ because it might depend on the target and there is no way to tell.
 ## What stays behind
 
 `remove` cleans up its own files, its skill symlinks, the now-empty directories it
-created, the `saasaloy.json` aliases whose target directory is gone, and any
-`chained-route` patch the module applied. Reversing that patch always takes the
-`.route()` link out of the entry file. It takes the named import out only when no other
-code still references the identifier, so a hand-written `app.use(waitlist.middleware)`
-is never left unbound. A route you repointed at your own handler is left where it is and
-reported, because the link no longer matches what the manifest recorded. Three things it
-does not touch:
+created, the `saasaloy.json` aliases whose target directory is gone, and every config
+patch the module applied to a config file: a `chained-route` link, a `wrangler-binding`
+entry, a `plugin-array` element. Reversing one takes the edit out and the named import
+with it, but only when no other code still references the identifier, so a hand-written
+`app.use(waitlist.middleware)` is never left unbound. A binding array in
+`apps/api/wrangler.jsonc` goes too once the last entry in it is gone, because the base
+`api` module ships no binding arrays and every one of them was added by a patch. A
+`providers` array in a capability's `src/index.ts` stays, empty, because the capability
+ships it and the next provider install needs it there.
 
-- **Config patches of every other kind stay.** When a module patched a file another module
-  owns, `remove` prints one warning per patched file and drops the entry from the
-  manifest. Dropping the entry is untracking, not undoing. Removing `email-cloudflare`,
-  for instance, leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
-  provider entry in `packages/email/src/index.ts` exactly where they were. Revert those by
-  hand. See [Known limitations](../reference.md#known-limitations) for the issue tracking
-  this.
+Nothing is reverse-patched blindly. A route you repointed at your own handler, a binding
+whose value you edited, a plugin call you gave arguments: each is left where it is and
+reported with the reason, because it no longer matches what the manifest recorded. The
+record is still dropped, so the module stops being tracked either way. Three things
+`remove` does not touch:
+
+- **The two `package.json` patch kinds stay.** `remove` prints one warning per patched
+  file and drops the entry from the manifest. Dropping the entry is untracking, not
+  undoing. Removing `waitlist`, for instance, leaves `hono` and `@repo/api` in
+  `apps/web/package.json` exactly where they were. Revert those by hand. See
+  [Known limitations](../reference.md#known-limitations).
 - **npm dependencies stay in your root `package.json`.** `add` merges them in; `remove`
   has no dependency handling at all.
 - **Environment variables you set for the module** are left alone, wherever you put them.

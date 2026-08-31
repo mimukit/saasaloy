@@ -278,8 +278,8 @@ put the core's copy back by hand:
 }
 ```
 
-`remove` also warns about the leftovers it cannot reverse: the `nodejs_compat` flag in
-`apps/api/wrangler.jsonc`, and the `db:migrate` script plus the `postgres` and `@types/node`
+`remove` takes the `nodejs_compat` flag back out of `apps/api/wrangler.jsonc`. It warns about the
+leftovers it cannot reverse: the `db:migrate` script plus the `postgres` and `@types/node`
 dependencies in `packages/db/package.json`. Delete those by hand. Your `src/schema/*.ts` files stay
 put and are still `pg-core` — port them to `sqlite-core` yourself.
 

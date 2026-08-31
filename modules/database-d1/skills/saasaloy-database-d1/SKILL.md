@@ -149,10 +149,11 @@ put the core's copy back by hand:
 }
 ```
 
-`remove` also warns about the leftovers it cannot reverse: the `d1_databases` block in
-`apps/api/wrangler.jsonc` and the two `db:migrate:*` scripts plus the `wrangler` devDependency in
-`packages/db/package.json`. Delete those by hand. Your `src/schema/*.ts` files stay put and are
-still SQLite — port them to `pg-core` yourself.
+`remove` takes the `d1_databases` block back out of `apps/api/wrangler.jsonc`, unless you edited the
+binding, in which case it says so and leaves it. It warns about the leftovers it cannot reverse: the
+two `db:migrate:*` scripts plus the `wrangler` devDependency in `packages/db/package.json`. Delete
+those by hand. Your `src/schema/*.ts` files stay put and are still SQLite — port them to `pg-core`
+yourself.
 
 ## Boundaries to honor
 
