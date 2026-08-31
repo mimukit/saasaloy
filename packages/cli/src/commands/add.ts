@@ -32,7 +32,11 @@ import {
   REGISTRY_ENV,
 } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
-import { resolveGraph } from "../lib/resolve.js";
+import {
+  detectMissingRequirements,
+  formatMissingRequirements,
+} from "../lib/requires.js";
+import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 
@@ -87,6 +91,10 @@ const ACTION_LABEL: Record<FileAction, string> = {
 
 // Cap a single file's diff so a big generated file can't flood the terminal.
 const MAX_DIFF_LINES = 60;
+
+// How many `requiresOneOf` prompts one `add` may open. Each pick settles one requirement,
+// so this is only reached by a chain of modules that each require the next.
+const MAX_REQUIREMENT_PROMPTS = 8;
 
 // Keyed by DiffLine["kind"], so adding a kind to lib/diff.ts is a type error here
 // rather than a silently unstyled line.
@@ -285,7 +293,47 @@ export async function runAdd(argv: string[]): Promise<number> {
       requested = picked;
     }
 
-    const graph = await resolveGraph(source, requested);
+    let graph = await resolveGraph(source, requested);
+
+    // `requiresOneOf` — a capability naming its mutually exclusive drivers. Settle it
+    // before the conflict check below, so that check reads the graph a picked driver is
+    // already part of (#98).
+    let unmet = detectMissingRequirements({ config, graph });
+    if (unmet.length > 0 && (!isInteractive() || opts.yes)) {
+      // `--yes` means "don't ask me", not "choose a driver for my project", and a
+      // pipeline has no terminal to answer in. Both refuse and name the options.
+      cancel(formatMissingRequirements(unmet, requested));
+      return 1;
+    }
+    // One prompt per unmet requirement, re-checked after each pick: a single driver can
+    // satisfy two capabilities, and a picked module may declare a requirement of its own.
+    // The round cap keeps a descriptor that requires its way in a circle from prompting
+    // forever; whatever is still unmet when it runs out is refused below.
+    for (
+      let round = 0;
+      unmet.length > 0 && round < MAX_REQUIREMENT_PROMPTS;
+      round++
+    ) {
+      const requirement = unmet[0];
+      if (!requirement) {
+        break;
+      }
+      const picked = await select({
+        message: `${pc.cyan(requirement.declaredBy)} needs one of these — pick one`,
+        options: requirement.options.map((n) => ({ label: n, value: n })),
+      });
+      if (isCancel(picked)) {
+        cancel("add cancelled");
+        return 1;
+      }
+      graph = mergeGraph(graph, await resolveGraph(source, picked));
+      unmet = detectMissingRequirements({ config, graph });
+    }
+    if (unmet.length > 0) {
+      cancel(formatMissingRequirements(unmet, requested));
+      return 1;
+    }
+
     prereqs = graph.order.filter((n) => n !== requested);
 
     // Mutually exclusive modules are refused before anything is written, and `--force`

@@ -39,6 +39,16 @@
         "pattern": "^[a-z0-9][a-z0-9-]*$"
       }
     },
+    "requiresOneOf": {
+      "type": "array",
+      "description": "Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers (e.g. `database` naming `database-d1` and `database-postgres`). `add` counts a module as present when it is already installed or arrives in the same resolved graph, refuses when none is, and offers the list as a prompt on an interactive terminal. Use `dependsOn` for a single hard prerequisite; this field exists for a choice, so it takes at least two names (#98, ADR 0023).",
+      "uniqueItems": true,
+      "minItems": 2,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*$"
+      }
+    },
     "dependencies": {
       "type": "array",
       "description": "npm packages merged into the consumer's `dependencies`. Each must be exact-pinned `name@version` (e.g. zod@4.0.5) — bare names and ranges are rejected; `pnpm deps:update` fills/refreshes the versions.",

@@ -47,3 +47,34 @@ export async function resolveGraph(
   await visit(requested);
   return { modules, order };
 }
+
+/**
+ * Fold a second resolution into the first, returning a new graph and mutating neither.
+ *
+ * `add` needs this when a `requiresOneOf` prompt picks a driver after the requested
+ * module's graph is already resolved: the picked module is resolved on its own and merged
+ * here, rather than re-resolving everything, because a remote source re-downloads every
+ * descriptor it reads (`registry.ts`'s `readModule` extracts to a temp dir per call).
+ *
+ * The base wins on a name both graphs carry — it is the descriptor the run already
+ * planned against. `extra.order` is a post-order walk, so appending the names the base
+ * lacks, in that order, keeps every prerequisite ahead of the module that needs it.
+ */
+export function mergeGraph(base: Graph, extra: Graph): Graph {
+  const modules = new Map(base.modules);
+  const order = [...base.order];
+  const seen = new Set(order);
+  for (const name of extra.order) {
+    if (seen.has(name)) {
+      continue;
+    }
+    const mod = extra.modules.get(name);
+    if (!mod) {
+      continue;
+    }
+    seen.add(name);
+    modules.set(name, mod);
+    order.push(name);
+  }
+  return { modules, order };
+}

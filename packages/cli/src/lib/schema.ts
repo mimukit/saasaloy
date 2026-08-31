@@ -141,6 +141,8 @@ export interface RegistryItem {
   dependsOn?: string[];
   /** Modules this one refuses to sit beside; `add` refuses rather than installing both. Recorded in the lockfile so the check works in either install order. */
   conflictsWith?: string[];
+  /** Modules exactly one of which has to be present — a capability naming its mutually exclusive drivers. `add` refuses when none is installed or in the resolved graph, and offers the list as a prompt on a terminal. */
+  requiresOneOf?: string[];
   /** npm deps merged into the consumer's `dependencies`. Exact-pinned `name@version` (bare/range rejected by the schema). */
   dependencies?: string[];
   /** npm deps merged into the consumer's `devDependencies` (`@types/*`, build tooling). Same exact-pin form; a name in both buckets lands in `dependencies` only. */
