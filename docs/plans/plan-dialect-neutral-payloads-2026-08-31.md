@@ -7,7 +7,7 @@ ADR 0026 split the database capability into a dialect-agnostic core (`modules/da
 
 Success means `saasaloy add auth` and `saasaloy add waitlist` produce a working, type-checking app under `database-d1` and under `database-postgres`, verified in `.dev`.
 
-The driver-split record is **ADR 0026**, not 0023. It was renumbered on 2026-08-31 under #98 because five records shared 0023, and every "ADR 0023" in the first draft of this plan and in issue #99's body meant this one. Issue #99's body still carries the old citation and Phase 5 corrects it.
+The driver-split record is **ADR 0026**, not 0023. It was renumbered on 2026-08-31 under #98 because five records shared 0023, and every "ADR 0023" in the first draft of this plan and in issue #99's body meant this one. Both are corrected.
 
 **#98 is merged** (PR [#101](https://github.com/mimukit/saasaloy/pull/101), 2026-08-31). `requiresOneOf`, the `dependsOn: ["database-d1"]` stopgap, the Postgres `withDb` helper and the unified `listModuleFiles` are all on main. Nothing in this plan is blocked.
 
@@ -48,26 +48,26 @@ The failure needs two requests into one isolate. One manual sign-in passes, whic
 
 Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `conflicts.ts`, `applier.ts`), the lock/config machinery that already records installed modules, the `database` core's glob-merged `src/schema.ts` (dialect-agnostic, untouched), the driver modules' existing `client.ts` payloads, and #98's `requiresOneOf` and Postgres `withDb` helper.
 
-### Phase 1: descriptor condition mechanism
+### Phase 1: descriptor condition mechanism (#99)
 
 - Add the optional `onlyWith: "<module-name>"` condition to `registry-item.schema.json`, on both top-level `files[]` entries and `scaffolds[].files[]` entries: the file installs only when the named module is in the resolved install set (this run's graph plus already-installed modules from config/lock).
 - Implement selection in `listModuleFiles` (`packages/cli/src/lib/applier.ts:167`), which gains the resolved install set as a parameter and filters both arrays before recording a target. `buildPlan` (`applier.ts:387`) and `buildUpdatePlan` (`updater.ts:541-542`) inherit it with no filter of their own. Update the function's doc comment at `applier.ts:158-165` to name the condition as its fourth rule.
 - Two variant entries for the same `target` with disjoint conditions must be legal. A target whose entries are all conditional and none match is a hard plan-time error naming the target and candidates.
 - Unit tests: variant selection under each driver, selection inside a scaffold rather than only in top-level `files[]`, the no-match error, `update` seeing exactly the set `add` wrote, and `plan`/`diff` output showing which variant was chosen.
 
-### Phase 2: normalize the D1 client contract
+### Phase 2: normalize the D1 client contract (#99)
 
 - Change `modules/database-d1/files/src/client.ts` to `getDb(env: DbBindings)` reading `env.DB` internally; keep `DbBindings { DB: D1Database }`.
 - Align the cleanup contract with #98's Postgres `withDb` helper so a single route body works on both drivers (D1 side is a no-op).
 - Update the `database`, `database-d1`, and `database-postgres` skills for the one call shape.
 
-### Phase 3: waitlist goes neutral
+### Phase 3: waitlist goes neutral (#99)
 
 - Split `modules/waitlist/files/db/schema/waitlist.ts` into sqlite and pg variants (pg: identity/serial id, `timestamp` column) selected via `onlyWith`.
 - Rewrite `files/api/routes/waitlist.ts` as one neutral file: `getDb(c.env)`, driver-neutral cleanup per Phase 2. `.onConflictDoNothing()` already works on both dialects.
 - Neutralize the waitlist skill's migration references.
 
-### Phase 4: auth goes neutral
+### Phase 4: auth goes neutral (#99)
 
 - Split `modules/auth/files/db/schema/auth.ts` into sqlite and pg variants; the pg variant replaces the `unixepoch('subsecond')` default and `integer` timestamp mappings with Better Auth's pg-adapter mapping.
 - Add `files/src/db-provider.ts` in two variants, selected via `onlyWith` inside `scaffolds[0].files[]`. Each exports four things: `provider` (`"sqlite" | "pg"`), the driver's binding shape, `authDb` (the ALS-backed proxy the adapter binds), and `withAuthScope(c, fn)`. The two files differ only in `withAuthScope`: the pg variant is `withDb(c, (db) => dbScope.run(db, fn))`, the D1 variant is `dbScope.run(getDb(c.env), fn)`.
@@ -77,12 +77,11 @@ Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `co
 - Add `files/src/db-provider.test.ts` under the existing `node --test` glob: `authDb` throws outside a scope, and resolves the current request's client inside one. Both variants ship the test.
 - Neutralize the auth skill's D1 command references, and update the protected-route recipe at `SKILL.md:127` to the new `getSession(c)` signature.
 
-### Phase 5: remove the stopgap, amend the ADR, verify
+### Phase 5: remove the stopgap, amend the ADR, verify (#99)
 
 - Revert `auth` and `waitlist` `dependsOn` to their pre-stopgap values; delete the `dependsOn: ["database-d1"]` entries #98 added.
 - Write `docs/adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md` with **domainkit**: the module-scope singleton stays, the db behind it is request-scoped, and every `auth.api` call runs inside `withAuthScope` on both drivers.
 - Cut ADR 0026's 2026-08-31 amendment down: it currently says `auth` and `waitlist` "pin D1 until they get one", which Phase 5 makes false. Retract the D1 pin, keep the correction to the "no branch needed" consequence at `adr-0026-database-driver-split-2026-08-28.md:19`, and point at 0029 for the contract that replaced it.
-- Correct issue #99's body, which cites the driver-split record as ADR 0023 under its pre-renumber number.
 - Manual QA in `.dev`, both drivers: scaffold, add the driver, add `auth` + `waitlist`, typecheck, migrate, exercise the waitlist route. Postgres runs in a local container, since this box has a Docker daemon and no `psql` client.
 - The auth QA case names two assertions, never one: sign in and get a cookie, then call a protected route on the **same** worker and get a 200 rather than `Cannot perform I/O on behalf of a different request`. A single sign-in passes on a broken build, which is how the first draft's QA step missed this.
 - Close the loop on issue #99's checklist.
