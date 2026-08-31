@@ -546,8 +546,22 @@ export async function runAdd(argv: string[]): Promise<number> {
     } finally {
       // Record whatever actually landed even if a mid-plan write failed — a written
       // file the manifest doesn't know about would classify as a conflict next run.
+      //
+      // The lock saves here too (#98): all three state files leave `add` through one
+      // path, so no exit skips one of them. It pins what `config.installed` records
+      // rather than what the plan intended — `executePlan` writes that list last, so a
+      // run that threw records no module in either file, and the two never disagree.
+      //
+      // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly
+      // installed ones: an already-installed dependency keeps the SHA it was fetched at,
+      // so the lock never misstates on-disk provenance.
+      const installed = plan.install.filter((name) =>
+        config.installed.includes(name)
+      );
+      upsertLock(lock, source.provenance(), installed, graph);
       await saveManifest(root, manifest);
       await saveConfig(root, config);
+      await saveLock(root, lock);
     }
 
     // Merge npm deps into the project root package.json (best-effort — never blocks the
@@ -576,12 +590,6 @@ export async function runAdd(argv: string[]): Promise<number> {
         );
       }
     }
-
-    // Pin what was actually applied in the lockfile: source + ref + commit SHA per module
-    // (ADR 0012). Only the freshly-installed modules — an already-installed dep keeps the
-    // SHA it was fetched at, so the lock never misstates on-disk provenance.
-    upsertLock(lock, source.provenance(), plan.install, graph);
-    await saveLock(root, lock);
 
     for (const file of result.written) {
       log.step(`${ACTION_LABEL[file.action]}  ${file.target}`);
