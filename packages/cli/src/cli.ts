@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import {
   cancel,
   isCancel as clackIsCancel,
@@ -24,6 +25,18 @@ export interface CliDeps {
   select: SelectPrompt;
   /** clack's cancel sentinel is module-private, so recognising it is injectable too. */
   isCancel: (value: unknown) => value is symbol;
+}
+
+// The version comes from package.json at runtime rather than a build-time constant, so a
+// rebuild is never needed to keep them in step. At runtime import.meta.url is
+// <pkg>/dist/index.js and under vitest it's <pkg>/src/cli.ts — ../package.json resolves
+// to <pkg>/package.json from both.
+export async function cliVersion(): Promise<string> {
+  const raw = await readFile(
+    new URL("../package.json", import.meta.url),
+    "utf-8"
+  );
+  return (JSON.parse(raw) as { version: string }).version;
 }
 
 export function printHelp(registry: CommandRegistry): void {
@@ -81,6 +94,11 @@ export async function main(
     isCancel = clackIsCancel,
   } = deps;
   const [name, ...rest] = argv;
+
+  if (name === "--version" || name === "-v" || name === "version") {
+    console.log(await cliVersion());
+    return 0;
+  }
 
   // Explicit help is never the picker, on a TTY as much as anywhere.
   if (name === "--help" || name === "-h" || name === "help") {

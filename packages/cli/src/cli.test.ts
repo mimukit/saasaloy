@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, expect, it } from "vitest";
 import type { SelectPrompt } from "./cli.js";
 import { main, printHelp } from "./cli.js";
@@ -150,6 +151,37 @@ describe("main — explicit help", () => {
       expect(code).toBe(0);
       expect(picker.calls).toHaveLength(0);
       expect(captured.out.join("\n")).toContain("Usage:");
+      expect(init.calls).toHaveLength(0);
+    }
+  );
+});
+
+describe("main — version", () => {
+  it.each(["--version", "-v", "version"])(
+    "prints the package.json version and exits 0 for %s",
+    async (flag) => {
+      setTTY(true);
+      const picker = recordSelect("init");
+      const captured = capture();
+      let code: number;
+      try {
+        code = await main([flag], {
+          registry,
+          select: picker.select,
+          isCancel,
+        });
+      } finally {
+        captured.restore();
+      }
+      expect(code).toBe(0);
+      expect(picker.calls).toHaveLength(0);
+      expect(captured.out).toStrictEqual([
+        (
+          JSON.parse(
+            await readFile(new URL("../package.json", import.meta.url), "utf-8")
+          ) as { version: string }
+        ).version,
+      ]);
       expect(init.calls).toHaveLength(0);
     }
   );
