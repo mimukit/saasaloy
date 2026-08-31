@@ -1,5 +1,7 @@
 # Plan — Audit remediation: security, driver split, engine drift, CI
 
+Grilled: 2026-08-31
+
 ## Context
 
 A four-part review on 2026-08-30 covered the 13 modules, the CLI architecture, the security surface,
@@ -47,6 +49,15 @@ and a push runs lint, typecheck, and tests.
 | Scope of the security fix | Both write-path findings together: the traversal guard and the `package-json-script` lifecycle namespace. They are the same trust boundary and the same review. |
 | What this plan does not carry | The module roadmap (billing, teams, sms, infra, email providers). Those have issues and are feature work, not remediation. |
 | Where the untracked findings go | issuekit files them after the grill. This plan is the source; the phases below map to issues roughly one-to-one. |
+| Driver split end state | `dependsOn: ["database-d1"]` is a stopgap. File a follow-up issue for dialect-neutral `auth`/`waitlist` payloads, and amend ADR 0023 to retract the "no branch needed" claim. |
+| How `database` requires one driver | A new descriptor schema field, `requiresOneOf: ["database-d1", "database-postgres"]`, enforced by `add`. The interactive path adds a driver prompt on top in the same phase. |
+| `package-json-script` hardening | Denylist only, blocking install-lifecycle keys. The plan preview already shows every patch before the confirm, so no second prompt. The patch type stays scoped to the `scripts` map. |
+| Traversal fix and the schema | Tighten now. No known descriptor (14 first-party, the example, every test fixture) uses a `.`/`..` target segment, and no third-party registry has ever been exercised. Skill link paths (`.agents/skills/<name>`) are a dot-leading namespace and stay on the runtime `resolveWithinRoot` guard, outside the schema pattern. |
+| `nextSteps` | No descriptor field. `add` ends with a pointer to the installed skill and a re-print of the required env vars. The skill stays the single source of the procedure. |
+| Partial apply ([#49](https://github.com/mimukit/saasaloy/issues/49)) | Reorder now: write deps only after `executePlan` succeeds, folded into Phase 4. The full journal stays deferred in #49; bump it only if the reorder proves insufficient. |
+| Waitlist rate limiting | Wait for the `ratelimit` capability. The waitlist skill and docs name the exposure and point at Turnstile as the interim. |
+| The `web` pseudo-module | Migrate to a first-class `base` field in `saasaloy.json`. About 10 edits: it deletes the `managedModules` plumbing (`manifest.ts:60-77`, three sites in `conflicts.ts`, `add.ts:296-300`) instead of teaching it to every new engine. Lands in Phase 6. |
+| Phase 6 issue shape | One issue. The `git init` decision is made here: implement `git init` in `commands/init.ts`; do not amend the documents. Three documents and a QA plan already promise it, and without it husky and turbo misbehave. |
 
 ## Approach
 
@@ -94,11 +105,14 @@ existing suite stays green.
 
 ### Phase 2: Close the driver split
 
-- Declare the real constraint on `auth` and `waitlist` so `add` refuses a mismatched driver instead
-  of failing at typecheck.
-- Give `database` a machine-checkable "requires one driver" gate, so `add auth` cannot leave a
-  project whose `@repo/db/client` import resolves to nothing. `modules/database/files/package.json`
-  exports `./client`, but only a driver ships `src/client.ts`.
+- Declare `dependsOn: ["database-d1"]` on `auth` and `waitlist` so `add` refuses a mismatched driver
+  instead of failing at typecheck. This is a stopgap; file a follow-up issue for dialect-neutral
+  payloads and amend ADR 0023 to retract the "no branch needed" claim.
+- Give `database` a machine-checkable "requires one driver" gate via a new descriptor schema field,
+  `requiresOneOf: ["database-d1", "database-postgres"]`, enforced by `add`, with a driver prompt on
+  the interactive path. Without it, `add auth` can leave a project whose `@repo/db/client` import
+  resolves to nothing: `modules/database/files/package.json` exports `./client`, but only a driver
+  ships `src/client.ts`.
 - Ship a `withDb`-style helper or middleware for `database-postgres`, so the
   `waitUntil(db.$client.end())` requirement in its client docstring stops being a per-route
   obligation nobody demonstrates. A forgotten `end()` leaks a socket per request.
@@ -130,6 +144,9 @@ The structural fix. It removes the duplication that produced the Phase 1 drift.
   clobbered. This is the drift-is-sacred invariant, honored by two engines out of three.
 - Stop `executePlan` rewriting byte-identical files. `WRITABLE` includes `unchanged`
   (`applier.ts:32-36`); `executeUpdatePlan` already skips this case and explains why.
+- Reorder the `add` dep write so `package.json` changes land only after `executePlan` succeeds. The
+  common mid-`add` failure then leaves no half-state. The full rollback journal stays deferred in
+  [#49](https://github.com/mimukit/saasaloy/issues/49).
 
 ### Phase 5: `update` command correctness
 
@@ -150,9 +167,10 @@ Four defects in one command, worth one pass.
 Independent, individually small, collectively the difference between a tool that feels finished and
 one that does not.
 
-- **Next steps after `add`.** The descriptor schema has no `nextSteps` field, so `add waitlist` ends
-  at "Applied" while the project 500s until `db:generate` and `db:migrate:local` run. Env vars print
-  at plan time and scroll away before the confirm.
+- **Next steps after `add`.** `add waitlist` ends at "Applied" while the project 500s until
+  `db:generate` and `db:migrate:local` run, and env vars print at plan time and scroll away. Fix: no
+  `nextSteps` descriptor field; `add` ends with a pointer to the installed skill and a re-print of
+  the required env vars.
 - **`.dev.vars.example`.** The base `_gitignore` carves out an exception for it; no module or
   template ships one. Generate it from the descriptors' `envVars` maps.
 - **`--version`, `--help`, non-TTY guards.** No `--version` handler exists, so bug reports cannot
@@ -167,7 +185,12 @@ one that does not.
 - **The `git init` regression.** ADR 0024, CONTRIBUTING, and `docs/qa/` all say `init` creates the
   repository. Neither `commands/init.ts` nor the built bundle contains it. Without the repo, husky
   hooks do not install and turbo serves a stale cache, so `deps:verify` can validate a cached build
-  of the old template. Implement it or amend the three documents; do not leave the contradiction.
+  of the old template. Decision: implement `git init` in `commands/init.ts`; do not amend the
+  documents.
+- **Retire the `web` pseudo-module.** Move the base app to a first-class `base` field in
+  `saasaloy.json`, drop `installed: ["web"]` from the template, and delete the `managedModules`
+  plumbing (`manifest.ts:60-77`, the three excuse sites in `conflicts.ts`, `add.ts:296-300`). About
+  10 edits plus test fixtures.
 - **Docs truth pass.** The wiki says "four commands" and never names `update`, a 797-line command
   with its own flags. `docs/wiki/modules.md` lists 7 of 13 modules. `templates/base/README.md`
   advertises a `billing` module that does not exist, and its `AGENTS.md` tells agents to run a
@@ -197,30 +220,8 @@ one that does not.
 
 ## Open questions
 
-Targets for the grill.
-
-1. **Driver split end state.** Is `dependsOn: ["database-d1"]` on `auth`/`waitlist` the answer, or a
-   stopgap for dialect-neutral payloads? If it is a stopgap, does ADR 0023 need an amendment saying
-   the "no branch needed" claim was wrong?
-2. **How does `database` express "requires one driver"?** A new descriptor field, a convention in
-   `dependsOn`, or an `add`-time prompt that offers the driver choice? Each changes the schema
-   contract for third-party registries.
-3. **Is the `package-json-script` denylist enough,** or should every patch that touches the
-   consumer's root `package.json` require explicit confirmation? A denylist is a guess about which
-   keys are dangerous.
-4. **Should the traversal fix be a breaking schema change?** Tightening the target patterns could
-   reject a descriptor that a third-party registry ships today. Is there anything to migrate?
-5. **Does `nextSteps` belong in the descriptor,** duplicating what the skills already say, or should
-   `add` print a pointer to the installed skill instead?
-6. **The `web` pseudo-module.** `saasaloy.json` ships `installed: ["web"]` with no lock or manifest
-   entry, and three modules carry special cases to excuse it. Is a first-class `base` field worth the
-   migration, or is the wart cheaper?
-7. **Priority of [#49](https://github.com/mimukit/saasaloy/issues/49) (partial apply).** `add` writes
-   deps before `executePlan` with no rollback, so a crash leaves files that `remove` refuses to clean
-   up. It sits at low priority. Does reordering the dep write buy enough to defer the full journal?
-8. **Rate limiting the waitlist endpoint.** It is unthrottled and there is no `ratelimit` capability.
-   Does a Turnstile or Workers rate-limit binding go into `waitlist` now, or wait for the capability?
-9. **Does Phase 6 stay one issue or split into five?** It is a list, not a unit of work.
+None. The 2026-08-31 grill settled all nine, plus the `git init` direction. The resolutions live in
+the "Design decisions (settled)" table above and are folded into the phases.
 
 ## Non-goals
 
@@ -234,6 +235,8 @@ Targets for the grill.
 - **The security items that checked out clean.** CORS allowlisting, cookie-domain derivation, email
   HTML escaping, `safeUrl`, login enumeration, Drizzle parameterization, and the SHA-pinned registry
   fetch were all read and found sound. They need no work here.
+- **Waitlist rate limiting.** It waits for the `ratelimit` capability. Until then, the waitlist
+  skill and docs name the unthrottled endpoint and point at Turnstile as the interim.
 - **Security response headers** (CSP, HSTS, `X-Frame-Options`). Real but low severity, and better
   placed with the infra module than in a remediation pass.
 - **An exhaustive nitpick sweep.** Filename-case drift, timestamp-mode drift between the two schema
