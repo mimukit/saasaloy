@@ -241,6 +241,41 @@ const GITHUB_API = "https://api.github.com";
 // hatch below, which is faster than waiting through a second attempt.
 const FETCH_TIMEOUT_MS = 15_000;
 
+// The module download gets a longer one. It is a tarball over a link the API calls never
+// touch, so 15s would fail a healthy fetch on a slow connection, and giget 3.3.0 takes
+// neither a timeout nor an AbortSignal — the race below can only stop *waiting* on the
+// download, not stop the download itself. That is enough: the files land in a temp dir
+// this process deletes, and the point is that `saasaloy add` never hangs with no output.
+const DOWNLOAD_TIMEOUT_MS = 60_000;
+
+/**
+ * Reject when `work` outruns `ms`. The work keeps running; only the wait ends. Used where
+ * the underlying call exposes no cancellation of its own.
+ */
+async function withDeadline<T>(
+  work: Promise<T>,
+  ms: number,
+  what: string
+): Promise<T> {
+  // The loser of the race still settles. Without a handler of its own, a rejection
+  // arriving after the deadline is an unhandled rejection, which takes the process down
+  // instead of the message below.
+  work.catch(() => {
+    // Reported by the race, or irrelevant because the deadline already won.
+  });
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const deadline = new Promise<never>((_resolve, reject) => {
+    timer = setTimeout(() => {
+      reject(new Error(`${what} did not finish in ${ms / 1000}s`));
+    }, ms);
+  });
+  try {
+    return await Promise.race([work, deadline]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 /** The line every network failure ends with, so the offline path is never a secret. */
 export const OFFLINE_HINT = `Set ${REGISTRY_ENV} to a local \`modules/\` checkout to work offline.`;
 
@@ -285,13 +320,17 @@ export class RemoteRegistrySource implements RegistrySource {
     this.tempDirs.push(parent);
     const dir = join(parent, name);
     try {
-      await downloadTemplate(
-        `github:${this.owner}/${this.repo}/modules/${name}#${sha}`,
-        {
-          auth: authToken(),
-          dir,
-          force: true,
-        }
+      await withDeadline(
+        downloadTemplate(
+          `github:${this.owner}/${this.repo}/modules/${name}#${sha}`,
+          {
+            auth: authToken(),
+            dir,
+            force: true,
+          }
+        ),
+        DOWNLOAD_TIMEOUT_MS,
+        `Download of module "${name}"`
       );
     } catch (error) {
       const because = requiredBy ? ` (required by ${requiredBy})` : "";
