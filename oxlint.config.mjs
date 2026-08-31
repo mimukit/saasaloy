@@ -313,11 +313,12 @@ export default defineConfig({
       files: ["scripts/**"],
       rules: { "no-console": "off" },
     },
-    // The console email provider: writing the message to stdout is the whole
-    // implementation. Ditto any future logger-console provider — `modules/logger*/`
-    // does not exist yet, so that glob is forward-looking on purpose (see #66).
+    // The console providers (email-console, sms-console, …): writing the message
+    // to stdout is the whole implementation. Ditto any future logger-console
+    // provider — `modules/logger*/` does not exist yet, so that glob is
+    // forward-looking on purpose (see #66).
     {
-      files: ["modules/email-console/files/**", "modules/logger*/files/**"],
+      files: ["modules/*-console/files/**", "modules/logger*/files/**"],
       rules: { "no-console": "off" },
     },
     // The infra module is deploy tooling, in the same class as `scripts/**`
