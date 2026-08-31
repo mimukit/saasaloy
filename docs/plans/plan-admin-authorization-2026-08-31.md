@@ -48,7 +48,7 @@ The work reuses what already exists and adds one file's worth of new logic. `get
 
 **The first-user-wins risk, stated once.** Sign-up is open. Any account that reaches `/signup` before the project's owner does becomes the admin, and on a deployed api with a public origin that window is real. The hook narrows it to the very first sign-up on an empty table, which is a much smaller target than an unconditional promotion, but it does not close it. Phase 2 carries the warning in three places for that reason, and the auth skill carries the recovery command so the warning has an answer attached. The concurrent case, where two requests both read an empty table and both become admin, is left unmitigated and is a QA observation rather than a lock.
 
-### Phase 1: the server gate and its first caller
+### Phase 1: the server gate and its first caller (built 2026-08-31)
 
 In `modules/auth/files/src/server.ts`:
 
