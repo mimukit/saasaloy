@@ -70,20 +70,27 @@ function parseArgs(argv: string[]): Options {
   };
 }
 
+interface LocalProject {
+  /** Modules `saasaloy add` applied here. */
+  installed: Set<string>;
+  /** The base app `init` scaffolded, which is not a module and is in no registry. */
+  base?: string;
+}
+
 /**
- * What this project has installed, or an empty set when `list` is run outside one.
- * Listing a registry from anywhere is the point of the command, so a missing
- * `saasaloy.json` is not an error here — it only means nothing can be marked.
+ * What this project has, or nothing when `list` is run outside one. Listing a registry
+ * from anywhere is the point of the command, so a missing `saasaloy.json` is not an error
+ * here — it only means nothing can be marked.
  */
-async function installedHere(): Promise<Set<string>> {
+async function localProject(): Promise<LocalProject> {
   try {
     const config = await loadConfig(await findProjectRoot());
-    return new Set([
-      ...config.installed,
-      ...(config.base === undefined ? [] : [config.base]),
-    ]);
+    return {
+      installed: new Set(config.installed),
+      ...(config.base === undefined ? {} : { base: config.base }),
+    };
   } catch {
-    return new Set();
+    return { installed: new Set() };
   }
 }
 
@@ -120,7 +127,8 @@ export async function runList(argv: string[]): Promise<number> {
       );
     }
 
-    const installed = await installedHere();
+    const project = await localProject();
+    const installed = project.installed;
     const modules = await source.listModules();
     if (modules.length === 0) {
       note(`No modules found in ${source.label}.`, "Registry");
@@ -130,8 +138,9 @@ export async function runList(argv: string[]): Promise<number> {
 
     const offeredAndInstalled = modules.filter((name) => installed.has(name));
     const offeredOnly = modules.filter((name) => !installed.has(name));
-    // Installed here but absent from this registry: the base app, a module from another
-    // registry, or one that was renamed upstream. Say so rather than omitting it.
+    // Installed here but absent from this registry: a module from another registry, or
+    // one renamed upstream. Say so rather than omitting it. The base app is not in this
+    // list — it is not a module, so no registry ever offers it.
     const elsewhere = [...installed]
       .filter((name) => !modules.includes(name))
       .toSorted();
@@ -162,6 +171,14 @@ export async function runList(argv: string[]): Promise<number> {
       lines.push(
         "",
         pc.dim(`installed but not in this registry: ${elsewhere.join(", ")}`)
+      );
+    }
+    if (project.base && !opts.available && !opts.installed) {
+      lines.push(
+        "",
+        pc.dim(
+          `base app: ${project.base} — scaffolded by \`saasaloy init\`, not a module`
+        )
       );
     }
 

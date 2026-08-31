@@ -157,20 +157,22 @@ export async function loadModuleFolder(
   const file = join(dir, "registry-item.json");
   if (!(await pathExists(file))) {
     const because = requiredBy ? ` (required by ${requiredBy})` : "";
-    throw new Error(
+    // Refused, not failed: the coordinate names something the registry does not have,
+    // so a retry cannot help (#98's 0/1/2 scheme).
+    throw new RefusalError(
       `Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`
     );
   }
   const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
   const result = await validateRegistryItem(parsed);
   if (!result.valid) {
-    throw new Error(
+    throw new RefusalError(
       `Module "${name}" has an invalid descriptor:\n  ${result.errors.join("\n  ")}`
     );
   }
   const item = parsed as RegistryItem;
   if (item.name !== name) {
-    throw new Error(
+    throw new RefusalError(
       `Module folder "${name}" declares name "${item.name}" — the folder and descriptor name must match.`
     );
   }
@@ -223,7 +225,7 @@ export class LocalRegistrySource implements RegistrySource {
 
   private async assertExists(): Promise<void> {
     if (!(await pathExists(this.dir))) {
-      throw new Error(`${REGISTRY_ENV}=${this.dir} does not exist.`);
+      throw new RefusalError(`${REGISTRY_ENV}=${this.dir} does not exist.`);
     }
   }
 }
