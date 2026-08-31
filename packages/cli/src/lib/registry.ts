@@ -163,7 +163,17 @@ export async function loadModuleFolder(
       `Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`
     );
   }
-  const parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  // A truncated or hand-edited descriptor threw a bare SyntaxError that named no module
+  // and exited 1. It is bad input, not a transient failure, so it refuses with the name.
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(await readFile(file, "utf-8")) as unknown;
+  } catch (error) {
+    throw new RefusalError(
+      `Module "${name}" has an unreadable descriptor: ${file} is not valid JSON.`,
+      { cause: error }
+    );
+  }
   const result = await validateRegistryItem(parsed);
   if (!result.valid) {
     throw new RefusalError(

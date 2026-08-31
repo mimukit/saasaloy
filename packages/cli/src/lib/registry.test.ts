@@ -2,6 +2,7 @@ import { mkdtemp, rm, writeFile, mkdir } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
+import { isRefusal } from "./exit.js";
 import { LocalRegistrySource, parseCoordinate } from "./registry.js";
 
 describe(parseCoordinate, () => {
@@ -121,6 +122,28 @@ describe(LocalRegistrySource, () => {
     await expect(source.readModule("missing", "hello-widget")).rejects.toThrow(
       /Unknown module "missing" \(required by hello-widget\)/
     );
+  });
+
+  // A truncated descriptor used to escape as a bare SyntaxError, which named no module
+  // and exited 1 — a code that tells a wrapper script to retry a file that cannot heal.
+  it("refuses a descriptor that is not valid JSON, naming the module", async () => {
+    // Its own directory, so the listModules expectation above stays a one-module registry.
+    const broken = await mkdtemp(join(tmpdir(), "saasaloy-badjson-"));
+    await mkdir(join(broken, "torn"), { recursive: true });
+    await writeFile(join(broken, "torn", "registry-item.json"), '{"name": ');
+    const source = new LocalRegistrySource(broken);
+    let thrown: unknown;
+    try {
+      await source.readModule("torn");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isRefusal(thrown)).toBeTruthy();
+    expect((thrown as Error).message).toMatch(
+      /Module "torn" has an unreadable descriptor/
+    );
+    expect((thrown as Error).cause).toBeInstanceOf(SyntaxError);
+    await rm(broken, { force: true, recursive: true });
   });
 
   it("errors when the registry directory does not exist", async () => {
