@@ -1406,3 +1406,169 @@ describe("add and update agree (#98)", () => {
     expect(updatePlan.modules[0]?.patches[0]).toStrictEqual(addPlan.patches[0]);
   });
 });
+
+// #98 Phase 5. `update` used to drop two things the descriptor carries: the module's
+// `conflictsWith` list, which the lock is the only offline record of, and its `envVars`,
+// so a version that started requiring a secret updated without saying so.
+describe("buildUpdatePlan — conflictsWith and envVars (#98)", () => {
+  it("carries the new version's conflictsWith into the plan", async () => {
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        conflictsWith: ["email-ses"],
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs })] });
+    expect(plan.modules[0]?.conflictsWith).toStrictEqual(["email-ses"]);
+  });
+
+  it("writes conflictsWith back into the lock entry it moves", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", conflictsWith: ["email-ses"], files: [] },
+      {}
+    );
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    await executeUpdatePlan(plan, { root, ...state });
+    // Without this the driver-exclusion check degrades on the very next `add`: the
+    // descriptor is gone by then, and the lock is the only place the list survives.
+    expect(state.lock.modules.email).toMatchObject({
+      resolved: NEW_SHA,
+      conflictsWith: ["email-ses"],
+    });
+  });
+
+  it("gives a new prerequisite's lock entry its own conflictsWith", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", dependsOn: ["queue-a"], files: [] },
+      {}
+    );
+    const queue = await writeModule(
+      "new",
+      "queue-a",
+      {
+        type: "saasaloy:capability",
+        conflictsWith: ["queue-b"],
+        files: [],
+      },
+      {}
+    );
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    const plan = await build({
+      ...state,
+      inputs: [
+        input({
+          theirs,
+          base,
+          prereqs: {
+            order: ["queue-a"],
+            modules: new Map([["queue-a", queue]]),
+          },
+        }),
+      ],
+    });
+
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.lock.modules["queue-a"]).toMatchObject({
+      conflictsWith: ["queue-b"],
+    });
+  });
+
+  it("reports only the env vars the new version added", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: { RESEND_API_KEY: "Resend API key" },
+        files: [],
+      },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: {
+          RESEND_API_KEY: "Resend API key",
+          EMAIL_WEBHOOK_SECRET: "Signs inbound webhooks",
+        },
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({
+      EMAIL_WEBHOOK_SECRET: "Signs inbound webhooks",
+    });
+  });
+
+  it("reports every env var when there is no merge base to diff against", async () => {
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        envVars: { RESEND_API_KEY: "Resend API key" },
+        files: [],
+      },
+      {}
+    );
+    const plan = await build({
+      inputs: [input({ theirs, noMergeBase: "local install" })],
+    });
+    // No base means no way to tell new from old, and a silently-missing secret is the
+    // worse failure — so the whole set is named.
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({
+      RESEND_API_KEY: "Resend API key",
+    });
+  });
+
+  it("reports nothing when the env var set didn't move", async () => {
+    const envVars = { RESEND_API_KEY: "Resend API key" };
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", envVars, files: [] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", envVars, files: [] },
+      {}
+    );
+    const plan = await build({ inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.newEnvVars).toStrictEqual({});
+  });
+});

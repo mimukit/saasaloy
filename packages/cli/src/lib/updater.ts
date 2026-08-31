@@ -366,8 +366,23 @@ export interface ModuleUpdatePlan {
   prereqPlan?: Plan;
   /** Each prerequisite's own `dependsOn`, so its lock entry stays self-describing. */
   prereqDependsOn: Record<string, string[]>;
+  /** Each prerequisite's own `conflictsWith`, for the same reason. */
+  prereqConflictsWith: Record<string, string[]>;
   /** The new version's own `dependsOn`, written into the lock entry. */
   dependsOn?: string[];
+  /**
+   * The new version's own `conflictsWith`, written into the lock entry. The descriptor is
+   * gone once the update lands, so the lock is the only offline record of what this
+   * module refuses to sit beside — drop it here and the next `add` stops refusing a
+   * second driver (#98).
+   */
+  conflictsWith?: string[];
+  /**
+   * Env vars the new version requires that the old one did not — named before the
+   * confirmation, or a version that starts requiring a secret updates in silence. With no
+   * merge base there is nothing to diff against, so the whole set is reported.
+   */
+  newEnvVars: Record<string, string>;
   /** True when anything about this module routes to the merge plan. */
   needsMerge: boolean;
 }
@@ -594,6 +609,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   // left for the user to install by hand (decision 11).
   let prereqPlan: Plan | undefined;
   const prereqDependsOn: Record<string, string[]> = {};
+  const prereqConflictsWith: Record<string, string[]> = {};
   const prereqNames = (input.prereqs?.order ?? []).filter(
     (n) => !config.installed.includes(n)
   );
@@ -607,9 +623,14 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       manifest,
     });
     for (const prereq of prereqNames) {
-      const dependsOn = input.prereqs.modules.get(prereq)?.item.dependsOn;
+      const prereqItem = input.prereqs.modules.get(prereq)?.item;
+      const dependsOn = prereqItem?.dependsOn;
       if (dependsOn && dependsOn.length > 0) {
         prereqDependsOn[prereq] = dependsOn;
+      }
+      const conflictsWith = prereqItem?.conflictsWith;
+      if (conflictsWith && conflictsWith.length > 0) {
+        prereqConflictsWith[prereq] = conflictsWith;
       }
     }
   }
@@ -632,11 +653,37 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     prereqNames,
     ...(prereqPlan ? { prereqPlan } : {}),
     prereqDependsOn,
+    prereqConflictsWith,
     ...(theirs.item.dependsOn && theirs.item.dependsOn.length > 0
       ? { dependsOn: theirs.item.dependsOn }
       : {}),
+    ...(theirs.item.conflictsWith && theirs.item.conflictsWith.length > 0
+      ? { conflictsWith: theirs.item.conflictsWith }
+      : {}),
+    newEnvVars: newEnvVars(base, theirs),
     needsMerge,
   };
+}
+
+/**
+ * Env vars `theirs` requires that `base` did not. `base` absent means the run has no
+ * merge base at all (a local install, a force-pushed branch), so nothing can be called
+ * old — the whole set is returned rather than staying quiet about a secret the project
+ * may now need.
+ */
+function newEnvVars(
+  base: LoadedModule | undefined,
+  theirs: LoadedModule
+): Record<string, string> {
+  const known = new Set(Object.keys(base?.item.envVars ?? {}));
+  const out: Record<string, string> = {};
+  for (const [key, description] of Object.entries(theirs.item.envVars ?? {})) {
+    if (base && known.has(key)) {
+      continue;
+    }
+    out[key] = description;
+  }
+  return out;
 }
 
 /**
@@ -988,6 +1035,7 @@ export async function executeUpdatePlan(
         ref: mod.comparison.ref,
         resolved: mod.comparison.latest,
         ...(mod.dependsOn ? { dependsOn: mod.dependsOn } : {}),
+        ...(mod.conflictsWith ? { conflictsWith: mod.conflictsWith } : {}),
       };
       result.lockMoved.push(mod.name);
     } else {
@@ -1008,11 +1056,13 @@ export async function executeUpdatePlan(
     // A prerequisite installed here is pinned to the same SHA as the module that needs it.
     for (const prereq of mod.prereqPlan?.install ?? []) {
       const dependsOn = mod.prereqDependsOn[prereq];
+      const conflictsWith = mod.prereqConflictsWith[prereq];
       lock.modules[prereq] = {
         source: mod.comparison.source,
         ref: mod.comparison.ref,
         resolved: mod.comparison.latest,
         ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+        ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
       };
     }
   }
