@@ -55,6 +55,29 @@ pnpm run dev            # run the scaffolded app
 Edit a module under `modules/` (or a CLI command under `packages/cli/src`), then re-run the
 shim — `cli:dev` has already rebuilt, so you're always testing the latest.
 
+### Unit tests over module payloads
+
+`pnpm test` is two passes. `turbo run test` runs the CLI's vitest suite, then `pnpm test:modules`
+runs `node --test` over `modules/*/files/**/*.test.ts` — the security-relevant pure functions a
+module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts`.
+
+The second pass uses Node's own test runner rather than vitest, and the reason is mechanical.
+Vite loads a tsconfig for every file it transforms; a module payload's `tsconfig.json` extends
+`@repo/tsconfig/base.json`, which resolves only inside a scaffolded project, so vitest fails those
+files with `TSCONFIG_ERROR` before an assertion runs. Node 24 strips the types with no tsconfig at
+all — the same reason `scripts/*.ts` needs no build step.
+
+Two rules for a test under `modules/`:
+
+- Keep it out of the descriptor's `files` and `scaffolds[].files` lists, so `add` never copies it
+  into a user's project.
+- Import with the explicit `.ts` extension (`from "./env.ts"`). Node resolves the real file. Shipped
+  payload code keeps the extensionless style the bundler expects.
+
+Test only a payload file with no imports. Anything reaching `cloudflare:workers`, `better-auth`, or a
+`@repo/*` workspace package will not resolve outside a scaffolded project; extract the pure part
+into its own file first, the way `auth.ts` extracted `env.ts`.
+
 ### Resetting
 
 ```sh

@@ -299,6 +299,27 @@ export default defineConfig({
       },
     },
 
+    // --- Module payload tests run on node:test, not vitest -----------------
+    // `pnpm test:modules` runs `modules/*/files/**/*.test.ts` under `node --test`,
+    // because vite cannot transform a payload file: it loads a tsconfig for every
+    // file, and a payload's `tsconfig.json` extends `@repo/tsconfig/base.json`,
+    // which resolves only inside a scaffolded project. See CONTRIBUTING.md.
+    //
+    // So these two rules are pointing the file at a runner it cannot use. Nothing
+    // else in Ultracite's vitest block is turned off: the assertion-shape rules
+    // above still apply, and they read `describe`/`it` the same either way. This
+    // is an override glob rather than an inline directive because the CLI copies
+    // files out of `modules/*/files/`, and a directive in one of them would land
+    // in a user's project.
+    {
+      files: ["modules/*/files/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
+      },
+    },
+
     // --- no-console exemptions ---------------------------------------------
     // Terminal UX is the product here: @clack/prompts + picocolors write to the
     // console by design (ADR 0009). Note this is the entrypoint pair only —
