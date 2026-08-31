@@ -78,7 +78,8 @@
           "path": {
             "type": "string",
             "minLength": 1,
-            "description": "Source path relative to the module folder (e.g. files/api/routes/waitlist.ts)."
+            "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+            "description": "Source path relative to the module folder (e.g. files/api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
           },
           "target": {
             "type": "string",
@@ -241,7 +242,8 @@
                 "path": {
                   "type": "string",
                   "minLength": 1,
-                  "description": "Source path relative to the module folder (e.g. files/src/index.ts)."
+                  "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
+                  "description": "Source path relative to the module folder (e.g. files/src/index.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .dev.vars.example is fine."
                 },
                 "target": {
                   "type": "string",
