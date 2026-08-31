@@ -675,9 +675,9 @@ export async function executePlan(
     if (changed) {
       await writeFile(p.fileAbs, content, "utf-8");
       patched.push(p);
-      // Record for `remove` (which reverses only `chained-route` today, and warns for the
-      // rest) — deduped so a `--force` re-apply that lands the same op again doesn't
-      // duplicate the entry.
+      // Record for `remove` (which reverses the three config kinds and warns for the two
+      // `package.json` kinds) — deduped so a `--force` re-apply that lands the same op
+      // again doesn't duplicate the entry.
       const entry: ManifestPatch = {
         module: p.module,
         file: p.file,
