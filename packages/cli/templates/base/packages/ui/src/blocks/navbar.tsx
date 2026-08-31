@@ -51,13 +51,12 @@ export function Navbar({
   // Escape is the expected way out of an open menu, and focus has to go back to the
   // toggle — the panel unmounts under the user's cursor otherwise, dropping focus to
   // the document and sending the next Tab to the top of the page.
+  // The listener stays attached while the menu is closed and exits on the first line
+  // instead — one early `return` plus a cleanup `return` in the same effect is two
+  // return shapes, which `consistent-return` rejects.
   useEffect(() => {
-    if (!open) {
-      return;
-    }
-
     function handleKeyDown(event: KeyboardEvent) {
-      if (event.key !== "Escape") {
+      if (!open || event.key !== "Escape") {
         return;
       }
       setOpen(false);
@@ -113,7 +112,9 @@ export function Navbar({
             aria-controls={open ? "navbar-mobile-menu" : undefined}
             aria-expanded={open}
             aria-label={open ? ui.navbar.closeMenu : ui.navbar.openMenu}
-            onClick={() => setOpen((previous) => !previous)}
+            onClick={() => {
+              setOpen((previous) => !previous);
+            }}
           >
             {open ? <XIcon /> : <MenuIcon />}
           </Button>
@@ -133,7 +134,9 @@ export function Navbar({
               <a
                 key={link.href}
                 href={link.href}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  setOpen(false);
+                }}
                 className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-2 py-2 text-sm transition-colors"
               >
                 {link.label}
@@ -141,7 +144,9 @@ export function Navbar({
             ))}
             <a
               href={ctaHref}
-              onClick={() => setOpen(false)}
+              onClick={() => {
+                setOpen(false);
+              }}
               className={cn(buttonVariants({ size: "sm" }), "mt-2")}
             >
               {ctaLabel}

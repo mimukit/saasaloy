@@ -82,7 +82,9 @@ export function PricingTable({
               size="sm"
               variant={annual ? "ghost" : "secondary"}
               aria-pressed={!annual}
-              onClick={() => setAnnual(false)}
+              onClick={() => {
+                setAnnual(false);
+              }}
             >
               {ui.pricing.monthly}
             </Button>
@@ -90,7 +92,9 @@ export function PricingTable({
               size="sm"
               variant={annual ? "secondary" : "ghost"}
               aria-pressed={annual}
-              onClick={() => setAnnual(true)}
+              onClick={() => {
+                setAnnual(true);
+              }}
             >
               {ui.pricing.annual}
             </Button>
@@ -102,15 +106,16 @@ export function PricingTable({
       <div className="mt-14 grid items-start gap-4 lg:grid-cols-3">
         {tiers.map((tier) => {
           const price = annual ? tier.annualPrice : tier.monthlyPrice;
+          const featured = tier.featured ?? false;
           return (
             <Card
               key={tier.id}
-              className={cn("h-full", tier.featured && "ring-primary ring-2")}
+              className={cn("h-full", featured && "ring-primary ring-2")}
             >
               <CardHeader>
                 <div className="flex items-center justify-between gap-2">
                   <CardTitle>{tier.name}</CardTitle>
-                  {tier.featured && <Badge>{ui.pricing.featuredBadge}</Badge>}
+                  {featured && <Badge>{ui.pricing.featuredBadge}</Badge>}
                 </div>
                 <CardDescription>{tier.description}</CardDescription>
               </CardHeader>
@@ -153,7 +158,7 @@ export function PricingTable({
                   href={tier.ctaHref}
                   className={cn(
                     buttonVariants({
-                      variant: tier.featured ? "default" : "outline",
+                      variant: featured ? "default" : "outline",
                     }),
                     "w-full"
                   )}
