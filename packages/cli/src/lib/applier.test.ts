@@ -198,6 +198,38 @@ describe("buildPlan — scaffolds", () => {
   });
 });
 
+describe("executePlan — removal warnings", () => {
+  it("persists descriptor warnings by module name", async () => {
+    const teams = await writeModule("teams", {
+      type: "saasaloy:feature",
+      removeWarnings: ["The organization tables survive removal."],
+    });
+    const manifest = emptyManifest();
+    const config = emptyConfig();
+    const p = await plan({ install: ["teams"], modules: [teams] });
+
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.removeWarnings).toStrictEqual({
+      teams: ["The organization tables survive removal."],
+    });
+  });
+
+  it("clears stale warnings when a descriptor no longer supplies them", async () => {
+    const teams = await writeModule("teams", {
+      type: "saasaloy:feature",
+    });
+    const manifest = emptyManifest();
+    manifest.removeWarnings.teams = ["Old warning"];
+    const config = emptyConfig();
+    const p = await plan({ install: ["teams"], modules: [teams] });
+
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.removeWarnings.teams).toBeUndefined();
+  });
+});
+
 describe("executePlan — scaffolds", () => {
   it("writes the workspace, registers the alias, records the manifest", async () => {
     const config = emptyConfig();

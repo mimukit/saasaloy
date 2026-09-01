@@ -92,6 +92,8 @@ export interface PlannedRemovePatch {
 
 export interface RemovePlan {
   module: string;
+  /** Descriptor warnings persisted at add or clean update time. */
+  warnings: string[];
   files: PlannedRemoveFile[];
   links: PlannedRemoveLink[];
   /** This module's entries in manifest.patches, each classified against fresh disk state.
@@ -207,6 +209,7 @@ export async function buildRemovePlan(
 
   return {
     module: name,
+    warnings: [...(manifest.removeWarnings[name] ?? [])],
     files,
     links,
     patches,
@@ -307,7 +310,7 @@ export interface RemoveResult {
   /** Symlinks left untouched because something else occupies their path. */
   linkConflicts: PlannedRemoveLink[];
   /** Patch entries actually undone on disk — a route link, a wrangler binding, a plugin
-   *  array element, each with the import it needed. */
+   *  array element, a const array element, each with the import it needed. */
   patchesReversed: ManifestPatch[];
   /** Patch entries untracked without being undone: a kind with no inverse (the two
    *  `package.json` ones), a target file that's gone, an edit already hand-reverted, or a
@@ -464,7 +467,7 @@ export async function executeRemovePlan(
     delete manifest.links[link.target];
   }
 
-  // Reverse what can be reversed, then untrack every entry either way. The three kinds
+  // Reverse what can be reversed, then untrack every entry either way. The four kinds
   // that edit a config file have an inverse (#83, #36); the two `package.json` kinds stay
   // report-only, and the command warns naming each file.
   //
@@ -513,6 +516,7 @@ export async function executeRemovePlan(
 
   config.installed = config.installed.filter((m) => m !== plan.module);
   delete lock.modules[plan.module];
+  delete manifest.removeWarnings[plan.module];
 
   return {
     deleted,

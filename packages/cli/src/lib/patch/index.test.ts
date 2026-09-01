@@ -48,6 +48,18 @@ const PLUGIN_PATCH: Patch = {
   import: { name: "stripe", from: "@better-auth/stripe" },
 };
 
+const CONST_ARRAY_PATCH: Patch = {
+  kind: "const-array",
+  constName: "NAV_ITEMS",
+  key: "to",
+  entry: { to: "/teams", label: "Teams" },
+};
+
+const NAV = `const NAV_ITEMS = [
+  { to: "/", label: "Overview" },
+] as const;
+`;
+
 const API_ENTRY = `import { Hono } from "hono";
 
 const app = new Hono();
@@ -113,6 +125,25 @@ describe(applyPatch, () => {
     const again = applyPatch(first.content, PLUGIN_PATCH, "auth.ts");
     expect(again.changed).toBeFalsy();
     expect(again.diff).toBe("");
+  });
+
+  it("applies and idempotently re-runs a const-array patch", () => {
+    const first = applyPatch(NAV, CONST_ARRAY_PATCH, "app-shell.tsx");
+    expect(first.changed).toBeTruthy();
+    expect(first.content).toContain('to: "/teams"');
+    const again = applyPatch(first.content, CONST_ARRAY_PATCH, "app-shell.tsx");
+    expect(again.changed).toBeFalsy();
+    expect(again.content).toBe(first.content);
+  });
+
+  it("reports why a const-array target shape is absent", () => {
+    const result = applyPatch(
+      "const OTHER = [];\n",
+      CONST_ARRAY_PATCH,
+      "app-shell.tsx"
+    );
+    expect(result.changed).toBeFalsy();
+    expect(result.reason).toContain("NAV_ITEMS");
   });
 
   it("re-running a package-json-dependency patch is likewise a clean no-op", () => {
@@ -288,10 +319,24 @@ export const auth = betterAuth({
 
   it("isReversibleKind agrees with what reversePatch will undo", () => {
     expect(isReversibleKind("chained-route")).toBeTruthy();
+    expect(isReversibleKind("const-array")).toBeTruthy();
     expect(isReversibleKind("plugin-array")).toBeTruthy();
     expect(isReversibleKind("wrangler-binding")).toBeTruthy();
     expect(isReversibleKind("package-json-script")).toBeFalsy();
     expect(isReversibleKind("package-json-dependency")).toBeFalsy();
+  });
+
+  it("reverses plugin-array and const-array patches", () => {
+    const pluginApplied = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
+    expect(
+      reversePatch(pluginApplied.content, PLUGIN_PATCH, "auth.ts")?.content
+    ).toBe(AUTH);
+
+    const navApplied = applyPatch(NAV, CONST_ARRAY_PATCH, "app-shell.tsx");
+    expect(
+      reversePatch(navApplied.content, CONST_ARRAY_PATCH, "app-shell.tsx")
+        ?.content
+    ).toBe(NAV);
   });
 });
 

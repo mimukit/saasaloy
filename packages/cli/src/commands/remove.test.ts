@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -81,5 +81,39 @@ describe("runRemove without a module name", () => {
     }
     expect(code).toBe(2);
     expect(captured.lines.join("")).toContain("saasaloy remove [<module>]");
+  });
+
+  it("prints stored warnings before a dry-run exits", async () => {
+    await mkdir(join(dir, ".saasaloy"), { recursive: true });
+    await writeFile(
+      join(dir, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: {},
+        links: {},
+        patches: [],
+        removeWarnings: {
+          waitlist: ["The deployed waitlist data survives removal."],
+        },
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(dir, "saasaloy-lock.json"),
+      JSON.stringify({ lockfileVersion: 1, modules: {} }),
+      "utf-8"
+    );
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["waitlist", "--dry-run"]);
+    } finally {
+      captured.restore();
+    }
+    const output = captured.lines.join("");
+    expect(code).toBe(0);
+    expect(output).toContain("The deployed waitlist data survives removal.");
+    expect(output.indexOf("survives removal")).toBeLessThan(
+      output.indexOf("dry run")
+    );
   });
 });

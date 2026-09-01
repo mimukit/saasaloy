@@ -5,6 +5,12 @@ import {
   removeChainedRoute,
 } from "./chained-route.js";
 import type { ChainedRoute } from "./chained-route.js";
+import {
+  constArrayInsertRefusal,
+  insertIntoConstArray,
+  removeFromConstArray,
+} from "./const-array.js";
+import type { ConstArrayInsert } from "./const-array.js";
 import { toDiff } from "./diff.js";
 import {
   matchWranglerBinding,
@@ -44,6 +50,12 @@ export {
   removeChainedRoute,
   type ChainedRoute,
 } from "./chained-route.js";
+export {
+  constArrayInsertRefusal,
+  insertIntoConstArray,
+  removeFromConstArray,
+  type ConstArrayInsert,
+} from "./const-array.js";
 export { toDiff } from "./diff.js";
 export {
   type BindingMatch,
@@ -72,6 +84,7 @@ export {
 
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
+  | ({ kind: "const-array" } & ConstArrayInsert)
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
   | ({ kind: "package-json-script" } & PackageJsonScript)
@@ -86,6 +99,7 @@ export type PatchKind = Patch["kind"];
 // holds both JSON Schemas to, so the enums can't drift apart again (#98).
 const PATCH_KIND_KEYS: Record<PatchKind, true> = {
   "chained-route": true,
+  "const-array": true,
   "package-json-dependency": true,
   "package-json-script": true,
   "plugin-array": true,
@@ -174,6 +188,9 @@ function matchExisting(source: string, patch: Patch): PatchMatch | undefined {
 
 function applyCodemod(source: string, patch: Patch): string {
   switch (patch.kind) {
+    case "const-array": {
+      return insertIntoConstArray(source, patch);
+    }
     case "wrangler-binding": {
       return upsertWranglerBinding(source, patch);
     }
@@ -196,13 +213,13 @@ function applyCodemod(source: string, patch: Patch): string {
   }
 }
 
-// The one table of kind → inverse codemod. The three kinds that edit a *config* file
-// reverse: `chained-route` (#83), then `wrangler-binding` and `plugin-array` (#36). The
-// two `package.json` kinds deliberately do not — uninstalling an npm dependency isn't
-// derivable offline and other code may already use it, and nothing asks for a script back
-// (plan-remove-command-2026-07-25.md, non-goals). `remove` drops-and-warns for every kind
-// absent from this table, and both `isReversibleKind` and `reversePatch` read it, so
-// adding an inverse stays one edit.
+// The one table of kind → inverse codemod. The four kinds that edit a *config* file
+// reverse: `chained-route` (#83), then `wrangler-binding`, `plugin-array` and
+// `const-array` (#36). The two `package.json` kinds deliberately do not — uninstalling an
+// npm dependency isn't derivable offline and other code may already use it, and nothing
+// asks for a script back (plan-remove-command-2026-07-25.md, non-goals). `remove`
+// drops-and-warns for every kind absent from this table, and both `isReversibleKind` and
+// `reversePatch` read it, so adding an inverse stays one edit.
 type Inverse<K extends PatchKind> = (
   source: string,
   patch: Extract<Patch, { kind: K }>
@@ -210,6 +227,7 @@ type Inverse<K extends PatchKind> = (
 
 const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
   "chained-route": removeChainedRoute,
+  "const-array": removeFromConstArray,
   "plugin-array": removeFromPluginArray,
   "wrangler-binding": removeWranglerBinding,
 };
@@ -255,8 +273,8 @@ export function reversePatch(
 // only when nothing changed. The forward table is short because most kinds only ever
 // no-op on an edit that is already present; `package-json-script` joined it in #98,
 // because it refuses an install-lifecycle key outright and a refusal a user never sees is
-// a security hole that reads as a typo. The reversal table mirrors `INVERSES`: every kind
-// that can undo an edit can also find that the edit is no longer the one it wrote.
+// a security hole that reads as a typo. The reversal table follows `INVERSES`, minus
+// `const-array`, whose removal only ever no-ops on an entry that is already gone.
 type Refusal<K extends PatchKind> = (
   source: string,
   patch: Extract<Patch, { kind: K }>
@@ -264,6 +282,7 @@ type Refusal<K extends PatchKind> = (
 
 const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteInsertRefusal,
+  "const-array": constArrayInsertRefusal,
   "package-json-script": packageJsonScriptRefusal,
 };
 

@@ -135,6 +135,11 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
     call: "waitlist",
     import: { name: "waitlist", from: "./routes/waitlist.js" },
   },
+  "const-array": {
+    constName: "NAV_ITEMS",
+    key: "to",
+    entry: { to: "/teams", label: "Teams" },
+  },
   "package-json-dependency": { name: "zod", version: "4.4.3" },
   "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
   "plugin-array": {
@@ -162,6 +167,22 @@ describe.each(PATCH_KINDS)("patch kind %s", (kind) => {
         managed: {},
         patches: [{ module: "sample", file: op.file, patch: op }],
       })
+    ).resolves.toMatchObject({ valid: true });
+  });
+});
+
+describe("removal warnings", () => {
+  it("validates descriptor warnings and their persisted manifest form", async () => {
+    const warnings = ["The organization tables survive removal."];
+    await expect(
+      validateRegistryItem({
+        name: "teams",
+        type: "saasaloy:feature",
+        removeWarnings: warnings,
+      })
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      validateManifest({ managed: {}, removeWarnings: { teams: warnings } })
     ).resolves.toMatchObject({ valid: true });
   });
 });

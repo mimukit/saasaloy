@@ -91,6 +91,22 @@ describe("loadManifest — validation on load", () => {
     await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
   });
 
+  it("loads an old manifest with an empty removal warning map", async () => {
+    await writeManifest({ managed: {}, links: {}, patches: [] });
+    await expect(loadManifest(root)).resolves.toMatchObject({
+      removeWarnings: {},
+    });
+  });
+
+  it("round-trips stored removal warnings", async () => {
+    const manifest = emptyManifest();
+    manifest.removeWarnings.teams = [
+      "The organization tables survive removal.",
+    ];
+    await saveManifest(root, manifest);
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
   // The applier records whatever kind a descriptor authored. Until the fix round the
   // manifest schema listed two of the five, so the first `add` that applied a
   // `package-json-dependency` wrote a file the next `add`/`remove`/`update` refused.

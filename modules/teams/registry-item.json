@@ -1,0 +1,67 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "teams",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "database", "database-d1", "auth", "admin"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "The deployed organization, member, and invitation tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
+  ],
+  "patches": [
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "organizationPlugin",
+      "import": {
+        "name": "organizationPlugin",
+        "from": "./plugins/organization"
+      }
+    },
+    {
+      "file": "packages/auth/src/client.ts",
+      "kind": "plugin-array",
+      "exportName": "authClientPlugins",
+      "arrayProp": "plugins",
+      "call": "organizationClient",
+      "import": {
+        "name": "organizationClient",
+        "from": "better-auth/client/plugins"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/teams", "label": "Teams" }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/db/schema/teams.ts",
+      "target": "@db/schema/teams.ts"
+    },
+    {
+      "path": "files/auth/plugins/organization.ts",
+      "target": "@auth/plugins/organization.ts"
+    },
+    {
+      "path": "files/admin/routes/teams.tsx",
+      "target": "@admin/routes/teams.tsx"
+    },
+    {
+      "path": "files/admin/components/organization-create-form.tsx",
+      "target": "@admin/components/organization-create-form.tsx"
+    },
+    {
+      "path": "files/admin/components/organization-workspace.tsx",
+      "target": "@admin/components/organization-workspace.tsx"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-teams"]
+  }
+}

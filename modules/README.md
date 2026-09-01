@@ -27,6 +27,8 @@ layout's `beforeLoad`, and calls the api through `hc<AppType>` with `credentials
 extension point is a file drop: a feature module writes `src/routes/<feature>.tsx` and the router
 plugin registers it, no patch — the admin-side twin of the schema barrel.
 
+`teams` is a feature module on `auth` and `admin`. It enables Better Auth organizations, drops the organization schema into `packages/db`, and adds the site-admin `/teams` screen. The screen covers organization creation, active-organization switching, members, and copy-ID invitations. Better Auth's nested teams-within-an-organization feature stays off.
+
 `validators` is the capability that scaffolds `packages/validators` (`@repo/validators`): shared Zod
 input schemas, one file per feature, with `zod` as the only runtime dependency. It `dependsOn` `api`
 and patches `@repo/validators` into `apps/api/package.json`, so api routes validate requests against

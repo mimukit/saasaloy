@@ -226,3 +226,26 @@ export const auth = betterAuth({ plugins: [stripe()] });
     ).toBeUndefined();
   });
 });
+
+describe(removeFromPluginArray, () => {
+  it("removes the recorded call and its now-unused named import", () => {
+    const applied = insertIntoPluginArray(AUTH, STRIPE);
+    const out = removeFromPluginArray(applied, STRIPE);
+    expect(out).toBe(AUTH);
+  });
+
+  it("keeps the named import when another expression still uses it", () => {
+    const applied = insertIntoPluginArray(AUTH, STRIPE).replace(
+      "export const auth",
+      "export const stripeOptions = stripe.options;\n\nexport const auth"
+    );
+    const out = removeFromPluginArray(applied, STRIPE);
+    expect(out).not.toContain("stripe()");
+    expect(out).toContain('import { stripe } from "@better-auth/stripe";');
+    expect(out).toContain("stripe.options");
+  });
+
+  it("is a byte-for-byte no-op when the call is already absent", () => {
+    expect(removeFromPluginArray(AUTH, STRIPE)).toBe(AUTH);
+  });
+});

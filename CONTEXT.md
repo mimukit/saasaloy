@@ -24,6 +24,10 @@ A module that scaffolds an app or package **and** establishes convention-based e
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
 
+### Team
+The product word for the `teams` feature module, which adds Better Auth organizations, members, invitations, and active-organization switching. It does not mean Better Auth's nested teams-within-an-organization sub-feature. That sub-feature stays disabled, so the module adds no `team` or `teamMember` table.
+_Avoid: using team to mean an organization subdivision unless the nested plugin feature is enabled later._
+
 ### Provider module
 A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-console`, `sms-console`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. Allowed only where the capability wraps a *stateless* third-party service ([ADR 0001](docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment); the authoring guide is `.agents/skills/create-provider/`. Several providers coexist in one project and a runtime env var picks between them; a mutually exclusive alternate implementation of a *stateful* capability is a [driver module](#driver-module) instead ([ADR 0026](docs/adr/adr-0026-database-driver-split-2026-08-28.md)).
 _Taxonomy wart, on purpose: a provider module is typed `saasaloy:feature`, because `registry-item.schema.json` constrains `type` to `saasaloy:capability | saasaloy:feature`. It isn't a feature in the sense above — it adds no user-facing behavior. A third tier would be a descriptor-format change, and one wart is cheaper than that._

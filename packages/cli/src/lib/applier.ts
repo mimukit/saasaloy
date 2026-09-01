@@ -95,9 +95,9 @@ export type PatchAction = "apply" | "unchanged" | "missing";
 // PlannedFile it is never manifest-tracked as a managed file — a patch mutates a
 // file another module owns, so it isn't a clean managed copy. `executePlan` records
 // each applied patch in `manifest.patches`, which is what `remove` reads back: it
-// reverses the three kinds that edit a config file (`chained-route`, `wrangler-binding`,
-// `plugin-array`) and warns about the two `package.json` kinds, which stay the user's to
-// undo (#36).
+// reverses the four kinds that edit a config file (`chained-route`, `wrangler-binding`,
+// `plugin-array`, `const-array`) and warns about the two `package.json` kinds, which stay
+// the user's to undo (#36).
 export interface PlannedPatch {
   module: string;
   /** Project-relative POSIX path of the file being patched. */
@@ -154,6 +154,8 @@ export interface Plan {
   aliasConflicts: string[];
   /** Structural config patches to apply (previewed against the would-be on-disk state). */
   patches: PlannedPatch[];
+  /** Removal warnings keyed by the module that supplied them. */
+  removeWarnings: Record<string, string[]>;
 }
 
 /** A file one revision of a module ships: where it comes from and where it lands. */
@@ -505,6 +507,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const devDependencies: string[] = [];
   const envVars: Record<string, string> = {};
   const devVars: Record<string, string> = {};
+  const removeWarnings: Record<string, string[]> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
   // files[] can resolve against a capability's brand-new alias even when both install in
@@ -637,6 +640,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
     }
+    if (item.removeWarnings && item.removeWarnings.length > 0) {
+      removeWarnings[name] = [...item.removeWarnings];
+    }
   }
 
   // A module may take a file another one owns only when it reaches that owner through
@@ -691,6 +697,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     aliases,
     aliasConflicts,
     patches,
+    removeWarnings,
   };
 }
 
@@ -799,7 +806,7 @@ export async function executePlan(
     if (changed) {
       await writeFile(p.fileAbs, content, "utf-8");
       patched.push(p);
-      // Record for `remove` (which reverses the three config kinds and warns for the two
+      // Record for `remove` (which reverses the four config kinds and warns for the two
       // `package.json` kinds) — deduped so a `--force` re-apply that lands the same op
       // again doesn't duplicate the entry.
       const entry: ManifestPatch = {
@@ -849,6 +856,12 @@ export async function executePlan(
   for (const name of plan.install) {
     if (!config.installed.includes(name)) {
       config.installed.push(name);
+    }
+    const warnings = plan.removeWarnings[name];
+    if (warnings) {
+      manifest.removeWarnings[name] = [...warnings];
+    } else {
+      delete manifest.removeWarnings[name];
     }
   }
 

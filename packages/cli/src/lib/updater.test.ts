@@ -46,6 +46,77 @@ beforeEach(async () => {
   moduleRoot = await mkdtemp(join(tmpdir(), "saasaloy-update-mod-"));
 });
 
+describe("executeUpdatePlan — removal warnings", () => {
+  it("replaces stored warnings after a clean update", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", removeWarnings: ["Old warning"] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", removeWarnings: ["New warning"] },
+      {}
+    );
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    state.manifest.removeWarnings.email = ["Old warning"];
+    const plan = await build({
+      ...state,
+      inputs: [input({ theirs, base })],
+    });
+
+    await executeUpdatePlan(plan, { root, ...state });
+
+    expect(state.manifest.removeWarnings.email).toStrictEqual(["New warning"]);
+  });
+
+  it("keeps stored warnings when an update needs a merge", async () => {
+    const file = {
+      path: "files/lib/email.ts",
+      target: "@api/lib/email.ts",
+    };
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [file] },
+      { "files/lib/email.ts": "old\n" }
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      {
+        type: "saasaloy:feature",
+        files: [file],
+        removeWarnings: ["New warning"],
+      },
+      { "files/lib/email.ts": "new\n" }
+    );
+    await mkdir(join(root, "apps/api/src/lib"), { recursive: true });
+    await writeFile(join(root, "apps/api/src/lib/email.ts"), "user file\n");
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    state.manifest.removeWarnings.email = ["Old warning"];
+    const plan = await build({
+      ...state,
+      inputs: [input({ theirs, base })],
+    });
+
+    await executeUpdatePlan(plan, { root, ...state });
+
+    expect(plan.modules[0]?.needsMerge).toBeTruthy();
+    expect(state.manifest.removeWarnings.email).toStrictEqual(["Old warning"]);
+  });
+});
+
 afterEach(async () => {
   await rm(root, { recursive: true, force: true });
   await rm(moduleRoot, { recursive: true, force: true });

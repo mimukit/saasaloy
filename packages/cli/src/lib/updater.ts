@@ -378,6 +378,8 @@ export interface ModuleUpdatePlan {
    * second driver (#98).
    */
   conflictsWith?: string[];
+  /** Removal warnings from the new descriptor, persisted only after a clean update. */
+  removeWarnings: string[];
   /**
    * Env vars the new version requires that the old one did not — named before the
    * confirmation, or a version that starts requiring a secret updates in silence. With no
@@ -683,6 +685,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     ...(theirs.item.conflictsWith && theirs.item.conflictsWith.length > 0
       ? { conflictsWith: theirs.item.conflictsWith }
       : {}),
+    removeWarnings: [...(theirs.item.removeWarnings ?? [])],
     newEnvVars: newEnvVars(base, theirs),
     needsMerge,
   };
@@ -1047,6 +1050,14 @@ export async function executeUpdatePlan(
         name: bump.name,
         version: bump.to,
       });
+    }
+
+    if (clean) {
+      if (mod.removeWarnings.length > 0) {
+        manifest.removeWarnings[mod.name] = [...mod.removeWarnings];
+      } else {
+        delete manifest.removeWarnings[mod.name];
+      }
     }
 
     // Move `resolved` only for a module that fully landed. While anything still needs

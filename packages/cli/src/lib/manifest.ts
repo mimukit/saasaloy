@@ -27,7 +27,7 @@ export interface ManagedEntry {
 // A structural config patch that actually landed on disk, recorded so `remove` can undo
 // it — or, for a kind with no inverse, warn the user which file it can't clean up (see
 // the `PlannedPatch` comment in applier.ts). `patch` is the op as authored, which is all
-// `reversePatch` reads: the three config kinds are reversible from this record alone, and
+// `reversePatch` reads: the four config kinds are reversible from this record alone, and
 // the record carries no pre-patch content or hash, so drift is detected structurally
 // against the recorded payload rather than by comparison (#36).
 export interface ManifestPatch {
@@ -43,6 +43,8 @@ export interface Manifest {
   managed: Record<string, ManagedEntry>;
   links: Record<string, string>;
   patches: ManifestPatch[];
+  /** Module name to warnings shown before removal. */
+  removeWarnings: Record<string, string[]>;
 }
 
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
@@ -63,7 +65,7 @@ export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
 }
 
 export function emptyManifest(): Manifest {
-  return { links: {}, managed: {}, patches: [] };
+  return { links: {}, managed: {}, patches: [], removeWarnings: {} };
 }
 
 export async function loadManifest(root: string): Promise<Manifest> {
@@ -97,6 +99,7 @@ export async function loadManifest(root: string): Promise<Manifest> {
     links: parsed.links ?? {},
     managed: parsed.managed ?? {},
     patches: parsed.patches ?? [],
+    removeWarnings: parsed.removeWarnings ?? {},
   };
 }
 

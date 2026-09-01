@@ -274,6 +274,9 @@ export async function runRemove(argv: string[]): Promise<number> {
     }
 
     summarizeRemovePlan(plan, name, opts.yes);
+    for (const warning of plan.warnings) {
+      log.warn(warning);
+    }
 
     if (opts.diff) {
       for (const file of plan.files) {

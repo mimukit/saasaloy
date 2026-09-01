@@ -113,7 +113,9 @@ export function isReferenced(program: ProgramLike, name: string): boolean {
       ) {
         continue;
       }
-      walk(value, childKey);
+      // A computed member or key (`obj[name]`, `{ [name]: … }`) is a real reference, so
+      // clear the slot name and let the identifier count.
+      walk(value, record.computed === true ? undefined : childKey);
     }
   }
 
