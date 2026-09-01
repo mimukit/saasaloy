@@ -26,7 +26,9 @@ function definePlugins<T>(config: T): T {
 // `plugin-array` codemod needs this exact `export const <name> = <fn>({ plugins: [...] })`
 // shape so feature modules can add their client plugins. Keep the array literal here,
 // and never omit it, even when no client plugin ships by default.
-export const authClientPlugins = definePlugins({ plugins: [adminClient()] });
+export const authClientPlugins = definePlugins({
+  plugins: [adminClient()],
+});
 
 export function createClient(baseURL: string) {
   return createAuthClient({

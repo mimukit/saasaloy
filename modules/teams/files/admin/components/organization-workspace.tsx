@@ -5,7 +5,7 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -24,6 +24,19 @@ import { auth } from "@admin/lib/auth";
 interface OrganizationSummary {
   id: string;
   name: string;
+}
+
+function renderCollectionState(
+  isPending: boolean,
+  hasItems: boolean,
+  loading: ReactNode,
+  items: ReactNode,
+  empty: ReactNode
+): ReactNode {
+  if (isPending) {
+    return loading;
+  }
+  return hasItems ? items : empty;
 }
 
 export function OrganizationWorkspace({
@@ -156,13 +169,14 @@ export function OrganizationWorkspace({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {members.isPending ? (
+          {renderCollectionState(
+            members.isPending,
+            Boolean(members.data?.length),
             <p className="text-muted-foreground text-sm" role="status">
               Loading members…
-            </p>
-          ) : members.data?.length ? (
+            </p>,
             <div className="divide-border divide-y">
-              {members.data.map((member) => (
+              {members.data?.map((member) => (
                 <div
                   key={member.id}
                   className="flex min-h-12 items-center justify-between gap-3 py-2"
@@ -211,8 +225,7 @@ export function OrganizationWorkspace({
                   </div>
                 </div>
               ))}
-            </div>
-          ) : (
+            </div>,
             <p className="text-muted-foreground text-sm">
               This organization has no members.
             </p>
@@ -292,13 +305,14 @@ export function OrganizationWorkspace({
             </div>
           ) : null}
 
-          {invitations.isPending ? (
+          {renderCollectionState(
+            invitations.isPending,
+            Boolean(pendingInvitations?.length),
             <p className="text-muted-foreground text-sm" role="status">
               Loading invitations…
-            </p>
-          ) : pendingInvitations?.length ? (
+            </p>,
             <div className="divide-border divide-y">
-              {pendingInvitations.map((invitation) => (
+              {pendingInvitations?.map((invitation) => (
                 <div
                   key={invitation.id}
                   className="flex min-h-12 items-center justify-between gap-3 py-2"
@@ -346,8 +360,7 @@ export function OrganizationWorkspace({
                   </div>
                 </div>
               ))}
-            </div>
-          ) : (
+            </div>,
             <p className="text-muted-foreground text-sm">
               This organization has no pending invitations.
             </p>
