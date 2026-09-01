@@ -16,7 +16,7 @@
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260828.1",
+    "@cloudflare/workers-types": "5.20260829.1",
     "@repo/tsconfig": "workspace:*",
     "@types/node": "26.4.0",
     "rimraf": "6.1.3",

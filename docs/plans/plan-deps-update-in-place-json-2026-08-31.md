@@ -74,7 +74,7 @@ Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 - [ ] the root `test` script picks up `scripts/**/*.test.ts`
 - [ ] `pnpm lint` passes over the new file (oxlint type-aware covers `scripts`, per AGENTS.md)
 
-### Phase 4: land the pins that were blocked
+### Phase 4: land the pins that were blocked (built 2026-09-01)
 
 - [ ] run `pnpm deps:update` and confirm `modules/waitlist/registry-item.json`'s `hono` range moves as a one-line diff
 - [ ] `pnpm deps:check` exits 0 with no hand edit left over

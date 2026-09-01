@@ -25,7 +25,7 @@
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "zod",
-      "range": "4.4.3"
+      "range": "4.5.2"
     }
   ],
   "files": [],
