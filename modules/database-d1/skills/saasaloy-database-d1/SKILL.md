@@ -169,6 +169,21 @@ two `db:migrate:*` scripts plus the `wrangler` devDependency in `packages/db/pac
 those by hand. Your `src/schema/*.ts` files stay put and are still SQLite — port them to `pg-core`
 yourself.
 
+**A driver switch takes the dependent feature modules with it.** `auth` and `waitlist` pick their
+schema variant at install time, and the unchosen one is filtered before the plan is built, so
+neither notices that the driver under it changed. Remove and add each of them too:
+
+```sh
+saasaloy remove waitlist
+saasaloy remove auth
+saasaloy remove database-d1
+saasaloy add database-postgres
+saasaloy add auth
+saasaloy add waitlist
+```
+
+There is no data migration in either direction; see ADR 0026.
+
 ## Boundaries to honor
 
 - **`c.env` for the binding, never `process.env`.** Read it through `withDb(c, …)`, the call shape

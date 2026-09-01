@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or working out why `add auth` is refused on a Postgres project. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -232,26 +232,20 @@ the binding rather than through the pool, so local behavior is unchanged. And `d
 under Node against `DATABASE_URL`, not through the binding, so migrations always speak to the origin
 database.
 
-## `auth` and `waitlist` are D1-only today
+## `auth` and `waitlist` install here
 
-Both modules ship SQLite payloads: their tables use `sqliteTable` from `drizzle-orm/sqlite-core`, and
-`auth`'s Better Auth config passes `provider: "sqlite"` to the Drizzle adapter. Neither works on this
-driver.
+Both ship their table declarations in two variants, one per dialect, and the descriptor's `onlyWith`
+condition picks the `pg-core` file on this driver and filters the SQLite one out before the plan is
+built. `saasaloy add auth --dry-run` prints which source it chose. Their route files are single
+files under both drivers, because `withDb(c, …)` has the same signature here and on `database-d1`.
 
-Neither names a driver in `dependsOn`. Both depend on the `database` capability, so `add auth` on a
-Postgres project installs and nothing refuses it. The project then fails at `pnpm typecheck`:
+`auth` carries one extra rule this driver forces: its Better Auth singleton is module-scope and its
+database client is not. Every `auth.api.*` call runs inside `withAuthScope(c, …)`, which is what
+keeps one request's socket from reaching the next request on the same isolate. Read
+`saasaloy-auth` before writing a protected route, and see ADR 0029.
 
-```
-$ pnpm typecheck
-packages/db/src/schema/auth.ts: Type '"sqlite"' is not assignable ...
-```
-
-An earlier release pinned `dependsOn: ["database-d1"]` so `add` refused these two by name. The pin
-came out under [#91](https://github.com/mimukit/saasaloy/issues/91), because on a clean project it
-also chose D1 for the user without asking. Dialect-neutral payloads are the end state, tracked in
-[#99](https://github.com/mimukit/saasaloy/issues/99); ADR 0026's 2026-09-01 retraction records the
-change. Until they land, a Postgres project writes its own tables against `drizzle-orm/pg-core` and
-its own routes, which is what the rest of this skill covers.
+Until 2026-08-31 both modules declared `dependsOn: ["database-d1"]` and `add` refused them here by
+name. That stopgap is gone; ADR 0026's amendment records the retraction.
 
 ## Switching drivers
 
@@ -288,6 +282,21 @@ put the core's copy back by hand:
 leftovers it cannot reverse: the `db:migrate` script plus the `postgres` and `@types/node`
 dependencies in `packages/db/package.json`. Delete those by hand. Your `src/schema/*.ts` files stay
 put and are still `pg-core` — port them to `sqlite-core` yourself.
+
+**A driver switch takes the dependent feature modules with it.** `auth` and `waitlist` pick their
+schema variant at install time, and the unchosen one is filtered before the plan is built, so
+neither notices that the driver under it changed. Remove and add each of them too:
+
+```sh
+saasaloy remove waitlist
+saasaloy remove auth
+saasaloy remove database-postgres
+saasaloy add database-d1
+saasaloy add auth
+saasaloy add waitlist
+```
+
+There is no data migration in either direction; see ADR 0026.
 
 ## Boundaries to honor
 

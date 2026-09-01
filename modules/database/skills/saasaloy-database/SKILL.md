@@ -52,19 +52,17 @@ Read the driver's skill for anything the tables themselves don't decide: how the
 a request handler, which bindings or environment variables it needs, and how a generated migration
 is applied.
 
-## D1 is the default, and two modules only work on it
+## D1 is the default, and both feature modules run on either driver
 
-`auth` and `waitlist` ship SQLite payloads: `sqliteTable` tables, and `provider: "sqlite"` in
-`auth`'s Better Auth config. Neither names a driver in `dependsOn`, because a feature module has no
-standing to pick a project's database. Both depend on this core, so `add auth` on a clean project
-fires the `requiresOneOf` prompt and installs the driver you choose.
+`auth` and `waitlist` ship their table declarations twice, once against `sqlite-core` and once
+against `pg-core`, and the descriptor's `onlyWith` condition installs the pair that matches the
+driver already in the project. Their route files are single files, because `withDb(c, …)` has the
+same signature under both. `saasaloy add auth --dry-run` prints which schema source it chose.
 
-Choose `database-postgres` and those two modules install, then fail at `pnpm typecheck` on the
-dialect. That is the honest answer for a combination that has never worked. Dialect-neutral payloads
-are the end state, tracked in [#99](https://github.com/mimukit/saasaloy/issues/99); ADR 0026's
-2026-09-01 retraction records why the old `database-d1` pin came out. A Postgres project writes its
-own tables and routes in the meantime, and everything below this line works the same on either
-driver.
+Both modules declared `dependsOn: ["database-d1"]` until 2026-08-31, as a stopgap while the
+payloads were still SQLite-only. That is gone; ADR 0026's amendment records the retraction, and ADR
+0029 records the request-scoped client `auth` needs to hold on Postgres. Everything below this line
+works the same on either driver.
 
 ## Add a table (the core convention)
 
@@ -211,7 +209,6 @@ explicit command you run.
   belongs in a driver module instead.
 - **Exactly one driver per project.** `requiresOneOf` on this core stops you at zero, `conflictsWith`
   on each driver stops you at two; switching means `saasaloy remove` on the old driver first.
-- **`auth` and `waitlist` only run on `database-d1`.** They depend on this core and name no driver,
-  so nothing refuses them on Postgres; the typecheck does, and that is the honest answer until they
-  are dialect-neutral.
+- **`auth` and `waitlist` install under either driver**, and each picks its schema variant when you
+  add it. Switching driver later means removing and adding those modules too; see the driver skill.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.
