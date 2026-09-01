@@ -86,6 +86,11 @@
             "pattern": "^@[a-z0-9][a-z0-9-]*/.+",
             "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
             "description": "Alias-prefixed destination (e.g. @api/routes/waitlist.ts). No '.' or '..' path segment: the applier refuses one at runtime and this fails the descriptor at authoring time (#98). A dot-leading file name such as .gitignore is fine."
+          },
+          "onlyWith": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$",
+            "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Two entries may share one `target` when their conditions are disjoint: that is how a module ships a per-driver variant of a dialect-bound file. A target whose entries are all conditional and none matches is a plan-time refusal, not a silently missing file."
           }
         }
       }
@@ -251,6 +256,11 @@
                   "pattern": "^[^/@]",
                   "not": { "pattern": "(^|/)\\.\\.?(/|$)" },
                   "description": "Destination relative to the workspace root (e.g. src/index.ts). No leading slash or @alias, and no '.' or '..' path segment (#98). A dot-leading file name such as .dev.vars.example is fine."
+                },
+                "onlyWith": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9][a-z0-9-]*$",
+                  "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Same rule as a top-level files[] entry: two entries may share one `target` when their conditions are disjoint, and a target no candidate matches is a plan-time refusal. auth's per-driver db-provider.ts lives here rather than in files[], which is why both shapes carry the keyword."
                 }
               }
             }

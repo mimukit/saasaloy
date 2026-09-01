@@ -13,9 +13,14 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { buildPlan, executePlan } from "./applier.js";
+import {
+  buildPlan,
+  executePlan,
+  listModuleFiles,
+  selectModuleFiles,
+} from "./applier.js";
 import type { Plan } from "./applier.js";
-import { RefusalError } from "./exit.js";
+import { RefusalError, isRefusal } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
@@ -2157,5 +2162,262 @@ describe("a target another installed module already owns", () => {
     expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
       "database-d1"
     );
+  });
+});
+
+// #99 Phase 1. A module whose payload is dialect-bound ships one variant per driver and
+// lets the resolved install set pick. The condition is enforced in `listModuleFiles`, the
+// one place the file rules live, so `add` and `update` cannot disagree about which
+// variant a project holds.
+describe("listModuleFiles — onlyWith (#99)", () => {
+  const SQLITE = "files/db/schema/waitlist.sqlite.ts";
+  const PG = "files/db/schema/waitlist.pg.ts";
+  const D1_PROVIDER = "files/src/db-provider.d1.ts";
+  const PG_PROVIDER = "files/src/db-provider.pg.ts";
+
+  const aliases = { "@api": "apps/api/src", "@db": "packages/db/src" };
+
+  // Both shapes at once: a `files[]` pair resolved through an alias, a `scaffolds[]` pair
+  // resolved against the workspace, and one unconditional file beside them.
+  async function dialectModule(): Promise<LoadedModule> {
+    return writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [
+          {
+            path: SQLITE,
+            target: "@db/schema/waitlist.ts",
+            onlyWith: "database-d1",
+          },
+          {
+            path: PG,
+            target: "@db/schema/waitlist.ts",
+            onlyWith: "database-postgres",
+          },
+          {
+            path: "files/api/routes/waitlist.ts",
+            target: "@api/routes/waitlist.ts",
+          },
+        ],
+        scaffolds: [
+          {
+            workspace: "packages/waitlist",
+            files: [
+              {
+                path: D1_PROVIDER,
+                target: "src/db-provider.ts",
+                onlyWith: "database-d1",
+              },
+              {
+                path: PG_PROVIDER,
+                target: "src/db-provider.ts",
+                onlyWith: "database-postgres",
+              },
+            ],
+          },
+        ],
+      },
+      {
+        [SQLITE]: "export const waitlist = sqliteTable();\n",
+        [PG]: "export const waitlist = pgTable();\n",
+        [D1_PROVIDER]: "export const provider = 'sqlite';\n",
+        [PG_PROVIDER]: "export const provider = 'pg';\n",
+        "files/api/routes/waitlist.ts": "export const waitlistRoute = 1;\n",
+      }
+    );
+  }
+
+  it("picks the sqlite variant under database-d1", async () => {
+    const mod = await dialectModule();
+    const files = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["waitlist", "database", "database-d1"])
+    );
+
+    expect(files.get("packages/db/src/schema/waitlist.ts")?.from).toBe(SQLITE);
+    expect(files.get("packages/waitlist/src/db-provider.ts")?.from).toBe(
+      D1_PROVIDER
+    );
+    // One entry per target, never both variants.
+    expect([...files.keys()].toSorted()).toStrictEqual([
+      "apps/api/src/routes/waitlist.ts",
+      "packages/db/src/schema/waitlist.ts",
+      "packages/waitlist/src/db-provider.ts",
+    ]);
+  });
+
+  it("picks the pg variant under database-postgres", async () => {
+    const mod = await dialectModule();
+    const files = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["waitlist", "database", "database-postgres"])
+    );
+
+    expect(files.get("packages/db/src/schema/waitlist.ts")?.from).toBe(PG);
+    expect(files.get("packages/waitlist/src/db-provider.ts")?.from).toBe(
+      PG_PROVIDER
+    );
+  });
+
+  it("leaves an unconditional file alone whatever is installed", async () => {
+    const mod = await dialectModule();
+    const files = await listModuleFiles(mod, aliases, new Set(["waitlist"]));
+
+    expect(files.get("apps/api/src/routes/waitlist.ts")?.from).toBe(
+      "files/api/routes/waitlist.ts"
+    );
+  });
+
+  it("marks the chosen ref with the condition that chose it", async () => {
+    const mod = await dialectModule();
+    const files = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["waitlist", "database-d1"])
+    );
+
+    expect(files.get("packages/db/src/schema/waitlist.ts")?.onlyWith).toBe(
+      "database-d1"
+    );
+    expect(
+      files.get("apps/api/src/routes/waitlist.ts")?.onlyWith
+    ).toBeUndefined();
+  });
+
+  it("reports a target whose every candidate is conditional and unmatched", async () => {
+    const mod = await dialectModule();
+    const { files, unmatched } = await selectModuleFiles(
+      mod,
+      aliases,
+      new Set(["waitlist"])
+    );
+
+    expect(files.has("packages/db/src/schema/waitlist.ts")).toBeFalsy();
+    expect(unmatched).toStrictEqual([
+      {
+        module: "waitlist",
+        target: "packages/db/src/schema/waitlist.ts",
+        candidates: [
+          { from: SQLITE, onlyWith: "database-d1" },
+          { from: PG, onlyWith: "database-postgres" },
+        ],
+      },
+      {
+        module: "waitlist",
+        target: "packages/waitlist/src/db-provider.ts",
+        candidates: [
+          { from: D1_PROVIDER, onlyWith: "database-d1" },
+          { from: PG_PROVIDER, onlyWith: "database-postgres" },
+        ],
+      },
+    ]);
+  });
+
+  it("accepts two variants of one target as a valid descriptor", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "waitlist",
+        type: "saasaloy:feature",
+        files: [
+          {
+            path: SQLITE,
+            target: "@db/schema/waitlist.ts",
+            onlyWith: "database-d1",
+          },
+          {
+            path: PG,
+            target: "@db/schema/waitlist.ts",
+            onlyWith: "database-postgres",
+          },
+        ],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+});
+
+const withDb = (installed: string[]): SaasaloyConfig => ({
+  aliases: { "@db": "packages/db/src" },
+  installed,
+});
+
+describe("buildPlan — onlyWith (#99)", () => {
+  const SQLITE = "files/schema.sqlite.ts";
+  const PG = "files/schema.pg.ts";
+
+  async function waitlist(): Promise<LoadedModule> {
+    return writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [
+          { path: SQLITE, target: "@db/schema.ts", onlyWith: "database-d1" },
+          {
+            path: PG,
+            target: "@db/schema.ts",
+            onlyWith: "database-postgres",
+          },
+        ],
+      },
+      { [SQLITE]: "sqlite\n", [PG]: "pg\n" }
+    );
+  }
+
+  it("plans the variant the driver in this run's graph selects", async () => {
+    const result = await plan({
+      install: ["database-postgres", "waitlist"],
+      modules: [await waitlist()],
+      config: withDb([]),
+    });
+
+    expect(result.files).toHaveLength(1);
+    expect(result.files[0]?.content).toBe("pg\n");
+    expect(result.files[0]?.from).toBe(PG);
+  });
+
+  it("plans the variant an already-installed driver selects", async () => {
+    const result = await plan({
+      install: ["waitlist"],
+      modules: [await waitlist()],
+      config: withDb(["database", "database-d1"]),
+    });
+
+    expect(result.files[0]?.content).toBe("sqlite\n");
+  });
+
+  it("refuses when no variant matches, naming the target and every candidate", async () => {
+    await expect(
+      plan({
+        install: ["waitlist"],
+        modules: [await waitlist()],
+        config: withDb([]),
+      })
+    ).rejects.toThrow(
+      /packages\/db\/src\/schema\.ts[\s\S]*files\/schema\.sqlite\.ts[\s\S]*database-d1[\s\S]*files\/schema\.pg\.ts[\s\S]*database-postgres/
+    );
+  });
+
+  it("refuses by design, so `add` exits 2 rather than 1", async () => {
+    const failure = await plan({
+      install: ["waitlist"],
+      modules: [await waitlist()],
+      config: withDb([]),
+    }).catch((error: unknown) => error);
+
+    expect(isRefusal(failure)).toBeTruthy();
+  });
+
+  it("writes nothing — the refusal comes before any file lands", async () => {
+    await expect(
+      plan({
+        install: ["waitlist"],
+        modules: [await waitlist()],
+        config: withDb([]),
+      })
+    ).rejects.toThrow(/no file variant matches/);
+
+    await expect(pathExists(join(root, "packages", "db"))).resolves.toBeFalsy();
   });
 });

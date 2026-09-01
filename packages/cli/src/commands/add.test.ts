@@ -17,6 +17,7 @@ import {
   expect,
   it,
 } from "vitest";
+import { pathExists } from "../lib/fs-utils.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
 import { runAdd } from "./add.js";
@@ -192,5 +193,109 @@ describe("runAdd — dependency write ordering (#98)", () => {
       await readFile(join(project, "package.json"), "utf-8")
     ) as { dependencies: Record<string, string> };
     expect(pkg.dependencies.zod).toBe("4.4.3");
+  });
+});
+
+// #99 Phase 1, from the outside: the plan a user reads has to say which variant it
+// picked, because two descriptor entries share one target and the target alone no longer
+// identifies the file. And a project no variant matches is refused, not half-applied.
+describe("runAdd — onlyWith variants (#99)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeProject(installed: string[]): Promise<void> {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed }),
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-cond-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-cond-reg-"));
+    await writeProject(["database-d1"]);
+
+    const mod = join(registry, "waitlist");
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name: "waitlist",
+        type: "saasaloy:feature",
+        files: [
+          {
+            path: "files/schema.sqlite.ts",
+            target: "@web/schema.ts",
+            onlyWith: "database-d1",
+          },
+          {
+            path: "files/schema.pg.ts",
+            target: "@web/schema.ts",
+            onlyWith: "database-postgres",
+          },
+          { path: "files/route.ts", target: "@web/route.ts" },
+        ],
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "schema.sqlite.ts"),
+      "sqlite\n",
+      "utf-8"
+    );
+    await writeFile(join(mod, "files", "schema.pg.ts"), "pg\n", "utf-8");
+    await writeFile(join(mod, "files", "route.ts"), "route\n", "utf-8");
+
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("names the chosen variant on the plan line and leaves the rest alone", async () => {
+    const { code, out } = await run(["waitlist", "--dry-run", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("apps/web/schema.ts (files/schema.sqlite.ts)");
+    // An unconditional file's line is what it always was: the target, and nothing after
+    // it but the box's own padding.
+    expect(out).toMatch(/create {2}apps\/web\/route\.ts +│/);
+    expect(out).not.toContain("route.ts (files/route.ts)");
+  });
+
+  it("names the chosen variant on the --diff heading too", async () => {
+    const { out } = await run(["waitlist", "--diff", "--yes"]);
+
+    expect(out).toContain("apps/web/schema.ts (files/schema.sqlite.ts)");
+  });
+
+  it("refuses a project no variant matches, and writes nothing", async () => {
+    await writeProject([]);
+    const { code, out } = await run(["waitlist", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("apps/web/schema.ts");
+    expect(out).toContain("files/schema.sqlite.ts");
+    expect(out).toContain("database-postgres");
+    // The unconditional file of the same module: the refusal lands before `executePlan`,
+    // so not even the entries that did match are on disk.
+    await expect(
+      pathExists(join(project, "apps", "web", "route.ts"))
+    ).resolves.toBeFalsy();
   });
 });

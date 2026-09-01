@@ -1572,3 +1572,81 @@ describe("buildUpdatePlan — conflictsWith and envVars (#98)", () => {
     expect(plan.modules[0]?.newEnvVars).toStrictEqual({});
   });
 });
+
+// #99 Phase 1. `onlyWith` filters in `listModuleFiles`, which both engines share, so
+// `update` diffs the same variant `add` wrote. Filtering in `buildPlan` alone would let
+// `update` reinstate the variant this project does not hold.
+describe("buildUpdatePlan — onlyWith (#99)", () => {
+  const SQLITE = "files/schema.sqlite.ts";
+  const PG = "files/schema.pg.ts";
+
+  const dialectItem = {
+    type: "saasaloy:feature" as const,
+    files: [
+      { path: SQLITE, target: "@api/schema.ts", onlyWith: "database-d1" },
+      { path: PG, target: "@api/schema.ts", onlyWith: "database-postgres" },
+    ],
+  };
+
+  const dialectFiles = { [SQLITE]: "sqlite\n", [PG]: "pg\n" };
+
+  function withDriver(driver: string): SaasaloyConfig {
+    return config({ installed: ["email", "database", driver] });
+  }
+
+  it("sees exactly the set `add` wrote, under each driver", async () => {
+    for (const [driver, content] of [
+      ["database-d1", "sqlite\n"],
+      ["database-postgres", "pg\n"],
+    ] as const) {
+      const mod = await writeModule("new", "email", dialectItem, dialectFiles);
+      const cfg = withDriver(driver);
+
+      const addPlan = await buildPlan({
+        root,
+        install: ["email"],
+        alreadyInstalled: [],
+        modules: new Map([["email", mod]]),
+        config: cfg,
+        manifest: emptyManifest(),
+      });
+      const updatePlan = await build({
+        config: cfg,
+        inputs: [input({ theirs: mod })],
+      });
+
+      expect(addPlan.files.map((f) => `${f.target} ${f.from}`)).toStrictEqual(
+        updatePlan.modules[0]?.files.map((f) => `${f.target} ${f.from}`)
+      );
+      expect(addPlan.files[0]?.content).toBe(content);
+      expect(updatePlan.modules[0]?.files[0]?.theirs).toBe(content);
+    }
+  });
+
+  it("does not reinstate the variant this project never held", async () => {
+    const mod = await writeModule("new", "email", dialectItem, dialectFiles);
+    const manifest = emptyManifest();
+    await trackFile(manifest, "apps/api/src/schema.ts", "sqlite\n", SQLITE);
+
+    const plan = await build({
+      config: withDriver("database-d1"),
+      manifest,
+      inputs: [input({ theirs: mod })],
+    });
+
+    expect(plan.modules[0]?.files.map((f) => f.from)).toStrictEqual([SQLITE]);
+    // And nothing is reported as dropped: the pg variant was never this project's file.
+    expect(plan.modules[0]?.removals).toStrictEqual([]);
+  });
+
+  it("never throws on a project that matches no variant — `add` owns that refusal", async () => {
+    const mod = await writeModule("new", "email", dialectItem, dialectFiles);
+
+    const plan = await build({
+      config: config({ installed: ["email"] }),
+      inputs: [input({ theirs: mod })],
+    });
+
+    expect(plan.modules[0]?.files).toStrictEqual([]);
+  });
+});

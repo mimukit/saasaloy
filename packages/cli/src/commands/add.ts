@@ -146,6 +146,18 @@ function renderDiff(file: PlannedFile): string {
   return shown.join("\n");
 }
 
+/**
+ * How the plan names one file. A target alone identifies it, until `onlyWith` lets two
+ * descriptor entries share one target (#99) — then the plan has to say which variant it
+ * picked, because that is the whole decision the user would want to check. An
+ * unconditional file's line is unchanged, so the common plan reads as it always did.
+ */
+function fileLabel(file: PlannedFile): string {
+  return file.onlyWith === undefined
+    ? file.target
+    : `${file.target} ${pc.dim(`(${file.from})`)}`;
+}
+
 function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   if (prereqs.length > 0) {
     note(
@@ -171,7 +183,7 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
   );
   lines.push("");
   for (const file of plan.files) {
-    lines.push(`  ${ACTION_LABEL[file.action]}  ${file.target}`);
+    lines.push(`  ${ACTION_LABEL[file.action]}  ${fileLabel(file)}`);
   }
   lines.push(
     "",
@@ -507,7 +519,10 @@ export async function runAdd(argv: string[]): Promise<number> {
         if (file.action === "unchanged") {
           continue;
         }
-        note(renderDiff(file), `${ACTION_LABEL[file.action]}  ${file.target}`);
+        note(
+          renderDiff(file),
+          `${ACTION_LABEL[file.action]}  ${fileLabel(file)}`
+        );
       }
       for (const p of plan.patches) {
         if (p.action !== "apply") {

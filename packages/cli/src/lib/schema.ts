@@ -120,6 +120,13 @@ export interface SaasaloyConfig {
 export interface RegistryFile {
   path: string;
   target: string;
+  /**
+   * Install this file only when the named module is in the resolved install set (#99).
+   * Two entries may share one `target` under disjoint conditions, which is how a module
+   * ships a sqlite and a pg variant of one dialect-bound file. `RegistryScaffold.files`
+   * is this same type, so the keyword covers a scaffold's workspace files too.
+   */
+  onlyWith?: string;
 }
 
 // A new workspace a capability births. Its `files[].target`s are workspace-root-relative
