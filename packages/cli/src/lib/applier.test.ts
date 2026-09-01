@@ -2006,3 +2006,153 @@ describe("a target two unrelated modules in one run both ship", () => {
     expect(planned.files[0]?.module).toBe("database-d1");
   });
 });
+
+// #91 phase 2. The same rule against what is already installed: `classify` reads the
+// owner out of `manifest.managed[target].module`, and buildPlan refuses a claimant that
+// does not reach that owner through `dependsOn`. `--force` never crosses this line.
+// A driver whose files[] land on `packages/db/src/`, so two drivers contest them.
+const driverItem: Omit<RegistryItem, "name"> = {
+  type: "saasaloy:capability",
+  dependsOn: ["database"],
+  files: [
+    { path: "files/client.ts", target: "@db/client.ts" },
+    { path: "files/drizzle.config.ts", target: "@db/drizzle.config.ts" },
+  ],
+};
+
+function driverFiles(name: string): Record<string, string> {
+  return {
+    "files/client.ts": `export const client = "${name}";\n`,
+    "files/drizzle.config.ts": `export default { dialect: "${name}" };\n`,
+  };
+}
+
+describe("a target another installed module already owns", () => {
+  const config: SaasaloyConfig = {
+    aliases: { "@db": "packages/db/src" },
+    installed: ["database", "database-d1"],
+  };
+
+  // Put d1's two files on disk and record d1 as their owner, the state `add database-d1`
+  // leaves behind.
+  async function installD1(): Promise<Manifest> {
+    const d1 = await writeModule("database-d1", driverItem, driverFiles("d1"));
+    const manifest = emptyManifest();
+    const applied = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: [],
+      modules: new Map([["database-d1", d1]]),
+      config,
+      manifest,
+    });
+    await executePlan(applied, root, config, manifest);
+    return manifest;
+  }
+
+  it("refuses a sibling driver, naming every contested path once", async () => {
+    const manifest = await installD1();
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database-d1"
+    );
+    const before = await readFile(
+      join(root, "packages/db/src/client.ts"),
+      "utf-8"
+    );
+
+    const promise = buildPlan({
+      root,
+      install: ["database-postgres"],
+      alreadyInstalled: ["database", "database-d1"],
+      modules: new Map([
+        [
+          "database-postgres",
+          await writeModule("database-postgres", driverItem, driverFiles("pg")),
+        ],
+        [
+          "database",
+          await writeModule("database", { type: "saasaloy:capability" }),
+        ],
+      ]),
+      config,
+      manifest,
+      requested: "database-postgres",
+    });
+    await expect(promise).rejects.toThrow(RefusalError);
+    // One refusal, both paths, and the way through.
+    const refusal = await promise.catch((error: unknown) => error as Error);
+    expect(refusal.message).toContain("packages/db/src/client.ts");
+    expect(refusal.message).toContain("packages/db/src/drizzle.config.ts");
+    expect(refusal.message).toContain("saasaloy remove database-d1");
+    // Nothing was written: the refusal fires while planning, before executePlan runs.
+    await expect(
+      readFile(join(root, "packages/db/src/client.ts"), "utf-8")
+    ).resolves.toBe(before);
+  });
+
+  it("lets a module re-apply its own file", async () => {
+    const manifest = await installD1();
+    const planned = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: [],
+      modules: new Map([
+        [
+          "database-d1",
+          await writeModule("database-d1", driverItem, driverFiles("d1")),
+        ],
+      ]),
+      config,
+      manifest,
+    });
+    expect(planned.files.map((f) => f.action)).toStrictEqual([
+      "unchanged",
+      "unchanged",
+    ]);
+  });
+
+  it("lets a module write over a file owned by one it dependsOn", async () => {
+    // `database` owns the client, and `database-d1` dependsOn it, so the driver may
+    // take the file over.
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        files: [{ path: "files/client.ts", target: "@db/client.ts" }],
+      },
+      { "files/client.ts": "export const client = null;\n" }
+    );
+    const manifest = emptyManifest();
+    const first = await buildPlan({
+      root,
+      install: ["database"],
+      alreadyInstalled: [],
+      modules: new Map([["database", core]]),
+      config,
+      manifest,
+    });
+    await executePlan(first, root, config, manifest);
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database"
+    );
+
+    const second = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: ["database"],
+      modules: new Map([
+        [
+          "database-d1",
+          await writeModule("database-d1", driverItem, driverFiles("d1")),
+        ],
+        ["database", core],
+      ]),
+      config,
+      manifest,
+    });
+    await executePlan(second, root, config, manifest);
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database-d1"
+    );
+  });
+});

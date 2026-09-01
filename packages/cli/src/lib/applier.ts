@@ -1,6 +1,12 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix } from "node:path";
-import { detectCollisions, formatCollisions } from "./collisions.js";
+import {
+  detectCollisions,
+  detectOwnedCollisions,
+  formatCollisions,
+  formatOwnedCollisions,
+} from "./collisions.js";
+import type { OwnedCollision } from "./collisions.js";
 import { RefusalError } from "./exit.js";
 import {
   assertNoSymlinkPath,
@@ -274,21 +280,40 @@ async function classify(
   targetAbs: string,
   target: string,
   newHash: string,
-  manifest: Manifest
-): Promise<{ action: FileAction; oldContent?: string }> {
+  manifest: Manifest,
+  /** The module planning this write, compared against the manifest's recorded owner. */
+  module: string
+): Promise<{
+  action: FileAction;
+  oldContent?: string;
+  /**
+   * The installed module that owns this file, when it is not the one writing now. The
+   * cross-module fact only; `buildPlan` decides whether the claim is legal, because the
+   * answer needs the run's `dependsOn` map and a per-file fatal action would leave a plan
+   * that must not execute (plan decision Q6).
+   */
+  ownedBy?: string;
+}> {
   if (!(await pathExists(targetAbs))) {
+    // Nothing on disk to lose, so a stale `managed` entry pointing at another module is
+    // not a collision — the file this run writes is the only copy there will be.
     return { action: "create" };
   }
   const oldContent = await readFile(targetAbs, "utf-8");
   const oldHash = hashContent(oldContent);
-  if (oldHash === newHash) {
-    return { action: "unchanged", oldContent };
-  }
   const managed = manifest.managed[target];
+  // Reported before the hash branches, because identical bytes are no defence: the
+  // manifest entry is refreshed on `unchanged` too, so ownership would still flip (#91).
+  const ownedBy =
+    managed && managed.module !== module ? { ownedBy: managed.module } : {};
+  if (oldHash === newHash) {
+    return { action: "unchanged", oldContent, ...ownedBy };
+  }
   if (managed) {
     return {
       action: managed.hash === oldHash ? "overwrite" : "drift",
       oldContent,
+      ...ownedBy,
     };
   }
   return { action: "conflict", oldContent };
@@ -299,30 +324,34 @@ async function planModuleFile(
   ref: ModuleFileRef,
   root: string,
   manifest: Manifest
-): Promise<PlannedFile> {
+): Promise<{ file: PlannedFile; ownedBy?: string }> {
   const content = await readFile(ref.abs, "utf-8");
   const newHash = hashContent(content);
   // `add` is the one engine whose input is an untrusted remote descriptor, so the target
   // is resolved under the same guard `remover` and `updater` use on their state files
   // (#98). `join()` normalizes a `..` away silently; this refuses it instead.
   const targetAbs = resolveWithinRoot(root, ref.target);
-  const { action, oldContent } = await classify(
+  const { action, oldContent, ownedBy } = await classify(
     targetAbs,
     ref.target,
     newHash,
-    manifest
+    manifest,
+    module.item.name
   );
   return {
-    module: module.item.name,
-    source: ref.abs,
-    from: ref.from,
-    target: ref.target,
-    targetAbs,
-    content,
-    newHash,
-    action,
-    oldContent,
-    isSkill: isSkillTarget(ref.target),
+    file: {
+      module: module.item.name,
+      source: ref.abs,
+      from: ref.from,
+      target: ref.target,
+      targetAbs,
+      content,
+      newHash,
+      action,
+      oldContent,
+      isSkill: isSkillTarget(ref.target),
+    },
+    ...(ownedBy === undefined ? {} : { ownedBy }),
   };
 }
 
@@ -360,6 +389,10 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // topological, so the last planner is the most specific one: let it win, and plan one
   // entry per target.
   const byTarget = new Map<string, PlannedFile>();
+  // Every file this run would write that an already-installed *other* module owns, as
+  // `classify` reports them. Collected across the whole loop and judged once below, so a
+  // module contesting three of another's files raises one refusal naming all three (#91).
+  const claims: OwnedCollision[] = [];
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const devDependencies: string[] = [];
@@ -429,7 +462,19 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     // classified and recorded alike, so create/drift/conflict and `remove` all come
     // for free.
     for (const ref of refsByModule.get(name) ?? []) {
-      const planned = await planModuleFile(mod, ref, root, manifest);
+      const { file: planned, ownedBy } = await planModuleFile(
+        mod,
+        ref,
+        root,
+        manifest
+      );
+      if (ownedBy !== undefined) {
+        claims.push({
+          target: planned.target,
+          owner: ownedBy,
+          claimant: name,
+        });
+      }
       // Re-key rather than overwrite in place, so the surviving entry is listed under
       // the module that actually writes it.
       byTarget.delete(planned.target);
@@ -475,6 +520,16 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
     }
+  }
+
+  // A module may take a file another one owns only when it reaches that owner through
+  // `dependsOn`. Judged after every file is classified so the refusal names every
+  // contested path at once, and before the plan is returned so `add` never executes it.
+  // `--force` cannot reach this: it changes what goes into `install`, not this rule
+  // (plan decision Q3).
+  const owned = detectOwnedCollisions(claims, modules);
+  if (owned.length > 0) {
+    throw new RefusalError(formatOwnedCollisions(owned, requested));
   }
 
   const files = [...byTarget.values()];

@@ -98,6 +98,21 @@ and `--force` does not bypass it. `add` never uninstalls anything to resolve a c
 module installed before its lock entry existed can't be checked this way; `add` says so and
 proceeds.
 
+Every file `add` writes is recorded in `.saasaloy/manifest.json` under the module that
+applied it, and one module may not overwrite another's file. A module may write over a
+file owned by a module it declares in `dependsOn` — that is how `database-d1` puts its own
+`packages/db/tsconfig.json` over the one `database` scaffolds — and over nothing else. Two
+modules in the same run that both write a path with no `dependsOn` edge either way are
+refused before anything is written, and so is a module claiming a path an installed,
+unrelated module owns. Either refusal exits 2 and names every contested path.
+
+`--force` does not cross module file ownership. It means "re-apply the module I named",
+so it re-applies that module's own files and stops at the first file another module owns.
+The message names `saasaloy remove <other>` as the way through, because removing the
+owner deletes its files and its manifest entries together, which leaves ownership
+consistent for the next `add`. Swapping `database-d1` for `database-postgres` is
+`saasaloy remove database-d1` then `saasaloy add database-postgres`.
+
 A descriptor may also declare `requiresOneOf`, naming modules exactly one of which has to
 be present. `add` counts an option as present when it is already installed or arrives in
 the same resolved graph. When none is, an interactive run offers the list as a picker and

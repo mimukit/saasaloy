@@ -1,10 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
   detectCollisions,
+  detectOwnedCollisions,
   formatCollisions,
+  formatOwnedCollisions,
   mayShareTarget,
 } from "./collisions.js";
-import type { FileCollision, ModuleTargets } from "./collisions.js";
+import type {
+  FileCollision,
+  ModuleTargets,
+  OwnedCollision,
+} from "./collisions.js";
 import type { LoadedModule } from "./registry.js";
 
 // The rule under test: two modules in one run may share a file target only when one of
@@ -227,6 +233,142 @@ describe("formatCollisions — the refusal text", () => {
   it("falls back to a generic subject when no module was requested", () => {
     expect(formatCollisions([collision]).split("\n")[0]).toBe(
       "Cannot add these modules — file collision:"
+    );
+  });
+});
+
+// Phase 2: the same rule, read against `.saasaloy/manifest.json` instead of the run.
+// `classify` reports the owner of a file already on disk; these decide whether the
+// module installing now may take it (#91).
+
+/** One claim `classify` reported: this run's module wants a file another module owns. */
+function claim(
+  target: string,
+  owner: string,
+  claimant: string
+): OwnedCollision {
+  return { target, owner, claimant };
+}
+
+describe("detectOwnedCollisions — a legal claim", () => {
+  it("allows a module to write over a file owned by a module it dependsOn", () => {
+    const found = detectOwnedCollisions(
+      [claim("packages/db/tsconfig.json", "database", "database-d1")],
+      modules(mod("database"), mod("database-d1", ["database"]))
+    );
+    expect(found).toStrictEqual([]);
+  });
+
+  it("allows a capability to rewrite a file its own driver took over", () => {
+    // `add database --force` on a d1 project: the driver reaches the capability, so the
+    // pair is related and last-planner-wins still governs the bytes.
+    const found = detectOwnedCollisions(
+      [claim("packages/db/tsconfig.json", "database-d1", "database")],
+      modules(mod("database"), mod("database-d1", ["database"]))
+    );
+    expect(found).toStrictEqual([]);
+  });
+
+  it("allows a claim across a transitive dependsOn chain", () => {
+    const found = detectOwnedCollisions(
+      [claim("apps/api/tsconfig.json", "api", "waitlist")],
+      modules(
+        mod("api"),
+        mod("database", ["api"]),
+        mod("waitlist", ["database"])
+      )
+    );
+    expect(found).toStrictEqual([]);
+  });
+
+  it("reports nothing for an empty claim list", () => {
+    expect(detectOwnedCollisions([], modules(mod("blog")))).toStrictEqual([]);
+  });
+});
+
+describe("detectOwnedCollisions — an illegal claim", () => {
+  it("refuses a sibling driver taking the installed driver's file", () => {
+    const found = detectOwnedCollisions(
+      [claim("packages/db/src/client.ts", "database-d1", "database-postgres")],
+      modules(
+        mod("database"),
+        mod("database-d1", ["database"]),
+        mod("database-postgres", ["database"])
+      )
+    );
+    expect(found).toStrictEqual([
+      claim("packages/db/src/client.ts", "database-d1", "database-postgres"),
+    ] satisfies OwnedCollision[]);
+  });
+
+  it("refuses two unrelated modules and keeps every contested path", () => {
+    const found = detectOwnedCollisions(
+      [
+        claim("packages/db/src/schema.ts", "waitlist", "blog"),
+        claim("apps/api/src/env.ts", "waitlist", "blog"),
+      ],
+      modules(mod("waitlist"), mod("blog"))
+    );
+    expect(found).toHaveLength(2);
+    expect(found.map((c) => c.target)).toStrictEqual([
+      "packages/db/src/schema.ts",
+      "apps/api/src/env.ts",
+    ]);
+  });
+
+  it("refuses a claim on a module missing from the resolved map", () => {
+    // The owner is installed but not in this run's graph, so no edge can be read and
+    // the stricter answer is the safe one.
+    const found = detectOwnedCollisions(
+      [claim("packages/db/src/client.ts", "database-d1", "blog")],
+      modules(mod("blog"))
+    );
+    expect(found).toHaveLength(1);
+  });
+});
+
+describe("formatOwnedCollisions — the refusal text", () => {
+  const owned = claim(
+    "packages/db/src/client.ts",
+    "database-d1",
+    "database-postgres"
+  );
+
+  it("names the owner, the path, and the remove that clears it", () => {
+    const message = formatOwnedCollisions([owned], "database-postgres");
+    expect(message).toContain("database-d1");
+    expect(message).toContain("packages/db/src/client.ts");
+    expect(message).toContain("saasaloy remove database-d1");
+  });
+
+  it("says --force does not cross module ownership", () => {
+    expect(formatOwnedCollisions([owned], "database-postgres")).toContain(
+      "--force"
+    );
+  });
+
+  it("heads the refusal with what the user asked for", () => {
+    expect(
+      formatOwnedCollisions([owned], "database-postgres").split("\n")[0]
+    ).toBe("Cannot add database-postgres — file owned by another module:");
+  });
+
+  it("pluralises the heading and lists one line per path", () => {
+    const message = formatOwnedCollisions(
+      [owned, { ...owned, target: "packages/db/drizzle.config.ts" }],
+      "database-postgres"
+    );
+    const lines = message.split("\n");
+    expect(lines[0]).toBe(
+      "Cannot add database-postgres — files owned by another module:"
+    );
+    expect(lines).toHaveLength(3);
+    expect(lines[2]).toContain("packages/db/drizzle.config.ts");
+  });
+
+  it("falls back to a generic subject when no module was requested", () => {
+    expect(formatOwnedCollisions([owned]).split("\n")[0]).toBe(
+      "Cannot add these modules — file owned by another module:"
     );
   });
 });

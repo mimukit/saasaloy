@@ -26,6 +26,20 @@ export interface FileCollision {
   other: string;
 }
 
+/**
+ * One file already on disk that a module in this run wants to write, and the installed
+ * module `.saasaloy/manifest.json` says owns it. `classify` reports the pair; the rule
+ * below decides whether the claimant may take it (#91 phase 2).
+ */
+export interface OwnedCollision {
+  /** Project-relative POSIX path of the contested file. */
+  target: string;
+  /** The installed module that applied the file, per `manifest.managed[target].module`. */
+  owner: string;
+  /** The module this run would have overwrite it. */
+  claimant: string;
+}
+
 /** One module's planned targets, as `listModuleFiles` enumerates them. */
 export interface ModuleTargets {
   module: string;
@@ -131,4 +145,52 @@ export function formatCollisions(
 ): string {
   const heading = `Cannot add ${requested} — file collision${collisions.length > 1 ? "s" : ""}:`;
   return [heading, ...collisions.map((c) => `  ${describe(c)}`)].join("\n");
+}
+
+/**
+ * Every claim on an installed file that crosses module ownership illegally, in the order
+ * `buildPlan` classified them. The rule is `mayShareTarget`, the same one the same-run
+ * check uses: a module may take a file owned by a module it reaches through `dependsOn`,
+ * and nothing else (plan decision Q4).
+ *
+ * The relation stays symmetric here, as it is in the same-run case. `add database --force`
+ * on a project where `database-d1` took over `packages/db/tsconfig.json` is the capability
+ * rewriting its own driver's file, and refusing it would tell the user to remove a driver
+ * that depends on the very module being installed.
+ *
+ * An owner with no descriptor in `modules` reads as unrelated, which refuses the claim.
+ * That is the safe answer: the run resolved every module it could reach, so an owner it
+ * never saw is one nothing in this run depends on.
+ */
+export function detectOwnedCollisions(
+  claims: readonly OwnedCollision[],
+  modules: ReadonlyMap<string, LoadedModule>
+): OwnedCollision[] {
+  return claims.filter(
+    (claim) => !mayShareTarget(claim.claimant, claim.owner, modules)
+  );
+}
+
+// One owned-file claim as a sentence. `--force` is named because it is the flag a user
+// reaches for next, and it deliberately does not cross ownership — `remove` does, because
+// it is the one path that leaves the manifest consistent (plan decision Q3).
+function describeOwned(collision: OwnedCollision): string {
+  const { target, owner, claimant } = collision;
+  return (
+    `${owner} owns ${target}, and ${claimant} does not declare it in \`dependsOn\`. ` +
+    `\`--force\` does not cross module file ownership: run \`saasaloy remove ${owner}\` first.`
+  );
+}
+
+/** The refusal `add` prints for files another installed module owns. */
+export function formatOwnedCollisions(
+  collisions: OwnedCollision[],
+  /** What the user asked for; a caller planning a set with no single request omits it. */
+  requested = "these modules"
+): string {
+  const noun = collisions.length > 1 ? "files" : "file";
+  const heading = `Cannot add ${requested} — ${noun} owned by another module:`;
+  return [heading, ...collisions.map((c) => `  ${describeOwned(c)}`)].join(
+    "\n"
+  );
 }
