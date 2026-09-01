@@ -1,4 +1,11 @@
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import {
+  boolean,
+  index,
+  pgTable,
+  text,
+  timestamp,
+  uniqueIndex,
+} from "drizzle-orm/pg-core";
 
 // The Postgres half of Better Auth's tables, selected by
 // `onlyWith: "database-postgres"`. Its SQLite twin sits beside it as `auth.sqlite.ts`,
@@ -9,8 +16,8 @@ import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 // dialect, and what has to match is the shape a row comes back in.
 //
 // Hand-authored Drizzle snapshot of Better Auth's core schema (user/session/account/
-// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.6.25
-// — NOT
+// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.2
+// (packages/auth/package.json) — NOT
 // generated at `add` time (no exec, deterministic, `--diff`-able; see the auth plan's
 // "Auth schema" decision). Column-for-column against that version's
 // `getAuthTables()` (@better-auth/core/db) plus the Drizzle adapter's own Postgres type
@@ -23,6 +30,16 @@ import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 // inline below; re-verify them on a bump too. Note the Drizzle *property* name is what
 // the adapter matches (`banReason`), not the SQL column name (`ban_reason`) — the
 // adapter does no case conversion, so renaming a property silently detaches the field.
+//
+// Re-verifying against 1.7.2 moved one thing: `account` gained a required `issuer`
+// column and a unique index over (`issuer`, `accountId`). Better Auth writes
+// `local:credential` there for an email/password account and `local:oauth:<provider>`
+// for a linked social account, so the pair replaces (`providerId`, `accountId`) as the
+// row's identity. Both are below, matching the SQLite variant. A project that installed
+// auth before this landed has `account` rows with no `issuer`; unlike SQLite, Postgres
+// can add a NOT NULL column to a populated table given a `DEFAULT`, so the generated
+// migration still wants the backfill the auth skill carries. Nothing else moved: the
+// other three tables and every admin-plugin field match 1.7.2 column for column.
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this
 // file into `packages/db/src/schema/` means database's existing barrel + migration
@@ -92,6 +109,9 @@ export const account = pgTable(
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     id: text("id").primaryKey(),
     idToken: text("id_token"),
+    // Added in better-auth 1.7.2. `local:credential` for an email/password account,
+    // `local:oauth:<provider>` for a linked social one.
+    issuer: text("issuer").notNull(),
     password: text("password"),
     providerId: text("provider_id").notNull(),
     refreshToken: text("refresh_token"),
@@ -105,7 +125,13 @@ export const account = pgTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [index("account_user_id_idx").on(table.userId)]
+  (table) => [
+    uniqueIndex("account_issuer_account_id_uidx").on(
+      table.issuer,
+      table.accountId
+    ),
+    index("account_user_id_idx").on(table.userId),
+  ]
 );
 
 export const verification = pgTable(

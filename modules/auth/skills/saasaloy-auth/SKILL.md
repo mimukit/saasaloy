@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first admin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why `add auth` fails typecheck on a Postgres project.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first admin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -8,28 +8,70 @@ description: Runbook for the auth capability — Better Auth with httpOnly sessi
 `packages/auth` (`@repo/auth`) owns [Better Auth](https://better-auth.com) outright (ADR 0020) —
 no other workspace depends on `better-auth` directly. `apps/api` gets a thin `routes/auth.ts`
 that forwards to `auth.handler`; `packages/db` gets a hand-authored schema snapshot. Sessions are
-**DB-backed httpOnly cookies**, not JWTs (build-spec §2.5 / ADR 0004): a D1 read per request is
-negligible, and sessions are instantly revocable by deleting the row.
+**DB-backed httpOnly cookies**, not JWTs (build-spec §2.5 / ADR 0004): one database read per
+request is negligible, and sessions are instantly revocable by deleting the row.
 
-## This module is SQLite-only, but it does not pick your driver
+## Either database driver
 
-`auth` is SQLite-only today, in two places that have to agree: `packages/db/src/schema/auth.ts`
-builds its tables with `sqliteTable` from `drizzle-orm/sqlite-core`, and
-`packages/auth/src/auth.ts` hands `drizzleAdapter` a `provider: "sqlite"`. Neither works against
-`database-postgres`.
+This module installs against `database-d1` or `database-postgres`, and picks the right files for
+whichever one the project holds. It depends on `api` and `database`, and names no driver:
+`database`'s own `requiresOneOf` is what guarantees one is present.
 
-The descriptor still declares `dependsOn: ["api", "database"]`, naming the capability and no driver.
-`database` declares `requiresOneOf: ["database-d1", "database-postgres"]`, so `saasaloy add auth` on
-a clean project asks which driver to install, and a non-interactive run refuses and names both.
-Answer `database-d1` for a project that uses this payload as shipped.
+Two files ship twice, and nothing else does:
 
-Pick `database-postgres` and the install goes through, then `pnpm typecheck` fails on the dialect.
-That combination has never worked. Earlier releases pinned `dependsOn: ["database-d1"]`, which
-silently overrode a Postgres project's driver choice; a loud typecheck failure replaces it.
+| Source in the module | Installs when | What differs |
+|---|---|---|
+| `files/db/schema/auth.sqlite.ts` | `onlyWith: "database-d1"` | `sqliteTable`, `drizzle-orm/sqlite-core`, millisecond-integer dates |
+| `files/db/schema/auth.pg.ts` | `onlyWith: "database-postgres"` | `pgTable`, `drizzle-orm/pg-core`, `timestamptz` dates, `boolean` flags |
+| `files/src/db-provider.d1.ts` | `onlyWith: "database-d1"` | `provider: "sqlite"`, and `withAuthScope` runs the body |
+| `files/src/db-provider.pg.ts` | `onlyWith: "database-postgres"` | `provider: "pg"`, and `withAuthScope` wraps `withDb` |
 
-Porting the schema by hand is not the fix. The dialect-neutral rewrite is tracked in
-[#99](https://github.com/mimukit/saasaloy/issues/99). Everything below assumes D1, and the
-`saasaloy-database-d1` skill owns the connection and the migrate commands.
+Each pair names one `target` — `packages/db/src/schema/auth.ts` and
+`packages/auth/src/db-provider.ts` — so exactly one of the two lands and the other is filtered out
+before the plan is built. `saasaloy add auth --dry-run` prints which source it chose.
+
+`auth.ts`, `env.ts`, `server.ts`, `client.ts` and `apps/api/src/routes/auth.ts` are single files
+under both drivers. The dialect reaches the table declarations and the four lines of
+`db-provider.ts`, and stops there.
+
+The two schema variants are the same four tables, so keep them in step. They differ only where each
+dialect is idiomatic. A row comes back the same shape either way.
+
+**Switching driver is remove-then-add, and it takes this module with it.** The unchosen variant is
+filtered before planning, so a project that swaps drivers keeps the schema it already installed.
+Remove `auth` and add it again after the driver switch to get the other variant. There is no data
+migration; see ADR 0026.
+
+## The database client is request-scoped
+
+`auth` is one module-scope singleton whose database client belongs to a single request. That split
+is the one thing to understand before writing a call against `auth.api.*`.
+
+Why it exists: a Workers isolate outlives the request that created it, but an open socket does not.
+Under `database-postgres`, a client bound once at module scope serves the first request and then
+throws `Cannot perform I/O on behalf of a different request` on the second. A single manual sign-in
+does not catch it; it takes two requests into one worker.
+
+How it works: `drizzleAdapter` is handed `authDb`, a proxy holding no client of its own. It reads
+the current request's client out of an `AsyncLocalStorage` in `packages/auth/src/db-scope.ts`.
+`withAuthScope(c, fn)` in `packages/auth/src/db-provider.ts` is what puts it there — under
+Postgres by wrapping the driver's `withDb`, which also closes the socket on
+`c.executionCtx.waitUntil`; under D1 by opening a binding stub and running the body.
+
+**Every `auth.handler` and `auth.api.*` call runs inside `withAuthScope`.** `apps/api/src/routes/auth.ts`
+already wraps the handler, and `getSession(c)` already wraps its own read, so ordinary use needs
+nothing. Reach for the wrapper by hand only when calling `auth.api.*` yourself:
+
+```ts
+import { auth, withAuthScope } from "@repo/auth/server";
+
+const users = await withAuthScope(c, () => auth.api.listUsers({ query: {}, headers: c.req.raw.headers }));
+```
+
+Forget it and the read throws with a message naming `withAuthScope` — **on both drivers**, D1
+included. That is deliberate. D1 is the default driver, so most development happens there, and a
+permissive D1 path would let the mistake pass every local test and surface only after a project
+switched to Postgres. The cost on D1 is one property lookup per call. See ADR 0029.
 
 ## The plugin-array patch point (read this before adding billing/teams)
 
@@ -133,8 +175,9 @@ Reach for a gate first. A route that reads `getSession` and branches by hand is 
 // apps/api/src/routes/widgets.ts
 import { Hono } from "hono";
 import { requireAdmin } from "@repo/auth/server";
+import type { AuthDbBindings } from "@repo/auth/server";
 
-export const widgets = new Hono().get("/", async (c) => {
+export const widgets = new Hono<{ Bindings: AuthDbBindings }>().get("/", async (c) => {
   const session = await requireAdmin(c);
   return c.json({ userId: session.user.id }, 200);
 });
@@ -143,6 +186,8 @@ export const widgets = new Hono().get("/", async (c) => {
 There is no `if` and no error body in that route, and that is the point. The gates throw a Hono `HTTPException`, `apps/api`'s `onError` catches it, and `ERROR_CODES` renders it as the one envelope the api publishes: `{ "error": { "code": "forbidden", "message": "role required: admin" } }` on a 403, `"unauthorized"` on a 401. Write the check by hand and you own that shape yourself, in every route, forever.
 
 Each gate returns the session, so the caller reads `session.user.id` without a second round trip. `requireRole` takes any string, so a `support` role later costs a call site rather than a rewrite. `requireAdmin` compares with `===` against the exported `ADMIN_ROLE`, which is the same constant `admin()` treats as privileged. `"Admin"` and `"administrator"` are not admins.
+
+`AuthDbBindings` is whichever binding shape the installed driver declares, so this route is one file under both drivers.
 
 **One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `auth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-admin hook writes `"admin"`, and `client.admin.setRole({ userId, role: "admin" })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
 
@@ -180,31 +225,28 @@ The first account to sign up on an empty `user` table gets `role: "admin"`. A `d
 
 **Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the admin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from user`. Two sign-ups that land at the same instant both read an empty table and both become admin; that is accepted rather than locked, because a unique index on `role = 'admin'` would also block promoting a second admin later.
 
-If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against:
+If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against. The statement is the same under both drivers:
 
-```sh
-# local D1 (the same SQLite `vite dev` serves from)
-pnpm --filter @repo/db exec wrangler d1 execute DB --local \
-  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
-  --command "update user set role = 'admin' where email = 'you@example.com'"
-
-# production D1
-pnpm --filter @repo/db exec wrangler d1 execute DB --remote \
-  --config ../../apps/api/wrangler.jsonc \
-  --command "update user set role = 'admin' where email = 'you@example.com'"
+```sql
+update "user" set role = 'admin' where email = 'you@example.com';
 ```
 
-Swap `update` for `select email, role from user` to check it landed. The change takes effect on
-the next `getSession` call, because sessions are DB-backed and the role is read off the user row
-— no re-login needed, and `cookieCache` is off (see the last boundary below).
+**How you run it is the driver's business**, so read the skill for the driver this project
+installed — `saasaloy-database-d1` or `saasaloy-database-postgres` — for the console it hands you.
+Swap `update` for `select email, role from "user"` to check it landed. (`user` is a reserved word
+in Postgres and needs the quotes there; SQLite accepts them too.)
+
+The change takes effect on the next `getSession` call, because sessions are DB-backed and the role
+is read off the user row — no re-login needed, and `cookieCache` is off (see the last boundary
+below).
 
 Once one admin exists, promote the rest through the API instead of SQL: `client.admin.setRole({
 userId, role: "admin" })`, which the server authorizes against the caller's own role. The plugin
 also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same namespace.
 
-**A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then `db:migrate:local` (and `db:migrate:prod` when you deploy). Existing users come out of it with `role` null, which is not `"admin"`, so the guard denies them until you promote one.
+**A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is not `"admin"`, so the guard denies them until you promote one.
 
-**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`). `db:generate` emits exactly two statements for it, and the first one cannot run on a populated table:
+**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`). The worked example below is the SQLite/D1 form; a Postgres project hits the same backfill with `ALTER TABLE "account" ADD COLUMN "issuer" text NOT NULL DEFAULT 'local:credential'` and the same `UPDATE` before the index. `db:generate` emits exactly two statements for it, and the first one cannot run on a populated table:
 
 ```sql
 ALTER TABLE `account` ADD `issuer` text NOT NULL;--> statement-breakpoint
@@ -223,7 +265,7 @@ CREATE UNIQUE INDEX `account_issuer_account_id_uidx` ON `account` (`issuer`,`acc
 
 `local:credential` is the value better-auth writes for an email/password account, `local:oauth:<providerId>` for a linked social one, so those two statements reproduce what the library would have written itself. Keep the `DEFAULT` in the migration and out of the schema file; drizzle-kit compares the schema to its snapshot, so the extra clause never reads back as drift.
 
-Then `pnpm --filter @repo/db db:migrate:local`, and `db:migrate:prod` when you deploy. Check it with `select id, provider_id, issuer from account`. If `CREATE UNIQUE INDEX` fails with `UNIQUE constraint failed`, two rows share a provider and an `account_id`; list them with `select issuer, account_id, count(*) from account group by 1, 2 having count(*) > 1` and delete the duplicate before you run the migration again.
+Then apply it with the command from the installed driver's skill. Check it with `select id, provider_id, issuer from account`. If `CREATE UNIQUE INDEX` fails with `UNIQUE constraint failed`, two rows share a provider and an `account_id`; list them with `select issuer, account_id, count(*) from account group by 1, 2 having count(*) > 1` and delete the duplicate before you run the migration again.
 
 This sequence was run against drizzle-kit 0.31.10 and drizzle-orm 0.45.2, the versions `packages/db` pins, on a SQLite database holding one credential account and one linked GitHub account. A fresh project needs none of it: its `account` table is empty when the migration lands, so the generated SQL applies as emitted.
 
@@ -273,20 +315,27 @@ non-admin browser grants nothing; the server authorizes every call.
 
 ## Schema: hand-authored, never generated at `add` time
 
-`@db/schema/auth.ts` (dropped into `packages/db/src/schema/auth.ts`) is a **checked-in Drizzle
-snapshot** of Better Auth's core tables (`user`, `session`, `account`, `verification`) plus the
+`packages/db/src/schema/auth.ts` (one of `auth.sqlite.ts` and `auth.pg.ts`, chosen by the
+installed driver) is a **checked-in Drizzle snapshot** of Better Auth's core tables (`user`, `session`, `account`, `verification`) plus the
 fields the `admin` plugin adds (`user.role`, `banned`, `ban_reason`, `ban_expires`, and
 `session.impersonated_by`), pinned to the exact `better-auth` version in
 `packages/auth/package.json` — not run through a generator at add-time (no exec, deterministic, `--diff`-able). If you bump `better-auth`, **re-verify this file against the new version's schema** (`@better-auth/core`'s `getAuthTables()`, and the admin plugin's own `schema` export) before shipping — fix the snapshot, not the adapter config, on a mismatch. The adapter matches on the Drizzle **property** name (`banReason`), not the SQL column name (`ban_reason`), and does no case conversion. It's picked up by database's existing barrel + migration scripts same as any other table:
 
 ```sh
 pnpm --filter @repo/db db:generate       # emits SQL for the new tables
-pnpm --filter @repo/db db:migrate:local  # applies to local D1
 ```
 
 The rule has a guard in this repo. The snapshot's header names the version it was verified against, and `modules/auth/files/src/schema-version.test.ts` fails `pnpm test` when that string and `better-auth` in `modules/auth/files/package.json` disagree. It cannot check a column; it makes a bump that skipped the re-verification loud instead of silent. Do the comparison, fix what moved, then edit the header. Editing the header alone to get green is the one way to defeat it.
 
-The 1.6.25 → 1.7.2 pass is the worked example of what "re-verify" means here. It found one change, `account.issuer`, and the header says so.
+The 1.6.25 → 1.7.2 pass is the worked example of what "re-verify" means here. It found one change, `account.issuer`, and the header says so. Both variants carry it.
+
+`db:generate` belongs to the `database` core and is the same command under either driver. **The
+apply step is the driver's**, and the command differs, so read the skill for the driver this
+project installed: `saasaloy-database-d1` or `saasaloy-database-postgres`.
+
+Both variants have to stay in step. Edit one table and edit its twin — `add auth` installs only the
+one matching the project's driver, so a mismatch shows up on the other driver's first install, long
+after the edit.
 
 ## Boundaries to honor
 
@@ -294,12 +343,16 @@ The 1.6.25 → 1.7.2 pass is the worked example of what "re-verify" means here. 
   `@repo/auth/server` / `@repo/auth/client` (ADR 0020).
 - **`packages/auth/src/auth.ts` stays a module-scope singleton** — don't refactor it into a
   per-request factory; that would break the plugin-array patch point every future capability
-  relies on.
+  relies on. The database behind it stays request-scoped for the opposite reason (ADR 0029);
+  don't collapse the two by binding a client at module scope.
+- **Every `auth.api.*` and `auth.handler` call runs inside `withAuthScope`.** Don't add a fallback
+  that opens a client when the scope is empty: that path has no `executionCtx` to close the socket
+  on, which is the leak the wrapper exists to prevent.
 - **`plugins` stays a literal array** in the `betterAuth({ ... })` call — never omit it, never
   hoist it to a named const, and never leave it empty by dropping `admin()`.
 - **CORS is api's job.** Don't add CORS handling here; reuse `CORS_ORIGINS`.
 - **Sessions are DB-backed; `cookieCache` stays off** — revocability over the marginal latency of
-  a D1 read per request.
-- **D1 is a hard requirement, not a default.** Don't swap `sqliteTable` for `pgTable` or flip
-  `provider: "sqlite"` to make this run on `database-postgres`; the two edits have to land together
-  with the migrations, and that is the dialect-neutral rewrite ADR 0026's amendment defers.
+  one database read per request.
+- **The dialect lives in the two schema variants and in `db-provider.ts`, nowhere else.** A
+  `sqlite-core` or `pg-core` import outside `files/db/schema/auth.*.ts`, or a `provider:` string
+  written inline in `auth.ts`, pins this module to one driver again.
