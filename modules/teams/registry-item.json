@@ -30,6 +30,13 @@
         "name": "organizationClient",
         "from": "better-auth/client/plugins"
       }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/teams", "label": "Teams" }
     }
   ],
   "files": [
@@ -40,6 +47,21 @@
     {
       "path": "files/auth/plugins/organization.ts",
       "target": "@auth/plugins/organization.ts"
+    },
+    {
+      "path": "files/admin/routes/teams.tsx",
+      "target": "@admin/routes/teams.tsx"
+    },
+    {
+      "path": "files/admin/components/organization-create-form.tsx",
+      "target": "@admin/components/organization-create-form.tsx"
+    },
+    {
+      "path": "files/admin/components/organization-workspace.tsx",
+      "target": "@admin/components/organization-workspace.tsx"
     }
-  ]
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-teams"]
+  }
 }

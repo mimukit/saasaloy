@@ -19,6 +19,7 @@ Every installable module in the default registry, in one place. This table is th
 | `sms` | capability | a `packages/sms` workspace with the provider interface and segment counting, on `api`. Cloudflare has no SMS product, so there is no Cloudflare-native provider |
 | `sms-console` | feature (provider) | an `sms` provider that logs messages instead of sending |
 | `waitlist` | feature | a waitlist form plus its API route and table, on `api` + `database` + `validators`. Its table ships in a SQLite and a Postgres variant, so it installs under either driver |
+| `teams` | feature | Better Auth organizations, memberships and copy-ID invitations, plus a site-admin Teams screen, on `auth` + `admin` |
 | `infra` | capability | an `infra` workspace holding the Pulumi program that deploys every Worker in the project. Depends on nothing |
 
 Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one and a `--yes` run stops and names the options:
@@ -38,4 +39,4 @@ saasaloy add <name> --dry-run
 
 To list what a registry offers, including third-party ones, see [`saasaloy list`](reference.md#saasaloy-list). To publish a module of your own, start at [Contribute a module](how-to/contribute-a-module.md).
 
-_Verified against the descriptors in `modules/` on 2026-08-31._
+_Verified against the descriptors in `modules/` on 2026-09-01._

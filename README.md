@@ -33,7 +33,7 @@ saasaloy remove waitlist    # undo an applied module via the manifest
 ### Modules
 
 - **Capability modules** — `api`, `database`, `validators`, `email`, `sms`, `logger`, `auth`, `admin`, `infra`. Each scaffolds an app or package and establishes convention-based extension points (chained route registration, schema barrels, shared input schemas).
-- **Feature modules** — `waitlist`. Each extends capabilities by dropping files into those conventions and declares its `dependsOn`. `billing` ([#14](https://github.com/mimukit/saasaloy/issues/14)) and `teams` ([#16](https://github.com/mimukit/saasaloy/issues/16)) are coming soon.
+- **Feature modules** — `waitlist`, `teams`. Each extends capabilities by dropping files into those conventions and declares its `dependsOn`. `billing` ([#14](https://github.com/mimukit/saasaloy/issues/14)) is coming soon.
 - **Provider modules** — `email-cloudflare`, `email-console`, `logger-console`, `sms-console`, … Each supplies one implementation of a capability's provider interface, so a project picks its email, SMS or log sink service without any calling code learning which one is active.
 - **Driver modules** — `database-d1`, `database-postgres`. Each supplies the connection half of a stateful capability, and only one may be installed. The `database` core owns the tables, the schema barrel and `db:generate`; the driver owns the client, the dialect and the migrate commands. `saasaloy add` refuses the second driver rather than letting both sit behind an interface.
 
@@ -41,7 +41,7 @@ Dependencies resolve recursively, topologically sorted, behind a confirmation pr
 
 ## Requirements
 
-Node 24.13.0+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` + `database-d1`, `validators`, `logger`, `auth`, `admin`, and `waitlist` all work on it.
+Node 24.13.0+ and pnpm 11+. A Cloudflare account is needed only once you deploy, or once you install a Cloudflare-backed module — `saasaloy init` needs none at all. Most of the stack then runs on Cloudflare's free tier: `base`, `api`, `database` + `database-d1`, `validators`, `logger`, `auth`, `admin`, `waitlist`, and `teams` all work on it.
 
 A few modules ask for something Cloudflare's free tier doesn't cover, and it's worth knowing before you install one rather than at the first failed send:
 
@@ -62,4 +62,3 @@ Getting started, how-to guides, the architecture overview and the full command r
 ## License
 
 Licensed under the [MIT license](LICENSE.md).
-

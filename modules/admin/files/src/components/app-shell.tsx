@@ -38,24 +38,28 @@ export function AppShell({
           aria-label="Admin sections"
           className="flex flex-1 flex-col gap-0.5 p-2"
         >
-          {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
-            <Link
-              key={to}
-              to={to}
-              // TanStack Router sets aria-current on the active link, which is both the
-              // accessible signal and the hook the active styling keys off — no second
-              // source of truth for "which screen am I on".
-              activeOptions={{ exact: to === "/" }}
-              className={cn(
-                "text-muted-foreground flex items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors",
-                "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
-                "aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:font-medium"
-              )}
-            >
-              <Icon className="size-4 shrink-0" />
-              {label}
-            </Link>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const Icon = "icon" in item ? item.icon : null;
+
+            return (
+              <Link
+                key={item.to}
+                to={item.to}
+                // TanStack Router sets aria-current on the active link, which is both the
+                // accessible signal and the hook the active styling keys off — no second
+                // source of truth for "which screen am I on".
+                activeOptions={{ exact: item.to === "/" }}
+                className={cn(
+                  "text-muted-foreground flex min-h-11 items-center gap-2 rounded-lg px-2 py-1.5 text-sm transition-colors md:min-h-0",
+                  "hover:bg-sidebar-accent hover:text-sidebar-accent-foreground",
+                  "aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:font-medium"
+                )}
+              >
+                {Icon ? <Icon className="size-4 shrink-0" /> : null}
+                {item.label}
+              </Link>
+            );
+          })}
         </nav>
 
         {/* The user menu, kept as a plain block rather than a popover: @repo/ui ships no
