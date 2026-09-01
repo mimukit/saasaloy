@@ -99,8 +99,9 @@ export function mayShareTarget(
 
 /**
  * Every illegal same-run overlap, in install order and then target order, so the refusal
- * reads the same on every run. A target three unrelated modules claim reports two pairs,
- * each naming the earlier claimant, because each pair is its own decision to fix.
+ * reads the same on every run. Each claimant of a target reports one pair per earlier
+ * claimant, so three unrelated modules on one target report three pairs, because each
+ * pair is its own decision to fix.
  */
 export function detectCollisions(args: DetectCollisionsArgs): FileCollision[] {
   const { planned, modules } = args;

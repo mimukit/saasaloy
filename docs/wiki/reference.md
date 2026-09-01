@@ -107,7 +107,8 @@ refused before anything is written, and so is a module claiming a path an instal
 unrelated module owns. Either refusal exits 2 and names every contested path.
 
 `--force` does not cross module file ownership. It means "re-apply the module I named",
-so it re-applies that module's own files and stops at the first file another module owns.
+so it re-applies that module's own files and refuses before applying anything when the
+module claims a file another module owns.
 The message names `saasaloy remove <other>` as the way through, because removing the
 owner deletes its files and its manifest entries together, which leaves ownership
 consistent for the next `add`. Swapping `database-d1` for `database-postgres` is
