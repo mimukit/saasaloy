@@ -61,7 +61,7 @@ Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `co
 - Align the cleanup contract with #98's Postgres `withDb` helper so a single route body works on both drivers (D1 side is a no-op).
 - Update the `database`, `database-d1`, and `database-postgres` skills for the one call shape.
 
-### Phase 3: waitlist goes neutral (#99)
+### Phase 3: waitlist goes neutral (#99) (built 2026-09-01)
 
 - Split `modules/waitlist/files/db/schema/waitlist.ts` into sqlite and pg variants (pg: identity/serial id, `timestamp` column) selected via `onlyWith`.
 - Rewrite `files/api/routes/waitlist.ts` as one neutral file: `getDb(c.env)`, driver-neutral cleanup per Phase 2. `.onConflictDoNothing()` already works on both dialects.

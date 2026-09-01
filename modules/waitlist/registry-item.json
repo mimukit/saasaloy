@@ -40,8 +40,14 @@
       "target": "@api/routes/waitlist.ts"
     },
     {
-      "path": "files/db/schema/waitlist.ts",
-      "target": "@db/schema/waitlist.ts"
+      "path": "files/db/schema/waitlist.sqlite.ts",
+      "target": "@db/schema/waitlist.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/waitlist.pg.ts",
+      "target": "@db/schema/waitlist.ts",
+      "onlyWith": "database-postgres"
     },
     {
       "path": "files/validators/waitlist.ts",
