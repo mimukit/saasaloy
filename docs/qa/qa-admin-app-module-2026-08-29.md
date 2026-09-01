@@ -506,11 +506,11 @@ Sign-up runs through the api with `curl`, not the browser. The admin app ships n
 **Setup.** Run once, for every case in this scenario.
 
 1. Stop both dev servers with Ctrl-C. Wait for both prompts.
-2. Build a fresh project and install the modules.
+2. Build a fresh project and install the modules. The `add` command reads `saasaloy.json` from the shell's working directory, so it has to run inside the playground; the repository root has no such file and the command refuses there.
 
 ```sh
 pnpm play:reset
-.dev/playground/saasaloy add admin --yes
+(cd .dev/playground && ./saasaloy add admin --yes)
 pnpm -C .dev/playground install
 ```
 
@@ -808,4 +808,4 @@ The agent stopped both dev servers when it finished. The tester starts them agai
 - **A second `saasaloy add admin` over an edited file.** Whether the second add reports "needing merge" cleanly is untested.
 - **Concurrency and performance.** The dashboard reads one endpoint with one row of data, so neither dimension carries risk worth a case.
 - **The first-admin race under real load.** TC-5.3 fires two sign-ups from one shell on one machine. It records what happens; it does not establish how wide the window is on a deployed Worker with a public origin, where the two requests may land on different isolates. Treat its counts as an observation, not a bound.
-- **`account.issuer` on a project that upgraded.** The schema snapshot now carries the column better-auth 1.7.2 made required, and the auth skill documents the backfill. Every run in this plan starts from a fresh `add auth`, so the upgrade path itself is untested here.
+- **`account.issuer` on a project that upgraded.** The schema snapshot now carries the column better-auth 1.7.2 made required, and the auth skill documents the migration edit it needs. That sequence was run against a standalone SQLite database on drizzle-kit 0.31.10, but not against a real D1 through `db:migrate:local`. Every run in this plan starts from a fresh `add auth`, so the upgrade path is untested here.
