@@ -20,6 +20,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | Field | Applied at `add` time? |
 | --- | --- |
 | `files[]` | ✅ copied to their `@alias` targets |
+| `files[].onlyWith` | ✅ the entry is copied only when the module it names is in the resolved install set; two entries may share one `target` under disjoint conditions (also honored on a scaffold's `files[]`) |
 | `agent.skills[]` | ✅ files land in `.agents/skills/saasaloy-<name>/`, with a `.claude/skills/` symlink (both recorded in the manifest) (ADR 0015) |
 | `dependencies[]` | ✅ merged into the root `package.json`'s `dependencies` (you run `pnpm install`) |
 | `devDependencies[]` | ✅ merged into the root `package.json`'s `devDependencies` (`@types/*`, build tooling) |
@@ -152,6 +153,16 @@ Field notes:
   written with a consumer **alias**, resolved from the consumer's `saasaloy.json`:
   `@web`→`apps/web/src`, `@api`→`apps/api/src`, `@admin`→`apps/admin/src`, `@db`→`packages/db/src`,
   `@ui`→`packages/ui/src`. Prefer alias targets that land in a convention folder (Step 3).
+- **`onlyWith`** — an optional condition on one file entry, in `files[]` or in a scaffold's
+  `files[]`, naming a single module. The file is copied only when that module is in the resolved
+  install set: this run's `dependsOn` graph plus what the project's `saasaloy.json` already records.
+  Two entries may name the **same `target`** under disjoint conditions, which is how one module
+  ships a per-driver variant of a file it cannot write neutrally — a `sqliteTable` schema and a
+  `pgTable` schema behind one `@db/schema/waitlist.ts`. Name the variants for the dialect
+  (`waitlist.sqlite.ts`, `waitlist.pg.ts`) and keep every neutral file single-source: the condition
+  is for the file that genuinely cannot be written once, never a shortcut around writing it once.
+  A target whose entries are **all** conditional and none matches makes `add` refuse and name the
+  candidates, so a missing variant is a refusal rather than a file that quietly never arrived.
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
   invented secrets committed to files.
 - **`patches`** — reserve for genuinely structural edits (see Step 3). Empty is the goal. Each op

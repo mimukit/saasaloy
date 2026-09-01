@@ -48,7 +48,7 @@ The failure needs two requests into one isolate. One manual sign-in passes, whic
 
 Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `conflicts.ts`, `applier.ts`), the lock/config machinery that already records installed modules, the `database` core's glob-merged `src/schema.ts` (dialect-agnostic, untouched), the driver modules' existing `client.ts` payloads, and #98's `requiresOneOf` and Postgres `withDb` helper.
 
-### Phase 1: descriptor condition mechanism (#99)
+### Phase 1: descriptor condition mechanism (#99) (built 2026-08-31)
 
 - Add the optional `onlyWith: "<module-name>"` condition to `registry-item.schema.json`, on both top-level `files[]` entries and `scaffolds[].files[]` entries: the file installs only when the named module is in the resolved install set (this run's graph plus already-installed modules from config/lock).
 - Implement selection in `listModuleFiles` (`packages/cli/src/lib/applier.ts:167`), which gains the resolved install set as a parameter and filters both arrays before recording a target. `buildPlan` (`applier.ts:387`) and `buildUpdatePlan` (`updater.ts:541-542`) inherit it with no filter of their own. Update the function's doc comment at `applier.ts:158-165` to name the condition as its fourth rule.
