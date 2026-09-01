@@ -279,15 +279,20 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 
 Two gaps are load-bearing enough to plan around.
 
-**`remove` reverses one config patch kind out of five.**
-[#36](https://github.com/mimukit/saasaloy/issues/36). When a module patches a file another
-module owns, `remove` can only undo the edit for `chained-route`, where it takes the
-`.route()` link back out, and the named import with it when no other code in the file still
-references the identifier. For the other four kinds it drops the record from
-the manifest and prints a warning naming the file, and the edit stays. Removing
-`email-cloudflare` leaves the `send_email` binding in `apps/api/wrangler.jsonc` and the
-provider registration in `packages/email/src/index.ts`. Revert those by hand. Skill links,
-by contrast, are removed properly.
+**`remove` leaves the two `package.json` patch kinds behind.**
+[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the three kinds that
+edit a config file — `chained-route`, `wrangler-binding` and `plugin-array` — taking the
+named import out with the edit when no other code in the file still references the
+identifier. Removing `email-cloudflare` now takes the `send_email` binding out of
+`apps/api/wrangler.jsonc` and the provider registration out of
+`packages/email/src/index.ts`. It never reverse-patches blindly: if you edited what the
+patch wrote, `remove` prints the reason, skips the file, and drops only the record.
+
+`package-json-dependency` and `package-json-script` are the two it does not reverse. A
+dependency is not safe to uninstall offline, because the lockfile does not say who else
+imports it, and nothing asks for a script back. For both, `remove` drops the record from
+the manifest and prints a warning naming the file. Removing `waitlist` leaves `hono` and
+`@repo/api` in `apps/web/package.json`. Revert those by hand.
 
 **`add` is not transactional.**
 [#49](https://github.com/mimukit/saasaloy/issues/49). If `add` fails partway through, it

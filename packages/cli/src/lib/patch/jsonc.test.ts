@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { upsertWranglerBinding } from "./jsonc.js";
+import {
+  removeWranglerBinding,
+  upsertWranglerBinding,
+  wranglerBindingRemoveRefusal,
+} from "./jsonc.js";
 
 const WRANGLER = `{
   // Cloudflare Worker config
@@ -139,6 +143,155 @@ describe(upsertWranglerBinding, () => {
     });
     expect(again).toBe(withRoute);
     expect(withRoute).toContain("api.example.com");
+  });
+});
+
+describe(removeWranglerBinding, () => {
+  it("round-trips: upsert then remove restores the source byte-for-byte", () => {
+    // The shipping case (email-cloudflare): the module introduces the array, so undoing
+    // it has to take the array with it or the file never returns to its pre-patch bytes.
+    const patch = {
+      bindingType: "send_email",
+      entry: { name: "EMAIL", remote: true },
+      matchOn: "name",
+    };
+    const patched = upsertWranglerBinding(WRANGLER, patch);
+    expect(patched).not.toBe(WRANGLER);
+    expect(removeWranglerBinding(patched, patch)).toBe(WRANGLER);
+  });
+
+  it("round-trips an append into an array that already had entries", () => {
+    // Normalise first. `upsertWranglerBinding` reflows an array it appends into, so a
+    // round trip is only byte-exact from a document already in the shape it writes —
+    // asserting otherwise would be a claim about the forward direction, not the inverse.
+    const base = upsertWranglerBinding(WRANGLER, {
+      bindingType: "d1_databases",
+      entry: { binding: "FIRST", database_id: "one" },
+    });
+    const patch = {
+      bindingType: "d1_databases",
+      entry: {
+        binding: "ANALYTICS",
+        database_id: "xyz-789",
+        database_name: "an-db",
+      },
+    };
+    const patched = upsertWranglerBinding(base, patch);
+    expect(patched).toContain("ANALYTICS");
+    const back = removeWranglerBinding(patched, patch);
+    expect(back).toBe(base);
+    // The siblings that were there before the patch are still there, comments included.
+    expect(back).toContain("app-db");
+    expect(back).toContain("FIRST");
+    expect(back).toContain("// Cloudflare Worker config");
+  });
+
+  it("round-trips a bare-string entry and drops the array it created", () => {
+    const patch = {
+      bindingType: "compatibility_flags",
+      entry: "nodejs_compat",
+    };
+    const patched = upsertWranglerBinding(WRANGLER, patch);
+    expect(patched).toContain("nodejs_compat");
+    expect(removeWranglerBinding(patched, patch)).toBe(WRANGLER);
+  });
+
+  it("keeps a sibling string flag it did not add", () => {
+    const withBoth = `{
+  "name": "api",
+  "compatibility_flags": ["nodejs_compat", "no_nodejs_compat_v2"]
+}
+`;
+    const out = removeWranglerBinding(withBoth, {
+      bindingType: "compatibility_flags",
+      entry: "nodejs_compat",
+    });
+    expect(out).toContain("no_nodejs_compat_v2");
+    expect(out).not.toContain('"nodejs_compat"');
+  });
+
+  it("is idempotent: removing an entry that is already gone returns the source", () => {
+    const patch = {
+      bindingType: "kv_namespaces",
+      entry: { binding: "CACHE", id: "kv-1" },
+    };
+    expect(removeWranglerBinding(WRANGLER, patch)).toBe(WRANGLER);
+    const once = removeWranglerBinding(
+      upsertWranglerBinding(WRANGLER, patch),
+      patch
+    );
+    expect(removeWranglerBinding(once, patch)).toBe(once);
+  });
+
+  it("never reverse-patches a hand-edited entry", () => {
+    // Same match key, different value — the user owns this line now.
+    const edited = `{
+  "name": "api",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "app-db", "database_id": "9f2c-real" }
+  ]
+}
+`;
+    const out = removeWranglerBinding(edited, {
+      bindingType: "d1_databases",
+      entry: { binding: "DB", database_id: "abc-123", database_name: "app-db" },
+    });
+    expect(out).toBe(edited);
+    expect(out).toContain("9f2c-real");
+  });
+
+  it("leaves a document with no parse tree alone", () => {
+    // `parseTree` recovers from most malformed JSONC and still hands back a tree, so
+    // the `!root` guard needs an input it gives up on entirely. An empty file is one:
+    // `parseTree("")` is `undefined`. `{ "name": "api",,, }` is not — it parses to an
+    // object node and exits through the "no array of ours" branch instead.
+    for (const broken of ["", `{ "name": "api",,, }`]) {
+      expect(
+        removeWranglerBinding(broken, {
+          bindingType: "d1_databases",
+          entry: { binding: "DB" },
+        })
+      ).toBe(broken);
+    }
+  });
+});
+
+describe(wranglerBindingRemoveRefusal, () => {
+  it("reports the drifted entry it refused to delete", () => {
+    const edited = `{
+  "name": "api",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "app-db", "database_id": "9f2c-real" }
+  ]
+}
+`;
+    const reason = wranglerBindingRemoveRefusal(edited, {
+      bindingType: "d1_databases",
+      entry: { binding: "DB", database_id: "abc-123", database_name: "app-db" },
+    });
+    expect(reason).toContain("d1_databases[binding=DB]");
+  });
+
+  it("says nothing when the entry is already gone — that is not a refusal", () => {
+    expect(
+      wranglerBindingRemoveRefusal(WRANGLER, {
+        bindingType: "kv_namespaces",
+        entry: { binding: "CACHE" },
+      })
+    ).toBeUndefined();
+  });
+
+  it("says nothing when the entry on disk is the one that was applied", () => {
+    expect(
+      wranglerBindingRemoveRefusal(WRANGLER, {
+        bindingType: "d1_databases",
+        entry: {
+          binding: "DB",
+          database_id: "abc-123",
+          database_name: "app-db",
+        },
+      })
+    ).toBeUndefined();
   });
 });
 

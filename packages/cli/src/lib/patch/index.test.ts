@@ -211,11 +211,73 @@ export default app;
     expect(reversed?.reason).toContain("myWaitlist");
   });
 
-  it("returns undefined for a kind with no inverse yet (#36 owns the rest)", () => {
-    expect(reversePatch(AUTH, PLUGIN_PATCH, "auth.ts")).toBeUndefined();
-    expect(
-      reversePatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc")
-    ).toBeUndefined();
+  it("undoes a wrangler-binding patch, restoring the pre-patch content", () => {
+    const applied = applyPatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
+    const reversed = reversePatch(
+      applied.content,
+      BINDING_PATCH,
+      "wrangler.jsonc"
+    );
+    expect(reversed?.changed).toBeTruthy();
+    expect(reversed?.content).not.toContain("app-db");
+    expect(reversed?.diff).toContain("wrangler.jsonc");
+    expect(reversed?.diff).toContain("-");
+  });
+
+  it("undoes a plugin-array patch, restoring the pre-patch content byte-for-byte", () => {
+    const applied = applyPatch(AUTH, PLUGIN_PATCH, "auth.ts");
+    const reversed = reversePatch(applied.content, PLUGIN_PATCH, "auth.ts");
+    expect(reversed?.changed).toBeTruthy();
+    // The whole point of the issue: what `add` wrote, `remove` takes back out exactly.
+    expect(reversed?.content).toBe(AUTH);
+    expect(reversed?.diff).toContain("auth.ts");
+  });
+
+  it("reports changed=false when a wrangler-binding is already reversed", () => {
+    const reversed = reversePatch(WRANGLER, BINDING_PATCH, "wrangler.jsonc");
+    expect(reversed?.changed).toBeFalsy();
+    expect(reversed?.content).toBe(WRANGLER);
+    expect(reversed?.reason).toBeUndefined();
+  });
+
+  it("reports changed=false when a plugin-array call is already reversed", () => {
+    const reversed = reversePatch(AUTH, PLUGIN_PATCH, "auth.ts");
+    expect(reversed?.changed).toBeFalsy();
+    expect(reversed?.content).toBe(AUTH);
+    expect(reversed?.reason).toBeUndefined();
+  });
+
+  it("reports a reason when the inverse refuses a binding the user edited", () => {
+    const edited = `{
+  "name": "api",
+  "d1_databases": [
+    { "binding": "DB", "database_name": "app-db", "database_id": "9f2c-real" }
+  ]
+}
+`;
+    const reversed = reversePatch(edited, BINDING_PATCH, "wrangler.jsonc");
+    expect(reversed?.changed).toBeFalsy();
+    expect(reversed?.content).toBe(edited);
+    expect(reversed?.reason).toContain("d1_databases[binding=DB]");
+  });
+
+  it("reports a reason when the inverse refuses a plugin the user configured", () => {
+    const configured = `import { betterAuth } from "better-auth";
+import { stripe } from "@better-auth/stripe";
+
+export const auth = betterAuth({
+  plugins: [organization(), stripe({ apiKey: env.STRIPE_KEY })],
+});
+`;
+    const reversed = reversePatch(configured, PLUGIN_PATCH, "auth.ts");
+    expect(reversed?.changed).toBeFalsy();
+    expect(reversed?.content).toBe(configured);
+    expect(reversed?.reason).toContain("stripe");
+  });
+
+  it("returns undefined for the package.json kinds, which stay drop-and-warn", () => {
+    // Uninstalling an npm dependency is not derivable offline and other code may use it
+    // (plan-remove-command-2026-07-25.md, non-goals); no scope line asks for scripts.
     expect(
       reversePatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json")
     ).toBeUndefined();
@@ -226,8 +288,8 @@ export default app;
 
   it("isReversibleKind agrees with what reversePatch will undo", () => {
     expect(isReversibleKind("chained-route")).toBeTruthy();
-    expect(isReversibleKind("plugin-array")).toBeFalsy();
-    expect(isReversibleKind("wrangler-binding")).toBeFalsy();
+    expect(isReversibleKind("plugin-array")).toBeTruthy();
+    expect(isReversibleKind("wrangler-binding")).toBeTruthy();
     expect(isReversibleKind("package-json-script")).toBeFalsy();
     expect(isReversibleKind("package-json-dependency")).toBeFalsy();
   });

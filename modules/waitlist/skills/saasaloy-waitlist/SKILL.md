@@ -40,8 +40,8 @@ writes its own waitlist table and route, using this module's route and form as t
 
 ## What it patches
 
-Three patches; `saasaloy remove` reverses only the first — the other two are dropped with a warning
-(#36), so uninstalling leaves the two web dependencies behind:
+Three patches; `saasaloy remove` reverses only the first — it does not uninstall npm dependencies,
+so the other two are dropped with a warning and uninstalling leaves them in `apps/web/package.json`:
 
 | Patch | Target | Why |
 |---|---|---|

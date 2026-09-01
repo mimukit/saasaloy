@@ -6,7 +6,12 @@ import {
 } from "./chained-route.js";
 import type { ChainedRoute } from "./chained-route.js";
 import { toDiff } from "./diff.js";
-import { matchWranglerBinding, upsertWranglerBinding } from "./jsonc.js";
+import {
+  matchWranglerBinding,
+  removeWranglerBinding,
+  upsertWranglerBinding,
+  wranglerBindingRemoveRefusal,
+} from "./jsonc.js";
 import type { WranglerBinding } from "./jsonc.js";
 import {
   matchPackageJsonDependency,
@@ -18,7 +23,11 @@ import {
   upsertPackageJsonScript,
 } from "./pkg-json-script.js";
 import type { PackageJsonScript } from "./pkg-json-script.js";
-import { insertIntoPluginArray } from "./ts-module.js";
+import {
+  insertIntoPluginArray,
+  pluginArrayRemoveRefusal,
+  removeFromPluginArray,
+} from "./ts-module.js";
 import type { PluginArrayInsert } from "./ts-module.js";
 
 // The config-patch engine (build spec §3.4): the ~10% of module application that isn't
@@ -39,8 +48,10 @@ export { toDiff } from "./diff.js";
 export {
   type BindingMatch,
   matchWranglerBinding,
+  removeWranglerBinding,
   upsertWranglerBinding,
   type WranglerBinding,
+  wranglerBindingRemoveRefusal,
 } from "./jsonc.js";
 export {
   matchPackageJsonDependency,
@@ -52,7 +63,12 @@ export {
   upsertPackageJsonScript,
   type PackageJsonScript,
 } from "./pkg-json-script.js";
-export { insertIntoPluginArray, type PluginArrayInsert } from "./ts-module.js";
+export {
+  insertIntoPluginArray,
+  type PluginArrayInsert,
+  pluginArrayRemoveRefusal,
+  removeFromPluginArray,
+} from "./ts-module.js";
 
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
@@ -180,10 +196,13 @@ function applyCodemod(source: string, patch: Patch): string {
   }
 }
 
-// The one table of kind → inverse codemod. `chained-route` is the only entry today:
-// issue #83 scoped its reversal deliberately, and the general mechanism across every kind
-// is issue #36's. `remove` drops-and-warns for every kind absent from this table, and both
-// `isReversibleKind` and `reversePatch` read it, so adding an inverse is one edit.
+// The one table of kind → inverse codemod. The three kinds that edit a *config* file
+// reverse: `chained-route` (#83), then `wrangler-binding` and `plugin-array` (#36). The
+// two `package.json` kinds deliberately do not — uninstalling an npm dependency isn't
+// derivable offline and other code may already use it, and nothing asks for a script back
+// (plan-remove-command-2026-07-25.md, non-goals). `remove` drops-and-warns for every kind
+// absent from this table, and both `isReversibleKind` and `reversePatch` read it, so
+// adding an inverse stays one edit.
 type Inverse<K extends PatchKind> = (
   source: string,
   patch: Extract<Patch, { kind: K }>
@@ -191,6 +210,8 @@ type Inverse<K extends PatchKind> = (
 
 const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
   "chained-route": removeChainedRoute,
+  "plugin-array": removeFromPluginArray,
+  "wrangler-binding": removeWranglerBinding,
 };
 
 /** Whether `reversePatch` can undo a patch of this kind. */
@@ -230,11 +251,12 @@ export function reversePatch(
 // The tables of kind → "why did nothing change?", one per direction. A codemod is pure
 // `string → string`, so a refusal to touch the file looks exactly like an idempotent
 // no-op at the call site; these tell the two apart, so `add` and `remove` can warn by
-// name instead of skipping in silence. Only `chained-route` can refuse today: the other
-// four kinds only ever no-op because their edit is already present, which is not worth
-// reporting. Asking costs a second parse, so both callers ask only when nothing changed.
-// `package-json-script` joined the forward table in #98: it refuses an install-lifecycle
-// key outright, and a refusal a user never sees is a security hole that reads as a typo.
+// name instead of skipping in silence. Asking costs a second parse, so both callers ask
+// only when nothing changed. The forward table is short because most kinds only ever
+// no-op on an edit that is already present; `package-json-script` joined it in #98,
+// because it refuses an install-lifecycle key outright and a refusal a user never sees is
+// a security hole that reads as a typo. The reversal table mirrors `INVERSES`: every kind
+// that can undo an edit can also find that the edit is no longer the one it wrote.
 type Refusal<K extends PatchKind> = (
   source: string,
   patch: Extract<Patch, { kind: K }>
@@ -247,6 +269,8 @@ const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
 
 const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteRemoveRefusal,
+  "plugin-array": pluginArrayRemoveRefusal,
+  "wrangler-binding": wranglerBindingRemoveRefusal,
 };
 
 function refusalReason(

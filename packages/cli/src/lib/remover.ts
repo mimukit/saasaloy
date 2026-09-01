@@ -11,6 +11,7 @@ import type { Lockfile } from "./lock.js";
 import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { isReversibleKind, reversePatch } from "./patch/index.js";
+import type { PatchResult } from "./patch/index.js";
 import type { SaasaloyConfig } from "./schema.js";
 
 // The deterministic core of `saasaloy remove` — mirrors applier.ts's buildPlan/
@@ -73,9 +74,10 @@ export interface PlannedRemoveLink {
 
 // How a recorded config patch relates to what's on disk right now:
 //   revert  — a reversible kind with an edit still there → `diff` previews the undo
-//   refused — the inverse declined it; the line is the user's now → `reason` says why
+//   refused — the inverse declined it (the line is the user's now), or the file no longer
+//             parses at all → `reason` says which, and names the file
 //   gone    — nothing left to undo (target file absent, or already hand-reverted)
-//   drop    — a kind with no inverse yet (#36) → the record goes, the edit stays
+//   drop    — a kind with no inverse (the two `package.json` ones) → record goes, edit stays
 export type PatchRemoveAction = "revert" | "refused" | "gone" | "drop";
 
 export interface PlannedRemovePatch {
@@ -93,9 +95,9 @@ export interface RemovePlan {
   files: PlannedRemoveFile[];
   links: PlannedRemoveLink[];
   /** This module's entries in manifest.patches, each classified against fresh disk state.
-   *  Every entry is dropped on execute; a `chained-route` entry is also *reversed* on disk
-   *  first (the one kind with an inverse — see `reversePatch`), and `diff` previews that
-   *  reversal so `--dry-run`/`--diff` show the edit rather than only labelling it. */
+   *  Every entry is dropped on execute; an entry of a reversible kind is also *reversed*
+   *  on disk first (see `reversePatch`), and `diff` previews that reversal so
+   *  `--dry-run`/`--diff` show the edit rather than only labelling it. */
   patches: PlannedRemovePatch[];
   /** Installed modules whose lock `dependsOn` names this module — block removal
    *  without `--force`. */
@@ -236,7 +238,11 @@ async function previewPatchRemoval(
   await assertNoSymlinkPath(root, fileAbs);
 
   const source = await readFile(fileAbs, "utf-8");
-  const result = reversePatch(source, entry.patch, entry.file);
+  const attempt = tryReversePatch(source, entry);
+  if (!attempt.ok) {
+    return { entry, action: "refused", diff: "", reason: attempt.reason };
+  }
+  const result = attempt.result;
   if (result?.changed) {
     return { entry, action: "revert", diff: result.diff };
   }
@@ -244,6 +250,35 @@ async function previewPatchRemoval(
     return { entry, action: "refused", diff: "", reason: result.reason };
   }
   return { entry, action: "gone", diff: "" };
+}
+
+/** Either the codemod's own verdict, or the parser's complaint about the target file. */
+type ReversalAttempt =
+  { ok: true; result: PatchResult | undefined } | { ok: false; reason: string };
+
+/**
+ * `reversePatch` behind a guard. Every inverse parses the target file first, and both
+ * parsers throw on syntax they can't read — a state only a hand edit produces, which the
+ * remove contract routes to warn-and-skip, not to an aborted command. Turning the throw
+ * into a refusal reason keeps the codemods pure (`string => string`, no error channel)
+ * and names the file, so the warning says which of the workspace's files to open. Both
+ * the plan and the execute pass call this: the plan so a broken target is previewed as a
+ * refusal, the execute so a file broken *between* the two doesn't throw after files and
+ * links are already deleted.
+ */
+function tryReversePatch(
+  source: string,
+  entry: ManifestPatch
+): ReversalAttempt {
+  try {
+    return { ok: true, result: reversePatch(source, entry.patch, entry.file) };
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return {
+      ok: false,
+      reason: `${entry.file} does not parse (${detail}) — fix the file, then hand-revert this patch`,
+    };
+  }
 }
 
 export interface ExecuteRemoveArgs {
@@ -271,10 +306,12 @@ export interface RemoveResult {
   linksRemoved: PlannedRemoveLink[];
   /** Symlinks left untouched because something else occupies their path. */
   linkConflicts: PlannedRemoveLink[];
-  /** Patch entries actually undone on disk — a `chained-route` link and its import. */
+  /** Patch entries actually undone on disk — a route link, a wrangler binding, a plugin
+   *  array element, each with the import it needed. */
   patchesReversed: ManifestPatch[];
-  /** Patch entries untracked without being undone: a kind with no inverse yet (#36),
-   *  a target file that's gone, a link already hand-reverted, or a refusal. The command warns. */
+  /** Patch entries untracked without being undone: a kind with no inverse (the two
+   *  `package.json` ones), a target file that's gone, an edit already hand-reverted, or a
+   *  refusal. The command warns. */
   patchesDropped: ManifestPatch[];
   /** The subset of `patchesDropped` the inverse codemod actively declined, each with its
    *  reason — a route the user repointed at their own handler, say. Separates "there was
@@ -427,13 +464,13 @@ export async function executeRemovePlan(
     delete manifest.links[link.target];
   }
 
-  // Reverse what can be reversed, then untrack every entry either way. Only
-  // `chained-route` has an inverse today (#83); the rest stay report-only until #36
-  // generalises the mechanism, and the command warns naming each file.
+  // Reverse what can be reversed, then untrack every entry either way. The three kinds
+  // that edit a config file have an inverse (#83, #36); the two `package.json` kinds stay
+  // report-only, and the command warns naming each file.
   //
   // Read fresh disk content rather than trusting the plan, mirroring what `executePlan`
   // does forward: the file may have been hand-edited since the plan was built. The
-  // codemod is a no-op when the link it recorded is already gone, so a hand-reverted
+  // codemod is a no-op when the edit it recorded is already gone, so a hand-reverted
   // file is untracked and warned about instead of force-edited.
   const patchesReversed: ManifestPatch[] = [];
   const patchesDropped: ManifestPatch[] = [];
@@ -448,12 +485,14 @@ export async function executeRemovePlan(
       // rather than reverse a patch into a file outside the root.
       await assertNoSymlinkPath(root, fileAbs);
       const source = await readFile(fileAbs, "utf-8");
-      const result = reversePatch(source, entry.patch, entry.file);
-      if (result?.changed) {
-        await writeFile(fileAbs, result.content, "utf-8");
+      const attempt = tryReversePatch(source, entry);
+      if (!attempt.ok) {
+        patchRefusals.push({ patch: entry, reason: attempt.reason });
+      } else if (attempt.result?.changed) {
+        await writeFile(fileAbs, attempt.result.content, "utf-8");
         reversed = true;
-      } else if (result?.reason !== undefined) {
-        patchRefusals.push({ patch: entry, reason: result.reason });
+      } else if (attempt.result?.reason !== undefined) {
+        patchRefusals.push({ patch: entry, reason: attempt.result.reason });
       }
     }
     (reversed ? patchesReversed : patchesDropped).push(entry);

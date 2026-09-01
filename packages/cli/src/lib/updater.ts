@@ -320,7 +320,8 @@ export interface PlannedUpdateFile {
    * Modules whose config patches also wrote to this file. A patched file's manifest
    * hash is deliberately not re-recorded (the patch belongs to another module, see
    * applier.ts), so it classifies as drift on the next update — this says so, rather
-   * than letting the merge plan imply a human edited it. Real patch tracking is #36.
+   * than letting the merge plan imply a human edited it. `remove` reverses those patches
+   * from the manifest record itself (#36); `update` still has no hash to compare against.
    */
   patchedBy?: string[];
 }
