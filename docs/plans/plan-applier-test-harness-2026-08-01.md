@@ -1,5 +1,7 @@
 # Plan — Applier test harness: commands, remote registry, e2e, and a conflict matrix
 
+Grilled: 2026-09-01
+
 > Tracked in [#47](https://github.com/mimukit/saasaloy/issues/47) (single issue — all phases folded).
 
 ## Context
@@ -42,7 +44,7 @@ problem on a stranger's machine.
 | **`doctor` folded in here** | `saasaloy doctor` validates descriptors against `registry-item.schema.json` via `ajv` — the same machinery the test suite exercises, and the same fixtures. Splitting it would duplicate both. |
 | **E2E spawns the real binary** | Tests run `node dist/index.js` as a subprocess, not the command functions in-process. That is the only way to catch what actually breaks a release: argument parsing, the preserved shebang, exit codes, and whether the `files` array shipped `templates/`. |
 | **Remote tests are hermetic** | A local HTTP fixture server, so tests are fast, offline-capable, and immune to GitHub rate limits (which the code already has explicit handling for). Rejected hitting a real pinned GitHub repo — network flakiness in a gate that must be trusted is worse than slightly lower fidelity. |
-| **A testability seam is required** | `RemoteRegistrySource` calls global `fetch` against a module-level `GITHUB_API` constant, and fetches modules through giget's `github:` provider. Neither is redirectable today. This plan introduces an explicit seam — an overridable API base and a way to point giget at the fixture server — rather than reaching for broad module mocks. **Whether giget's `github:` provider can be redirected at all, or whether that boundary must be stubbed instead, is the open technical risk.** |
+| **A testability seam is required** | `RemoteRegistrySource` calls global `fetch` against a module-level `GITHUB_API` constant, and fetches modules through giget's `github:` provider. Neither is redirectable today. This plan introduces an explicit seam — an overridable API base and a way to point giget at the fixture server — rather than reaching for broad module mocks. **Settled (2026-09-01):** giget's `github:` provider already reads `GIGET_GITHUB_URL` and fetches tarballs from `${GIGET_GITHUB_URL}/repos/<owner>/<repo>/tarball/<ref>`, so the fixture server mimics that path shape. The CLI's own hardcoded `GITHUB_API` constant (`registry.ts`) gains a matching env override. Env vars for both, because the e2e harness spawns a subprocess that an in-process `providers` option cannot reach. |
 | **The matrix is derived, not maintained** | The combination test enumerates `modules/*/registry-item.json` from disk and generates pairs. Nobody hand-maintains a list; a new module joins the matrix by existing. |
 | **Matrix assertion depth** | A pair passes when both modules apply with **no conflicts and no alias collisions**, and the resulting project **typechecks**. Full `build` per pair is too slow for a PR gate — see Open questions on cadence. |
 | **Coverage is reported, not gated** | Add a v8 coverage reporter so the gaps are visible, but set no failing threshold initially. A threshold chosen before the suite exists would be arbitrary, and a low one is worse than none. |
@@ -124,25 +126,15 @@ The author-facing half, for the third-party registry story (#39).
   exist and carry the `saasaloy-` prefix required by ADR 0014.
 - Reuse the CLI's existing `@clack/prompts` + `picocolors` presentation.
 
-## Open questions
+## Settled in the grill (2026-09-01)
 
-Targets for grillkit before this is filed as issues.
-
-- **Can giget's `github:` provider be redirected?** The whole hermetic-remote approach rests on it.
-  If not, does the seam move up to a `downloadModule` function that tests substitute — and does that
-  weaken the test enough to want the nightly live check after all?
-- **Where does the matrix run?** Pairs grow quadratically and Phase 3 quadruples the module count. On
-  every PR, only when `modules/` changes, or nightly?
-- **Is typecheck-per-pair fast enough** to gate a PR, or does the matrix need to assert on the
-  applier's conflict report only and leave typechecking to a nightly job?
-- **Do we want a live-GitHub canary** on a schedule, so a real GitHub API change still gets caught
-  even though PRs are hermetic?
-- **Should `doctor` validate remote coordinates** (`saasaloy doctor owner/repo/name`), or only local
-  folders? Remote validation is what a *consumer* wants before installing a stranger's module;
-  local is what an *author* wants.
-- **Coverage threshold** — introduce one once the suite exists, and at what number?
-- **Fixture location.** Under `packages/cli/src/__fixtures__`, or a top-level `test/fixtures/` shared
-  with the e2e harness?
+- **Giget redirect: proven, env vars for both halves.** giget reads `GIGET_GITHUB_URL`; the CLI's `GITHUB_API` constant gains a matching env override. The in-process `providers` option was rejected because the e2e subprocess cannot see it.
+- **Matrix cadence: path-filtered PR run plus a nightly full run.** On a PR the matrix runs only when `modules/**` or the applier source changes; nightly runs everything. `plan-ship-the-cli-2026-08-01.md` wires the workflow with this filter.
+- **Matrix depth on a PR: conflict report only; typecheck runs in the nightly full run.** A scaffolded typecheck needs an installed workspace plus the `^build` chain, too heavy for 120+ pairs in a PR gate (16 modules today). Promotion path: move typecheck into the PR gate if nightly timing shows it is cheap.
+- **Live-GitHub canary: yes, nightly.** One real `add` from a pinned public repo in the same nightly workflow as the full matrix. It alerts and never blocks a PR.
+- **`doctor` scope: local folders only.** Remote-coordinate validation (`saasaloy doctor owner/repo/name`, the consumer path) is a follow-up issue, not this plan.
+- **Coverage threshold: report only now.** Closing step of Phase 3: after the suite lands, pin the threshold at the measured value minus 2 points.
+- **Fixture location: `packages/cli/test/fixtures/`.** Outside `src/`, so the type-aware oxlint pass and the build ignore deliberately broken descriptors; inside the package, so unit tests and the e2e harness share one path. The repo has no fixture directory today.
 
 ## Non-goals
 
