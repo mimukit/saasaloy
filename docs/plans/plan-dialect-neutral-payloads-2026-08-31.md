@@ -55,7 +55,7 @@ Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `co
 - Two variant entries for the same `target` with disjoint conditions must be legal. A target whose entries are all conditional and none match is a hard plan-time error naming the target and candidates.
 - Unit tests: variant selection under each driver, selection inside a scaffold rather than only in top-level `files[]`, the no-match error, `update` seeing exactly the set `add` wrote, and `plan`/`diff` output showing which variant was chosen.
 
-### Phase 2: normalize the D1 client contract (#99)
+### Phase 2: normalize the D1 client contract (#99) (built 2026-09-01)
 
 - Change `modules/database-d1/files/src/client.ts` to `getDb(env: DbBindings)` reading `env.DB` internally; keep `DbBindings { DB: D1Database }`.
 - Align the cleanup contract with #98's Postgres `withDb` helper so a single route body works on both drivers (D1 side is a no-op).

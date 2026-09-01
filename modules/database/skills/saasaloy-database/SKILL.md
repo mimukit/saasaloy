@@ -121,12 +121,15 @@ Drizzle its relational metadata in `getDb`:
 ```ts
 // packages/db/src/repositories/waitlist.ts
 import { waitlist } from "../schema/waitlist";
-import type { getDb } from "../client";
+import type { Db } from "../client";
 
-export function listWaitlist(db: ReturnType<typeof getDb>) {
+export function listWaitlist(db: Db) {
   return db.select().from(waitlist);
 }
 ```
+
+`Db` is the driver's Drizzle client type. Both drivers export it under that name, so a repository
+signature does not change when the project switches driver.
 
 (A file inside `packages/db` imports its own siblings by relative path. `@repo/db/...` is for
 *other* workspaces consuming this package, not for code inside it.)
@@ -134,18 +137,35 @@ export function listWaitlist(db: ReturnType<typeof getDb>) {
 A repository written against the shared Drizzle query builder works on either driver. One reaching
 for driver-specific SQL does not, so keep it on the builder where you can.
 
-## `getDb` and the `@repo/db/client` contract
+## `withDb` and the `@repo/db/client` contract
 
 The core's `package.json` declares the `./client` export, but the file behind it,
-`src/client.ts`, is scaffolded by the **driver**. Every consumer imports the same path either way:
+`src/client.ts`, is scaffolded by the **driver**. Every consumer imports the same path either way,
+and both drivers export the same four names behind it — `getDb`, `Db`, `DbRequestContext` and
+`withDb` — with the same signatures:
 
 ```ts
-import { getDb } from "@repo/db/client";
+// apps/api/src/routes/waitlist.ts
+import { withDb, type DbBindings } from "@repo/db/client";
 import { listWaitlist } from "@repo/db/repositories/waitlist";
+
+const waitlist = new Hono<{ Bindings: DbBindings }>();
+
+waitlist.get("/", (c) => withDb(c, async (db) => c.json(await listWaitlist(db))));
 ```
 
-`getDb` takes whatever the active driver connects with, so its argument and the type it exports
-alongside are the driver's business. The driver skill shows the exact call for a route.
+**`withDb(c, …)` is the one call shape for a route**, under either driver. It hands your callback a
+client for this request and cleans up after it: on `database-postgres` that closes a real socket on
+`c.executionCtx.waitUntil`, and on `database-d1` there is nothing to close, so it runs the callback
+and returns. Writing the route this way means it does not change when the project switches driver.
+
+`getDb(c.env)` is the client `withDb` builds, and it takes the whole `env` on both drivers — the
+D1 one reads `env.DB`, the Postgres one resolves a connection string. Call it directly only where
+there is no request context to hand over, such as a scheduled handler or a script, and then read
+the driver skill for what you owe the connection afterwards.
+
+`DbBindings` is the only piece whose *shape* is the driver's business. Compose it into the route's
+Hono generic and the driver decides what `c.env` has to carry.
 
 Note the import is `@repo/db/...`, the real package name, via `@repo/db`'s `exports` map, not
 `@db/...`. `@db` is only the *file-placement* alias `saasaloy.json` uses to resolve a module's

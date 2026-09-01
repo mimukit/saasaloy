@@ -130,6 +130,12 @@ not have, both of which `withDb` keeps for you:
 - **Close it when the response is done.** `db.$client` is the underlying postgres.js instance and
   `end()` runs the moment it is called, not when the promise settles.
 
+`database-d1` exports the same four names with the same signatures — `getDb`, `Db`,
+`DbRequestContext`, `withDb` — and its `withDb` is a pass-through, because a D1 binding holds no
+socket. So the route body above is byte-identical under both drivers, which is what lets a feature
+module like `waitlist` ship one route file rather than one per dialect. Only the table declarations
+differ, and those the feature module ships per dialect.
+
 The one rule `withDb` cannot keep for you: **read everything you need inside the callback.** `end()`
 starts as soon as the callback settles and postgres.js rejects every query issued after it, so
 returning the `db`, a lazy query builder, or an unawaited promise out of the callback gives the
