@@ -3,6 +3,8 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { getDb } from "@repo/db/client";
+import { user as userTable } from "@repo/db/schema/auth";
+import { ADMIN_ROLE } from "./authorize";
 import { deriveCookieDomain, requireAuthSecret } from "./env";
 import type { AuthEnv } from "./env";
 
@@ -35,6 +37,16 @@ const cookieDomain = deriveCookieDomain(authEnv);
 // Auth's published development key. See ./env.ts for the rule and the escape hatch.
 const secret = requireAuthSecret(authEnv);
 
+// One client for both readers: the Drizzle adapter below and the first-admin hook.
+const db = getDb(authEnv.DB);
+
+// Is the `user` table still empty? A one-row `select` rather than a `count(*)`, because
+// the only question is existence and D1 stops at the first row.
+async function noUsersYet(): Promise<boolean> {
+  const rows = await db.select({ id: userTable.id }).from(userTable).limit(1);
+  return rows.length === 0;
+}
+
 // Top-level singleton, not a per-request `c.env`-scoped factory (the convention every
 // other capability follows). This is deliberate: the Better Auth plugin-array patch
 // point (`{ exportName: "auth", arrayProp: "plugins" }` — see
@@ -51,7 +63,39 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // needs the `email` capability; auth deliberately doesn't depend on it
   },
-  database: drizzleAdapter(getDb(authEnv.DB), { provider: "sqlite" }),
+  database: drizzleAdapter(db, { provider: "sqlite" }),
+  // First user wins. This is the ONLY automatic role promotion in the system, and it
+  // fires at most once per project: the hook reads the `user` table before the row is
+  // written, so it can only match on the very first sign-up. Without it a fresh
+  // `saasaloy add admin` scaffolds an admin app that denies every account, and the only
+  // way in is the `update user set role` SQL in the auth skill.
+  //
+  // WARNING — sign-up is open. Any account that reaches /signup before you do becomes
+  // the admin, and on a deployed api with a public origin that window is real. Sign up
+  // yourself as soon as the api answers, and check with
+  // `select email, role from user`. The auth skill carries the recovery SQL for when
+  // somebody else got there first, and `client.admin.setRole` promotes the rest once one
+  // admin exists.
+  //
+  // Two first sign-ups that land at the same instant both read an empty table and both
+  // become admin. That is accepted, not engineered away: a unique index on
+  // `role = 'admin'` would also block the legitimate promotion of a second admin.
+  databaseHooks: {
+    user: {
+      create: {
+        // Returning `{ data }` replaces the row being written; returning nothing leaves
+        // it alone, so the `admin()` plugin's own hook — which runs first and writes the
+        // default `"user"` — stands. The two are merged in registration order, which is
+        // why this one wins when it does answer.
+        before: async (newUser) => {
+          if (!(await noUsersYet())) {
+            return;
+          }
+          return { data: { ...newUser, role: ADMIN_ROLE } };
+        },
+      },
+    },
+  },
   advanced: cookieDomain
     ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
     : undefined,

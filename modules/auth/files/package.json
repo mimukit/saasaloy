@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "better-auth": "1.7.2",
+    "hono": "4.13.5",
     "@repo/db": "workspace:*"
   },
   "devDependencies": {

@@ -48,7 +48,7 @@ The work reuses what already exists and adds one file's worth of new logic. `get
 
 **The first-user-wins risk, stated once.** Sign-up is open. Any account that reaches `/signup` before the project's owner does becomes the admin, and on a deployed api with a public origin that window is real. The hook narrows it to the very first sign-up on an empty table, which is a much smaller target than an unconditional promotion, but it does not close it. Phase 2 carries the warning in three places for that reason, and the auth skill carries the recovery command so the warning has an answer attached. The concurrent case, where two requests both read an empty table and both become admin, is left unmitigated and is a QA observation rather than a lock.
 
-### Phase 1: the server gate and its first caller
+### Phase 1: the server gate and its first caller (built 2026-08-31)
 
 In `modules/auth/files/src/server.ts`:
 
@@ -61,7 +61,7 @@ Add `hono` to `modules/auth/files/package.json` at the exact version `modules/ap
 
 Then give them a caller. `modules/admin` ships no api files today, so this phase adds the first: `files/api/routes/admin-users.ts`, a `GET /admin/users` sub-app that calls `requireAdmin` then `auth.api.listUsers`, registered with a `chained-route` patch on the exported chain (ADR 0028) so `hc<AppType>` types it. The route contract is the one `modules/waitlist/files/api/routes/waitlist.ts` documents: one named `export const`, one chained expression, an explicit status on every `c.json`.
 
-### Phase 2: first user wins
+### Phase 2: first user wins (built 2026-08-31)
 
 Add `databaseHooks` to `betterAuth({...})` in `modules/auth/files/src/auth.ts`. The `user.create.before` hook counts rows in `user` through the drizzle client already in scope (`getDb(authEnv.DB)`) and returns `{ data: { ...user, role: ADMIN_ROLE } }` on zero. Anything else returns the input untouched, so the plugin's `"user"` default applies.
 
@@ -71,7 +71,7 @@ The warning goes in three places, because the failure is unrecoverable once a st
 - The descriptor's env-var output, which the CLI prints at `add` time and is the only one of the three that reaches the person running the command.
 - The auth skill, carrying both the warning and the `update user set role` recovery command that already ships there.
 
-### Phase 3: the schema snapshot
+### Phase 3: the schema snapshot (built 2026-08-31)
 
 Re-verify the four tables against `better-auth@1.7.2`'s `getAuthTables()` and its Drizzle SQLite type mapping, fix any column that moved, and correct the header to name `1.7.2`. If nothing moved, the change is the header alone, and that is still the point of the rule.
 
@@ -79,7 +79,7 @@ Add a test beside `env.test.ts` asserting that the version string in the snapsho
 
 This phase is independent of Phases 1 and 2 and can land first.
 
-### Phase 4: docs, skills and QA
+### Phase 4: docs, skills and QA (built 2026-08-31)
 
 - `modules/auth/skills/saasaloy-auth/SKILL.md` — add `requireSession`/`requireRole`/`requireAdmin` to "Protect a route", and rewrite "Roles and the first admin" so the first-user-wins hook is the primary path, the open-signup window is stated, and the wrangler SQL becomes the recovery path. Keep the "installed auth before this shipped needs a migration" paragraph.
 - `modules/admin/skills/saasaloy-admin/SKILL.md` — state that the SPA guard is the second half of a gate whose first half is `requireAdmin`, and that a new admin route wires both. Document `GET /admin/users` as the worked example.

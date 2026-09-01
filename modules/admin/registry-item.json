@@ -7,8 +7,25 @@
   "envVars": {
     "PUBLIC_API_URL": "Origin the admin SPA calls for api and auth requests (e.g. https://api.x.com). Falls back to http://localhost:4000 in dev. The `PUBLIC_` prefix is what vite.config.ts exposes to the browser bundle."
   },
-  "patches": [],
-  "files": [],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin",
+      "call": "adminUsers",
+      "import": {
+        "name": "adminUsers",
+        "from": "./routes/admin-users"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/admin-users.ts",
+      "target": "@api/routes/admin-users.ts"
+    }
+  ],
   "scaffolds": [
     {
       "workspace": "apps/admin",
