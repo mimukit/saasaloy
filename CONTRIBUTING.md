@@ -57,9 +57,14 @@ shim — `cli:dev` has already rebuilt, so you're always testing the latest.
 
 ### Unit tests over module payloads
 
-`pnpm test` is two passes. `turbo run test` runs the CLI's vitest suite, then `pnpm test:modules`
+`pnpm test` is three passes. `turbo run test` runs the CLI's vitest suite, `pnpm test:modules`
 runs `node --test` over `modules/*/files/**/*.test.ts` — the security-relevant pure functions a
-module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts`.
+module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts` —
+and `pnpm test:scripts` runs the same runner over `scripts/**/*.test.ts`, which today covers the
+write path of `scripts/update-deps.ts`.
+
+That last file guards its `main()` call behind a `process.argv[1]` check, because a test importing
+its helpers must not start a registry scan. Keep the guard if you add another script test.
 
 The second pass uses Node's own test runner rather than vitest, and the reason is mechanical.
 Vite loads a tsconfig for every file it transforms; a module payload's `tsconfig.json` extends

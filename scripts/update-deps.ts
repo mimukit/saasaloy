@@ -99,7 +99,7 @@ function isDepBucket(value: unknown): value is DepBucket {
 type SpecKind = "bare" | "exact" | "range";
 
 /** One scannable dependency lifted out of a manifest. */
-interface Dep {
+export interface Dep {
   bucket: DepBucket;
   name: string;
   spec: string;
@@ -123,7 +123,7 @@ function depKey(file: string, dep: Dep): string {
   return `${file} ${source} ${dep.bucket} ${dep.name}`;
 }
 
-type ManifestKind = "package-json" | "registry-item";
+export type ManifestKind = "package-json" | "registry-item";
 
 /** A discovered manifest, before it has been read. */
 interface ManifestFile {
@@ -139,7 +139,7 @@ interface ManifestFile {
  * `raw` as text with jsonc-parser, because re-serializing the parsed document reflows
  * every compact one-line array a hand-authored descriptor holds (issue #93).
  */
-interface Manifest extends ManifestFile {
+export interface Manifest extends ManifestFile {
   /** The file's bytes exactly as read. The write pass edits this string. */
   raw: string;
   json: Record<string, unknown>;
@@ -473,7 +473,7 @@ async function walk(
   return out;
 }
 
-async function discoverManifests(): Promise<ManifestFile[]> {
+export async function discoverManifests(): Promise<ManifestFile[]> {
   const manifests: ManifestFile[] = [];
 
   // Class 1: base template package.jsons (object-form deps/devDeps).
@@ -512,7 +512,9 @@ async function discoverManifests(): Promise<ManifestFile[]> {
 // flat list of { bucket, name, spec, kind }. `bucket` is "dependencies" |
 // "devDependencies". The bytes are kept because the write pass edits them as text; one
 // read per file also means no window in which the file changes between read and write.
-async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
+export async function readManifestDeps(
+  manifest: ManifestFile
+): Promise<Manifest> {
   const raw = await readFile(manifest.file, "utf-8");
   const parsed: unknown = JSON.parse(raw);
   const json = isRecord(parsed) ? parsed : {};
@@ -1405,7 +1407,16 @@ async function writeUpdates(
   );
 }
 
-main().catch((error: unknown) => {
-  console.error(error);
-  process.exit(2);
-});
+// Run the CLI only when node was pointed at this file. `scripts/update-deps.test.ts`
+// imports the helpers above, and without this guard that import would start a full
+// registry scan inside the test process. `process.argv[1]` is the entry script node
+// resolved, so under `node --test` it is the test file and this stays false.
+if (
+  process.argv[1] !== undefined &&
+  resolve(process.argv[1]) === import.meta.filename
+) {
+  main().catch((error: unknown) => {
+    console.error(error);
+    process.exit(2);
+  });
+}

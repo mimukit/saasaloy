@@ -2,6 +2,11 @@
   "$schema": "https://json.schemastore.org/tsconfig",
   "extends": "./tsconfig.base.json",
   "compilerOptions": {
+    // `scripts/` runs under bare Node type stripping, which resolves the real file and
+    // does no extension rewriting, so `update-deps.test.ts` must import
+    // `./update-deps.ts` by its true name. Safe here because nothing in this project
+    // emits.
+    "allowImportingTsExtensions": true,
     "noEmit": true,
     "declaration": false,
     "sourceMap": false

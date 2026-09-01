@@ -65,7 +65,7 @@ Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 - [ ] `--dry-run` still writes nothing and still logs the same steps
 - [ ] add the `CONTRIBUTING.md` line covering why `jsonc-parser` sits in the root `devDependencies`
 
-### Phase 3: prove it, and keep it proved
+### Phase 3: prove it, and keep it proved (built 2026-09-01)
 
 - [ ] a test under `scripts/` sweeps every manifest `discoverManifests` finds, applies a no-op edit (write a dep back to its current value), and asserts the output equals the input byte-for-byte
 - [ ] an inline fixture with a compact one-line array takes a real bump, and the test asserts the diff is exactly one line

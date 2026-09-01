@@ -325,6 +325,27 @@ export default defineConfig({
       },
     },
 
+    // --- Maintainer script tests also run on node:test ---------------------
+    // `pnpm test:scripts` runs `scripts/**/*.test.ts` under `node --test`, because
+    // `scripts/` has no build step at all: Node 24 strips the types and runs the file
+    // (ADR/#54). Same two vitest rules off as the payload tests above, for the same
+    // reason — they point the file at a runner it cannot use.
+    //
+    // `no-floating-promises` is the one addition. These files are the first node:test
+    // suites inside the type-aware pass (`lint:types` covers `packages/cli/src` and
+    // `scripts`), and node:test's `describe`/`it` return a promise the runner itself
+    // awaits. Prefixing twenty call sites with `void` would say nothing the runner
+    // does not already guarantee.
+    {
+      files: ["scripts/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "typescript/no-floating-promises": "off",
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
+      },
+    },
+
     // --- no-console exemptions ---------------------------------------------
     // Terminal UX is the product here: @clack/prompts + picocolors write to the
     // console by design (ADR 0009). Note this is the help surface only — `index.ts`
