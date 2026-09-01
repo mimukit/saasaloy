@@ -255,6 +255,8 @@ downstream project exactly like a `dependencies[]` entry, so it goes through the
 within-major gate. A patch missing `name`, `range`, or a `section` naming a real dependency map
 fails the run rather than slipping past the gate.
 
+**Writes are text edits, not reserializations.** `deps:update` changes a version with `jsonc-parser`'s `modify` + `applyEdits` over the file's own bytes, so a bump is a one-line diff and the rest of the document is untouched. It used to reserialize the parsed document with `JSON.stringify(json, null, 2)`, which is byte-stable for a prettier-formatted `package.json` but explodes every compact one-line array a hand-authored descriptor holds — `dependsOn`, `files`, `agent.skills` — turning a one-character bump into a ~60-line diff (issue #93). That is why `jsonc-parser` is pinned in the **root** `devDependencies` and not only in `packages/cli`: `scripts/` runs under bare `node` with type stripping, with no bundler and no build step, so its imports have to resolve in the root `node_modules`, and pnpm's isolated layout will not surface a `packages/cli` dependency there. Keep the two pins on the same version.
+
 **Resolution policy** (see [ADR 0016](docs/adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
 per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores
 `dist-tags`** (never trusts `latest`), caps the pre-checked default at the **highest eligible version

@@ -24,7 +24,8 @@
 // own stack — @clack/prompts + picocolors (root devDependencies) — for a grouped,
 // semver-colored report, an interactive group-picker, and a confirm step. Maintainer-
 // only; never shipped to consumers, so the dep cost stays off the published surface
-// (ADR 0016 / plan Phase 7).
+// (ADR 0016 / plan Phase 7). Writes go through jsonc-parser (also a root devDependency)
+// so an edit lands on one line instead of reserializing the whole document (#93).
 //
 // Resolver policy (ADR 0016): per package, enumerate the npm `versions` map, DROP
 // prereleases, IGNORE dist-tags (never trust `latest`), cap at the highest eligible
@@ -50,6 +51,8 @@ import {
   cancel,
 } from "@clack/prompts";
 import type { Option } from "@clack/prompts";
+import { applyEdits, modify } from "jsonc-parser";
+import type { FormattingOptions, JSONPath } from "jsonc-parser";
 import pc from "picocolors";
 
 const root = resolve(import.meta.dirname, "..");
@@ -129,10 +132,16 @@ interface ManifestFile {
 }
 
 /**
- * A manifest that has been read: its parsed document — kept because the write pass
- * rewrites it in place to preserve key order — plus its scannable deps.
+ * A manifest that has been read: its source bytes, its parsed document, and its
+ * scannable deps.
+ *
+ * `json` is read-only scan input. Nothing writes through it. The write pass edits
+ * `raw` as text with jsonc-parser, because re-serializing the parsed document reflows
+ * every compact one-line array a hand-authored descriptor holds (issue #93).
  */
 interface Manifest extends ManifestFile {
+  /** The file's bytes exactly as read. The write pass edits this string. */
+  raw: string;
   json: Record<string, unknown>;
   deps: Dep[];
 }
@@ -499,8 +508,10 @@ async function discoverManifests(): Promise<ManifestFile[]> {
 }
 
 // Read a manifest into the record the rest of the run carries: the discovered
-// { file, kind }, the parsed document, and the scannable deps as a flat list of
-// { bucket, name, spec, kind }. `bucket` is "dependencies" | "devDependencies".
+// { file, kind }, the source bytes, the parsed document, and the scannable deps as a
+// flat list of { bucket, name, spec, kind }. `bucket` is "dependencies" |
+// "devDependencies". The bytes are kept because the write pass edits them as text; one
+// read per file also means no window in which the file changes between read and write.
 async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
   const raw = await readFile(manifest.file, "utf-8");
   const parsed: unknown = JSON.parse(raw);
@@ -603,7 +614,7 @@ async function readManifestDeps(manifest: ManifestFile): Promise<Manifest> {
     pushArray("devDependencies");
     pushPatches();
   }
-  return { deps, file: manifest.file, json, kind: manifest.kind };
+  return { deps, file: manifest.file, json, kind: manifest.kind, raw };
 }
 
 // --- Status decision ---------------------------------------------------------
@@ -1246,8 +1257,82 @@ function printReport(rows: Row[], notes: string[]): void {
   }
 }
 
-// Rewrite each manifest's deps to the chosen exact version, preserving key order and JSON
-// formatting (2-space, trailing newline). `toWrite` is the list of chosen candidates
+// Match the document's own indentation so an edited line doesn't stand out. Copied from
+// `packages/cli/src/lib/patch/jsonc.ts:177` rather than imported: that module resolves
+// under the CLI's build, this script runs under bare node type stripping, and importing
+// across the boundary would drag the wrangler helpers along for eight lines.
+export function inferFormatting(source: string): FormattingOptions {
+  const usesTabs = /^\t/m.test(source);
+  const spaceIndent = source.match(/^( +)\S/m)?.[1];
+  return {
+    eol: source.includes("\r\n") ? "\r\n" : "\n",
+    insertSpaces: !usesTabs,
+    tabSize: spaceIndent ? spaceIndent.length : 2,
+  };
+}
+
+/**
+ * Where a dep's version lives in its manifest, as a jsonc-parser path. Three shapes:
+ *
+ * - `["patches", i, "range"]` — a descriptor's `package-json-dependency` patch.
+ * - `[bucket, name]` — a package.json's object-form dependency map.
+ * - `[bucket, idx]` — a descriptor's array-form `dependencies[]` / `devDependencies[]`.
+ *
+ * Returns `undefined` only for the array form when no entry matches `dep.name`, which is
+ * the silent skip the write pass has always taken. Every other unexpected shape throws
+ * with the manifest path, because the node was read out of this same document during the
+ * scan: inventing it would write a pin into a manifest that never declared one.
+ */
+export function depPath(manifest: Manifest, dep: Dep): JSONPath | undefined {
+  const { json } = manifest;
+
+  if (dep.patchIndex !== undefined) {
+    // The entry was read out of this same document and validated there, so it is present
+    // and a record.
+    const patches = json.patches;
+    const patch = Array.isArray(patches) ? patches[dep.patchIndex] : undefined;
+    if (!isRecord(patch)) {
+      throw new Error(
+        `${manifest.file}: patches[${dep.patchIndex}] is not an object`
+      );
+    }
+    return ["patches", dep.patchIndex, "range"];
+  }
+
+  if (manifest.kind === "package-json") {
+    const bucket = json[dep.bucket];
+    if (!isRecord(bucket)) {
+      throw new Error(`${manifest.file}: "${dep.bucket}" is not an object`);
+    }
+    return [dep.bucket, dep.name];
+  }
+
+  const arr = json[dep.bucket];
+  if (!Array.isArray(arr)) {
+    throw new TypeError(`${manifest.file}: "${dep.bucket}" is not an array`);
+  }
+  // Split at the LAST `@` so a scoped name like `@scope/pkg@1.0.0` keeps its leading one.
+  const idx = arr.findIndex((e: unknown) => {
+    const entry = String(e);
+    const at = entry.lastIndexOf("@");
+    return (at > 0 ? entry.slice(0, at) : entry) === dep.name;
+  });
+  return idx === -1 ? undefined : [dep.bucket, idx];
+}
+
+/**
+ * What to write at `depPath`. A descriptor's array form carries the name in the string,
+ * so the whole `name@version` entry is replaced; every other site holds a bare version.
+ */
+export function depValue(manifest: Manifest, dep: Dep, target: string): string {
+  const isDescriptorArray =
+    manifest.kind === "registry-item" && dep.patchIndex === undefined;
+  return isDescriptorArray ? `${dep.name}@${target}` : target;
+}
+
+// Rewrite each manifest's deps to the chosen exact version as a text edit over the file's
+// own bytes, so key order, indentation, compact one-line arrays and the trailing newline
+// all survive untouched (issue #93). `toWrite` is the list of chosen candidates
 // ({ row, target, kind }); duplicates for one (file, bucket, name) collapse to the higher
 // version, so a selected major overrides its within-major primary.
 async function writeUpdates(
@@ -1279,47 +1364,22 @@ async function writeUpdates(
     if (!fileCands || fileCands.length === 0) {
       continue;
     }
-    const { json } = manifest;
+    // Fold the file's bumps over its own bytes: one modify + applyEdits per candidate,
+    // re-parsing each time. jsonc-parser computes edit offsets against the source it was
+    // handed, and promises nothing about applying two independent edit sets to one
+    // string, so the sequential fold is the only correct order for a multi-bump file.
+    const formattingOptions = inferFormatting(manifest.raw);
+    let source = manifest.raw;
 
     for (const c of fileCands) {
       const { dep } = c.row;
       const { target } = c;
-      if (dep.patchIndex !== undefined) {
-        // A `package-json-dependency` patch: the version is its `range`. The entry was read
-        // out of this same document and validated there, so it is present and a record.
-        const patches = json.patches;
-        const patch = Array.isArray(patches)
-          ? patches[dep.patchIndex]
-          : undefined;
-        if (!isRecord(patch)) {
-          throw new Error(
-            `${manifest.file}: patches[${dep.patchIndex}] is not an object`
-          );
-        }
-        patch.range = target;
-      } else if (manifest.kind === "package-json") {
-        // The bucket was read out of this same document, so it is present and an object.
-        // Throwing beats inventing a bucket in a manifest that never had one.
-        const bucket = json[dep.bucket];
-        if (!isRecord(bucket)) {
-          throw new Error(`${manifest.file}: "${dep.bucket}" is not an object`);
-        }
-        bucket[dep.name] = target;
-      } else {
-        const arr = json[dep.bucket];
-        if (!Array.isArray(arr)) {
-          throw new TypeError(
-            `${manifest.file}: "${dep.bucket}" is not an array`
-          );
-        }
-        const idx = arr.findIndex((e: unknown) => {
-          const entry = String(e);
-          const at = entry.lastIndexOf("@");
-          return (at > 0 ? entry.slice(0, at) : entry) === dep.name;
+      const path = depPath(manifest, dep);
+      if (path !== undefined) {
+        const edits = modify(source, path, depValue(manifest, dep, target), {
+          formattingOptions,
         });
-        if (idx !== -1) {
-          arr[idx] = `${dep.name}@${target}`;
-        }
+        source = applyEdits(source, edits);
       }
       changed++;
       log.step(
@@ -1330,12 +1390,8 @@ async function writeUpdates(
       );
     }
 
-    if (!flags.dryRun) {
-      await writeFile(
-        manifest.file,
-        `${JSON.stringify(json, null, 2)}\n`,
-        "utf-8"
-      );
+    if (!flags.dryRun && source !== manifest.raw) {
+      await writeFile(manifest.file, source, "utf-8");
     }
   }
 
