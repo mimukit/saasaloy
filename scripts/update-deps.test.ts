@@ -8,52 +8,26 @@
 // - Fixtures are inline template literals, never files on disk. `discoverManifests`
 //   matches ANY path under `modules/` ending `registry-item.json`, so a fixture file
 //   would join the sweep below and assert against itself.
-// - The bump fold is re-stated here rather than imported. `writeUpdates` owns the real
-//   fold (`update-deps.ts:1374-1391`) and can't be called without the CLI, so `applyBumps`
-//   mirrors it: one `modify` + `applyEdits` per bump over a running string, re-parsing
-//   each time. Keep the two in step.
+// - The bump fold is imported, not copied. `applyBumps` is the same function `writeUpdates`
+//   calls per file, so these tests exercise the shipped write path rather than a mirror of
+//   it. `writeUpdates` itself stays untested here: it needs the CLI's flags, logger and
+//   filesystem.
 //
 // It runs on `node:test` under Node's type stripping, like the module payload tests.
 // Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { applyEdits, modify } from "jsonc-parser";
 import {
+  applyBumps,
   depPath,
   depValue,
   discoverManifests,
-  inferFormatting,
   readManifestDeps,
 } from "./update-deps.ts";
 import type { Dep, Manifest, ManifestKind } from "./update-deps.ts";
 
 // --- Helpers -----------------------------------------------------------------
-
-/** One chosen bump, the shape `writeUpdates` folds over a file. */
-interface Bump {
-  dep: Dep;
-  target: string;
-}
-
-/**
- * Apply bumps to a manifest's own bytes. This mirrors the fold in `writeUpdates`; see
- * the file header for why it is a copy rather than a call.
- */
-function applyBumps(manifest: Manifest, bumps: Bump[]): string {
-  const formattingOptions = inferFormatting(manifest.raw);
-  let source = manifest.raw;
-  for (const { dep, target } of bumps) {
-    const path = depPath(manifest, dep);
-    if (path !== undefined) {
-      const edits = modify(source, path, depValue(manifest, dep, target), {
-        formattingOptions,
-      });
-      source = applyEdits(source, edits);
-    }
-  }
-  return source;
-}
 
 /** Build an in-memory manifest from an inline fixture. `deps` are named per test. */
 function fixture(kind: ManifestKind, raw: string, deps: Dep[] = []): Manifest {

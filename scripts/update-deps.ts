@@ -1263,7 +1263,7 @@ function printReport(rows: Row[], notes: string[]): void {
 // `packages/cli/src/lib/patch/jsonc.ts:177` rather than imported: that module resolves
 // under the CLI's build, this script runs under bare node type stripping, and importing
 // across the boundary would drag the wrangler helpers along for eight lines.
-export function inferFormatting(source: string): FormattingOptions {
+function inferFormatting(source: string): FormattingOptions {
   const usesTabs = /^\t/m.test(source);
   const spaceIndent = source.match(/^( +)\S/m)?.[1];
   return {
@@ -1332,6 +1332,34 @@ export function depValue(manifest: Manifest, dep: Dep, target: string): string {
   return isDescriptorArray ? `${dep.name}@${target}` : target;
 }
 
+/** One chosen bump: the dep to rewrite and the exact version to write at its path. */
+export interface Bump {
+  dep: Dep;
+  target: string;
+}
+
+/**
+ * Fold a file's bumps over its own bytes and return the new source. One `modify` +
+ * `applyEdits` per bump, re-parsing each time. jsonc-parser computes edit offsets against
+ * the source it was handed, and promises nothing about applying two independent edit sets
+ * to one string, so the sequential fold is the only correct order for a multi-bump file.
+ * A dep whose path no longer resolves is skipped, leaving the source unchanged.
+ */
+export function applyBumps(manifest: Manifest, bumps: Bump[]): string {
+  const formattingOptions = inferFormatting(manifest.raw);
+  let source = manifest.raw;
+  for (const { dep, target } of bumps) {
+    const path = depPath(manifest, dep);
+    if (path !== undefined) {
+      const edits = modify(source, path, depValue(manifest, dep, target), {
+        formattingOptions,
+      });
+      source = applyEdits(source, edits);
+    }
+  }
+  return source;
+}
+
 // Rewrite each manifest's deps to the chosen exact version as a text edit over the file's
 // own bytes, so key order, indentation, compact one-line arrays and the trailing newline
 // all survive untouched (issue #93). `toWrite` is the list of chosen candidates
@@ -1366,23 +1394,14 @@ async function writeUpdates(
     if (!fileCands || fileCands.length === 0) {
       continue;
     }
-    // Fold the file's bumps over its own bytes: one modify + applyEdits per candidate,
-    // re-parsing each time. jsonc-parser computes edit offsets against the source it was
-    // handed, and promises nothing about applying two independent edit sets to one
-    // string, so the sequential fold is the only correct order for a multi-bump file.
-    const formattingOptions = inferFormatting(manifest.raw);
-    let source = manifest.raw;
+    const source = applyBumps(
+      manifest,
+      fileCands.map((c) => ({ dep: c.row.dep, target: c.target }))
+    );
 
     for (const c of fileCands) {
       const { dep } = c.row;
       const { target } = c;
-      const path = depPath(manifest, dep);
-      if (path !== undefined) {
-        const edits = modify(source, path, depValue(manifest, dep, target), {
-          formattingOptions,
-        });
-        source = applyEdits(source, edits);
-      }
       changed++;
       log.step(
         `${pc.dim(relative(root, manifest.file))}  ${pc.cyan(dep.name)} ` +
