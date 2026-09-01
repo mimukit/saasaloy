@@ -1,123 +1,85 @@
 # Plan — Make `saasaloy add` honest about partial failure
 
+Grilled: 2026-09-01
+
 > Tracked in [#49](https://github.com/mimukit/saasaloy/issues/49) (single issue — all phases folded).
-> Blocked by [#47](https://github.com/mimukit/saasaloy/issues/47) for its test infrastructure.
+> Blocked by [#47](https://github.com/mimukit/saasaloy/issues/47) for its test infrastructure — settled at the grill: Phase 5 waits for that harness rather than building a thin local one.
+> Updated 2026-09-01: gaps 1 and 2 of the original draft landed independently (#98, #101/f84b9cc); rescoped to what remains, plus the `config.installed` truthfulness finding deferred here from the PR #101 review. Grilled the same day.
 
 ## Context
 
-`saasaloy add` writes files, merges npm dependencies, applies config patches, and creates skill
-symlinks. If it throws halfway, the project is left in a partial state — and today the bookkeeping
-that describes that state is subtly wrong.
+`saasaloy add` writes files, merges npm dependencies, applies config patches, and creates skill symlinks. If it throws halfway, the project is left in a partial state. The command's failure model is deliberate: `commands/add.ts` wraps `executePlan` in a `try/finally` that persists the manifest, config, and lock regardless of outcome, so **the ledger stays truthful and recovery is re-running `add`**. File writes are idempotent, `planDeps` dedupes, and the manifest's content hashes make a re-run classify already-written files as `unchanged`.
 
-The code is not careless about this. `commands/add.ts` wraps `executePlan` in a `try/finally` that
-persists the manifest and config **regardless of outcome**, with a comment stating the intent
-plainly: *"Record whatever actually landed even if a mid-plan write failed — a written file the
-manifest doesn't know about would classify as a conflict next run."* That is a deliberate failure
-model: **the ledger stays truthful, and recovery is re-running `add`.** It's a defensible choice for
-a copy-in tool — file writes are idempotent, `planDeps` dedupes, and the manifest's content hashes
-make a re-run classify already-written files as `unchanged`.
+Since the original draft, two of its four gaps were fixed on main:
 
-The problem is that the model is neither fully implemented nor written down anywhere:
+- **Dependency ordering** — `writeDeps` now runs *after* `executePlan` (landed with #98), so a mid-plan failure leaves the root `package.json` untouched.
+- **The lock save** — moved into the same `finally` as the manifest and config (#101, commit f84b9cc), so a mid-plan throw cannot leave changed files without provenance.
 
-1. **Dependencies are written before any file is.** `writeDeps` mutates the root `package.json`
-   *before* `executePlan` runs. A mid-plan failure therefore leaves the project carrying dependencies
-   for a module whose code never landed — and if the user gives up rather than re-running, those
-   orphan dependencies stay forever.
-2. **The lock save escapes the `try/finally`.** `upsertLock` and `saveLock` sit *after* the block, so
-   a failed apply leaves files on disk with **no provenance recorded at all** — precisely the
-   integrity anchor ADR 0012 introduced the lock to provide. The manifest says the files are managed;
-   the lock can't say where they came from.
-3. **Nothing tells the user what to do.** A thrown error surfaces as a stack trace or a message. The
-   recovery instruction — "re-run `saasaloy add <module>`" — is never stated.
-4. **No test drives a mid-plan failure**, so none of the above is protected against regression.
+What remains:
 
-**Success:** a mid-plan failure leaves a state that is accurately described by the manifest, config,
-and lock; re-running `add` converges to a complete install; the user is told so; and the failure
-model is a recorded decision rather than an implicit property of statement ordering.
+1. **`config.installed` claims more than disk delivers.** `executePlan` appends every `plan.install` entry to `config.installed` at the end of the run, whether or not that module's files landed. A file held back as `lateDrift` (edited between plan preview and write) keeps its old bytes, yet its module is marked installed — and `add` then skips an installed module at plan time, so `saasaloy add <name>` reports "nothing to do" and the user cannot repair it. Only `update` offers a way out. (Found in the CodeRabbit review of #101, [thread](https://github.com/mimukit/saasaloy/pull/101#discussion_r3896304790), deferred here.) The fix needs a per-module notion of "applied completely" that `ApplyResult` does not yet expose.
+2. **The `finally` path can defeat itself.** `upsertLock` runs first inside the `finally` and calls `source.provenance()`, which **throws** if no commit SHA was ever resolved. If that throw fires, the manifest and config saves after it never run, and the new error masks the original one — the exact "bookkeeping describes disk" guarantee the block exists to provide.
+3. **Nothing tells the user what to do.** A mid-apply failure surfaces through `cancel(formatFailure(error))` — the recovery instruction, "re-run `saasaloy add <module>`", is never stated.
+4. **No test drives a mid-plan failure**, so none of the behaviour above is protected against regression, including the two fixes that already landed.
+5. **The model is not written down.** It lives in code comments; `remove` (#27), `update` (#17), and every future applier change depend on it.
+
+**Success:** a mid-plan failure leaves a state accurately described by the manifest, config, and lock; re-running `add` converges to a complete install; the user is told so; and the failure model is a recorded decision rather than an implicit property of statement ordering.
 
 ## Design decisions (settled)
+
+The last five rows were settled at the 2026-09-01 grill.
 
 | Decision | Resolution |
 |----------|-----------|
 | **Failure model** | **Keep "re-run is recovery" and make it correct.** The applier's operations are already idempotent and the manifest already exists to make a re-run classify correctly. Formalize what the code was reaching for rather than replacing it. |
-| **Rejected: stage-and-commit** | Writing to a staging directory and atomically moving into place gives true atomicity for *files*, but config patches (`magicast`/`jsonc-parser` edits to existing project files) and root `package.json` merges cannot be staged that way. It would deliver partial atomicity at a large cost while still leaving a partial-state case to reason about. |
-| **Rejected: journal-based undo** | Recording every write and rolling back on failure is the middle-weight option and would share machinery with `saasaloy remove` (#27). Rejected for now because it creates a **second undo path** that must stay in sync with `remove`'s, and because `remove` itself already declines to reverse config patches (deferred to #36) — so the journal couldn't fully roll back either. Revisit if #36 lands and makes reversal complete. |
-| **Dependency write moves after the apply** | The risky, many-step work (file writes, patches, symlinks) runs first; dependencies land only if it succeeded. Under the re-run model either order converges, but this order never leaves orphan dependencies for a user who walks away. |
-| **Lock save moves inside the `try/finally`** | Provenance is bookkeeping, and all bookkeeping should obey one rule: describe what is actually on disk. |
-| **Documented as an ADR** | This is a hard-to-reverse behavioral contract that `remove` (#27), `update` (#17), and every future module depends on. It belongs in `docs/adr/` next to ADR 0006 (copy-in updates, manifest hash tracking), not buried in a code comment. |
-| **Scope** | Ordering, bookkeeping truthfulness, the recovery message, an ADR, and tests. **No** new applier capability, no rollback engine, no change to what a successful `add` does. |
+| **Rejected: stage-and-commit** | Writing to a staging directory and atomically moving into place gives true atomicity for *files*, but config patches (`magicast`/`jsonc-parser` edits to existing project files) and root `package.json` merges cannot be staged that way. Partial atomicity at a large cost, with a partial-state case still left to reason about. |
+| **Rejected: journal-based undo** | Recording every write and rolling back on failure would create a second undo path that must stay in sync with `remove`'s (#27), and `remove` itself declines to reverse config patches (deferred to #36) — so the journal couldn't fully roll back either. Revisit if #36 lands and makes reversal complete. |
+| **Installed-state derives from results, not intent** | `config.installed` and the lock's per-module entries are keyed off what `executePlan` actually applied per module, not off `plan.install`. This is the invariant — *bookkeeping describes disk* — extended from files to module state. |
+| **Documented as an ADR** | A hard-to-reverse behavioral contract that `remove`, `update`, and every future module depend on. It belongs in `docs/adr/` next to ADR 0006 (copy-in updates, manifest hash tracking). |
+| **The completeness gate is authorization, not bytes** | `lateDrift` blocks installed-ness because the user approved a plan showing *different* bytes. On the re-run the same file classifies as `drift` at plan time, the preview shows it, and informed approval installs the module with the file held for merge. Plan-time `heldBack` therefore never blocks installed-ness, and the state converges in one re-run. The ADR records this asymmetry and its reason. |
+| **Dependency repair needs no `--force` change** | A failed dependency is absent from `config.installed` once installed-state derives from results, so a plain re-run of `add <requested>` re-plans it. `--force` keeps meaning "re-apply this one module". |
+| **Patch failures never block completeness** | `patchConflicts` and `patchRefusals` stay a warning class ("wire it by hand"). If they blocked installed-ness, a refused patch would make a module permanently uninstallable, since a re-run refuses the same patch again. File writes alone decide "completed". |
+| **`doctor` surfaces the partial state; the lock stays a provenance record** | The lock records nothing for an incomplete module. `doctor` (#47) gains a check: a module with manifest-tracked files but no `config.installed` entry is flagged as "partial install — re-run `saasaloy add <name>`". No new lock schema field (ADR 0012 made the lock provenance, not status). |
+| **An incomplete non-throwing run exits 0** | A `lateDrift` hold-back is a declined write, not a failure — consistent with `heldBack` merges. The output names the uninstalled module and says a re-run completes it. Only a thrown apply error exits non-zero. |
+| **Scope** | Bookkeeping truthfulness, `finally`-path hardening, the recovery message, an ADR, and tests. **No** new applier capability, no rollback engine, no change to what a fully successful `add` does. |
 
 ## Approach
 
-### Phase 1 — Reorder the apply sequence
+### Phase 1 — Make `ApplyResult` say which modules fully applied
 
-- Move the `writeDeps` block in `commands/add.ts` to **after** `executePlan` returns successfully.
-- Preserve today's best-effort semantics: a missing root `package.json` warns rather than failing,
-  and dependency version conflicts warn rather than blocking.
-- Confirm nothing in `executePlan` reads the root `package.json` deps it previously would have found
-  already written.
+- Extend `ApplyResult` (in `packages/cli/src/lib/applier.ts`) with a per-module completeness view — e.g. `completed: string[]`: modules whose every planned *file write* landed or was already `unchanged`. `lateDrift` excludes a module; plan-time `heldBack`, patch conflicts, and patch refusals do not (settled above).
+- In `executePlan`, append to `config.installed` only the completed modules, replacing the unconditional `plan.install` loop.
+- In `commands/add.ts`, derive the lock's freshly-installed list the same way (today it filters `plan.install` by `config.installed`, which becomes correct automatically once the step above lands — verify rather than assume).
+- Report an incomplete module in the output: name it, say why (`lateDrift`), and say the re-run completes it. The run still exits 0 (settled above).
 
-### Phase 2 — Bring the lock inside the bookkeeping guarantee
+### Phase 2 — Harden the `finally` path
 
-- Move `upsertLock` + `saveLock` into the same `finally` that persists the manifest and config.
-- Handle the case the current placement quietly avoids: `source.provenance()` **throws** if called
-  before a SHA was resolved, which is reachable when the failure happened early. Guard it.
-- Resolve what the lock should record on a partial apply — see Open questions; the plan's assumption
-  is that it records provenance for modules whose files actually landed, derived from the apply
-  result rather than from the intended install list.
+- Guard `source.provenance()` inside the `finally`: if no SHA was resolved, skip the lock upsert (there is nothing truthful to record) rather than throwing over the manifest and config saves.
+- Guard each of the three saves so a failure in one cannot skip the others or mask the original apply error; surface a save failure as a warning alongside the original error.
+- Confirm the local-source `provenance()` (registry.ts:218) cannot throw the same way.
 
 ### Phase 3 — Tell the user how to recover
 
-- Catch the failure at the command boundary and emit a clear message: what failed, that partial
-  changes were recorded, and that re-running `saasaloy add <module>` completes the install.
-- Use the existing `@clack/prompts` + `picocolors` presentation rather than a raw throw.
-- Keep a non-zero exit code.
+- Catch the failure at the command boundary and emit a clear message: what failed, that partial changes were recorded truthfully, and that re-running `saasaloy add <module>` completes the install.
+- Use the existing `@clack/prompts` + `picocolors` presentation rather than a raw throw. Keep a non-zero exit code (`exitCodeFor`) for the thrown case only.
 
 ### Phase 4 — Record the decision
 
-- Write `docs/adr/adr-00NN-re-run-is-recovery-for-partial-applies-2026-08-01.md`: the model, why
-  stage-and-commit and journal-undo were rejected, and the invariant every future applier change must
-  preserve — *bookkeeping describes disk*.
+- Write `docs/adr/adr-0029-re-run-is-recovery-for-partial-applies-2026-09-01.md`: the model, why stage-and-commit and journal-undo were rejected, the authorization framing of the completeness gate, the patch-failure and exit-code decisions, and the invariant every future applier change must preserve — *bookkeeping describes disk*, for files and for module installed-state alike.
 - Cross-reference from ADR 0006 and from `CONTEXT.md`'s `.saasaloy/manifest.json` entry.
+- Add a cross-plan note to `plan-applier-test-harness-2026-08-01.md` (#47): `doctor` gains the "manifest-tracked files, module not installed" check settled here.
 
 ### Phase 5 — Prove it
 
-- Inject a failure mid-`executePlan` (a fixture module whose Nth file write throws) and assert:
-  files written before the failure are in the manifest; the lock records provenance consistent with
-  those files; the root `package.json` is **unmodified**; and `config.installed` does not claim the
-  module is installed.
-- Assert **convergence**: re-running the same `add` against that partial state completes, classifies
-  the already-written files as `unchanged`, and produces a project identical to one from a clean
-  single run.
-- **Depends on** `plan-applier-test-harness-2026-08-01.md` for the fixture-module and temp-project
-  infrastructure. That plan should land first, or this phase builds a thin version of it.
-
-## Open questions
-
-Targets for grillkit before this is filed as issues.
-
-- **What does the lock record on a partial apply?** Only modules whose files fully landed, every
-  module attempted, or a partial marker? "Fully landed" is cleanest but the current `ApplyResult`
-  may not carry enough information to distinguish it — that needs checking.
-- **Should `config.installed` ever record a partially-applied module?** Today it's appended at the
-  very end of `executePlan`, so a partial apply leaves it absent while files exist and are tracked.
-  That is the re-run model working as intended — but it means `saasaloy list`/`remove` see a module
-  that isn't installed while its files sit on disk. Does `remove` (#27) need to handle that, or is a
-  manifest entry without a `config.installed` entry a state `doctor` should flag?
-- **Does `--force` interact correctly with a partial state?** It re-applies only the requested
-  module, not its dependencies — if the failure occurred *inside* a dependency, `--force` on the
-  requested module would not repair it.
-- **Should a config patch that fails behave the same as a file write that fails?** Patches are
-  currently non-fatal (they degrade to a `patchConflicts` warning), which is a different failure
-  class from a throwing write. Is that distinction deliberate?
-- **Is there a case for `--no-deps`,** so a user recovering from a failure can re-run the file apply
-  without touching `package.json`?
+- Inject a failure mid-`executePlan` (a fixture module whose Nth file write throws) and assert: files written before the failure are in the manifest; the lock is consistent with them; the root `package.json` is unmodified; `config.installed` does not claim the module.
+- Drive the `lateDrift` case: edit a planned file between plan and apply, assert the module stays uninstalled, the run exits 0 with the re-run note, and the re-run (approving the drift plan) installs the module with the file held for merge.
+- Assert **convergence**: re-running the same `add` against the partial state completes, classifies already-written files as `unchanged`, and produces a project identical to one from a clean single run.
+- **Blocked by** `plan-applier-test-harness-2026-08-01.md` (#47) for the fixture-module and temp-project infrastructure. Settled at the grill: wait for that harness; do not build a thin local one.
 
 ## Non-goals
 
 - **True atomicity** — no staging directory, no all-or-nothing guarantee.
 - **A rollback or undo engine.** Undo is `saasaloy remove` (#27); reversing config patches is #36.
-- **Any change to a successful `add`.** The happy path must be byte-identical afterwards.
-- **The broader test suite** — `plan-applier-test-harness-2026-08-01.md`.
-- **Interrupt handling (Ctrl-C mid-apply).** A signal-safety story is a separate question from an
-  exception-safety one.
+- **Any change to a fully successful `add`.** The happy path stays byte-identical.
+- **The broader test suite** — `plan-applier-test-harness-2026-08-01.md` (#47).
+- **Interrupt handling (Ctrl-C mid-apply).** Signal safety is a separate question from exception safety.
