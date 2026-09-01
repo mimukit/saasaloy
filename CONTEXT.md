@@ -81,6 +81,10 @@ _Avoid: putting resolved SHAs in `saasaloy.json`._
 ### File aliases
 The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin`.
 
+### Conditional file entry (`onlyWith`)
+A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.
+_Avoid: file variant, dialect flag, conditional patch (patches carry no condition)._
+
 ### Config-patch engine
 The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings.
 
