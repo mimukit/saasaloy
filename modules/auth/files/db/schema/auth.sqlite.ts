@@ -93,6 +93,10 @@ export const session = sqliteTable(
     // --- admin plugin --- set only while an admin impersonates this user; the
     // plugin hides impersonated sessions from `listSessions` by reading it.
     impersonatedBy: text("impersonated_by"),
+    // --- teams patch point --- nullable because the organization plugin sets it only
+    // after a user chooses an active organization. This mirrors the plugin's `session`
+    // schema block even when the teams module is not installed.
+    activeOrganizationId: text("active_organization_id"),
   },
   (table) => [index("session_user_id_idx").on(table.userId)]
 );
