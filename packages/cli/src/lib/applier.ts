@@ -1,5 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix } from "node:path";
+import { RefusalError } from "./exit.js";
 import {
   detectCollisions,
   detectOwnedCollisions,
@@ -7,7 +8,6 @@ import {
   formatOwnedCollisions,
 } from "./collisions.js";
 import type { OwnedCollision } from "./collisions.js";
-import { RefusalError } from "./exit.js";
 import {
   assertNoSymlinkPath,
   classifyLink,
@@ -75,6 +75,8 @@ export interface PlannedFile {
   oldContent?: string;
   /** True for files copied from an `agent.skills` folder (vs. `files[]`). */
   isSkill: boolean;
+  /** The `onlyWith` condition that chose this variant — the plan names it (#99). */
+  onlyWith?: string;
 }
 
 // How a skill's `.claude/skills/<name>` symlink relates to what's already on disk:
@@ -162,34 +164,97 @@ export interface ModuleFileRef {
   target: string;
   /** Absolute path of the source file inside the module folder. */
   abs: string;
+  /** The `onlyWith` condition that selected this variant; absent on an unconditional file. */
+  onlyWith?: string;
+}
+
+/** One `onlyWith` entry that could have filled a target, as the refusal names it. */
+export interface FileCandidate {
+  from: string;
+  onlyWith: string;
+}
+
+/** A target every one of whose entries is conditional, none of them matching this project. */
+export interface UnmatchedTarget {
+  module: string;
+  target: string;
+  /** Every entry that declared this target, in descriptor order. */
+  candidates: FileCandidate[];
+}
+
+/** What a module ships once its conditions are applied: the files, and the targets left empty. */
+export interface ModuleFileSelection {
+  files: Map<string, ModuleFileRef>;
+  unmatched: UnmatchedTarget[];
 }
 
 /**
  * Every file a module ships, keyed by its project-relative target — `files[]`, each
- * scaffold's workspace files, and each `agent.skills` folder expanded.
+ * scaffold's workspace files, and each `agent.skills` folder expanded — with each entry's
+ * `onlyWith` condition applied against the resolved install set.
  *
- * The one place those three rules live. `buildPlan` walks it to plan an `add`, and
+ * The one place those four rules live. `buildPlan` walks it to plan an `add`, and
  * `buildUpdatePlan` walks it at two SHAs to diff a module against itself, so `update`
  * always sees exactly the set `add` would have written. Each engine carried its own copy
  * of these rules until #98, which is how the write-path guards drifted apart.
+ *
+ * `onlyWith` (#99) lets one module ship a dialect-bound file twice, once per database
+ * driver, both entries naming the same `target`. Selection has to sit here rather than in
+ * `buildPlan`: `auth`'s per-driver file lives in a scaffold rather than in `files[]`, and
+ * an `update` that filtered differently would diff against a set `add` never wrote and
+ * reinstate the variant this project does not hold.
+ *
+ * `installed` is this run's resolved graph unioned with what the project already records.
+ * A target whose entries are *all* conditional and none matches is not an error here —
+ * this stays a pure lister, and a project that predates a variant must not make `update`
+ * throw. It comes back in `unmatched`, and `buildPlan` alone refuses on it.
  */
-export async function listModuleFiles(
+export async function selectModuleFiles(
   mod: LoadedModule,
-  aliases: Record<string, string>
-): Promise<Map<string, ModuleFileRef>> {
-  const out = new Map<string, ModuleFileRef>();
-  const record = (from: string, target: string): void => {
-    out.set(target, { from, target, abs: joinModulePath(mod.dir, from) });
+  aliases: Record<string, string>,
+  installed: ReadonlySet<string>
+): Promise<ModuleFileSelection> {
+  // Gather every entry per target first, then resolve: a target is only unmatched once
+  // all of its candidates are known, and the last eligible entry still wins, which is the
+  // precedence `record` had before conditions existed.
+  const byTarget = new Map<
+    string,
+    { chosen?: ModuleFileRef; candidates: FileCandidate[] }
+  >();
+  const record = (from: string, target: string, onlyWith?: string): void => {
+    let slot = byTarget.get(target);
+    if (!slot) {
+      slot = { candidates: [] };
+      byTarget.set(target, slot);
+    }
+    if (onlyWith !== undefined) {
+      slot.candidates.push({ from, onlyWith });
+      if (!installed.has(onlyWith)) {
+        return;
+      }
+    }
+    slot.chosen = {
+      from,
+      target,
+      abs: joinModulePath(mod.dir, from),
+      ...(onlyWith === undefined ? {} : { onlyWith }),
+    };
   };
 
   for (const file of mod.item.files ?? []) {
-    record(file.path, resolveTarget(aliases, file.target));
+    record(file.path, resolveTarget(aliases, file.target), file.onlyWith);
   }
   for (const scaffold of mod.item.scaffolds ?? []) {
     for (const file of scaffold.files) {
-      record(file.path, posix.join(scaffold.workspace, file.target));
+      record(
+        file.path,
+        posix.join(scaffold.workspace, file.target),
+        file.onlyWith
+      );
     }
   }
+  // A skill folder is expanded from disk, not declared file by file, so there is no entry
+  // to hang a condition on. Its files are unconditional by construction (#99).
   for (const skillRel of mod.item.agent?.skills ?? []) {
     const folderName = posix.basename(skillRel);
     for (const rel of await listFilesRelative(
@@ -201,7 +266,47 @@ export async function listModuleFiles(
       );
     }
   }
-  return out;
+
+  const files = new Map<string, ModuleFileRef>();
+  const unmatched: UnmatchedTarget[] = [];
+  for (const [target, slot] of byTarget) {
+    if (slot.chosen) {
+      files.set(target, slot.chosen);
+    } else {
+      unmatched.push({
+        module: mod.item.name,
+        target,
+        candidates: slot.candidates,
+      });
+    }
+  }
+  return { files, unmatched };
+}
+
+/** {@link selectModuleFiles} without the unmatched report — what `update` needs. */
+export async function listModuleFiles(
+  mod: LoadedModule,
+  aliases: Record<string, string>,
+  installed: ReadonlySet<string>
+): Promise<Map<string, ModuleFileRef>> {
+  return (await selectModuleFiles(mod, aliases, installed)).files;
+}
+
+/**
+ * The refusal `add` prints when a target's every variant was filtered out. Same shape as
+ * `formatConflicts`/`formatMissingRequirements`: a heading, then one line per target
+ * naming each candidate and the module that would have selected it. `requiresOneOf`
+ * should make this unreachable, so it reads as a descriptor bug rather than user error.
+ */
+export function formatUnmatchedTargets(unmatched: UnmatchedTarget[]): string {
+  const heading = `Cannot apply — no file variant matches this project for ${unmatched.length} target${unmatched.length > 1 ? "s" : ""}:`;
+  const lines = unmatched.map((u) => {
+    const candidates = u.candidates
+      .map((c) => `${c.from} (onlyWith ${c.onlyWith})`)
+      .join(", ");
+    return `  ${u.target} — ${u.module} ships ${candidates}, and none of those modules is installed.`;
+  });
+  return [heading, ...lines].join("\n");
 }
 
 /** True for a target under the `.agents/skills/` namespace an `agent.skills` folder fills. */
@@ -351,6 +456,7 @@ async function planModuleFile(
       action,
       oldContent,
       isSkill: isSkillTarget(ref.target),
+      ...(ref.onlyWith === undefined ? {} : { onlyWith: ref.onlyWith }),
     },
     ...(ownedBy === undefined ? {} : { ownedBy }),
   };
@@ -422,6 +528,16 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // Scaffold aliases win over the on-disk map when resolving this run's file targets.
   const aliasView = { ...config.aliases, ...aliases };
 
+  // What an `onlyWith` condition is tested against (#99): everything this run installs,
+  // plus everything the project already holds. A feature added long after its driver has
+  // only the second half; a feature that drags its driver in has only the first.
+  const installedSet = new Set([
+    ...install,
+    ...alreadyInstalled,
+    ...config.installed,
+  ]);
+  const unmatched: UnmatchedTarget[] = [];
+
   // Enumerate every module's files first, so the collision check sees the whole run
   // before a single file is classified. One enumeration for all three rules — `files[]`,
   // each scaffold's workspace files, and each `agent.skills` folder — shared with
@@ -432,9 +548,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     if (!mod) {
       continue;
     }
-    refsByModule.set(name, [
-      ...(await listModuleFiles(mod, aliasView)).values(),
-    ]);
+    const selection = await selectModuleFiles(mod, aliasView, installedSet);
+    unmatched.push(...selection.unmatched);
+    refsByModule.set(name, [...selection.files.values()]);
   }
 
   // Two modules writing the same target is legal only when one reaches the other through
@@ -531,6 +647,14 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const owned = detectOwnedCollisions(claims, modules);
   if (owned.length > 0) {
     throw new RefusalError(formatOwnedCollisions(owned, requested));
+  }
+
+  // A target every one of whose variants was filtered out would otherwise be a file that
+  // silently never arrived — an app missing its schema, discovered at typecheck. Refuse
+  // the whole plan instead, before `executePlan` writes anything, and name what would
+  // have satisfied it. A refusal, not a failure: `add` exits 2 (#98's code scheme).
+  if (unmatched.length > 0) {
+    throw new RefusalError(formatUnmatchedTargets(unmatched));
   }
 
   const files = [...byTarget.values()];

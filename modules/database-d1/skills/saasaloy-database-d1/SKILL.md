@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-d1
-description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (c.env.DB), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, or applying migrations with db:migrate:local and db:migrate:prod. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, or applying migrations with db:migrate:local and db:migrate:prod. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-d1 — the Cloudflare D1 driver
@@ -26,26 +26,40 @@ without forcing Workers types on a project that runs Postgres.
 Read `saasaloy-database` first for how to add a table or write a repository. Nothing below changes
 those steps.
 
-## Read the DB from a route: `c.env.DB`, never `process.env`
+## Read the DB from a route: `withDb(c, …)`
 
 The D1 binding arrives on the Worker's `env`, threaded through Hono as `c.env.DB`. Compose
-`DbBindings` into the route's Hono generic so it's typed with no patch to api's entry:
+`DbBindings` into the route's Hono generic so it's typed with no patch to api's entry, then wrap
+the handler's body in `withDb`:
 
 ```ts
 // apps/api/src/routes/waitlist.ts
 import { Hono } from "hono";
-import { getDb, type DbBindings } from "@repo/db/client";
+import { withDb, type DbBindings } from "@repo/db/client";
 import { listWaitlist } from "@repo/db/repositories/waitlist";
 
 const waitlist = new Hono<{ Bindings: DbBindings }>();
 
-waitlist.get("/", async (c) => c.json(await listWaitlist(getDb(c.env.DB))));
+waitlist.get("/", (c) => withDb(c, async (db) => c.json(await listWaitlist(db))));
 
 export default waitlist;
 ```
 
-`getDb(d1)` wraps the binding in a Drizzle instance carrying the whole schema barrel, so
-`db.query.<table>` and relational queries work. `DbBindings` is `{ DB: D1Database }`.
+`getDb(c.env)` reads the binding off `env` and wraps it in a Drizzle instance carrying the whole
+schema barrel, so `db.query.<table>` and relational queries work. `DbBindings` is
+`{ DB: D1Database }`.
+
+**`withDb` does nothing extra on D1, and that is the point.** A D1 binding is a stub the runtime
+owns, so there is no connection to open and nothing to close; this driver's `withDb` calls `getDb`
+and runs your callback. `database-postgres` exports the same four names — `getDb`, `Db`,
+`DbRequestContext`, `withDb` — with the same signatures, and there the wrapper opens a real socket
+per request and closes it on `c.executionCtx.waitUntil`. One route body is therefore correct under
+both drivers, which is what lets a feature module like `waitlist` ship one route file instead of
+two. Read the db through bare `getDb` instead and the route leaks a socket the day the project
+switches driver.
+
+Reach for `getDb(c.env)` directly only where there is no request context to hand over — a scheduled
+handler, a script.
 
 Never reach for `process.env` — it doesn't exist on Workers. Bindings live on the runtime, and
 `c.env` is the only way to them.
@@ -155,9 +169,25 @@ two `db:migrate:*` scripts plus the `wrangler` devDependency in `packages/db/pac
 those by hand. Your `src/schema/*.ts` files stay put and are still SQLite — port them to `pg-core`
 yourself.
 
+**A driver switch takes the dependent feature modules with it.** `auth` and `waitlist` pick their
+schema variant at install time, and the unchosen one is filtered before the plan is built, so
+neither notices that the driver under it changed. Remove and add each of them too:
+
+```sh
+saasaloy remove waitlist
+saasaloy remove auth
+saasaloy remove database-d1
+saasaloy add database-postgres
+saasaloy add auth
+saasaloy add waitlist
+```
+
+There is no data migration in either direction; see ADR 0026.
+
 ## Boundaries to honor
 
-- **`c.env.DB` for the binding, never `process.env`.**
+- **`c.env` for the binding, never `process.env`.** Read it through `withDb(c, …)`, the call shape
+  both drivers share, and keep bare `getDb(env)` for code holding no request context.
 - **Tables import `drizzle-orm/sqlite-core`**, matching `dialect: "sqlite"` in `drizzle.config.ts`.
   Never hand-edit that config.
 - **Replace `database_id` before going remote**, and only then. Local dev needs no Cloudflare

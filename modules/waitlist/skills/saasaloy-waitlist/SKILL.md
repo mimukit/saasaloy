@@ -7,32 +7,45 @@ description: Runbook for the waitlist feature — a landing-page email waitlist 
 
 `waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points
 `api`, `database`, `validators` and the base web template already established, and registers its
-route with one `chained-route` patch. It requires
-`dependsOn: ["api", "database", "validators"]`, resolved and installed automatically.
+route with one `chained-route` patch. It depends on `api`, `database` and `validators`, resolved and
+installed automatically. It names no database **driver**: `database`'s own `requiresOneOf` is what
+guarantees one is present.
 
-## The database driver is your choice, and this payload is SQLite-only
+## Either database driver
 
-`waitlist` names the `database` capability, never a driver. `database` declares
-`requiresOneOf: ["database-d1", "database-postgres"]`, so on a clean project `saasaloy add waitlist`
-asks which driver to install, and a non-interactive run refuses and names both. A project that
-already has a driver keeps it.
+This module installs against `database-d1` or `database-postgres`, and picks the right table
+declaration for whichever one the project holds. It ships the table twice:
 
-`packages/db/src/schema/waitlist.ts` still builds its table with `sqliteTable` from
-`drizzle-orm/sqlite-core`. Pick `database-postgres` and the table does not compile: `pnpm typecheck`
-fails on the dialect. That combination has never worked, and the failure is now loud instead of
-silent. Earlier releases pinned `dependsOn: ["database-d1"]`, which overrode a Postgres project's
-driver choice rather than reporting it.
+| Source in the module | Installs when | Dialect |
+|---|---|---|
+| `files/db/schema/waitlist.sqlite.ts` | `onlyWith: "database-d1"` | `sqliteTable`, `drizzle-orm/sqlite-core` |
+| `files/db/schema/waitlist.pg.ts` | `onlyWith: "database-postgres"` | `pgTable`, `drizzle-orm/pg-core` |
 
-Porting the table to `drizzle-orm/pg-core` by hand is not the fix. The dialect-neutral rewrite is
-tracked in [#99](https://github.com/mimukit/saasaloy/issues/99). Until it lands, a Postgres project
-writes its own waitlist table and route, using this module's route and form as the worked example.
+Both name the same `target`, `packages/db/src/schema/waitlist.ts`, so exactly one lands and the
+other is filtered out before the plan is built. `saasaloy add waitlist --dry-run` prints which
+source it chose.
+
+**Everything else is one file.** The route, the validators, the component and the section are
+dialect-neutral, because Drizzle's query builder is the same under both dialects and the driver's
+`withDb(c, …)` is the same call. The dialect reaches the column declarations and stops there.
+
+The two variants are the same table, so keep them in step. They differ only where each dialect is
+idiomatic: the SQLite id is `integer("id").primaryKey({ autoIncrement: true })` and the Postgres id
+is `integer("id").primaryKey().generatedAlwaysAsIdentity()`; `created_at` is a millisecond integer
+on SQLite (`mode: "timestamp_ms"`, defaulted from `unixepoch('subsecond')`) and a `timestamptz` on
+Postgres (defaulted from `now()`). A row comes back the same shape either way.
+
+**Switching driver is remove-then-add, and it takes this module with it.** The unchosen variant is
+filtered before planning, so a project that swaps `database-d1` for `database-postgres` keeps the
+SQLite table it already installed. Remove `waitlist` and add it again after the driver switch to
+get the other variant. There is no data migration; see ADR 0026.
 
 ## What it drops, and where
 
 | File | Convention it extends |
 |------|------------------------|
 | `apps/api/src/routes/waitlist.ts` | api's route-module contract — a chained sub-app under `export const waitlist` |
-| `packages/db/src/schema/waitlist.ts` | db's `schema/*.ts` glob — one table, `waitlist` |
+| `packages/db/src/schema/waitlist.ts` | db's `schema/*.ts` glob — one table, `waitlist`, in the installed driver's dialect |
 | `packages/validators/src/waitlist.ts` | validators' one-file-per-feature rule — `@repo/validators/waitlist` |
 | `apps/web/src/components/WaitlistForm.tsx` | React island (base template ships React) |
 | `apps/web/src/sections/waitlist.astro` | base `index.astro`'s `sections/*.astro` glob |
@@ -67,8 +80,33 @@ pre-generated SQL**:
 
 ```sh
 pnpm --filter @repo/db db:generate       # emits SQL for the new `waitlist` table
-pnpm --filter @repo/db db:migrate:local  # applies it to local D1
 ```
+
+`db:generate` belongs to the `database` core and is the same command under either driver. **The
+apply step is the driver's**, and the command differs, so read the skill for the driver this
+project installed: `saasaloy-database-d1` or `saasaloy-database-postgres`. Nothing here should name
+one of them, because this module works with both.
+
+### Updating a D1 project that installed waitlist before the two-variant split
+
+`created_at` used to be `integer("created_at", { mode: "timestamp" })`, which stores **whole
+seconds**. The SQLite variant now uses `mode: "timestamp_ms"`, which stores **milliseconds**. The
+integers already in the table do not change when `saasaloy update waitlist` rewrites the schema
+file — only the way Drizzle reads them changes, so every pre-existing row comes back dated near
+1970.
+
+Nothing this module ships reads `createdAt` back (the route only inserts), so a project that never
+queries the column can ignore this. If yours does, rescale the old rows once, after the update and
+before the first read:
+
+```sql
+UPDATE waitlist SET created_at = created_at * 1000 WHERE created_at < 100000000000;
+```
+
+The `WHERE` clause is what makes it safe to run twice: a genuine millisecond timestamp is already
+past that bound, so a second run touches nothing. Apply it with the same command your driver's
+skill gives for migrations. Postgres projects are unaffected — `timestamptz` never carried the
+seconds form.
 
 ## The route's responses
 
@@ -133,12 +171,14 @@ If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worke
   and still typechecks, but `typeof waitlist` forgets it, so `api.waitlist` disappears from the
   client with no error anywhere in `apps/api`.
 - **Input shapes live in `@repo/validators/waitlist`**, not inline in the route.
-- **Migrations stay manual** — `db:generate` then `db:migrate:local`/`:prod`, per the
-  `saasaloy-database` skill. Never auto-migrate.
+- **Migrations stay manual** — `db:generate` from the `saasaloy-database` skill, then the apply
+  command from the installed driver's skill. Never auto-migrate.
 - **Duplicate email → 201, not error.** Don't change this to a 409 without reconsidering the
   membership-leak tradeoff above.
-- **D1 is a hard requirement.** The table is `sqliteTable`, so don't rewrite it as `pgTable` to get
-  this running on `database-postgres` — see the section above.
+- **The dialect lives in the two schema variants and nowhere else.** Edit both when the table
+  changes, and keep the route on `withDb(c, …)` and the shared query builder. A `sqlite-core` or
+  `pg-core` import anywhere but `files/db/schema/waitlist.*.ts` pins this module to one driver
+  again.
 - **No email-confirmation flow ships here.** Optional `email`-module integration is a follow-up
   (no resolver support yet for optional `dependsOn`); this module's `dependsOn` is a hard
-  requirement on `api` + `database` + `database-d1` + `validators` only.
+  requirement on `api` + `database` + `validators` only.

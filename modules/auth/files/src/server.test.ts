@@ -215,7 +215,7 @@ describe("server.ts wiring", () => {
     // If a helper grows its own literal status or message, these go stale and the
     // tests above stop describing what the api actually answers.
     assert.match(source, /const \{ denial, session \} = decide\(/);
-    assert.match(source, /decide\(await getSession\(request\), role\)/);
+    assert.match(source, /decide\(await getSession\(c\), role\)/);
     assert.match(source, /new HTTPException\(denial\.status/);
   });
 

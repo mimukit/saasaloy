@@ -466,6 +466,13 @@ export async function buildUpdatePlan(
   const modules: ModuleUpdatePlan[] = [];
   const touched: string[] = [];
 
+  // Both records of what this project holds, unioned: `saasaloy.json` is the live list and
+  // the lock is what `add` actually resolved, and a project can be mid-way between them.
+  const installed: ReadonlySet<string> = new Set([
+    ...config.installed,
+    ...Object.keys(lock.modules),
+  ]);
+
   for (const item of inputs) {
     const plan = await planOneModule({
       root,
@@ -473,6 +480,7 @@ export async function buildUpdatePlan(
       manifest,
       input: item,
       pkg: pkg ?? null,
+      installed,
     });
     modules.push(plan);
     for (const file of plan.files) {
@@ -515,6 +523,8 @@ interface PlanOneArgs {
   manifest: Manifest;
   input: ModuleUpdateInput;
   pkg: PackageJson | null;
+  /** Modules this project holds — what an `onlyWith` condition is tested against (#99). */
+  installed: ReadonlySet<string>;
 }
 
 async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
@@ -539,8 +549,20 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     ...scaffoldAliases(theirs),
   };
 
-  const theirsFiles = await listModuleFiles(theirs, aliasView);
-  const baseFiles = base ? await listModuleFiles(base, aliasView) : undefined;
+  // The same install set both revisions are filtered against (#99): what the project
+  // holds, plus any prerequisite this update introduces. Filtering base and theirs alike
+  // is what keeps the three-way merge honest — a variant this project never held is not
+  // a file the new revision "dropped", and the one it does hold is the one to diff.
+  const installedSet = new Set([
+    ...args.installed,
+    ...(input.prereqs?.order ?? []),
+    name,
+  ]);
+
+  const theirsFiles = await listModuleFiles(theirs, aliasView, installedSet);
+  const baseFiles = base
+    ? await listModuleFiles(base, aliasView, installedSet)
+    : undefined;
 
   const files: PlannedUpdateFile[] = [];
   for (const ref of theirsFiles.values()) {

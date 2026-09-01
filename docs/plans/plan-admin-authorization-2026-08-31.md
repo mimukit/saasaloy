@@ -97,6 +97,6 @@ This phase is independent of Phases 1 and 2 and can land first.
 - An admin-management UI. `client.admin.setRole` and friends already exist on the client; nothing renders them.
 - `GET /waitlist`, gated or otherwise. It needs an optional-dependency mechanism the registry does not have, which is its own issue.
 - A migration shipped in `modules/database`. The schema file drops into `packages/db/src/schema/` and the project's own `db:generate` emits the SQL, which is the existing arrangement (ADR 0020).
-- Postgres portability of the row-count hook. `auth` declares `dependsOn: ["database-d1"]` (ADR 0026), so there is no Postgres path to break. It becomes real when auth supports `database-postgres`, and belongs to that issue.
+- ~~Postgres portability of the row-count hook.~~ **Retracted 2026-09-01 (#99, ADR 0029).** This bullet said `auth` declares `dependsOn: ["database-d1"]` (ADR 0026), so there was no Postgres path to break. That pin is gone: `auth` now installs under `database-d1` or `database-postgres` and ships a schema variant per driver. The row-count hook has a live Postgres path, so it is in scope for the admin-authorization work rather than deferred, and whatever ships it has to run on both drivers.
 - Rate limiting or abuse controls on `/signup`. Real, and a different issue.
 - Changing issue #13's acceptance criteria. #13 is closed and its QA plan already tests role denial.

@@ -2,21 +2,21 @@ import { env } from "cloudflare:workers";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
-import { getDb } from "@repo/db/client";
 import { user as userTable } from "@repo/db/schema/auth";
 import { ADMIN_ROLE } from "./authorize";
+import { authDb, provider } from "./db-provider";
 import { deriveCookieDomain, requireAuthSecret } from "./env";
 import type { AuthEnv } from "./env";
 
-// Bindings + secrets this module reads. `cloudflare:workers`' importable `env` (not
-// Hono's `c.env`) is used deliberately here — see the comment on `export const auth`
-// below for why. The string vars live in `./env` with the two rules that read them, so
-// those rules stay testable without booting a Worker.
-interface AuthBindings extends AuthEnv {
-  DB: D1Database;
-}
-
-const authEnv = env as unknown as AuthBindings;
+// Secrets and string config this module reads. `cloudflare:workers`' importable `env`
+// (not Hono's `c.env`) is used deliberately here — see the comment on `export const
+// auth` below for why. The rules that read these vars live in `./env`, so they stay
+// testable without booting a Worker.
+//
+// There is no database binding in this type, and there must not be one. The binding
+// shape is the driver's business and lives in `./db-provider.ts`, which this module
+// ships once per driver. That is what lets one `auth.ts` serve both.
+const authEnv = env as unknown as AuthEnv;
 
 // Same localhost dev fallback `modules/api`'s CORS spine uses — one origin list, two
 // readers (api's `cors()` middleware and this file's `trustedOrigins`), no drift.
@@ -37,13 +37,19 @@ const cookieDomain = deriveCookieDomain(authEnv);
 // Auth's published development key. See ./env.ts for the rule and the escape hatch.
 const secret = requireAuthSecret(authEnv);
 
-// One client for both readers: the Drizzle adapter below and the first-admin hook.
-const db = getDb(authEnv.DB);
-
 // Is the `user` table still empty? A one-row `select` rather than a `count(*)`, because
-// the only question is existence and D1 stops at the first row.
+// the only question is existence and the driver stops at the first row.
+//
+// Reads through `authDb`, the same request-scoped proxy the adapter below takes, not a
+// module-scope client. This runs inside the `create.before` hook, which Better Auth only
+// reaches from an `auth.api.*` or `auth.handler` call, and every one of those already
+// runs inside `withAuthScope`. A client bound at module scope would serve the first
+// request and throw on the second under `database-postgres`.
 async function noUsersYet(): Promise<boolean> {
-  const rows = await db.select({ id: userTable.id }).from(userTable).limit(1);
+  const rows = await authDb
+    .select({ id: userTable.id })
+    .from(userTable)
+    .limit(1);
   return rows.length === 0;
 }
 
@@ -52,8 +58,18 @@ async function noUsersYet(): Promise<boolean> {
 // point (`{ exportName: "auth", arrayProp: "plugins" }` — see
 // packages/cli/src/lib/patch/ts-module.ts) must be a module-scope `export const` for
 // `billing`/`teams` to patch `plugins: [...]` with zero codemod changes. Workers'
-// `cloudflare:workers` importable-env makes bindings available at module scope, which
-// is what makes this shape possible without losing per-request binding access.
+// `cloudflare:workers` importable-env makes the string config and the secret above
+// available at module scope, which is what makes this shape possible.
+//
+// The database is the one thing that is NOT module-scope, and the split is load-bearing.
+// A Workers isolate outlives the request that created it while an open socket does not,
+// so under `database-postgres` a client bound here serves the first request and throws
+// "Cannot perform I/O on behalf of a different request" on the second. `authDb` is a
+// proxy holding no client of its own; it reads the current request's out of an
+// `AsyncLocalStorage` that `withAuthScope` enters. Every `auth.handler` and `auth.api.*`
+// call therefore has to run inside that wrapper, on both drivers — `getSession(c)` from
+// `./server.ts` and `apps/api/src/routes/auth.ts` already do. See `./db-scope.ts`,
+// `./db-provider.ts` and ADR 0029.
 export const auth = betterAuth({
   basePath: "/auth",
   baseURL: authEnv.BETTER_AUTH_URL,
@@ -63,7 +79,7 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // needs the `email` capability; auth deliberately doesn't depend on it
   },
-  database: drizzleAdapter(db, { provider: "sqlite" }),
+  database: drizzleAdapter(authDb, { provider }),
   // First user wins. This is the ONLY automatic role promotion in the system, and it
   // fires at most once per project: the hook reads the `user` table before the row is
   // written, so it can only match on the very first sign-up. Without it a fresh

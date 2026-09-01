@@ -1,4 +1,5 @@
-import { auth, requireAdmin } from "@repo/auth/server";
+import { auth, requireAdmin, withAuthScope } from "@repo/auth/server";
+import type { AuthDbBindings } from "@repo/auth/server";
 import { Hono } from "hono";
 
 // The worked example of the server half of the admin gate. `apps/admin`'s root route
@@ -21,22 +22,30 @@ import { Hono } from "hono";
 // `CORS_ORIGINS` allowlist to `*` before this sub-app is mounted, and a sub-app that
 // sets no `onError` inherits api's — which is what turns the `HTTPException` below into
 // `{ "error": { "code": "forbidden", "message": "role required: admin" } }` with a 403.
-export const adminUsers = new Hono().get("/users", async (c) => {
-  // First line of the handler, before anything reads the database. It throws 401 when
-  // nobody is signed in and 403 when the session's role is not "admin", so the body
-  // below only ever runs for an admin.
-  await requireAdmin(c.req.raw);
+export const adminUsers = new Hono<{ Bindings: AuthDbBindings }>().get(
+  "/users",
+  // One scope around the whole handler, because both halves below reach the database and
+  // `auth` is a module-scope singleton whose client is not. `requireAdmin` would enter its
+  // own scope if this did not, but `auth.api.listUsers` has no such wrapper and would
+  // throw under `database-postgres`. See packages/auth/src/db-scope.ts.
+  (c) =>
+    withAuthScope(c, async () => {
+      // First line of the handler, before anything reads the database. It throws 401 when
+      // nobody is signed in and 403 when the session's role is not "admin", so the body
+      // below only ever runs for an admin.
+      await requireAdmin(c);
 
-  // better-auth's `admin()` plugin owns the query. Going through `auth.api` rather than
-  // Drizzle keeps the vendor package inside `packages/auth` (ADR 0020) and keeps the
-  // shape in step with the plugin across a bump. It re-checks the caller's role itself;
-  // `requireAdmin` runs first so the refusal is api's envelope, not the plugin's.
-  const { users, total } = await auth.api.listUsers({
-    headers: c.req.raw.headers,
-    query: { limit: 100 },
-  });
+      // better-auth's `admin()` plugin owns the query. Going through `auth.api` rather than
+      // Drizzle keeps the vendor package inside `packages/auth` (ADR 0020) and keeps the
+      // shape in step with the plugin across a bump. It re-checks the caller's role itself;
+      // `requireAdmin` runs first so the refusal is api's envelope, not the plugin's.
+      const { users, total } = await auth.api.listUsers({
+        headers: c.req.raw.headers,
+        query: { limit: 100 },
+      });
 
-  // Pass the status explicitly. `hc` keys the response type by status code, so an
-  // omitted `200` leaves the caller with a looser type than the route actually has.
-  return c.json({ users, total }, 200);
-});
+      // Pass the status explicitly. `hc` keys the response type by status code, so an
+      // omitted `200` leaves the caller with a looser type than the route actually has.
+      return c.json({ users, total }, 200);
+    })
+);

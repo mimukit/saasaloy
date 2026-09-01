@@ -52,19 +52,17 @@ Read the driver's skill for anything the tables themselves don't decide: how the
 a request handler, which bindings or environment variables it needs, and how a generated migration
 is applied.
 
-## D1 is the default, and two modules only work on it
+## D1 is the default, and both feature modules run on either driver
 
-`auth` and `waitlist` ship SQLite payloads: `sqliteTable` tables, and `provider: "sqlite"` in
-`auth`'s Better Auth config. Neither names a driver in `dependsOn`, because a feature module has no
-standing to pick a project's database. Both depend on this core, so `add auth` on a clean project
-fires the `requiresOneOf` prompt and installs the driver you choose.
+`auth` and `waitlist` ship their table declarations twice, once against `sqlite-core` and once
+against `pg-core`, and the descriptor's `onlyWith` condition installs the pair that matches the
+driver already in the project. Their route files are single files, because `withDb(c, …)` has the
+same signature under both. `saasaloy add auth --dry-run` prints which schema source it chose.
 
-Choose `database-postgres` and those two modules install, then fail at `pnpm typecheck` on the
-dialect. That is the honest answer for a combination that has never worked. Dialect-neutral payloads
-are the end state, tracked in [#99](https://github.com/mimukit/saasaloy/issues/99); ADR 0026's
-2026-09-01 retraction records why the old `database-d1` pin came out. A Postgres project writes its
-own tables and routes in the meantime, and everything below this line works the same on either
-driver.
+Both modules declared `dependsOn: ["database-d1"]` until 2026-08-31, as a stopgap while the
+payloads were still SQLite-only. That is gone; ADR 0026's amendment records the retraction, and ADR
+0029 records the request-scoped client `auth` needs to hold on Postgres. Everything below this line
+works the same on either driver.
 
 ## Add a table (the core convention)
 
@@ -121,12 +119,15 @@ Drizzle its relational metadata in `getDb`:
 ```ts
 // packages/db/src/repositories/waitlist.ts
 import { waitlist } from "../schema/waitlist";
-import type { getDb } from "../client";
+import type { Db } from "../client";
 
-export function listWaitlist(db: ReturnType<typeof getDb>) {
+export function listWaitlist(db: Db) {
   return db.select().from(waitlist);
 }
 ```
+
+`Db` is the driver's Drizzle client type. Both drivers export it under that name, so a repository
+signature does not change when the project switches driver.
 
 (A file inside `packages/db` imports its own siblings by relative path. `@repo/db/...` is for
 *other* workspaces consuming this package, not for code inside it.)
@@ -134,18 +135,35 @@ export function listWaitlist(db: ReturnType<typeof getDb>) {
 A repository written against the shared Drizzle query builder works on either driver. One reaching
 for driver-specific SQL does not, so keep it on the builder where you can.
 
-## `getDb` and the `@repo/db/client` contract
+## `withDb` and the `@repo/db/client` contract
 
 The core's `package.json` declares the `./client` export, but the file behind it,
-`src/client.ts`, is scaffolded by the **driver**. Every consumer imports the same path either way:
+`src/client.ts`, is scaffolded by the **driver**. Every consumer imports the same path either way,
+and both drivers export the same four names behind it — `getDb`, `Db`, `DbRequestContext` and
+`withDb` — with the same signatures:
 
 ```ts
-import { getDb } from "@repo/db/client";
+// apps/api/src/routes/waitlist.ts
+import { withDb, type DbBindings } from "@repo/db/client";
 import { listWaitlist } from "@repo/db/repositories/waitlist";
+
+const waitlist = new Hono<{ Bindings: DbBindings }>();
+
+waitlist.get("/", (c) => withDb(c, async (db) => c.json(await listWaitlist(db))));
 ```
 
-`getDb` takes whatever the active driver connects with, so its argument and the type it exports
-alongside are the driver's business. The driver skill shows the exact call for a route.
+**`withDb(c, …)` is the one call shape for a route**, under either driver. It hands your callback a
+client for this request and cleans up after it: on `database-postgres` that closes a real socket on
+`c.executionCtx.waitUntil`, and on `database-d1` there is nothing to close, so it runs the callback
+and returns. Writing the route this way means it does not change when the project switches driver.
+
+`getDb(c.env)` is the client `withDb` builds, and it takes the whole `env` on both drivers — the
+D1 one reads `env.DB`, the Postgres one resolves a connection string. Call it directly only where
+there is no request context to hand over, such as a scheduled handler or a script, and then read
+the driver skill for what you owe the connection afterwards.
+
+`DbBindings` is the only piece whose *shape* is the driver's business. Compose it into the route's
+Hono generic and the driver decides what `c.env` has to carry.
 
 Note the import is `@repo/db/...`, the real package name, via `@repo/db`'s `exports` map, not
 `@db/...`. `@db` is only the *file-placement* alias `saasaloy.json` uses to resolve a module's
@@ -191,7 +209,6 @@ explicit command you run.
   belongs in a driver module instead.
 - **Exactly one driver per project.** `requiresOneOf` on this core stops you at zero, `conflictsWith`
   on each driver stops you at two; switching means `saasaloy remove` on the old driver first.
-- **`auth` and `waitlist` only run on `database-d1`.** They depend on this core and name no driver,
-  so nothing refuses them on Postgres; the typecheck does, and that is the honest answer until they
-  are dialect-neutral.
+- **`auth` and `waitlist` install under either driver**, and each picks its schema variant when you
+  add it. Switching driver later means removing and adding those modules too; see the driver skill.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.

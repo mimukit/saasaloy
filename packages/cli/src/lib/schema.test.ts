@@ -53,6 +53,79 @@ describe("patch-kind enums agree across both schemas", () => {
   });
 });
 
+// A one-entry descriptor whose file entry carries whatever extra keys a case wants to
+// put the condition through, well-formed or not.
+function conditionalItem(
+  extra: Record<string, unknown>
+): Record<string, unknown> {
+  return {
+    name: "waitlist",
+    type: "saasaloy:feature",
+    files: [
+      {
+        path: "files/db/schema/waitlist.sqlite.ts",
+        target: "@db/schema/waitlist.ts",
+        ...extra,
+      },
+    ],
+  };
+}
+
+// `onlyWith` is authored on a file entry, and there are two of those objects in the
+// schema — top-level `files[]` and `scaffolds[].files[]`. Both set
+// `additionalProperties: false`, so a keyword added to one and forgotten on the other
+// rejects half the descriptors that use it. auth's variants live in a scaffold and
+// waitlist's in `files[]`, so #99 needs both.
+describe("registry-item schema — onlyWith (#99)", () => {
+  it("declares onlyWith on both file-entry shapes", async () => {
+    const schema = await readSchema("registry-item.schema.json");
+    expect(JSON.stringify(schema).match(/"onlyWith"/g)).toHaveLength(2);
+  });
+
+  it("accepts onlyWith on a top-level files[] entry", async () => {
+    await expect(
+      validateRegistryItem(conditionalItem({ onlyWith: "database-d1" }))
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("accepts onlyWith on a scaffold files[] entry", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "auth",
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/auth",
+            aliases: { "@auth": "packages/auth/src" },
+            files: [
+              {
+                path: "files/src/db-provider.pg.ts",
+                target: "src/db-provider.ts",
+                onlyWith: "database-postgres",
+              },
+            ],
+          },
+        ],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("rejects a misspelt onlyWit", async () => {
+    await expect(
+      validateRegistryItem(conditionalItem({ onlyWit: "database-d1" }))
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("rejects a condition that is not one module name", async () => {
+    await expect(
+      validateRegistryItem(conditionalItem({ onlyWith: "Database D1" }))
+    ).resolves.toMatchObject({ valid: false });
+    await expect(
+      validateRegistryItem(conditionalItem({ onlyWith: ["database-d1"] }))
+    ).resolves.toMatchObject({ valid: false });
+  });
+});
+
 // One authored op per kind. `Record<PatchKind, …>` keeps this exhaustive: a new kind
 // with no sample here fails typecheck rather than silently going untested.
 const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {

@@ -1,9 +1,19 @@
+import { readFile } from "node:fs/promises";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   insertIntoPluginArray,
   pluginArrayRemoveRefusal,
   removeFromPluginArray,
 } from "./ts-module.js";
+
+// The real file `billing` and `teams` patch, read off disk rather than restated here.
+// The synthetic fixture below cannot catch an edit to `modules/auth` that hoists
+// `plugins` to a named const or moves `auth` out of module scope, and #99 rewrote that
+// file around this exact call.
+const SHIPPED_AUTH = fileURLToPath(
+  new URL("../../../../../modules/auth/files/src/auth.ts", import.meta.url)
+);
 
 const AUTH = `import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
@@ -66,6 +76,18 @@ export const auth = betterAuth({ plugins: [stripe()] });
     const out = insertIntoPluginArray(noPlugins, STRIPE);
     expect(out).toContain("plugins: [stripe()]");
     expect(out).toContain("database: db");
+  });
+
+  it("still finds the patch point in the shipped modules/auth `auth.ts`", async () => {
+    const source = await readFile(SHIPPED_AUTH, "utf-8");
+    const out = insertIntoPluginArray(source, STRIPE);
+
+    expect(out).not.toBe(source);
+    expect(out).toContain("plugins: [admin(), stripe()]");
+    expect(out).toContain('import { stripe } from "@better-auth/stripe";');
+    // The module-scope export is what the codemod anchors on; a refactor that wraps it
+    // in a factory would break every feature capability that patches it.
+    expect(out).toContain("export const auth = betterAuth({");
   });
 });
 

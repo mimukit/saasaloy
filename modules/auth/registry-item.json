@@ -37,7 +37,16 @@
   ],
   "files": [
     { "path": "files/api/routes/auth.ts", "target": "@api/routes/auth.ts" },
-    { "path": "files/db/schema/auth.ts", "target": "@db/schema/auth.ts" }
+    {
+      "path": "files/db/schema/auth.sqlite.ts",
+      "target": "@db/schema/auth.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/auth.pg.ts",
+      "target": "@db/schema/auth.ts",
+      "onlyWith": "database-postgres"
+    }
   ],
   "scaffolds": [
     {
@@ -48,6 +57,17 @@
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/src/auth.ts", "target": "src/auth.ts" },
         { "path": "files/src/authorize.ts", "target": "src/authorize.ts" },
+        { "path": "files/src/db-scope.ts", "target": "src/db-scope.ts" },
+        {
+          "path": "files/src/db-provider.d1.ts",
+          "target": "src/db-provider.ts",
+          "onlyWith": "database-d1"
+        },
+        {
+          "path": "files/src/db-provider.pg.ts",
+          "target": "src/db-provider.ts",
+          "onlyWith": "database-postgres"
+        },
         { "path": "files/src/env.ts", "target": "src/env.ts" },
         { "path": "files/src/server.ts", "target": "src/server.ts" },
         { "path": "files/src/client.ts", "target": "src/client.ts" }

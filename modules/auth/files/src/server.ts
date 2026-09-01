@@ -2,20 +2,57 @@ import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
 import { ADMIN_ROLE, decide } from "./authorize";
 import type { Denial } from "./authorize";
+import { withAuthScope } from "./db-provider";
+import type { AuthDbBindings } from "./db-provider";
 
 export { auth } from "./auth";
 export { ADMIN_ROLE } from "./authorize";
 
-// The protected-route recipe: read the session off any inbound Request's headers
-// (the httpOnly cookie rides along automatically), return null when there isn't one.
-// A route does `const session = await getSession(c.req.raw); if (!session) return c.json({}, 401);`
-// — no route ever imports `better-auth` directly (ADR 0020).
-//
-// This stays exported alongside the three helpers below, because a route that wants a
-// nullable session (a page that renders differently when signed in, rather than
-// refusing) needs an answer, not a throw.
-export async function getSession(request: Request) {
-  return auth.api.getSession({ headers: request.headers });
+// Re-exported so a route reaches the scope and the binding shape through one entry
+// point. `apps/api/src/routes/auth.ts` imports only `hono` and this module, and no route
+// ever imports `better-auth` directly (ADR 0020). Which driver supplied them is
+// `packages/auth/src/db-provider.ts`'s business, and nothing above it can tell.
+export { withAuthScope } from "./db-provider";
+export type { AuthDbBindings } from "./db-provider";
+
+/**
+ * The part of a Hono `Context` `getSession` reads.
+ *
+ * Structural on purpose: `packages/auth` takes no `hono` dependency, and any request
+ * context carrying these three fields fits. It is `DbRequestContext` from
+ * `@repo/db/client` plus `req.raw`, which is where the session cookie arrives.
+ */
+export interface AuthRequestContext {
+  env: AuthDbBindings;
+  executionCtx: { waitUntil: (promise: Promise<unknown>) => void };
+  req: { raw: Request };
+}
+
+/**
+ * Read the session for this request, or `null` when there is not one.
+ *
+ * The protected-route recipe:
+ *
+ *   const session = await getSession(c);
+ *   if (!session) return c.json({ error: { code: "unauthorized" } }, 401);
+ *
+ * It takes the whole context rather than a `Request`, and that is not decoration. Better
+ * Auth's `auth` is a module-scope singleton while its database client belongs to one
+ * request, so the call has to run inside `withAuthScope`, which needs `c.env` to open the
+ * client and `c.executionCtx` to close it. Passing `c.req.raw` alone would leave the
+ * caller to remember the wrapper, and forgetting it type-checks, passes on D1 and throws
+ * on Postgres. Doing it here means there is nothing to forget. See `./db-scope.ts`.
+ *
+ * The httpOnly session cookie rides along on `c.req.raw` automatically.
+ *
+ * This stays exported alongside the three helpers below, because a route that wants a
+ * nullable session (a page that renders differently when signed in, rather than
+ * refusing) needs an answer, not a throw.
+ */
+export async function getSession(c: AuthRequestContext) {
+  return withAuthScope(c, () =>
+    auth.api.getSession({ headers: c.req.raw.headers })
+  );
 }
 
 // Why a throw and not Hono middleware: the `chained-route` patch kind registers routes,
@@ -37,8 +74,8 @@ function denialError(denial: Denial): HTTPException {
  * The session, or a 401. Use this when a route needs to know who the caller is and
  * nothing more — `session.user.id` is right there, so no second lookup.
  */
-export async function requireSession(request: Request) {
-  const { denial, session } = decide(await getSession(request));
+export async function requireSession(c: AuthRequestContext) {
+  const { denial, session } = decide(await getSession(c));
   if (denial) {
     throw denialError(denial);
   }
@@ -57,8 +94,8 @@ export async function requireSession(request: Request) {
  * One role per user: `decide` compares with `===`, so a comma-joined `"admin,support"` is
  * refused even though better-auth's own plugin would accept it. See `hasRole`.
  */
-export async function requireRole(request: Request, role: string) {
-  const { denial, session } = decide(await getSession(request), role);
+export async function requireRole(c: AuthRequestContext, role: string) {
+  const { denial, session } = decide(await getSession(c), role);
   if (denial) {
     throw denialError(denial);
   }
@@ -66,6 +103,6 @@ export async function requireRole(request: Request, role: string) {
 }
 
 /** The session, or a 401/403. The gate every administrative route opens with. */
-export async function requireAdmin(request: Request) {
-  return requireRole(request, ADMIN_ROLE);
+export async function requireAdmin(c: AuthRequestContext) {
+  return requireRole(c, ADMIN_ROLE);
 }

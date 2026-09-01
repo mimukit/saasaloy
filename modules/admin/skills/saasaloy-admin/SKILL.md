@@ -101,7 +101,7 @@ import { Hono } from "hono";
 import { requireAdmin } from "@repo/auth/server";
 
 export const reports = new Hono().get("/", async (c) => {
-  await requireAdmin(c.req.raw);
+  await requireAdmin(c);
   return c.json({ reports: await listReports() }, 200);
 });
 ```

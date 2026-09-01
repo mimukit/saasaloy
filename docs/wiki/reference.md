@@ -121,6 +121,15 @@ adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and 
 options instead of choosing for you. `database` declares it, so the core can never land on
 a project with no driver behind its `@repo/db/client` export.
 
+A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
+one module. `add` copies that file only when the named module is in the resolved install
+set: this run's graph plus what `saasaloy.json` already records. Two entries may name the
+same `target` under disjoint conditions, which is how a module ships one file per database
+dialect and lets the installed driver pick. The condition is applied where `add` and
+`update` share their file listing, so `update` diffs the variant the project actually
+holds. When a target's entries are all conditional and none matches, `add` exits 2 and
+names the target and every candidate rather than leaving the file out.
+
 `database-d1` and `database-postgres` are the pair both fields point at today. They are
 **driver modules**, two implementations of the same capability's connection layer, and a
 project holds exactly one: `requiresOneOf` on the core stops it at zero, `conflictsWith` on
@@ -129,11 +138,12 @@ each driver stops it at two. The `database` core carries the tables, the schema 
 by removing one driver and adding the other, which moves no data
 ([ADR 0026](../adr/adr-0026-database-driver-split-2026-08-28.md)).
 
-`auth` and `waitlist` ship SQLite payloads, but neither names a driver. Both declare
-`dependsOn` on the `database` capability, so `add auth` on a clean project fires the
-driver prompt and installs whichever one you pick. Pick `database-postgres` and the
-project then fails at `pnpm typecheck` on the dialect, because those payloads are still
-SQLite. See ADR 0026's 2026-09-01 retraction and [#99](https://github.com/mimukit/saasaloy/issues/99).
+`auth` and `waitlist` install under either driver. Each ships its table declarations twice,
+once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
+condition installs the variant matching the driver already in the project; `--dry-run`
+prints which source it chose. Because that choice is made at install time, switching driver
+later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
+and [ADR 0029](../adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md).
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
