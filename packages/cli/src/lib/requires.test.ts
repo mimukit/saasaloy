@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { detectConflicts } from "./conflicts.js";
+import { detectConflicts, formatConflicts } from "./conflicts.js";
 import { emptyLock, upsertLock } from "./lock.js";
 import type { LoadedModule, ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -220,7 +220,10 @@ describe("the first-party database driver wiring", () => {
     );
   });
 
-  it("has no payload naming a driver, so the choice stays the user's", async () => {
+  it("has neither payload pinning a driver — `database` is what guarantees one", async () => {
+    // #99 retracted the `dependsOn: ["database-d1"]` stopgap from both payloads. They ship
+    // a per-driver schema variant instead, so they depend on the `database` capability and
+    // let its `requiresOneOf` pick the driver (ADR 0029).
     expect((await descriptor("auth")).dependsOn).toStrictEqual([
       "api",
       "database",
@@ -267,20 +270,49 @@ describe("the first-party database driver wiring", () => {
     expect(message).toContain("database-d1, database-postgres");
   });
 
-  it("keeps `add auth` on a Postgres project free of a conflict", async () => {
-    // Before phase 3 this pair was refused, because `auth` dragged `database-d1` in and
-    // the two drivers exclude each other. The pin is gone, so the installed driver is
-    // whatever the user picked and no conflict fires.
+  it("lets `add auth` through on a project already running database-postgres", async () => {
+    // The #99 acceptance case, read off the real descriptors: `add database-postgres`,
+    // then `add auth`. `auth` brings no driver of its own, so nothing collides with the
+    // installed one and `database`'s requiresOneOf is already satisfied. Before #91 this
+    // pair was refused, because `auth` dragged `database-d1` in and the drivers exclude
+    // each other.
+    const installed = await loaded("database-postgres");
+    const lock = emptyLock();
+    upsertLock(lock, PROVENANCE, ["database-postgres"], graph(installed));
+
+    const project = config("api", "database", "database-postgres");
+    const incoming = graph(await loaded("auth"));
+
+    expect(
+      detectConflicts({ config: project, graph: incoming, lock }).conflicts
+    ).toStrictEqual([]);
+    expect(
+      detectMissingRequirements({ config: project, graph: incoming })
+    ).toStrictEqual([]);
+  });
+
+  it("refuses `add database-d1` on a project already running database-postgres", async () => {
+    // The collision that survives #99 is driver against driver, and only that. The reverse
+    // pass reads the installed driver's lock entry to find it.
     const installed = await loaded("database-postgres");
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ["database-postgres"], graph(installed));
 
     const report = detectConflicts({
       config: config("database", "database-postgres"),
-      graph: graph(await loaded("database"), await loaded("auth")),
+      graph: graph(await loaded("database-d1")),
       lock,
     });
 
-    expect(report.conflicts).toStrictEqual([]);
+    expect(report.conflicts).toStrictEqual([
+      {
+        conflictsWith: "database-postgres",
+        declaredBy: "database-d1",
+        installed: "database-postgres",
+      },
+    ]);
+    const message = formatConflicts(report.conflicts, "database-d1");
+    expect(message).toContain("Cannot add database-d1");
+    expect(message).toContain("saasaloy remove database-postgres");
   });
 });
