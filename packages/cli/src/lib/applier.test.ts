@@ -15,6 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildPlan, executePlan } from "./applier.js";
 import type { Plan } from "./applier.js";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
@@ -1899,5 +1900,262 @@ describe("a descriptor source path that escapes the module folder", () => {
         files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
       })
     ).resolves.toMatchObject({ valid: false });
+  });
+});
+
+// #91. The overlap above is legal because the driver dependsOn the core. Two modules with
+// no dependsOn edge either way have nothing that says whose copy the user wanted, so the
+// run is refused before a single file is classified.
+describe("a target two unrelated modules in one run both ship", () => {
+  it("refuses the run, naming both modules and the contested path", async () => {
+    const waitlist = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/schema.ts", target: "@db/schema.ts" }],
+      },
+      { "files/schema.ts": "export const waitlist = {};\n" }
+    );
+    const blog = await writeModule(
+      "blog",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/schema.ts", target: "@db/schema.ts" }],
+      },
+      { "files/schema.ts": "export const posts = {};\n" }
+    );
+
+    const promise = plan({
+      install: ["waitlist", "blog"],
+      modules: [waitlist, blog],
+      config: { aliases: { "@db": "packages/db/src" }, installed: [] },
+    });
+    await expect(promise).rejects.toThrow(RefusalError);
+    await expect(promise).rejects.toThrow(
+      /waitlist and blog both write packages\/db\/src\/schema\.ts/
+    );
+    // The refusal fires before planning, so nothing reached disk.
+    await expect(
+      pathExists(join(root, "packages", "db", "src", "schema.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("catches a scaffolds[] target the same way it catches a files[] one", async () => {
+    const scaffoldModule = async (name: string): Promise<LoadedModule> =>
+      writeModule(
+        name,
+        {
+          type: "saasaloy:capability",
+          scaffolds: [
+            {
+              workspace: "packages/db",
+              files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+            },
+          ],
+        },
+        { "files/tsconfig.json": `{ "name": "${name}" }\n` }
+      );
+
+    await expect(
+      plan({
+        install: ["reports", "search"],
+        modules: [
+          await scaffoldModule("reports"),
+          await scaffoldModule("search"),
+        ],
+      })
+    ).rejects.toThrow(
+      /reports and search both write packages\/db\/tsconfig\.json/
+    );
+  });
+
+  it("still allows the core-plus-driver overlap through dependsOn", async () => {
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["vite/client"] }\n' }
+    );
+    const driver = await writeModule(
+      "database-d1",
+      {
+        type: "saasaloy:capability",
+        dependsOn: ["database"],
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["@cloudflare/workers-types"] }\n' }
+    );
+
+    const planned = await plan({
+      install: ["database", "database-d1"],
+      modules: [core, driver],
+    });
+    expect(planned.files).toHaveLength(1);
+    expect(planned.files[0]?.module).toBe("database-d1");
+  });
+});
+
+// #91 phase 2. The same rule against what is already installed: `classify` reads the
+// owner out of `manifest.managed[target].module`, and buildPlan refuses a claimant that
+// does not reach that owner through `dependsOn`. `--force` never crosses this line.
+// A driver whose files[] land on `packages/db/src/`, so two drivers contest them.
+const driverItem: Omit<RegistryItem, "name"> = {
+  type: "saasaloy:capability",
+  dependsOn: ["database"],
+  files: [
+    { path: "files/client.ts", target: "@db/client.ts" },
+    { path: "files/drizzle.config.ts", target: "@db/drizzle.config.ts" },
+  ],
+};
+
+function driverFiles(name: string): Record<string, string> {
+  return {
+    "files/client.ts": `export const client = "${name}";\n`,
+    "files/drizzle.config.ts": `export default { dialect: "${name}" };\n`,
+  };
+}
+
+describe("a target another installed module already owns", () => {
+  const config: SaasaloyConfig = {
+    aliases: { "@db": "packages/db/src" },
+    installed: ["database", "database-d1"],
+  };
+
+  // Put d1's two files on disk and record d1 as their owner, the state `add database-d1`
+  // leaves behind.
+  async function installD1(): Promise<Manifest> {
+    const d1 = await writeModule("database-d1", driverItem, driverFiles("d1"));
+    const manifest = emptyManifest();
+    const applied = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: [],
+      modules: new Map([["database-d1", d1]]),
+      config,
+      manifest,
+    });
+    await executePlan(applied, root, config, manifest);
+    return manifest;
+  }
+
+  it("refuses a sibling driver, naming every contested path once", async () => {
+    const manifest = await installD1();
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database-d1"
+    );
+    const before = await readFile(
+      join(root, "packages/db/src/client.ts"),
+      "utf-8"
+    );
+
+    const promise = buildPlan({
+      root,
+      install: ["database-postgres"],
+      alreadyInstalled: ["database", "database-d1"],
+      modules: new Map([
+        [
+          "database-postgres",
+          await writeModule("database-postgres", driverItem, driverFiles("pg")),
+        ],
+        [
+          "database",
+          await writeModule("database", { type: "saasaloy:capability" }),
+        ],
+      ]),
+      config,
+      manifest,
+      requested: "database-postgres",
+    });
+    await expect(promise).rejects.toThrow(RefusalError);
+    // One refusal, both paths, and the way through.
+    const refusal = (await promise.then(
+      () => new Error("expected a refusal"),
+      (error: unknown) => error
+    )) as Error;
+    expect(refusal.message).toContain("packages/db/src/client.ts");
+    expect(refusal.message).toContain("packages/db/src/drizzle.config.ts");
+    expect(refusal.message).toContain("saasaloy remove database-d1");
+    // Nothing was written: the refusal fires while planning, before executePlan runs.
+    await expect(
+      readFile(join(root, "packages/db/src/client.ts"), "utf-8")
+    ).resolves.toBe(before);
+  });
+
+  it("lets a module re-apply its own file", async () => {
+    const manifest = await installD1();
+    const planned = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: [],
+      modules: new Map([
+        [
+          "database-d1",
+          await writeModule("database-d1", driverItem, driverFiles("d1")),
+        ],
+      ]),
+      config,
+      manifest,
+    });
+    expect(planned.files.map((f) => f.action)).toStrictEqual([
+      "unchanged",
+      "unchanged",
+    ]);
+  });
+
+  it("lets a module write over a file owned by one it dependsOn", async () => {
+    // `database` owns the client, and `database-d1` dependsOn it, so the driver may
+    // take the file over.
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        files: [{ path: "files/client.ts", target: "@db/client.ts" }],
+      },
+      { "files/client.ts": "export const client = null;\n" }
+    );
+    const manifest = emptyManifest();
+    const first = await buildPlan({
+      root,
+      install: ["database"],
+      alreadyInstalled: [],
+      modules: new Map([["database", core]]),
+      config,
+      manifest,
+    });
+    await executePlan(first, root, config, manifest);
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database"
+    );
+
+    const second = await buildPlan({
+      root,
+      install: ["database-d1"],
+      alreadyInstalled: ["database"],
+      modules: new Map([
+        [
+          "database-d1",
+          await writeModule("database-d1", driverItem, driverFiles("d1")),
+        ],
+        ["database", core],
+      ]),
+      config,
+      manifest,
+    });
+    await executePlan(second, root, config, manifest);
+    expect(manifest.managed["packages/db/src/client.ts"]?.module).toBe(
+      "database-d1"
+    );
   });
 });

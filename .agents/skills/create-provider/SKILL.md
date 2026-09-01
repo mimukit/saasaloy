@@ -84,6 +84,12 @@ near-identical runbooks.
 > a licence to grow a provider. If your module is mutually exclusive with a sibling, read that ADR.
 > If it is one of several that coexist behind an interface, every rule on this page still binds
 > you.
+>
+> **A driver name belongs in exactly two places**: the capability's `requiresOneOf`, and the
+> `conflictsWith` each driver declares against its siblings. No consumer names a driver in
+> `dependsOn`. A feature depends on `database`, and the user picks `database-d1` or
+> `database-postgres` from the capability's prompt. The same rule holds for a provider: a consumer
+> depends on `email`, never on `email-resend`.
 
 ### Why the whole descriptor, and not one swappable function body
 

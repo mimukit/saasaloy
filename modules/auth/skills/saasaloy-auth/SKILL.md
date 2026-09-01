@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first admin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why `add auth` is refused on a Postgres project.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first admin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why `add auth` fails typecheck on a Postgres project.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -11,29 +11,24 @@ that forwards to `auth.handler`; `packages/db` gets a hand-authored schema snaps
 **DB-backed httpOnly cookies**, not JWTs (build-spec §2.5 / ADR 0004): a D1 read per request is
 negligible, and sessions are instantly revocable by deleting the row.
 
-## This module needs the `database-d1` driver
+## This module is SQLite-only, but it does not pick your driver
 
 `auth` is SQLite-only today, in two places that have to agree: `packages/db/src/schema/auth.ts`
 builds its tables with `sqliteTable` from `drizzle-orm/sqlite-core`, and
 `packages/auth/src/auth.ts` hands `drizzleAdapter` a `provider: "sqlite"`. Neither works against
 `database-postgres`.
 
-So the descriptor declares `dependsOn: ["api", "database", "database-d1"]`. Two consequences:
+The descriptor still declares `dependsOn: ["api", "database"]`, naming the capability and no driver.
+`database` declares `requiresOneOf: ["database-d1", "database-postgres"]`, so `saasaloy add auth` on
+a clean project asks which driver to install, and a non-interactive run refuses and names both.
+Answer `database-d1` for a project that uses this payload as shipped.
 
-- `saasaloy add auth` on a fresh project installs `database-d1` along the way. You do not add the
-  driver first, and you are not asked which one to use.
-- `saasaloy add auth` on a project already running `database-postgres` is **refused**, because each
-  driver names the other in `conflictsWith`:
+Pick `database-postgres` and the install goes through, then `pnpm typecheck` fails on the dialect.
+That combination has never worked. Earlier releases pinned `dependsOn: ["database-d1"]`, which
+silently overrode a Postgres project's driver choice; a loud typecheck failure replaces it.
 
-```
-Cannot add auth — module conflict:
-  database-d1 (required by auth) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
-```
-
-The refusal is deliberate and `--force` does not bypass it. Before it existed the install went
-through and the project failed later at `pnpm typecheck`, with a dialect error naming neither
-module. Making the payload dialect-neutral is the end state, not a workaround you apply by hand;
-ADR 0026's amendment records the retraction and the follow-up. Everything below assumes D1, and the
+Porting the schema by hand is not the fix. The dialect-neutral rewrite is tracked in
+[#99](https://github.com/mimukit/saasaloy/issues/99). Everything below assumes D1, and the
 `saasaloy-database-d1` skill owns the connection and the migrate commands.
 
 ## The plugin-array patch point (read this before adding billing/teams)

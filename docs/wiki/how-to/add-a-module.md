@@ -83,7 +83,13 @@ saasaloy add waitlist --force
 ```
 
 `--force` applies to the module you asked for. Dependencies that are already installed
-stay as they are. It reapplies whatever the coordinate resolves to, which is not
+stay as they are. It does not cross module file ownership: a module reapplies its own
+files and the files of the modules it declares in `dependsOn`, and `add` exits 2 when it
+reaches a file some other module owns. To hand a file to a different module, remove the
+owner first — `saasaloy remove database-d1` then `saasaloy add database-postgres` swaps
+one database driver for the other, and the refusal prints the exact `remove` to run.
+
+`--force` reapplies whatever the coordinate resolves to, which is not
 necessarily `main`'s tip — with the module already in the lockfile, that is the SHA the
 lock recorded.
 

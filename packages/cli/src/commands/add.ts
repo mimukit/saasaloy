@@ -490,6 +490,7 @@ export async function runAdd(argv: string[]): Promise<number> {
       install,
       manifest,
       modules: graph.modules,
+      requested,
       root,
     });
 

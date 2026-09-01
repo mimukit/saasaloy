@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
-import { detectConflicts, formatConflicts } from "./conflicts.js";
+import { detectConflicts } from "./conflicts.js";
 import { emptyLock, upsertLock } from "./lock.js";
 import type { LoadedModule, ModuleProvenance } from "./registry.js";
 import type { Graph } from "./resolve.js";
@@ -220,9 +220,16 @@ describe("the first-party database driver wiring", () => {
     );
   });
 
-  it("has the two SQLite payloads depending on the D1 driver", async () => {
-    expect((await descriptor("auth")).dependsOn).toContain("database-d1");
-    expect((await descriptor("waitlist")).dependsOn).toContain("database-d1");
+  it("has no payload naming a driver, so the choice stays the user's", async () => {
+    expect((await descriptor("auth")).dependsOn).toStrictEqual([
+      "api",
+      "database",
+    ]);
+    expect((await descriptor("waitlist")).dependsOn).toStrictEqual([
+      "api",
+      "database",
+      "validators",
+    ]);
   });
 
   it("leaves nothing unmet when a driver comes in as a prerequisite", async () => {
@@ -237,34 +244,43 @@ describe("the first-party database driver wiring", () => {
     expect(missing).toStrictEqual([]);
   });
 
-  it("refuses `add auth` on a project already running database-postgres", async () => {
-    // The acceptance case: `add database-postgres`, then `add auth`. The reverse pass
-    // reads the installed driver's lock entry, and `auth`'s new `dependsOn` is what puts
-    // `database-d1` in the graph for it to collide with.
+  it("leaves `add waitlist` on a clean project with the driver choice unmet", async () => {
+    // The acceptance case for #91 phase 3: `waitlist` names the capability, so nothing
+    // in its resolved graph satisfies `database`'s `requiresOneOf`. An interactive `add`
+    // turns this into the picker; a non-interactive one refuses and names both drivers.
+    const missing = detectMissingRequirements({
+      config: config(),
+      graph: graph(
+        await loaded("api"),
+        await loaded("database"),
+        await loaded("validators"),
+        await loaded("waitlist")
+      ),
+    });
+
+    expect(missing).toStrictEqual([
+      { declaredBy: "database", options: ["database-d1", "database-postgres"] },
+    ]);
+    const message = formatMissingRequirements(missing, "waitlist");
+    expect(message).toContain("Cannot add waitlist");
+    expect(message).toContain("database (required by waitlist)");
+    expect(message).toContain("database-d1, database-postgres");
+  });
+
+  it("keeps `add auth` on a Postgres project free of a conflict", async () => {
+    // Before phase 3 this pair was refused, because `auth` dragged `database-d1` in and
+    // the two drivers exclude each other. The pin is gone, so the installed driver is
+    // whatever the user picked and no conflict fires.
     const installed = await loaded("database-postgres");
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ["database-postgres"], graph(installed));
 
     const report = detectConflicts({
       config: config("database", "database-postgres"),
-      graph: graph(
-        await loaded("database"),
-        await loaded("database-d1"),
-        await loaded("auth")
-      ),
+      graph: graph(await loaded("database"), await loaded("auth")),
       lock,
     });
 
-    expect(report.conflicts).toStrictEqual([
-      {
-        conflictsWith: "database-postgres",
-        declaredBy: "database-d1",
-        installed: "database-postgres",
-      },
-    ]);
-    const message = formatConflicts(report.conflicts, "auth");
-    expect(message).toContain("Cannot add auth");
-    expect(message).toContain("database-d1 (required by auth)");
-    expect(message).toContain("saasaloy remove database-postgres");
+    expect(report.conflicts).toStrictEqual([]);
   });
 });
