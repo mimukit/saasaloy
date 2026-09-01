@@ -120,10 +120,12 @@ headers to prove it.
 
 | Helper | Returns | Throws |
 |---|---|---|
-| `getSession(request)` | the session, or `null` | never |
-| `requireSession(request)` | the session | `HTTPException(401, "sign in first")` |
-| `requireRole(request, role)` | the session | 401 as above, then `HTTPException(403, "role required: <role>")` |
-| `requireAdmin(request)` | the session | as `requireRole(request, ADMIN_ROLE)` |
+| `getSession(c)` | the session, or `null` | never |
+| `requireSession(c)` | the session | `HTTPException(401, "sign in first")` |
+| `requireRole(c, role)` | the session | 401 as above, then `HTTPException(403, "role required: <role>")` |
+| `requireAdmin(c)` | the session | as `requireRole(c, ADMIN_ROLE)` |
+
+All four take the whole Hono context, not `c.req.raw`. They need `c.env` to open this request's database client and `c.executionCtx` to close it, and they enter `withAuthScope` for you. See "Either database driver" below.
 
 Reach for a gate first. A route that reads `getSession` and branches by hand is writing the same two error bodies again, and one typo in either is a hole.
 
@@ -133,7 +135,7 @@ import { Hono } from "hono";
 import { requireAdmin } from "@repo/auth/server";
 
 export const widgets = new Hono().get("/", async (c) => {
-  const session = await requireAdmin(c.req.raw);
+  const session = await requireAdmin(c);
   return c.json({ userId: session.user.id }, 200);
 });
 ```
@@ -147,7 +149,7 @@ Each gate returns the session, so the caller reads `session.user.id` without a s
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
 ```ts
-const session = await getSession(c.req.raw);
+const session = await getSession(c);
 return c.json({ voted: session ? await hasVoted(session.user.id) : false }, 200);
 ```
 

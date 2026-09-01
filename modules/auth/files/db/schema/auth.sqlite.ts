@@ -7,6 +7,13 @@ import {
   uniqueIndex,
 } from "drizzle-orm/sqlite-core";
 
+// The SQLite half of Better Auth's tables, selected by `onlyWith: "database-d1"`. Its
+// Postgres twin sits beside it as `auth.pg.ts`, and exactly one of the two lands as
+// `packages/db/src/schema/auth.ts`. Change one and change the other: they are the same
+// four tables, and `packages/auth/src/db-provider.ts` tells the adapter which dialect it
+// is generating SQL for. Parity is semantic, not textual — each column is the idiomatic
+// form for its dialect, and what has to match is the shape a row comes back in.
+//
 // Hand-authored Drizzle snapshot of Better Auth's core schema (user/session/account/
 // verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.2
 // (packages/auth/package.json) — NOT
@@ -37,9 +44,9 @@ import {
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this
 // file into `packages/db/src/schema/` means database's existing barrel + migration
-// scripts (`db:generate`/`db:migrate:local`/`db:migrate:prod`) pick it up like any
-// other table — the ADR 0020 exception (schema is database's domain even when
-// another capability authors the table).
+// scripts pick it up like any other table — the ADR 0020 exception (schema is
+// database's domain even when another capability authors the table). `db:generate`
+// belongs to the `database` core; the apply command belongs to the installed driver.
 
 const timestampMs = (name: string) => integer(name, { mode: "timestamp_ms" });
 const createdAtDefault = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;

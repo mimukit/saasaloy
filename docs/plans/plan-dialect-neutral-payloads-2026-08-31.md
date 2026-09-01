@@ -67,7 +67,7 @@ Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `co
 - Rewrite `files/api/routes/waitlist.ts` as one neutral file: `getDb(c.env)`, driver-neutral cleanup per Phase 2. `.onConflictDoNothing()` already works on both dialects.
 - Neutralize the waitlist skill's migration references.
 
-### Phase 4: auth goes neutral (#99)
+### Phase 4: auth goes neutral (#99) (built 2026-09-01)
 
 - Split `modules/auth/files/db/schema/auth.ts` into sqlite and pg variants; the pg variant replaces the `unixepoch('subsecond')` default and `integer` timestamp mappings with Better Auth's pg-adapter mapping.
 - Add `files/src/db-provider.ts` in two variants, selected via `onlyWith` inside `scaffolds[0].files[]`. Each exports four things: `provider` (`"sqlite" | "pg"`), the driver's binding shape, `authDb` (the ALS-backed proxy the adapter binds), and `withAuthScope(c, fn)`. The two files differ only in `withAuthScope`: the pg variant is `withDb(c, (db) => dbScope.run(db, fn))`, the D1 variant is `dbScope.run(getDb(c.env), fn)`.
