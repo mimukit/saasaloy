@@ -44,6 +44,10 @@
         { "path": "files/src/lib/auth.ts", "target": "src/lib/auth.ts" },
         { "path": "files/src/lib/api.ts", "target": "src/lib/api.ts" },
         {
+          "path": "files/src/lib/redirect.ts",
+          "target": "src/lib/redirect.ts"
+        },
+        {
           "path": "files/src/components/app-shell.tsx",
           "target": "src/components/app-shell.tsx"
         },
