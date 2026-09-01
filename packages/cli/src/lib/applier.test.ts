@@ -15,6 +15,7 @@ import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildPlan, executePlan } from "./applier.js";
 import type { Plan } from "./applier.js";
+import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
@@ -1899,5 +1900,109 @@ describe("a descriptor source path that escapes the module folder", () => {
         files: [{ path: "../secret.txt", target: "@api/stolen.txt" }],
       })
     ).resolves.toMatchObject({ valid: false });
+  });
+});
+
+// #91. The overlap above is legal because the driver dependsOn the core. Two modules with
+// no dependsOn edge either way have nothing that says whose copy the user wanted, so the
+// run is refused before a single file is classified.
+describe("a target two unrelated modules in one run both ship", () => {
+  it("refuses the run, naming both modules and the contested path", async () => {
+    const waitlist = await writeModule(
+      "waitlist",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/schema.ts", target: "@db/schema.ts" }],
+      },
+      { "files/schema.ts": "export const waitlist = {};\n" }
+    );
+    const blog = await writeModule(
+      "blog",
+      {
+        type: "saasaloy:feature",
+        files: [{ path: "files/schema.ts", target: "@db/schema.ts" }],
+      },
+      { "files/schema.ts": "export const posts = {};\n" }
+    );
+
+    const promise = plan({
+      install: ["waitlist", "blog"],
+      modules: [waitlist, blog],
+      config: { aliases: { "@db": "packages/db/src" }, installed: [] },
+    });
+    await expect(promise).rejects.toThrow(RefusalError);
+    await expect(promise).rejects.toThrow(
+      /waitlist and blog both write packages\/db\/src\/schema\.ts/
+    );
+    // The refusal fires before planning, so nothing reached disk.
+    await expect(
+      pathExists(join(root, "packages", "db", "src", "schema.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("catches a scaffolds[] target the same way it catches a files[] one", async () => {
+    const scaffoldModule = async (name: string): Promise<LoadedModule> =>
+      writeModule(
+        name,
+        {
+          type: "saasaloy:capability",
+          scaffolds: [
+            {
+              workspace: "packages/db",
+              files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+            },
+          ],
+        },
+        { "files/tsconfig.json": `{ "name": "${name}" }\n` }
+      );
+
+    await expect(
+      plan({
+        install: ["reports", "search"],
+        modules: [
+          await scaffoldModule("reports"),
+          await scaffoldModule("search"),
+        ],
+      })
+    ).rejects.toThrow(
+      /reports and search both write packages\/db\/tsconfig\.json/
+    );
+  });
+
+  it("still allows the core-plus-driver overlap through dependsOn", async () => {
+    const core = await writeModule(
+      "database",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["vite/client"] }\n' }
+    );
+    const driver = await writeModule(
+      "database-d1",
+      {
+        type: "saasaloy:capability",
+        dependsOn: ["database"],
+        scaffolds: [
+          {
+            workspace: "packages/db",
+            files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+          },
+        ],
+      },
+      { "files/tsconfig.json": '{ "types": ["@cloudflare/workers-types"] }\n' }
+    );
+
+    const planned = await plan({
+      install: ["database", "database-d1"],
+      modules: [core, driver],
+    });
+    expect(planned.files).toHaveLength(1);
+    expect(planned.files[0]?.module).toBe("database-d1");
   });
 });

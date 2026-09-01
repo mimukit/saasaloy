@@ -1,5 +1,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, posix } from "node:path";
+import { detectCollisions, formatCollisions } from "./collisions.js";
+import { RefusalError } from "./exit.js";
 import {
   assertNoSymlinkPath,
   classifyLink,
@@ -331,10 +333,24 @@ export interface BuildPlanArgs {
   modules: Map<string, LoadedModule>;
   config: SaasaloyConfig;
   manifest: Manifest;
+  /**
+   * What the user asked for, named in a refusal so a collision raised by a transitive
+   * prerequisite still says which command hit it. Omitted by callers that plan a set with
+   * no single requested module (`update`'s prerequisite plan).
+   */
+  requested?: string;
 }
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
-  const { root, install, alreadyInstalled, modules, config, manifest } = args;
+  const {
+    root,
+    install,
+    alreadyInstalled,
+    modules,
+    config,
+    manifest,
+    requested,
+  } = args;
   // Keyed by project-relative target, because two modules in one run can ship the same
   // file: `database` and its driver `database-d1`/`database-postgres` both scaffold
   // `packages/db/tsconfig.json`. Planned as two entries they both classify `create` off
@@ -372,6 +388,35 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // Scaffold aliases win over the on-disk map when resolving this run's file targets.
   const aliasView = { ...config.aliases, ...aliases };
 
+  // Enumerate every module's files first, so the collision check sees the whole run
+  // before a single file is classified. One enumeration for all three rules — `files[]`,
+  // each scaffold's workspace files, and each `agent.skills` folder — shared with
+  // `update` (#98), so `files[]` and `scaffolds[].files[]` are covered alike here.
+  const refsByModule = new Map<string, ModuleFileRef[]>();
+  for (const name of install) {
+    const mod = modules.get(name);
+    if (!mod) {
+      continue;
+    }
+    refsByModule.set(name, [
+      ...(await listModuleFiles(mod, aliasView)).values(),
+    ]);
+  }
+
+  // Two modules writing the same target is legal only when one reaches the other through
+  // `dependsOn` — core-plus-driver keeps last-planner-wins below, an unrelated pair is
+  // refused here, before anything is planned (#91).
+  const collisions = detectCollisions({
+    planned: [...refsByModule].map(([module, refs]) => ({
+      module,
+      targets: refs.map((ref) => ref.target),
+    })),
+    modules,
+  });
+  if (collisions.length > 0) {
+    throw new RefusalError(formatCollisions(collisions, requested));
+  }
+
   for (const name of install) {
     const mod = modules.get(name);
     if (!mod) {
@@ -379,12 +424,11 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     }
     const { item } = mod;
 
-    // One enumeration for all three rules — `files[]`, each scaffold's workspace files,
-    // and each `agent.skills` folder — shared with `update` (#98). A scaffold file's
-    // target is workspace-relative and a skill file's lands under `.agents/skills/`;
-    // from here every one of them is an ordinary managed file, classified and recorded
-    // alike, so create/drift/conflict and `remove` all come for free.
-    for (const ref of (await listModuleFiles(mod, aliasView)).values()) {
+    // A scaffold file's target is workspace-relative and a skill file's lands under
+    // `.agents/skills/`; from here every one of them is an ordinary managed file,
+    // classified and recorded alike, so create/drift/conflict and `remove` all come
+    // for free.
+    for (const ref of refsByModule.get(name) ?? []) {
       const planned = await planModuleFile(mod, ref, root, manifest);
       // Re-key rather than overwrite in place, so the surviving entry is listed under
       // the module that actually writes it.
