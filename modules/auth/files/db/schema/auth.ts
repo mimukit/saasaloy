@@ -30,8 +30,9 @@ import {
 // for a linked social account, so the pair replaces (`providerId`, `accountId`) as the
 // row's identity. Both are below. A project that installed auth before this landed has
 // `account` rows with no `issuer`, and SQLite cannot add a NOT NULL column to a
-// populated table without a default — see the auth skill's migration note for the
-// backfill. Nothing else moved: the other three tables and every admin-plugin field
+// populated table without a default, so the migration `db:generate` emits for this
+// column has to be hand-edited before it is applied. The auth skill carries the exact
+// edit. Nothing else moved: the other three tables and every admin-plugin field
 // match 1.7.2 column for column.
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this

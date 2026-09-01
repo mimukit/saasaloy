@@ -147,6 +147,8 @@ There is no `if` and no error body in that route, and that is the point. The gat
 
 Each gate returns the session, so the caller reads `session.user.id` without a second round trip. `requireRole` takes any string, so a `support` role later costs a call site rather than a rewrite. `requireAdmin` compares with `===` against the exported `ADMIN_ROLE`, which is the same constant `admin()` treats as privileged. `"Admin"` and `"administrator"` are not admins.
 
+**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `auth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-admin hook writes `"admin"`, and `client.admin.setRole({ userId, role: "admin" })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
+
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
 ```ts
@@ -164,9 +166,7 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 ## Roles and the first admin
 
-Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a
-`role` column, writes `"user"` into it for every new sign-up (except the first one, see below),
-and treats `"admin"` as the privileged role. `apps/admin`'s guard reads exactly one thing:
+Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), and treats `"admin"` as the privileged role. `apps/admin`'s guard reads exactly one thing:
 
 ```ts
 const { data } = await client.getSession();
@@ -179,22 +179,11 @@ being an unchecked cast.
 
 ### First user wins
 
-The first account to sign up on an empty `user` table gets `role: "admin"`. A
-`databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before
-the row is written, so it can only match on the very first sign-up; every account after that
-keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it
-is what makes `saasaloy add admin` usable without SQL.
+The first account to sign up on an empty `user` table gets `role: "admin"`. A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL.
 
-**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches
-`/signup` before you do becomes the admin, and on a deployed API with a public origin the window
-is real. Sign up yourself the moment the API answers its first request, then confirm with
-`select email, role from user`. Two sign-ups that land at the same instant both read an empty
-table and both become admin; that is accepted rather than locked, because a unique index on
-`role = 'admin'` would also block promoting a second admin later.
+**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the admin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from user`. Two sign-ups that land at the same instant both read an empty table and both become admin; that is accepted rather than locked, because a unique index on `role = 'admin'` would also block promoting a second admin later.
 
-If somebody else got there first, or you are promoting an account on a project that already has
-users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working
-directory in `packages/db`, which is what the relative paths are written against:
+If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against:
 
 ```sh
 # local D1 (the same SQLite `vite dev` serves from)
@@ -218,15 +207,28 @@ also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same n
 
 **A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then `db:migrate:local` (and `db:migrate:prod` when you deploy). Existing users come out of it with `role` null, which is not `"admin"`, so the guard denies them until you promote one.
 
-**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`). SQLite cannot add a NOT NULL column to a table that already holds rows, so `db:generate` emits SQL that fails on a populated `account` table. Backfill first, then let the generator run. Every account a scaffolded project has is an email/password one, which is `local:credential`:
+**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`). `db:generate` emits exactly two statements for it, and the first one cannot run on a populated table:
 
-```sh
-pnpm --filter @repo/db exec wrangler d1 execute DB --local \
-  --config ../../apps/api/wrangler.jsonc --persist-to ../../apps/api/.wrangler/state \
-  --command "alter table account add column issuer text; update account set issuer = 'local:credential' where issuer is null"
+```sql
+ALTER TABLE `account` ADD `issuer` text NOT NULL;--> statement-breakpoint
+CREATE UNIQUE INDEX `account_issuer_account_id_uidx` ON `account` (`issuer`,`account_id`);
 ```
 
-An account linked through a social provider takes `local:oauth:<providerId>` instead. Read `select id, provider_id, issuer from account` before and after, and run the same pair with `--remote` when you deploy. A fresh project needs none of this; the column ships in its first migration.
+SQLite refuses that `ALTER` with `Cannot add a NOT NULL column with default value NULL` as soon as `account` holds one row. Backfilling the column by hand first does not help: drizzle-kit diffs the schema against its own snapshot, never against the live database, so the emitted migration still tries to add `issuer` and then fails with `duplicate column name: issuer`.
+
+Edit the emitted migration instead. Give the column a default so the existing rows fill themselves, and correct the social accounts before the unique index goes on:
+
+```sql
+ALTER TABLE `account` ADD `issuer` text DEFAULT 'local:credential' NOT NULL;--> statement-breakpoint
+UPDATE `account` SET `issuer` = 'local:oauth:' || `provider_id` WHERE `provider_id` != 'credential';--> statement-breakpoint
+CREATE UNIQUE INDEX `account_issuer_account_id_uidx` ON `account` (`issuer`,`account_id`);
+```
+
+`local:credential` is the value better-auth writes for an email/password account, `local:oauth:<providerId>` for a linked social one, so those two statements reproduce what the library would have written itself. Keep the `DEFAULT` in the migration and out of the schema file; drizzle-kit compares the schema to its snapshot, so the extra clause never reads back as drift.
+
+Then `pnpm --filter @repo/db db:migrate:local`, and `db:migrate:prod` when you deploy. Check it with `select id, provider_id, issuer from account`. If `CREATE UNIQUE INDEX` fails with `UNIQUE constraint failed`, two rows share a provider and an `account_id`; list them with `select issuer, account_id, count(*) from account group by 1, 2 having count(*) > 1` and delete the duplicate before you run the migration again.
+
+This sequence was run against drizzle-kit 0.31.10 and drizzle-orm 0.45.2, the versions `packages/db` pins, on a SQLite database holding one credential account and one linked GitHub account. A fresh project needs none of it: its `account` table is empty when the migration lands, so the generated SQL applies as emitted.
 
 ## Revocation: delete the session row
 
