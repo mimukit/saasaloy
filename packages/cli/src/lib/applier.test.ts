@@ -2080,7 +2080,10 @@ describe("a target another installed module already owns", () => {
     });
     await expect(promise).rejects.toThrow(RefusalError);
     // One refusal, both paths, and the way through.
-    const refusal = await promise.catch((error: unknown) => error as Error);
+    const refusal = (await promise.then(
+      () => new Error("expected a refusal"),
+      (error: unknown) => error
+    )) as Error;
     expect(refusal.message).toContain("packages/db/src/client.ts");
     expect(refusal.message).toContain("packages/db/src/drizzle.config.ts");
     expect(refusal.message).toContain("saasaloy remove database-d1");
