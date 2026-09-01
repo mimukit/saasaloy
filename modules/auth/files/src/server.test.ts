@@ -13,14 +13,21 @@
 // `hono/http-exception`, and through `./auth.ts` it pulls `better-auth`, `@repo/db` and
 // `cloudflare:workers`, none of which resolve outside a scaffolded project. Splitting the
 // role decision into a file with zero imports is what makes the rule testable at all. The
-// second `describe` below reads `./server.ts` as text so the split cannot rot: it asserts
-// the three helpers still exist and still route their refusals through that core.
+// last `describe` below reads `./server.ts` as text so the split cannot rot: it asserts
+// the three helpers still exist, still hold no condition of their own, and still route
+// every refusal through `decide`.
 
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
-import { ADMIN_ROLE, SIGNED_OUT, hasRole, roleDenial } from "./authorize.ts";
+import {
+  ADMIN_ROLE,
+  SIGNED_OUT,
+  decide,
+  hasRole,
+  roleDenial,
+} from "./authorize.ts";
 
 describe("ADMIN_ROLE", () => {
   it("is the string better-auth's admin() plugin treats as privileged", () => {
@@ -47,6 +54,22 @@ describe("hasRole", () => {
     assert.equal(hasRole({ user: {} }, ADMIN_ROLE), false);
     assert.equal(hasRole({ user: { role: undefined } }, ADMIN_ROLE), false);
     assert.equal(hasRole({ user: { role: null } }, ADMIN_ROLE), false);
+  });
+
+  it("refuses a comma-joined role, which is the documented contract", () => {
+    // better-auth's plugin reads `user.role` as a comma-separated list, so
+    // `"admin,support"` is an admin to `auth.api.listUsers` and is refused here. The
+    // divergence is deliberate: it fails closed, and `apps/admin`'s browser guard
+    // compares with `===` too, so accepting it here alone would split the two halves
+    // of the gate. This case is the contract, not an oversight.
+    assert.equal(
+      hasRole({ user: { role: "admin,support" } }, ADMIN_ROLE),
+      false
+    );
+    assert.equal(
+      hasRole({ user: { role: "support,admin" } }, ADMIN_ROLE),
+      false
+    );
   });
 
   it("compares case-sensitively and does not match a substring", () => {
@@ -98,6 +121,72 @@ describe("roleDenial", () => {
   });
 });
 
+describe("decide", () => {
+  // This is the gate itself. Every branch below is a branch `requireSession`,
+  // `requireRole` and `requireAdmin` no longer carry, so inverting any one of them
+  // fails here instead of shipping green.
+  const admin = { user: { role: ADMIN_ROLE } };
+  const plain = { user: { role: "user" } };
+
+  it("refuses a missing session with 401, with or without a role", () => {
+    assert.deepEqual(decide(null).denial, SIGNED_OUT);
+    // The explicit `undefined` is the assertion: `decide` accepts it as "no session"
+    // alongside `null`, so passing nothing here would test a different call.
+    // oxlint-disable-next-line no-useless-undefined
+    assert.deepEqual(decide(undefined).denial, SIGNED_OUT);
+    assert.deepEqual(decide(null, ADMIN_ROLE).denial, SIGNED_OUT);
+    // Signed out beats wrong role: a 403 would tell an anonymous caller to give up
+    // rather than sign in.
+    assert.equal(decide(null, ADMIN_ROLE).denial?.status, 401);
+  });
+
+  it("hands back no session when it refuses", () => {
+    // The two fields are exclusive on purpose, so a caller that throws on `denial`
+    // cannot go on to read a session that was never allowed.
+    assert.equal(decide(null).session, null);
+    assert.equal(decide(plain, ADMIN_ROLE).session, null);
+  });
+
+  it("passes a signed-in caller when no role is demanded", () => {
+    // `requireSession` asks this question: who are you, nothing more.
+    assert.equal(decide(plain).denial, null);
+    assert.equal(decide(plain).session, plain);
+    assert.equal(decide({ user: {} }).denial, null);
+  });
+
+  it("passes a caller who holds the demanded role", () => {
+    assert.equal(decide(admin, ADMIN_ROLE).denial, null);
+    assert.equal(decide(admin, ADMIN_ROLE).session, admin);
+    assert.equal(decide({ user: { role: "support" } }, "support").denial, null);
+  });
+
+  it("refuses a signed-in caller who holds the wrong role with 403", () => {
+    // The one case the whole feature exists for: authenticated, not privileged.
+    assert.deepEqual(decide(plain, ADMIN_ROLE).denial, roleDenial(ADMIN_ROLE));
+    assert.equal(decide(plain, ADMIN_ROLE).denial?.status, 403);
+    assert.equal(
+      decide(plain, ADMIN_ROLE).denial?.message,
+      "role required: admin"
+    );
+  });
+
+  it("refuses a role-less session when a role is demanded", () => {
+    // A row written before the admin plugin shipped reads back `null`.
+    assert.equal(decide({ user: {} }, ADMIN_ROLE).denial?.status, 403);
+    assert.equal(
+      decide({ user: { role: null } }, ADMIN_ROLE).denial?.status,
+      403
+    );
+  });
+
+  it("treats an empty-string role as a demand, not as no demand", () => {
+    // The `role` check keys off `undefined`, not off falsiness. A `""` role slipping
+    // through as "no role demanded" would open the gate.
+    assert.equal(decide(plain, "").denial?.status, 403);
+    assert.equal(decide({ user: { role: "" } }, "").denial, null);
+  });
+});
+
 describe("server.ts wiring", () => {
   const source = readFileSync(
     fileURLToPath(new URL("server.ts", import.meta.url)),
@@ -123,10 +212,22 @@ describe("server.ts wiring", () => {
   });
 
   it("routes every refusal through the tested core and one HTTPException", () => {
-    // If a helper grows its own literal status or message, these three go stale and
-    // the tests above stop describing what the api actually answers.
-    assert.match(source, /SIGNED_OUT/);
-    assert.match(source, /roleDenial\(role\)/);
+    // If a helper grows its own literal status or message, these go stale and the
+    // tests above stop describing what the api actually answers.
+    assert.match(source, /const \{ denial, session \} = decide\(/);
+    assert.match(source, /decide\(await getSession\(request\), role\)/);
     assert.match(source, /new HTTPException\(denial\.status/);
+  });
+
+  it("holds no decision of its own, only `if (denial)`", () => {
+    // The tests above only protect the gate while `decide` is the one thing deciding.
+    // A hand-written condition here would run under no test at all, so every `if` in
+    // this file must be the throw on a denial `decide` already returned.
+    const conditions = source.match(/^\s*if \(.*$/gm) ?? [];
+    assert.deepEqual(
+      conditions.map((line) => line.trim()),
+      ["if (denial) {", "if (denial) {"],
+      "server.ts must branch on nothing but decide()'s answer"
+    );
   });
 });

@@ -1,6 +1,6 @@
 import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
-import { ADMIN_ROLE, SIGNED_OUT, hasRole, roleDenial } from "./authorize";
+import { ADMIN_ROLE, decide } from "./authorize";
 import type { Denial } from "./authorize";
 
 export { auth } from "./auth";
@@ -24,8 +24,11 @@ export async function getSession(request: Request) {
 // `HTTPException` as the one `{ error: { code, message } }` envelope the api publishes —
 // so every deny, from every module, answers with the same body.
 //
-// The status and the message come from ./authorize.ts rather than from literals here, so
-// the rule the tests cover is the rule a caller meets.
+// The whole rule, status and message included, comes from `decide()` in ./authorize.ts
+// rather than from a condition written here. Every helper below is the same three lines:
+// read the session, ask `decide`, throw what it hands back. That leaves no branch in this
+// file for a test to miss, which is the point — nothing here can be imported by a test,
+// so any decision written here would ship unexecuted.
 function denialError(denial: Denial): HTTPException {
   return new HTTPException(denial.status, { message: denial.message });
 }
@@ -35,9 +38,9 @@ function denialError(denial: Denial): HTTPException {
  * nothing more — `session.user.id` is right there, so no second lookup.
  */
 export async function requireSession(request: Request) {
-  const session = await getSession(request);
-  if (!session) {
-    throw denialError(SIGNED_OUT);
+  const { denial, session } = decide(await getSession(request));
+  if (denial) {
+    throw denialError(denial);
   }
   return session;
 }
@@ -50,11 +53,14 @@ export async function requireSession(request: Request) {
  *
  * Role only, no `banned` check. The `admin()` plugin already refuses a banned account at
  * sign-in and revokes its sessions, so a banned user holds no session to inspect.
+ *
+ * One role per user: `decide` compares with `===`, so a comma-joined `"admin,support"` is
+ * refused even though better-auth's own plugin would accept it. See `hasRole`.
  */
 export async function requireRole(request: Request, role: string) {
-  const session = await requireSession(request);
-  if (!hasRole(session, role)) {
-    throw denialError(roleDenial(role));
+  const { denial, session } = decide(await getSession(request), role);
+  if (denial) {
+    throw denialError(denial);
   }
   return session;
 }
