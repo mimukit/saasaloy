@@ -2,7 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "auth",
   "type": "saasaloy:capability",
-  "dependsOn": ["api", "database", "database-d1"],
+  "dependsOn": ["api", "database"],
   "dependencies": [],
   "envVars": {
     "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws while the Worker initializes when it is unset, unless BETTER_AUTH_URL names a loopback host.",

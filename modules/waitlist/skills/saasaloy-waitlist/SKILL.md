@@ -8,28 +8,24 @@ description: Runbook for the waitlist feature — a landing-page email waitlist 
 `waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points
 `api`, `database`, `validators` and the base web template already established, and registers its
 route with one `chained-route` patch. It requires
-`dependsOn: ["api", "database", "database-d1", "validators"]`, resolved and installed automatically.
+`dependsOn: ["api", "database", "validators"]`, resolved and installed automatically.
 
-## The `database-d1` requirement
+## The database driver is your choice, and this payload is SQLite-only
 
-`packages/db/src/schema/waitlist.ts` builds its table with `sqliteTable` from
-`drizzle-orm/sqlite-core`, so this module is SQLite-only and names the D1 driver in `dependsOn`.
-A fresh `saasaloy add waitlist` therefore installs `database-d1` along the way, and never asks which
-driver to use.
+`waitlist` names the `database` capability, never a driver. `database` declares
+`requiresOneOf: ["database-d1", "database-postgres"]`, so on a clean project `saasaloy add waitlist`
+asks which driver to install, and a non-interactive run refuses and names both. A project that
+already has a driver keeps it.
 
-On a project already running `database-postgres`, `add waitlist` is **refused**, because the two
-drivers name each other in `conflictsWith`:
+`packages/db/src/schema/waitlist.ts` still builds its table with `sqliteTable` from
+`drizzle-orm/sqlite-core`. Pick `database-postgres` and the table does not compile: `pnpm typecheck`
+fails on the dialect. That combination has never worked, and the failure is now loud instead of
+silent. Earlier releases pinned `dependsOn: ["database-d1"]`, which overrode a Postgres project's
+driver choice rather than reporting it.
 
-```
-Cannot add waitlist — module conflict:
-  database-d1 (required by waitlist) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
-```
-
-That is the intended answer, and `--force` does not bypass it. Before it, the install went through
-and the project failed later at `pnpm typecheck`, with a dialect error naming neither module. Porting
-the table to `drizzle-orm/pg-core` by hand is not the fix; the dialect-neutral rewrite is tracked
-against ADR 0026's amendment. A Postgres project writes its own waitlist table and route, using this
-module's route and form as the worked example.
+Porting the table to `drizzle-orm/pg-core` by hand is not the fix. The dialect-neutral rewrite is
+tracked in [#99](https://github.com/mimukit/saasaloy/issues/99). Until it lands, a Postgres project
+writes its own waitlist table and route, using this module's route and form as the worked example.
 
 ## What it drops, and where
 

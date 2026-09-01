@@ -113,7 +113,12 @@ Field notes:
 - **`dependsOn`** — capabilities that must exist first. The applier resolves these recursively,
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
-  skill/README rather than in `dependsOn`.
+  skill/README rather than in `dependsOn`. **Name the capability, never one of its drivers.**
+  `waitlist` depends on `database`, not on `database-d1`, even though its schema is SQLite-only. The
+  capability's `requiresOneOf` names the drivers, so the user picks one at install time. A feature
+  that pins a driver overrides that choice silently and makes itself uninstallable beside any other
+  driver. When your payload only works on one driver, say so in your skill and fix the payload; do
+  not encode it in `dependsOn`.
 - **`conflictsWith`** — modules this one refuses to sit beside, named the same way `dependsOn`
   names them. Reach for it when two modules are genuinely mutually exclusive: two drivers behind
   one capability's interface, two mailers a project can only pick one of. `add` refuses with a
@@ -125,8 +130,9 @@ Field notes:
   module is incomplete on its own and several modules could complete it: `database` scaffolds
   `packages/db` and declares the `./client` export, but the file behind that export ships in
   `database-d1` or `database-postgres`. `add` counts an option as present when it is already
-  installed or arrives in the same resolved graph, so naming a driver directly satisfies the core
-  with no prompt. When nothing satisfies it, an interactive `add` offers the list as a picker and a
+  installed or arrives in the same resolved graph, so a user who runs `saasaloy add database-d1`
+  directly satisfies the core with no prompt. That is the only legitimate way a driver name reaches
+  the graph: from the user, never from another module's `dependsOn`. When nothing satisfies it, an interactive `add` offers the list as a picker and a
   non-interactive one refuses and names the options. It takes **at least two** names — one hard
   prerequisite is `dependsOn`. Pair it with `conflictsWith` on the options themselves: this field
   stops a project at zero, `conflictsWith` stops it at two.
@@ -309,8 +315,9 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 
 - [ ] `modules/<name>/registry-item.json` present, `name` matches the directory.
 - [ ] `type` is `saasaloy:capability` or `saasaloy:feature` (capabilities carry `scaffolds`).
-- [ ] Every needed capability is in `dependsOn`; every npm import is exact-pinned in
-      `dependencies`/`devDependencies` (`name@version`; `pnpm deps:update` fills versions).
+- [ ] Every needed capability is in `dependsOn`, named as the capability and never as one of its
+      drivers; every npm import is exact-pinned in `dependencies`/`devDependencies` (`name@version`;
+      `pnpm deps:update` fills versions).
 - [ ] Each `files[]` target uses a `@alias` and lands in a convention folder where possible.
 - [ ] `patches` is empty unless a change is genuinely structural (with a note on why), and each op
       uses a `kind` the engine defines.

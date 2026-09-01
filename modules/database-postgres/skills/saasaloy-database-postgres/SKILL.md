@@ -232,19 +232,20 @@ Both modules ship SQLite payloads: their tables use `sqliteTable` from `drizzle-
 `auth`'s Better Auth config passes `provider: "sqlite"` to the Drizzle adapter. Neither works on this
 driver.
 
-Both now declare `dependsOn: ["database-d1"]`, so on a Postgres project `add` refuses them by name:
+Neither names a driver in `dependsOn`. Both depend on the `database` capability, so `add auth` on a
+Postgres project installs and nothing refuses it. The project then fails at `pnpm typecheck`:
 
 ```
-$ saasaloy add auth
-Cannot add auth — module conflict:
-  database-d1 (required by auth) declares a conflict with database-postgres, which is already installed. Run `saasaloy remove database-postgres` first.
+$ pnpm typecheck
+packages/db/src/schema/auth.ts: Type '"sqlite"' is not assignable ...
 ```
 
-That refusal is the point. Before it the install went through and the project failed later at
-`pnpm typecheck`, with a dialect error naming neither module. Dialect-neutral payloads are the end
-state and are tracked separately; ADR 0026's amendment records that. Until they land, a Postgres
-project writes its own tables against `drizzle-orm/pg-core` and its own routes, which is what the
-rest of this skill covers.
+An earlier release pinned `dependsOn: ["database-d1"]` so `add` refused these two by name. The pin
+came out under [#91](https://github.com/mimukit/saasaloy/issues/91), because on a clean project it
+also chose D1 for the user without asking. Dialect-neutral payloads are the end state, tracked in
+[#99](https://github.com/mimukit/saasaloy/issues/99); ADR 0026's 2026-09-01 retraction records the
+change. Until they land, a Postgres project writes its own tables against `drizzle-orm/pg-core` and
+its own routes, which is what the rest of this skill covers.
 
 ## Switching drivers
 

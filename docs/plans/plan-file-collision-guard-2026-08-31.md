@@ -70,7 +70,7 @@ Rejected alternatives, one line each. A per-file `FileAction` surfaces the colli
 - [ ] `remove` leaves ownership consistent, so reinstalling the other driver afterwards is clean
 - [ ] the `--force` behaviour is documented
 
-### Phase 3: a feature names the capability, never the driver
+### Phase 3: a feature names the capability, never the driver (built 2026-09-01)
 
 - [ ] drop `database-d1` from `modules/waitlist`'s `dependsOn`, leaving `["api", "database", "validators"]`
 - [ ] drop `database-d1` from `modules/auth`'s `dependsOn`, leaving `["api", "database"]`
