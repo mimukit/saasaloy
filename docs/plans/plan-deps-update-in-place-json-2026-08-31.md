@@ -47,7 +47,7 @@ Replace the serialize step in `writeUpdates` with a text-edit step. The function
 
 Rejected alternatives, one line each. A hand-rolled regex over the version string is smaller but cannot tell a `range` inside `patches[3]` from an identical string elsewhere in the file. Keeping `JSON.stringify` and post-formatting with prettier does not help, because prettier expands those arrays too.
 
-### Phase 1: address a bump as a JSON path
+### Phase 1: address a bump as a JSON path (built 2026-09-01)
 
 Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 
@@ -57,7 +57,7 @@ Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 - [ ] `writeUpdates` no longer mutates `manifest.json`
 - [ ] add `raw: string` to `Manifest`, populated in `readManifestDeps`, and rewrite the `Manifest` doc comment: `json` is read-only scan input, `raw` is what the write pass edits
 
-### Phase 2: write with `modify` + `applyEdits`
+### Phase 2: write with `modify` + `applyEdits` (built 2026-09-01)
 
 - [ ] add `jsonc-parser` at `3.3.1` to the root `devDependencies`
 - [ ] copy `inferFormatting` into `scripts/update-deps.ts`, with a comment naming `packages/cli/src/lib/patch/jsonc.ts:177` as the original
@@ -65,7 +65,7 @@ Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 - [ ] `--dry-run` still writes nothing and still logs the same steps
 - [ ] add the `CONTRIBUTING.md` line covering why `jsonc-parser` sits in the root `devDependencies`
 
-### Phase 3: prove it, and keep it proved
+### Phase 3: prove it, and keep it proved (built 2026-09-01)
 
 - [ ] a test under `scripts/` sweeps every manifest `discoverManifests` finds, applies a no-op edit (write a dep back to its current value), and asserts the output equals the input byte-for-byte
 - [ ] an inline fixture with a compact one-line array takes a real bump, and the test asserts the diff is exactly one line
@@ -74,7 +74,7 @@ Turn each candidate into a `jsonc-parser` path instead of an object mutation.
 - [ ] the root `test` script picks up `scripts/**/*.test.ts`
 - [ ] `pnpm lint` passes over the new file (oxlint type-aware covers `scripts`, per AGENTS.md)
 
-### Phase 4: land the pins that were blocked
+### Phase 4: land the pins that were blocked (built 2026-09-01)
 
 - [ ] run `pnpm deps:update` and confirm `modules/waitlist/registry-item.json`'s `hono` range moves as a one-line diff
 - [ ] `pnpm deps:check` exits 0 with no hand edit left over
