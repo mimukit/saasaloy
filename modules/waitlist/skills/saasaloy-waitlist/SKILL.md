@@ -87,6 +87,27 @@ apply step is the driver's**, and the command differs, so read the skill for the
 project installed: `saasaloy-database-d1` or `saasaloy-database-postgres`. Nothing here should name
 one of them, because this module works with both.
 
+### Updating a D1 project that installed waitlist before the two-variant split
+
+`created_at` used to be `integer("created_at", { mode: "timestamp" })`, which stores **whole
+seconds**. The SQLite variant now uses `mode: "timestamp_ms"`, which stores **milliseconds**. The
+integers already in the table do not change when `saasaloy update waitlist` rewrites the schema
+file — only the way Drizzle reads them changes, so every pre-existing row comes back dated near
+1970.
+
+Nothing this module ships reads `createdAt` back (the route only inserts), so a project that never
+queries the column can ignore this. If yours does, rescale the old rows once, after the update and
+before the first read:
+
+```sql
+UPDATE waitlist SET created_at = created_at * 1000 WHERE created_at < 100000000000;
+```
+
+The `WHERE` clause is what makes it safe to run twice: a genuine millisecond timestamp is already
+past that bound, so a second run touches nothing. Apply it with the same command your driver's
+skill gives for migrations. Postgres projects are unaffected — `timestamptz` never carried the
+seconds form.
+
 ## The route's responses
 
 `POST /waitlist` answers with two status codes, both explicit so `hc` can key the response type on
