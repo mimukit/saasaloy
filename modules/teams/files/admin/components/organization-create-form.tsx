@@ -35,7 +35,12 @@ export function OrganizationCreateForm({
     setSlugStatus("checking");
     const result = await auth.organization.checkSlug({ slug });
     if (result.error) {
-      setSlugStatus("error");
+      // Better Auth reports a taken slug as an error, not as { status: false }.
+      setSlugStatus(
+        result.error.code === "ORGANIZATION_SLUG_ALREADY_TAKEN"
+          ? "taken"
+          : "error"
+      );
       return false;
     }
     const available = result.data?.status === true;

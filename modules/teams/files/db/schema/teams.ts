@@ -9,18 +9,14 @@ import { user } from "./auth";
 const timestampMs = (name: string) => integer(name, { mode: "timestamp_ms" });
 const createdAtDefault = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 
-export const organization = sqliteTable(
-  "organization",
-  {
-    createdAt: timestampMs("created_at").notNull(),
-    id: text("id").primaryKey(),
-    logo: text("logo"),
-    metadata: text("metadata"),
-    name: text("name").notNull(),
-    slug: text("slug").notNull().unique(),
-  },
-  (table) => [index("organization_slug_idx").on(table.slug)]
-);
+export const organization = sqliteTable("organization", {
+  createdAt: timestampMs("created_at").notNull(),
+  id: text("id").primaryKey(),
+  logo: text("logo"),
+  metadata: text("metadata"),
+  name: text("name").notNull(),
+  slug: text("slug").notNull().unique(),
+});
 
 export const member = sqliteTable(
   "member",
