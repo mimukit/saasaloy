@@ -41,24 +41,22 @@ const DEFAULT_API_URL = "https://next-api.useplunk.com";
  * false` — guessing that an unknown failure is safe to retry is the more expensive mistake,
  * since it means duplicate mail. Add a row when you meet a new code in the wild.
  *
- * | Status | Code | Meaning |
- * |---|---|---|
- * | 401 | — | `PLUNK_API_KEY` is wrong, or holds the `pk_` public key instead of `sk_` |
- * | 403 | — | the key is valid but the project may not send |
- * | 404 | — | wrong `PLUNK_API_URL`, or a project that no longer exists |
- * | 413, 422 + size code | — | the message is too big |
- * | 422 | — | Plunk rejected the payload (bad address, empty body, unverified sender) |
- * | 429 | — | rate limited |
- * | 5xx | — | Plunk's failure, not the message's |
+ * | Status | Meaning |
+ * |---|---|
+ * | 401 | `PLUNK_API_KEY` is wrong, or holds the `pk_` public key instead of `sk_` |
+ * | 403 | the key is valid but the project may not send |
+ * | 404 | wrong `PLUNK_API_URL`, or a project that no longer exists |
+ * | 413, 422 + size code | the message is too big |
+ * | 422 | Plunk rejected the payload (bad address, empty body, unverified sender) |
+ * | 429 | rate limited |
+ * | 5xx | Plunk's failure, not the message's |
  */
 const ERROR_CODES: Record<
   string,
   { code: EmailErrorCode; retryable: boolean }
 > = {
-  // Populated as real codes are observed. The unverified-sender rejection is the first one
-  // to add here: it arrives as a 422 today, which is honest but coarse.
-  RATE_LIMITED: { code: "rate_limited", retryable: true },
-  PAYLOAD_TOO_LARGE: { code: "too_large", retryable: false },
+  // Populated as real codes are observed; empty until one is. The unverified-sender rejection
+  // is the first one to add here: it arrives as a 422 today, which is honest but coarse.
 };
 
 interface PlunkPayload {
@@ -214,9 +212,7 @@ function mapStatus(
 }
 
 function isSizeCode(providerCode: string | undefined): boolean {
-  return (
-    providerCode !== undefined && /SIZE|TOO_LARGE|LIMIT/i.test(providerCode)
-  );
+  return providerCode !== undefined && /SIZE|TOO_LARGE/i.test(providerCode);
 }
 
 function readCode(body: unknown): string | undefined {
