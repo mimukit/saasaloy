@@ -138,11 +138,12 @@ each driver stops it at two. The `database` core carries the tables, the schema 
 by removing one driver and adding the other, which moves no data
 ([ADR 0026](../adr/adr-0026-database-driver-split-2026-08-28.md)).
 
-`auth` and `waitlist` ship SQLite payloads, but neither names a driver. Both declare
-`dependsOn` on the `database` capability, so `add auth` on a clean project fires the
-driver prompt and installs whichever one you pick. Pick `database-postgres` and the
-project then fails at `pnpm typecheck` on the dialect, because those payloads are still
-SQLite. See ADR 0026's 2026-09-01 retraction and [#99](https://github.com/mimukit/saasaloy/issues/99).
+`auth` and `waitlist` install under either driver. Each ships its table declarations twice,
+once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
+condition installs the variant matching the driver already in the project; `--dry-run`
+prints which source it chose. Because that choice is made at install time, switching driver
+later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
+and [ADR 0029](../adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md).
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 

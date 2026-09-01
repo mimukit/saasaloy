@@ -11,17 +11,24 @@ Every installable module in the default registry, in one place. This table is th
 | `database` | capability | a `packages/db` workspace with Drizzle ORM and `drizzle-kit`, on `api`. Ships no client: it names `database-d1` and `database-postgres` in `requiresOneOf`, so `add` makes you pick one |
 | `database-d1` | feature (driver) | the Cloudflare D1 client, `drizzle.config.ts` and wrangler binding. Conflicts with `database-postgres` |
 | `database-postgres` | feature (driver) | the Postgres client over `postgres.js`, a Hyperdrive-aware `getDb`, and a `withDb` callback helper that scopes a client to one handler and closes it. Conflicts with `database-d1` |
-| `auth` | capability | a `packages/auth` workspace wrapping Better Auth, on `api` + `database`. Its payload is SQLite-only, so it typechecks under `database-d1` and not under `database-postgres` ([#99](https://github.com/mimukit/saasaloy/issues/99)) |
+| `auth` | capability | a `packages/auth` workspace wrapping Better Auth, on `api` + `database`. Installs under either driver: it ships its schema and its db provider in a SQLite and a Postgres variant, and holds a request-scoped db client behind the module-scope singleton ([ADR 0029](../adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md)) |
 | `admin` | capability | an `apps/admin` TanStack Router SPA behind the auth session, on `api` + `auth` |
 | `email` | capability | a `packages/email` workspace with the provider interface, the escaping `html` tag and `safeUrl`, on `api` |
 | `email-console` | feature (provider) | an `email` provider that logs messages instead of sending — no plan, no domain, no key |
 | `email-cloudflare` | feature (provider) | an `email` provider on Cloudflare Email Sending — needs a paid Workers plan and a hand-onboarded domain, see [the reference](reference.md#email-providers) |
 | `sms` | capability | a `packages/sms` workspace with the provider interface and segment counting, on `api`. Cloudflare has no SMS product, so there is no Cloudflare-native provider |
 | `sms-console` | feature (provider) | an `sms` provider that logs messages instead of sending |
-| `waitlist` | feature | a waitlist form plus its API route and table, on `api` + `database` + `validators`. Its table is SQLite-only, like `auth`'s ([#99](https://github.com/mimukit/saasaloy/issues/99)) |
+| `waitlist` | feature | a waitlist form plus its API route and table, on `api` + `database` + `validators`. Its table ships in a SQLite and a Postgres variant, so it installs under either driver |
 | `infra` | capability | an `infra` workspace holding the Pulumi program that deploys every Worker in the project. Depends on nothing |
 
-Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. No feature names a driver, so `database` asks you to pick `database-d1` or `database-postgres` on a project that has neither. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
+Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one and a `--yes` run stops and names the options:
+
+```
+Cannot add waitlist — unmet requirement:
+  database (required by waitlist) needs one of: database-d1, database-postgres, and none is installed. Run `saasaloy add database-d1` first, or pick another from that list.
+```
+
+Add a driver first and the second run goes through. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 To see what any module would actually do to your project before installing it:
 

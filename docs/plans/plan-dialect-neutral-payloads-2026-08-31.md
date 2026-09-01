@@ -77,7 +77,7 @@ Reuses: the existing descriptor pipeline (`packages/cli/src/lib/resolve.ts`, `co
 - Add `files/src/db-provider.test.ts` under the existing `node --test` glob: `authDb` throws outside a scope, and resolves the current request's client inside one. Both variants ship the test.
 - Neutralize the auth skill's D1 command references, and update the protected-route recipe at `SKILL.md:127` to the new `getSession(c)` signature.
 
-### Phase 5: remove the stopgap, amend the ADR, verify (#99)
+### Phase 5: remove the stopgap, amend the ADR, verify (#99) (built 2026-09-01)
 
 - Revert `auth` and `waitlist` `dependsOn` to their pre-stopgap values; delete the `dependsOn: ["database-d1"]` entries #98 added.
 - Write `docs/adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md` with **domainkit**: the module-scope singleton stays, the db behind it is request-scoped, and every `auth.api` call runs inside `withAuthScope` on both drivers.
