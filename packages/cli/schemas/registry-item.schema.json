@@ -115,6 +115,15 @@
         "type": "string"
       }
     },
+    "removeWarnings": {
+      "type": "array",
+      "description": "Warnings saved with an installed module and shown before removal. Use this for deployed resources that file and patch removal cannot delete safely.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "minLength": 1
+      }
+    },
     "patches": {
       "type": "array",
       "description": "Structural config patches applied at `add` time by the patch engine (issue #7). A flat array where each op names its own target `file` and codemod `kind` (wrangler.jsonc bindings, package.json dependency merges, package.json script entries, Better Auth plugin-array insertions, router chain `.route()` links); kind-specific payload fields are defined by the engine. An empty array means no patches (ADR 0019).",
@@ -136,12 +145,39 @@
               "package-json-dependency",
               "package-json-script",
               "plugin-array",
+              "const-array",
               "chained-route"
             ],
-            "description": "Which codemod applies this patch — `wrangler-binding` upserts a jsonc binding array; `package-json-dependency` upserts a dependency into a package.json section; `package-json-script` upserts an entry into a package.json `scripts` map; `plugin-array` inserts into a TS module plugin array; `chained-route` appends a `.route(path, handler)` link to a TS module's exported call chain. `chained-route` is the one kind `saasaloy remove` reverses; the rest are dropped with a warning."
+            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, and `chained-route` have removal inverses."
           }
         },
         "allOf": [
+          {
+            "if": {
+              "properties": { "kind": { "const": "const-array" } },
+              "required": ["kind"]
+            },
+            "then": {
+              "required": ["constName", "key", "entry"],
+              "properties": {
+                "constName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Name of the module-scope const array to extend."
+                },
+                "key": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Entry property whose JSON value identifies the entry for add and remove."
+                },
+                "entry": {
+                  "type": "object",
+                  "minProperties": 1,
+                  "description": "JSON object literal appended to the named array."
+                }
+              }
+            }
+          },
           {
             "if": {
               "properties": { "kind": { "const": "package-json-script" } },

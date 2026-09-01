@@ -1493,6 +1493,20 @@ describe("executeRemovePlan — state reconciliation", () => {
     expect(lock.modules.auth).toBeUndefined();
     expect(lock.modules.billing).toBeDefined();
   });
+
+  it("carries stored warnings into the plan and deletes them after removal", async () => {
+    const manifest = emptyManifest();
+    manifest.removeWarnings.auth = ["The auth tables survive removal."];
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock = emptyLock();
+
+    const plan = await build("auth", config, manifest, lock);
+    expect(plan.warnings).toStrictEqual(["The auth tables survive removal."]);
+
+    await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(manifest.removeWarnings.auth).toBeUndefined();
+  });
 });
 
 // Regression cover for two findings on PR #37. Both are about trusting stale

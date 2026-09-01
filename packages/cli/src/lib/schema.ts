@@ -166,6 +166,8 @@ export interface RegistryItem {
   envVars?: Record<string, string>;
   /** Local-dev values for a subset of `envVars`, pre-filled into `.dev.vars.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
   devVars?: Record<string, string>;
+  /** Warnings persisted at add time and printed before this module is removed. */
+  removeWarnings?: string[];
   patches?: RegistryPatch[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;
