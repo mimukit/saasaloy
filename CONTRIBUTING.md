@@ -83,6 +83,47 @@ Test only a payload file with no imports. Anything reaching `cloudflare:workers`
 `@repo/*` workspace package will not resolve outside a scaffolded project; extract the pure part
 into its own file first, the way `auth.ts` extracted `env.ts`.
 
+### The two suites `pnpm test` does not run
+
+Two more suites live under `packages/cli/test/` and run on their own scripts, because both need
+something the unit run does not: a build, or the whole `modules/` directory.
+
+```sh
+pnpm --filter saasaloy build      # both suites assume dist/ is current
+pnpm --filter saasaloy test:e2e   # spawn the real binary against a temp project
+pnpm --filter saasaloy test:matrix # every module and every pair of modules
+```
+
+`test:e2e` runs `dist/index.js` as a subprocess — `init`, then `add` — and asserts on the files
+that land, not on the log. It is the only place argument parsing, the preserved shebang, the exit
+codes and the published `files` array are all exercised together. Set `SAASALOY_E2E_BIN` to run the
+same suite against an installed tarball instead of `dist/`.
+
+`test:matrix` reads `modules/*/registry-item.json` off disk and checks every module alone and every
+pair together for a file collision, an alias registered twice for different directories, or one npm
+package pinned to two versions. Nothing maintains the list: a new module joins the matrix by
+existing. A failure is named by the pair, so it says which two modules disagree.
+
+Fixtures for both live in `packages/cli/test/fixtures/`, outside `src/` because several are invalid
+by design — `registry-broken/` is what `saasaloy doctor`'s tests read, and one descriptor there is
+not parseable JSON at all. That directory is in `.prettierignore` for the same reason.
+
+### Checking a descriptor you wrote
+
+`saasaloy doctor [path]` validates module descriptors against `registry-item.schema.json` and against
+the conventions the schema cannot express: that every declared file is on disk, that every `target`
+names an alias the base template or some scaffold in the registry defines, that `dependsOn` resolves
+within the registry, that npm deps are exact-pinned, and that each `agent.skills` folder exists and
+carries the `saasaloy-` prefix ADR 0014 requires. It reports every violation, not the first, and
+exits 2 when it finds any — so it works as a pre-publish gate.
+
+```sh
+pnpm cli doctor modules            # the whole registry
+pnpm cli doctor modules/waitlist   # one module
+```
+
+It reads local folders only. Validating a remote coordinate is a separate command and a follow-up.
+
 ### Resetting
 
 ```sh
@@ -121,6 +162,8 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
+| `pnpm --filter saasaloy test:e2e` | spawn the built binary against a temp project |
+| `pnpm --filter saasaloy test:matrix` | check every module and every pair of modules |
 
 ### Why the playground is a git repository
 

@@ -244,6 +244,26 @@ export class LocalRegistrySource implements RegistrySource {
 
 const GITHUB_API = "https://api.github.com";
 
+/**
+ * Point the GitHub API calls at another base URL. The remote path is what every real user
+ * hits, so it has to be testable, and the only seam that reaches it is an env var: the
+ * end-to-end harness spawns the CLI as a subprocess, which no in-process injection can
+ * reach. giget reads `GIGET_GITHUB_URL` for the tarball half and builds
+ * `${base}/repos/<owner>/<repo>/tarball/<ref>` from it, so one fixture server can serve
+ * both halves when both variables name it.
+ *
+ * Not a general-purpose GitHub Enterprise switch: nothing else in the CLI reads it, and
+ * a real GHES base would need `GIGET_GITHUB_URL` set to match.
+ */
+export const GITHUB_API_ENV = "SAASALOY_GITHUB_API";
+
+// Read at call time, not at import: a test sets it after this module is loaded, and the
+// e2e subprocess inherits it from its environment.
+function githubApiBase(): string {
+  const override = process.env[GITHUB_API_ENV];
+  return override ? override.replace(/\/$/, "") : GITHUB_API;
+}
+
 // Every GitHub call gets one. Without it a connection that opens and then stalls — a
 // captive portal, a half-dead proxy — hangs `saasaloy add` with no output and no way
 // out but Ctrl-C (#98). Fifteen seconds is far above a healthy round trip and far below
@@ -452,8 +472,11 @@ export class RemoteRegistrySource implements RegistrySource {
       "User-Agent": "saasaloy-cli",
       "X-GitHub-Api-Version": "2022-11-28",
     };
+    // Never attach the token to a cleartext base. The only non-HTTPS base is a
+    // SAASALOY_GITHUB_API override (the test fixture server), which needs no auth; a
+    // typo'd `http://` override must not leak GITHUB_TOKEN on the wire.
     const auth = authToken();
-    if (auth) {
+    if (auth && githubApiBase().startsWith("https://")) {
       headers.Authorization = `Bearer ${auth}`;
     }
     return headers;
@@ -468,7 +491,7 @@ export class RemoteRegistrySource implements RegistrySource {
   private async apiText(path: string, accept: string): Promise<string> {
     let res: Response;
     try {
-      res = await fetch(`${GITHUB_API}${path}`, {
+      res = await fetch(`${githubApiBase()}${path}`, {
         headers: this.headers(accept),
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       });

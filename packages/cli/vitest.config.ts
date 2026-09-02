@@ -9,6 +9,10 @@ export default defineConfig({
     // means. No threshold is set yet: the audit asked CI to *report* coverage, and
     // a gate picked before anyone has read one run's report is a number invented,
     // not measured. Add `thresholds` here once the baseline is known.
+    //
+    // Measured on 2026-09-01, after #47's suite landed: 82.5% statements, 77.1%
+    // branches, 82.6% functions, 82.6% lines. The plan's closing step is to pin the
+    // threshold two points under whichever of those the gate should watch.
     coverage: {
       // `templates/` and `schemas/` are shipped assets, not code this suite runs.
       include: ["src/**/*.ts"],

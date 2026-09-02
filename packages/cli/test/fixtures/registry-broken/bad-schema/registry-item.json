@@ -1,0 +1,6 @@
+{
+  "name": "bad-schema",
+  "type": "saasaloy:widget",
+  "files": [{ "path": "files/a.ts" }],
+  "unexpected": true
+}

@@ -1,6 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
+import { pathExists } from "./fs-utils.js";
 
 // Copy a template tree into a target dir, applying two conventions:
 //   - files named `_foo` become `.foo` (npm refuses to publish literal dotfiles
@@ -9,6 +11,25 @@ import cliPackage from "../../package.json" with { type: "json" };
 // All template files are UTF-8 text, so every file gets token substitution.
 
 export type TemplateVars = Record<string, string>;
+
+// The base template is bundled at <pkg>/templates/base. At runtime import.meta.url is
+// <pkg>/dist/index.js, so `../templates` resolves; under vitest it is <pkg>/src/lib/
+// scaffold.ts, so the template sits one level further up. Try both, the way
+// `lib/schema.ts` finds its schemas — without it `init` is only reachable from a build,
+// which is what kept it untested (#47).
+const TEMPLATE_DIR_CANDIDATES = ["../templates/base", "../../templates/base"];
+
+/** Absolute path of the bundled base template. `init` copies it; `doctor` reads its aliases. */
+export async function baseTemplateDir(): Promise<string> {
+  for (const candidate of TEMPLATE_DIR_CANDIDATES) {
+    const dir = fileURLToPath(new URL(candidate, import.meta.url));
+    if (await pathExists(join(dir, "package.json"))) {
+      return dir;
+    }
+  }
+  // Fall back to the packaged location, for a sensible ENOENT naming the real path.
+  return fileURLToPath(new URL(TEMPLATE_DIR_CANDIDATES[0]!, import.meta.url));
+}
 
 // The substitutions the base template expects. CLI_VERSION stamps the DESIGN.md
 // seed, so a generated contract records which CLI wrote it.

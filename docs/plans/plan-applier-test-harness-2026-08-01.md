@@ -55,7 +55,7 @@ problem on a stranger's machine.
 Ordered so the cheapest, highest-density coverage lands first and the infrastructure-heavy work
 comes after the seam it depends on.
 
-### Phase 1 — Command-layer unit tests
+### Phase 1 — Command-layer unit tests (built 2026-09-01)
 
 The largest coverage gap and the one needing no new infrastructure.
 
@@ -69,7 +69,7 @@ The largest coverage gap and the one needing no new infrastructure.
 - Cover `--force` applying only the *requested* module and not its dependencies.
 - Cover the already-installed early return, and `init`'s name validation, `--force`, `--no-install`.
 
-### Phase 2 — The remote-registry seam and its tests
+### Phase 2 — The remote-registry seam and its tests (built 2026-09-01)
 
 - Introduce the seam: an injectable GitHub API base and a redirectable module-download path.
   Prototype this **first** — if giget's `github:` provider can't be pointed at a fixture server, the
@@ -82,7 +82,7 @@ The largest coverage gap and the one needing no new infrastructure.
   `listModules()` parsing the recursive tree response; and the three error paths the code already
   distinguishes — rate limit (403 with `x-ratelimit-remaining: 0`), 404, and generic API error.
 
-### Phase 3 — Close the remaining library gaps
+### Phase 3 — Close the remaining library gaps (built 2026-09-01)
 
 - **`resolve.ts`** — assert the topological post-order puts prerequisites first, and drive the
   existing cycle detection so its error message is pinned.
@@ -91,7 +91,7 @@ The largest coverage gap and the one needing no new infrastructure.
   today), `diff.ts`, and `fs-utils.ts`.
 - Add the v8 coverage reporter to `vitest.config.ts`.
 
-### Phase 4 — End-to-end: the real binary against a real temp project
+### Phase 4 — End-to-end: the real binary against a real temp project (built 2026-09-01)
 
 - A harness that builds the CLI, creates a temp directory outside the workspace, spawns
   `node dist/index.js init`, then `add` against a fixture registry via `SAASALOY_REGISTRY_DIR`.
@@ -105,7 +105,7 @@ The largest coverage gap and the one needing no new infrastructure.
   run this same harness against an installed tarball rather than `dist/`. Build the harness so the
   binary under test is a parameter.
 
-### Phase 5 — The combination matrix
+### Phase 5 — The combination matrix (built 2026-09-01)
 
 - Enumerate `modules/*/registry-item.json` and generate every pair (plus each module alone).
 - For each combination: scaffold a temp project, apply both, and assert no unexpected conflicts, no
@@ -114,7 +114,7 @@ The largest coverage gap and the one needing no new infrastructure.
   which test index failed.
 - Pairs are `n²`; see Open questions on where this runs.
 
-### Phase 6 — `saasaloy doctor`
+### Phase 6 — `saasaloy doctor` (built 2026-09-01)
 
 The author-facing half, for the third-party registry story (#39).
 

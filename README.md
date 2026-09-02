@@ -28,6 +28,7 @@ saasaloy add waitlist       # pulls api + database, drops in the feature
 saasaloy list               # what the registry offers, and what you already have
 saasaloy update waitlist    # re-apply at a newer ref, with a merge plan for your edits
 saasaloy remove waitlist    # undo an applied module via the manifest
+saasaloy doctor modules     # check your own module descriptors before you publish them
 ```
 
 ### Modules

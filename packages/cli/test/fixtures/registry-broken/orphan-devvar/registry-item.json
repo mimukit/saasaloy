@@ -1,0 +1,7 @@
+{
+  "name": "orphan-devvar",
+  "type": "saasaloy:feature",
+  "envVars": { "KNOWN_URL": "Described here." },
+  "devVars": { "KNOWN_URL": "http://localhost:1", "ORPHAN_URL": "http://localhost:2" },
+  "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]
+}

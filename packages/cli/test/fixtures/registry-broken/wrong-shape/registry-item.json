@@ -1,0 +1,9 @@
+{
+  "name": "wrong-shape",
+  "type": "saasaloy:feature",
+  "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }],
+  "scaffolds": {},
+  "dependsOn": {},
+  "devVars": "not-an-object",
+  "agent": { "skills": {} }
+}

@@ -1,9 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "outDir": "dist",
-    "rootDir": "src"
+    "outDir": "dist"
   },
-  "include": ["src"],
-  "exclude": ["dist", "node_modules"]
+  "// include": "`test/` holds the GitHub fixture server, the e2e harness and the module matrix. It is typechecked but never built: tsup's only entry is src/index.ts. `test/fixtures` is excluded on purpose \u2014 several fixtures are invalid by design and one is not parseable JSON, which is what they are for. No `rootDir`: the build is tsup's, and `tsc` here only checks.",
+  "include": ["src", "test"],
+  "exclude": ["dist", "node_modules", "test/fixtures"]
 }

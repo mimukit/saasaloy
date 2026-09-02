@@ -1,0 +1,12 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "alpha",
+  "type": "saasaloy:capability",
+  "scaffolds": [
+    {
+      "workspace": "apps/api",
+      "aliases": { "@api": "apps/api/src" },
+      "files": [{ "path": "files/index.ts", "target": "src/index.ts" }]
+    }
+  ]
+}

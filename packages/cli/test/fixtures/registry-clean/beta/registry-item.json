@@ -1,0 +1,11 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "beta",
+  "type": "saasaloy:feature",
+  "dependsOn": ["alpha"],
+  "dependencies": ["zod@4.4.3"],
+  "envVars": { "BETA_URL": "Where beta posts to." },
+  "devVars": { "BETA_URL": "http://localhost:4000" },
+  "files": [{ "path": "files/beta.ts", "target": "@api/beta.ts" }],
+  "agent": { "skills": ["saasaloy-beta"] }
+}
