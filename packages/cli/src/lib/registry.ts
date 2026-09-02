@@ -472,8 +472,11 @@ export class RemoteRegistrySource implements RegistrySource {
       "User-Agent": "saasaloy-cli",
       "X-GitHub-Api-Version": "2022-11-28",
     };
+    // Never attach the token to a cleartext base. The only non-HTTPS base is a
+    // SAASALOY_GITHUB_API override (the test fixture server), which needs no auth; a
+    // typo'd `http://` override must not leak GITHUB_TOKEN on the wire.
     const auth = authToken();
-    if (auth) {
+    if (auth && githubApiBase().startsWith("https://")) {
       headers.Authorization = `Bearer ${auth}`;
     }
     return headers;

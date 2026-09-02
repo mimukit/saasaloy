@@ -90,6 +90,19 @@ describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
     ]);
   });
 
+  it("never sends the token to a non-HTTPS API override", async () => {
+    // The override here is `http://127.0.0.1:<port>`. A cleartext base must never carry
+    // `Authorization`, or a typo'd override would leak GITHUB_TOKEN on the wire.
+    process.env.GITHUB_TOKEN = "ghp_secret";
+    const remote = source();
+
+    await remote.resolveSha();
+
+    expect(fixture.authHeaders).toHaveLength(fixture.requests.length);
+    expect(fixture.requests.length).toBeGreaterThan(0);
+    expect(fixture.authHeaders.filter(Boolean)).toStrictEqual([]);
+  });
+
   it("resolves once and reuses the SHA for every module in one install", async () => {
     const remote = source();
     await remote.readModule("email");

@@ -123,6 +123,23 @@ describe("doctor — schema violations", () => {
     expect(report.findings[0]?.message).toContain("no registry-item.json");
   });
 
+  it("reports a wrong-shaped field instead of crashing the whole run", async () => {
+    // `"scaffolds": {}` used to throw inside collectAliases/checkModule, taking every
+    // sibling's report down with it. The schema names each wrong-shaped field.
+    const findings = await findingsFor("wrong-shape");
+
+    expect(findings.length).toBeGreaterThan(0);
+    expect(findings).toContainEqual(expect.stringContaining("/scaffolds"));
+  });
+
+  it("still reports the siblings when one descriptor is wrong-shaped", async () => {
+    const findings = await findingsFor("missing-file");
+
+    expect(findings).toContainEqual(
+      expect.stringContaining("no such file: files/gone.ts")
+    );
+  });
+
   it("finds no module in a folder that is neither a module nor a registry", async () => {
     // The command turns this into "No module folders in <path>", which is the more
     // useful message than guessing which of the two the author meant.
@@ -175,6 +192,24 @@ describe("doctor — the conventions the schema cannot check", () => {
 
     expect(findings.join("\n")).not.toContain("must match pattern");
     expect(findings.join("\n")).toContain("name@1.2.3");
+  });
+
+  it("reports a source path that escapes the module folder", async () => {
+    // A bare `join` would resolve `../outside.ts` outside the module and report it
+    // present when the file exists there; the applier refuses that descriptor.
+    await expect(findingsFor("escape-path")).resolves.toContainEqual(
+      expect.stringContaining(
+        '/files/0/path "../outside.ts" escapes the module folder'
+      )
+    );
+  });
+
+  it("reports a skill path that escapes the module folder", async () => {
+    await expect(findingsFor("escape-path")).resolves.toContainEqual(
+      expect.stringContaining(
+        '/agent/skills/0 "../saasaloy-outside" escapes the module folder'
+      )
+    );
   });
 
   it("reports a devVars key that no envVars entry describes", async () => {

@@ -1,0 +1,6 @@
+{
+  "name": "escape-path",
+  "type": "saasaloy:feature",
+  "files": [{ "path": "../outside.ts", "target": "@web/a.ts" }],
+  "agent": { "skills": ["../saasaloy-outside"] }
+}

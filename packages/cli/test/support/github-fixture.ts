@@ -44,6 +44,12 @@ export interface GithubFixture {
   url: string;
   /** Every request path the fixture served, in order — how a test counts API calls. */
   requests: string[];
+  /**
+   * The `Authorization` header of each request, in the same order as `requests`,
+   * `undefined` where none was sent. The fixture is plain HTTP, so the CLI must never
+   * send one here; a test proves that by asserting on this list.
+   */
+  authHeaders: (string | undefined)[];
   close(): Promise<void>;
 }
 
@@ -58,6 +64,7 @@ export async function startGithubFixture(
   const sha = options.sha ?? DEFAULT_SHA;
   const modules = options.modules ?? {};
   const requests: string[] = [];
+  const authHeaders: (string | undefined)[] = [];
 
   const shaFor = (ref: string): string => options.shaByRef?.[ref] ?? sha;
 
@@ -75,6 +82,7 @@ export async function startGithubFixture(
   const handler = (req: IncomingMessage, res: ServerResponse): void => {
     const path = req.url ?? "/";
     requests.push(path);
+    authHeaders.push(req.headers.authorization);
 
     const failure = options.failure?.(path);
     if (failure) {
@@ -144,6 +152,7 @@ export async function startGithubFixture(
   let closed = false;
 
   return {
+    authHeaders,
     requests,
     url: `http://127.0.0.1:${address.port}`,
     close() {
