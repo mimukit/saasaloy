@@ -2,11 +2,14 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   checkModule,
+  checkProject,
   checkTarget,
   registryModuleNames,
   resolveDoctorTarget,
 } from "./doctor.js";
 import type { ModuleReport } from "./doctor.js";
+import { emptyManifest } from "./manifest.js";
+import type { Manifest } from "./manifest.js";
 
 // The fixtures live outside `src/` on purpose: several are invalid by design, one is not
 // parseable JSON at all, and the type-aware lint pass and the build both ignore anything
@@ -246,5 +249,68 @@ describe("doctor — the repo's own registry", () => {
         report.findings.map((f) => `${report.module}${f.where}: ${f.message}`)
       )
     ).toStrictEqual([]);
+  });
+});
+
+// #107. The project rule, run over plain objects: `saasaloy.json` says a module is
+// installed, `.saasaloy/manifest.json` says it owns nothing.
+function manifestOwning(...modules: string[]): Manifest {
+  const manifest = emptyManifest();
+  for (const [index, module] of modules.entries()) {
+    manifest.managed[`src/file-${index}.ts`] = { module, hash: "abc" };
+  }
+  return manifest;
+}
+
+describe(checkProject, () => {
+  it("says nothing when every installed module owns a file", () => {
+    const findings = checkProject({
+      config: { aliases: {}, installed: ["auth", "waitlist"] },
+      manifest: manifestOwning("auth", "waitlist"),
+    });
+
+    expect(findings).toStrictEqual([]);
+  });
+
+  it("flags the installed module that owns none, naming its remove", () => {
+    const findings = checkProject({
+      config: { aliases: {}, installed: ["auth", "waitlist"] },
+      manifest: manifestOwning("waitlist"),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.module).toBe("auth");
+    expect(findings[0]?.where).toBe("/installed");
+    expect(findings[0]?.message).toContain("saasaloy remove auth");
+  });
+
+  it("says nothing when nothing is installed", () => {
+    expect(
+      checkProject({
+        config: { aliases: {}, installed: [] },
+        manifest: manifestOwning("auth"),
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("never reports the base app, which is not a module", () => {
+    const findings = checkProject({
+      config: { aliases: {}, base: "base", installed: ["auth"] },
+      manifest: manifestOwning("auth"),
+    });
+
+    expect(findings).toStrictEqual([]);
+  });
+
+  it("ignores links and patches — managed files are the ledger", () => {
+    const manifest = emptyManifest();
+    manifest.links[".agents/skills/saasaloy-auth"] = ".claude/skills/x";
+    const findings = checkProject({
+      config: { aliases: {}, installed: ["auth"] },
+      manifest,
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.module).toBe("auth");
   });
 });

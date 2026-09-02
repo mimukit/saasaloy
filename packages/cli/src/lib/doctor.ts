@@ -1,9 +1,11 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { joinModulePath, pathExists, readDirNames } from "./fs-utils.js";
+import type { Manifest } from "./manifest.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
 import { validateRegistryItem } from "./schema.js";
+import type { SaasaloyConfig } from "./schema.js";
 
 // The checks behind `saasaloy doctor`. Split from the command so the rules are testable
 // without a terminal, and so a future `doctor owner/repo/name` (the consumer path, a
@@ -345,6 +347,40 @@ async function missingModulePath(
     return "escape";
   }
   return (await pathExists(abs)) ? false : "absent";
+}
+
+export interface ProjectCheckArgs {
+  config: SaasaloyConfig;
+  manifest: Manifest;
+}
+
+/**
+ * The one project-state rule (#107): a module `saasaloy.json` lists as installed that owns
+ * no file in `.saasaloy/manifest.json`. `add` warns once when it reclaims a target whose
+ * file was hand-deleted, and that warning scrolls away; this is how the state stays
+ * findable afterwards. The inverse — files tracked for a module that is not installed —
+ * belongs to #49.
+ *
+ * Already-loaded state comes in rather than a root path, so the rule tests with plain
+ * objects like the descriptor rules above it. `config.base` is not walked, so the base app
+ * can never be reported.
+ */
+export function checkProject(args: ProjectCheckArgs): Finding[] {
+  const { config, manifest } = args;
+  const owners = new Set(
+    Object.values(manifest.managed).map((entry) => entry.module)
+  );
+  // `managed` is the file ledger, and the criterion is about files. A module owning a
+  // patch or a link but no file is still a module that owns no files.
+  return config.installed
+    .filter((name) => !owners.has(name))
+    .map((name) =>
+      finding(
+        name,
+        "/installed",
+        `installed but owns no files in .saasaloy/manifest.json — run \`saasaloy remove ${name}\` to drop it.`
+      )
+    );
 }
 
 export interface DoctorTarget {

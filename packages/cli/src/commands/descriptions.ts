@@ -14,5 +14,5 @@ export const DESCRIPTIONS = {
   remove: "undo a module's applied files via the manifest (offline)",
   list: "list the modules a registry offers, marking the ones installed here",
   doctor:
-    "validate local module descriptors against the schema and the conventions",
+    "validate local module descriptors, or a project's saasaloy.json against its manifest",
 } as const satisfies Record<string, string>;
