@@ -489,6 +489,12 @@ export async function persistState(input: PersistInput): Promise<unknown[]> {
 
 /** What `applyAndPersist` needs beyond the state files `persistState` writes. */
 export interface ApplyInput extends Omit<PersistInput, "completed"> {
+  /**
+   * Called once the apply itself is over, before any state file is written (#49). This
+   * is the edge of the window where a failure can leave files on disk, and the caller
+   * needs it to decide whether the run owes the user a recovery line.
+   */
+  onApplied?: () => void;
   plan: Plan;
 }
 
@@ -502,6 +508,8 @@ export interface ApplyInput extends Omit<PersistInput, "completed"> {
  *
  * A failed apply propagates its own error; a failed save on an otherwise clean apply
  * propagates that instead, because a run whose state files didn't land is not a success.
+ * The two are not the same failure, though, so `onApplied` marks the boundary between
+ * them for the caller.
  */
 export async function applyAndPersist(input: ApplyInput): Promise<ApplyResult> {
   let result: ApplyResult;
@@ -516,6 +524,7 @@ export async function applyAndPersist(input: ApplyInput): Promise<ApplyResult> {
     await persistState({ ...input, completed: [] });
     throw error;
   }
+  input.onApplied?.();
 
   const failures = await persistState({
     ...input,
@@ -842,20 +851,23 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
     }
 
-    // For the length of this call a failure can leave files on disk, so the catch below
-    // owes the user the re-run that completes them (#49). Past it the apply is done and
-    // the state files describe it, so a later step's failure is its own story.
+    // For the length of the apply a failure can leave files on disk, so the catch below
+    // owes the user the re-run that completes them (#49). `onApplied` closes that window
+    // the moment the apply is over: a save that fails afterwards is its own story, and
+    // the re-run the recovery line advises would have nothing left to complete.
     partial = requested;
     const result = await applyAndPersist({
       config,
       graph,
       lock,
       manifest,
+      onApplied: () => {
+        partial = undefined;
+      },
       plan,
       root,
       source,
     });
-    partial = undefined;
 
     // Merge npm deps into the project root package.json (best-effort — never blocks the
     // apply). This trails `executePlan` on purpose (#98): a mid-plan failure throws past

@@ -1261,6 +1261,26 @@ describe("runAdd — recovery instruction (#49)", () => {
     expect(code).not.toBe(0);
     expect(out).not.toContain("Partial apply");
   });
+
+  it("stays quiet about recovery when only a save failed after a clean apply", async () => {
+    // Undo the setup's mid-apply fault so the plan runs to the end, then block the
+    // manifest save instead. The apply is complete, so "re-run to complete it" would be
+    // both untrue and useless: the re-run would report the module already installed.
+    await rm(join(project, "apps", "web"));
+    await mkdir(join(project, "apps", "web"), { recursive: true });
+    await writeFile(join(project, ".saasaloy"), "not a directory\n", "utf-8");
+
+    const { code, out } = await run(["widget", "--yes"]);
+
+    expect(code).not.toBe(0);
+    expect(out).not.toContain("Partial apply");
+    // The per-file warning still names what failed to save.
+    expect(out).toContain("manifest.json");
+    // And the apply itself really did land.
+    await expect(
+      pathExists(join(project, "apps", "web", "widget.ts"))
+    ).resolves.toBeTruthy();
+  });
 });
 
 describe("add — formatRecovery (#49)", () => {
