@@ -108,6 +108,17 @@ Fixtures for both live in `packages/cli/test/fixtures/`, outside `src/` because 
 by design — `registry-broken/` is what `saasaloy doctor`'s tests read, and one descriptor there is
 not parseable JSON at all. That directory is in `.prettierignore` for the same reason.
 
+### Starting a module
+
+`saasaloy new module <name> [--type <tier>] [--depends-on <a,b>]` writes the skeleton: a schema-valid
+`modules/<name>/registry-item.json`, an empty `modules/<name>/files/`, and a
+`modules/<name>/skills/saasaloy-<name>/SKILL.md` stub whose frontmatter already matches the folder.
+It prompts for the tier and the dependencies when you leave the flags off, runs the `doctor` checks
+over what it wrote, and refuses inside a generated project — a `modules/` folder means nothing in a
+repo that installs modules rather than hosting them. The `create-module` skill runs this command for
+the skeleton and keeps the judgment: which tier, which conventions, and how thin a vertical slice can
+be. One scaffolder, not two.
+
 ### Checking a descriptor you wrote
 
 `saasaloy doctor [path]` validates module descriptors against `registry-item.schema.json` and against

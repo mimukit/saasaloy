@@ -1,6 +1,6 @@
 // The one-line description of each command, in the lifecycle order a user walks
 // (scaffold → compose → configure → inspect → refresh → undo → browse), with the
-// author-facing `doctor`
+// author-facing `new` and `doctor`
 // last. It lives here rather than in
 // `index.ts` because each command's own `--help` prints its description too, and
 // importing the registry from a command module would close an import cycle
@@ -17,6 +17,7 @@ export const DESCRIPTIONS = {
     "re-apply modules at a newer ref, with a merge plan for anything you edited",
   remove: "undo a module's applied files via the manifest (offline)",
   list: "list the modules a registry offers, marking the ones installed here",
+  new: "scaffold a new module in a registry repo (descriptor + files/ + skill stub)",
   doctor:
     "validate local module descriptors, or a project's saasaloy.json against its manifest",
 } as const satisfies Record<string, string>;

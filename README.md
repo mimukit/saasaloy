@@ -30,6 +30,7 @@ saasaloy list               # what the registry offers, and what you already hav
 saasaloy outdated           # which installed modules have moved (--check gates CI)
 saasaloy update waitlist    # re-apply at a newer ref, with a merge plan for your edits
 saasaloy remove waitlist    # undo an applied module via the manifest
+saasaloy new module billing # scaffold a module in a registry repo (descriptor + files/ + skill)
 saasaloy doctor modules     # check your own module descriptors before you publish them
 ```
 
