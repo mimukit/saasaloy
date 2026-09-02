@@ -383,6 +383,29 @@ export function envSteps(
 }
 
 /**
+ * The line an incomplete apply ends on (#49). A module whose file was edited between the
+ * plan and the write is not installed, and staying quiet about it is the bug: the state
+ * files say one thing and the closing "Applied" would say another. Name the modules, and
+ * name the command that finishes the job — a plain re-run, because they are absent from
+ * `config.installed` and so get planned again, drift and all, for a fresh approval.
+ *
+ * `requested` is the module the user typed, not each incomplete name: re-running it
+ * re-plans the whole graph, including an incomplete dependency.
+ */
+export function formatIncomplete(
+  incomplete: string[],
+  requested: string
+): string {
+  const names = incomplete.map((name) => pc.cyan(name)).join(", ");
+  const verb = incomplete.length === 1 ? "is" : "are";
+  const object = incomplete.length === 1 ? "it" : "them";
+  return (
+    `${names} ${verb} not installed — files changed while the plan was open. ` +
+    `Re-run ${pc.cyan(`saasaloy add ${requested}`)} to complete ${object}.`
+  );
+}
+
+/**
  * The closing box: where the module's procedure is written down, and what the project
  * still needs from the operator. `add waitlist` used to end at "Applied" while the
  * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
@@ -693,25 +716,27 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
     }
 
+    // What the run actually installed, readable from inside the `finally` below even when
+    // the apply threw before `executePlan` returned.
+    let completed: string[] = [];
     let result: ApplyResult;
     try {
       result = await executePlan(plan, root, config, manifest);
+      completed = result.completed;
     } finally {
       // Record whatever actually landed even if a mid-plan write failed — a written
       // file the manifest doesn't know about would classify as a conflict next run.
       //
       // The lock saves here too (#98): all three state files leave `add` through one
-      // path, so no exit skips one of them. It pins what `config.installed` records
-      // rather than what the plan intended — `executePlan` writes that list last, so a
-      // run that threw records no module in either file, and the two never disagree.
+      // path, so no exit skips one of them. It pins what the apply reported complete
+      // rather than what the plan intended (#49) — the same list `config.installed`
+      // derives from, so a run that threw pins nothing and the two never disagree, not
+      // even under `--force`, where the module was already installed before the run.
       //
       // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly
       // installed ones: an already-installed dependency keeps the SHA it was fetched at,
       // so the lock never misstates on-disk provenance.
-      const installed = plan.install.filter((name) =>
-        config.installed.includes(name)
-      );
-      upsertLock(lock, source.provenance(), installed, graph);
+      upsertLock(lock, source.provenance(), completed, graph);
       await saveManifest(root, manifest);
       await saveConfig(root, config);
       await saveLock(root, lock);
@@ -788,6 +813,14 @@ export async function runAdd(argv: string[]): Promise<number> {
         "Changed under us"
       );
     }
+    // Which of those kept files cost their module its install, stated plainly. The run
+    // still exits 0: nothing failed, the user's own edit simply outranked the plan.
+    const incomplete = plan.install.filter(
+      (name) => !result.completed.includes(name)
+    );
+    if (incomplete.length > 0) {
+      log.warn(formatIncomplete(incomplete, requested));
+    }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack
         .map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`)
@@ -826,10 +859,16 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     printNextSteps(plan, result, devVarsPath, config.aliases);
 
+    // The closing line names what was installed, not what was planned (#49). When
+    // everything landed the two lists are the same and this reads as it always did.
     outro(
-      pc.green(
-        `Applied ${plan.install.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
-      )
+      result.completed.length > 0
+        ? pc.green(
+            `Applied ${result.completed.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
+          )
+        : pc.yellow(
+            `Nothing installed ${pc.dim(`(${result.written.length} files written)`)}`
+          )
     );
     return EXIT_OK;
   } catch (error) {

@@ -22,7 +22,13 @@ import { emptyLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
-import { envSteps, parseArgs, pinToLock, runAdd } from "./add.js";
+import {
+  envSteps,
+  formatIncomplete,
+  parseArgs,
+  pinToLock,
+  runAdd,
+} from "./add.js";
 
 // `add` with no module opens a picker. Without a terminal that prompt can never be
 // answered, so it has to fail fast instead of hanging a pipeline — and it has to do so
@@ -877,5 +883,25 @@ describe(envSteps, () => {
 
   it("says nothing when the plan declares no variable", () => {
     expect(envSteps([], "apps/api/.dev.vars.example")).toStrictEqual([]);
+  });
+});
+
+// #49. A run that leaves a module uninstalled has to say so. Nothing failed and the run
+// exits 0, so the only signal the user gets is this line: which module missed out, and
+// the command that finishes it.
+describe("add — formatIncomplete", () => {
+  it("names the module and the re-run that completes it", () => {
+    const line = stripAnsi(formatIncomplete(["widget"], "widget"));
+
+    expect(line).toContain("widget is not installed");
+    expect(line).toContain("saasaloy add widget");
+  });
+
+  it("points an incomplete dependency at the module the user asked for", () => {
+    const line = stripAnsi(formatIncomplete(["api", "database"], "waitlist"));
+
+    expect(line).toContain("api, database are not installed");
+    expect(line).toContain("saasaloy add waitlist");
+    expect(line).toContain("complete them");
   });
 });

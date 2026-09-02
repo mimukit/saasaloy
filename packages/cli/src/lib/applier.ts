@@ -752,6 +752,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
 }
 
 export interface ApplyResult {
+  /** Modules of `plan.install` whose planned file writes all landed — the list
+   *  `config.installed` and the lock's freshly-installed entries derive from (#49). */
+  completed: string[];
   written: PlannedFile[];
   /** Files already byte-identical to what we'd write — manifest refreshed, disk untouched. */
   refreshed: PlannedFile[];
@@ -901,12 +904,26 @@ export async function executePlan(
     config.aliases[alias] = prefix;
   }
 
-  // A module counts as installed once its clean files have landed. Preserve insertion
-  // order and dedupe against what's already there.
-  for (const name of plan.install) {
+  // A module counts as installed once its clean files have landed — completeness comes
+  // from what this run did, never from what it intended (#49). The gate is authorization,
+  // not bytes: a `lateDrift` file was edited after the user approved the plan, so that
+  // approval doesn't describe the module now on disk and the module stays uninstalled,
+  // which is what lets a plain re-run re-plan it and ask again. A plan-time `heldBack`
+  // file was shown as held *before* the approval, so it never blocks, and patch failures
+  // are reported on their own — file writes alone decide this. A module that plans no
+  // file writes has nothing that could fail, so it completes.
+  const drifted = new Set(lateDrift.map((file) => file.module));
+  const completed = plan.install.filter((name) => !drifted.has(name));
+
+  // Preserve insertion order and dedupe against what's already there.
+  for (const name of completed) {
     if (!config.installed.includes(name)) {
       config.installed.push(name);
     }
+  }
+  // Warnings track the files that did land, so they follow `plan.install`: an incomplete
+  // module still wrote some of its files, and `remove` must warn about those.
+  for (const name of plan.install) {
     const warnings = plan.removeWarnings[name];
     if (warnings) {
       manifest.removeWarnings[name] = [...warnings];
@@ -916,6 +933,7 @@ export async function executePlan(
   }
 
   return {
+    completed,
     written,
     refreshed,
     lateDrift,
