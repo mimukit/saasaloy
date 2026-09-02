@@ -1,0 +1,8 @@
+{
+  "name": "missing-file",
+  "type": "saasaloy:feature",
+  "files": [
+    { "path": "files/here.ts", "target": "@web/here.ts" },
+    { "path": "files/gone.ts", "target": "@web/gone.ts" }
+  ]
+}

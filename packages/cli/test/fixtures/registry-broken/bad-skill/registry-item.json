@@ -1,0 +1,6 @@
+{
+  "name": "bad-skill",
+  "type": "saasaloy:feature",
+  "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }],
+  "agent": { "skills": ["helper", "saasaloy-absent"] }
+}

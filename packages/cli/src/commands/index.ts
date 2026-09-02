@@ -1,5 +1,6 @@
 import { runAdd } from "./add.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
 import { runList } from "./list.js";
 import { runRemove } from "./remove.js";
@@ -17,12 +18,14 @@ export interface Command {
 export type CommandRegistry = Record<string, Command>;
 
 // Insertion order is deliberate: it is the lifecycle a user walks (scaffold → compose →
-// undo → browse), and it is the order both help and the picker render. Append with that
-// in mind. No explicit `order`/`group` field until the list outgrows a single screen.
+// undo → browse), then the author-facing `doctor`, and it is the order both help and the
+// picker render. Append with that in mind. No explicit `order`/`group` field until the
+// list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
   init: { describe: DESCRIPTIONS.init, run: runInit },
   add: { describe: DESCRIPTIONS.add, run: runAdd },
   update: { describe: DESCRIPTIONS.update, run: runUpdate },
   remove: { describe: DESCRIPTIONS.remove, run: runRemove },
   list: { describe: DESCRIPTIONS.list, run: runList },
+  doctor: { describe: DESCRIPTIONS.doctor, run: runDoctor },
 };

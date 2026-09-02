@@ -1,0 +1,6 @@
+{
+  "name": "ghost-dep",
+  "type": "saasaloy:feature",
+  "dependsOn": ["ghost"],
+  "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]
+}

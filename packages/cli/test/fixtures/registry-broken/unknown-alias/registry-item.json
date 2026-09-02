@@ -1,0 +1,5 @@
+{
+  "name": "unknown-alias",
+  "type": "saasaloy:feature",
+  "files": [{ "path": "files/a.ts", "target": "@nowhere/a.ts" }]
+}

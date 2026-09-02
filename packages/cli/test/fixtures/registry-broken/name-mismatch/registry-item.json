@@ -1,0 +1,5 @@
+{
+  "name": "something-else",
+  "type": "saasaloy:feature",
+  "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]
+}
