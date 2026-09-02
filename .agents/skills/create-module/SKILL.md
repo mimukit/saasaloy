@@ -381,8 +381,9 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] `envVars` lists any required keys; no secrets baked into files.
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
-- [ ] Any UI ships as a `@ui/blocks/<name>.tsx` block that imports React and ui primitives only,
-      with its behaviour injected from a `@web/components/<Name>.tsx` island the module also ships.
+- [ ] Any UI ships as a `@ui/blocks/<name>.tsx` block that imports React and ui primitives only;
+      when the block takes injected behaviour, that comes from a `@web/components/<Name>.tsx`
+      island the module also ships (a static block needs no island).
 - [ ] The skill carries a `## Wire-up` section naming the file to edit, the import line, the tag
       with its client directive, and a suggested anchor marked as a suggestion.
 - [ ] Files are self-contained wiring (clean copy-in updates; no sentinel comments).
