@@ -22,7 +22,7 @@ import { emptyLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
-import { parseArgs, pinToLock, runAdd } from "./add.js";
+import { envSteps, parseArgs, pinToLock, runAdd } from "./add.js";
 
 // `add` with no module opens a picker. Without a terminal that prompt can never be
 // answered, so it has to fail fast instead of hanging a pipeline — and it has to do so
@@ -841,5 +841,41 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
     await expect(
       pathExists(join(project, "apps", "web", "widget.ts"))
     ).resolves.toBeFalsy();
+  });
+});
+
+// #50: the next-steps note used to end at "copy .dev.vars.example and fill it in", which
+// was the only instruction and was wrong for a `PUBLIC_*` value. It now names the command
+// that does the work.
+describe(envSteps, () => {
+  it("points at `saasaloy env` rather than a hand copy", () => {
+    const out = stripAnsi(
+      envSteps(
+        ["PUBLIC_API_URL", "BETA_URL"],
+        "apps/api/.dev.vars.example"
+      ).join("\n")
+    );
+
+    expect(out).toContain("saasaloy env");
+    expect(out).not.toContain("copy it to");
+  });
+
+  it("still lists the variable names, sorted", () => {
+    const out = stripAnsi(envSteps(["PUBLIC_API_URL", "BETA_URL"], "")[0]!);
+
+    expect(out).toBe("Set BETA_URL, PUBLIC_API_URL.");
+  });
+
+  it("keeps the example file as the record of what each one means", () => {
+    const out = stripAnsi(
+      envSteps(["BETA_URL"], "apps/api/.dev.vars.example")[1]!
+    );
+
+    expect(out).toContain("apps/api/.dev.vars.example");
+    expect(out).toContain("description");
+  });
+
+  it("says nothing when the plan declares no variable", () => {
+    expect(envSteps([], "apps/api/.dev.vars.example")).toStrictEqual([]);
   });
 });

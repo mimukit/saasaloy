@@ -1,5 +1,6 @@
 // The one-line description of each command, in the lifecycle order a user walks
-// (scaffold → compose → inspect → refresh → undo → browse), with the author-facing `doctor`
+// (scaffold → compose → configure → inspect → refresh → undo → browse), with the
+// author-facing `doctor`
 // last. It lives here rather than in
 // `index.ts` because each command's own `--help` prints its description too, and
 // importing the registry from a command module would close an import cycle
@@ -9,6 +10,7 @@
 export const DESCRIPTIONS = {
   init: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
   add: "apply a module into the current project (resolves dependsOn)",
+  env: "fill in the environment variables the installed modules declare (--check gates a deploy)",
   outdated:
     "report each installed module's current vs latest commit (--check gates CI)",
   update:
