@@ -292,10 +292,9 @@ function wireUpSteps(
 
   const lines: string[] = [];
   for (const module of [...byModule.keys()].toSorted()) {
-    const targets = (byModule.get(module) ?? [])
-      .toSorted()
-      .map((target) => pc.cyan(target))
-      .join(", ");
+    const moduleTargets = (byModule.get(module) ?? []).toSorted();
+    const targets = moduleTargets.map((target) => pc.cyan(target)).join(", ");
+    const verb = moduleTargets.length === 1 ? "is" : "are";
     const skill = skillByModule.get(module);
     if (skill === undefined) {
       log.warn(
@@ -305,7 +304,7 @@ function wireUpSteps(
       continue;
     }
     lines.push(
-      `Manual wire-up needed — ${targets} is on disk but on no page yet. ` +
+      `Manual wire-up needed — ${targets} ${verb} on disk but on no page yet. ` +
         `In Claude Code, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
     );
   }

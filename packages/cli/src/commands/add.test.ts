@@ -271,11 +271,14 @@ describe("runAdd — ui block wire-up pointer (#62)", () => {
     const { code, out } = await run(["widget", "--yes"]);
 
     expect(code).toBe(0);
-    expect(out).toContain("Manual wire-up");
-    expect(out).toContain("packages/ui/src/blocks/widget.tsx");
     expect(out).toContain("/saasaloy-widget");
-    // The non-block file of the same module is not a wire-up step.
-    expect(out).not.toContain("packages/ui/src/types/widget.d.ts (wire");
+    // The wire-up line names the block and only the block — the non-block file of the
+    // same module is not a wire-up step.
+    const wireUpTargets = out
+      .split("Manual wire-up needed — ")[1]
+      ?.split(" on disk")[0];
+    expect(wireUpTargets).toContain("packages/ui/src/blocks/widget.tsx");
+    expect(wireUpTargets).not.toContain("widget.d.ts");
   });
 
   it("warns when a block arrives from a module that ships no skill", async () => {
