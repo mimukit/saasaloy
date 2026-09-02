@@ -183,6 +183,19 @@ function describeOwned(collision: OwnedCollision): string {
   );
 }
 
+/**
+ * One stale-ownership note as a sentence. The file is gone, so nothing is refused: the
+ * claim is legal and the run continues. What is left behind is an installed module that
+ * no longer owns the file it applied, and only `remove` clears that (#107).
+ */
+export function describeStaleOwner(collision: OwnedCollision): string {
+  const { target, owner, claimant } = collision;
+  return (
+    `${owner} still owns ${target} in the manifest, but the file is gone — ${claimant} now writes it. ` +
+    `Run \`saasaloy remove ${owner}\` to drop the stale module.`
+  );
+}
+
 /** The refusal `add` prints for files another installed module owns. */
 export function formatOwnedCollisions(
   collisions: OwnedCollision[],

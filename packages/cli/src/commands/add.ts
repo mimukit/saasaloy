@@ -17,6 +17,7 @@ import type {
   Plan,
   PlannedFile,
 } from "../lib/applier.js";
+import { describeStaleOwner } from "../lib/collisions.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import {
   EXIT_FAILURE,
@@ -248,6 +249,12 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
     log.warn(
       `Alias redefinition: ${conflict} ${pc.dim("(scaffold overrides the existing alias)")}.`
     );
+  }
+  // The sentence lives in collisions.ts beside the ownership refusal it mirrors, so the
+  // two ownership messages cannot drift apart; the path is accented here the way every
+  // other `add` warning accents one (#107).
+  for (const stale of plan.staleOwners) {
+    log.warn(describeStaleOwner({ ...stale, target: pc.cyan(stale.target) }));
   }
   const newLinks = plan.links.filter((l) => l.action !== "conflict");
   if (newLinks.length > 0) {

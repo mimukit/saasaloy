@@ -2195,6 +2195,132 @@ describe("a target another installed module already owns", () => {
       "database-d1"
     );
   });
+
+  // #107. Same pair, but the files were hand-deleted first. Nothing is on disk to lose,
+  // so the claim is legal and the run must not refuse; the stale `installed` entry is
+  // what the user is told about instead.
+  describe("when the file was deleted off disk", () => {
+    // The rival with no `dependsOn` edge to d1 and none to `database`, so `mayShareTarget`
+    // cannot excuse the overlap — the "different, unrelated module" the issue names.
+    const unrelatedItem: Omit<RegistryItem, "name"> = {
+      type: "saasaloy:capability",
+      files: driverItem.files,
+    };
+
+    async function planRival(): Promise<Plan> {
+      const manifest = await installD1();
+      await rm(join(root, "packages/db/src/client.ts"));
+      await rm(join(root, "packages/db/src/drizzle.config.ts"));
+      return buildPlan({
+        root,
+        install: ["database-postgres"],
+        alreadyInstalled: ["database", "database-d1"],
+        modules: new Map([
+          [
+            "database-postgres",
+            await writeModule(
+              "database-postgres",
+              unrelatedItem,
+              driverFiles("pg")
+            ),
+          ],
+        ]),
+        config,
+        manifest,
+        requested: "database-postgres",
+      });
+    }
+
+    it("plans the write and names the stale owner instead of refusing", async () => {
+      const planned = await planRival();
+
+      expect(planned.files.map((f) => f.action)).toStrictEqual([
+        "create",
+        "create",
+      ]);
+      expect(planned.staleOwners).toStrictEqual([
+        {
+          target: "packages/db/src/client.ts",
+          owner: "database-d1",
+          claimant: "database-postgres",
+        },
+        {
+          target: "packages/db/src/drizzle.config.ts",
+          owner: "database-d1",
+          claimant: "database-postgres",
+        },
+      ]);
+    });
+
+    it("says nothing when the claimant reaches the owner through dependsOn", async () => {
+      // `database` owns the client and is deleted off disk; `database-d1` dependsOn it,
+      // so reclaiming the file is normal and no `remove` should be suggested.
+      const core = await writeModule(
+        "database",
+        {
+          type: "saasaloy:capability",
+          files: [{ path: "files/client.ts", target: "@db/client.ts" }],
+        },
+        { "files/client.ts": "export const client = null;\n" }
+      );
+      const manifest = emptyManifest();
+      const first = await buildPlan({
+        root,
+        install: ["database"],
+        alreadyInstalled: [],
+        modules: new Map([["database", core]]),
+        config,
+        manifest,
+      });
+      await executePlan(first, root, config, manifest);
+      await rm(join(root, "packages/db/src/client.ts"));
+
+      const second = await buildPlan({
+        root,
+        install: ["database-d1"],
+        alreadyInstalled: ["database"],
+        modules: new Map([
+          [
+            "database-d1",
+            await writeModule("database-d1", driverItem, driverFiles("d1")),
+          ],
+          ["database", core],
+        ]),
+        config,
+        manifest,
+      });
+
+      expect(second.staleOwners).toStrictEqual([]);
+    });
+
+    it("says nothing when the owner is no longer installed", async () => {
+      // Manifest entries with no `installed` entry behind them are the mirror state
+      // `doctor` reports (#49); #107 must not claim it too.
+      const manifest = await installD1();
+      await rm(join(root, "packages/db/src/client.ts"));
+      await rm(join(root, "packages/db/src/drizzle.config.ts"));
+
+      const planned = await buildPlan({
+        root,
+        install: ["database-postgres"],
+        alreadyInstalled: [],
+        modules: new Map([
+          [
+            "database-postgres",
+            await writeModule(
+              "database-postgres",
+              unrelatedItem,
+              driverFiles("pg")
+            ),
+          ],
+        ]),
+        config: { aliases: config.aliases, installed: ["database"] },
+        manifest,
+      });
+
+      expect(planned.staleOwners).toStrictEqual([]);
+    });
+  });
 });
 
 // #99 Phase 1. A module whose payload is dialect-bound ships one variant per driver and

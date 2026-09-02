@@ -6,6 +6,7 @@ import {
   detectOwnedCollisions,
   formatCollisions,
   formatOwnedCollisions,
+  mayShareTarget,
 } from "./collisions.js";
 import type { OwnedCollision } from "./collisions.js";
 import {
@@ -152,6 +153,8 @@ export interface Plan {
   aliases: Record<string, string>;
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
   aliasConflicts: string[];
+  /** Files a module reclaims whose manifest owner is a different installed module that is now stale (#107). */
+  staleOwners: OwnedCollision[];
   /** Structural config patches to apply (previewed against the would-be on-disk state). */
   patches: PlannedPatch[];
   /** Removal warnings keyed by the module that supplied them. */
@@ -401,11 +404,23 @@ async function classify(
    * that must not execute (plan decision Q6).
    */
   ownedBy?: string;
+  /**
+   * The module the manifest still records as this target's owner, when the file itself is
+   * gone and the owner is not the module writing now. Reported, never refused (#107).
+   */
+  staleOwner?: string;
 }> {
   if (!(await pathExists(targetAbs))) {
     // Nothing on disk to lose, so a stale `managed` entry pointing at another module is
-    // not a collision — the file this run writes is the only copy there will be.
-    return { action: "create" };
+    // not a collision — the file this run writes is the only copy there will be. The
+    // entry is still a fact worth saying out loud: the recorded owner keeps its
+    // `installed` slot and its applied patches while owning none of the bytes. #107
+    // settles that as warn-and-instruct — name the owner, tell the user to run
+    // `saasaloy remove <owner>`, and never edit the bookkeeping on their behalf.
+    const stale = manifest.managed[target];
+    return stale && stale.module !== module
+      ? { action: "create", staleOwner: stale.module }
+      : { action: "create" };
   }
   const oldContent = await readFile(targetAbs, "utf-8");
   const oldHash = hashContent(oldContent);
@@ -432,14 +447,14 @@ async function planModuleFile(
   ref: ModuleFileRef,
   root: string,
   manifest: Manifest
-): Promise<{ file: PlannedFile; ownedBy?: string }> {
+): Promise<{ file: PlannedFile; ownedBy?: string; staleOwner?: string }> {
   const content = await readFile(ref.abs, "utf-8");
   const newHash = hashContent(content);
   // `add` is the one engine whose input is an untrusted remote descriptor, so the target
   // is resolved under the same guard `remover` and `updater` use on their state files
   // (#98). `join()` normalizes a `..` away silently; this refuses it instead.
   const targetAbs = resolveWithinRoot(root, ref.target);
-  const { action, oldContent, ownedBy } = await classify(
+  const { action, oldContent, ownedBy, staleOwner } = await classify(
     targetAbs,
     ref.target,
     newHash,
@@ -461,6 +476,7 @@ async function planModuleFile(
       ...(ref.onlyWith === undefined ? {} : { onlyWith: ref.onlyWith }),
     },
     ...(ownedBy === undefined ? {} : { ownedBy }),
+    ...(staleOwner === undefined ? {} : { staleOwner }),
   };
 }
 
@@ -502,6 +518,10 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // `classify` reports them. Collected across the whole loop and judged once below, so a
   // module contesting three of another's files raises one refusal naming all three (#91).
   const claims: OwnedCollision[] = [];
+  // The same fact about a file that is no longer on disk. Nothing is at risk, so these
+  // never refuse: they are collected here and reported by `add` so the user knows a
+  // module is left installed owning nothing (#107).
+  const staleClaims: OwnedCollision[] = [];
   const links: PlannedLink[] = [];
   const dependencies: string[] = [];
   const devDependencies: string[] = [];
@@ -582,16 +602,22 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     // classified and recorded alike, so create/drift/conflict and `remove` all come
     // for free.
     for (const ref of refsByModule.get(name) ?? []) {
-      const { file: planned, ownedBy } = await planModuleFile(
-        mod,
-        ref,
-        root,
-        manifest
-      );
+      const {
+        file: planned,
+        ownedBy,
+        staleOwner,
+      } = await planModuleFile(mod, ref, root, manifest);
       if (ownedBy !== undefined) {
         claims.push({
           target: planned.target,
           owner: ownedBy,
+          claimant: name,
+        });
+      }
+      if (staleOwner !== undefined) {
+        staleClaims.push({
+          target: planned.target,
+          owner: staleOwner,
           claimant: name,
         });
       }
@@ -655,6 +681,18 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     throw new RefusalError(formatOwnedCollisions(owned, requested));
   }
 
+  // The missing-file half of the same rule, reported rather than refused (#107). Two
+  // filters keep the note honest. `mayShareTarget` drops the driver reclaiming a file its
+  // `dependsOn` capability applied, because telling the user to remove a module the new
+  // one depends on would be wrong. The owner also has to still be installed: an owner
+  // absent from `installed` is the mirror state `doctor` reports (#49), not this one.
+  const priorInstalled = new Set([...alreadyInstalled, ...config.installed]);
+  const staleOwners = staleClaims.filter(
+    (claim) =>
+      priorInstalled.has(claim.owner) &&
+      !mayShareTarget(claim.claimant, claim.owner, modules)
+  );
+
   // A target every one of whose variants was filtered out would otherwise be a file that
   // silently never arrived — an app missing its schema, discovered at typecheck. Refuse
   // the whole plan instead, before `executePlan` writes anything, and name what would
@@ -696,6 +734,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     envVars,
     aliases,
     aliasConflicts,
+    staleOwners,
     patches,
     removeWarnings,
   };
