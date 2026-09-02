@@ -185,7 +185,9 @@ no SDK, no binding and no Cloudflare plan involved, so the provider behaves iden
    returns 401. Put it in `apps/api/.dev.vars` as `PLUNK_API_KEY=sk_...` for dev, and run
    `wrangler secret put PLUNK_API_KEY` for production.
 3. **Self-hosting only:** set `PLUNK_API_URL` to your instance's base URL. It defaults to the hosted
-   API, so leave it unset otherwise.
+   API, so leave it unset otherwise. The URL must use HTTPS — the request carries your secret key,
+   and the provider refuses a cleartext endpoint. Plain `http://` is accepted for localhost only,
+   for running a local Plunk under `wrangler dev`; never point a production Worker at one.
 
 Three behaviours worth knowing before your first send:
 

@@ -86,10 +86,11 @@ export function plunk(): EmailProvider {
         );
       }
 
-      const baseUrl =
+      const baseUrl = validateBaseUrl(
         typeof env.PLUNK_API_URL === "string" && env.PLUNK_API_URL
           ? env.PLUNK_API_URL
-          : DEFAULT_API_URL;
+          : DEFAULT_API_URL
+      );
 
       const payload: PlunkPayload = {
         to: message.to,
@@ -109,6 +110,9 @@ export function plunk(): EmailProvider {
             "content-type": "application/json",
           },
           body: JSON.stringify(payload),
+          // The send endpoint has no business redirecting, and following one would replay the
+          // `authorization` header at whatever host the redirect names. Refuse instead.
+          redirect: "error",
           // Bound the call. Without this a hung provider holds the Worker's response open
           // until the platform kills it, and the caller gets no `EmailError` at all.
           signal: AbortSignal.timeout(10_000),
@@ -145,6 +149,40 @@ export function plunk(): EmailProvider {
       return { messageId };
     },
   };
+}
+
+/**
+ * The request attaches the secret key, so the destination has to earn it: HTTPS, or plain HTTP
+ * to loopback only (a self-hosted Plunk under `wrangler dev`). Anything else — an `http://`
+ * host on the network, or a value that does not parse as a URL at all — fails fast here rather
+ * than sending `PLUNK_API_KEY` in cleartext and surfacing as a mystery 404 later.
+ */
+function validateBaseUrl(baseUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch (error) {
+    throw new EmailError(
+      "provider_error",
+      `plunk: \`PLUNK_API_URL\` is not a valid URL: ${baseUrl}`,
+      { cause: error }
+    );
+  }
+  const loopback =
+    parsed.hostname === "localhost" ||
+    parsed.hostname === "127.0.0.1" ||
+    parsed.hostname === "[::1]";
+  if (
+    parsed.protocol !== "https:" &&
+    !(parsed.protocol === "http:" && loopback)
+  ) {
+    throw new EmailError(
+      "provider_error",
+      "plunk: `PLUNK_API_URL` must use HTTPS (plain HTTP is allowed for localhost only) — " +
+        "the request carries `PLUNK_API_KEY`, and cleartext would expose it"
+    );
+  }
+  return baseUrl;
 }
 
 /** Parses the response body, tolerating a non-JSON one (an HTML error page, an empty 502). */
