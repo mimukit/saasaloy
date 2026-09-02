@@ -30,6 +30,7 @@ import { DEV_VARS_EXAMPLE, writeDevVarsExample } from "../lib/dev-vars.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
 import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
+import type { Lockfile } from "../lib/lock.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -40,7 +41,7 @@ import {
   parseCoordinate,
   REGISTRY_ENV,
 } from "../lib/registry.js";
-import type { RegistrySource } from "../lib/registry.js";
+import type { Coordinate, RegistrySource } from "../lib/registry.js";
 import {
   detectMissingRequirements,
   formatMissingRequirements,
@@ -57,7 +58,7 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // targets, record them in .saasaloy/manifest.json with content hashes, and merge npm
 // deps (build spec §2.4/§2.7/§2.9). `--dry-run`/`--diff` preview without mutating.
 
-interface Options {
+export interface AddOptions {
   name?: string;
   dryRun: boolean;
   diff: boolean;
@@ -90,7 +91,13 @@ const HELP: CommandHelp = {
   },
 };
 
-function parseArgs(argv: string[]): Options {
+/**
+ * Split `add`'s argv into options. Exported for its own tests: the rejection rules here
+ * (an unknown flag, a second positional) are the difference between `--forse` doing
+ * nothing and `--forse` being reported, and they are worth pinning without driving a
+ * whole apply to reach them.
+ */
+export function parseArgs(argv: string[]): AddOptions {
   const positional: string[] = [];
   const unknown: string[] = [];
   for (const arg of argv) {
@@ -110,6 +117,28 @@ function parseArgs(argv: string[]): Options {
     unknown,
     yes: argv.includes("--yes") || argv.includes("-y"),
   };
+}
+
+/**
+ * Pin a coordinate to the SHA the lock recorded for it, so a re-install reproduces
+ * identical bytes (ADR 0012). Three conditions hold it back, and each one means the user
+ * asked for something else: `SAASALOY_REGISTRY_DIR` points at a working copy, an explicit
+ * `@ref` names the ref to move to, or the entry was installed from a local checkout and
+ * carries no SHA to pin to. Returns `coord` unchanged when none applies.
+ *
+ * A separate function from `runAdd` because reaching this branch through the command
+ * means resolving a remote source, and the rule is worth testing on its own.
+ */
+export function pinToLock(coord: Coordinate, lock: Lockfile): Coordinate {
+  if (process.env[REGISTRY_ENV] || !coord.module || coord.ref) {
+    return coord;
+  }
+  const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
+  const pinned = lock.modules[coord.module];
+  if (!pinned || pinned.source !== slug || pinned.resolved === "local") {
+    return coord;
+  }
+  return { ...coord, ref: pinned.resolved };
 }
 
 const ACTION_LABEL: Record<FileAction, string> = {
@@ -365,13 +394,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     // re-install then reproduces identical bytes (ADR 0012). Explicit `@ref` or the
     // `update` flow (#17) are the sanctioned ways to move off the lock.
     const lock = await loadLock(root);
-    if (!process.env[REGISTRY_ENV] && coord.module && !coord.ref) {
-      const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
-      const pinned = lock.modules[coord.module];
-      if (pinned && pinned.source === slug && pinned.resolved !== "local") {
-        coord = { ...coord, ref: pinned.resolved };
-      }
-    }
+    coord = pinToLock(coord, lock);
 
     source = createRegistrySource(coord);
     if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
