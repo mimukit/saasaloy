@@ -239,12 +239,31 @@ export function isSet(values: Record<string, string>, name: string): boolean {
 }
 
 /**
- * The file's new content, with `additions` appended.
+ * Is this line the empty placeholder for `name` — `KEY=`, with nothing but spaces after
+ * the `=`? A commented-out line is not one: `# KEY=` has a key of `# KEY`.
+ */
+function isPlaceholderFor(line: string, name: string): boolean {
+  const equals = line.indexOf("=");
+  return (
+    equals !== -1 &&
+    line.slice(0, equals).trim() === name &&
+    line.slice(equals + 1).trim() === ""
+  );
+}
+
+/**
+ * The file's new content, with `additions` written in.
  *
  * Every existing line survives byte for byte, comments and ordering included. This is a
  * file a person edits by hand, unlike `.dev.vars.example`, which is regenerated from the
  * descriptors — re-rendering it here would throw away their formatting to say the same
  * thing.
+ *
+ * One exception, and it is the reason this is not a plain append: a `.dev.vars` copied
+ * from `.dev.vars.example` holds `KEY=` for every variable, and `isSet` calls those
+ * unset. Appending would leave the file carrying two lines for one key, the first of them
+ * a lie. So a placeholder is filled where it stands, and only a key the file has never
+ * heard of goes on the end.
  */
 export function appendVars(
   existing: string | undefined,
@@ -253,12 +272,27 @@ export function appendVars(
   if (additions.length === 0) {
     return existing ?? "";
   }
-  const appended = additions.map(([name, value]) => `${name}=${value}`);
   if (!existing || existing.trim() === "") {
-    return `${appended.join("\n")}\n`;
+    return `${additions.map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
   }
-  const head = existing.endsWith("\n") ? existing : `${existing}\n`;
-  return `${head}${appended.join("\n")}\n`;
+
+  const lines = existing.split("\n");
+  const appended: string[] = [];
+  for (const [name, value] of additions) {
+    const line = `${name}=${value}`;
+    const index = lines.findIndex((existingLine) =>
+      isPlaceholderFor(existingLine, name)
+    );
+    if (index === -1) {
+      appended.push(line);
+    } else {
+      lines[index] = line;
+    }
+  }
+
+  const kept = lines.join("\n");
+  const head = kept.endsWith("\n") ? kept : `${kept}\n`;
+  return appended.length === 0 ? head : `${head}${appended.join("\n")}\n`;
 }
 
 /**

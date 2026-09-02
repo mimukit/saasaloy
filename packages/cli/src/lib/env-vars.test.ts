@@ -168,6 +168,35 @@ describe(appendVars, () => {
   it("changes nothing when there is nothing to add", () => {
     expect(appendVars("KEEP_ME=yes", [])).toBe("KEEP_ME=yes");
   });
+
+  // A `.dev.vars` copied from `.dev.vars.example` is all empty placeholders, and `isSet`
+  // calls those unset. Appending would leave two lines for one key, the first of them
+  // wrong (review N1).
+  it("fills an empty placeholder in place rather than appending a second line", () => {
+    expect(
+      appendVars("# note\nA=\nKEEP_ME=yes\nB =  \n", [
+        ["A", "1"],
+        ["B", "2"],
+      ])
+    ).toBe("# note\nA=1\nKEEP_ME=yes\nB=2\n");
+  });
+
+  it("appends only the keys the file has never heard of", () => {
+    expect(
+      appendVars("A=\n", [
+        ["A", "1"],
+        ["C", "3"],
+      ])
+    ).toBe("A=1\nC=3\n");
+  });
+
+  it("leaves a commented-out placeholder alone", () => {
+    expect(appendVars("# A=\n", [["A", "1"]])).toBe("# A=\nA=1\n");
+  });
+
+  it("never rewrites a line that already carries a value", () => {
+    expect(appendVars("A=keep-me\n", [["B", "2"]])).toBe("A=keep-me\nB=2\n");
+  });
 });
 
 describe(productionSecretCommands, () => {

@@ -14,11 +14,12 @@ import { pathExists } from "./fs-utils.js";
 // file implements the subset of gitignore's pattern language the question needs:
 // comments, negation, anchoring, directory-only patterns, `*`, `?`, and `**`.
 //
-// Three deliberate gaps, none of which changes the answer for an env file: character
-// classes (`[a-z]`) are matched literally, `.git/info/exclude` and the global excludes
-// file are not read, and a `.gitignore` inside an already-ignored directory is still
-// read. Each can only make the check stricter (report "not ignored" for something git
-// would ignore), which refuses rather than leaks.
+// Four deliberate gaps, none of which changes the answer for an env file: character
+// classes (`[a-z]`) are matched literally, a backslash escape (`\#.env`, a trailing
+// `.env\ `) is matched literally rather than unescaped, `.git/info/exclude` and the
+// global excludes file are not read, and a `.gitignore` inside an already-ignored
+// directory is still read. Each can only make the check stricter (report "not ignored"
+// for something git would ignore), which refuses rather than leaks.
 
 interface Rule {
   /** Tested against the path relative to the `.gitignore`'s own directory. */

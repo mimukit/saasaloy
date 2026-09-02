@@ -143,7 +143,7 @@ optional `requires.saasaloy` field turns both into one sentence, checked before 
 Any semver range works, upper bounds included (`>=0.3 <2`, `^1.2.0`, `1.x`), so there is no separate
 maximum field. A CLI outside the range refuses the whole run and writes nothing, and it does so for a
 transitive `dependsOn` too — the message names the module in the chain that declared the range, not
-the one you typed. The matcher is `packages/cli/src/lib/semver.ts`, ~200 lines owned rather than the
+the one you typed. The matcher is `packages/cli/src/lib/semver.ts`, ~400 lines owned rather than the
 `semver` package added as a runtime dependency for one boolean.
 
 ```sh

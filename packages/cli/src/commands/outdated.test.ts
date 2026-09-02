@@ -2,9 +2,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { startGithubFixture } from "../../test/support/github-fixture.js";
+import type { GithubFixture } from "../../test/support/github-fixture.js";
 import { emptyLock } from "../lib/lock.js";
 import type { LockModule } from "../lib/lock.js";
-import { REGISTRY_ENV } from "../lib/registry.js";
+import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
 import type { ModuleComparison } from "../lib/updater.js";
 import {
@@ -186,12 +188,13 @@ describe(parseArgs, () => {
   });
 });
 
-// Command-level behaviour, offline. Nothing here reaches the network: an entry pinned to
-// a SHA needs no resolution, an entry the lock doesn't hold is unresolvable on the spot,
-// and SAASALOY_REGISTRY_DIR short-circuits resolution for the drift case.
+// Command-level behaviour, offline. Nothing here reaches GitHub: an entry pinned to a SHA
+// needs no resolution, an entry the lock doesn't hold is unresolvable on the spot, and the
+// drift case resolves against the local fixture server.
 describe(runOutdated, () => {
   const ORIGINAL_CWD = process.cwd();
   let project: string;
+  let fixture: GithubFixture | undefined;
 
   async function writeProject(
     installed: string[],
@@ -209,6 +212,19 @@ describe(runOutdated, () => {
     );
   }
 
+  /**
+   * A project whose lock says `email` sits on `SHA_A` while `main` now points at `SHA_B`.
+   * The SHA comes from the local fixture server rather than the registry override, so the
+   * drift is a real comparison result — the override says nothing about drift (B1).
+   */
+  async function driftingProject(): Promise<void> {
+    fixture = await startGithubFixture({ sha: SHA_B });
+    process.env[GITHUB_API_ENV] = fixture.url;
+    await writeProject(["email"], {
+      email: { source: "mimukit/saasaloy", ref: "main", resolved: SHA_A },
+    });
+  }
+
   beforeEach(async () => {
     project = await mkdtemp(join(tmpdir(), "saasaloy-outdated-"));
     process.chdir(project);
@@ -217,6 +233,9 @@ describe(runOutdated, () => {
   afterEach(async () => {
     process.chdir(ORIGINAL_CWD);
     delete process.env[REGISTRY_ENV];
+    delete process.env[GITHUB_API_ENV];
+    await fixture?.close();
+    fixture = undefined;
     await rm(project, { recursive: true, force: true });
   });
 
@@ -263,24 +282,54 @@ describe(runOutdated, () => {
   });
 
   it("exits 0 on drift by default, and names the fix", async () => {
-    process.env[REGISTRY_ENV] = project;
-    await writeProject(["email"], {
-      email: { source: "mimukit/saasaloy", ref: "main", resolved: SHA_A },
-    });
+    await driftingProject();
     const { code, out } = await runCommand([]);
 
     expect(code).toBe(0);
+    expect(out).toContain("outdated");
     expect(out).toContain("1 module moved");
     expect(out).toContain("saasaloy update");
   });
 
   it("exits 2 with --check once anything has moved", async () => {
-    process.env[REGISTRY_ENV] = project;
-    await writeProject(["email"], {
-      email: { source: "mimukit/saasaloy", ref: "main", resolved: SHA_A },
-    });
+    await driftingProject();
 
     await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(2);
+  });
+
+  // Regression, review B1: `compareInstalled` calls an override row `outdated`, which to
+  // `update` means "re-apply from the checkout". Read as drift, that made every module
+  // under SAASALOY_REGISTRY_DIR a moved module and `--check` exited 2 in a playground
+  // where nothing had moved at all.
+  describe(`with ${REGISTRY_ENV} set`, () => {
+    beforeEach(async () => {
+      process.env[REGISTRY_ENV] = project;
+      await writeProject(["email"], {
+        email: { source: "mimukit/saasaloy", ref: "main", resolved: SHA_A },
+      });
+    });
+
+    it("reads every module as local, not as drift", async () => {
+      const { code, out } = await runCommand([]);
+
+      const row = out
+        .split("\n")
+        .find((line) => line.includes("email"))
+        ?.trim();
+
+      expect(code).toBe(0);
+      expect(row).toContain("local");
+      // The banner says "saasaloy outdated", so the status is read off the row itself.
+      expect(row).not.toContain("outdated");
+      expect(out).not.toContain("moved");
+      expect(out).toContain("Nothing to compare");
+    });
+
+    it("exits 0 with --check — an override is not drift", async () => {
+      await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
+        0
+      );
+    });
   });
 
   it("refuses an unknown flag", async () => {

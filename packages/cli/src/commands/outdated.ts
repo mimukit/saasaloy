@@ -153,6 +153,28 @@ export function countDrift(comparisons: ModuleComparison[]): number {
   return comparisons.filter((c) => c.status === "outdated").length;
 }
 
+/**
+ * Rewrite the rows a registry override produced so they read `local`.
+ *
+ * `compareInstalled` marks every override row `outdated`, because that is what the word
+ * means to `update`: re-apply the module from the checkout. `outdated` asks a different
+ * question, and a working copy has no commit to compare against, so the honest answer is
+ * `local` — the same answer a locally installed module gets without the override. Left as
+ * `outdated`, every row counted as drift and `--check` exited 2 with nothing moved.
+ *
+ * Rows the override never touched (a module with no lock entry stays `unresolvable`) are
+ * returned as they came.
+ */
+export function asLocalRows(
+  comparisons: ModuleComparison[]
+): ModuleComparison[] {
+  return comparisons.map((comparison) =>
+    comparison.status === "outdated"
+      ? { ...comparison, status: "local" as const }
+      : comparison
+  );
+}
+
 function splitSlug(slug: string): [string, string] | undefined {
   const parts = slug.split("/");
   return parts.length === 2 && parts[0] && parts[1]
@@ -216,14 +238,21 @@ export async function runOutdated(argv: string[]): Promise<number> {
       return source;
     };
 
-    const comparisons = await compareInstalled({
+    const compared = await compareInstalled({
       installed: config.installed,
       lock,
       registryOverride,
       resolveRef: (_name, entry, ref) => remote(entry.source, ref).resolveSha(),
     });
+    const comparisons = registryOverride ? asLocalRows(compared) : compared;
 
     note(wrapForNote(renderComparisons(comparisons).join("\n")), "Modules");
+
+    if (registryOverride) {
+      // Nothing was compared, so there is nothing to gate on — `--check` exits 0 too.
+      outro(pc.dim("Nothing to compare — every module reads as local."));
+      return EXIT_OK;
+    }
 
     const drift = countDrift(comparisons);
     if (drift === 0) {
