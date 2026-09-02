@@ -1,7 +1,6 @@
 import { spawn } from "node:child_process";
 import { readdir } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
-import { fileURLToPath } from "node:url";
 import {
   cancel,
   intro,
@@ -22,7 +21,11 @@ import {
 } from "../lib/fs-utils.js";
 import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { logger } from "../lib/logger.js";
-import { copyTemplate, templateVars } from "../lib/scaffold.js";
+import {
+  baseTemplateDir,
+  copyTemplate,
+  templateVars,
+} from "../lib/scaffold.js";
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -35,15 +38,10 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // a file (see linkAgentSkills). Churny modules (api, database, auth, admin, features) are
 // added later via `saasaloy add`, which copies their own skills in.
 
-// Bundled at <pkg>/templates/base; at runtime import.meta.url is <pkg>/dist/index.js.
-const TEMPLATE_DIR = fileURLToPath(
-  new URL("../templates/base", import.meta.url)
-);
-
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
 
-interface Options {
+export interface InitOptions {
   name?: string;
   force: boolean;
   noInstall: boolean;
@@ -71,7 +69,8 @@ const HELP: CommandHelp = {
   },
 };
 
-function parseArgs(argv: string[]): Options {
+/** Split `init`'s argv into options. Exported for its own tests, like `add`'s. */
+export function parseArgs(argv: string[]): InitOptions {
   const positional: string[] = [];
   const unknown: string[] = [];
   for (const arg of argv) {
@@ -325,7 +324,11 @@ export async function runInit(argv: string[]): Promise<number> {
 
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
-  await copyTemplate(TEMPLATE_DIR, target, templateVars(projectName));
+  await copyTemplate(
+    await baseTemplateDir(),
+    target,
+    templateVars(projectName)
+  );
   s.stop(
     `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
   );
