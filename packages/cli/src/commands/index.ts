@@ -3,6 +3,7 @@ import { DESCRIPTIONS } from "./descriptions.js";
 import { runDoctor } from "./doctor.js";
 import { runInit } from "./init.js";
 import { runList } from "./list.js";
+import { runOutdated } from "./outdated.js";
 import { runRemove } from "./remove.js";
 import { runUpdate } from "./update.js";
 
@@ -18,12 +19,14 @@ export interface Command {
 export type CommandRegistry = Record<string, Command>;
 
 // Insertion order is deliberate: it is the lifecycle a user walks (scaffold → compose →
-// undo → browse), then the author-facing `doctor`, and it is the order both help and the
-// picker render. Append with that in mind. No explicit `order`/`group` field until the
-// list outgrows a single screen.
+// inspect → refresh → undo → browse), then the author-facing `doctor`, and it is the
+// order both help and the picker render. `outdated` sits directly before `update`
+// because it is the question `update` is the answer to. Append with that in mind. No
+// explicit `order`/`group` field until the list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
   init: { describe: DESCRIPTIONS.init, run: runInit },
   add: { describe: DESCRIPTIONS.add, run: runAdd },
+  outdated: { describe: DESCRIPTIONS.outdated, run: runOutdated },
   update: { describe: DESCRIPTIONS.update, run: runUpdate },
   remove: { describe: DESCRIPTIONS.remove, run: runRemove },
   list: { describe: DESCRIPTIONS.list, run: runList },

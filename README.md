@@ -26,6 +26,7 @@ saasaloy init my-app        # scaffold the base: Astro landing + packages/ui + c
 saasaloy add database-d1    # pulls api + database, then binds them to D1 (or pick database-postgres)
 saasaloy add waitlist       # pulls api + database, drops in the feature
 saasaloy list               # what the registry offers, and what you already have
+saasaloy outdated           # which installed modules have moved (--check gates CI)
 saasaloy update waitlist    # re-apply at a newer ref, with a merge plan for your edits
 saasaloy remove waitlist    # undo an applied module via the manifest
 saasaloy doctor modules     # check your own module descriptors before you publish them

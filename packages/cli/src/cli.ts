@@ -41,7 +41,7 @@ export function printHelp(registry: CommandRegistry): void {
   );
   console.log(pc.bold("Commands:"));
   for (const [name, command] of Object.entries(registry)) {
-    console.log(`  ${pc.cyan(name.padEnd(6))} ${pc.dim(command.describe)}`);
+    console.log(`  ${pc.cyan(name.padEnd(8))} ${pc.dim(command.describe)}`);
   }
   console.log(`\n${pc.bold("Options:")}`);
   console.log(
