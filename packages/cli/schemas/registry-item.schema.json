@@ -21,6 +21,18 @@
       "enum": ["saasaloy:capability", "saasaloy:feature"],
       "description": "`saasaloy:capability` scaffolds an app/package and establishes extension points; `saasaloy:feature` extends capabilities by dropping files into their conventions."
     },
+    "requires": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Tool versions this descriptor needs. A descriptor sets `additionalProperties: false`, so an old CLI meeting a new field already fails — as a raw schema dump, and not at all when an existing field merely changed meaning. Declaring a range turns both into one fatal, actionable message, checked before any write is planned. Optional: a descriptor without it works on every CLI version.",
+      "properties": {
+        "saasaloy": {
+          "type": "string",
+          "minLength": 1,
+          "description": "Semver range the running `saasaloy` CLI has to satisfy (e.g. `>=0.3`, `>=0.3 <2`, `^1.2.0`, `1.x`). Any range shape is accepted, upper bounds included, so there is no separate maximum field. A CLI outside the range refuses the whole run and names this module, even when it is a transitive `dependsOn`."
+        }
+      }
+    },
     "dependsOn": {
       "type": "array",
       "description": "Modules this one requires. Resolved recursively and topologically sorted behind a confirmation prompt.",

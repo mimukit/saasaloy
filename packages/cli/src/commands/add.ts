@@ -17,6 +17,10 @@ import type {
   Plan,
   PlannedFile,
 } from "../lib/applier.js";
+import {
+  detectCliMismatches,
+  formatCliMismatches,
+} from "../lib/cli-requires.js";
 import { describeStaleOwner } from "../lib/collisions.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import {
@@ -53,6 +57,7 @@ import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
@@ -509,6 +514,24 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     let graph = await resolveGraph(source, requested);
 
+    // `requires.saasaloy` — the descriptor's floor on the CLI reading it (#50). Checked
+    // before the driver prompt and before a single file is planned, because a CLI too old
+    // to understand the descriptor cannot be trusted to resolve the rest of it either.
+    // The graph holds every transitive prerequisite, so a range declared three levels down
+    // refuses here and the message names that module, not the one the user typed.
+    const cliVersion = await readVersion();
+    const cliCheckFails = (): boolean => {
+      const mismatches = detectCliMismatches({ cliVersion, graph });
+      if (mismatches.length === 0) {
+        return false;
+      }
+      cancel(formatCliMismatches(mismatches, requested, cliVersion));
+      return true;
+    };
+    if (cliCheckFails()) {
+      return EXIT_REFUSED;
+    }
+
     // `requiresOneOf` — a capability naming its mutually exclusive drivers. Settle it
     // before the conflict check below, so that check reads the graph a picked driver is
     // already part of (#98).
@@ -545,6 +568,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     if (unmet.length > 0) {
       cancel(formatMissingRequirements(unmet, requested));
+      return EXIT_REFUSED;
+    }
+
+    // A driver the user just picked is a descriptor this run never saw above, so its own
+    // `requires` is checked here too — still before anything is planned.
+    if (cliCheckFails()) {
       return EXIT_REFUSED;
     }
 

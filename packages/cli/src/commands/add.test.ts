@@ -722,3 +722,124 @@ describe("runAdd — --force and the already-installed early return", () => {
     await expect(pathExists(widgetFile())).resolves.toBeFalsy();
   });
 });
+
+// `requires.saasaloy` at the command level (#50): the range is checked against the
+// running CLI before a plan is built, so a refusal leaves the project byte-identical.
+// The CLI's own version is 0.0.0, which is why `>=0.3` is the unsatisfiable case here
+// and `>=0.0.0` is the satisfiable one.
+describe("runAdd — a descriptor's requires.saasaloy", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
+    const mod = join(registry, name);
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name,
+        type: "saasaloy:feature",
+        files: [{ path: "files/a.ts", target: `@web/${name}.ts` }],
+        ...extra,
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "a.ts"),
+      `export const ${name} = 1;\n`,
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-requires-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-requires-reg-"));
+    await mkdir(join(project, "apps", "web"), { recursive: true });
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("applies a module whose range this CLI satisfies", async () => {
+    await writeModule("widget", { requires: { saasaloy: ">=0.0.0" } });
+    const { code } = await run(["widget", "--yes"]);
+
+    expect(code).toBe(0);
+    await expect(
+      pathExists(join(project, "apps", "web", "widget.ts"))
+    ).resolves.toBeTruthy();
+  });
+
+  it("refuses a module whose range this CLI fails, and writes nothing", async () => {
+    await writeModule("widget", { requires: { saasaloy: ">=0.3" } });
+    const { code, out } = await run(["widget", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("widget");
+    expect(out).toContain(">=0.3");
+    expect(out).toContain("0.0.0 is installed");
+    expect(out).toContain("pnpm add --global saasaloy@latest");
+    await expect(
+      pathExists(join(project, "apps", "web", "widget.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("is fatal for a transitive dependency, naming the module in the chain", async () => {
+    await writeModule("b", { requires: { saasaloy: ">=0.3" } });
+    await writeModule("a", { dependsOn: ["b"] });
+    const { code, out } = await run(["a", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("b (required by a)");
+    // Neither the prerequisite nor the requested module landed.
+    await expect(
+      pathExists(join(project, "apps", "web", "b.ts"))
+    ).resolves.toBeFalsy();
+    await expect(
+      pathExists(join(project, "apps", "web", "a.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it.each([">=0.0.0", ">=0.0.0 <2", "^0.0.0", "0.x", "*"])(
+    "accepts the range %j, upper bounds included",
+    async (range) => {
+      await writeModule("widget", { requires: { saasaloy: range } });
+      const { code } = await run(["widget", "--yes"]);
+      expect(code).toBe(0);
+    }
+  );
+
+  it("refuses a range it cannot parse rather than applying the module", async () => {
+    await writeModule("widget", { requires: { saasaloy: ">=nope" } });
+    const { code, out } = await run(["widget", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("isn't a semver range");
+    await expect(
+      pathExists(join(project, "apps", "web", "widget.ts"))
+    ).resolves.toBeFalsy();
+  });
+});

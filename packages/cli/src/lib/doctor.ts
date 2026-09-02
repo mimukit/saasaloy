@@ -4,6 +4,7 @@ import { joinModulePath, pathExists, readDirNames } from "./fs-utils.js";
 import type { Manifest } from "./manifest.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
+import { isValidRange } from "./semver.js";
 import { validateRegistryItem } from "./schema.js";
 import type { SaasaloyConfig } from "./schema.js";
 
@@ -250,6 +251,32 @@ export async function checkModule(
           )
         );
       }
+    }
+  }
+
+  // `requires.saasaloy` is checked structurally only: is it a string, and is it a range
+  // this CLI can evaluate (#50). It is deliberately *not* compared against the running
+  // version — doctor is the author's tool, and a registry author's CLI is not the
+  // consumer's. An author on 0.9 writing `>=2` for a field landing next quarter is right,
+  // and a doctor that failed them for it would teach them to stop declaring the field.
+  const requires = asRecord(item.requires).saasaloy;
+  if (requires !== undefined) {
+    if (typeof requires !== "string") {
+      findings.push(
+        finding(
+          module,
+          "/requires/saasaloy",
+          `must be a semver range string, not ${Array.isArray(requires) ? "an array" : typeof requires}`
+        )
+      );
+    } else if (!isValidRange(requires)) {
+      findings.push(
+        finding(
+          module,
+          "/requires/saasaloy",
+          `"${requires}" isn't a semver range — write one like ">=0.3", ">=0.3 <2", "^1.2.0" or "1.x"`
+        )
+      );
     }
   }
 

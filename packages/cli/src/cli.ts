@@ -1,5 +1,3 @@
-import { readFile } from "node:fs/promises";
-import { fileURLToPath } from "node:url";
 import {
   cancel,
   isCancel as clackIsCancel,
@@ -10,6 +8,11 @@ import type { CommandRegistry } from "./commands/index.js";
 import { COMMANDS } from "./commands/index.js";
 import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "./lib/exit.js";
 import { isInteractive } from "./lib/tui.js";
+import { readVersion } from "./version.js";
+
+// Re-exported so `saasaloy --version` and this module's tests keep one import site; the
+// reader itself lives in version.ts, which commands/add.ts also imports (#50).
+export { readVersion } from "./version.js";
 
 // Argument parsing and dispatch. Kept out of index.ts — which only bootstraps this and
 // maps the resolved code onto process.exit — so a test can import it without running the
@@ -60,23 +63,6 @@ export function printHelp(registry: CommandRegistry): void {
   console.log(
     `\n${pc.dim("Set SAASALOY_DEBUG=1 to print the full cause chain behind a failure.")}`
   );
-}
-
-// The version comes off the package's own package.json rather than a build-time
-// constant, so a bug report names the build that is actually installed. At runtime
-// import.meta.url is <pkg>/dist/index.js and under vitest it is <pkg>/src/cli.ts, so
-// `../package.json` resolves to <pkg>/package.json either way.
-export async function readVersion(): Promise<string> {
-  try {
-    const file = fileURLToPath(new URL("../package.json", import.meta.url));
-    const parsed = JSON.parse(await readFile(file, "utf-8")) as {
-      version?: unknown;
-    };
-    return typeof parsed.version === "string" ? parsed.version : "unknown";
-  } catch {
-    // A missing or unreadable package.json is not worth failing `--version` over.
-    return "unknown";
-  }
 }
 
 // Bare invocation on a terminal: show what the tool can do and run the choice, rather

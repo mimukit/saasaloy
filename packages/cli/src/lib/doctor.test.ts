@@ -221,6 +221,32 @@ describe("doctor — the conventions the schema cannot check", () => {
     ]);
   });
 
+  it("reports a requires.saasaloy range it cannot parse", async () => {
+    const findings = await findingsFor("bad-requires");
+
+    expect(findings).toStrictEqual([
+      '/requires/saasaloy ">=nope" isn\'t a semver range — write one like ">=0.3", ">=0.3 <2", "^1.2.0" or "1.x"',
+    ]);
+  });
+
+  it("reports a non-string requires.saasaloy once, not twice", async () => {
+    // The schema rejects it too, at the same path. The dedupe by `where` keeps the
+    // sentence and drops the raw type error under it.
+    const findings = await findingsFor("nonstring-requires");
+
+    expect(findings).toStrictEqual([
+      "/requires/saasaloy must be a semver range string, not number",
+    ]);
+  });
+
+  it("passes a descriptor whose requires.saasaloy is a valid range", async () => {
+    // `registry-clean/alpha` carries one. doctor never compares it against the running
+    // CLI: an author's version is not the consumer's.
+    const [report] = await check(CLEAN, "alpha");
+
+    expect(report?.findings).toStrictEqual([]);
+  });
+
   it("reports a skill folder that lacks the saasaloy- prefix (ADR 0014)", async () => {
     const findings = await findingsFor("bad-skill");
 

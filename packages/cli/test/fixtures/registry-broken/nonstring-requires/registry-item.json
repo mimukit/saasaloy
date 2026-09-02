@@ -1,0 +1,5 @@
+{
+  "name": "nonstring-requires",
+  "type": "saasaloy:feature",
+  "requires": { "saasaloy": 3 }
+}

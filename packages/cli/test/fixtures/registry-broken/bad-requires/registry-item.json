@@ -1,0 +1,5 @@
+{
+  "name": "bad-requires",
+  "type": "saasaloy:feature",
+  "requires": { "saasaloy": ">=nope" }
+}
