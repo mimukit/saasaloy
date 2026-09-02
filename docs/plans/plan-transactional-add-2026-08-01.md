@@ -1,10 +1,11 @@
 # Plan — Make `saasaloy add` honest about partial failure
 
-Grilled: 2026-09-01
+Grilled: 2026-09-02
 
 > Tracked in [#49](https://github.com/mimukit/saasaloy/issues/49) (single issue — all phases folded).
-> Blocked by [#47](https://github.com/mimukit/saasaloy/issues/47) for its test infrastructure — settled at the grill: Phase 5 waits for that harness rather than building a thin local one.
+> Was blocked by [#47](https://github.com/mimukit/saasaloy/issues/47) for its test infrastructure; #47 closed 2026-09-02, so this plan is unblocked.
 > Updated 2026-09-01: gaps 1 and 2 of the original draft landed independently (#98, #101/f84b9cc); rescoped to what remains, plus the `config.installed` truthfulness finding deferred here from the PR #101 review. Grilled the same day.
+> Re-grilled 2026-09-02: settled the failure-injection mechanism, pulled the doctor partial-install check into this plan (its host #47 is delivered), and unpinned the ADR number.
 
 ## Context
 
@@ -41,6 +42,9 @@ The last five rows were settled at the 2026-09-01 grill.
 | **Patch failures never block completeness** | `patchConflicts` and `patchRefusals` stay a warning class ("wire it by hand"). If they blocked installed-ness, a refused patch would make a module permanently uninstallable, since a re-run refuses the same patch again. File writes alone decide "completed". |
 | **`doctor` surfaces the partial state; the lock stays a provenance record** | The lock records nothing for an incomplete module. `doctor` (#47) gains a check: a module with manifest-tracked files but no `config.installed` entry is flagged as "partial install — re-run `saasaloy add <name>`". No new lock schema field (ADR 0012 made the lock provenance, not status). |
 | **An incomplete non-throwing run exits 0** | A `lateDrift` hold-back is a declined write, not a failure — consistent with `heldBack` merges. The output names the uninstalled module and says a re-run completes it. Only a thrown apply error exits non-zero. |
+| **Failure injection is a filesystem fault, not a code hook** (2026-09-02) | The e2e test makes one target's parent directory read-only before the run, so a real write throws mid-plan with no test hook in production code. The `ApplyResult` completeness logic gets in-process unit tests as well. Rejected: an env-var hook inside `executePlan` (ships test code) and in-process-only tests (skip the `finally` path in `add.ts`, which Phase 2 hardens). |
+| **The doctor check ships in this plan** (2026-09-02) | #47 delivered `doctor` and its plan is closed, so there is no cross-plan note to leave. The "manifest tracks files, module not in `installed`" check lands in `lib/doctor.ts` here, with a test. |
+| **ADR number is next-free at write time** (2026-09-02) | 0029 is taken by the auth ADR; 0030 exists. Use the next free number when the ADR is written instead of a pinned literal. |
 | **Scope** | Bookkeeping truthfulness, `finally`-path hardening, the recovery message, an ADR, and tests. **No** new applier capability, no rollback engine, no change to what a fully successful `add` does. |
 
 ## Approach
@@ -65,16 +69,17 @@ The last five rows were settled at the 2026-09-01 grill.
 
 ### Phase 4 — Record the decision
 
-- Write `docs/adr/adr-0029-re-run-is-recovery-for-partial-applies-2026-09-01.md`: the model, why stage-and-commit and journal-undo were rejected, the authorization framing of the completeness gate, the patch-failure and exit-code decisions, and the invariant every future applier change must preserve — *bookkeeping describes disk*, for files and for module installed-state alike.
+- Write `docs/adr/adr-NNNN-re-run-is-recovery-for-partial-applies.md` (next free number; 0031 as of 2026-09-02): the model, why stage-and-commit and journal-undo were rejected, the authorization framing of the completeness gate, the patch-failure and exit-code decisions, and the invariant every future applier change must preserve — *bookkeeping describes disk*, for files and for module installed-state alike.
 - Cross-reference from ADR 0006 and from `CONTEXT.md`'s `.saasaloy/manifest.json` entry.
-- Add a cross-plan note to `plan-applier-test-harness-2026-08-01.md` (#47): `doctor` gains the "manifest-tracked files, module not installed" check settled here.
+- Add the settled check to `packages/cli/src/lib/doctor.ts`: a module with manifest-tracked files but no `config.installed` entry is flagged "partial install — re-run `saasaloy add <name>`", with a test. (Was a cross-plan note to #47; that plan is delivered.)
 
 ### Phase 5 — Prove it
 
-- Inject a failure mid-`executePlan` (a fixture module whose Nth file write throws) and assert: files written before the failure are in the manifest; the lock is consistent with them; the root `package.json` is unmodified; `config.installed` does not claim the module.
+- Inject a failure mid-`executePlan` by making one planned target's parent directory read-only before the run (the harness runs unprivileged, so the write throws) and assert: files written before the failure are in the manifest; the lock is consistent with them; the root `package.json` is unmodified; `config.installed` does not claim the module.
 - Drive the `lateDrift` case: edit a planned file between plan and apply, assert the module stays uninstalled, the run exits 0 with the re-run note, and the re-run (approving the drift plan) installs the module with the file held for merge.
 - Assert **convergence**: re-running the same `add` against the partial state completes, classifies already-written files as `unchanged`, and produces a project identical to one from a clean single run.
-- **Blocked by** `plan-applier-test-harness-2026-08-01.md` (#47) for the fixture-module and temp-project infrastructure. Settled at the grill: wait for that harness; do not build a thin local one.
+- Unit-test the `ApplyResult` completeness derivation in-process with a stubbed write, so the per-module logic is covered without the subprocess harness.
+- Uses the #47 harness (`packages/cli/test/support/`: `runCli`, `fixtureModule`, `startGithubFixture`), which landed 2026-09-02. The former blocker is cleared.
 
 ## Non-goals
 
