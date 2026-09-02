@@ -17,15 +17,23 @@ import {
   expect,
   it,
 } from "vitest";
+import type { Plan, PlannedFile } from "../lib/applier.js";
 import { pathExists } from "../lib/fs-utils.js";
 import { emptyLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
+import { emptyManifest } from "../lib/manifest.js";
+import type { Manifest } from "../lib/manifest.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
+import type { RegistrySource } from "../lib/registry.js";
+import type { Graph } from "../lib/resolve.js";
 import { stripAnsi } from "../lib/tui.js";
 import {
+  applyAndPersist,
   envSteps,
   formatIncomplete,
+  formatRecovery,
   parseArgs,
+  persistState,
   pinToLock,
   runAdd,
 } from "./add.js";
@@ -903,5 +911,363 @@ describe("add — formatIncomplete", () => {
     expect(line).toContain("api, database are not installed");
     expect(line).toContain("saasaloy add waitlist");
     expect(line).toContain("complete them");
+  });
+});
+
+// #49. The state files leave `add` through one path on the way out of an apply, failed or
+// not. That path used to be a bare sequence: `upsertLock` first, then three unguarded
+// saves. `source.provenance()` throws when the source resolved no commit SHA, so an
+// unresolvable remote cost the user the manifest and the config too, and reported itself
+// in place of whatever really went wrong. Each step now stands or falls alone.
+const PERSIST_SHA = "b".repeat(40);
+
+/** A source that never resolved a commit SHA — `provenance()` is a throw, not a value. */
+function unresolvedSource(): Pick<RegistrySource, "provenance"> {
+  return {
+    provenance: () => {
+      throw new Error(
+        "provenance() called before the source resolved a commit SHA."
+      );
+    },
+  };
+}
+
+function resolvedSource(): Pick<RegistrySource, "provenance"> {
+  return {
+    provenance: () => ({
+      ref: "main",
+      resolved: PERSIST_SHA,
+      source: "acme/kit",
+    }),
+  };
+}
+
+/** A one-module plan carrying nothing but the files under test. */
+function planOf(files: PlannedFile[]): Plan {
+  return {
+    aliasConflicts: [],
+    aliases: {},
+    alreadyInstalled: [],
+    dependencies: [],
+    devDependencies: [],
+    devVars: {},
+    envVars: {},
+    files,
+    install: ["widget"],
+    links: [],
+    patches: [],
+    removeWarnings: {},
+    staleOwners: [],
+  };
+}
+
+describe("persistState — the finally path (#49)", () => {
+  let root: string;
+
+  const GRAPH: Graph = { modules: new Map(), order: [] };
+
+  function input(
+    source: Pick<RegistrySource, "provenance">
+  ): Parameters<typeof persistState>[0] {
+    const manifest = emptyManifest();
+    manifest.managed["apps/web/widget.ts"] = {
+      from: "files/widget.ts",
+      hash: "h",
+      module: "widget",
+    };
+    return {
+      completed: ["widget"],
+      config: { aliases: { "@web": "apps/web" }, installed: ["widget"] },
+      graph: GRAPH,
+      lock: emptyLock(),
+      manifest,
+      root,
+      source,
+    };
+  }
+
+  async function readJson<T>(name: string): Promise<T> {
+    return JSON.parse(await readFile(join(root, name), "utf-8")) as T;
+  }
+
+  /** The manifest's keys carry dots, which `toHaveProperty` reads as a path. */
+  async function managedModule(): Promise<string | undefined> {
+    const manifest = await readJson<Manifest>(
+      join(".saasaloy", "manifest.json")
+    );
+    return manifest.managed["apps/web/widget.ts"]?.module;
+  }
+
+  async function persist(
+    args: Parameters<typeof persistState>[0]
+  ): Promise<{ failures: unknown[]; out: string }> {
+    const captured = capture();
+    try {
+      return {
+        failures: await persistState(args),
+        out: captured.lines.join(""),
+      };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-add-persist-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("writes all three files when nothing is wrong", async () => {
+    const { failures } = await persist(input(resolvedSource()));
+
+    expect(failures).toStrictEqual([]);
+    await expect(managedModule()).resolves.toBe("widget");
+    await expect(
+      readJson<Lockfile>("saasaloy-lock.json")
+    ).resolves.toHaveProperty("modules.widget.resolved", PERSIST_SHA);
+  });
+
+  it("skips the lock entry when the source resolved no commit SHA", async () => {
+    const { failures, out } = await persist(input(unresolvedSource()));
+
+    // The manifest and the config still describe what landed — that is the whole point of
+    // the pass. A lock entry is a pin, not a record of disk, so having none is correct.
+    await expect(managedModule()).resolves.toBe("widget");
+    await expect(
+      readJson<{ installed: string[] }>("saasaloy.json")
+    ).resolves.toHaveProperty("installed", ["widget"]);
+    await expect(
+      readJson<Lockfile>("saasaloy-lock.json")
+    ).resolves.toHaveProperty("modules", {});
+    expect(failures).toHaveLength(1);
+    expect(stripAnsi(out)).toContain("saasaloy-lock.json");
+  });
+
+  it("writes the config and the lock when the manifest cannot be written", async () => {
+    // A regular file where the manifest's directory belongs: `mkdir` refuses it.
+    await writeFile(join(root, ".saasaloy"), "not a directory\n", "utf-8");
+
+    const { failures, out } = await persist(input(resolvedSource()));
+
+    expect(failures).toHaveLength(1);
+    expect(stripAnsi(out)).toContain("manifest.json");
+    await expect(
+      readJson<{ installed: string[] }>("saasaloy.json")
+    ).resolves.toHaveProperty("installed", ["widget"]);
+    await expect(
+      readJson<Lockfile>("saasaloy-lock.json")
+    ).resolves.toHaveProperty("modules.widget.resolved", PERSIST_SHA);
+  });
+
+  it("reports every failure and still throws none", async () => {
+    await writeFile(join(root, ".saasaloy"), "not a directory\n", "utf-8");
+    await mkdir(join(root, "saasaloy.json"));
+    await mkdir(join(root, "saasaloy-lock.json"));
+
+    const { failures } = await persist(input(unresolvedSource()));
+
+    expect(failures).toHaveLength(4);
+  });
+});
+
+// #49. `applyAndPersist` is the seam the apply and the bookkeeping share: whatever the
+// plan managed to do is recorded, and the error the user hears about is the one that
+// actually stopped the run.
+describe("applyAndPersist (#49)", () => {
+  let root: string;
+  let outside: string;
+
+  function file(target: string): PlannedFile {
+    return {
+      action: "create",
+      content: "export const x = 1;\n",
+      from: "files/widget.ts",
+      isSkill: false,
+      module: "widget",
+      newHash: "h",
+      source: join(outside, "widget.ts"),
+      target,
+      targetAbs: join(root, target),
+    };
+  }
+
+  async function run(
+    p: Plan,
+    source: Pick<RegistrySource, "provenance"> = unresolvedSource()
+  ): Promise<{ error: unknown; out: string }> {
+    const captured = capture();
+    try {
+      await applyAndPersist({
+        config: { aliases: { "@web": "apps/web" }, installed: [] },
+        graph: { modules: new Map(), order: [] },
+        lock: emptyLock(),
+        manifest: emptyManifest(),
+        plan: p,
+        root,
+        source,
+      });
+      return { error: undefined, out: captured.lines.join("") };
+    } catch (error) {
+      return { error, out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-add-apply-"));
+    outside = await mkdtemp(join(tmpdir(), "saasaloy-add-apply-out-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  it("reports the apply error, not the unresolved provenance behind it", async () => {
+    // The apply fails on the guard the alias symlink trips; the source carries no SHA
+    // either, so both steps have something to throw. Only the first one is the answer.
+    await mkdir(join(root, "apps"), { recursive: true });
+    await symlink(outside, join(root, "apps", "web"), "dir");
+
+    const { error } = await run(planOf([file("apps/web/widget.ts")]));
+
+    expect(stripAnsi(String(error))).toContain("symlink");
+    expect(String(error)).not.toContain("provenance()");
+  });
+
+  it("records what landed before the throw", async () => {
+    await mkdir(join(root, "apps", "web"), { recursive: true });
+    await mkdir(join(root, "apps", "api"), { recursive: true });
+    await symlink(outside, join(root, "apps", "api", "src"), "dir");
+
+    const { error } = await run(
+      planOf([file("apps/web/widget.ts"), file("apps/api/src/widget.ts")])
+    );
+
+    expect(error).toBeDefined();
+    const manifest = JSON.parse(
+      await readFile(join(root, ".saasaloy", "manifest.json"), "utf-8")
+    ) as Manifest;
+    // The file that landed is tracked; the one that never got written is not. An untracked
+    // written file would plan as a conflict next run.
+    expect(Object.keys(manifest.managed)).toStrictEqual(["apps/web/widget.ts"]);
+    // A run that threw installs nothing, so it pins nothing either.
+    expect(
+      (
+        JSON.parse(await readFile(join(root, "saasaloy.json"), "utf-8")) as {
+          installed: string[];
+        }
+      ).installed
+    ).toStrictEqual([]);
+  });
+
+  it("fails the run when a save fails on an otherwise clean apply", async () => {
+    await mkdir(join(root, "apps", "web"), { recursive: true });
+    await writeFile(join(root, ".saasaloy"), "not a directory\n", "utf-8");
+
+    const { error } = await run(planOf([file("apps/web/widget.ts")]), {
+      provenance: () => ({
+        ref: "main",
+        resolved: "c".repeat(40),
+        source: "acme/kit",
+      }),
+    });
+
+    expect(stripAnsi(String(error))).toContain(".saasaloy");
+    // The file itself did land — there is no rollback, and the manifest is what's missing.
+    await expect(
+      pathExists(join(root, "apps", "web", "widget.ts"))
+    ).resolves.toBeTruthy();
+  });
+});
+
+// #49. `add` has no rollback: a mid-apply failure leaves whatever landed on disk, and the
+// state files are written to describe it. The run used to close on the bare error, so the
+// user was left to guess whether the project was half-installed and what to do about it.
+describe("runAdd — recovery instruction (#49)", () => {
+  let project: string;
+  let registry: string;
+  let outside: string;
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-recover-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-recover-reg-"));
+    outside = await mkdtemp(join(tmpdir(), "saasaloy-add-recover-out-"));
+
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    // The apply throws on the symlink guard, part-way through the plan.
+    await mkdir(join(project, "apps"), { recursive: true });
+    await symlink(outside, join(project, "apps", "web"), "dir");
+
+    const mod = join(registry, "widget");
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name: "widget",
+        type: "saasaloy:feature",
+        files: [{ path: "files/widget.ts", target: "@web/widget.ts" }],
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "widget.ts"),
+      "export const x = 1;\n",
+      "utf-8"
+    );
+
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+    await rm(outside, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("names the re-run that completes a failed apply, and exits non-zero", async () => {
+    const { code, out } = await run(["widget", "--yes"]);
+
+    expect(code).not.toBe(0);
+    expect(out).toContain("Partial apply");
+    expect(out).toContain("saasaloy add widget");
+    // The error that stopped the run is still the one reported.
+    expect(out).toContain("symlink");
+  });
+
+  it("stays quiet about recovery when the failure came before the apply", async () => {
+    const { code, out } = await run(["nosuch", "--yes"]);
+
+    expect(code).not.toBe(0);
+    expect(out).not.toContain("Partial apply");
+  });
+});
+
+describe("add — formatRecovery (#49)", () => {
+  it("states the model and the command that finishes the job", () => {
+    const line = stripAnsi(formatRecovery("waitlist"));
+
+    expect(line).toContain("Partial apply");
+    expect(line).toContain("saasaloy add waitlist");
   });
 });
