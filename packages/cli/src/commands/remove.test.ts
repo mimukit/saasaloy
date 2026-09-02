@@ -1,7 +1,16 @@
 import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
+import {
+  afterAll,
+  afterEach,
+  beforeAll,
+  beforeEach,
+  describe,
+  expect,
+  it,
+} from "vitest";
+import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { stripAnsi } from "../lib/tui.js";
 import { runRemove } from "./remove.js";
 
@@ -115,5 +124,72 @@ describe("runRemove without a module name", () => {
     expect(output.indexOf("survives removal")).toBeLessThan(
       output.indexOf("dry run")
     );
+  });
+});
+
+// #62. `remove` deletes the block file it wrote, and it cannot delete the import line the
+// owner added by hand — nothing recorded where that line went. Say so, or the next build
+// fails on a module the user believes is fully uninstalled.
+describe("runRemove — a ui block leaves its wire-up behind (#62)", () => {
+  let project: string;
+  const BLOCK = "packages/ui/src/blocks/widget.tsx";
+  const BODY = "export const Widget = () => null;\n";
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-remove-block-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        aliases: { "@ui": "packages/ui/src" },
+        installed: ["widget"],
+      }),
+      "utf-8"
+    );
+    await mkdir(join(project, "packages", "ui", "src", "blocks"), {
+      recursive: true,
+    });
+    await writeFile(join(project, ...BLOCK.split("/")), BODY, "utf-8");
+    await mkdir(join(project, ".saasaloy"), { recursive: true });
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: {
+          [BLOCK]: { module: "widget", hash: hashContent(BODY) },
+        },
+        links: {},
+        patches: [],
+        removeWarnings: {},
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      JSON.stringify({ lockfileVersion: 1, modules: {} }),
+      "utf-8"
+    );
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    await rm(project, { recursive: true, force: true });
+  });
+
+  it("deletes the block and says the import is not reversed", async () => {
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["widget", "--yes"]);
+    } finally {
+      captured.restore();
+    }
+    const output = captured.lines.join("");
+
+    expect(code).toBe(0);
+    await expect(
+      pathExists(join(project, ...BLOCK.split("/")))
+    ).resolves.toBeFalsy();
+    expect(output).toContain(BLOCK);
+    expect(output).toContain("not reversed");
   });
 });

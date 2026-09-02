@@ -30,7 +30,7 @@ export default defineConfig({
       // `@web` mirrors saasaloy.json's alias of the same name (apps/web/src) — that
       // alias only drives the CLI's file-placement when a module's files[] target
       // `@web/...`; this is what makes the dropped source's own `@web/...` imports
-      // (e.g. a sections/*.astro importing @web/components/*) actually resolve.
+      // (e.g. a dropped page importing @web/components/*) actually resolve.
       alias: { "@web": fileURLToPath(new URL("src", import.meta.url)) },
     },
   },

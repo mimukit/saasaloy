@@ -205,9 +205,23 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   `onClick`, and do not paste a second copy of the boot script into a page: any document
   that renders the block must inline that one constant in its `<head>`, or the control
   stays hidden.
-- **The landing page has a second extension point.** `index.astro` globs
-  `src/sections/*.astro` in sorted order, so dropping a file there adds a section with no
-  edit to the page. `saasaloy add <module>` uses it; do not remove the glob.
+- **A block never reaches the network; the app injects the behaviour.** A block that needs
+  to send something takes a function prop (`onSubmit`) and calls it. It does not import an
+  api package, an http client, or `import.meta.env`. Two reasons, both concrete.
+  `packages/ui` has a `typecheck` script and consumes workspaces as source, so one
+  `import type { AppType } from "@repo/api/client"` here makes `tsc` compile the entire
+  Worker source tree under this package's tsconfig. And a block that hardcodes an endpoint
+  is a block you cannot reuse on a second page. The counterpart lives in the app: a small
+  React file under `apps/web/src/components/` builds the client and passes the function
+  down. Astro serializes island props, so the page renders **that** file, never the block
+  directly.
+- **A module's UI arrives here too, and you wire it up by hand.** `saasaloy add <module>`
+  writes a UI-bearing module's block into `src/blocks/` exactly like the base blocks, adds
+  the app-side island that feeds it, and then stops: nothing globs a folder, and no command
+  edits `index.astro`. The command prints a pointer to the module's skill, and that skill's
+  **Wire-up** section carries the import line, the component to render, the client
+  directive, and a suggested spot on the page. Put it where you want it. `saasaloy remove`
+  deletes the files it wrote and leaves your import alone, so take that line out yourself.
 
 Blocks, like primitives, are source you own — they are meant to be edited, not wrapped.
 

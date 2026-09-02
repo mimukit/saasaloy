@@ -2,8 +2,10 @@
 
 _Generated 2026-07-24 · covers the uncommitted `waitlist` module + base React/sections prerequisites + the `package-json-dependency` patch kind (issue #10)_
 
+_Updated 2026-09-02 for issue #62: the sections glob is retired. The waitlist UI now ships as a `@repo/ui` block plus a `WaitlistForm` island, and placing it on the page is a manual wire-up step. Dev ports moved to web `:3000` / api `:4000`. TC-7 now tests the wire-up pointer instead of the glob; re-run the changed cases before trusting their old pass marks._
+
 ## Summary
-- `saasaloy add waitlist` topo-sorts and installs `api → database → waitlist` behind one prompt, drops a Hono route, a Drizzle table, and a React landing-page section — all pure file-drop — and auto-patches `@repo/db` into `apps/api/package.json` so the route can import the DB.
+- `saasaloy add waitlist` topo-sorts and installs `api → database → waitlist` behind one prompt, drops a Hono route, a Drizzle table, a presentational `Waitlist` block into `packages/ui/src/blocks/` and a `WaitlistForm` island into `apps/web/src/components/`, and auto-patches `@repo/db` into `apps/api/package.json` so the route can import the DB. It then prints a wire-up pointer; putting the form on the page is your edit (see the `/saasaloy-waitlist` skill's Wire-up section).
 - "Working" means: a visitor submits the form on `/`, the row lands in local D1, a duplicate email returns success without a second row, and no config file needed a hand-edit.
 
 ## Preconditions
@@ -25,13 +27,23 @@ cd .dev/playground && ./saasaloy add waitlist --yes
 corepack pnpm install --config.minimumReleaseAge=0
 ```
 
+- Wire the form onto the landing page (`add` prints the pointer but never edits a page). In `apps/web/src/pages/index.astro`, add the import beside the other block imports and render the island inside `<main>`, after `<Cta siteName={siteName} />`:
+
+```astro
+import WaitlistForm from "@web/components/WaitlistForm";
+```
+
+```astro
+<WaitlistForm client:load />
+```
+
 - Generate + apply the migration (the module ships **no** pre-generated SQL):
 
 ```sh
 pnpm --filter @repo/db db:generate && pnpm --filter @repo/db db:migrate:local
 ```
 
-- Launch both dev servers (separate terminals) — api on `:5173`, web on `:4321`:
+- Launch both dev servers (separate terminals) — api on `:4000`, web on `:3000`:
 
 ```sh
 pnpm --filter @repo/api dev
@@ -47,26 +59,26 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 | # | Test case | Priority |
 |------|-----------|----------|
-| TC-1 | Landing page renders the waitlist section on `/` | 🔴 Critical |
+| TC-1 | Landing page renders the wired-up waitlist block on `/` | 🔴 Critical |
 | TC-2 | Happy path: submit a valid email → row lands in D1 | 🔴 Critical |
 | TC-3 | Duplicate email → success, still one row | 🔴 Critical |
 | TC-4 | Invalid email → form blocks / server rejects, no row | 🟡 Normal |
 | TC-5 | api unreachable → form shows a graceful error | 🟡 Normal |
 | TC-6 | Submitting state + success copy behave correctly | 🟡 Normal |
-| TC-7 | Second feature section co-exists (sorted, no clobber) | 🟢 Low |
+| TC-7 | `add` prints the wire-up pointer; `remove` says wire-up is not reversed | 🟢 Low |
 | TC-8 | Keyboard-only submit + screen-reader status/alert roles | 🟢 Low |
 
 ## Test cases
 
-### TC-1 — Landing page renders the waitlist section on `/`  ·  🔴 Critical
+### TC-1 — Landing page renders the wired-up waitlist block on `/`  ·  🔴 Critical
 **Steps**
-1. Open `http://localhost:4321/` in a browser.
-2. Scroll to below the hero copy.
+1. Open `http://localhost:3000/` in a browser.
+2. Scroll to below the CTA panel (the wire-up anchor from the Preconditions).
 
 **Expected**
-- A "Get early access" section appears below the hero, no separate `/waitlist` page needed.
+- A "Get early access" panel appears after the CTA, no separate `/waitlist` page needed.
 - It shows an email input and a "Join the waitlist" button (the React island hydrated — `client:load`).
-- No console error about an unresolved `@web/components/WaitlistForm` import.
+- No console error about an unresolved `@web/components/WaitlistForm` or `@repo/ui/blocks/waitlist` import.
 
 **Actual:** _(tester fills in)_
 
@@ -84,7 +96,7 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 **Expected**
 - The form swaps to the success message: "You're on the list — we'll be in touch."
-- The browser Network tab shows `POST http://localhost:5173/waitlist` returning `200` with `{ "ok": true }`.
+- The browser Network tab shows `POST http://localhost:4000/waitlist` succeeding (`201`).
 - The D1 query returns exactly one row: `alice@example.com`, with a populated `created_at`.
 
 **Actual:** _(tester fills in)_
@@ -150,19 +162,20 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 - [x] Pass
 - [ ] Fail
 
-### TC-7 — Second feature section co-exists (sorted, no clobber)  ·  🟢 Low
+### TC-7 — `add` prints the wire-up pointer; `remove` says wire-up is not reversed  ·  🟢 Low
 **Steps**
-1. Drop a second section file `apps/web/src/sections/aaa-test.astro` with any `<section><h2>Test</h2></section>` markup.
-2. Reload `/`.
+1. Re-read the `./saasaloy add waitlist --yes` output from the Preconditions (or re-run it with `--dry-run` on a fresh playground).
+2. Run `./saasaloy remove waitlist --yes` on a throwaway playground where the wire-up import was added, then reload `/`.
 
 **Expected**
-- Both the new section and the waitlist section render.
-- Order is by sorted filename — `aaa-test.astro` appears **before** `waitlist.astro` — confirming the `import.meta.glob(...).sort()` placement, and that dropping a section needs no edit to `index.astro`.
-- Remove the throwaway file afterward.
+- The add output contains a "Manual wire-up needed" line naming `packages/ui/src/blocks/waitlist.tsx` and pointing at `/saasaloy-waitlist` — `add` never edits `index.astro`.
+- The remove output deletes the block and the island, and says plainly that the manual wire-up is **not** auto-reversed.
+- The web dev server fails loudly on the now-dangling `WaitlistForm` import until you take the two wire-up lines out yourself.
+- Restore the playground afterward (`add` again + wire-up, or `play:reset`).
 
 **Actual:** _(tester fills in)_
 
-- [x] Pass
+- [ ] Pass
 - [ ] Fail
 
 ### TC-8 — Keyboard-only submit + screen-reader roles  ·  🟢 Low
@@ -182,8 +195,8 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 
 ## Regression checks
 - [x] `./saasaloy add api` alone still scaffolds `apps/api` + `routes/health.ts` (the api zod/validator additions didn't break the bare capability).
-- [x] `GET http://localhost:5173/health` still returns its health payload after the waitlist route is mounted (route glob didn't shadow it).
-- [x] Base `index.astro` still renders the hero and Terms/Privacy nav when **no** sections are present (empty-safe glob — verify on a `play:reset` project before adding waitlist).
+- [x] `GET http://localhost:4000/health` still returns its health payload after the waitlist route is mounted (route glob didn't shadow it).
+- [x] Base `index.astro` still renders the hero and Terms/Privacy nav **before** the wire-up edit (the page composes from explicit imports only; an un-wired block changes nothing — verify on a `play:reset` project before adding waitlist).
 - [x] `apps/web` and `packages/ui` still typecheck with React added to the base (no stray `.tsx`/JSX config breakage).
 
 ## Automated verification (by AI agent)
@@ -223,5 +236,5 @@ cd .dev/playground/apps/api && node_modules/.bin/wrangler d1 execute DB --local 
 - **Browser rendering & hydration** (TC-1) — that the React island actually mounts under Astro and the section paints correctly is a visual check.
 - **UX feel** (TC-6) — the submitting/disabled/success transitions read well only to a human eye.
 - **Accessibility** (TC-8) — keyboard order and screen-reader announcements need a real assistive-tech pass, not a static assertion.
-- **CORS preflight in a real browser** — `hono/cors` on the sub-app should answer the `OPTIONS` preflight the `application/json` POST triggers; only a cross-origin browser request (`:4321` → `:5173`) proves it end to end.
+- **CORS preflight in a real browser** — `hono/cors` on the sub-app should answer the `OPTIONS` preflight the `application/json` POST triggers; only a cross-origin browser request (`:3000` → `:4000`) proves it end to end.
 - **Production `PUBLIC_API_URL`** — dev uses the localhost fallback; the build-time env for a deployed api Worker is doc-only here (deferred with the remote/deploy story).

@@ -88,7 +88,7 @@ Start from this annotated feature example (waitlist) and trim/extend per tier:
   "files": [
     { "path": "files/api/routes/waitlist.ts",          "target": "@api/routes/waitlist.ts" },
     { "path": "files/db/schema/waitlist.ts",           "target": "@db/schema/waitlist.ts" },
-    { "path": "files/web/components/WaitlistForm.tsx",  "target": "@web/components/WaitlistForm.tsx" }
+    { "path": "files/ui/blocks/waitlist.tsx",          "target": "@ui/blocks/waitlist.tsx" }
   ],
   "envVars": {},                              // env keys the module needs (documented for the user)
   "patches": [                                // a route file is dropped, but registered by patch
@@ -239,8 +239,26 @@ file where a capability already auto-discovers it.
   register it with a `chained-route` patch (below). The drop alone mounts nothing.
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
-- **Landing-facing UI** drops into `apps/web` (`@web/...`); shared components into `packages/ui`
-  (`@ui/...`).
+- **UI goes into `packages/ui`, as a block.** A module that ships user-facing UI targets
+  `@ui/blocks/<name>.tsx` and follows the same rules the base blocks follow: one file, one
+  component export named for the block (`Waitlist`), copy as in-file prop defaults, reached at its
+  own `@repo/ui/blocks/<name>` subpath. Nothing globs a folder and no page is patched, so the block
+  lands on disk and goes nowhere until the owner imports it. **A module that targets
+  `@ui/blocks/` must ship a skill with a `## Wire-up` section** (Step 4) — that section is the only
+  place the wire-up steps exist, and `saasaloy add` prints a pointer to it. Copy defaults stay in
+  the block file: `packages/ui/src/content/landing.ts` belongs to the base, and a module never edits
+  a file it does not own.
+- **A block stays presentational, and the app injects the behaviour.** A block that has to send
+  something takes a function prop and calls it. It imports React and ui primitives, and nothing
+  else — never an api package, an http client, or `import.meta.env`. Ship the counterpart as a
+  second file under `@web/components/<Name>.tsx`: a small React island that builds the client and
+  passes the function down. Two reasons. `packages/ui` has a `typecheck` script and the workspace
+  is consumed as source, so a single `import type { AppType } from "@repo/api/client"` in a block
+  makes `tsc` compile the entire api and db source tree under the ui package's tsconfig, inheriting
+  every error in it. And Astro serializes island props, so a function cannot cross from `.astro`
+  into an island anyway — the page has to render the app-side file. `waitlist` is the worked
+  example: `blocks/waitlist.tsx` plus `apps/web/src/components/WaitlistForm.tsx`.
+- Non-UI files still drop into their own app (`@web/...`, `@api/...`).
 
 Only when a change is genuinely structural — and no convention exists for it — use a **small,
 tested AST patch** in `patches`: a D1 binding in `wrangler.jsonc`, a plugin inserted into Better
@@ -284,6 +302,25 @@ generated project may have dozens of module skills alongside the user's, and a b
 `billing` is exactly the kind of name a user might already have. Keep the folder name and the
 frontmatter `name` identical and prefixed. (See ADR 0014.)
 
+**A UI-bearing module's skill carries a `## Wire-up` section, and it is required.** Any module with
+a `files[]` target under `@ui/blocks/` needs one, because the applier writes the block and then
+stops: it never edits a page, and it prints only a pointer to your skill. Write the section for an
+agent that has to follow it without guessing, and name all four things:
+
+1. **Which file to edit** — `apps/web/src/pages/index.astro` for the landing page.
+2. **The import line, verbatim** — `import WaitlistForm from "@web/components/WaitlistForm";`.
+   Name the app-side island when the block takes injected behaviour, and say plainly that the page
+   imports that file rather than the block.
+3. **The tag, verbatim, with its client directive** — `<WaitlistForm client:load />` — and say why
+   the directive is there, or say that the block is static and takes none.
+4. **An exact suggested anchor, marked as a suggestion** — "after `<Cta />`, or wherever you want
+   it". Placement is the owner's decision; the anchor saves them a search, it does not make the
+   choice.
+
+Say also what `saasaloy remove` does not undo: it deletes the block file and leaves the import the
+owner added, so that line has to come out by hand. `modules/waitlist/skills/saasaloy-waitlist/SKILL.md`
+is the worked example.
+
 Module guidance is therefore **on-demand Claude skills** — the agent loads a module's runbook only
 when working on that module, keeping the always-in-context `AGENTS.md` lean. There is no `AGENTS.md`
 concatenation and no regeneration step: the consumer's `AGENTS.md`/`CLAUDE.md` are committed static
@@ -315,6 +352,12 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - **A route is the exception: drop the handler, then register it with a `chained-route`
   patch.** `apps/api/src/index.ts` names every route statically so `AppType` carries them;
   nothing globs `routes/` (ADR 0028).
+- **UI ships as a `@ui/blocks/` block, and the owner places it.** No module puts itself on a page,
+  and no applier edits one. A module with such a file ships a skill whose `## Wire-up` section
+  carries the import, the tag and a suggested anchor.
+- **Blocks are presentational; behaviour is injected.** A block takes a function prop and never
+  imports an api package, an http client or `import.meta.env`. The module ships the app-side island
+  that supplies it under `@web/components/`.
 - **Contribute agent context by shipping a skill folder**, not editing shared ones: an
   `agent.skills[]` folder is copied into the consumer's `.claude/skills/` by `add`. Modules
   never append to the committed `AGENTS.md`/`CLAUDE.md`.
@@ -338,4 +381,9 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] `envVars` lists any required keys; no secrets baked into files.
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
+- [ ] Any UI ships as a `@ui/blocks/<name>.tsx` block that imports React and ui primitives only;
+      when the block takes injected behaviour, that comes from a `@web/components/<Name>.tsx`
+      island the module also ships (a static block needs no island).
+- [ ] The skill carries a `## Wire-up` section naming the file to edit, the import line, the tag
+      with its client directive, and a suggested anchor marked as a suggestion.
 - [ ] Files are self-contained wiring (clean copy-in updates; no sentinel comments).

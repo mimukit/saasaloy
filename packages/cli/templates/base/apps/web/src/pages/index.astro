@@ -1,5 +1,4 @@
 ---
-import type { AstroComponentFactory } from "astro/runtime/server/index.js";
 import { siteName } from "@repo/ui";
 import { Cta } from "@repo/ui/blocks/cta";
 import { Faq } from "@repo/ui/blocks/faq";
@@ -17,17 +16,11 @@ import Layout from "../layouts/Layout.astro";
 // landing.meta.*, which spells the brand as a `{siteName}` token. Every block reads its
 // own words from the same file (packages/ui/src/content/landing.ts).
 
-// File-based landing-page sections. Every module in ../sections default-exports an
-// Astro component; dropping `sections/<name>.astro` puts it on the landing page with
-// no edit here — the same file-drop convention as api's routes/ and db's schema/ globs.
-// Sorted filename order gives deterministic placement; empty-safe (the base ships none).
-const sectionModules = import.meta.glob<{ default: AstroComponentFactory }>(
-  "../sections/*.astro",
-  { eager: true }
-);
-const sections = Object.keys(sectionModules)
-  .toSorted()
-  .map((key) => sectionModules[key].default);
+// This page composes itself from explicit imports and nothing else. A module that ships
+// UI writes a block into packages/ui/src/blocks/ plus a small island under
+// src/components/ that feeds it, and then tells you to place it here; the module never
+// puts itself on the page. Read the module's own skill for the import line and where it
+// suggests the component goes, then decide the position yourself.
 ---
 
 {
@@ -63,15 +56,6 @@ const sections = Object.keys(sectionModules)
     <PricingTable client:visible />
     <Faq client:visible />
     <Cta siteName={siteName} />
-    {
-      sections.length > 0 && (
-        <div class="mx-auto w-full max-w-6xl px-6 pb-20">
-          {sections.map((Section) => (
-            <Section />
-          ))}
-        </div>
-      )
-    }
   </main>
   <Footer siteName={siteName} />
 </Layout>

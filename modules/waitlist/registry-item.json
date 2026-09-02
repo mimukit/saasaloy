@@ -54,12 +54,12 @@
       "target": "@validators/waitlist.ts"
     },
     {
-      "path": "files/web/components/WaitlistForm.tsx",
-      "target": "@web/components/WaitlistForm.tsx"
+      "path": "files/ui/blocks/waitlist.tsx",
+      "target": "@ui/blocks/waitlist.tsx"
     },
     {
-      "path": "files/web/sections/waitlist.astro",
-      "target": "@web/sections/waitlist.astro"
+      "path": "files/web/components/WaitlistForm.tsx",
+      "target": "@web/components/WaitlistForm.tsx"
     },
     {
       "path": "files/web/types/waitlist-env.d.ts",
