@@ -1,5 +1,11 @@
 import { createHash } from "node:crypto";
-import { chmodSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import {
+  chmodSync,
+  mkdtempSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
 import {
   chmod,
   mkdir,
@@ -57,6 +63,26 @@ function readOnlyDirsBite(): boolean {
 }
 
 const DENIES_WRITES = readOnlyDirsBite();
+
+/**
+ * Whether a file symlink can be created here. Windows needs developer mode or an
+ * elevated shell for one, so the drift fault would throw in `beforeAll` and fail the
+ * file rather than skip it.
+ */
+function symlinksWork(): boolean {
+  const probe = mkdtempSync(join(tmpdir(), "saasaloy-link-probe-"));
+  try {
+    writeFileSync(join(probe, "target.txt"), "probe", "utf-8");
+    symlinkSync("target.txt", join(probe, "link.txt"));
+    return true;
+  } catch {
+    return false;
+  } finally {
+    rmSync(probe, { force: true, recursive: true });
+  }
+}
+
+const SYMLINKS_WORK = symlinksWork();
 
 interface Config {
   aliases: Record<string, string>;
@@ -269,80 +295,82 @@ describe.skipIf(!DENIES_WRITES)(
   }
 );
 
-describe("e2e — a file that appears mid-apply holds its module back", () => {
-  let driftProject: string;
-  let blocked: CliRun;
-
-  beforeAll(async () => {
-    driftProject = await initProject(join(workspace, "drift"));
-
-    // The window between the plan and the write, opened with filesystem state alone:
-    // `apps/api/src/beta.ts` is a symlink to a sibling that does not exist yet, so the
-    // plan reads the target as empty and classifies a `create`. alpha's `index.ts` is
-    // written earlier in the same plan, which makes the link resolve — by beta's turn
-    // the target holds bytes the user never approved a write over.
-    const src = join(driftProject, "apps", "api", "src");
-    await mkdir(src, { recursive: true });
-    await symlink("index.ts", join(src, "beta.ts"));
-
-    blocked = await add(driftProject, ["beta", "--yes"]);
-  }, 120_000);
-
-  it("exits 0 — nothing failed, an edit simply outranked the plan", () => {
-    expect(blocked.code).toBe(0);
-  });
-
-  it("names the module it did not install and the re-run that completes it", () => {
-    expect(blocked.output).toContain("is not installed");
-    expect(blocked.output).toContain("saasaloy add beta");
-  });
-
-  it("keeps the bytes that were there", async () => {
-    const target = join(driftProject, "apps", "api", "src", "beta.ts");
-
-    await expect(readlink(target)).resolves.toBe("index.ts");
-    await expect(readFile(target, "utf-8")).resolves.toContain("alpha");
-  });
-
-  it("leaves the module out of saasaloy.json", async () => {
-    expect((await config(driftProject)).installed).toStrictEqual(["alpha"]);
-  });
-
-  it("claims no manifest entry for the file it did not write", async () => {
-    const tracked = await manifest(driftProject);
-
-    expect(tracked.managed["apps/api/src/beta.ts"]).toBeUndefined();
-  });
-
-  describe("and the re-run installs it on informed approval", () => {
-    let repair: CliRun;
+describe.skipIf(!SYMLINKS_WORK)(
+  "e2e — a file that appears mid-apply holds its module back",
+  () => {
+    let driftProject: string;
+    let blocked: CliRun;
 
     beforeAll(async () => {
-      repair = await add(driftProject, ["beta", "--yes"]);
+      driftProject = await initProject(join(workspace, "drift"));
+
+      // The window between the plan and the write, opened with filesystem state alone:
+      // `apps/api/src/beta.ts` is a symlink to a sibling that does not exist yet, so the
+      // plan reads the target as empty and classifies a `create`. alpha's `index.ts` is
+      // written earlier in the same plan, which makes the link resolve — by beta's turn
+      // the target holds bytes the user never approved a write over.
+      const src = join(driftProject, "apps", "api", "src");
+      await mkdir(src, { recursive: true });
+      await symlink("index.ts", join(src, "beta.ts"));
+
+      blocked = await add(driftProject, ["beta", "--yes"]);
     }, 120_000);
 
-    it("re-plans the module, because it never reached saasaloy.json", () => {
-      expect(repair.code).toBe(0);
-      expect(repair.output).toContain("will install: beta");
+    it("exits 0 — nothing failed, an edit simply outranked the plan", () => {
+      expect(blocked.code).toBe(0);
     });
 
-    it("shows the drift in the preview this time", () => {
-      expect(repair.output).toContain("apps/api/src/beta.ts");
-      expect(repair.output).toContain("merge");
+    it("names the module it did not install and the re-run that completes it", () => {
+      expect(blocked.output).toContain("is not installed");
+      expect(blocked.output).toContain("saasaloy add beta");
     });
 
-    it("installs the module once the plan is approved with the drift on it", async () => {
-      expect((await config(driftProject)).installed.toSorted()).toStrictEqual([
-        "alpha",
-        "beta",
-      ]);
-    });
-
-    it("still keeps the user's bytes, held back for a merge", async () => {
+    it("keeps the bytes that were there", async () => {
       const target = join(driftProject, "apps", "api", "src", "beta.ts");
 
-      expect(repair.output).toContain("Needs merge");
+      await expect(readlink(target)).resolves.toBe("index.ts");
       await expect(readFile(target, "utf-8")).resolves.toContain("alpha");
     });
-  });
-});
+
+    it("leaves the module out of saasaloy.json", async () => {
+      expect((await config(driftProject)).installed).toStrictEqual(["alpha"]);
+    });
+
+    it("claims no manifest entry for the file it did not write", async () => {
+      const tracked = await manifest(driftProject);
+
+      expect(tracked.managed["apps/api/src/beta.ts"]).toBeUndefined();
+    });
+
+    describe("and the re-run installs it on informed approval", () => {
+      let repair: CliRun;
+
+      beforeAll(async () => {
+        repair = await add(driftProject, ["beta", "--yes"]);
+      }, 120_000);
+
+      it("re-plans the module, because it never reached saasaloy.json", () => {
+        expect(repair.code).toBe(0);
+        expect(repair.output).toContain("will install: beta");
+      });
+
+      it("shows the drift in the preview this time", () => {
+        expect(repair.output).toContain("apps/api/src/beta.ts");
+        expect(repair.output).toContain("merge");
+      });
+
+      it("installs the module once the plan is approved with the drift on it", async () => {
+        expect((await config(driftProject)).installed.toSorted()).toStrictEqual(
+          ["alpha", "beta"]
+        );
+      });
+
+      it("still keeps the user's bytes, held back for a merge", async () => {
+        const target = join(driftProject, "apps", "api", "src", "beta.ts");
+
+        expect(repair.output).toContain("Needs merge");
+        await expect(readFile(target, "utf-8")).resolves.toContain("alpha");
+      });
+    });
+  }
+);
