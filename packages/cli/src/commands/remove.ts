@@ -31,6 +31,7 @@ import type {
 } from "../lib/remover.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
+import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { DESCRIPTIONS } from "./descriptions.js";
@@ -404,6 +405,23 @@ export async function runRemove(argv: string[]): Promise<number> {
     for (const alias of result.droppedAliases) {
       log.warn(
         `Alias ${pc.cyan(alias)} dropped — its target directory is gone.`
+      );
+    }
+
+    // A block was placed by hand, so it is un-placed by hand. `add` wrote the file and
+    // printed a pointer to the module's skill; nothing recorded which page the owner
+    // imported it into, so the deletion here leaves a live import pointing at a file that
+    // no longer exists. Say it plainly rather than let the next build say it (#62).
+    const removedBlocks = uiBlockFiles(result.deleted, config.aliases);
+    if (removedBlocks.length > 0) {
+      const blockLines = removedBlocks
+        .map((f) => `  ${pc.red("deleted")}  ${f.target}`)
+        .join("\n");
+      note(
+        wrapForNote(
+          `${blockLines}\n\n${pc.dim("The wire-up you added by hand is not reversed — nothing recorded which page you put it on. Take the import and its tag out yourself, or the build fails.")}`
+        ),
+        "Wire-up left behind"
       );
     }
 

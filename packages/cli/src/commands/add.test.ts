@@ -196,6 +196,127 @@ describe("runAdd — dependency write ordering (#98)", () => {
   });
 });
 
+// #62. A module's UI is a block in the ui package, and nothing places it: `add` writes
+// the file and points at the module's skill, whose Wire-up section carries the import and
+// the tag. The `@ui/blocks/` target is the only signal, so a module that ships such a file
+// without a skill has nowhere to put those steps — say so rather than apply in silence.
+describe("runAdd — ui block wire-up pointer (#62)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(withSkill: boolean): Promise<void> {
+    const mod = join(registry, "widget");
+    await mkdir(join(mod, "files", "blocks"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name: "widget",
+        type: "saasaloy:feature",
+        files: [
+          { path: "files/blocks/widget.tsx", target: "@ui/blocks/widget.tsx" },
+          { path: "files/blocks/widget.tsx", target: "@ui/types/widget.d.ts" },
+        ],
+        ...(withSkill ? { agent: { skills: ["skills/saasaloy-widget"] } } : {}),
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "blocks", "widget.tsx"),
+      "export const Widget = () => null;\n",
+      "utf-8"
+    );
+    if (withSkill) {
+      await mkdir(join(mod, "skills", "saasaloy-widget"), { recursive: true });
+      await writeFile(
+        join(mod, "skills", "saasaloy-widget", "SKILL.md"),
+        "# widget\n\n## Wire-up\n\nImport it.\n",
+        "utf-8"
+      );
+    }
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-block-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-block-reg-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        aliases: { "@ui": "packages/ui/src" },
+        installed: [],
+      }),
+      "utf-8"
+    );
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("names the block and points at the module's skill", async () => {
+    await writeModule(true);
+    const { code, out } = await run(["widget", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("Manual wire-up");
+    expect(out).toContain("packages/ui/src/blocks/widget.tsx");
+    expect(out).toContain("/saasaloy-widget");
+    // The non-block file of the same module is not a wire-up step.
+    expect(out).not.toContain("packages/ui/src/types/widget.d.ts (wire");
+  });
+
+  it("warns when a block arrives from a module that ships no skill", async () => {
+    await writeModule(false);
+    const { code, out } = await run(["widget", "--yes"]);
+
+    // The file still applies — the convention is missing its instructions, which is the
+    // module author's bug, not a reason to refuse the user's install.
+    expect(code).toBe(0);
+    expect(out).toContain("widget");
+    expect(out).toContain("no skill");
+    await expect(
+      pathExists(join(project, "packages", "ui", "src", "blocks", "widget.tsx"))
+    ).resolves.toBeTruthy();
+  });
+
+  it("says nothing about wire-up when no block is written", async () => {
+    const mod = join(registry, "plain");
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name: "plain",
+        type: "saasaloy:feature",
+        files: [{ path: "files/x.ts", target: "@ui/lib/x.ts" }],
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "x.ts"),
+      "export const x = 1;\n",
+      "utf-8"
+    );
+
+    const { code, out } = await run(["plain", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).not.toContain("Manual wire-up");
+  });
+});
+
 // #99 Phase 1, from the outside: the plan a user reads has to say which variant it
 // picked, because two descriptor entries share one target and the target alone no longer
 // identifies the file. And a project no variant matches is refused, not half-applied.

@@ -48,6 +48,7 @@ import {
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
+import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { DESCRIPTIONS } from "./descriptions.js";
@@ -257,6 +258,61 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
 }
 
 /**
+ * A block the applier wrote into the ui package renders nothing until the owner imports
+ * it, because `add` never edits a page — where a block belongs is the owner's decision,
+ * not filename sort's (ADR 0030). One line per module: which file arrived, and the skill
+ * command whose Wire-up section carries the import and the tag.
+ *
+ * The `@ui/blocks/` target is the whole signal, so a module that ships one without a
+ * skill has nowhere to keep those steps. That is the module author's bug, and it warns
+ * rather than refuses — the file itself is fine and the user asked for it.
+ */
+function wireUpSteps(
+  result: ApplyResult,
+  aliases: Record<string, string>
+): string[] {
+  const blocks = uiBlockFiles(
+    [...result.written, ...result.refreshed],
+    aliases
+  );
+  if (blocks.length === 0) {
+    return [];
+  }
+
+  const skillByModule = new Map(
+    result.links.map((link) => [link.module, posix.basename(link.path)])
+  );
+  const byModule = new Map<string, string[]>();
+  for (const block of blocks) {
+    byModule.set(block.module, [
+      ...(byModule.get(block.module) ?? []),
+      block.target,
+    ]);
+  }
+
+  const lines: string[] = [];
+  for (const module of [...byModule.keys()].toSorted()) {
+    const targets = (byModule.get(module) ?? [])
+      .toSorted()
+      .map((target) => pc.cyan(target))
+      .join(", ");
+    const skill = skillByModule.get(module);
+    if (skill === undefined) {
+      log.warn(
+        `${pc.cyan(module)} wrote ${targets} but ships no skill — its wire-up steps are ` +
+          `missing. Import the block yourself ${pc.dim("(a module that ships a block should ship a skill with a Wire-up section)")}.`
+      );
+      continue;
+    }
+    lines.push(
+      `Manual wire-up needed — ${targets} is on disk but on no page yet. ` +
+        `In Claude Code, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
+    );
+  }
+  return lines;
+}
+
+/**
  * The closing box: where the module's procedure is written down, and what the project
  * still needs from the operator. `add waitlist` used to end at "Applied" while the
  * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
@@ -269,9 +325,10 @@ function summarizePlan(plan: Plan, requested: string, prereqs: string[]): void {
 function printNextSteps(
   plan: Plan,
   result: ApplyResult,
-  devVarsPath: string | undefined
+  devVarsPath: string | undefined,
+  aliases: Record<string, string>
 ): void {
-  const lines: string[] = [];
+  const lines: string[] = [...wireUpSteps(result, aliases)];
 
   const skills = result.links
     .map((link) => posix.basename(link.path))
@@ -687,7 +744,7 @@ export async function runAdd(argv: string[]): Promise<number> {
       log.warn(`Couldn't write ${DEV_VARS_EXAMPLE} — ${formatFailure(error)}.`);
     }
 
-    printNextSteps(plan, result, devVarsPath);
+    printNextSteps(plan, result, devVarsPath, config.aliases);
 
     outro(
       pc.green(
