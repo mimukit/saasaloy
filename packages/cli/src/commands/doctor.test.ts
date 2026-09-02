@@ -108,7 +108,8 @@ describe("runDoctor — what it reports and what it exits with", () => {
   it("reports how many modules were clean", async () => {
     const { out } = await run([BROKEN]);
 
-    expect(out).toContain("Checked 9 modules; 0 clean.");
+    // No exact count: adding a broken fixture must not break this test.
+    expect(out).toMatch(/Checked \d+ modules; 0 clean\./);
   });
 
   it("refuses an unknown flag", async () => {

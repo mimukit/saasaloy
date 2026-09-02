@@ -313,8 +313,7 @@ describe("RemoteRegistrySource — the three error paths", () => {
     await expect(source().resolveSha()).rejects.toThrow(
       /Could not reach GitHub for mimukit\/saasaloy/
     );
-    // The fixture is already closed; afterEach closing it again is a no-op it tolerates.
-    fixture.close = () => Promise.resolve();
+    // The fixture is already closed; `close()` is idempotent, so afterEach is a no-op.
   });
 });
 

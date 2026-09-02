@@ -140,10 +140,17 @@ export async function startGithubFixture(
   });
   const address = server.address() as AddressInfo;
 
+  // Idempotent so a test that closes the server itself doesn't blow up in `afterEach`.
+  let closed = false;
+
   return {
     requests,
     url: `http://127.0.0.1:${address.port}`,
     close() {
+      if (closed) {
+        return Promise.resolve();
+      }
+      closed = true;
       return new Promise<void>((resolvePromise, reject) => {
         server.close((error) => {
           if (error) {
