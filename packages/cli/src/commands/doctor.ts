@@ -126,8 +126,16 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const path = opts.path ?? DEFAULT_PATH;
   try {
     if (!(await pathExists(path))) {
+      // The default path only exists in a registry repo, so a user standing in a
+      // scaffolded project lands here — and the refusal is the only place they can learn
+      // the project mode exists. Name `doctor .` when their directory carries a
+      // `saasaloy.json` (#107). A path they typed themselves gets the plain refusal.
+      const hint =
+        opts.path === undefined && (await pathExists(CONFIG_FILE))
+          ? ` Run \`saasaloy doctor .\` to check this project instead.`
+          : "";
       cancel(
-        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.`
+        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.${hint}`
       );
       return EXIT_REFUSED;
     }

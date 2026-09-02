@@ -1,8 +1,8 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { afterAll, describe, expect, it } from "vitest";
+import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { stripAnsi } from "../lib/tui.js";
 import { parseArgs, runDoctor } from "./doctor.js";
 
@@ -124,6 +124,45 @@ describe("runDoctor — what it reports and what it exits with", () => {
 
     expect(code).toBe(2);
     expect(out).toContain("No such path");
+    expect(out).not.toContain("saasaloy doctor .");
+  });
+
+  // #107. The default path is the registry layout, which a scaffolded project does not
+  // have, so a bare `doctor` there refuses. That refusal is where the project user has to
+  // find the project mode.
+  describe("a bare run inside a project", () => {
+    const original = process.cwd();
+
+    afterEach(() => {
+      process.chdir(original);
+    });
+
+    it("names `doctor .` when the directory carries a saasaloy.json", async () => {
+      const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-project-"));
+      temps.push(project);
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ installed: [] })
+      );
+      process.chdir(project);
+
+      const { code, out } = await run([]);
+
+      expect(code).toBe(2);
+      expect(out).toContain("No such path: modules");
+      expect(out).toContain("saasaloy doctor .");
+    });
+
+    it("stays silent about it in a directory that is no project", async () => {
+      const plain = await mkdtemp(join(tmpdir(), "saasaloy-doctor-plain-"));
+      temps.push(plain);
+      process.chdir(plain);
+
+      const { code, out } = await run([]);
+
+      expect(code).toBe(2);
+      expect(out).not.toContain("saasaloy doctor .");
+    });
   });
 
   it("refuses a directory that holds no module folders", async () => {
