@@ -94,23 +94,43 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
 
 `packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
 the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
-`src/components/`, the marketing **blocks** in `src/blocks/`, and the landing page's copy
-in `src/content/`. `apps/web` pulls the theme in once, through the shared layout that
-imports `@repo/ui/globals.css`.
+`src/components/`, the marketing **blocks** in `src/blocks/`, the store-bound
+**containers** in `src/containers/`, and the landing page's copy in `src/content/`.
+`apps/web` pulls the theme in once, through the shared layout that imports
+`@repo/ui/globals.css`.
 
 `DESIGN.md` at the repository root records the token values and the rules behind them. Read it before you add or change UI.
 
-Primitives and blocks are reached by subpath — neither is re-exported from the package
-root, so importing one never drags in the rest. The root export is project-wide constants
-only (`siteName`):
+Primitives, blocks and containers are reached by subpath — none is re-exported from the
+package root, so importing one never drags in the rest. The root export is project-wide
+constants only (`siteName`):
 
 ```ts
 import { siteName } from "@repo/ui";
 import { Button } from "@repo/ui/components/button";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
+import { CartSummary } from "@repo/ui/containers/cart-summary";
 import { landing, ui } from "@repo/ui/content/landing";
 import { cn } from "@repo/ui/lib/utils";
 ```
+
+**Three layers, split by state scope — not by "has state".**
+
+1. **`src/components/`** — vendored shadcn primitives. No stores, no copy.
+2. **`src/blocks/`** — compositions of primitives plus copy from the content module. Local
+   state is allowed (an open accordion, a ticking clock). Importing a shared store is
+   forbidden: a block takes its data as props and reports changes through callbacks, so
+   every app — the Astro site, a React SPA's panels — can drive the same block from its own
+   data source.
+3. **`src/containers/`** — compositions that bind a shared store or cross-island state. A
+   container subscribes, then wires data and callbacks into pure blocks. Containers are
+   thin, app-flavored wiring; the visual weight stays in the blocks.
+
+**One rule covers the whole package: no IO in `@repo/ui`.** No fetch, no persistence, no
+auth, in any of the three layers. Client-state stores (nanostores) live in `src/lib/` and
+are bound **only** in containers; the app that owns the data hydrates the store. When a
+store-shaped need shows up in a block, move the binding up to a container instead of
+importing the store in place.
 
 **Adding a primitive the base doesn't vendor.** `shadcn` is already an exact-pinned
 dependency of `@repo/ui`, so reach it with `--filter … exec` — that runs in the package
@@ -215,6 +235,8 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   React file under `apps/web/src/components/` builds the client and passes the function
   down. Astro serializes island props, so the page renders **that** file, never the block
   directly.
+- **A block never imports a store either.** Local state is fine; shared state is not. See
+  the containers section below.
 - **A module's UI arrives here too, and you wire it up by hand.** `saasaloy add <module>`
   writes a UI-bearing module's block into `src/blocks/` exactly like the base blocks, adds
   the app-side island that feeds it, and then stops: nothing globs a folder, and no command
@@ -224,6 +246,26 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   deletes the files it wrote and leaves your import alone, so take that line out yourself.
 
 Blocks, like primitives, are source you own — they are meant to be edited, not wrapped.
+
+**Containers — the store bindings.** `src/containers/` holds the compositions that read
+shared state. The base ships none; the folder carries a note until you add your first.
+
+- **A container subscribes, a block renders.** The container reads the store, passes the
+  values down as props, and passes handlers that write back to the store. It adds no markup
+  a block could hold. If a container grows layout and copy, that part belongs in a block.
+- **The store lives in `src/lib/`, and only a container imports it.** A block that imports
+  a store is a block a second app cannot reuse, because the store now decides where its data
+  comes from. Move the binding up.
+- **Still no IO.** A container reads client state; it does not fetch, persist, or
+  authenticate. The app hydrates the store — the same app-side island pattern the blocks use
+  for `onSubmit`.
+- **Same file rules as blocks:** one container, one file, one component export, semantic
+  kebab-case filename, no barrel. Astro gives every `client:*` component its own React root,
+  so a container that a page hydrates must hold the whole composition.
+- **A container almost always needs a client directive.** It subscribes at runtime, so it
+  ships JavaScript by definition. Pick the cheapest one that works (`client:idle` above the
+  fold, `client:visible` below it), and keep the blocks it renders static in every page that
+  does not need the store.
 
 **The content module — where the words live.** `packages/ui/src/content/landing.ts` holds
 every user-visible string on the landing page, in two namespaces:

@@ -9,7 +9,8 @@
     "./lib/*": "./src/lib/*.ts",
     "./content/*": "./src/content/*.ts",
     "./components/*": "./src/components/*.tsx",
-    "./blocks/*": "./src/blocks/*.tsx"
+    "./blocks/*": "./src/blocks/*.tsx",
+    "./containers/*": "./src/containers/*.tsx"
   },
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
