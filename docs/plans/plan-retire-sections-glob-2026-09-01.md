@@ -31,25 +31,27 @@ Reuses: the `@ui` alias (already in the base `saasaloy.json`), the `./blocks/*":
 
 Rejected: a structured `wireUp` descriptor field (reverses the settled no-`nextSteps` stance); applier auto-inserting the import (auto-placement is the issue's non-goal); a wrapper-only block with a slot (two-import wire-up, block renders nothing alone); an `apiUrl` prop (forces every wire-up to plumb env); an `.astro` block in `ui` (changes the package's `*.tsx` export contract).
 
-### Phase 1: retire the glob in the base template
+### Phase 1: retire the glob in the base template (built 2026-09-02)
 
 - Delete the glob block, the sections render loop, and its wrapper `div` from `packages/cli/templates/base/apps/web/src/pages/index.astro`; the page becomes explicit imports only.
 - Note in the template's `AGENTS.md` that module UI arrives as `@repo/ui` blocks wired by hand.
 - Confirm no glob-convention references remain (`grep -r "sections" packages/cli/templates/base`).
 
-### Phase 2: migrate the waitlist module
+### Phase 2: migrate the waitlist module (built 2026-09-02, amended)
 
 - Merge `files/web/sections/waitlist.astro` and `files/web/components/WaitlistForm.tsx` into `modules/waitlist/files/ui/blocks/waitlist.tsx`, named export `Waitlist` (panel plus form, one component). Descriptor target `@ui/blocks/waitlist.tsx`.
 - Move `waitlist-env.d.ts` to target `@ui/types/waitlist-env.d.ts`; retarget the `hono` and `@repo/api` dependency patches to `packages/ui/package.json`. Keep the `hono` version pin aligned with `modules/api` (the versioned-patch rule in the waitlist skill; `pnpm deps:check` scans it).
 - Update `modules/waitlist/skills/saasaloy-waitlist/SKILL.md`: replace the sections-glob contract (drop table rows and boundary lines referencing `sections/*.astro`) with a "Wire-up" section: block `@repo/ui/blocks/waitlist`, export `Waitlist`, `<Waitlist client:load />` after `<Cta />` in `src/pages/index.astro`, "or wherever you want it".
 - Update the `create-module` skill: a UI-bearing module targets `@ui/blocks/` and its skill must carry a "Wire-up" section.
 
-### Phase 3: applier pointer and remove caveat
+**Amended 2026-09-02 during implementation ([ADR 0030](../adr/adr-0030-module-ui-ships-as-a-ui-package-block-2026-09-02.md)).** The merge above put `hc<AppType>` inside `packages/ui`, and `packages/ui` has a `typecheck` script that the old location (`apps/web`) does not. One `import type { AppType } from "@repo/api/client"` there makes `tsc` compile the whole api and db source tree under the ui package's tsconfig, which turned `@repo/ui:typecheck` red with four errors. The block is therefore presentational and takes a required `onSubmit`; the typed client stays in `apps/web/src/components/WaitlistForm.tsx`, which the page renders. The `hono` and `@repo/api` patches and `waitlist-env.d.ts` stay pointed at `apps/web`, unchanged. The Wire-up section names `WaitlistForm`, not `Waitlist`, because Astro serializes island props and a function cannot cross from `.astro` into an island.
+
+### Phase 3: applier pointer and remove caveat (built 2026-09-02)
 
 - In `add.ts` `printNextSteps()`, when any applied file target starts with `@ui/blocks/`, append a "Manual wire-up needed" item pointing at the module's skill command; warn when the module ships no skill.
 - In `remove` output, when such a file is removed, state that the block file is deleted but manual wire-up edits (the import in `index.astro`) are not auto-reversed. Known limit: the two dependency patches are already `drop`-kind on remove (#36), so `hono`/`@repo/api` linger in `packages/ui/package.json` after uninstall — unchanged behaviour, new location.
 
-### Phase 4: verify
+### Phase 4: verify (built 2026-09-02)
 
 - `pnpm lint`, `pnpm deps:verify` green.
 - Run the waitlist proof in `.dev` per `docs/qa/qa-waitlist-module-2026-07-24.md`: scaffold, add waitlist, follow the printed wire-up, confirm the form submits end to end. Update the QA doc's steps for the new wire-up.
