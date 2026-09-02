@@ -5,7 +5,7 @@
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
-    "EMAIL_PROVIDER": "Which installed provider sends: `cloudflare` (add email-cloudflare) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
+    "EMAIL_PROVIDER": "Which installed provider sends: `cloudflare` (add email-cloudflare), `plunk` (add email-plunk) or `console` (add email-console). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
     "EMAIL_FROM": "Default sender address (e.g. hello@x.com), on a domain the selected provider is allowed to send from. Overridable per message."
   },
   "patches": [

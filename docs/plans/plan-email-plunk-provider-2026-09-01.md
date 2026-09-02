@@ -24,13 +24,13 @@ Issue #65 asks for a third provider behind the `EmailProvider` interface, so a g
 
 Mirror `email-cloudflare` and `email-console` exactly; the `create-provider` skill defines the shape. Reuse: the `EmailError`/`normalize` pattern and error-table comment style from `modules/email-cloudflare/files/cloudflare.ts`, the descriptor shape and `plugin-array` patch from both siblings, and the envVars voice from `modules/database-postgres/registry-item.json`.
 
-### Phase 1: module descriptor and provider file
+### Phase 1: module descriptor and provider file (built 2026-09-01)
 
 - `modules/email-plunk/registry-item.json`: `type: "saasaloy:feature"`, `dependsOn: ["email"]`, empty `dependencies`, the `plugin-array` patch appending `plunk` into `providers[]` of `packages/email/src/index.ts`, `files` targeting `@email/providers/plunk.ts`, and `envVars` for `PLUNK_API_KEY` (required) and `PLUNK_API_URL` (optional, self-hosting) in the what-it-is / where-to-get-it / what-breaks voice.
 - `modules/email-plunk/files/plunk.ts`: `plunk(): EmailProvider` with `name: "plunk"`, the payload mapping, the missing-key guard, and the status+code error table per the decisions above. Header comment covers the contact-upsert side effect, the dropped `text`, and the self-hosted base URL.
 - No `package.json`, so no `clean` script applies (matches `email-cloudflare`).
 
-### Phase 2: install verification and lint
+### Phase 2: install verification and lint (built 2026-09-01)
 
 - `saasaloy add email-plunk` in `.dev`; re-run to prove idempotency of the codemod and file copy.
 - `pnpm lint` (all four passes cover `modules/*/files/**`) and the repo test/build gate.

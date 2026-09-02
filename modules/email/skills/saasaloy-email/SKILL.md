@@ -1,6 +1,6 @@
 ---
 name: saasaloy-email
-description: Runbook for the email capability — a provider-agnostic sender in packages/email with per-provider modules (email-cloudflare, email-console). Use when sending mail from a route, authoring or changing a template, onboarding a domain to Cloudflare Email Sending, choosing or switching EMAIL_PROVIDER, writing a custom provider, or wiring email into waitlist/auth signup flows.
+description: Runbook for the email capability — a provider-agnostic sender in packages/email with per-provider modules (email-cloudflare, email-plunk, email-console). Use when sending mail from a route, authoring or changing a template, onboarding a domain to Cloudflare Email Sending, sending through Plunk, choosing or switching EMAIL_PROVIDER, writing a custom provider, or wiring email into waitlist/auth signup flows.
 ---
 
 # email — provider-agnostic sending from `packages/email`
@@ -8,8 +8,9 @@ description: Runbook for the email capability — a provider-agnostic sender in 
 `packages/email` (`@repo/email`) is the capability core: a template convention, an escaping
 `html` helper, and a **provider registry**. It has **zero runtime dependencies** and knows nothing
 about any particular email service. Each provider ships as its own module — `email-cloudflare`
-(Cloudflare Email Sending, via a Worker binding) and `email-console` (dev) — dropping one file into
-`src/providers/` and registering itself in the array in `src/index.ts`.
+(Cloudflare Email Sending, via a Worker binding), `email-plunk` (Plunk, over HTTP) and
+`email-console` (dev) — dropping one file into `src/providers/` and registering itself in the array
+in `src/index.ts`.
 
 Callers import `@repo/email`, call `createEmail(env)`, and never learn which provider is active.
 
@@ -84,7 +85,7 @@ and `EmailError.retryable` is the flag it will read.
 
 | Var | What | Required |
 |---|---|---|
-| `EMAIL_PROVIDER` | Which registered provider sends: `cloudflare`, `console`, … | **Always**, even with one provider installed |
+| `EMAIL_PROVIDER` | Which registered provider sends: `cloudflare`, `plunk`, `console`, … | **Always**, even with one provider installed |
 | `EMAIL_FROM` | Default sender (`hello@x.com`), on a domain that provider may send from | Unless every message passes its own `from` |
 
 `EMAIL_PROVIDER` has **no default** on purpose. A default would mean a production deploy can
@@ -135,6 +136,7 @@ export const resetPassword: EmailTemplate<ResetProps> = ({ name, resetUrl }) => 
 | Module | Provider name | Needs | Adds |
 |---|---|---|---|
 | `email-cloudflare` | `cloudflare` | Workers **paid plan** + a domain onboarded in the dashboard | `send_email` binding in `apps/api/wrangler.jsonc` |
+| `email-plunk` | `plunk` | a [Plunk](https://www.useplunk.com) account and its `sk_` secret key | `PLUNK_API_KEY`, optional `PLUNK_API_URL` |
 | `email-console` | `console` | nothing | nothing — logs the rendered message |
 
 Installing another provider is the same command again (`saasaloy add email-console`); the codemod
@@ -170,6 +172,38 @@ headers. Errors arrive as `EmailError` with `code` one of `sender_not_verified`,
 `too_large`, `invalid_message`, `provider_error`, the raw Cloudflare code kept in `providerCode`.
 `E_INTERNAL_SERVER_ERROR` maps to `provider_error` with `retryable: true` — it is Cloudflare's
 failure, not the message's.
+
+### Plunk: the setup runbook
+
+`email-plunk` sends with one `fetch` against `POST https://next-api.useplunk.com/v1/send`. There is
+no SDK, no binding and no Cloudflare plan involved, so the provider behaves identically under
+`wrangler dev`, under `vite dev` and in a deployed Worker.
+
+1. **Verify a sending domain in Plunk** (dashboard → Project → Domain) and set `EMAIL_FROM` to an
+   address on it. An unverified sender is rejected by Plunk, not by this code.
+2. **Copy the secret key.** Plunk issues two, and only the `sk_...` one may send — a `pk_...` key
+   returns 401. Put it in `apps/api/.dev.vars` as `PLUNK_API_KEY=sk_...` for dev, and run
+   `wrangler secret put PLUNK_API_KEY` for production.
+3. **Self-hosting only:** set `PLUNK_API_URL` to your instance's base URL. It defaults to the hosted
+   API, so leave it unset otherwise. The URL must use HTTPS — the request carries your secret key,
+   and the provider refuses a cleartext endpoint. Plain `http://` is accepted for localhost only,
+   for running a local Plunk under `wrangler dev`; never point a production Worker at one.
+
+Three behaviours worth knowing before your first send:
+
+- **Every send upserts the recipient as a contact** in your Plunk project. That is Plunk's own
+  behaviour. The provider omits `subscribed` from the payload on purpose: a new contact lands
+  unsubscribed either way, and an explicit `false` would unsubscribe someone who had opted in.
+- **Plunk has no plaintext field.** `/v1/send` takes a single `body`, so the `text` the core derived
+  from your HTML is dropped and the message goes out HTML-only.
+- **`messageId` is the first recipient's id.** A multi-recipient send gets one id per recipient and
+  `EmailResult` carries one; the rest are in Plunk's dashboard against the same send.
+
+Errors map on HTTP status, refined by Plunk's own `code`, with the raw value kept in `providerCode`:
+429 → `rate_limited` (retryable), an oversize payload → `too_large`, 401/403/404/422 → `provider_error`
+(not retryable — a bad key, a disabled project or a rejected payload cannot succeed on a resend), and
+5xx or a failed request → `provider_error` with `retryable: true`. Plunk's send endpoint takes no
+idempotency key, so a retry can deliver twice.
 
 ### Local development
 
