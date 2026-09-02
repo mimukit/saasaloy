@@ -8,7 +8,7 @@ import {
   formatOwnedCollisions,
   mayShareTarget,
 } from "./collisions.js";
-import type { OwnedCollision } from "./collisions.js";
+import type { OwnedCollision, StaleOwner } from "./collisions.js";
 import {
   assertNoSymlinkPath,
   classifyLink,
@@ -154,7 +154,7 @@ export interface Plan {
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
   aliasConflicts: string[];
   /** Files a module reclaims whose manifest owner is a different installed module that is now stale (#107). */
-  staleOwners: OwnedCollision[];
+  staleOwners: StaleOwner[];
   /** Structural config patches to apply (previewed against the would-be on-disk state). */
   patches: PlannedPatch[];
   /** Removal warnings keyed by the module that supplied them. */
@@ -687,11 +687,22 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // one depends on would be wrong. The owner also has to still be installed: an owner
   // absent from `installed` is the mirror state `doctor` reports (#49), not this one.
   const priorInstalled = new Set([...alreadyInstalled, ...config.installed]);
-  const staleOwners = staleClaims.filter(
-    (claim) =>
-      priorInstalled.has(claim.owner) &&
-      !mayShareTarget(claim.claimant, claim.owner, modules)
-  );
+  // Every target this plan writes changes hands, so an owner is left stale only when its
+  // remaining `managed` entries are all in that set. That is the same arithmetic `doctor`
+  // does, which is what keeps the two messages from contradicting each other: an owner
+  // that keeps a file is not flagged there and is not told to `remove` here (#107).
+  const changingHands = new Set(byTarget.keys());
+  const keepsFiles = (owner: string): boolean =>
+    Object.entries(manifest.managed).some(
+      ([target, entry]) => entry.module === owner && !changingHands.has(target)
+    );
+  const staleOwners: StaleOwner[] = staleClaims
+    .filter(
+      (claim) =>
+        priorInstalled.has(claim.owner) &&
+        !mayShareTarget(claim.claimant, claim.owner, modules)
+    )
+    .map((claim) => ({ ...claim, ownerKeepsFiles: keepsFiles(claim.owner) }));
 
   // A target every one of whose variants was filtered out would otherwise be a file that
   // silently never arrived — an app missing its schema, discovered at typecheck. Refuse

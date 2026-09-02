@@ -2243,11 +2243,52 @@ describe("a target another installed module already owns", () => {
           target: "packages/db/src/client.ts",
           owner: "database-d1",
           claimant: "database-postgres",
+          ownerKeepsFiles: false,
         },
         {
           target: "packages/db/src/drizzle.config.ts",
           owner: "database-d1",
           claimant: "database-postgres",
+          ownerKeepsFiles: false,
+        },
+      ]);
+    });
+
+    // The rival takes one of d1's two files, so d1 still owns the other once the run
+    // ends. `doctor` would not flag it, and the note must not say `remove` either — that
+    // would delete the file d1 keeps.
+    it("marks the owner as keeping files when it still owns one", async () => {
+      const manifest = await installD1();
+      await rm(join(root, "packages/db/src/client.ts"));
+
+      const planned = await buildPlan({
+        root,
+        install: ["database-postgres"],
+        alreadyInstalled: ["database", "database-d1"],
+        modules: new Map([
+          [
+            "database-postgres",
+            await writeModule(
+              "database-postgres",
+              {
+                type: "saasaloy:capability",
+                files: [{ path: "files/client.ts", target: "@db/client.ts" }],
+              },
+              { "files/client.ts": 'export const client = "pg";\n' }
+            ),
+          ],
+        ]),
+        config,
+        manifest,
+        requested: "database-postgres",
+      });
+
+      expect(planned.staleOwners).toStrictEqual([
+        {
+          target: "packages/db/src/client.ts",
+          owner: "database-d1",
+          claimant: "database-postgres",
+          ownerKeepsFiles: true,
         },
       ]);
     });
