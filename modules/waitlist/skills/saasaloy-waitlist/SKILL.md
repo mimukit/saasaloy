@@ -1,15 +1,16 @@
 ---
 name: saasaloy-waitlist
-description: Runbook for the waitlist feature — a landing-page email waitlist proving the api chained-route patch and the database/web file-drop conventions end to end. Use when adding, changing, or debugging the waitlist route, schema, table, or form, running migrations after install, or setting PUBLIC_API_URL.
+description: Runbook for the waitlist feature — a landing-page email waitlist proving the api chained-route patch and the database/ui file-drop conventions end to end. Use when adding, changing, or debugging the waitlist route, schema, table, or block, placing the block on a page, running migrations after install, or setting PUBLIC_API_URL.
 ---
 
 # waitlist — landing-page email waitlist
 
 `waitlist` is a **feature module** (`saasaloy:feature`): it drops files into the extension points
-`api`, `database`, `validators` and the base web template already established, and registers its
-route with one `chained-route` patch. It depends on `api`, `database` and `validators`, resolved and
-installed automatically. It names no database **driver**: `database`'s own `requiresOneOf` is what
-guarantees one is present.
+`api`, `database`, `validators`, `packages/ui` and `apps/web` already established, registers its
+route with one `chained-route` patch, and leaves one step to you — placing its form on a page (see
+[Wire-up](#wire-up)). It depends on `api`, `database` and `validators`, resolved and installed
+automatically. It names no database **driver**: `database`'s own `requiresOneOf` is what guarantees
+one is present.
 
 ## Either database driver
 
@@ -25,9 +26,9 @@ Both name the same `target`, `packages/db/src/schema/waitlist.ts`, so exactly on
 other is filtered out before the plan is built. `saasaloy add waitlist --dry-run` prints which
 source it chose.
 
-**Everything else is one file.** The route, the validators, the component and the section are
-dialect-neutral, because Drizzle's query builder is the same under both dialects and the driver's
-`withDb(c, …)` is the same call. The dialect reaches the column declarations and stops there.
+**Everything else is one file.** The route, the validators and the block are dialect-neutral,
+because Drizzle's query builder is the same under both dialects and the driver's `withDb(c, …)` is
+the same call. The dialect reaches the column declarations and stops there.
 
 The two variants are the same table, so keep them in step. They differ only where each dialect is
 idiomatic: the SQLite id is `integer("id").primaryKey({ autoIncrement: true })` and the Postgres id
@@ -47,14 +48,61 @@ get the other variant. There is no data migration; see ADR 0026.
 | `apps/api/src/routes/waitlist.ts` | api's route-module contract — a chained sub-app under `export const waitlist` |
 | `packages/db/src/schema/waitlist.ts` | db's `schema/*.ts` glob — one table, `waitlist`, in the installed driver's dialect |
 | `packages/validators/src/waitlist.ts` | validators' one-file-per-feature rule — `@repo/validators/waitlist` |
-| `apps/web/src/components/WaitlistForm.tsx` | React island (base template ships React) |
-| `apps/web/src/sections/waitlist.astro` | base `index.astro`'s `sections/*.astro` glob |
+| `packages/ui/src/blocks/waitlist.tsx` | ui's blocks folder — one file, one component export, same as every base block |
+| `apps/web/src/components/WaitlistForm.tsx` | the app's own island — supplies the block's `onSubmit` |
 | `apps/web/src/types/waitlist-env.d.ts` | ambient `ImportMetaEnv` augmentation (see below) |
+
+**The block is presentational and the app supplies the behaviour.** `Waitlist` renders the panel,
+owns the form's own state, and takes a required `onSubmit`. It imports React and three ui
+primitives, and nothing else — no api package, no http client, no env var. `WaitlistForm.tsx`
+holds all of that: it builds `hc<AppType>` and passes the function down. Keeping `packages/ui`
+clear of the api package is not tidiness — a design package that imports it compiles the whole
+Worker source tree on every `pnpm typecheck`.
+
+**Neither file is placed for you.** `saasaloy add waitlist` writes both and stops; no command edits
+a page. Read [Wire-up](#wire-up) for the two lines that put the form on the landing page.
+
+## Wire-up
+
+Put the form on a page yourself:
+
+1. Open `apps/web/src/pages/index.astro`.
+2. Add the import, beside the other block imports:
+
+   ```astro
+   import WaitlistForm from "@web/components/WaitlistForm";
+   ```
+
+3. Render it inside `<main>`, after `<Cta siteName={siteName} />` — or wherever you want it:
+
+   ```astro
+   <WaitlistForm client:load />
+   ```
+
+Import `WaitlistForm`, **not** `Waitlist`. The block needs a function prop, and Astro serializes
+island props, so a function cannot cross from `.astro` into an island. `WaitlistForm` is the React
+file that closes over it. This is also why `client:load` is required rather than a default: the form
+owns browser state, and with no client directive the page renders dead HTML whose button does
+nothing. The whole block hydrates, heading and paragraph included, because a static React parent
+cannot hold a hydrated React child.
+
+The suggested spot is after `<Cta />` for one reason: both use the muted panel, and this block is
+laid out in two columns so that the pair does not read as two centred panels in a row. Move it and
+the page still works.
+
+`Waitlist` also takes optional `id`, `title` and `description` props, which `WaitlistForm` is the
+place to pass. Its copy lives in the block file rather than in
+`packages/ui/src/content/landing.ts`, because that content module belongs to the base and this
+module never edits a file it does not own.
+
+`saasaloy remove waitlist` deletes both files and **does not** touch the import you added. Take
+those two lines out yourself, or the page stops building.
 
 ## What it patches
 
 Three patches; `saasaloy remove` reverses only the first — it does not uninstall npm dependencies,
-so the other two are dropped with a warning and uninstalling leaves them in `apps/web/package.json`:
+so the other two are dropped with a warning and uninstalling leaves them in
+`apps/web/package.json`:
 
 | Patch | Target | Why |
 |---|---|---|
@@ -65,7 +113,7 @@ so the other two are dropped with a warning and uninstalling leaves them in `app
 The route link is a patch, not a drop, because a folder scan gives the chain no type to carry. See
 the `saasaloy-api` skill for the convention. Nothing here edits `src/schema.ts` or `index.astro`.
 
-The `hono` patch carries a **version**, `4.12.33`, and it is the only versioned patch range in the
+The `hono` patch carries a **version**, `4.13.5`, and it is the only versioned patch range in the
 repo. It must match `modules/api/files/package.json`'s `hono` pin: `apps/web` infers `AppType`
 across the package boundary from `apps/api`, and two `hono` copies at different versions make that
 inference fail in ways the error message does not explain. `pnpm deps:check` scans this range and
@@ -142,10 +190,11 @@ the api Worker's pinned local dev port — `:4000`, fixed with `strictPort` in `
 Set `PUBLIC_API_URL` at web build time once the api Worker has a real (non-localhost) URL — e.g. its
 deployed `*.workers.dev` address or a custom domain.
 
-`waitlist-env.d.ts` augments Astro/Vite's `ImportMetaEnv` with `PUBLIC_API_URL` so the read
+`waitlist-env.d.ts` augments the bundler's `ImportMetaEnv` with `PUBLIC_API_URL` so the read
 typechecks. It's a global ambient `interface` in its own file — TypeScript merges same-named
 interfaces across files, so a future feature can add its own env var the same way without
-touching this one.
+touching this one. It sits in `apps/web` rather than `packages/ui`, because the env read sits there
+too — the block takes a function and never looks at `import.meta.env`.
 
 ## Duplicate submissions are a success, not an error
 
@@ -164,9 +213,16 @@ If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worke
 
 ## Boundaries to honor
 
-- **The route registers by patch; table, component and section stay file-drops.** Extend any of
-  them by editing the dropped file. The one edit to `apps/api/src/index.ts` is the `chained-route`
-  patch's, so don't hand-write the link and don't reach into `src/schema.ts` or `index.astro`.
+- **The route registers by patch; table, block and island stay file-drops.** Extend any of them by
+  editing the dropped file. The one edit to `apps/api/src/index.ts` is the `chained-route` patch's,
+  so don't hand-write the link and don't reach into `src/schema.ts`.
+- **The block stays free of the api.** `packages/ui/src/blocks/waitlist.tsx` takes `onSubmit` and
+  imports React and ui primitives only. Never move `hc`, `@repo/api`, or an `import.meta.env` read
+  into it: `packages/ui` has a `typecheck` script, and one import of `@repo/api` there makes `tsc`
+  compile the whole Worker source tree under the ui package's own tsconfig.
+- **The form's placement is the owner's, and no code of ours writes it.** Never teach a user to
+  expect the form on the page automatically, and never add a patch that edits `index.astro`. The
+  Wire-up section above is the whole mechanism.
 - **Keep the route one unbroken chain.** A `waitlist.post(...)` statement still serves the request
   and still typechecks, but `typeof waitlist` forgets it, so `api.waitlist` disappears from the
   client with no error anywhere in `apps/api`.
