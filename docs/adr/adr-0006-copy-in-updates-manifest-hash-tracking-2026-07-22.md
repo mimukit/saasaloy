@@ -3,7 +3,7 @@
 Existing projects receive module fixes via **copy-in + `--diff`**, not versioned packages, and managed-file status is tracked in a central `.saasaloy/manifest.json` (each managed file + a content hash + owning module) rather than in-file markers. On update the tool hashes the file: match → safe clean overwrite; drift (hand-edited) → routed to the AI-merge path instead of clobbered. The churny wiring is exactly what you don't hand-edit, so updates are usually clean overwrites of files you never touched. See build-spec [§2.9](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
-accepted — supersedes the `// saasaloy:managed` in-file marker idea
+accepted — supersedes the `// saasaloy:managed` in-file marker idea. Extended by [ADR 0031](adr-0031-re-run-is-recovery-for-a-partial-add-2026-09-03.md), which carries the same rule up from the file to the module: `saasaloy.json`'s `installed` list describes what landed, not what was planned, and a partial apply is recovered by re-running `add`.
 
 ## Considered Options
 - `// saasaloy:managed` sentinel comments in generated files — rejected: manifest tracking keeps files clean, is pollution-free, and applies to *every* managed file (including copied skills), not just agent files.

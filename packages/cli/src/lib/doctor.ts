@@ -15,11 +15,17 @@ import type { SaasaloyConfig } from "./schema.js";
 // Everything here is local: a module folder, its siblings in the same registry, and the
 // alias map the base template establishes. Nothing is fetched, so an author can run it
 // before publishing rather than finding out on a stranger's machine.
+//
+// `checkProject` at the foot of the file reads the other side — a consumer project's own
+// state files — and is the one check here that says nothing about a descriptor.
 
 export interface Finding {
   /** The module folder the finding belongs to. */
   module: string;
-  /** Where inside the descriptor, in the shape ajv prints (`/files/0/target`). */
+  /**
+   * Where inside the descriptor, in the shape ajv prints (`/files/0/target`). A project
+   * check points into the project's own state instead, e.g. `/installed/waitlist`.
+   */
   where: string;
   message: string;
 }
@@ -386,7 +392,7 @@ export interface ProjectCheckArgs {
  * no file in `.saasaloy/manifest.json`. `add` warns once when it reclaims a target whose
  * file was hand-deleted, and that warning scrolls away; this is how the state stays
  * findable afterwards. The inverse — files tracked for a module that is not installed —
- * belongs to #49.
+ * is `checkPartialInstalls` below (#49).
  *
  * Already-loaded state comes in rather than a root path, so the rule tests with plain
  * objects like the descriptor rules above it. `config.base` is not walked, so the base app
@@ -427,6 +433,46 @@ export async function resolveDoctorTarget(path: string): Promise<DoctorTarget> {
     return { names: [basename(dir)], registryDir: dirname(dir) };
   }
   return { names: await registryModuleNames(dir), registryDir: dir };
+}
+
+export interface ProjectState {
+  /** The project's `.saasaloy/manifest.json`, as `loadManifest` returns it. */
+  manifest: Manifest;
+  /** `saasaloy.json`'s `installed` list. */
+  installed: string[];
+}
+
+/**
+ * The inverse of `checkProject`'s rule (#49): a module the manifest tracks work for,
+ * absent from `installed`, is a partial install.
+ *
+ * `add` leaves that state on purpose. It never rolls back, so a run that failed mid-apply
+ * — or one whose file drifted between the plan and the write — keeps the files it wrote
+ * and withholds the install. The bookkeeping is honest and the project is unfinished, and
+ * only a re-run finishes it, which is what this says out loud. Two files, or twenty, are
+ * one finding: the module is the unit the user acts on.
+ */
+export function checkPartialInstalls(state: ProjectState): Finding[] {
+  const installed = new Set(state.installed);
+  const tracked = new Set<string>();
+  for (const entry of Object.values(state.manifest.managed)) {
+    tracked.add(entry.module);
+  }
+  // A patch counts as tracked work too. A module whose files all held as conflicts can
+  // still have landed a dependency in a package.json, and that is on disk either way.
+  for (const patch of state.manifest.patches) {
+    tracked.add(patch.module);
+  }
+  return [...tracked]
+    .filter((name) => !installed.has(name))
+    .toSorted()
+    .map((name) =>
+      finding(
+        name,
+        `/installed/${name}`,
+        `partial install — re-run \`saasaloy add ${name}\``
+      )
+    );
 }
 
 /** Check every module named by `target`, in name order. */

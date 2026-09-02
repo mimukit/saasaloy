@@ -2,6 +2,7 @@ import { cancel, intro, log, note, outro } from "@clack/prompts";
 import { join, relative } from "node:path";
 import pc from "picocolors";
 import {
+  checkPartialInstalls,
   checkProject,
   checkTarget,
   resolveDoctorTarget,
@@ -79,7 +80,12 @@ function renderReport(report: ModuleReport, root: string): string {
 async function reportProject(path: string): Promise<number> {
   const config = await loadConfig(path);
   const manifest = await loadManifest(path);
-  const findings = checkProject({ config, manifest });
+  // Two halves of the same question: a module installed that owns nothing (#107), and a
+  // module that owns work but was never marked installed (#49).
+  const findings = [
+    ...checkProject({ config, manifest }),
+    ...checkPartialInstalls({ installed: config.installed, manifest }),
+  ];
   if (findings.length === 0) {
     const count = config.installed.length;
     note(

@@ -77,10 +77,10 @@ A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsO
 The descriptor field pinning the skill folder(s) a module ships: `{ "skills": ["skills/saasaloy-<name>"] }`.
 
 ### `saasaloy.json`
-The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution).
+The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution). A module enters `installed` only when the run that applied it wrote every file it planned, because bookkeeping describes disk. A half-applied module stays out of the list and a plain re-run of `saasaloy add` re-plans and completes it ([ADR 0031](docs/adr/adr-0031-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
 
 ### `.saasaloy/manifest.json`
-Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries.
+Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries. An entry means those bytes are on disk ([ADR 0006](docs/adr/adr-0006-copy-in-updates-manifest-hash-tracking-2026-07-22.md)), which is why entries for a module that `saasaloy.json` does not list as installed mean a partial apply, and `saasaloy doctor` reports it as one ([ADR 0031](docs/adr/adr-0031-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
 
 ### `saasaloy-lock.json`
 Machine-owned provenance at the consumer root: per installed module, its [registry source](#registry-source) + ref + resolved commit **SHA** + resolved `dependsOn` graph. The npm-style lock to `saasaloy.json`'s intent — it makes remote installs reproducible (the SHA *is* the integrity anchor), so the default ref can be a live branch rather than a hand-pinned tag.
