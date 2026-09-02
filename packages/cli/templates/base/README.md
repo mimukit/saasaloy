@@ -63,6 +63,9 @@ Blocks render to static HTML by default. Only the three that need browser state 
 client directive (`Navbar` is `client:idle`; `PricingTable` and `Faq` are
 `client:visible`) — the rest ship no JavaScript at all. Don't reach for `client:load`.
 
-The page also globs `apps/web/src/sections/*.astro` in sorted filename order, so dropping
-a file there adds a section with no edit to `index.astro`. That's the hook
-`saasaloy add <module>` uses; keep it.
+The page composes itself from explicit imports, and nothing discovers a file behind your
+back. A module that ships UI writes its block into `packages/ui/src/blocks/` like every
+block above, plus a small island under `apps/web/src/components/` that feeds the block
+whatever it needs to talk to (blocks stay presentational and take behaviour as props).
+`saasaloy add <module>` then prints a pointer to the module's skill, which carries the
+import line and the suggested spot. Where it actually goes is your call.
