@@ -1,0 +1,37 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "email-react",
+  "type": "saasaloy:feature",
+  "dependsOn": ["email"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/email-react",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/email-react",
+      "aliases": { "@email-react": "packages/email-react/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.tsx", "target": "src/define.tsx" },
+        {
+          "path": "files/src/templates/welcome.tsx",
+          "target": "src/templates/welcome.tsx"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-email-react"]
+  }
+}

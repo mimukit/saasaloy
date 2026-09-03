@@ -15,7 +15,7 @@ export type {
   EmailTemplate,
   ResolvedEmailMessage,
 } from "./provider";
-export { deriveText, html, layout, raw, SafeHtml } from "./render";
+export { deriveText, html, layout, raw, SafeHtml, safeUrl } from "./render";
 export type { LayoutOptions } from "./render";
 
 // The provider registry, and the patch point every `email-<provider>` module writes
