@@ -126,10 +126,15 @@ the first.
 pnpm --filter @repo/email-react dev
 ```
 
-That runs `email dev --dir src/templates` — the `react-email` package installs its CLI under the
-bin name `email`, not `react-email`. It starts on http://localhost:3000, lists every template in
-the folder, and hot-reloads as you edit. It is a development tool: it never runs in the Worker, and
-both `react-email` and `@react-email/ui` are devDependencies, so neither reaches a deploy.
+That runs `email dev --dir src/templates --port 3002` — the `react-email` package installs its CLI
+under the bin name `email`, not `react-email`. It starts on http://localhost:3002, lists every
+template in the folder, and hot-reloads as you edit. It is a development tool: it never runs in the
+Worker, and both `react-email` and `@react-email/ui` are devDependencies, so neither reaches a
+deploy.
+
+The port is pinned on purpose. The CLI defaults to 3000, which `apps/web` already holds with
+`strictPort`, and the root `pnpm dev` starts every workspace's `dev` script at once. 3001 is
+`apps/admin`, so the preview takes the next free frontend port, 3002.
 
 `@react-email/ui` is declared up front on purpose. Without it the CLI stops on an interactive
 "would you like to install it?" prompt, which hangs any non-interactive run.
@@ -178,6 +183,7 @@ There is no budget gate on it: the module is opt-in, so only a project that adds
 
 ## Pinned React
 
-`packages/email-react` pins the same exact `react` version as `packages/ui`. Two different pins put
-two Reacts in one project. `pnpm verify:pins` enforces the match and runs first inside
-`pnpm deps:verify`; change one pin and change the other in the same commit.
+`packages/email-react` pins the same exact `react` and `@types/react` versions as `packages/ui`. Two
+different pins put two Reacts, or two sets of React types, in one project. `pnpm verify:pins`
+enforces both matches and runs first inside `pnpm deps:verify`; change one pin and change the other
+in the same commit.

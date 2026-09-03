@@ -65,7 +65,7 @@ const styles = {
   text: { margin: "0 0 24px" },
 } as const;
 
-/** The sample props the preview server renders with. Also the fixture for a smoke test. */
+/** The sample props the preview server renders with. */
 export const welcomePreviewProps: WelcomeProps = {
   appName: "Acme",
   ctaUrl: "https://app.acme.com",
