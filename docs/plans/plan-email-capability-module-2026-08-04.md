@@ -43,13 +43,15 @@ Three of these shape the module: **there is no secret to manage** for this provi
 | **Providers in scope** | `email-cloudflare` (binding) and `email-console` (dev). Resend/SES/Plunk are follow-up issues. |
 | **Provider selection** | `EMAIL_PROVIDER` is **always required**, even with one provider installed. `createEmail` throws naming the registered providers when it is unset or unknown. No implicit default — a production deploy must never silently stop sending, and a test run must never silently send. |
 | **Env access** | **Factory: `createEmail(env)`**, mirroring `getDb(c.env.DB)`. Deviates from that precedent in taking the *whole* env rather than one binding, because which key a provider reads is precisely what the caller isn't allowed to know. Not module-scope `cloudflare:workers` env — `packages/auth` uses that only because its `export const auth` must be a module-scope singleton for the `ts-module` plugin-array patch point. |
-| **Templating** | **Plain tagged-template helpers in `packages/email`. No React Email.** `send()` takes `html`/`text` strings, so nothing forces a framework; `react-dom/server` in the api Worker is bundle weight every project pays for. |
+| **Templating** | **Plain tagged-template helpers in `packages/email`. No React Email.** `send()` takes `html`/`text` strings, so nothing forces a framework; `react-dom/server` in the api Worker is bundle weight every project pays for. **Reversed in part — see the note below.** |
 | **Template contract** | `(props) => { subject, html, text? }`. `text` is **auto-derived** from the `html` tag helper's output when absent, and overridable when the derived version isn't good enough. Every message ships multipart without every template being authored twice. |
 | **Errors** | Providers normalize failures into one thrown `EmailError` carrying a stable `code` union, a `retryable` flag, and the raw `providerCode`. |
 | **Retry** | **None in the package.** A retry loop inside a Worker request handler holds the response open. The example teaches `waitUntil()` for non-critical mail and `await`-with-catch for critical — both stay correct when `queue` lands. |
 | **Secrets** | Provider-owned. `email-cloudflare` needs none; an HTTP provider declares its own key in its own `envVars`. Issue #15's *"`envVars` for the Resend key"* moves to the `email-resend` follow-up. |
 | **`dependsOn`** | `email` → `["api"]`; each provider → `["email"]`. |
 | **Optional-dependency mechanism** | **Out of scope. Its own issue + ADR.** See below. |
+
+> **Reversal note (2026-09-03) — §Templating.** The "No React Email" line above is reversed by [`plan-email-react-templates-2026-09-03.md`](plan-email-react-templates-2026-09-03.md) and recorded in [ADR 0031](../adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md). What changed is not the cost but who pays it: React Email ships as a separate opt-in module, `email-react`, so "bundle weight every project pays for" stops being true — only a project that runs `saasaloy add email-react` pays. The measured cost is +262,576 B gzipped on a Worker whose route imports a JSX template. Everything else in this row still holds. `packages/email` keeps the tagged-template idiom, keeps zero runtime dependencies, and is untouched by that module; the two idioms coexist per template.
 
 ### Architecture: capability core + provider modules
 
