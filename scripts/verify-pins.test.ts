@@ -109,6 +109,17 @@ describe("PIN_RULES", () => {
     );
   });
 
+  it("covers @types/react across the same two manifests", () => {
+    const types = PIN_RULES.find((rule) => rule.dep === "@types/react");
+    assert.ok(types !== undefined);
+    assert.ok(types.files.includes("modules/email-react/files/package.json"));
+    assert.ok(
+      types.files.includes(
+        "packages/cli/templates/base/packages/ui/package.json"
+      )
+    );
+  });
+
   it("names at least two manifests per rule", () => {
     for (const rule of PIN_RULES) {
       assert.ok(rule.files.length >= 2, `${rule.dep} needs two manifests`);

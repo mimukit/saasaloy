@@ -51,6 +51,16 @@ export const PIN_RULES: readonly PinRule[] = [
       "packages/cli/templates/base/packages/ui/package.json",
     ],
   },
+  // The types package is coupled the same way and for the same reason: two copies of
+  // `@types/react` in one project surface as cross-workspace type errors on identical
+  // component types. `react-dom` needs no rule — `ui` pins react-dom nowhere.
+  {
+    dep: "@types/react",
+    files: [
+      "modules/email-react/files/package.json",
+      "packages/cli/templates/base/packages/ui/package.json",
+    ],
+  },
 ];
 
 const SECTIONS = [
