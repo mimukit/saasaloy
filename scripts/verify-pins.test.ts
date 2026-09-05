@@ -11,7 +11,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { checkRule, PIN_RULES, readPin } from "./verify-pins.ts";
+import {
+  checkRule,
+  isExactVersion,
+  PIN_RULES,
+  readPin,
+} from "./verify-pins.ts";
 import type { PinnedManifest } from "./verify-pins.ts";
 
 function manifest(file: string, json: Record<string, unknown>): PinnedManifest {
@@ -94,6 +99,54 @@ describe("checkRule", () => {
     ]);
     assert.ok(failure !== null);
     assert.match(failure, /b\/package\.json/);
+  });
+
+  // Equality is not the contract; exactness is. Two workspaces on the same caret range
+  // resolve it separately, so a release between the two installs still splits React.
+  it("fails when both manifests carry the same non-exact range", () => {
+    const failure = checkRule(rule, [
+      manifest("a/package.json", { dependencies: { react: "^19.2.8" } }),
+      manifest("b/package.json", { peerDependencies: { react: "^19.2.8" } }),
+    ]);
+    assert.ok(failure !== null);
+    assert.match(failure, /exact version/);
+    assert.match(failure, /\^19\.2\.8/);
+  });
+
+  it("fails when only one manifest carries a range", () => {
+    const failure = checkRule(rule, [
+      manifest("a/package.json", { dependencies: { react: "19.2.8" } }),
+      manifest("b/package.json", { dependencies: { react: "~19.2.8" } }),
+    ]);
+    assert.ok(failure !== null);
+    assert.match(failure, /exact version/);
+  });
+});
+
+describe("isExactVersion", () => {
+  it("accepts a bare semver", () => {
+    assert.equal(isExactVersion("19.2.8"), true);
+  });
+
+  it("accepts a prerelease and build metadata", () => {
+    assert.equal(isExactVersion("19.2.8-canary.3"), true);
+    assert.equal(isExactVersion("19.2.8+build.1"), true);
+  });
+
+  it("rejects every range operator", () => {
+    for (const version of [
+      "^19.2.8",
+      "~19.2.8",
+      ">=19.2.8",
+      "19.2.x",
+      "19.x",
+      "*",
+      "latest",
+      "19.2.8 || 20.0.0",
+      "workspace:*",
+    ]) {
+      assert.equal(isExactVersion(version), false, version);
+    }
   });
 });
 

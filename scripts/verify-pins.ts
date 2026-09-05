@@ -91,10 +91,25 @@ export function readPin(
 }
 
 /**
+ * A bare semver and nothing else: no `^`, `~`, `>=`, `*`, ` || `, or `x` placeholder.
+ * A prerelease and build metadata are still exact, so both are allowed.
+ */
+const EXACT_VERSION = /^\d+\.\d+\.\d+(?:-[\w.-]+)?(?:\+[\w.-]+)?$/;
+
+export function isExactVersion(version: string): boolean {
+  return EXACT_VERSION.test(version);
+}
+
+/**
  * Compare one rule against the manifests already read for it. Returns `null` when every
- * manifest carries the same version, or a message naming every file and its version.
- * A manifest that pins nothing reads as `(absent)` and fails the rule: a rule whose
- * target has been renamed away must break loudly rather than pass vacuously.
+ * manifest carries the same exact version, or a message naming every file and its
+ * version. A manifest that pins nothing reads as `(absent)` and fails the rule: a rule
+ * whose target has been renamed away must break loudly rather than pass vacuously.
+ *
+ * Equality alone is not enough. Two manifests that both say `^19.2.8` agree as strings
+ * and still install two Reacts, because each workspace resolves the range on its own and
+ * a release between the two installs splits them. So a range fails the rule even when
+ * every manifest carries the same one, which also holds the repo's `saveExact` contract.
  */
 export function checkRule(
   rule: PinRule,
@@ -104,13 +119,21 @@ export function checkRule(
     file: manifest.file,
     version: readPin(manifest.json, rule.dep),
   }));
+  const lines = found.map(
+    (entry) => `    ${entry.file}: ${entry.version ?? "(absent)"}`
+  );
+
+  const ranged = found.filter(
+    (entry) => entry.version !== undefined && !isExactVersion(entry.version)
+  );
+  if (ranged.length > 0) {
+    return `"${rule.dep}" is not pinned to an exact version:\n${lines.join("\n")}`;
+  }
+
   const distinct = new Set(found.map((entry) => entry.version));
   if (distinct.size <= 1 && !distinct.has(undefined)) {
     return null;
   }
-  const lines = found.map(
-    (entry) => `    ${entry.file}: ${entry.version ?? "(absent)"}`
-  );
   return `"${rule.dep}" is pinned inconsistently:\n${lines.join("\n")}`;
 }
 
@@ -146,7 +169,8 @@ async function main(): Promise<void> {
       console.error(`  ${failure}\n`);
     }
     console.error(
-      "  Set both manifests to one version, or drop the rule from scripts/verify-pins.ts\n" +
+      "  Set both manifests to one exact version, or drop the rule from\n" +
+        "  scripts/verify-pins.ts\n" +
         "  if the coupling is genuinely gone."
     );
     process.exitCode = 1;
