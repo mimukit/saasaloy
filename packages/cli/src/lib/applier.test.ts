@@ -1839,6 +1839,165 @@ describe("executePlan — plan-to-execute re-check (#98)", () => {
   });
 });
 
+// #49. `config.installed` used to be written from `plan.install` — intent, not outcome —
+// so a module whose file drifted between the plan and the write was recorded as installed
+// anyway, and `add` then skipped it on the next run, leaving no way to repair it. The list
+// now comes off what the run itself did. The gate is authorization, not bytes: only
+// `lateDrift` (bytes the approved plan never described) blocks a module.
+describe("executePlan — per-module completeness (#49)", () => {
+  it("reports every planned module complete on a clean run", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWithWrangler(), await dbCapability()],
+      config,
+      manifest,
+    });
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.completed).toStrictEqual(["api", "database"]);
+    expect(config.installed).toStrictEqual(["api", "database"]);
+  });
+
+  it("holds a drifted module out of completed and out of config.installed", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+
+    // Written after the plan was built: the user edited it while the confirmation was up,
+    // so the plan they approved does not describe these bytes.
+    const abs = join(root, "apps", "api", "src", "index.ts");
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, "// mine\n", "utf-8");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.lateDrift).toHaveLength(1);
+    expect(result.completed).toStrictEqual([]);
+    expect(config.installed).toStrictEqual([]);
+  });
+
+  it("still completes the modules the drifted one doesn't touch", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api", "database"],
+      modules: [await apiWithWrangler(), await dbCapability()],
+      config,
+      manifest,
+    });
+
+    const abs = join(root, "packages", "db", "src", "client.ts");
+    await mkdir(dirname(abs), { recursive: true });
+    await writeFile(abs, "// mine\n", "utf-8");
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.lateDrift.map((f) => f.module)).toStrictEqual(["database"]);
+    expect(result.completed).toStrictEqual(["api"]);
+    expect(config.installed).toStrictEqual(["api"]);
+  });
+
+  it("keeps a drifted module out even when it was already installed", async () => {
+    // The `--force` re-apply: the module is in `config.installed` before the run, and the
+    // run must not leave it there claiming bytes it never wrote.
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = [await apiCapability()];
+    await executePlan(
+      await plan({ install: ["api"], modules: mods, config, manifest }),
+      root,
+      config,
+      manifest
+    );
+    expect(config.installed).toStrictEqual(["api"]);
+
+    const second = await plan({
+      install: ["api"],
+      modules: mods,
+      config,
+      manifest,
+    });
+    await writeFile(
+      join(root, "apps", "api", "src", "index.ts"),
+      "// edited while the prompt was up\n",
+      "utf-8"
+    );
+
+    const result = await executePlan(second, root, config, manifest);
+
+    expect(result.completed).toStrictEqual([]);
+  });
+
+  it("counts a plan-time held-back file as no obstacle", async () => {
+    // A file that was already there and untracked plans as `conflict`, and the user
+    // approved the plan *with* that file listed as held for merge. The approval stands.
+    const existing = join(root, "apps", "api", "package.json");
+    await mkdir(dirname(existing), { recursive: true });
+    await writeFile(existing, '{ "name": "hand-written" }\n', "utf-8");
+
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["api"],
+      modules: [await apiCapability()],
+      config,
+      manifest,
+    });
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.heldBack.map((f) => f.target)).toStrictEqual([
+      "apps/api/package.json",
+    ]);
+    expect(result.completed).toStrictEqual(["api"]);
+    expect(config.installed).toStrictEqual(["api"]);
+  });
+
+  it("counts a patch whose target is missing as no obstacle", async () => {
+    // File writes alone decide completeness; a patch failure is reported on its own.
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["database"],
+      modules: [await dbCapability()],
+      config,
+      manifest,
+    });
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(result.patchConflicts).toHaveLength(1);
+    expect(result.completed).toStrictEqual(["database"]);
+    expect(config.installed).toStrictEqual(["database"]);
+  });
+
+  it("completes a module that plans no files at all", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const teams = await writeModule("teams", { type: "saasaloy:feature" });
+    const p = await plan({
+      install: ["teams"],
+      modules: [teams],
+      config,
+      manifest,
+    });
+
+    const result = await executePlan(p, root, config, manifest);
+
+    expect(p.files).toStrictEqual([]);
+    expect(result.completed).toStrictEqual(["teams"]);
+    expect(config.installed).toStrictEqual(["teams"]);
+  });
+});
+
 // #98 fix round. Two modules in one run can ship the same target: `database` and its
 // driver `database-d1` both scaffold `packages/db/tsconfig.json`. Planned twice they
 // both classified `create`, the core's copy landed first, and `stillMatches` then read

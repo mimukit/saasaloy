@@ -2,12 +2,13 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   checkModule,
+  checkPartialInstalls,
   checkProject,
   checkTarget,
   registryModuleNames,
   resolveDoctorTarget,
 } from "./doctor.js";
-import type { ModuleReport } from "./doctor.js";
+import type { Finding, ModuleReport } from "./doctor.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 
@@ -258,6 +259,90 @@ describe("doctor — the conventions the schema cannot check", () => {
     const findings = await findingsFor("bad-skill");
 
     expect(findings[1]).toContain("no such folder: saasaloy-absent");
+  });
+});
+
+function manifestWith(managed: Record<string, string>): Manifest {
+  const manifest = emptyManifest();
+  for (const [target, module] of Object.entries(managed)) {
+    manifest.managed[target] = { hash: "sha256:x", module };
+  }
+  return manifest;
+}
+
+function messages(findings: Finding[]): string[] {
+  return findings.map((found) => `${found.where} ${found.message}`);
+}
+
+describe("checkPartialInstalls — a partial install (#49)", () => {
+  it("flags a module whose files are tracked but which is not installed", () => {
+    const findings = checkPartialInstalls({
+      installed: ["api"],
+      manifest: manifestWith({
+        "apps/api/src/routes/waitlist.ts": "waitlist",
+        "packages/api/src/index.ts": "api",
+      }),
+    });
+
+    expect(messages(findings)).toStrictEqual([
+      "/installed/waitlist partial install — re-run `saasaloy add waitlist`",
+    ]);
+    expect(findings[0]?.module).toBe("waitlist");
+  });
+
+  it("says nothing when every tracked module is installed", () => {
+    expect(
+      checkPartialInstalls({
+        installed: ["api", "waitlist"],
+        manifest: manifestWith({
+          "apps/api/src/routes/waitlist.ts": "waitlist",
+          "packages/api/src/index.ts": "api",
+        }),
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("reports one finding per module, whatever its file count, in name order", () => {
+    const findings = checkPartialInstalls({
+      installed: [],
+      manifest: manifestWith({
+        "a.ts": "waitlist",
+        "b.ts": "waitlist",
+        "c.ts": "api",
+      }),
+    });
+
+    expect(findings.map((found) => found.module)).toStrictEqual([
+      "api",
+      "waitlist",
+    ]);
+  });
+
+  it("counts a tracked patch and a tracked skill link, not only a written file", () => {
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      file: "apps/api/package.json",
+      module: "waitlist",
+      patch: {
+        kind: "package-json-dependency",
+        file: "apps/api/package.json",
+        name: "hono",
+        range: "4.0.0",
+        section: "dependencies",
+      },
+    });
+
+    expect(
+      messages(checkPartialInstalls({ installed: [], manifest }))
+    ).toStrictEqual([
+      "/installed/waitlist partial install — re-run `saasaloy add waitlist`",
+    ]);
+  });
+
+  it("says nothing about an empty project", () => {
+    expect(
+      checkPartialInstalls({ installed: [], manifest: emptyManifest() })
+    ).toStrictEqual([]);
   });
 });
 

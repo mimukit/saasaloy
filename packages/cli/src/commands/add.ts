@@ -34,9 +34,10 @@ import { planWritesUi } from "../lib/design.js";
 import { DEV_VARS_EXAMPLE, writeDevVarsExample } from "../lib/dev-vars.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
-import { loadLock, saveLock, upsertLock } from "../lib/lock.js";
+import { loadLock, LOCK_FILE, saveLock, upsertLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
+import type { Manifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
@@ -52,7 +53,9 @@ import {
   formatMissingRequirements,
 } from "../lib/requires.js";
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
-import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import type { Graph } from "../lib/resolve.js";
+import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
@@ -383,6 +386,157 @@ export function envSteps(
 }
 
 /**
+ * The line an incomplete apply ends on (#49). A module whose file was edited between the
+ * plan and the write is not installed, and staying quiet about it is the bug: the state
+ * files say one thing and the closing "Applied" would say another. Name the modules, and
+ * name the command that finishes the job — a plain re-run, because they are absent from
+ * `config.installed` and so get planned again, drift and all, for a fresh approval.
+ *
+ * `requested` is the module the user typed, not each incomplete name: re-running it
+ * re-plans the whole graph, including an incomplete dependency.
+ */
+export function formatIncomplete(
+  incomplete: string[],
+  requested: string
+): string {
+  const names = incomplete.map((name) => pc.cyan(name)).join(", ");
+  const verb = incomplete.length === 1 ? "is" : "are";
+  const object = incomplete.length === 1 ? "it" : "them";
+  return (
+    `${names} ${verb} not installed — files changed while the plan was open. ` +
+    `Re-run ${pc.cyan(`saasaloy add ${requested}`)} to complete ${object}.`
+  );
+}
+
+/**
+ * The line a thrown apply ends on (#49). `add` has no rollback by design: whatever
+ * landed before the throw stays, and the manifest, config and lock are written to
+ * describe it. That is only honest if the user is told, so state the model and name the
+ * command that finishes the job — the same plain re-run an incomplete run asks for,
+ * since the module never reached `config.installed`.
+ */
+export function formatRecovery(requested: string): string {
+  return (
+    "Partial apply — the manifest, config and lock describe what landed. " +
+    `Re-run ${pc.cyan(`saasaloy add ${requested}`)} to complete it.`
+  );
+}
+
+/** What `persistState` needs to write the three state files. */
+export interface PersistInput {
+  config: LoadedConfig;
+  /** The modules `executePlan` reported complete; `[]` when the apply threw. */
+  completed: string[];
+  graph: Graph;
+  lock: Lockfile;
+  manifest: Manifest;
+  root: string;
+  source: Pick<RegistrySource, "provenance">;
+}
+
+/**
+ * Write the manifest, the config and the lock, and never throw (#49).
+ *
+ * This runs on the way out of an apply, successful or not, so one broken step here must
+ * not take the others with it — nor replace the apply error that sent us this way. Each
+ * step is attempted on its own, a failure is reported, and the failures are returned for
+ * the caller to decide about.
+ *
+ * The lock is skipped when the source has no commit SHA to pin to. `provenance()` throws
+ * in that case, and it used to throw first, before any save ran: an unresolvable remote
+ * cost the user the manifest as well, and reported itself instead of the real error. A
+ * lock entry is a pin, not a record of disk, so having none is the correct answer.
+ *
+ * A separate function from `runAdd` because these rules are what the bug was, and they
+ * need injectable failures to test.
+ */
+export async function persistState(input: PersistInput): Promise<unknown[]> {
+  const failures: unknown[] = [];
+
+  // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly installed
+  // ones: an already-installed dependency keeps the SHA it was fetched at, so the lock
+  // never misstates on-disk provenance.
+  try {
+    upsertLock(
+      input.lock,
+      input.source.provenance(),
+      input.completed,
+      input.graph
+    );
+  } catch (error) {
+    failures.push(error);
+    log.warn(`Couldn't pin ${LOCK_FILE} — ${formatFailure(error)}.`);
+  }
+
+  // Record whatever actually landed even if a mid-plan write failed — a written file the
+  // manifest doesn't know about would classify as a conflict next run.
+  const saves: [string, () => Promise<void>][] = [
+    [MANIFEST_FILE, () => saveManifest(input.root, input.manifest)],
+    [CONFIG_FILE, () => saveConfig(input.root, input.config)],
+    [LOCK_FILE, () => saveLock(input.root, input.lock)],
+  ];
+  for (const [file, save] of saves) {
+    try {
+      await save();
+    } catch (error) {
+      failures.push(error);
+      log.warn(`Couldn't write ${file} — ${formatFailure(error)}.`);
+    }
+  }
+
+  return failures;
+}
+
+/** What `applyAndPersist` needs beyond the state files `persistState` writes. */
+export interface ApplyInput extends Omit<PersistInput, "completed"> {
+  /**
+   * Called once the apply itself is over, before any state file is written (#49). This
+   * is the edge of the window where a failure can leave files on disk, and the caller
+   * needs it to decide whether the run owes the user a recovery line.
+   */
+  onApplied?: () => void;
+  plan: Plan;
+}
+
+/**
+ * Run the plan and record what it did, whichever way it goes (#98, #49).
+ *
+ * All three state files leave `add` through this one path, so no exit skips one of them.
+ * They pin what the apply reported complete rather than what the plan intended, so a run
+ * that threw pins nothing and `config.installed` and the lock never disagree, not even
+ * under `--force`, where the module was already installed before the run.
+ *
+ * A failed apply propagates its own error; a failed save on an otherwise clean apply
+ * propagates that instead, because a run whose state files didn't land is not a success.
+ * The two are not the same failure, though, so `onApplied` marks the boundary between
+ * them for the caller.
+ */
+export async function applyAndPersist(input: ApplyInput): Promise<ApplyResult> {
+  let result: ApplyResult;
+  try {
+    result = await executePlan(
+      input.plan,
+      input.root,
+      input.config,
+      input.manifest
+    );
+  } catch (error) {
+    await persistState({ ...input, completed: [] });
+    throw error;
+  }
+  input.onApplied?.();
+
+  const failures = await persistState({
+    ...input,
+    completed: result.completed,
+  });
+  if (failures.length > 0) {
+    throw failures[0];
+  }
+  return result;
+}
+
+/**
  * The closing box: where the module's procedure is written down, and what the project
  * still needs from the operator. `add waitlist` used to end at "Applied" while the
  * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
@@ -479,6 +633,10 @@ export async function runAdd(argv: string[]): Promise<number> {
   let plan: Plan;
   let prereqs: string[];
   let source: RegistrySource | undefined;
+  // Set to the requested module once the apply starts. It tells the catch below whether
+  // a failure could have left files on disk, so only those failures carry the re-run
+  // instruction — a bad coordinate or a missing descriptor writes nothing (#49).
+  let partial: string | undefined;
   try {
     // Load the lock up front so a named remote add can pin to the SHA it recorded — a
     // re-install then reproduces identical bytes (ADR 0012). Explicit `@ref` or the
@@ -693,29 +851,23 @@ export async function runAdd(argv: string[]): Promise<number> {
       }
     }
 
-    let result: ApplyResult;
-    try {
-      result = await executePlan(plan, root, config, manifest);
-    } finally {
-      // Record whatever actually landed even if a mid-plan write failed — a written
-      // file the manifest doesn't know about would classify as a conflict next run.
-      //
-      // The lock saves here too (#98): all three state files leave `add` through one
-      // path, so no exit skips one of them. It pins what `config.installed` records
-      // rather than what the plan intended — `executePlan` writes that list last, so a
-      // run that threw records no module in either file, and the two never disagree.
-      //
-      // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly
-      // installed ones: an already-installed dependency keeps the SHA it was fetched at,
-      // so the lock never misstates on-disk provenance.
-      const installed = plan.install.filter((name) =>
-        config.installed.includes(name)
-      );
-      upsertLock(lock, source.provenance(), installed, graph);
-      await saveManifest(root, manifest);
-      await saveConfig(root, config);
-      await saveLock(root, lock);
-    }
+    // For the length of the apply a failure can leave files on disk, so the catch below
+    // owes the user the re-run that completes them (#49). `onApplied` closes that window
+    // the moment the apply is over: a save that fails afterwards is its own story, and
+    // the re-run the recovery line advises would have nothing left to complete.
+    partial = requested;
+    const result = await applyAndPersist({
+      config,
+      graph,
+      lock,
+      manifest,
+      onApplied: () => {
+        partial = undefined;
+      },
+      plan,
+      root,
+      source,
+    });
 
     // Merge npm deps into the project root package.json (best-effort — never blocks the
     // apply). This trails `executePlan` on purpose (#98): a mid-plan failure throws past
@@ -788,6 +940,14 @@ export async function runAdd(argv: string[]): Promise<number> {
         "Changed under us"
       );
     }
+    // Which of those kept files cost their module its install, stated plainly. The run
+    // still exits 0: nothing failed, the user's own edit simply outranked the plan.
+    const incomplete = plan.install.filter(
+      (name) => !result.completed.includes(name)
+    );
+    if (incomplete.length > 0) {
+      log.warn(formatIncomplete(incomplete, requested));
+    }
     if (result.heldBack.length > 0) {
       const merges = result.heldBack
         .map((f) => `  ${ACTION_LABEL[f.action]}  ${f.target}`)
@@ -826,13 +986,25 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     printNextSteps(plan, result, devVarsPath, config.aliases);
 
+    // The closing line names what was installed, not what was planned (#49). When
+    // everything landed the two lists are the same and this reads as it always did.
     outro(
-      pc.green(
-        `Applied ${plan.install.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
-      )
+      result.completed.length > 0
+        ? pc.green(
+            `Applied ${result.completed.map((m) => pc.bold(m)).join(", ")} ${pc.dim(`(${result.written.length} files)`)}`
+          )
+        : pc.yellow(
+            `Nothing installed ${pc.dim(`(${result.written.length} files written)`)}`
+          )
     );
     return EXIT_OK;
   } catch (error) {
+    // A failure after the apply started leaves part of the module on disk. Nothing is
+    // rolled back, so say what the state files now describe and how to finish the job
+    // (#49) before the error itself closes the run.
+    if (partial) {
+      log.warn(formatRecovery(partial));
+    }
     cancel(formatFailure(error));
     return exitCodeFor(error);
   } finally {
