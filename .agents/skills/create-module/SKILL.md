@@ -44,10 +44,15 @@ described by the descriptor.
 
 ```
 modules/<name>/
-  registry-item.json     # name, type, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
+  registry-item.json     # name, type, requires{}, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
   files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
   skills/saasaloy-<name>/  # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/saasaloy-<name>/
 ```
+
+`saasaloy new module <name>` writes that skeleton (Step 2). Do not hand-write it: the CLI
+and this skill are one scaffolder, so a change to the shape lands in the command and both
+paths get it. Everything after the skeleton — the tier, the conventions, the vertical
+slice — is the judgment this skill carries, and the command has none of it.
 
 ## Step 1 — Pick the tier
 
@@ -73,15 +78,32 @@ you're adding a route + a table + some UI to things that already exist, it's a f
 > capability's workspace. Use [`create-provider`](../create-provider/SKILL.md) for those; it
 > assumes everything on this page and adds only the differences.
 
-## Step 2 — Write `registry-item.json`
+## Step 2 — Scaffold the skeleton, then fill in `registry-item.json`
 
-Start from this annotated feature example (waitlist) and trim/extend per tier:
+Run the CLI's own scaffold from the repo root. It takes the tier you settled in Step 1, so
+there is nothing to type twice:
+
+```sh
+saasaloy new module billing --type saasaloy:feature --depends-on api,database
+```
+
+It writes `modules/billing/registry-item.json` (schema-valid, `agent.skills[]` already
+pointing at the skill folder), an empty `modules/billing/files/`, and a
+`modules/billing/skills/saasaloy-billing/SKILL.md` stub with the frontmatter filled in and
+`TODO`s for the prose. Then it runs the `doctor` checks over what it wrote, so a fresh
+module starts green. Drop `--type` / `--depends-on` to be prompted for them instead, and
+run it in this repo — it refuses inside a generated project, where a `modules/` folder
+means nothing.
+
+The scaffold gives you the skeleton and stops. Everything below is what you fill in.
+Use this annotated feature example (waitlist) as the field reference:
 
 ```jsonc
 // modules/waitlist/registry-item.json
 {
   "name": "waitlist",
   "type": "saasaloy:feature",                 // or "saasaloy:capability"
+  "requires": { "saasaloy": ">=0.3" },        // optional — semver range the consumer's CLI must satisfy
   "dependsOn": ["api", "database"],           // capabilities this needs; resolved recursively
   "dependencies": ["zod@4.0.5"],              // consumer `dependencies` — exact-pinned name@version
   "devDependencies": ["@types/node@26.1.1"],  // optional — consumer `devDependencies` (@types/*, tooling)
@@ -111,6 +133,18 @@ Field notes:
 
 - **`name`** — matches the directory (`modules/<name>/`).
 - **`type`** — `saasaloy:capability` or `saasaloy:feature`.
+- **`requires`** — an optional `{ "saasaloy": "<semver range>" }` naming the CLI versions
+  this descriptor works on. A consumer whose CLI falls outside the range gets one fatal,
+  actionable message before anything is written, instead of an Ajv dump about a field the
+  old CLI never heard of — and instead of nothing at all when a field it does know has
+  changed meaning. Any range shape works, upper bounds included (`>=0.3`, `>=0.3 <2`,
+  `^1.2.0`, `1.x`), so there is no separate maximum field. The check is fatal and runs for
+  transitive `dependsOn` too, so declaring a floor you have not tested against refuses
+  installs that would have worked. Leave the field out unless you use something the older
+  CLI cannot do; a descriptor without it installs on every version, which is the right
+  default. `saasaloy new module` seeds it from the CLI that scaffolded the module, and
+  `saasaloy doctor` checks the range parses — it never compares it against your own CLI,
+  because your version is not the consumer's.
 - **`dependsOn`** — capabilities that must exist first. The applier resolves these recursively,
   topologically sorts them, and confirms with the user before installing (`waitlist` → `api`,
   `database`). Declare every hard prerequisite; mark genuinely optional ones as such in your
@@ -289,7 +323,8 @@ descriptor:
 
 A module carries the AI guidance for the capability it adds the same convention-based way it adds
 routes and schema: **by shipping a self-contained skill folder, never by editing a shared agent
-file.** Author `modules/<name>/skills/saasaloy-<name>/SKILL.md` and list it in `agent.skills[]`. At
+file.** Step 2's scaffold writes `modules/<name>/skills/saasaloy-<name>/SKILL.md` as a stub and
+lists it in `agent.skills[]`; replace its `TODO`s with the real runbook. At
 `add` time the applier **copies** that folder verbatim into the consumer's
 `.claude/skills/saasaloy-<name>/` and records it in `.saasaloy/manifest.json`, so `remove` deletes
 exactly what was copied.
@@ -367,8 +402,10 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 
 ## Authoring checklist
 
+- [ ] The skeleton came from `saasaloy new module <name>`, not from a hand-written file.
 - [ ] `modules/<name>/registry-item.json` present, `name` matches the directory.
 - [ ] `type` is `saasaloy:capability` or `saasaloy:feature` (capabilities carry `scaffolds`).
+- [ ] `requires.saasaloy` is left out, or names a range you have actually run the module on.
 - [ ] Every needed capability is in `dependsOn`, named as the capability and never as one of its
       drivers; every npm import is exact-pinned in `dependencies`/`devDependencies` (`name@version`;
       `pnpm deps:update` fills versions).
@@ -387,3 +424,4 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] The skill carries a `## Wire-up` section naming the file to edit, the import line, the tag
       with its client directive, and a suggested anchor marked as a suggestion.
 - [ ] Files are self-contained wiring (clean copy-in updates; no sentinel comments).
+- [ ] `saasaloy doctor modules/<name>` reports no findings.

@@ -17,6 +17,10 @@ import type {
   Plan,
   PlannedFile,
 } from "../lib/applier.js";
+import {
+  detectCliMismatches,
+  formatCliMismatches,
+} from "../lib/cli-requires.js";
 import { describeStaleOwner } from "../lib/collisions.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import {
@@ -53,6 +57,7 @@ import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
@@ -348,6 +353,36 @@ function wireUpSteps(
 }
 
 /**
+ * The environment half of the next-steps box.
+ *
+ * The variable names still print — they are what a reader scans for. What changed in #50
+ * is the instruction under them. `add` used to say "copy `.dev.vars.example` to
+ * `.dev.vars` and fill it in", which was the whole procedure and did nothing for a
+ * `PUBLIC_*` value, whose home is a frontend `.env` the example file never described.
+ * `saasaloy env` does both, so this points at it and leaves the example file as what it
+ * is: the checked-in record of what each variable means.
+ *
+ * Exported so the wording is pinned by a test — it is the one line telling a new user
+ * the next command exists.
+ */
+export function envSteps(
+  names: string[],
+  devVarsPath: string | undefined
+): string[] {
+  if (names.length === 0) {
+    return [];
+  }
+  const keys = names.toSorted();
+  const where = devVarsPath
+    ? ` ${pc.dim(`${devVarsPath} keeps the checked-in description of each.`)}`
+    : "";
+  return [
+    `Set ${keys.map((key) => pc.cyan(key)).join(", ")}.`,
+    `Run ${pc.cyan("saasaloy env")} — it prompts for each unset one and writes it to the ${pc.cyan(".dev.vars")} or ${pc.cyan(".env")} that reads it.${where}`,
+  ];
+}
+
+/**
  * The closing box: where the module's procedure is written down, and what the project
  * still needs from the operator. `add waitlist` used to end at "Applied" while the
  * project 500s until `db:generate` and `db:migrate:local` run, and the env vars it
@@ -376,15 +411,7 @@ function printNextSteps(
     );
   }
 
-  const envKeys = Object.keys(plan.envVars).toSorted();
-  if (envKeys.length > 0) {
-    lines.push(
-      `Set ${envKeys.map((key) => pc.cyan(key)).join(", ")}.`,
-      devVarsPath
-        ? `${pc.cyan(devVarsPath)} lists each one with its description — copy it to ${pc.cyan(".dev.vars")} and fill it in.`
-        : pc.dim("Each one is described in the plan above.")
-    );
-  }
+  lines.push(...envSteps(Object.keys(plan.envVars), devVarsPath));
 
   if (lines.length === 0) {
     return;
@@ -509,6 +536,24 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     let graph = await resolveGraph(source, requested);
 
+    // `requires.saasaloy` — the descriptor's floor on the CLI reading it (#50). Checked
+    // before the driver prompt and before a single file is planned, because a CLI too old
+    // to understand the descriptor cannot be trusted to resolve the rest of it either.
+    // The graph holds every transitive prerequisite, so a range declared three levels down
+    // refuses here and the message names that module, not the one the user typed.
+    const cliVersion = await readVersion();
+    const cliCheckFails = (): boolean => {
+      const mismatches = detectCliMismatches({ cliVersion, graph });
+      if (mismatches.length === 0) {
+        return false;
+      }
+      cancel(formatCliMismatches(mismatches, requested, cliVersion));
+      return true;
+    };
+    if (cliCheckFails()) {
+      return EXIT_REFUSED;
+    }
+
     // `requiresOneOf` — a capability naming its mutually exclusive drivers. Settle it
     // before the conflict check below, so that check reads the graph a picked driver is
     // already part of (#98).
@@ -545,6 +590,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     if (unmet.length > 0) {
       cancel(formatMissingRequirements(unmet, requested));
+      return EXIT_REFUSED;
+    }
+
+    // A driver the user just picked is a descriptor this run never saw above, so its own
+    // `requires` is checked here too — still before anything is planned.
+    if (cliCheckFails()) {
       return EXIT_REFUSED;
     }
 

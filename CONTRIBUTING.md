@@ -108,14 +108,43 @@ Fixtures for both live in `packages/cli/test/fixtures/`, outside `src/` because 
 by design — `registry-broken/` is what `saasaloy doctor`'s tests read, and one descriptor there is
 not parseable JSON at all. That directory is in `.prettierignore` for the same reason.
 
+### Starting a module
+
+`saasaloy new module <name> [--type <tier>] [--depends-on <a,b>]` writes the skeleton: a schema-valid
+`modules/<name>/registry-item.json`, an empty `modules/<name>/files/`, and a
+`modules/<name>/skills/saasaloy-<name>/SKILL.md` stub whose frontmatter already matches the folder.
+It prompts for the tier and the dependencies when you leave the flags off, runs the `doctor` checks
+over what it wrote, and refuses inside a generated project — a `modules/` folder means nothing in a
+repo that installs modules rather than hosting them. The `create-module` skill runs this command for
+the skeleton and keeps the judgment: which tier, which conventions, and how thin a vertical slice can
+be. One scaffolder, not two.
+
 ### Checking a descriptor you wrote
 
 `saasaloy doctor [path]` validates module descriptors against `registry-item.schema.json` and against
 the conventions the schema cannot express: that every declared file is on disk, that every `target`
 names an alias the base template or some scaffold in the registry defines, that `dependsOn` resolves
 within the registry, that npm deps are exact-pinned, and that each `agent.skills` folder exists and
-carries the `saasaloy-` prefix ADR 0014 requires. It reports every violation, not the first, and
+carries the `saasaloy-` prefix ADR 0014 requires. It also checks that a `requires.saasaloy` range is
+a range it can parse — structurally only, never against the version of the CLI you happen to be
+running, because your CLI is not your consumer's. It reports every violation, not the first, and
 exits 2 when it finds any — so it works as a pre-publish gate.
+
+### Declaring the CLI a descriptor needs
+
+A descriptor sets `additionalProperties: false`, so an old CLI meeting a field it has never heard of
+already fails — as a raw Ajv dump, and not at all when an existing field merely changed meaning. The
+optional `requires.saasaloy` field turns both into one sentence, checked before any write is planned:
+
+```json
+{ "name": "waitlist", "type": "saasaloy:feature", "requires": { "saasaloy": ">=0.3" } }
+```
+
+Any semver range works, upper bounds included (`>=0.3 <2`, `^1.2.0`, `1.x`), so there is no separate
+maximum field. A CLI outside the range refuses the whole run and writes nothing, and it does so for a
+transitive `dependsOn` too — the message names the module in the chain that declared the range, not
+the one you typed. The matcher is `packages/cli/src/lib/semver.ts`, ~400 lines owned rather than the
+`semver` package added as a runtime dependency for one boolean.
 
 ```sh
 pnpm cli doctor modules            # the whole registry

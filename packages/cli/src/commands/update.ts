@@ -10,6 +10,10 @@ import {
   outro,
 } from "@clack/prompts";
 import pc from "picocolors";
+import {
+  detectCliMismatches,
+  formatCliMismatches,
+} from "../lib/cli-requires.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import {
@@ -36,6 +40,7 @@ import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import {
   buildUpdatePlan,
@@ -549,6 +554,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // anything is written: `executeUpdatePlan` applies the whole plan under one
     // confirmation, so a refusal here has to stop the run, not one module of it.
     const conflictRefusals: string[] = [];
+    // The same shape for `requires.saasaloy` (#50): a module's *new* version can declare
+    // a CLI floor its installed version never had, and that is exactly the case the field
+    // exists for. Collected across the run and refused before any plan is built.
+    const cliRefusals: string[] = [];
+    const cliVersion = await readVersion();
     const missingLockEntries = new Set<string>();
     // Every graph that resolved, kept for the combined check below.
     const resolvedGraphs: Graph[] = [];
@@ -573,6 +583,13 @@ export async function runUpdate(argv: string[]): Promise<number> {
         }
 
         resolvedGraphs.push(graph);
+        const cliMismatches = detectCliMismatches({ cliVersion, graph });
+        if (cliMismatches.length > 0) {
+          cliRefusals.push(
+            formatCliMismatches(cliMismatches, comparison.name, cliVersion)
+          );
+          continue;
+        }
         const report = detectConflicts({ graph, config, lock });
         for (const name of report.missingLockEntries) {
           missingLockEntries.add(name);
@@ -666,6 +683,13 @@ export async function runUpdate(argv: string[]): Promise<number> {
           `any conflict they declare can't be checked ${pc.dim("(re-add them to record it)")}.`,
         TUI_ON_STDERR
       );
+    }
+    // A CLI too old for one of the incoming descriptors stops the whole run, ahead of the
+    // conflict report: there is no point resolving a driver choice with an applier that
+    // cannot read the module it would resolve it for.
+    if (cliRefusals.length > 0) {
+      cancel(cliRefusals.join("\n"), TUI_ON_STDERR);
+      return EXIT_REFUSED;
     }
     if (conflictRefusals.length > 0) {
       cancel(conflictRefusals.join("\n"), TUI_ON_STDERR);

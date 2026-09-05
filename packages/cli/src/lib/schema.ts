@@ -153,6 +153,12 @@ export type RegistryPatch = { file: string } & Patch;
 export interface RegistryItem {
   name: string;
   type: "saasaloy:capability" | "saasaloy:feature";
+  /**
+   * Tool versions this descriptor needs. `saasaloy` is a semver range the running CLI has
+   * to satisfy; a CLI outside it refuses the whole run before planning a single write,
+   * naming this module even when it arrived as a transitive `dependsOn` (#50).
+   */
+  requires?: { saasaloy?: string };
   dependsOn?: string[];
   /** Modules this one refuses to sit beside; `add` refuses rather than installing both. Recorded in the lockfile so the check works in either install order. */
   conflictsWith?: string[];
