@@ -1734,3 +1734,45 @@ describe("executeRemovePlan — revalidation between plan and execute", () => {
     expect((await lstat(linkAbs)).isSymbolicLink()).toBeFalsy();
   });
 });
+
+// #107 acceptance: the state `add` warns about is one `remove` clears completely. The
+// invariant is checked over the whole `managed` map, not the two contested paths.
+describe("remove clears a stale manifest owner (#107)", () => {
+  it("leaves no managed entry naming a module absent from installed", async () => {
+    // The state a reclaim leaves behind: `database-postgres` owns the files it rewrote,
+    // `database-d1` is still installed and owns nothing.
+    const manifest = emptyManifest();
+    await writeManaged(
+      manifest,
+      "packages/db/src/client.ts",
+      "pg\n",
+      "database-postgres"
+    );
+    await writeManaged(
+      manifest,
+      "packages/db/src/drizzle.config.ts",
+      "pg config\n",
+      "database-postgres"
+    );
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["database-d1", "database-postgres"],
+    };
+    const lock = emptyLock();
+
+    const plan = await build("database-d1", config, manifest, lock);
+    expect(plan.files).toHaveLength(0);
+    await executeRemovePlan(plan, { root, config, manifest, lock });
+
+    expect(config.installed).toStrictEqual(["database-postgres"]);
+    const installed = new Set(config.installed);
+    const orphans = Object.entries(manifest.managed).filter(
+      ([, entry]) => !installed.has(entry.module)
+    );
+    expect(orphans).toStrictEqual([]);
+    // The rival's files are still there — removing the stale owner deletes nothing.
+    await expect(
+      readFile(join(root, "packages/db/src/client.ts"), "utf-8")
+    ).resolves.toBe("pg\n");
+  });
+});

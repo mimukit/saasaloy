@@ -1,7 +1,11 @@
 import { cancel, intro, log, note, outro } from "@clack/prompts";
-import { relative } from "node:path";
+import { join, relative } from "node:path";
 import pc from "picocolors";
-import { checkTarget, resolveDoctorTarget } from "../lib/doctor.js";
+import {
+  checkProject,
+  checkTarget,
+  resolveDoctorTarget,
+} from "../lib/doctor.js";
 import type { ModuleReport } from "../lib/doctor.js";
 import {
   EXIT_OK,
@@ -10,6 +14,8 @@ import {
   formatFailure,
 } from "../lib/exit.js";
 import { pathExists } from "../lib/fs-utils.js";
+import { loadManifest } from "../lib/manifest.js";
+import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -19,6 +25,10 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // machine. It checks a local folder: one module (`doctor modules/waitlist`) or a whole
 // registry (`doctor modules`, the default). Validating a remote coordinate — the consumer
 // asking "is this module safe to add?" — is a separate command and a follow-up issue.
+//
+// A path carrying a `saasaloy.json` is checked as a project instead: the rules there read
+// `installed` against `.saasaloy/manifest.json` and report a module that owns no files
+// (#107).
 //
 // The rules live in `lib/doctor.ts`; this file is presentation and exit codes only. An
 // invalid descriptor is bad input, so a run with findings exits 2 (the refusal code),
@@ -65,6 +75,38 @@ function renderReport(report: ModuleReport, root: string): string {
   );
 }
 
+/** The project side of `doctor`: what `saasaloy.json` and the manifest say about each other. */
+async function reportProject(path: string): Promise<number> {
+  const config = await loadConfig(path);
+  const manifest = await loadManifest(path);
+  const findings = checkProject({ config, manifest });
+  if (findings.length === 0) {
+    const count = config.installed.length;
+    note(
+      wrapForNote(
+        config.installed.map((name) => `${pc.green("✔")} ${name}`).join("\n") ||
+          pc.dim("No modules installed.")
+      ),
+      `Checked ${count} installed module${count === 1 ? "" : "s"}`
+    );
+    outro(pc.green("No problems found."));
+    return EXIT_OK;
+  }
+
+  note(
+    wrapForNote(
+      findings
+        .map((found) => `${pc.yellow(found.module)}  ${found.message}`)
+        .join("\n")
+    ),
+    `${pc.yellow("Project state")} ${pc.dim(`(${findings.length})`)}`
+  );
+  cancel(
+    `${findings.length} problem${findings.length === 1 ? "" : "s"} in ${CONFIG_FILE}.`
+  );
+  return EXIT_REFUSED;
+}
+
 export async function runDoctor(argv: string[]): Promise<number> {
   const opts = parseArgs(argv);
   if (opts.unknown.length === 0 && wantsHelp(argv)) {
@@ -84,10 +126,25 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const path = opts.path ?? DEFAULT_PATH;
   try {
     if (!(await pathExists(path))) {
+      // The default path only exists in a registry repo, so a user standing in a
+      // scaffolded project lands here — and the refusal is the only place they can learn
+      // the project mode exists. Name `doctor .` when their directory carries a
+      // `saasaloy.json` (#107). A path they typed themselves gets the plain refusal.
+      const hint =
+        opts.path === undefined && (await pathExists(CONFIG_FILE))
+          ? ` Run \`saasaloy doctor .\` to check this project instead.`
+          : "";
       cancel(
-        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.`
+        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.${hint}`
       );
       return EXIT_REFUSED;
+    }
+
+    // A path carrying a `saasaloy.json` is a project, not a registry, so the project
+    // rules run instead of the descriptor ones (#107). The default path stays `modules`,
+    // so `saasaloy doctor` in a registry repo behaves exactly as it did.
+    if (await pathExists(join(path, CONFIG_FILE))) {
+      return await reportProject(path);
     }
 
     const target = await resolveDoctorTarget(path);

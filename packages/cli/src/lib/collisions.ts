@@ -183,6 +183,34 @@ function describeOwned(collision: OwnedCollision): string {
   );
 }
 
+/**
+ * A stale-ownership note: the manifest owner of a file that is gone, plus whether that
+ * owner still owns manifest entries this run does not take over. `remove` deletes every
+ * file a module owns, so the advice to run it is only safe when the owner is left owning
+ * nothing (#107).
+ */
+export interface StaleOwner extends OwnedCollision {
+  /** True when the owner keeps at least one managed entry after this run writes. */
+  ownerKeepsFiles: boolean;
+}
+
+/**
+ * One stale-ownership note as a sentence. The file is gone, so nothing is refused: the
+ * claim is legal and the run continues. What is left behind is an installed module that
+ * no longer owns the file it applied, and only `remove` clears that (#107).
+ *
+ * An owner that keeps other files is not stale once the run ends — `doctor` would not
+ * flag it — so that sentence states the transfer and stops. Naming `remove` there would
+ * tell the user to delete files they still use.
+ */
+export function describeStaleOwner(collision: StaleOwner): string {
+  const { target, owner, claimant, ownerKeepsFiles } = collision;
+  const head = `${owner} still owns ${target} in the manifest, but the file is gone — ${claimant} now writes it.`;
+  return ownerKeepsFiles
+    ? `${head} ${owner} keeps its other files, so leave it installed.`
+    : `${head} Run \`saasaloy remove ${owner}\` to drop the stale module.`;
+}
+
 /** The refusal `add` prints for files another installed module owns. */
 export function formatOwnedCollisions(
   collisions: OwnedCollision[],

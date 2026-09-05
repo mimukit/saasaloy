@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeStaleOwner,
   detectCollisions,
   detectOwnedCollisions,
   formatCollisions,
@@ -10,6 +11,7 @@ import type {
   FileCollision,
   ModuleTargets,
   OwnedCollision,
+  StaleOwner,
 } from "./collisions.js";
 import type { LoadedModule } from "./registry.js";
 
@@ -370,5 +372,43 @@ describe("formatOwnedCollisions — the refusal text", () => {
     expect(formatOwnedCollisions([owned]).split("\n")[0]).toBe(
       "Cannot add these modules — file owned by another module:"
     );
+  });
+});
+
+// #107. The missing-file half of the same fact. Nothing is refused, so the sentence has
+// to read as an instruction rather than a rejection.
+describe(describeStaleOwner, () => {
+  const stale: StaleOwner = {
+    target: "packages/db/src/client.ts",
+    owner: "database-d1",
+    claimant: "database-postgres",
+    ownerKeepsFiles: false,
+  };
+
+  it("names the stale owner, the path, the claimant, and the remove that clears it", () => {
+    const message = describeStaleOwner(stale);
+
+    expect(message).toContain("database-d1");
+    expect(message).toContain("packages/db/src/client.ts");
+    expect(message).toContain("database-postgres");
+    expect(message).toContain("saasaloy remove database-d1");
+  });
+
+  it("does not read as a refusal", () => {
+    const message = describeStaleOwner(stale);
+
+    expect(message).not.toContain("Cannot add");
+    expect(message).not.toContain("--force");
+  });
+
+  // `remove` deletes every file a module owns, so advising it while the owner still owns
+  // live files would tell the user to delete work they use.
+  it("withholds the remove advice while the owner keeps other files", () => {
+    const message = describeStaleOwner({ ...stale, ownerKeepsFiles: true });
+
+    expect(message).not.toContain("saasaloy remove");
+    expect(message).toContain("database-d1");
+    expect(message).toContain("packages/db/src/client.ts");
+    expect(message).toContain("leave it installed");
   });
 });
