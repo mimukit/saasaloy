@@ -131,6 +131,28 @@ export const resetPassword: EmailTemplate<ResetProps> = ({ name, resetUrl }) => 
   (`<a href="x">y</a>` → `y (x)`). Supply `text` by hand when the derived version reads badly; an
   explicit one always wins.
 
+### The JSX idiom, opt in with `email-react`
+
+The tagged template above is what `email` ships, and it stays the default: zero runtime
+dependencies, nothing to install, nothing added to the Worker bundle. For an email with real layout
+— columns, buttons, a header and footer that have to survive Outlook — `saasaloy add email-react`
+adds a second idiom alongside it, scaffolding `packages/email-react` with
+[React Email](https://react.email) as the render engine plus a preview server. Both idioms produce
+the same `{ subject, html, text }` object, so providers see no difference and a project mixes them
+per template.
+
+One thing changes at the call site. `@react-email/render` renders asynchronously under `workerd`,
+so a JSX template returns a **promise** rather than the core's synchronous `EmailTemplate<Props>`:
+
+```ts
+await mail.send({ to: user.email, ...(await welcome({ name, appName, ctaUrl })) });
+```
+
+The core contract, `deriveText()` and every provider are untouched by that module — see
+[ADR 0031](../../../../docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md). The
+full runbook (the `defineReactTemplate` helper, the preview-wrapper convention, when to pick which
+idiom) is the **`saasaloy-email-react`** skill, which that module installs.
+
 ## Providers
 
 | Module | Provider name | Needs | Adds |

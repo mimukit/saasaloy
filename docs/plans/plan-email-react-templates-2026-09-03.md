@@ -30,28 +30,52 @@ Hand-written HTML email ages badly across clients (Outlook, dark mode, table lay
 
 Reuses: the `EmailTemplate<Props>` type and `safeUrl` from `modules/email/files/src/provider.ts` / `render.ts`, the core's `deriveText()` fallback in `define.ts:resolve()`, the scaffold-workspace mechanism `modules/email/registry-item.json` already demonstrates, the `package-json-dependency` patch kind, and the `create-module` skill's descriptor conventions.
 
-### Phase 1: decision record
+### Phase 1: decision record (built 2026-09-03)
 
 - Add a note under §Templating in `docs/plans/plan-email-capability-module-2026-08-04.md`: reversed by this plan, link both ways.
 - Record the render-time and module-shape decision as an ADR under `docs/adr/` (the issue's acceptance asks for a recorded decision; the repo keeps ADRs for hard-to-reverse trade-offs). The ADR states the verdict: the opt-in module shape answers the bundle objection, and the Phase 3 measurement is recorded there as information, not judged against a budget.
 
-### Phase 2: the `email-react` module
+### Phase 2: the `email-react` module (built 2026-09-03)
 
 - `modules/email-react/registry-item.json`: `saasaloy:feature`, `dependsOn: ["email"]`, scaffold workspace `packages/email-react` (alias `@email-react`), patch `apps/api/package.json` dependency.
-- Scaffold files: `package.json` (deps above, the `react-email` CLI as a devDependency, a `dev` script for the preview server, `clean` via exact-pinned `rimraf`, `typecheck`), `tsconfig.json` (extends `@repo/tsconfig/base.json`, `"jsx": "react-jsx"`, workers types), `src/index.ts` re-exporting the helper and `safeUrl`, `src/templates/welcome.tsx` — the worked welcome template built from `@react-email/components` primitives directly (no bespoke JSX layout), same props as the tagged-template one, `safeUrl` on the CTA href, `text` set by the helper via `render({ plainText: true })`, plus a default-exported preview wrapper with sample props for the preview server.
+- Scaffold files: `package.json` (deps above, the `react-email` CLI as a devDependency, a `dev` script for the preview server, `clean` via exact-pinned `rimraf`, `typecheck`), `tsconfig.json` (extends `@repo/tsconfig/base.json`, `"jsx": "react-jsx"`; the workers types this line first asked for were dropped — see the measured result below), `src/index.ts` re-exporting the helper and `safeUrl`, `src/templates/welcome.tsx` — the worked welcome template built from `@react-email/components` primitives directly (no bespoke JSX layout), same props as the tagged-template one, `safeUrl` on the CTA href, `text` set by the helper via `render({ plainText: true })`, plus a default-exported preview wrapper with sample props for the preview server.
 - The `defineReactTemplate` helper renders the element with `render()` for `html` and `render({ plainText: true })` for `text`, and returns `{ subject, html, text }`.
 - Sibling skill `modules/email-react/skills/saasaloy-email-react/SKILL.md`; add one pointer line to `saasaloy-email`.
 - Add a pin-match rule to `deps:verify`: the `react` pin in `modules/email-react/files/package.json` must equal the one in `packages/cli/templates/base/packages/ui/package.json`.
 - Follow the `create-module` skill for descriptor shape and lint gates (`pnpm lint`, `pnpm deps:*` cover `modules/*/files/**`).
 
-### Phase 3: measure and verify end to end
+### Phase 3: measure and verify end to end (built 2026-09-03)
 
 - In `.dev`, scaffold a playground, `add email email-console email-react`, wire a route that sends the JSX welcome template. `pnpm typecheck` must pass.
 - Measure the Worker bundle: `wrangler deploy --dry-run --outdir` gzip size with the tagged-template welcome only vs with the JSX welcome imported. Record both numbers in the ADR and this plan as information (no budget gate — see the bundle-verdict decision).
 - Send end to end through `email-console`; eyeball the `render({ plainText: true })` output for readability.
 - Start the preview server (`pnpm --filter @repo/email-react dev`) and confirm the welcome template renders with its sample props.
 
-### Phase 4: docs and skill
+#### Measured result (2026-09-03)
+
+The decision is recorded in [ADR 0031](../adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md), which carries the same numbers.
+
+Taken in `.dev/playground` with `email`, `email-console` and `email-react` installed, on `wrangler 4.127.1`, with `wrangler deploy --dry-run --outdir` then `gzip -c <outdir>/index.js | wc -c`. One api route, differing only in which `welcome` it imports.
+
+| Route imports | Bundle | gzipped |
+|---|---|---|
+| `@repo/email/templates/welcome` (tagged) | 85,175 B | **22,239 B** |
+| `@repo/email-react/templates/welcome` (JSX) | 1,281,354 B | **284,871 B** |
+| delta | +1,196,179 B | **+262,632 B** (+256.5 KiB, 12.8x) |
+
+Recorded as information, not judged against a budget. A Worker's compressed limit is 3 MiB free / 10 MiB paid, so 278 KiB is not close to either, and only a project that installs the module pays it. The exact byte counts belong to the throwaway `apps/api` route used on 2026-09-03; a route of a different size moves both rows by a few bytes and leaves the delta where it is.
+
+Five things the implementation found that the plan did not predict:
+
+- **`packages/tsconfig/base.json` needs `"jsx": "react-jsx"`.** Internal packages are consumed as source, so `apps/api`'s own `tsc` compiles the `.tsx` template under `apps/api`'s tsconfig, not this package's, and fails `TS6142` without it. There is no tsconfig patch kind, so the shared base is the only lever.
+- **The `react-email` CLI's bin name is `email`, not `react-email`.** The `dev` script is `email dev --dir src/templates --port 3002`.
+- **The preview server needs an explicit port.** The CLI defaults to 3000, which `apps/web` already pins with `strictPort`, and the root `pnpm dev` starts every workspace's `dev` script together. 3001 is `apps/admin`, so the preview takes 3002.
+- **`@react-email/ui` must be a declared devDependency.** Without it `react-email@6.9.3` stops on an interactive install prompt, which hangs a non-interactive run.
+- **The scaffolded `tsconfig.json` carries no workers types.** Phase 2 asked for the `"types": ["@cloudflare/workers-types"]` entry `packages/email` sets. Nothing in `packages/email-react` reads a Worker global, and the preview CLI runs the same files under Node, so the entry and its devDependency would buy a constraint the package does not need. Add both the day a template reaches for a Worker global.
+
+End to end through `email-console`: `POST /mail` returned 200 with `{ subject, html, text }`, `html` starting `<!DOCTYPE html`, and the plaintext pass reading cleanly. The preview server started, listed `welcome`, and served the sample props. `@repo/api:typecheck` stays red on the two pre-existing `Bindings`/`LoggerEnv` errors that [ADR 0030](../adr/adr-0030-module-ui-ships-as-a-ui-package-block-2026-09-02.md) already records as present on main; every other workspace, `@repo/email-react` included, typechecks clean.
+
+### Phase 4: docs and skill (built 2026-09-03)
 
 - Update the template-contract section of `modules/email/skills/saasaloy-email/SKILL.md` to name the opt-in JSX idiom, and add the pointer line to `saasaloy-email-react`.
 - Write the `saasaloy-email-react` skill: the helper contract, `safeUrl` on hrefs, the preview-wrapper convention, and when to pick JSX over tagged templates.
