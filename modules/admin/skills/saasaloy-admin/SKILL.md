@@ -64,6 +64,14 @@ Three things the plugin owns, so do not hand-write them:
 - **Plugin order in `vite.config.ts`.** `tanstackRouter()` runs before `react()`. Reversed, the
   code-split rewrite lands on already-transformed output and the generated tree goes stale.
 
+Not-found and error handling comes with the root route as well. `__root.tsx` carries a
+`notFoundComponent` and an `errorComponent`, both rendering `@repo/ui`'s `ErrorState`, so an
+address matching no file under `src/routes/` shows the themed 404 inside the sidebar shell, and a
+throw during render shows a retry screen instead of a blank page. A feature module inherits both
+and registers neither: a second `notFoundComponent` on your own route captures every miss below it
+and answers with markup nobody else restyles. Change the words in
+`packages/ui/src/content/errors.ts`, not in a new component here.
+
 Adding the screen to `NAV_ITEMS` in `src/components/app-shell.tsx` is a separate, optional step.
 The `to` values are checked against the generated tree, so a nav entry for a route that does not
 exist fails `pnpm typecheck` rather than 404-ing in the browser.
@@ -288,6 +296,9 @@ files.
 - **A screen is a file drop** under `src/routes/`, never a patch. Let the plugin rewrite
   `src/routeTree.gen.ts`; never hand-edit it.
 - **`tanstackRouter()` stays ahead of `react()`** in `vite.config.ts`.
+- **Not-found and error screens are the root route's.** Inherit `__root.tsx`'s
+  `notFoundComponent` and `errorComponent`; do not register a second pair on a feature route, and
+  do not write error markup outside `@repo/ui`'s `ErrorState`.
 - **One `hc` call, in `src/lib/api.ts`.** Import `api`; do not build a second client.
 - **One origin for api and auth**, from `src/lib/auth.ts`'s `apiBaseUrl`. A split origin loses the
   session cookie.

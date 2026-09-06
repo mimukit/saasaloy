@@ -1,18 +1,42 @@
 // @ts-check
 import { fileURLToPath } from "node:url";
+import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
-// Static output — the marketing site is content-first and ships to Cloudflare as
-// Workers static assets (see wrangler.jsonc). No SSR adapter needed for the base;
-// an `add api`/`add admin` module introduces server runtime where it's actually used.
+// Static output — the marketing site is content-first, and every page here is
+// prerendered at build time. `output: "static"` is written out rather than left to the
+// default so the next person changing this file has to mean it.
+//
+// The Cloudflare adapter is registered anyway, and src/pages/500.astro is why. Astro
+// only treats a 500 page as an error handler when an adapter is present; without one it
+// is an ordinary page nothing ever routes to. The adapter also means the first page a
+// module drops in with `prerender = false` runs on demand with no config change and
+// inherits that same 500 screen.
+//
+// Registering it costs no Worker while everything is prerendered: the adapter builds in
+// assets-only mode, emits no server entry, and moves the site to dist/client. That move
+// is why wrangler.jsonc points `assets.directory` there — read its comment before you
+// change either file.
 //
 // The React integration ships in the base template itself (not per-feature) — every
 // downstream module (waitlist, admin, ui components) needs `.tsx` islands sooner or
 // later, so it's set up once here rather than patched in repeatedly.
 export default defineConfig({
   site: "https://example.com",
+  output: "static",
+  // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
+  // wanted, and writes a `SESSION` KV namespace binding with no id into the config it
+  // generates at dist/client/wrangler.json — which is the config `wrangler deploy` actually
+  // reads (see wrangler.jsonc). A prerendered marketing site stores no session, so that
+  // would be a namespace to provision for nothing. Note this is Astro's own `session`, not
+  // an adapter option; passing it to `cloudflare()` below does nothing.
+  session: false,
+  // `imageService: "compile"` optimises images during the build and serves the results
+  // as plain assets. The adapter's default would reach for Cloudflare's IMAGES binding
+  // at runtime, which needs a Worker this site does not have.
+  adapter: cloudflare({ imageService: "compile" }),
   integrations: [react()],
   // Fixed dev port. Every cross-origin consumer in this repo — the api Worker's CORS
   // allowlist, auth's `trustedOrigins`, the waitlist form's `PUBLIC_API_URL` fallback —

@@ -30,7 +30,7 @@ One shared block, four call sites (web 404, web 500, admin not-found, admin erro
 
 Rejected: per-app markup with no shared block (two copies to keep in step); full `output: "server"` (ends the static marketing-site model); an on-demand 500 page (renders inside a failing request and can leak internals).
 
-### Phase 1: the shared error block (#118)
+### Phase 1: the shared error block (#118) (built 2026-09-06)
 
 - Add `packages/ui/src/content/errors.ts` with copy for the not-found, the render-failure, and the server-failure cases. Follow the shape rules written at the top of `content/landing.ts`: max three levels, stable ids, single-brace `{token}` placeholders through `lib/interpolate.ts`, no runtime concatenation. Point back at `landing.ts`'s preamble instead of copying it.
 - Add `packages/ui/src/blocks/error-state.tsx` exporting `ErrorState`. Props: required `code` label, title, description, and one or two actions; copy defaults come from `content/errors.ts`.
@@ -38,14 +38,14 @@ Rejected: per-app markup with no shared block (two copies to keep in step); full
 - `packages/ui/package.json` already exports `./blocks/*` and `./content/*`; no export-map change.
 - Verify with `pnpm lint` (four passes) and `pnpm typecheck`.
 
-### Phase 2: `apps/web` 404, 500, and the Cloudflare adapter (#118)
+### Phase 2: `apps/web` 404, 500, and the Cloudflare adapter (#118) (built 2026-09-06)
 
 - Add `@astrojs/cloudflare` (exact-pinned) to `packages/cli/templates/base/apps/web/package.json` and register it in `astro.config.mjs`. Keep `output: "static"`; do not set `prerender = false` on any page. Rewrite the config's "no SSR adapter" comment to say why the adapter is there (the 500 page, and server runtime for future on-demand pages).
 - Add `src/pages/404.astro` and `src/pages/500.astro`. Both use `Layout.astro` exactly as `privacy.astro` does and render `ErrorState` with codes "404" and "500". `500.astro` stays prerendered and reads nothing from the failed request.
 - Update `wrangler.jsonc`: add `main` pointing at the adapter's Worker output, keep `assets` with `"not_found_handling": "404-page"`, rewrite the "pure static site" comment. Verify the exact `main` path and any `assets.binding` the adapter's current docs require.
 - Confirm behavior against `wrangler dev` over the built output, not the Astro dev server; the dev server has its own error handling.
 
-### Phase 3: admin not-found and error screens (#118)
+### Phase 3: admin not-found and error screens (#118) (built 2026-09-06)
 
 - Add `notFoundComponent` to the root route in `modules/admin/files/src/routes/__root.tsx`, rendering `ErrorState` inside `AppShell` with a link to `/`.
 - Replace the bare `ErrorComponent` fallback in `RootError` with `ErrorState` (code "500", retry via the router's `reset`, home link). Keep the `NotAdminError` branch that renders `AccessDenied` ahead of it, untouched.
@@ -53,14 +53,14 @@ Rejected: per-app markup with no shared block (two copies to keep in step); full
 - Do not hand-edit `src/routeTree.gen.ts`. No file is added under `src/routes/`, so the tree should not move.
 - Update `modules/admin/registry-item.json` only if a new file lands under `files/`.
 
-### Phase 4: `apps/api` 404 envelope (#118)
+### Phase 4: `apps/api` 404 envelope (#118) (built 2026-09-06)
 
 - Add `.notFound((c) => c.json(errorFor(404, "not found"), 404))` to the `base` chain in `modules/api/files/src/index.ts`, next to `.onError(...)`. Both are single slots, so a later `chained-route` patch inherits them.
 - Keep the explicit `Hono<{ Bindings; Variables }>` annotation on `base` intact.
 - Comment that a wrong method also answers 404, per decision Q5.
 - A sub-app mounted with `.route()` inherits the handler as long as it sets none of its own, same as `onError`.
 
-### Phase 5: docs and module descriptors (#118)
+### Phase 5: docs and module descriptors (#118) (built 2026-09-06)
 
 - Record the block in the base template's `DESIGN.md` alongside the other blocks.
 - State the rule in `packages/cli/templates/base/AGENTS.md`: an app that adds a route surface answers a miss with `ErrorState`, and no app writes its own error markup. Note that a `prerender = false` page inherits `500.astro`.

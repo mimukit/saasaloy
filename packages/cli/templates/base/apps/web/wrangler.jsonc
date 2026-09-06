@@ -2,8 +2,26 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "{{PROJECT_NAME}}-web",
   "compatibility_date": "2026-07-22",
-  // Pure static site: serve Astro's build output as Workers static assets, no Worker code.
+  // Static assets, and still no Worker code — but the layout moved. Registering
+  // @astrojs/cloudflare in astro.config.mjs (for src/pages/500.astro) makes Astro build
+  // to dist/client + dist/server instead of a flat dist/. While every page is
+  // prerendered the adapter runs assets-only and leaves dist/server empty, so there is
+  // no `main` to point at here. Add one the day a page sets `prerender = false`, when
+  // the adapter writes the server entry.
+  //
+  // THIS FILE IS NOT THE CONFIG THAT DEPLOYS. The build writes
+  // .wrangler/deploy/config.json, which redirects wrangler to the adapter's own generated
+  // file at dist/client/wrangler.json — wrangler prints "Using redirected Wrangler
+  // configuration" when it does. The adapter merges what is below into that file and adds
+  // its own keys, so an edit here only reaches production through that merge. Read
+  // dist/client/wrangler.json off a real build to see what actually ships, and run
+  // `wrangler deploy --dry-run` after changing anything here.
   "assets": {
-    "directory": "./dist",
+    "directory": "./dist/client",
+    // An address matching no asset gets dist/client/404.html with a real 404 status,
+    // instead of Cloudflare's empty miss. Do not change this to
+    // "single-page-application" — that is the admin app's setting, and here it would
+    // answer every typo with the home page at status 200.
+    "not_found_handling": "404-page",
   },
 }

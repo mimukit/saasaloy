@@ -144,7 +144,20 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
       const log = c.get("log") ?? createLogger(c.env);
       log.error("unhandled error", { err });
       return c.json(errorFor(500, "internal error"), 500);
-    });
+    })
+    // Hono's built-in miss answers plain text `404 Not Found`, which would be the one
+    // response in this Worker that is not the envelope above. This makes it the same
+    // shape, so a caller parses one body for every failure.
+    //
+    // A wrong method on a real path lands here too, and answers 404 rather than 405.
+    // That is Hono's model — a route is a (method, path) pair, so `POST /health` matches
+    // nothing — and it is the decision: 405 would mean tracking which methods each path
+    // registers, and it tells an unauthenticated caller that the path exists.
+    //
+    // Like `onError`, `notFound` is a single slot on the chain rather than ordered
+    // middleware, so a `chained-route` patch that lands after it still inherits it, and
+    // so does a sub-app mounted with `.route()` that sets none of its own.
+    .notFound((c) => c.json(errorFor(404, "not found"), 404));
 
 // The typed route chain. Every mounted route is one `.route()` link in a single
 // expression, so `typeof app` carries each path, its input, and its response shape —
