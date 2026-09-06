@@ -42,7 +42,7 @@
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "wrangler",
-      "range": "4.128.0"
+      "range": "4.129.0"
     }
   ],
   "files": [

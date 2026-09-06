@@ -17,6 +17,6 @@
     "@repo/tsconfig": "workspace:*",
     "@types/node": "26.4.1",
     "typescript": "7.0.2",
-    "wrangler": "4.128.0"
+    "wrangler": "4.129.0"
   }
 }
