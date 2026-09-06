@@ -45,11 +45,15 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.integration.config.ts test/e2e",
-    "test:matrix": "vitest run --config vitest.integration.config.ts test/matrix"
+    "test:matrix": "vitest run --config vitest.integration.config.ts test/matrix",
+    "release": "release-it",
+    "release:dry": "release-it --dry-run"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "12.0.0",
     "@types/node": "26.1.1",
     "@vitest/coverage-v8": "4.1.10",
+    "release-it": "21.0.2",
     "tsup": "8.5.1",
     "vitest": "4.1.10"
   },
