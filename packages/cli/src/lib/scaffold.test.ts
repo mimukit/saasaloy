@@ -2,6 +2,7 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import cliPackage from "../../package.json" with { type: "json" };
 import { hashContent, pathExists } from "./fs-utils.js";
 import { BASE_DECLARATION, copyTemplate, templateVars } from "./scaffold.js";
 
@@ -9,7 +10,8 @@ describe("init template variables", () => {
   it("includes the CLI package version", () => {
     expect(templateVars("demo-app")).toStrictEqual({
       PROJECT_NAME: "demo-app",
-      CLI_VERSION: "0.0.0",
+      // Read from the package rather than pinned, so a release bump does not fail this.
+      CLI_VERSION: cliPackage.version,
     });
   });
 });

@@ -17,6 +17,7 @@ import {
   expect,
   it,
 } from "vitest";
+import cliPackage from "../../package.json" with { type: "json" };
 import type { Plan, PlannedFile } from "../lib/applier.js";
 import { pathExists } from "../lib/fs-utils.js";
 import { emptyLock } from "../lib/lock.js";
@@ -739,8 +740,10 @@ describe("runAdd — --force and the already-installed early return", () => {
 
 // `requires.saasaloy` at the command level (#50): the range is checked against the
 // running CLI before a plan is built, so a refusal leaves the project byte-identical.
-// The CLI's own version is 0.0.0, which is why `>=0.3` is the unsatisfiable case here
-// and `>=0.0.0` is the satisfiable one.
+// The ranges are derived from the CLI's own version so a release bump cannot flip a case:
+// `>=999` is the unsatisfiable one, `>=0.0.0` the satisfiable one.
+const CLI_VERSION = cliPackage.version;
+const CLI_MAJOR = CLI_VERSION.split(".")[0];
 describe("runAdd — a descriptor's requires.saasaloy", () => {
   let project: string;
   let registry: string;
@@ -808,13 +811,13 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
   });
 
   it("refuses a module whose range this CLI fails, and writes nothing", async () => {
-    await writeModule("widget", { requires: { saasaloy: ">=0.3" } });
+    await writeModule("widget", { requires: { saasaloy: ">=999" } });
     const { code, out } = await run(["widget", "--yes"]);
 
     expect(code).toBe(2);
     expect(out).toContain("widget");
-    expect(out).toContain(">=0.3");
-    expect(out).toContain("0.0.0 is installed");
+    expect(out).toContain(">=999");
+    expect(out).toContain(`${CLI_VERSION} is installed`);
     expect(out).toContain("pnpm add --global saasaloy@latest");
     await expect(
       pathExists(join(project, "apps", "web", "widget.ts"))
@@ -822,7 +825,7 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
   });
 
   it("is fatal for a transitive dependency, naming the module in the chain", async () => {
-    await writeModule("b", { requires: { saasaloy: ">=0.3" } });
+    await writeModule("b", { requires: { saasaloy: ">=999" } });
     await writeModule("a", { dependsOn: ["b"] });
     const { code, out } = await run(["a", "--yes"]);
 
@@ -837,14 +840,17 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
     ).resolves.toBeFalsy();
   });
 
-  it.each([">=0.0.0", ">=0.0.0 <2", "^0.0.0", "0.x", "*"])(
-    "accepts the range %j, upper bounds included",
-    async (range) => {
-      await writeModule("widget", { requires: { saasaloy: range } });
-      const { code } = await run(["widget", "--yes"]);
-      expect(code).toBe(0);
-    }
-  );
+  it.each([
+    ">=0.0.0",
+    ">=0.0.0 <999",
+    `^${CLI_VERSION}`,
+    `${CLI_MAJOR}.x`,
+    "*",
+  ])("accepts the range %j, upper bounds included", async (range) => {
+    await writeModule("widget", { requires: { saasaloy: range } });
+    const { code } = await run(["widget", "--yes"]);
+    expect(code).toBe(0);
+  });
 
   it("refuses a range it cannot parse rather than applying the module", async () => {
     await writeModule("widget", { requires: { saasaloy: ">=nope" } });
