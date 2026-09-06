@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.1.1](https://github.com/mimukit/saasaloy/compare/v0.1.0...v0.1.1) (2026-09-06)
+
+### Bug Fixes
+
+* **release:** ship a readme in the published tarball ([bd08378](https://github.com/mimukit/saasaloy/commit/bd08378e1f3a65e722b1edfea699e9715e0a0bd8))
+
 ## 0.1.0 (2026-09-06)
 
 ### ⚠ BREAKING CHANGES
