@@ -2,6 +2,25 @@
   "name": "saasaloy",
   "version": "0.0.0",
   "description": "Composable SaaS accelerator kit.",
+  "keywords": [
+    "saas",
+    "scaffold",
+    "starter",
+    "cli",
+    "astro",
+    "cloudflare-workers",
+    "drizzle",
+    "generator"
+  ],
+  "homepage": "https://github.com/mimukit/saasaloy#readme",
+  "bugs": {
+    "url": "https://github.com/mimukit/saasaloy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mimukit/saasaloy.git",
+    "directory": "packages/cli"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -12,21 +31,29 @@
     "templates",
     "schemas/*.schema.json"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24.13.0"
   },
   "scripts": {
     "build": "tsup",
+    "prepack": "pnpm run build",
     "dev": "tsup --watch",
     "start": "node ./dist/index.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:e2e": "vitest run --config vitest.integration.config.ts test/e2e",
-    "test:matrix": "vitest run --config vitest.integration.config.ts test/matrix"
+    "test:matrix": "vitest run --config vitest.integration.config.ts test/matrix",
+    "release": "release-it",
+    "release:dry": "release-it --dry-run"
   },
   "devDependencies": {
+    "@release-it/conventional-changelog": "12.0.0",
     "@types/node": "26.1.1",
     "@vitest/coverage-v8": "4.1.10",
+    "release-it": "21.0.2",
     "tsup": "8.5.1",
     "vitest": "4.1.10"
   },

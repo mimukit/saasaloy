@@ -2,6 +2,10 @@
 # a contributor runs locally, in the same order, so a green local tree is a green
 # CI run and the two never disagree about what "passing" means.
 #
+# The release preflight runs the same four, and `scripts/release-preflight.test.ts` reads
+# this file to prove it. Write a gate step as a bare `- run: pnpm <script>` so that test
+# still sees it.
+#
 # `deps:verify` is deliberately absent. It scaffolds .dev/playground and installs it
 # from the network, which is minutes of work and a third-party outage away from a red
 # build on a change that touched none of it. It belongs on a schedule, not on a push.

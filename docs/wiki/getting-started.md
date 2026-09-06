@@ -10,24 +10,32 @@ on disk, and its landing page running at `http://localhost:3000`.
   fails the install rather than breaking later. `nvm use` picks the floor up from `.nvmrc`, which
   is also the version CI runs.
 - **pnpm 11 or newer.** The repo is pinned to `pnpm@11.14.0`.
-- **git**, to clone the repo.
 
 Nothing here needs a Cloudflare account. `saasaloy init` scaffolds a static Astro site and
 touches no cloud service.
 
-## 1. Install the CLI from a clone
+## 1. Install the CLI
 
-`saasaloy` is not on npm yet, so you build it from source and link the binary:
+`saasaloy` is on npm. Install it globally:
 
 ```bash
-git clone https://github.com/mimukit/saasaloy.git
-cd saasaloy
-pnpm install
-pnpm cli:link
+npm install -g saasaloy
 ```
 
-`pnpm cli:link` builds `packages/cli` and puts a global `saasaloy` bin on your `PATH`.
-Check it worked:
+or, with pnpm:
+
+```bash
+pnpm add -g saasaloy
+```
+
+You can also skip the install and run it once. Every command on this page then needs the
+`npx saasaloy` prefix in place of `saasaloy`:
+
+```bash
+npx saasaloy init my-app
+```
+
+Check the install worked:
 
 ```bash
 saasaloy --help
@@ -37,14 +45,10 @@ You should see the five commands: `init`, `add`, `update`, `remove`, `list`, and
 global `--help`/`--version` flags below them. If the shell can't find
 `saasaloy`, pnpm's global bin directory isn't on your `PATH` — `pnpm setup` puts it there.
 
-Link from one checkout only. The global bin points at a single
-`packages/cli/dist/index.js`, so linking from a second worktree silently repoints the
-first. [`CONTRIBUTING.md`](../../CONTRIBUTING.md#global-linking-main-checkout-only) explains
-why, and describes the `.dev/playground` shim to use instead when you are developing
-modules.
-
-When [#46](https://github.com/mimukit/saasaloy/issues/46) lands, this section becomes an
-`npm install` and the clone stops being necessary.
+> **Working on Saasaloy itself?** Don't install the published CLI. Clone the repo and use
+> the `.dev/playground` shim, which runs your checkout's CLI against your checkout's
+> `modules/`. [`CONTRIBUTING.md`](../../CONTRIBUTING.md#manual-qa-the-devplayground)
+> describes it, and explains why global linking from a worktree breaks the other worktrees.
 
 ## 2. Scaffold a project
 
@@ -123,12 +127,5 @@ from any subdirectory.
   `saasaloy list` to see what the registry offers.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
   project before you let it.
-
-When you're done with the linked CLI, remove the global bin:
-
-```bash
-cd /path/to/saasaloy
-pnpm cli:unlink
-```
 
 _Verified against `main`@`a21fcce` on 2026-08-31._

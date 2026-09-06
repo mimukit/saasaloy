@@ -14,7 +14,7 @@ This repository is a monorepo.
 
 - We use [Turborepo]([https://turbo.build/repo](https://turbo.build/repo)) as our build system.
 
-- We do not use changesets, and there is no release process yet: the CLI is not published to npm, and installing it means cloning this repo and linking the built binary. [#46](https://github.com/mimukit/saasaloy/issues/46) tracks the publish and will bring a release flow with it.
+- We do not use changesets. The CLI is published to npm as [`saasaloy`](https://www.npmjs.com/package/saasaloy), and the maintainer cuts each release by hand with [release-it](https://github.com/release-it/release-it). See [Releasing](#releasing).
 
 ## Manual QA: the `.dev/playground`
 
@@ -61,7 +61,9 @@ shim — `cli:dev` has already rebuilt, so you're always testing the latest.
 runs `node --test` over `modules/*/files/**/*.test.ts` — the security-relevant pure functions a
 module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts` —
 and `pnpm test:scripts` runs the same runner over `scripts/**/*.test.ts`, which today covers the
-write path of `scripts/update-deps.ts`.
+write path of `scripts/update-deps.ts`, the pin rules in `scripts/verify-pins.ts`, and the two
+release scripts' pure decisions — the `workspace:` detector in `scripts/release-smoke.ts` and the
+skip flag in `scripts/release-preflight.ts`.
 
 That last file guards its `main()` call behind a `process.argv[1]` check, because a test importing
 its helpers must not start a registry scan. Keep the guard if you add another script test.
@@ -418,3 +420,85 @@ first, so a scanner that stopped matching fails loudly instead of passing everyt
 it by hand after touching a block or the content module; it is **not** in `deps:verify`,
 which builds a playground to answer a different question.
 
+
+## Releasing
+
+Only the maintainer releases. There is no automated publish: CI is a gate and never touches npm, and every release is cut by hand from a `main` checkout.
+
+One package is published — `packages/cli`, as [`saasaloy`](https://www.npmjs.com/package/saasaloy). The root package is private and stays at `0.0.0` forever. Modules are not published; the repo is the registry (ADR 0012).
+
+### When to release
+
+After a merged pull request, if it changed `packages/cli/**` — source, templates, or schemas.
+
+- A PR that only touched `modules/**` needs **no release**. The CLI fetches the registry from this repo at run time, so a module change reaches users the moment it lands on `main`.
+- A PR whose commits are all `docs`, `chore`, or `refactor` gets **no release**. Nothing a user runs changed.
+
+Nothing enforces this. Read the diff and decide.
+
+### Picking the bump
+
+release-it always asks. It never picks for you, because on `0.x` the conventional-commit recommendation is wrong more often than it is right.
+
+Before `1.0.0`:
+
+- A **breaking change** is a **minor** bump. `0.x` has no other channel for one.
+- `feat` is a **minor** bump.
+- `fix` and `perf` are a **patch** bump.
+
+`1.0.0` is a deliberate decision about the applier being stable. It is never the answer to a prompt you clicked through.
+
+### Running it
+
+From a clean `main` checkout — not a worktree, because the release commit and tag belong on `main`:
+
+```sh
+GITHUB_TOKEN=$(gh auth token) pnpm release
+```
+
+That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, creates the GitHub Release, and publishes to npm. It prompts before each step.
+
+To see the whole plan without doing any of it:
+
+```sh
+pnpm release:dry
+```
+
+### Machine setup
+
+Two pieces of state, and nothing else. A second machine needs both:
+
+- `gh auth login` — release-it reads `GITHUB_TOKEN` from the shell to create the GitHub Release.
+- `npm login`, on an account with 2FA. Confirm with `npm whoami`. release-it prompts for the OTP at publish time.
+
+There is no token in the repo and no OIDC provenance, because provenance needs a CI publish and CI does not publish.
+
+### The preflight
+
+Before release-it writes anything it runs `pnpm release:preflight`, which:
+
+1. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
+2. Runs `lint`, `typecheck`, `test`, and `verify:content` — the same four scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
+3. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime.
+
+On a rerun after a transient failure you can skip step 2:
+
+```sh
+SAASALOY_RELEASE_SKIP_GATE=1 GITHUB_TOKEN=$(gh auth token) pnpm release
+```
+
+Use it only when you have just watched the gate pass on this exact tree. Steps 1 and 3 always run.
+
+### Modules that need a new CLI
+
+If your PR makes a module depend on a CLI change, set that module's `requires.saasaloy` to the version that ships the change, and release at least a **minor**. See [Declaring the CLI a descriptor needs](#declaring-the-cli-a-descriptor-needs). Nothing checks this automatically; `cli-requires` then enforces your range fatally for every user.
+
+### If it fails after the push
+
+release-it has no rollback. Once the commit, tag, and push exist, the version is spent.
+
+1. **Never rerun `pnpm release` for the same version**, and never rewrite pushed `main` history.
+2. Fix whatever failed.
+3. Publish by hand from `packages/cli`: `npm publish`. `prepack` rebuilds `dist/` first.
+4. If the GitHub Release is missing, create it by hand with `gh release create vX.Y.Z --notes-from-tag`.
+5. If the failure is in the published package itself, fix it and release the next patch. Do not unpublish.

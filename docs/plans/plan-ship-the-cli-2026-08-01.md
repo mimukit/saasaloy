@@ -101,6 +101,8 @@ The first `.github/` content this repo has ever had.
 
 ### Phase 4 — Release automation via changesets
 
+> **Superseded by [`plan-manual-semver-release-2026-09-06.md`](plan-manual-semver-release-2026-09-06.md).** Changesets, the GitHub Actions publish, and OIDC trusted publishing are all dropped; the CLI releases from a local machine with release-it and CI never publishes.
+
 - Install `@changesets/cli` and run `changeset init`.
 - Configure `.changeset/config.json` to ignore the private root package (`saasaloy-cli`) — only
   `saasaloy` is publishable.
@@ -111,6 +113,8 @@ The first `.github/` content this repo has ever had.
   accurate (including how a contributor adds a changeset to their PR).
 
 ### Phase 5 — Release smoke gate
+
+> **Superseded by [`plan-manual-semver-release-2026-09-06.md`](plan-manual-semver-release-2026-09-06.md).** The smoke is `scripts/release-smoke.ts`, run from the release preflight rather than from a CI job, and it resolves modules offline through `SAASALOY_REGISTRY_DIR`.
 
 The guard that Phase 1's manual check becomes permanent.
 
