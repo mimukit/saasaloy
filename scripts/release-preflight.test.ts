@@ -19,6 +19,8 @@ import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   GATE_SCRIPTS,
+  hasGitHubToken,
+  missingTokenMessage,
   shouldSkipGate,
   staleMainMessage,
 } from "./release-preflight.ts";
@@ -69,6 +71,29 @@ describe("GATE_SCRIPTS", () => {
       "utf-8"
     );
     assert.deepEqual([...GATE_SCRIPTS], gateStepsInCi(yaml));
+  });
+});
+
+describe("hasGitHubToken", () => {
+  it("is false when the variable is unset", () => {
+    assert.equal(hasGitHubToken({}), false);
+  });
+
+  // `gh auth token` prints nothing and exits non-zero when gh is not logged in, so the
+  // root script hands the hook an empty string rather than no variable at all.
+  it("is false when the variable is empty or blank", () => {
+    assert.equal(hasGitHubToken({ GITHUB_TOKEN: "" }), false);
+    assert.equal(hasGitHubToken({ GITHUB_TOKEN: "  \n" }), false);
+  });
+
+  it("is true when the variable holds a token", () => {
+    assert.equal(hasGitHubToken({ GITHUB_TOKEN: "gho_example" }), true);
+  });
+});
+
+describe("missingTokenMessage", () => {
+  it("tells the maintainer how to recover", () => {
+    assert.match(missingTokenMessage(), /gh auth login/);
   });
 });
 

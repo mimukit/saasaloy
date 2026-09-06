@@ -453,8 +453,10 @@ Before `1.0.0`:
 From a clean `main` checkout — not a worktree, because the release commit and tag belong on `main`:
 
 ```sh
-GITHUB_TOKEN=$(gh auth token) pnpm release
+pnpm release
 ```
+
+Both release scripts read `GITHUB_TOKEN` from your shell and fall back to `gh auth token`, so you do not pass it by hand. Without a token release-it does not stop; it falls back to a web release and puts the whole changelog in a `releases/new` query string, and GitHub answers 414. The preflight fails on an empty token for that reason.
 
 That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, creates the GitHub Release, and publishes to npm. It prompts before each step.
 
@@ -468,7 +470,7 @@ pnpm release:dry
 
 Two pieces of state, and nothing else. A second machine needs both:
 
-- `gh auth login` — release-it reads `GITHUB_TOKEN` from the shell to create the GitHub Release.
+- `gh auth login` — the release scripts read `GITHUB_TOKEN` from the shell, or call `gh auth token` when it is unset, and release-it uses it to create the GitHub Release.
 - `npm login`, on an account with 2FA. Confirm with `npm whoami`. release-it prompts for the OTP at publish time.
 
 There is no token in the repo and no OIDC provenance, because provenance needs a CI publish and CI does not publish.
@@ -477,17 +479,18 @@ There is no token in the repo and no OIDC provenance, because provenance needs a
 
 Before release-it writes anything it runs `pnpm release:preflight`, which:
 
-1. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
-2. Runs `lint`, `typecheck`, `test`, and `verify:content` — the same four scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-3. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime.
+1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
+2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
+3. Runs `lint`, `typecheck`, `test`, and `verify:content` — the same four scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
+4. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime.
 
-On a rerun after a transient failure you can skip step 2:
+On a rerun after a transient failure you can skip step 3:
 
 ```sh
-SAASALOY_RELEASE_SKIP_GATE=1 GITHUB_TOKEN=$(gh auth token) pnpm release
+SAASALOY_RELEASE_SKIP_GATE=1 pnpm release
 ```
 
-Use it only when you have just watched the gate pass on this exact tree. Steps 1 and 3 always run.
+Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2 and 4 always run.
 
 ### Modules that need a new CLI
 

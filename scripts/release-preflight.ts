@@ -45,6 +45,26 @@ export function shouldSkipGate(env: NodeJS.ProcessEnv): boolean {
   return env[SKIP_GATE_ENV] === "1";
 }
 
+/**
+ * Whether release-it will be able to create the GitHub Release over the API.
+ *
+ * Without a token release-it does not fail. It falls back to a web release and puts the
+ * whole changelog in a `releases/new` query string, which GitHub rejects with 414 on any
+ * release big enough to matter. Catching it here turns that into a message.
+ */
+export function hasGitHubToken(env: NodeJS.ProcessEnv): boolean {
+  return (env.GITHUB_TOKEN ?? "").trim() !== "";
+}
+
+/** What to print when `GITHUB_TOKEN` is missing or empty. */
+export function missingTokenMessage(): string {
+  return (
+    "GITHUB_TOKEN is empty.\n" +
+    "  release-it would fall back to a web release and GitHub would reject the URL.\n" +
+    "  Run `gh auth login`, then start the release again."
+  );
+}
+
 /** What to print when local `main` and `origin/main` disagree. */
 export function staleMainMessage(local: string, remote: string): string {
   return (
@@ -90,6 +110,13 @@ function capture(args: readonly string[], label: string): string {
 }
 
 async function main(): Promise<void> {
+  // --- Can release-it reach the GitHub API? -------------------------------------------
+
+  if (!hasGitHubToken(process.env)) {
+    fail("no GitHub token", missingTokenMessage());
+  }
+  step("GITHUB_TOKEN is set");
+
   // --- Is this checkout what origin holds? ------------------------------------------
 
   step("fetching origin/main");
