@@ -18,14 +18,14 @@
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "@hono/zod-validator",
-      "range": "0.9.0"
+      "range": "0.9.1"
     },
     {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "zod",
-      "range": "4.5.2"
+      "range": "4.5.4"
     }
   ],
   "files": [],
