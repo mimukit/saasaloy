@@ -38,7 +38,7 @@ Rejected: per-app markup with no shared block (two copies to keep in step); full
 - `packages/ui/package.json` already exports `./blocks/*` and `./content/*`; no export-map change.
 - Verify with `pnpm lint` (four passes) and `pnpm typecheck`.
 
-### Phase 2: `apps/web` 404, 500, and the Cloudflare adapter (#118)
+### Phase 2: `apps/web` 404, 500, and the Cloudflare adapter (#118) (built 2026-09-06)
 
 - Add `@astrojs/cloudflare` (exact-pinned) to `packages/cli/templates/base/apps/web/package.json` and register it in `astro.config.mjs`. Keep `output: "static"`; do not set `prerender = false` on any page. Rewrite the config's "no SSR adapter" comment to say why the adapter is there (the 500 page, and server runtime for future on-demand pages).
 - Add `src/pages/404.astro` and `src/pages/500.astro`. Both use `Layout.astro` exactly as `privacy.astro` does and render `ErrorState` with codes "404" and "500". `500.astro` stays prerendered and reads nothing from the failed request.

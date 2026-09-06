@@ -1,0 +1,33 @@
+---
+// The server-failure page. Astro serves it when an on-demand page throws, which the
+// Cloudflare adapter registered in astro.config.mjs is what makes possible.
+//
+// Nothing in the base template renders on demand today, so nothing here can trigger it.
+// That is the point: the first page a module drops in with `prerender = false` inherits
+// this screen instead of a stack trace.
+//
+// Prerendered, and it reads nothing from the failed request — no `Astro.props.error`, no
+// status text, no path. A 500 page renders inside a request that already went wrong, so
+// anything it reports from that request is a leak waiting to happen, and the visitor can
+// do nothing with the detail anyway.
+//
+// That also rules out a retry control. A retry has to know which URL failed, and this
+// page is built once at build time with no request in hand — a "try again" that reloads
+// /500 would be a lie. The one action is the home page; the browser's own reload button
+// is the real retry.
+//
+// No `client:*` directive: ErrorState is static and ships no JavaScript.
+import { siteName } from "@repo/ui";
+import { ErrorState } from "@repo/ui/blocks/error-state";
+import { errors } from "@repo/ui/content/errors";
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title={`${errors.serverFailure.title} — ${siteName}`}>
+  <ErrorState
+    code={errors.serverFailure.code}
+    title={errors.serverFailure.title}
+    description={errors.serverFailure.description}
+    primaryAction={{ label: errors.serverFailure.homeLabel, href: "/" }}
+  />
+</Layout>

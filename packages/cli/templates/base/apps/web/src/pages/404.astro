@@ -1,0 +1,24 @@
+---
+// The wrong-path page. Astro prerenders it to dist/404.html, and wrangler.jsonc's
+// `assets.not_found_handling: "404-page"` is what makes Cloudflare serve it (with a real
+// 404 status) for an address that matches no asset and no route.
+//
+// No markup of its own: every error screen in this repo is @repo/ui's ErrorState, and
+// every word is @repo/ui/content/errors. Change the copy there, not here.
+//
+// No `client:*` directive, deliberately. ErrorState is static, so this page ships zero
+// JavaScript for it.
+import { siteName } from "@repo/ui";
+import { ErrorState } from "@repo/ui/blocks/error-state";
+import { errors } from "@repo/ui/content/errors";
+import Layout from "../layouts/Layout.astro";
+---
+
+<Layout title={`${errors.notFound.title} — ${siteName}`}>
+  <ErrorState
+    code={errors.notFound.code}
+    title={errors.notFound.title}
+    description={errors.notFound.description}
+    primaryAction={{ label: errors.notFound.homeLabel, href: "/" }}
+  />
+</Layout>
