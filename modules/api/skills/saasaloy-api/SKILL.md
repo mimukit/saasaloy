@@ -284,6 +284,13 @@ A feature module inherits that handler and **must not register a second one**. `
 sets none of its own, and a `notFound` on your own sub-app takes over every miss under its mount
 for no gain. Nothing in a route module needs miss plumbing.
 
+One mount is outside all of this, and it is worth knowing before you test a miss. A sub-app that
+mounts a catch-all answers every path under its prefix itself, so nothing under that prefix is ever
+a Hono miss and `base`'s `notFound` never runs there. The `auth` module is the case in the base:
+it mounts `.on(["GET", "POST"], "/*", ...)` and hands the whole subtree to better-auth, so
+`GET /auth/nope` comes back as a bare 404 with an empty body rather than the envelope. Every other
+mount answers the envelope on a miss.
+
 ## Run it locally
 
 ```sh
@@ -352,6 +359,7 @@ Deployment of all services is centralized in the future **`infra`** capability (
 - **`c.get("log")` for logging, never `console.log`** — a bare console call is unlevelled and
   uncorrelated, and it bypasses redaction.
 - **Inherit `base`'s `onError` and `notFound`.** A feature module registers neither of its own; a
-  miss under any mount already answers the 404 envelope.
+  miss under a normally mounted sub-app already answers the 404 envelope. A mount with a catch-all
+  route (`auth`) answers its own misses and never reaches that handler.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
