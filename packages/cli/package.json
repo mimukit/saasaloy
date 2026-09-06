@@ -39,7 +39,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "prepack": "pnpm run build",
+    "prepack": "pnpm -w run readme:cli && pnpm run build",
     "dev": "tsup --watch",
     "start": "node ./dist/index.js",
     "typecheck": "tsc --noEmit",

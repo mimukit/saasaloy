@@ -216,6 +216,9 @@ async function main(): Promise<void> {
     installedRoot,
     [
       "dist/index.js",
+      // npm reads the page from this file and nothing else. 0.1.0 shipped without it and
+      // the npm listing was blank, so prepack generates it and this line proves it packed.
+      "README.md",
       "templates/base/package.json",
       "schemas/saasaloy.schema.json",
     ],

@@ -466,6 +466,12 @@ To see the whole plan without doing any of it:
 pnpm release:dry
 ```
 
+### The npm README
+
+`packages/cli/README.md` is generated and gitignored. npm reads a package's README from the directory holding its `package.json` and nowhere else, so the repo root README never reaches the npm page on its own. `prepack` runs `pnpm readme:cli`, which copies the root README into `packages/cli/` and rewrites every relative link to an absolute `github.com` URL. npm resolves relative links against `repository.directory`, which is `packages/cli`, so `LICENSE.md` would otherwise 404.
+
+Edit the root `README.md`. Never edit the copy. `release:smoke` asserts `README.md` is in the tarball, which is the check that would have caught the blank npm page on 0.1.0.
+
 ### Machine setup
 
 Two pieces of state, and nothing else. A second machine needs both:

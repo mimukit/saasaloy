@@ -154,6 +154,9 @@ routeTree.gen.ts
 # ---- Saasaloy local dev playground (scaffolded by `pnpm play:init` / `play:watch`) ----
 /.dev/
 
+# ---- The CLI's npm README (generated from the root README by `pnpm readme:cli`) ----
+/packages/cli/README.md
+
 # ---- Environment & Secrets ----
 .env
 .env.local
