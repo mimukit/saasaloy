@@ -26,6 +26,13 @@ import { defineConfig } from "astro/config";
 export default defineConfig({
   site: "https://example.com",
   output: "static",
+  // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
+  // wanted, and writes a `SESSION` KV namespace binding with no id into the config it
+  // generates at dist/client/wrangler.json — which is the config `wrangler deploy` actually
+  // reads (see wrangler.jsonc). A prerendered marketing site stores no session, so that
+  // would be a namespace to provision for nothing. Note this is Astro's own `session`, not
+  // an adapter option; passing it to `cloudflare()` below does nothing.
+  session: false,
   // `imageService: "compile"` optimises images during the build and serves the results
   // as plain assets. The adapter's default would reach for Cloudflare's IMAGES binding
   // at runtime, which needs a Worker this site does not have.
