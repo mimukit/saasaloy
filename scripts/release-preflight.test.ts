@@ -14,6 +14,8 @@
 // suites. Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
   GATE_SCRIPTS,
@@ -43,14 +45,30 @@ describe("shouldSkipGate", () => {
   });
 });
 
+/**
+ * The `pnpm <script>` steps of ci.yml's gate job, in file order, minus the install.
+ *
+ * A regex and not a YAML parse: the repo has no YAML dependency, and adding one to read
+ * five lines costs more than it returns. It reads `- run: pnpm x` steps only, so a gate
+ * step written any other way goes missing rather than mismatching. The comment in ci.yml
+ * points back here for that reason.
+ */
+function gateStepsInCi(yaml: string): string[] {
+  return [...yaml.matchAll(/^\s*- run: pnpm ([\w:]+)(?: .*)?$/gm)]
+    .map((match) => match[1]!)
+    .filter((script) => script !== "install");
+}
+
 describe("GATE_SCRIPTS", () => {
   // The preflight exists so a release never depends on GitHub's view of CI. That only
-  // holds while this list is the same one ci.yml runs.
-  it("is the four scripts ci.yml runs, in the same order", () => {
-    assert.deepEqual(
-      [...GATE_SCRIPTS],
-      ["lint", "typecheck", "test", "verify:content"]
+  // holds while this list is the same one ci.yml runs, so read ci.yml rather than
+  // restating it: a step added, dropped or reordered there fails here.
+  it("is the scripts ci.yml runs, in the same order", async () => {
+    const yaml = await readFile(
+      join(import.meta.dirname, "../.github/workflows/ci.yml"),
+      "utf-8"
     );
+    assert.deepEqual([...GATE_SCRIPTS], gateStepsInCi(yaml));
   });
 });
 
