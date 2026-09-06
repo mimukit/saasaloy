@@ -1,6 +1,15 @@
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
-import { joinModulePath, pathExists, readDirNames } from "./fs-utils.js";
+import { BASE_MODULE, baseEntries, isBaseTracked } from "./base.js";
+import {
+  hashContent,
+  joinModulePath,
+  pathExists,
+  readDirNames,
+  readIfPresent,
+  resolveWithinRoot,
+} from "./fs-utils.js";
+import type { LockBase, Lockfile } from "./lock.js";
 import type { Manifest } from "./manifest.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
@@ -463,8 +472,9 @@ export function checkPartialInstalls(state: ProjectState): Finding[] {
   for (const patch of state.manifest.patches) {
     tracked.add(patch.module);
   }
+  // The base records its files under a reserved name and is never in `installed` (#120).
   return [...tracked]
-    .filter((name) => !installed.has(name))
+    .filter((name) => !installed.has(name) && name !== BASE_MODULE)
     .toSorted()
     .map((name) =>
       finding(
@@ -492,4 +502,72 @@ export async function checkTarget(
     );
   }
   return reports;
+}
+
+export interface BaseCheckArgs {
+  root: string;
+  lock: Lockfile;
+  manifest: Manifest;
+  /** The seed paths the running template declares — listed, never hashed. */
+  seedFiles: string[];
+}
+
+export interface BaseReport {
+  /** `untracked` when the project carries no usable record; `update` writes one. */
+  status: "tracked" | "untracked";
+  record?: LockBase;
+  /** Managed base files whose bytes no longer match their recorded hash. */
+  drifted: string[];
+  /** Managed base files the record names that are not on disk. */
+  missing: string[];
+  /** How many managed base files still match their recorded hash. */
+  matching: number;
+  /** Seed files — declared by the template, or recorded as such — reported but not checked. */
+  seed: string[];
+}
+
+/**
+ * The base half of `doctor <project>` (#120): is there a record, which CLI wrote it, and
+ * which managed base files moved since. A drifted file is information, not a problem —
+ * the owner is meant to edit the base — so this never contributes a `Finding`, and it
+ * never writes: an untracked base is reported and left for `update` to adopt.
+ */
+export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
+  const { root, lock, manifest } = args;
+  const seedSet = new Set(args.seedFiles);
+  if (!isBaseTracked(lock, manifest) || !lock.base) {
+    return {
+      status: "untracked",
+      drifted: [],
+      missing: [],
+      matching: 0,
+      seed: args.seedFiles.toSorted(),
+    };
+  }
+  const drifted: string[] = [];
+  const missing: string[] = [];
+  const seed: string[] = [];
+  let matching = 0;
+  for (const [target, entry] of Object.entries(baseEntries(manifest))) {
+    if (seedSet.has(target)) {
+      seed.push(target);
+      continue;
+    }
+    const mine = await readIfPresent(resolveWithinRoot(root, target));
+    if (mine === undefined) {
+      missing.push(target);
+    } else if (hashContent(mine) === entry.hash) {
+      matching++;
+    } else {
+      drifted.push(target);
+    }
+  }
+  return {
+    status: "tracked",
+    record: lock.base,
+    drifted: drifted.toSorted(),
+    missing: missing.toSorted(),
+    matching,
+    seed: seed.toSorted(),
+  };
 }

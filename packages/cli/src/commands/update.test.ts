@@ -1,6 +1,6 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import {
   afterAll,
   afterEach,
@@ -10,8 +10,27 @@ import {
   expect,
   it,
 } from "vitest";
+import {
+  BASE_INTENT,
+  BASE_MODULE,
+  baseEntries,
+  baseRecord,
+  recordBaseFiles,
+  templateHash,
+} from "../lib/base.js";
+import { hashContent, pathExists } from "../lib/fs-utils.js";
+import { emptyLock, loadLock, saveLock } from "../lib/lock.js";
+import type { Lockfile } from "../lib/lock.js";
+import { emptyManifest, loadManifest, saveManifest } from "../lib/manifest.js";
+import type { Manifest } from "../lib/manifest.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
+import {
+  baseTemplateDir,
+  copyTemplate,
+  templateVars,
+} from "../lib/scaffold.js";
 import { stripAnsi } from "../lib/tui.js";
+import { readVersion } from "../version.js";
 import { runUpdate } from "./update.js";
 
 // Both guards here reject bad input *before* the command reaches the registry, which is
@@ -154,12 +173,14 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     expect(output).toContain("No terminal to confirm in");
   });
 
+  // Past the gate, a project with no base record is adopted and the run stops (#120);
+  // the point here is only that the gate let it through.
   it("proceeds past the gate with `--yes` on a piped stdin", async () => {
     process.stdin.isTTY = false;
     process.stdout.isTTY = false;
     const [code, output] = await runCaptured(["--yes"]);
     expect(code).toBe(0);
-    expect(output).toContain("Nothing installed");
+    expect(output).not.toContain("No terminal to confirm in");
   });
 
   it("proceeds past the gate for a preview, which writes nothing", async () => {
@@ -167,7 +188,7 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     process.stdout.isTTY = false;
     const [code, output] = await runCaptured(["--dry-run"]);
     expect(code).toBe(0);
-    expect(output).toContain("Nothing installed");
+    expect(output).not.toContain("No terminal to confirm in");
   });
 
   it("proceeds past the gate on a terminal, with the merge plan piped away", async () => {
@@ -175,7 +196,7 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     process.stdout.isTTY = false;
     const [code, output] = await runCaptured([]);
     expect(code).toBe(0);
-    expect(output).toContain("Nothing installed");
+    expect(output).not.toContain("No terminal to confirm in");
   });
 });
 
@@ -223,9 +244,27 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       JSON.stringify({ aliases: { "@web": "apps/web" }, installed }),
       "utf-8"
     );
+    // A tracked, current base, so a bare run goes on to the modules rather than
+    // adopting the base and stopping (#120).
     await writeFile(
       join(project, "saasaloy-lock.json"),
-      JSON.stringify({ lockfileVersion: 1, modules }),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules,
+        base: {
+          name: "web",
+          cliVersion: await readVersion(),
+          templateHash: await templateHash(await baseTemplateDir()),
+        },
+      }),
+      "utf-8"
+    );
+    await mkdir(join(project, ".saasaloy"), { recursive: true });
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+      }),
       "utf-8"
     );
   }
@@ -301,5 +340,281 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     expect(code).toBe(0);
     expect(output).toContain("WIDGET_TOKEN");
     expect(output).toContain("Signs widget callbacks");
+  });
+});
+
+// #120. The base rides the module engine. These run offline: the template ships with the
+// CLI, so a "newer template" is simply a project whose lock records another hash and
+// whose files differ from today's render.
+describe("runUpdate — the base template (#120)", () => {
+  let project: string;
+  let templateDir: string;
+  let runningHash: string;
+  let cliVersion: string;
+
+  /** stderr (the TUI) and stdout (the merge plan), both captured. */
+  async function runBoth(
+    argv: string[]
+  ): Promise<{ code: number; err: string; out: string }> {
+    const out: string[] = [];
+    const originalOut = process.stdout.write.bind(process.stdout);
+    process.stdout.write = (chunk: string | Uint8Array) => {
+      out.push(stripAnsi(String(chunk)));
+      return true;
+    };
+    try {
+      const [code, err] = await runCaptured(argv);
+      return { code, err, out: out.join("") };
+    } finally {
+      process.stdout.write = originalOut;
+    }
+  }
+
+  beforeAll(async () => {
+    templateDir = await baseTemplateDir();
+    runningHash = await templateHash(templateDir);
+    cliVersion = await readVersion();
+  });
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-update-base-"));
+    process.chdir(project);
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    process.stdin.isTTY = ORIGINAL_STDIN_TTY;
+    process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
+    await rm(project, { recursive: true, force: true });
+  });
+
+  /** A project `init` scaffolded with today's CLI, recorded exactly as `init` records it. */
+  async function scaffolded(): Promise<{ manifest: Manifest; lock: Lockfile }> {
+    const written = await copyTemplate(
+      templateDir,
+      project,
+      templateVars(basename(project))
+    );
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, written);
+    const lock = { ...emptyLock(), base: baseRecord(cliVersion, runningHash) };
+    await saveManifest(project, manifest);
+    await saveLock(project, lock);
+    return { manifest, lock };
+  }
+
+  /** Make the record say an older template rendered the project: another hash, and `AGENTS.md` at old bytes. */
+  async function fromOlderTemplate(state: {
+    manifest: Manifest;
+    lock: Lockfile;
+  }): Promise<void> {
+    await writeFile(join(project, "AGENTS.md"), "old agent rules\n", "utf-8");
+    state.manifest.managed["AGENTS.md"]!.hash =
+      hashContent("old agent rules\n");
+    state.lock.base = baseRecord("0.0.0", "f".repeat(64));
+    await saveManifest(project, state.manifest);
+    await saveLock(project, state.lock);
+  }
+
+  async function lockOnDisk(): Promise<Lockfile> {
+    return loadLock(project);
+  }
+
+  it("adopts an unrecorded project at the running CLI, applies nothing, and exits 0", async () => {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await writeFile(join(project, "AGENTS.md"), "my own rules\n", "utf-8");
+
+    const { code, err } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).toMatch(/Adopted \d+ base files? at CLI/);
+    expect(err).toContain("saasaloy update");
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "my own rules\n"
+    );
+    const lock = await lockOnDisk();
+    expect(lock.base).toStrictEqual(baseRecord(cliVersion, runningHash));
+    const manifest = await loadManifest(project);
+    expect(manifest.managed["AGENTS.md"]).toMatchObject({
+      module: BASE_MODULE,
+      hash: hashContent("my own rules\n"),
+    });
+  });
+
+  it("re-adopts when the lock has a record but the manifest has no base entries", async () => {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await saveLock(project, {
+      ...emptyLock(),
+      base: baseRecord("0.0.0", "f".repeat(64)),
+    });
+
+    const { code, err } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).toContain("Adopted");
+    expect(
+      Object.keys(baseEntries(await loadManifest(project))).length
+    ).toBeGreaterThan(10);
+  });
+
+  it("previews the adoption under --dry-run and writes nothing", async () => {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+
+    const { code, err } = await runBoth(["--dry-run"]);
+
+    expect(code).toBe(0);
+    expect(err).toMatch(/Would adopt \d+ base files?/);
+    await expect(
+      pathExists(join(project, "saasaloy-lock.json"))
+    ).resolves.toBeFalsy();
+    await expect(pathExists(join(project, ".saasaloy"))).resolves.toBeFalsy();
+  });
+
+  it("refuses a downgrade, naming both versions, and writes nothing", async () => {
+    const state = await scaffolded();
+    state.lock.base = baseRecord("99.0.0", "f".repeat(64));
+    await saveLock(project, state.lock);
+
+    const { code, err } = await runBoth(["--yes"]);
+
+    expect(code).toBe(2);
+    expect(err).toContain("99.0.0");
+    expect(err).toContain(cliVersion);
+    expect(err).toContain("Upgrade");
+    expect((await lockOnDisk()).base?.cliVersion).toBe("99.0.0");
+  });
+
+  it("says the base is up to date when the recorded hash is the running one", async () => {
+    await scaffolded();
+
+    const { code, err } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).toContain("Everything is up to date");
+  });
+
+  it("overwrites a clean base file from an older template and moves the lock record", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+
+    const { code, err, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).toContain("AGENTS.md");
+    expect(out).toBe("");
+    const now = await readFile(join(project, "AGENTS.md"), "utf-8");
+    expect(now).not.toBe("old agent rules\n");
+    expect((await lockOnDisk()).base).toStrictEqual(
+      baseRecord(cliVersion, runningHash)
+    );
+    expect((await loadManifest(project)).managed["AGENTS.md"]?.hash).toBe(
+      hashContent(now)
+    );
+  });
+
+  it("routes a hand-edited base file to the merge plan on stdout and keeps the old record", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "old agent rules, plus mine\n",
+      "utf-8"
+    );
+
+    const { code, err, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("# Saasaloy merge plan");
+    expect(out).toContain("## base");
+    expect(out).toContain(BASE_INTENT);
+    expect(out).toContain("AGENTS.md");
+    expect(err).toContain("needs a merge");
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "old agent rules, plus mine\n"
+    );
+    expect((await lockOnDisk()).base).toStrictEqual(
+      baseRecord("0.0.0", "f".repeat(64))
+    );
+  });
+
+  it("writes the merge plan to --out and shows a diff under --diff", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "old agent rules, plus mine\n",
+      "utf-8"
+    );
+
+    const diff = await runBoth(["--diff"]);
+    expect(diff.code).toBe(0);
+    expect(diff.err).toContain("drift → merge");
+    expect(diff.err).toContain("- old agent rules, plus mine");
+
+    const applied = await runBoth(["--yes", "--out", "plan.md"]);
+    expect(applied.code).toBe(0);
+    expect(applied.out).toBe("");
+    await expect(
+      readFile(join(project, "plan.md"), "utf-8")
+    ).resolves.toContain(BASE_INTENT);
+  });
+
+  it("never touches a seed file, however far it drifted", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await writeFile(
+      join(project, "README.md"),
+      "rewritten by the owner\n",
+      "utf-8"
+    );
+    state.manifest.managed["README.md"]!.hash = "0".repeat(64);
+    await saveManifest(project, state.manifest);
+
+    const { code, err, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).not.toContain("README.md");
+    expect(out).not.toContain("README.md");
+    await expect(readFile(join(project, "README.md"), "utf-8")).resolves.toBe(
+      "rewritten by the owner\n"
+    );
+  });
+
+  it("targets the base alone under `update base`, without reading the modules", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    // A module with no lock entry would be reported as unresolvable on a bare run.
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: ["ghost"] })
+    );
+
+    const { code, err } = await runBoth(["base", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(err).not.toContain("ghost");
+    expect((await lockOnDisk()).base).toStrictEqual(
+      baseRecord(cliVersion, runningHash)
+    );
+  });
+
+  it("refuses `--ref` on the base", async () => {
+    await scaffolded();
+
+    const { code, err } = await runBoth(["base", "--ref", "v2", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(err).toContain("--ref");
   });
 });

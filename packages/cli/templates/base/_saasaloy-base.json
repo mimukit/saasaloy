@@ -1,0 +1,9 @@
+{
+  "seedFiles": [
+    "DESIGN.md",
+    "README.md",
+    "saasaloy.json",
+    "apps/web/src/pages/index.astro",
+    "packages/ui/src/content/landing.ts"
+  ]
+}

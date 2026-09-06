@@ -1,8 +1,8 @@
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
-import { pathExists } from "./fs-utils.js";
+import { hashContent, pathExists } from "./fs-utils.js";
 
 // Copy a template tree into a target dir, applying two conventions:
 //   - files named `_foo` become `.foo` (npm refuses to publish literal dotfiles
@@ -11,6 +11,14 @@ import { pathExists } from "./fs-utils.js";
 // All template files are UTF-8 text, so every file gets token substitution.
 
 export type TemplateVars = Record<string, string>;
+
+/**
+ * The base template's own declaration (#120): which of its files are seed — meant to be
+ * rewritten by the owner, so never updated — as an explicit path list. It describes the
+ * template and is not part of it, so `copyTemplate` skips it by this exact name, before
+ * the `_` → `.` rename would turn it into a dotfile in someone's project.
+ */
+export const BASE_DECLARATION = "_saasaloy-base.json";
 
 // The base template is bundled at <pkg>/templates/base. At runtime import.meta.url is
 // <pkg>/dist/index.js, so `../templates` resolves; under vitest it is <pkg>/src/lib/
@@ -37,26 +45,85 @@ export function templateVars(projectName: string): TemplateVars {
   return { PROJECT_NAME: projectName, CLI_VERSION: cliPackage.version };
 }
 
+/** The `_name` → `.name` rename, applied to one path segment. */
+export function renderedName(name: string): string {
+  return name.startsWith("_") ? `.${name.slice(1)}` : name;
+}
+
+/** One file `copyTemplate` wrote, described the way the manifest records it (#120). */
+export interface WrittenFile {
+  /** Absolute path of the file as written. */
+  path: string;
+  /** Project-relative POSIX path after the rename — the manifest key. */
+  target: string;
+  /** Template-relative POSIX path before the rename — the manifest's `from`. */
+  from: string;
+  /** sha256 of the rendered bytes, so hashing the template source is never mistaken for it. */
+  hash: string;
+}
+
+export interface CopyTemplateOptions {
+  /**
+   * Write under the source names (`_gitignore` stays `_gitignore`). `update` renders the
+   * template this way so each file's `from` resolves inside the render, while `target`
+   * still says where it lands in the project.
+   */
+  keepNames?: boolean;
+}
+
 export async function copyTemplate(
   srcDir: string,
   destDir: string,
-  vars: TemplateVars
-): Promise<string[]> {
-  const written: string[] = [];
+  vars: TemplateVars,
+  options: CopyTemplateOptions = {}
+): Promise<WrittenFile[]> {
+  return copyTree(srcDir, destDir, vars, options, "", "", true);
+}
+
+async function copyTree(
+  srcDir: string,
+  destDir: string,
+  vars: TemplateVars,
+  options: CopyTemplateOptions,
+  fromPrefix: string,
+  targetPrefix: string,
+  isRoot: boolean
+): Promise<WrittenFile[]> {
+  const written: WrittenFile[] = [];
   await mkdir(destDir, { recursive: true });
   const entries = await readdir(srcDir, { withFileTypes: true });
   for (const entry of entries) {
+    // The declaration describes the template; it is never part of a project.
+    if (isRoot && entry.name === BASE_DECLARATION) {
+      continue;
+    }
     const srcPath = join(srcDir, entry.name);
-    const outName = entry.name.startsWith("_")
-      ? `.${entry.name.slice(1)}`
-      : entry.name;
-    const destPath = join(destDir, outName);
+    const outName = renderedName(entry.name);
+    const destPath = join(destDir, options.keepNames ? entry.name : outName);
+    const from = posix.join(fromPrefix, entry.name);
+    const target = posix.join(targetPrefix, outName);
     if (entry.isDirectory()) {
-      written.push(...(await copyTemplate(srcPath, destPath, vars)));
+      written.push(
+        ...(await copyTree(
+          srcPath,
+          destPath,
+          vars,
+          options,
+          from,
+          target,
+          false
+        ))
+      );
     } else if (entry.isFile()) {
       const raw = await readFile(srcPath, "utf-8");
-      await writeFile(destPath, applyVars(raw, vars), "utf-8");
-      written.push(destPath);
+      const rendered = applyVars(raw, vars);
+      await writeFile(destPath, rendered, "utf-8");
+      written.push({
+        path: destPath,
+        target,
+        from,
+        hash: hashContent(rendered),
+      });
     }
   }
   return written;

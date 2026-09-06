@@ -149,9 +149,16 @@ the one you typed. The matcher is `packages/cli/src/lib/semver.ts`, ~400 lines o
 ```sh
 pnpm cli doctor modules            # the whole registry
 pnpm cli doctor modules/waitlist   # one module
+pnpm cli doctor .dev/playground    # a scaffolded project: installed vs manifest, plus the base
 ```
 
 It reads local folders only. Validating a remote coordinate is a separate command and a follow-up.
+
+Pointed at a project, `doctor` also prints a Base section: which CLI recorded the base template, which base files were edited since, which are missing, and the seed files it does not check. A project with no record reads `untracked`, and `saasaloy update` is what records it (ADR 0032).
+
+### Changing the base template
+
+Every file under `packages/cli/templates/base/` is a managed file in a scaffolded project, recorded at `init` under the module name `base` with the hash of its rendered bytes. `saasaloy outdated` compares the lock's template hash against the running CLI's, so any edit to the template turns the base row `outdated` for every project scaffolded before it, and `saasaloy update` then overwrites the clean copies and routes edited ones to the merge plan. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles`, as an explicit path; a test asserts every listed path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename.
 
 ### Resetting
 

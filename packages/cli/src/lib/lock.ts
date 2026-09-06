@@ -24,10 +24,28 @@ export interface LockModule extends ModuleProvenance {
   conflictsWith?: string[];
 }
 
+/**
+ * Where the base came from (#120). The base ships inside the CLI package rather than in
+ * a registry, so its provenance is a CLI version rather than a commit: `templateHash` is
+ * a sha256 over the shipped template's sorted `(path, hash)` pairs and is what `outdated`
+ * compares, and `cliVersion` is the label printed beside it. Every build is `0.0.0` until
+ * a release process exists, which is why the hash, not the version, carries the verdict.
+ */
+export interface LockBase {
+  /** The base app's name — `saasaloy.json`'s `base` field, `web`. */
+  name: string;
+  /** The CLI that rendered or adopted the base, from `readVersion()`. */
+  cliVersion: string;
+  /** sha256 over the shipped template as `templateHash()` computes it. */
+  templateHash: string;
+}
+
 export interface Lockfile {
   $schema?: string;
   lockfileVersion: number;
   modules: Record<string, LockModule>;
+  /** Absent on a project scaffolded before the base carried provenance; `update` adopts it. */
+  base?: LockBase;
 }
 
 export function emptyLock(): Lockfile {
@@ -69,6 +87,7 @@ export async function loadLock(root: string): Promise<Lockfile> {
     $schema: parsed.$schema ?? LOCK_SCHEMA_URL,
     lockfileVersion: parsed.lockfileVersion ?? LOCKFILE_VERSION,
     modules: parsed.modules ?? {},
+    ...(parsed.base ? { base: parsed.base } : {}),
   };
 }
 

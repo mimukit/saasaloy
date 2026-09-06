@@ -137,6 +137,32 @@ describe("lockfile shape", () => {
   });
 });
 
+describe("lockfile shape — the base record (#120)", () => {
+  it("validates a lock carrying a base record", async () => {
+    const lock = {
+      ...emptyLock(),
+      base: { name: "web", cliVersion: "0.0.0", templateHash: "f".repeat(64) },
+    };
+
+    await expect(validateLock(lock)).resolves.toMatchObject({ valid: true });
+  });
+
+  it("refuses a base record whose templateHash is not a digest", async () => {
+    const lock = {
+      ...emptyLock(),
+      base: { name: "web", cliVersion: "0.0.0", templateHash: "nope" },
+    };
+
+    await expect(validateLock(lock)).resolves.toMatchObject({ valid: false });
+  });
+
+  it("still validates a lock with no base record, so every existing lock stays valid", async () => {
+    await expect(validateLock(emptyLock())).resolves.toMatchObject({
+      valid: true,
+    });
+  });
+});
+
 describe("loadLock / saveLock", () => {
   let root: string;
 
@@ -150,6 +176,17 @@ describe("loadLock / saveLock", () => {
 
   it("returns an empty lock when the file is missing", async () => {
     expect((await loadLock(root)).modules).toStrictEqual({});
+  });
+
+  it("round-trips a base record through disk (#120)", async () => {
+    const lock = {
+      ...emptyLock(),
+      base: { name: "web", cliVersion: "0.0.0", templateHash: "f".repeat(64) },
+    };
+
+    await saveLock(root, lock);
+
+    expect((await loadLock(root)).base).toStrictEqual(lock.base);
   });
 
   it("round-trips through disk", async () => {

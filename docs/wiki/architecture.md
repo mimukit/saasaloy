@@ -70,7 +70,7 @@ them:
 | File | Holds |
 |---|---|
 | `saasaloy.json` | the alias map plus the list of installed modules. Also the marker that identifies the project root. |
-| `saasaloy-lock.json` | per module, the source, the requested ref, and the resolved commit SHA. |
+| `saasaloy-lock.json` | per module, the source, the requested ref, and the resolved commit SHA; plus a `base` object with the CLI version and template hash the base was rendered or adopted at. |
 | `.saasaloy/manifest.json` | every file and skill link a module applied, by owning module and content hash, plus the config patches it applied. |
 
 **Aliases decouple a module from your layout.** A descriptor targets

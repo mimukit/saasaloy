@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { BASE_INTENT, BASE_MODULE, BASE_NO_MERGE_BASE } from "./base.js";
 import { renderMergePlan } from "./merge-plan.js";
 import type {
   ModuleComparison,
@@ -296,6 +297,48 @@ describe(renderMergePlan, () => {
       })
     );
     expect(doc).toContain("pnpm --filter @repo/db db:generate");
+  });
+
+  it("renders a drifted base file with the base's intent line and its no-merge-base reason (#120)", () => {
+    const doc = plan([
+      modulePlan({
+        name: BASE_MODULE,
+        comparison: comparison({
+          name: BASE_MODULE,
+          source: "bundled template",
+          ref: "template",
+          current: "0.1.0 (aaaaaaa)",
+          latest: "0.2.0 (bbbbbbb)",
+        }),
+        noMergeBase: BASE_NO_MERGE_BASE,
+        baseRecord: {
+          name: "web",
+          cliVersion: "0.2.0",
+          templateHash: "b".repeat(64),
+        },
+        files: [
+          file({
+            module: BASE_MODULE,
+            from: "AGENTS.md",
+            target: "AGENTS.md",
+            base: undefined,
+            theirs: "v2\n",
+            mine: "v1 plus mine\n",
+          }),
+        ],
+        needsMerge: true,
+      }),
+    ]);
+
+    const out = renderMergePlan(doc);
+
+    expect(out).toContain("## base");
+    expect(out).toContain(BASE_INTENT);
+    expect(out).toContain(BASE_NO_MERGE_BASE);
+    expect(out).toContain("Source in the template: `AGENTS.md`");
+    expect(out).toContain("**theirs → mine**");
+    expect(out).toContain("0.1.0 (aaaaaaa)");
+    expect(out).toContain("0.2.0 (bbbbbbb)");
   });
 
   it("returns an empty document when nothing drifted", () => {

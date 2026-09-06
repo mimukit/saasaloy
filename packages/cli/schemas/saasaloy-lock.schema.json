@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saasaloy.dev/schemas/saasaloy-lock.schema.json",
   "title": "saasaloy-lock.json — resolved module provenance",
-  "description": "Machine-owned lock at a generated project's root: for every installed module, the registry source it came from, the ref requested, and the exact commit SHA resolved — so a re-install reproduces identical bytes. The npm-style lock to saasaloy.json's intent (build spec §2.11; ADR 0012). Integrity is the commit SHA itself; there is no separate integrity field.",
+  "description": "Machine-owned lock at a generated project's root: for every installed module, the registry source it came from, the ref requested, and the exact commit SHA resolved — so a re-install reproduces identical bytes. The npm-style lock to saasaloy.json's intent (build spec §2.11; ADR 0012). Integrity is the commit SHA itself; there is no separate integrity field. The optional `base` object records the template `saasaloy init` rendered, keyed by CLI version and template hash rather than a commit, because the base ships inside the CLI package (ADR 0032).",
   "type": "object",
   "additionalProperties": false,
   "required": ["lockfileVersion", "modules"],
@@ -14,6 +14,29 @@
     "lockfileVersion": {
       "const": 1,
       "description": "Lock format version; bumped only on a breaking shape change."
+    },
+    "base": {
+      "type": "object",
+      "description": "Provenance of the base template `init` rendered, or `update` adopted. Absent on a project scaffolded before the record existed; `saasaloy update` writes it.",
+      "additionalProperties": false,
+      "required": ["name", "cliVersion", "templateHash"],
+      "properties": {
+        "name": {
+          "type": "string",
+          "pattern": "^[a-z0-9][a-z0-9-]*$",
+          "description": "The base app's name — saasaloy.json's `base` field (`web`)."
+        },
+        "cliVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The CLI version that rendered or adopted the base. A label beside the hash: `outdated` compares `templateHash`, and `update` refuses a downgrade when both sides are real semver."
+        },
+        "templateHash": {
+          "type": "string",
+          "pattern": "^[a-f0-9]{64}$",
+          "description": "sha256 over the sorted (path, sha256) pairs of the template as shipped in the CLI package. Differs whenever any shipped template file differs."
+        }
+      }
     },
     "modules": {
       "type": "object",

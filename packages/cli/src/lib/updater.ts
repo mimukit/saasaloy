@@ -15,11 +15,12 @@ import {
   readIfPresent,
   resolveWithinRoot,
 } from "./fs-utils.js";
-import type { Lockfile, LockModule } from "./lock.js";
+import { BASE_MODULE, isBaseTracked } from "./base.js";
+import type { LockBase, Lockfile, LockModule } from "./lock.js";
 import { samePatchEntry } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
-import { parseDep, writeDeps } from "./pkg-json.js";
+import { parseDep, readRootPackageJson, writeDeps } from "./pkg-json.js";
 import type { DepChange, PackageJson } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
 import { classifyTrackedFile } from "./remover.js";
@@ -59,9 +60,10 @@ const DB_SCHEMA_FALLBACK = "packages/db/src/schema/";
  *   pinned        — the lock's `ref` is itself a SHA, so it is frozen by definition
  *   local         — installed from a working copy; nothing to re-resolve
  *   unresolvable  — no lock entry, or the source couldn't be reached
+ *   untracked     — the base only: no record to compare, `update` adopts it (#120)
  */
 export type UpdateStatus =
-  "current" | "outdated" | "pinned" | "local" | "unresolvable";
+  "current" | "outdated" | "pinned" | "local" | "unresolvable" | "untracked";
 
 export interface ModuleComparison {
   name: string;
@@ -213,6 +215,56 @@ export async function compareInstalled(
   }
 
   return out;
+}
+
+/** What the base row prints where a module prints its `owner/repo` and its ref. */
+export const BASE_SOURCE = "bundled template";
+export const BASE_REF = "template";
+
+export interface CompareBaseArgs {
+  lock: Lockfile;
+  manifest: Manifest;
+  /** `templateHash()` of the template the running CLI ships. */
+  runningHash: string;
+  /** `readVersion()` of the running CLI. */
+  runningVersion: string;
+}
+
+/** `0.2.0 (bbbbbbb)` — the version is the label, the hash is the verdict (#120). */
+function baseLabel(version: string, hash: string): string {
+  return `${version} (${hash.slice(0, 7)})`;
+}
+
+/**
+ * The base's row beside `compareInstalled`'s (#120). The base ships inside the CLI, so
+ * its comparison is the lock's `templateHash` against the running CLI's, with the two
+ * `cliVersion`s as labels: `current` when the hashes agree, `outdated` when they differ,
+ * `untracked` when the project carries no usable record. Never `local`: the template has
+ * no working-copy override, and a registry override says nothing about it.
+ */
+export function compareBase(args: CompareBaseArgs): ModuleComparison {
+  const { lock, manifest, runningHash, runningVersion } = args;
+  const latest = baseLabel(runningVersion, runningHash);
+  if (!isBaseTracked(lock, manifest) || !lock.base) {
+    return {
+      name: BASE_MODULE,
+      source: BASE_SOURCE,
+      ref: BASE_REF,
+      current: "untracked",
+      latest,
+      status: "untracked",
+      detail:
+        "not recorded — run `saasaloy update` to adopt the base at this CLI",
+    };
+  }
+  return {
+    name: BASE_MODULE,
+    source: BASE_SOURCE,
+    ref: BASE_REF,
+    current: baseLabel(lock.base.cliVersion, lock.base.templateHash),
+    latest,
+    status: lock.base.templateHash === runningHash ? "current" : "outdated",
+  };
 }
 
 /**
@@ -388,6 +440,12 @@ export interface ModuleUpdatePlan {
   newEnvVars: Record<string, string>;
   /** True when anything about this module routes to the merge plan. */
   needsMerge: boolean;
+  /**
+   * Set on the base's plan only (#120): the lock `base` record a clean run writes in place
+   * of a `modules` entry. Its presence is also what the merge plan reads to render the
+   * section as the template rather than a registry module.
+   */
+  baseRecord?: LockBase;
 }
 
 export interface UpdatePlan {
@@ -417,6 +475,20 @@ export interface ModuleUpdateInput {
   intent?: string[];
   /** Descriptors for prerequisites the new version introduces, topologically ordered. */
   prereqs?: { order: string[]; modules: Map<string, LoadedModule> };
+  /**
+   * Manifest entries this module owns that the run must leave alone — the base's seed
+   * files (#120). They are neither classified nor treated as dropped when `theirs` no
+   * longer ships them.
+   */
+  ignoreTargets?: ReadonlySet<string>;
+  /**
+   * Recorded patches other modules applied to files `theirs` ships, re-applied after an
+   * overwrite through the same idempotent loop as the module's own (#120). A patch whose
+   * identity now holds a different value demotes its file to `drift`.
+   */
+  reapplyPatches?: ManifestPatch[];
+  /** The lock `base` record to write on a clean run — the base only (#120). */
+  baseRecord?: LockBase;
 }
 
 export interface BuildUpdatePlanArgs {
@@ -604,7 +676,11 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   // manifest is the record of what we actually put there.
   const removals: PlannedUpdateFile[] = [];
   for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (entry.module !== name || theirsFiles.has(target)) {
+    if (
+      entry.module !== name ||
+      theirsFiles.has(target) ||
+      input.ignoreTargets?.has(target)
+    ) {
       continue;
     }
     const targetAbs = resolveWithinRoot(root, target);
@@ -627,6 +703,12 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     name,
     theirs.item.patches ?? [],
     files
+  );
+  await reapplyRecordedPatches(
+    root,
+    input.reapplyPatches ?? [],
+    files,
+    patches
   );
   const deps = planDepChanges(base, theirs, pkg);
 
@@ -669,6 +751,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     name,
     comparison: input.comparison,
     ...(input.noMergeBase ? { noMergeBase: input.noMergeBase } : {}),
+    ...(input.baseRecord ? { baseRecord: input.baseRecord } : {}),
     intent: input.intent ?? [],
     files,
     removals,
@@ -689,6 +772,73 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     newEnvVars: newEnvVars(base, theirs),
     needsMerge,
   };
+}
+
+/**
+ * Patches other modules recorded against files this revision ships (#120): the base's
+ * `apps/web/package.json` after `waitlist` added a script to it. `add` never re-records a
+ * file's hash after a patch, so on disk it reads as drift; three verdicts fix that:
+ *
+ *   - a file that holds exactly the new render plus its patches is `unchanged`, since the
+ *     patched bytes are the bytes this run would leave behind;
+ *   - a file this run overwrites gets every recorded patch previewed against the new
+ *     render, so the execute loop lands them again after the write;
+ *   - a preview that comes back `matched` — the identity is present with a value the
+ *     template now ships — demotes the file to `drift`, and `patchedBy` names the patcher
+ *     in the plan.
+ */
+async function reapplyRecordedPatches(
+  root: string,
+  recorded: ManifestPatch[],
+  files: PlannedUpdateFile[],
+  patches: PlannedUpdatePatch[]
+): Promise<void> {
+  if (recorded.length === 0) {
+    return;
+  }
+  const byTarget = new Map(files.map((f) => [f.target, f]));
+
+  for (const file of files) {
+    const ops = recorded.filter((p) => p.file === file.target);
+    if (
+      file.action !== "drift" ||
+      ops.length === 0 ||
+      file.theirs === undefined
+    ) {
+      continue;
+    }
+    let expected = file.theirs;
+    for (const op of ops) {
+      expected = applyPatch(expected, op.patch, op.file).content;
+    }
+    if (expected === file.mine) {
+      file.action = "unchanged";
+    }
+  }
+
+  for (const entry of recorded) {
+    const file = byTarget.get(entry.file);
+    if (!file) {
+      continue;
+    }
+    const previews = await previewPatches({
+      root,
+      module: entry.module,
+      ops: [entry.patch],
+      planned: new Map([
+        [
+          file.target,
+          { content: file.theirs, landsOnDisk: WRITABLE.has(file.action) },
+        ],
+      ]),
+    });
+    for (const preview of previews) {
+      if (preview.matched !== undefined && file.action === "overwrite") {
+        file.action = "drift";
+      }
+      patches.push(preview);
+    }
+  }
 }
 
 /**
@@ -1060,6 +1210,16 @@ export async function executeUpdatePlan(
       }
     }
 
+    // The base has no `modules` entry: its record is the lock's `base` object, and it moves
+    // under the same rule as a module's `resolved` — only once everything landed (#120).
+    if (mod.baseRecord) {
+      if (clean && mod.comparison.latest !== mod.comparison.current) {
+        lock.base = mod.baseRecord;
+        result.lockMoved.push(mod.name);
+      }
+      continue;
+    }
+
     // Move `resolved` only for a module that fully landed. While anything still needs
     // merging, the *old* SHA is the only merge base a re-run has — advancing it would
     // strand the drifted files with nothing to diff against (decision 15's boundary).
@@ -1101,7 +1261,13 @@ export async function executeUpdatePlan(
     }
   }
 
-  const pkg = args.pkg;
+  // The root package.json is a base file, so a run that overwrote it above must not
+  // then write dependency pins into the copy read before the run started — that copy
+  // would clobber the new render (#120).
+  let pkg = args.pkg;
+  if (pkg && result.written.some((file) => file.target === "package.json")) {
+    pkg = await readRootPackageJson(root);
+  }
   const allAdds = plan.modules.flatMap((m) => m.depAdds);
   const allDevAdds = plan.modules.flatMap((m) => m.devDepAdds);
   if (

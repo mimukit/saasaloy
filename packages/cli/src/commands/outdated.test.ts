@@ -1,16 +1,20 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startGithubFixture } from "../../test/support/github-fixture.js";
 import type { GithubFixture } from "../../test/support/github-fixture.js";
+import { templateHash } from "../lib/base.js";
+import { pathExists } from "../lib/fs-utils.js";
 import { emptyLock } from "../lib/lock.js";
+import { baseTemplateDir } from "../lib/scaffold.js";
 import type { LockModule } from "../lib/lock.js";
 import { GITHUB_API_ENV, REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
 import type { ModuleComparison } from "../lib/updater.js";
 import {
   countDrift,
+  describeDrift,
   parseArgs,
   renderComparisons,
   runOutdated,
@@ -145,8 +149,27 @@ describe(renderComparisons, () => {
     expect(shaColumn(lines[1]!)).toBe(shaColumn(lines[2]!));
   });
 
-  it("says so plainly when nothing is installed", () => {
-    expect(rendered([])).toContain("Nothing installed");
+  it("says so plainly when no module is installed", () => {
+    expect(rendered([])).toContain("No modules installed");
+  });
+
+  it("renders an untracked base row with its hint (#120)", () => {
+    const out = rendered([
+      comparison({
+        name: "base",
+        source: "bundled template",
+        ref: "template",
+        current: "untracked",
+        latest: "0.0.0 (abcdef0)",
+        status: "untracked",
+        detail:
+          "not recorded — run `saasaloy update` to adopt the base at this CLI",
+      }),
+    ]);
+
+    expect(out).toContain("untracked");
+    expect(out).toContain("saasaloy update");
+    expect(out).toContain("0.0.0 (abcdef0)");
   });
 });
 
@@ -163,6 +186,31 @@ describe(countDrift, () => {
 
   it("is zero for an empty comparison", () => {
     expect(countDrift([])).toBe(0);
+  });
+
+  it("counts an outdated base, and never an untracked one (#120)", () => {
+    const base = comparison({ name: "base", status: "outdated" });
+    const untracked = comparison({ name: "base", status: "untracked" });
+
+    expect(countDrift([base])).toBe(1);
+    expect(countDrift([untracked])).toBe(0);
+  });
+});
+
+describe(describeDrift, () => {
+  it("names the base alone, the modules alone, or both", () => {
+    const base = comparison({ name: "base", status: "outdated" });
+    const email = comparison({ name: "email", status: "outdated" });
+
+    expect(describeDrift([base])).toContain("The base template moved");
+    expect(describeDrift([email])).toContain("1 module moved");
+    expect(
+      describeDrift([
+        base,
+        email,
+        comparison({ name: "auth", status: "outdated" }),
+      ])
+    ).toContain("The base template and 2 modules moved");
   });
 });
 
@@ -239,12 +287,79 @@ describe(runOutdated, () => {
     await rm(project, { recursive: true, force: true });
   });
 
-  it("says nothing is installed and exits 0", async () => {
+  it("says no module is installed and exits 0", async () => {
     await writeProject([], {});
     const { code, out } = await runCommand([]);
 
     expect(code).toBe(0);
-    expect(out).toContain("Nothing installed");
+    expect(out).toContain("No modules installed");
+  });
+
+  // #120: the base row. An unrecorded project is the common case for now — every
+  // project scaffolded before the record existed — and it is news, not drift.
+  describe("the base row", () => {
+    async function trackedBase(hash: string): Promise<void> {
+      await writeProject([], {});
+      await mkdir(join(project, ".saasaloy"), { recursive: true });
+      await writeFile(
+        join(project, ".saasaloy", "manifest.json"),
+        JSON.stringify({
+          managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+        }),
+        "utf-8"
+      );
+      await writeFile(
+        join(project, "saasaloy-lock.json"),
+        JSON.stringify({
+          ...emptyLock(),
+          base: { name: "web", cliVersion: "0.0.0", templateHash: hash },
+        }),
+        "utf-8"
+      );
+    }
+
+    it("reports an unrecorded base as untracked, exits 0, and writes nothing", async () => {
+      await writeProject([], {});
+      const { code, out } = await runCommand([]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("untracked");
+      expect(out).toContain("saasaloy update");
+      await expect(pathExists(join(project, ".saasaloy"))).resolves.toBeFalsy();
+      const lock = JSON.parse(
+        await readFile(join(project, "saasaloy-lock.json"), "utf-8")
+      );
+      expect(lock.base).toBeUndefined();
+    });
+
+    it("does not fail --check on an untracked base", async () => {
+      await writeProject([], {});
+
+      await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
+        0
+      );
+    });
+
+    it("reports a base at the running template's hash as current", async () => {
+      await trackedBase(await templateHash(await baseTemplateDir()));
+      const { code, out } = await runCommand([]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("current");
+      expect(out).toContain("Everything is up to date");
+    });
+
+    it("reports a base at another hash as outdated, and gates --check on it", async () => {
+      await trackedBase("f".repeat(64));
+      const report = await runCommand([]);
+
+      expect(report.code).toBe(0);
+      expect(report.out).toContain("outdated");
+      expect(report.out).toContain("The base template moved");
+      await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
+        2
+      );
+    });
   });
 
   it("exits 0 when every module is settled", async () => {
@@ -255,7 +370,9 @@ describe(runOutdated, () => {
 
     expect(code).toBe(0);
     expect(out).toContain("pinned");
-    expect(out).toContain("Everything is up to date");
+    // No base record here, so the closing line reports the modules and names the gap.
+    expect(out).toContain("up to date");
+    expect(out).toContain("base is untracked");
   });
 
   it("exits 0 with --check when nothing moved", async () => {

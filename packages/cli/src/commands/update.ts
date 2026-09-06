@@ -13,7 +13,15 @@ import pc from "picocolors";
 import {
   detectCliMismatches,
   formatCliMismatches,
+  UPGRADE_COMMAND,
 } from "../lib/cli-requires.js";
+import {
+  adoptBase,
+  BASE_MODULE,
+  baseUpdateInput,
+  isBaseTracked,
+  templateHash,
+} from "../lib/base.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import {
@@ -37,6 +45,8 @@ import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { baseTemplateDir } from "../lib/scaffold.js";
+import { compareVersions, parseVersion } from "../lib/semver.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -44,6 +54,7 @@ import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import {
   buildUpdatePlan,
+  compareBase,
   compareInstalled,
   executeUpdatePlan,
   recordRefRewrites,
@@ -67,6 +78,13 @@ import type {
 //
 // stdout belongs to the merge plan and nothing else, so the whole clack TUI goes to
 // stderr (`TUI_ON_STDERR`) and `saasaloy update email | claude` works with no flag.
+//
+// The base template rides the same engine (#120, ADR 0032). A bare run considers the base
+// and every module; `update base` considers the base alone. The bundled template is
+// rendered for this project and classified like a module with no merge base. A project
+// with no base record is *adopted* first — its base files are recorded as they stand at
+// the running CLI — and the run stops there, so the next run is a real update. This is
+// the only command that writes that record; `outdated` and `doctor` report `untracked`.
 
 interface Options {
   name?: string;
@@ -91,13 +109,14 @@ const KNOWN_FLAGS = new Set([
 ]);
 const VALUE_FLAGS = new Set(["--ref", "--out"]);
 const USAGE =
-  "saasaloy update [<module>] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
+  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
 const HELP: CommandHelp = {
   name: "update",
   describe: DESCRIPTIONS.update,
   usage: USAGE,
   flags: {
-    "--ref <ref>": "update one module to this branch, tag, or SHA",
+    "--ref <ref>":
+      "update one module to this branch, tag, or SHA (not the base)",
     "--out <path>": "write the merge plan to a file instead of stdout",
     "--dry-run": "show the plan and write nothing",
     "--diff": "show a per-file diff and write nothing",
@@ -462,24 +481,114 @@ export async function runUpdate(argv: string[]): Promise<number> {
   }
 
   const sources: RegistrySource[] = [];
+  // Temp renders of the bundled template, dropped with the sources.
+  const cleanups: (() => Promise<void>)[] = [];
   try {
-    if (opts.name && !config.installed.includes(opts.name)) {
+    // `update base` names the template, which ships with the CLI and has no ref to move.
+    const wantsBase = !opts.name || opts.name === BASE_MODULE;
+    const wantsModules = opts.name !== BASE_MODULE;
+    if (!wantsModules && opts.ref) {
+      cancel(
+        `\`--ref\` moves a module's ref; the base template ships with the CLI — usage: \`${USAGE}\`.`,
+        TUI_ON_STDERR
+      );
+      return EXIT_REFUSED;
+    }
+    if (wantsModules && opts.name && !config.installed.includes(opts.name)) {
       cancel(
         `${pc.cyan(opts.name)} isn't installed — nothing to update.`,
         TUI_ON_STDERR
       );
       return EXIT_REFUSED;
     }
-    const targets = opts.name ? [opts.name] : config.installed;
-    if (targets.length === 0) {
-      note("Nothing installed.", "Nothing to do", TUI_ON_STDERR);
-      outro(pc.dim("0 modules"), TUI_ON_STDERR);
-      return EXIT_OK;
-    }
+    const targets = wantsModules
+      ? opts.name
+        ? [opts.name]
+        : config.installed
+      : [];
 
     const manifest = await loadManifest(root);
     const lock = await loadLock(root);
     const registryOverride = !!process.env[REGISTRY_ENV];
+    const cliVersion = await readVersion();
+
+    // The base first (#120): adopt an unrecorded project and stop, refuse a downgrade,
+    // then compare the recorded template hash against the one this CLI ships.
+    let baseComparison: ModuleComparison | undefined;
+    let templateDir: string | undefined;
+    if (wantsBase) {
+      templateDir = await baseTemplateDir();
+      if (!isBaseTracked(lock, manifest)) {
+        const adoption = await adoptBase({
+          root,
+          cliVersion,
+          manifest,
+          lock,
+          templateDir,
+          dryRun: preview,
+        });
+        const count = adoption.adopted.length;
+        const lines = [
+          `${preview ? "Would adopt" : "Adopted"} ${count} base file${count === 1 ? "" : "s"} at CLI ${pc.cyan(cliVersion)}, ` +
+            `each at the hash it has on disk — your edits are the baseline, not drift.`,
+        ];
+        if (adoption.absent.length > 0) {
+          lines.push(
+            "",
+            `${adoption.absent.length} template file${adoption.absent.length === 1 ? " is" : "s are"} not on disk and ${preview ? "would be" : "were"} recorded as missing, so the next update restores ${adoption.absent.length === 1 ? "it" : "them"}:`,
+            ...adoption.absent.map((target) => `  ${pc.dim(target)}`)
+          );
+        }
+        lines.push(
+          "",
+          pc.dim(
+            "Nothing else was applied. Run `saasaloy update` again to update the base."
+          )
+        );
+        note(wrapForNote(lines.join("\n")), "Base adopted", TUI_ON_STDERR);
+        outro(
+          preview
+            ? pc.dim("dry run — nothing recorded")
+            : pc.green(`Recorded the base at CLI ${cliVersion}.`),
+          TUI_ON_STDERR
+        );
+        return EXIT_OK;
+      }
+
+      const recorded = lock.base!.cliVersion;
+      const recordedVersion = parseVersion(recorded);
+      const runningVersion = parseVersion(cliVersion);
+      if (
+        recordedVersion &&
+        runningVersion &&
+        compareVersions(recordedVersion, runningVersion) > 0
+      ) {
+        cancel(
+          `This project's base was recorded by saasaloy ${recorded}, and ${cliVersion} is running — ` +
+            `updating would move the base backwards. Upgrade with \`${UPGRADE_COMMAND}\`. Nothing was written.`,
+          TUI_ON_STDERR
+        );
+        return EXIT_REFUSED;
+      }
+      if (recorded !== cliVersion) {
+        log.info(
+          `Base recorded at CLI ${pc.cyan(recorded)}; ${pc.cyan(cliVersion)} is running.`,
+          TUI_ON_STDERR
+        );
+      }
+      baseComparison = compareBase({
+        lock,
+        manifest,
+        runningHash: await templateHash(templateDir),
+        runningVersion: cliVersion,
+      });
+    }
+
+    if (targets.length === 0 && !baseComparison) {
+      note("Nothing installed.", "Nothing to do", TUI_ON_STDERR);
+      outro(pc.dim("0 modules"), TUI_ON_STDERR);
+      return EXIT_OK;
+    }
 
     // Cache one source per (repo, ref) so a bare `update` resolves each ref once.
     const resolvers = new Map<string, RemoteRegistrySource>();
@@ -516,13 +625,20 @@ export async function runUpdate(argv: string[]): Promise<number> {
       }
     }
 
-    const comparisons = await compareInstalled({
-      installed: targets,
-      lock,
-      overrideRef: opts.ref,
-      registryOverride,
-      resolveRef: (_name, entry, ref) => remote(entry.source, ref).resolveSha(),
-    });
+    const moduleComparisons =
+      targets.length > 0
+        ? await compareInstalled({
+            installed: targets,
+            lock,
+            overrideRef: opts.ref,
+            registryOverride,
+            resolveRef: (_name, entry, ref) =>
+              remote(entry.source, ref).resolveSha(),
+          })
+        : [];
+    const comparisons = baseComparison
+      ? [baseComparison, ...moduleComparisons]
+      : moduleComparisons;
 
     const outdated = comparisons.filter((c) => c.status === "outdated");
     const skipped = comparisons.filter((c) => c.status !== "outdated");
@@ -558,11 +674,25 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // a CLI floor its installed version never had, and that is exactly the case the field
     // exists for. Collected across the run and refused before any plan is built.
     const cliRefusals: string[] = [];
-    const cliVersion = await readVersion();
     const missingLockEntries = new Set<string>();
     // Every graph that resolved, kept for the combined check below.
     const resolvedGraphs: Graph[] = [];
+    if (baseComparison?.status === "outdated" && templateDir) {
+      const handle = await baseUpdateInput({
+        root,
+        manifest,
+        lock,
+        templateDir,
+        cliVersion,
+        comparison: baseComparison,
+      });
+      cleanups.push(handle.cleanup);
+      inputs.push(handle.input);
+    }
     for (const comparison of outdated) {
+      if (comparison.name === BASE_MODULE) {
+        continue;
+      }
       // One module's fetch failing is that module's problem: a dead tarball, a renamed
       // dependency, a network blip. It is reported and skipped, never fatal, so a bare
       // `update` still lands every other module (criterion 17).
@@ -841,6 +971,9 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // Each remote source extracted its modules to a temp dir; drop them all.
     for (const source of sources) {
       await source.cleanup?.();
+    }
+    for (const cleanup of cleanups) {
+      await cleanup();
     }
   }
 }
