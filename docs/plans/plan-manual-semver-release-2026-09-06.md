@@ -42,7 +42,7 @@ release-it does the sequence; this plan adds the package metadata, the proof tha
 
 Rejected: semantic-release and release-please (merge-triggered automation the maintainer does not want); Changesets (file-based, batched, and a `major` changeset on 0.x yields 1.0.0); a hand-rolled `npm version` script (loses the changelog and the GitHub Release).
 
-### Phase 1: Make the package publishable
+### Phase 1: Make the package publishable (built 2026-09-06)
 
 The smallest change that turns `packages/cli` into something npm can serve. Carried over from the old plan's Phase 1 and still unbuilt.
 
@@ -52,7 +52,7 @@ The smallest change that turns `packages/cli` into something npm can serve. Carr
 - Confirm `saasaloy --version` prints the `package.json` version from the packed layout (`src/version.ts` resolves `../package.json` from `dist/`).
 - Land these as one commit titled `feat(cli): publish saasaloy to npm`, so the 0.1.0 changelog gets its headline entry.
 
-### Phase 2: Tarball smoke script
+### Phase 2: Tarball smoke script (built 2026-09-06)
 
 The manual proof from the old plan, made repeatable and offline.
 
@@ -61,7 +61,7 @@ The manual proof from the old plan, made repeatable and offline.
 - Reuse the `spawnSync` shape from `scripts/verify-preset.ts` rather than new process helpers.
 - Add `node --test` cases for the argument parsing and the `workspace:` assertion, matching `test:scripts`.
 
-### Phase 3: release-it configuration and preflight
+### Phase 3: release-it configuration and preflight (built 2026-09-06)
 
 - Add `release-it` and `@release-it/conventional-changelog` to `packages/cli` devDependencies, exact-pinned.
 - Add `scripts/release-preflight.ts` and a root script `release:preflight`. In order: fetch `origin/main` and fail with a named message if local `HEAD` differs; run `lint`, `typecheck`, `test`, and `verify:content` unless `SAASALOY_RELEASE_SKIP_GATE=1`; run `release:smoke`. Each step prints which check failed and the command to rerun. Cover the flag and the staleness message with `node --test`.
@@ -107,7 +107,7 @@ Not agent work. Needs `npm login` and `gh auth login` on the release machine.
 4. Verify from a clean directory outside the repo: `npx saasaloy@0.1.0 --version`, then `npx saasaloy init smoke` and `saasaloy add api` against the real remote registry.
 5. If publish or the GitHub Release failed after the push, follow the recovery procedure in CONTRIBUTING.md. Do not rerun `pnpm release`.
 
-### Phase 5: Docs and tracker
+### Phase 5: Docs and tracker (built 2026-09-06)
 
 - **CONTRIBUTING.md.** Add a "Releasing" section with: who releases; the cadence rule (`packages/cli/**` changed, not `modules/**` only, not docs-only); the 0.x bump rule; the exact command; the `gh auth login` and `npm login` prerequisites, which are the only machine state; `SAASALOY_RELEASE_SKIP_GATE=1` and when it is acceptable; the module `requires.saasaloy` rule; and the numbered recovery procedure for a failure after push. Replace the sentence that says "there is no release process yet".
 - **`docs/wiki/getting-started.md`.** Replace section 1 with `npm install -g saasaloy` / `pnpm add -g saasaloy` / `npx saasaloy init my-app`. Move the clone-and-link path to a "Contributing" note.

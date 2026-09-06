@@ -21,6 +21,12 @@ All-in on Cloudflare serverless architecture by default to develop & maintain in
 
 ## How it works
 
+Install the CLI, or run it once with `npx`:
+
+```bash
+npm install -g saasaloy
+```
+
 ```bash
 saasaloy init my-app        # scaffold the base: Astro landing + packages/ui + config
 saasaloy add database-d1    # pulls api + database, then binds them to D1 (or pick database-postgres)
