@@ -157,7 +157,7 @@ saasaloy outdated [--check]
 
 Report whether anything has moved, without touching a file. The first row is the base template: the template hash `saasaloy-lock.json` recorded against the one the running CLI ships, with the recorded and running CLI versions beside it. One row per installed module follows, comparing the lock's commit SHA with what its ref resolves to now.
 
-A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no record of which template scaffolded it, which is every project scaffolded before the record existed. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` is the command that records it. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table.
+A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record, which includes every project scaffolded before the record existed and a project whose lock has a `base` object but whose manifest has no tracked base entries. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` adopts or re-adopts the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table.
 
 ## `saasaloy update`
 
@@ -169,7 +169,7 @@ Re-apply the base template and installed modules at a newer version than `saasal
 
 The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. There is no old template on disk to use as a merge base, so a drifted base file renders two-way, current file against the new render, with the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
 
-Two cases stop before anything is applied. A project with no base record is **adopted**: every base file is recorded at the hash it has on disk, at the running CLI, and the run says so and exits 0. Your edits become the baseline rather than drift, and the next run is a real update. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
+Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, while each missing file is recorded at the rendered template hash. The run records the running CLI, reports the adoption, and exits 0. Your existing edits become the baseline rather than drift, while the next update restores missing files. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
 
 | Flag | Effect |
 |---|---|

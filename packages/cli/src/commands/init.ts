@@ -341,9 +341,8 @@ export async function runInit(argv: string[]): Promise<number> {
   );
 
   // Record what was just rendered: every file at the hash of its rendered bytes, and the
-  // template's own hash beside the CLI version. Bookkeeping only — the scaffold is on
-  // disk either way — so a failure here warns and names the recovery (`update` adopts an
-  // unrecorded base) rather than failing an `init` that already succeeded.
+  // template's own hash beside the CLI version. These ledgers decide whether later
+  // updates may overwrite files, so init must not report success if either write fails.
   try {
     const manifest = await loadManifest(target);
     const lock = await loadLock(target);
@@ -355,10 +354,11 @@ export async function runInit(argv: string[]): Promise<number> {
     await saveManifest(target, manifest);
     await saveLock(target, lock);
   } catch (error) {
-    logger.warn(
-      `Couldn't record the base template: ${errorMessage(error)} ` +
-        `${pc.dim("(the scaffold is fine — run `saasaloy update` in the project to record it)")}.`
+    cancel(
+      `Couldn't record the base template: ${errorMessage(error)}\n` +
+        `The scaffold files remain, but init cannot safely complete without its project state.`
     );
+    return EXIT_FAILURE;
   }
 
   // Before the install: husky's `prepare` script runs during `pnpm install` and needs a

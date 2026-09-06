@@ -273,6 +273,35 @@ describe("runInit — the template copy", () => {
   });
 });
 
+describe("runInit — base state persistence", () => {
+  it("fails when it cannot record the base manifest", async () => {
+    const project = "unrecordable-base";
+    const target = join(dir, project);
+    await mkdir(target, { recursive: true });
+    await writeFile(join(target, ".saasaloy"), "blocks the state directory\n");
+
+    try {
+      const result = await run([
+        project,
+        "--force",
+        "--no-install",
+        "--no-git",
+      ]);
+
+      expect(result.code).toBe(1);
+      expect(result.out).toContain("Couldn't record the base template");
+      expect(result.out).not.toContain(
+        "Created unrecordable-base successfully"
+      );
+      await expect(
+        pathExists(join(target, "package.json"))
+      ).resolves.toBeTruthy();
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
+  });
+});
+
 afterEach(() => {
   process.chdir(dir);
 });
