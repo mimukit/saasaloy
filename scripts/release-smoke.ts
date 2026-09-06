@@ -174,8 +174,10 @@ async function main(): Promise<void> {
   }
 
   step(`packing saasaloy@${version}`);
-  // `npm pack` runs prepublishOnly, so dist/ in the tarball is built from this checkout
-  // rather than from whatever the last `pnpm build` left behind.
+  // `npm pack` runs prepack, so dist/ in the tarball is built from this checkout rather
+  // than from whatever the last `pnpm build` left behind. It has to be prepack and not
+  // prepublishOnly: npm runs prepublishOnly on `npm publish` only, which would leave this
+  // smoke check packing a stale dist/ and proving nothing about the build being released.
   run("npm", ["pack", "--pack-destination", installDir], "npm pack", {
     cwd: cliDir,
   });

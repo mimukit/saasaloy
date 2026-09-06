@@ -30,8 +30,8 @@ The old plan chose Changesets and a GitHub Actions publish. Both are dropped. Th
 | **Smoke registry** | The smoke script runs `saasaloy add api` with `SAASALOY_REGISTRY_DIR` pointed at the repo's `modules/`, so it needs no network and proves the tarball, not the remote fetch. The remote path is checked once by hand in Phase 4. |
 | **`workspace:` guard** | The smoke script asserts the packed `package.json` contains no `workspace:` string. `npm publish` does not rewrite those ranges, so one such dependency would ship an uninstallable package. |
 | **Module `requires.saasaloy`** | A CONTRIBUTING.md rule, no automated check. A PR that makes a module depend on a CLI change sets that module's `requires.saasaloy` to the version that ships the change, and the release for that PR is at least a minor. `cli-requires.ts` enforces the range fatally, so the rule is stated where module authors read. |
-| **Failure after push** | release-it has no rollback. If `npm publish` or the GitHub Release fails after the commit, tag, and push exist, the maintainer fixes the cause and runs `npm publish` by hand in `packages/cli` (`prepublishOnly` rebuilds `dist/`), then creates the GitHub Release by hand if needed. Never rerun `pnpm release` for the same version, and never rewrite pushed `main` history. |
-| **Build before publish** | `"prepublishOnly": "pnpm run build"` in `packages/cli`, so `npm publish` can never ship a stale `dist/`. |
+| **Failure after push** | release-it has no rollback. If `npm publish` or the GitHub Release fails after the commit, tag, and push exist, the maintainer fixes the cause and runs `npm publish` by hand in `packages/cli` (`prepack` rebuilds `dist/`), then creates the GitHub Release by hand if needed. Never rerun `pnpm release` for the same version, and never rewrite pushed `main` history. |
+| **Build before publish** | `"prepack": "pnpm run build"` in `packages/cli`, so neither `npm publish` nor `npm pack` can ever ship a stale `dist/`. It has to be `prepack`: npm runs `prepublishOnly` on publish only, which would leave the tarball smoke check packing a stale build. |
 | **Publish command** | release-it's default `npm publish` from `packages/cli`. The package has no `workspace:` dependencies, so pnpm is not needed to rewrite the manifest. |
 | **Second machine** | CONTRIBUTING.md names the only two pieces of machine state: `gh auth login` and `npm login`. |
 | **Tracker** | Issue #46 is rewritten in place: new title `build(cli): publish saasaloy to npm with a manual release-it flow`, acceptance criteria from Phases 1, 2, 3, and 5, Phase 4 as a maintainer-only checkbox, priority `medium`. |
@@ -47,7 +47,7 @@ Rejected: semantic-release and release-please (merge-triggered automation the ma
 The smallest change that turns `packages/cli` into something npm can serve. Carried over from the old plan's Phase 1 and still unbuilt.
 
 - Add `repository` (`type: git`, `url`, `directory: "packages/cli"`), `homepage`, `bugs`, `keywords`, and `publishConfig.access: "public"` to `packages/cli/package.json`.
-- Add `"prepublishOnly": "pnpm run build"`.
+- Add `"prepack": "pnpm run build"`.
 - Run `npm pack --dry-run` in `packages/cli` and confirm `dist/`, `templates/base/**`, and all four `schemas/*.schema.json` are in the file list. Fix the `files` array if anything is missing.
 - Confirm `saasaloy --version` prints the `package.json` version from the packed layout (`src/version.ts` resolves `../package.json` from `dist/`).
 - Land these as one commit titled `feat(cli): publish saasaloy to npm`, so the 0.1.0 changelog gets its headline entry.

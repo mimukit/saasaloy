@@ -499,6 +499,6 @@ release-it has no rollback. Once the commit, tag, and push exist, the version is
 
 1. **Never rerun `pnpm release` for the same version**, and never rewrite pushed `main` history.
 2. Fix whatever failed.
-3. Publish by hand from `packages/cli`: `npm publish`. `prepublishOnly` rebuilds `dist/` first.
+3. Publish by hand from `packages/cli`: `npm publish`. `prepack` rebuilds `dist/` first.
 4. If the GitHub Release is missing, create it by hand with `gh release create vX.Y.Z --notes-from-tag`.
 5. If the failure is in the published package itself, fix it and release the next patch. Do not unpublish.

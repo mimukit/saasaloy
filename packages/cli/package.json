@@ -39,7 +39,7 @@
   },
   "scripts": {
     "build": "tsup",
-    "prepublishOnly": "pnpm run build",
+    "prepack": "pnpm run build",
     "dev": "tsup --watch",
     "start": "node ./dist/index.js",
     "typecheck": "tsc --noEmit",
