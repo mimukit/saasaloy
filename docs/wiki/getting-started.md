@@ -28,7 +28,8 @@ or, with pnpm:
 pnpm add -g saasaloy
 ```
 
-You can also skip the install and run it once:
+You can also skip the install and run it once. Every command on this page then needs the
+`npx saasaloy` prefix in place of `saasaloy`:
 
 ```bash
 npx saasaloy init my-app
@@ -126,12 +127,5 @@ from any subdirectory.
   `saasaloy list` to see what the registry offers.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
   project before you let it.
-
-When you're done with the linked CLI, remove the global bin:
-
-```bash
-cd /path/to/saasaloy
-pnpm cli:unlink
-```
 
 _Verified against `main`@`a21fcce` on 2026-08-31._

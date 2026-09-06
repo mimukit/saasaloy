@@ -21,10 +21,16 @@ All-in on Cloudflare serverless architecture by default to develop & maintain in
 
 ## How it works
 
-Install the CLI, or run it once with `npx`:
+Install the CLI:
 
 ```bash
 npm install -g saasaloy
+```
+
+Or skip the install and run it once, prefixing every command with `npx`:
+
+```bash
+npx saasaloy init my-app
 ```
 
 ```bash
