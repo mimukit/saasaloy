@@ -1,11 +1,13 @@
 import type { QueryClient } from "@tanstack/react-query";
 import {
-  ErrorComponent,
   Outlet,
   createRootRouteWithContext,
   redirect,
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
+
+import { ErrorState } from "@repo/ui/blocks/error-state";
+import { errors } from "@repo/ui/content/errors";
 
 import { AccessDenied } from "@admin/components/access-denied";
 import { AppShell } from "@admin/components/app-shell";
@@ -93,6 +95,7 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
   },
   component: RootLayout,
   errorComponent: RootError,
+  notFoundComponent: RootNotFound,
 });
 
 function RootLayout() {
@@ -111,12 +114,53 @@ function RootLayout() {
   );
 }
 
+// What an address that matches no route renders. It sits inside AppShell, so the sidebar
+// stays usable and the visitor can click their way out instead of reaching for the back
+// button.
+//
+// Only an admin ever sees this screen, and that is the guard working rather than a hole in
+// it. The router resolves `beforeLoad` top-down before it installs the not-found boundary,
+// and a redirect thrown there ends the match, so an anonymous visitor asking for an unknown
+// path lands on /login and learns nothing about which admin paths exist. The session is
+// therefore present in practice; the null branch below is a type guard, not a second case.
+function RootNotFound() {
+  const { session } = Route.useRouteContext();
+
+  const screen = (
+    <ErrorState
+      code={errors.notFound.code}
+      title={errors.notFound.title}
+      description={errors.notFound.description}
+      primaryAction={{ label: errors.notFound.homeLabel, href: "/" }}
+    />
+  );
+
+  if (!session) {
+    return screen;
+  }
+
+  return <AppShell session={session}>{screen}</AppShell>;
+}
+
 // The root route's error boundary, and the second half of the guard. A NotAdminError is the
 // deny path, so it renders the panel rather than a stack trace; anything else is a real
-// failure and gets the router's own error screen.
-function RootError({ error }: ErrorComponentProps) {
+// render failure and gets the same ErrorState every other app in the repo shows.
+//
+// `reset` is the router's own retry: it re-runs the failed match in place, which is the one
+// action that can clear a transient render error without a full page load. The home link is
+// the way out when it cannot.
+function RootError({ error, reset }: ErrorComponentProps) {
   if (error instanceof NotAdminError) {
     return <AccessDenied session={error.session} />;
   }
-  return <ErrorComponent error={error} />;
+
+  return (
+    <ErrorState
+      code={errors.renderFailure.code}
+      title={errors.renderFailure.title}
+      description={errors.renderFailure.description}
+      primaryAction={{ label: errors.renderFailure.retryLabel, onClick: reset }}
+      secondaryAction={{ label: errors.renderFailure.homeLabel, href: "/" }}
+    />
+  );
 }

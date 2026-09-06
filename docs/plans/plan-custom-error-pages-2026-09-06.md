@@ -45,7 +45,7 @@ Rejected: per-app markup with no shared block (two copies to keep in step); full
 - Update `wrangler.jsonc`: add `main` pointing at the adapter's Worker output, keep `assets` with `"not_found_handling": "404-page"`, rewrite the "pure static site" comment. Verify the exact `main` path and any `assets.binding` the adapter's current docs require.
 - Confirm behavior against `wrangler dev` over the built output, not the Astro dev server; the dev server has its own error handling.
 
-### Phase 3: admin not-found and error screens (#118)
+### Phase 3: admin not-found and error screens (#118) (built 2026-09-06)
 
 - Add `notFoundComponent` to the root route in `modules/admin/files/src/routes/__root.tsx`, rendering `ErrorState` inside `AppShell` with a link to `/`.
 - Replace the bare `ErrorComponent` fallback in `RootError` with `ErrorState` (code "500", retry via the router's `reset`, home link). Keep the `NotAdminError` branch that renders `AccessDenied` ahead of it, untouched.
