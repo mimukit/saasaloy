@@ -50,7 +50,9 @@ export const errors = {
     title: "Something went wrong on our side",
     description:
       "The page could not be produced. This is not something you did. Try again in a moment.",
-    retryLabel: "Try again",
+    // No `retryLabel`. The 500 page is prerendered, so a retry button would reload the
+    // same static file and could not re-run whatever failed; src/pages/500.astro says so
+    // at length. `renderFailure` keeps its retry because the router re-renders in place.
     homeLabel: "Back to home",
   },
 };
