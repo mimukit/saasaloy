@@ -186,6 +186,8 @@ The base radius is `0.625rem`. Controls use the `lg` radius. Cards use `xl`. Lar
 
 Primary buttons use the primary pair. Secondary buttons use the secondary pair. Destructive actions use the destructive token with restrained tint states. Inputs and buttons share a `2rem` default height and the `lg` radius. Cards use the card pair and a border-strength ring.
 
+The `error-state` block is the one screen for a failure: a wrong path, a failed render, a server error. It is a single centered card holding a muted icon, a status label in the mono face at the smallest size, a title at `body-lg`, a description in `muted-foreground`, and one or two actions on the button scale. It carries no destructive token and no alert tint, because a mistyped address is not a danger state. Every app renders this block rather than its own error markup, so a theme change reaches all three at once.
+
 ## Do's and Don'ts
 
 - Read this file and `packages/ui/src/styles/globals.css` before you write UI.

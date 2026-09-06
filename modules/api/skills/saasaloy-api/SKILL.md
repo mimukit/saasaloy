@@ -271,10 +271,18 @@ handler, so a route module writes no error plumbing of its own.
 `@repo/validators/common`, because `validators` declares `dependsOn: ["api"]` — the dependency runs
 one way. The two shapes are identical and each names the other. Change one, change the other.
 
-Two things the handler does **not** cover. A 404 for an unrouted path goes through Hono's
-`notFound` handler, not this one, and still answers as plain text — no declared type covers an
-unrouted path, so nothing lies. And a handler that *returns* a response is untouched; only throws
-land here.
+A handler that *returns* a response is untouched by `onError`; only throws land there.
+
+A miss has its own slot. `base` also ends in a `notFound` handler, and it answers the same
+envelope with status 404 and code `not_found`, so a caller parses one body shape for every failure
+this api can produce. A wrong method on a real path answers 404 too, not 405: Hono matches on the
+(method, path) pair, so `POST /health` matches nothing, and distinguishing the two would tell an
+unauthenticated caller which paths exist.
+
+A feature module inherits that handler and **must not register a second one**. `notFound`, like
+`onError`, is a single slot: a sub-app mounted with `.route()` uses `base`'s handler as long as it
+sets none of its own, and a `notFound` on your own sub-app takes over every miss under its mount
+for no gain. Nothing in a route module needs miss plumbing.
 
 ## Run it locally
 
@@ -343,5 +351,7 @@ Deployment of all services is centralized in the future **`infra`** capability (
 - **`c.env` for bindings, never `process.env`.**
 - **`c.get("log")` for logging, never `console.log`** — a bare console call is unlevelled and
   uncorrelated, and it bypasses redaction.
+- **Inherit `base`'s `onError` and `notFound`.** A feature module registers neither of its own; a
+  miss under any mount already answers the 404 envelope.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.

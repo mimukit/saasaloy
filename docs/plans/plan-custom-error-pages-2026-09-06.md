@@ -53,14 +53,14 @@ Rejected: per-app markup with no shared block (two copies to keep in step); full
 - Do not hand-edit `src/routeTree.gen.ts`. No file is added under `src/routes/`, so the tree should not move.
 - Update `modules/admin/registry-item.json` only if a new file lands under `files/`.
 
-### Phase 4: `apps/api` 404 envelope (#118)
+### Phase 4: `apps/api` 404 envelope (#118) (built 2026-09-06)
 
 - Add `.notFound((c) => c.json(errorFor(404, "not found"), 404))` to the `base` chain in `modules/api/files/src/index.ts`, next to `.onError(...)`. Both are single slots, so a later `chained-route` patch inherits them.
 - Keep the explicit `Hono<{ Bindings; Variables }>` annotation on `base` intact.
 - Comment that a wrong method also answers 404, per decision Q5.
 - A sub-app mounted with `.route()` inherits the handler as long as it sets none of its own, same as `onError`.
 
-### Phase 5: docs and module descriptors (#118)
+### Phase 5: docs and module descriptors (#118) (built 2026-09-06)
 
 - Record the block in the base template's `DESIGN.md` alongside the other blocks.
 - State the rule in `packages/cli/templates/base/AGENTS.md`: an app that adds a route surface answers a miss with `ErrorState`, and no app writes its own error markup. Note that a `prerender = false` page inherits `500.astro`.

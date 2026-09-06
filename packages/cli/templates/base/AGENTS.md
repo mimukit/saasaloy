@@ -225,6 +225,23 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   `onClick`, and do not paste a second copy of the boot script into a page: any document
   that renders the block must inline that one constant in its `<head>`, or the control
   stays hidden.
+- **`error-state` is the only error screen, and every app renders it.** An app that adds
+  a route surface answers a miss with `ErrorState` — `apps/web` through
+  `src/pages/404.astro`, the admin SPA through the root route's `notFoundComponent` and
+  its error boundary, and `apps/api` through `base.notFound(...)`, which answers the same
+  `{ error: { code, message } }` envelope as every other failure. Do **not** write a
+  second error screen in an app: one block means one restyle when the theme moves, and a
+  bespoke copy drifts out of the token vocabulary the day nobody is looking. Change the
+  words in `packages/ui/src/content/errors.ts`, the markup in
+  `packages/ui/src/blocks/error-state.tsx`.
+- **A `prerender = false` page inherits `500.astro`.** `apps/web` registers
+  `@astrojs/cloudflare` while staying on `output: "static"`, so `src/pages/500.astro` is
+  built ahead of time and carries no detail from the failed request. The day a page opts
+  into on-demand rendering, a throw inside it lands on that page for free — nothing to
+  add. Two things move on that day and only that day: `wrangler.jsonc` gains a `main`
+  pointing at the server entry the adapter now writes, and `dist/server` stops being
+  empty. Setting `main` before then breaks the build, which is why the comment in
+  `wrangler.jsonc` says to wait.
 - **A block never reaches the network; the app injects the behaviour.** A block that needs
   to send something takes a function prop (`onSubmit`) and calls it. It does not import an
   api package, an http client, or `import.meta.env`. Two reasons, both concrete.
