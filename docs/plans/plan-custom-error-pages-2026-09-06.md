@@ -30,7 +30,7 @@ One shared block, four call sites (web 404, web 500, admin not-found, admin erro
 
 Rejected: per-app markup with no shared block (two copies to keep in step); full `output: "server"` (ends the static marketing-site model); an on-demand 500 page (renders inside a failing request and can leak internals).
 
-### Phase 1: the shared error block (#118)
+### Phase 1: the shared error block (#118) (built 2026-09-06)
 
 - Add `packages/ui/src/content/errors.ts` with copy for the not-found, the render-failure, and the server-failure cases. Follow the shape rules written at the top of `content/landing.ts`: max three levels, stable ids, single-brace `{token}` placeholders through `lib/interpolate.ts`, no runtime concatenation. Point back at `landing.ts`'s preamble instead of copying it.
 - Add `packages/ui/src/blocks/error-state.tsx` exporting `ErrorState`. Props: required `code` label, title, description, and one or two actions; copy defaults come from `content/errors.ts`.
