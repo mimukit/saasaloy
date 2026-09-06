@@ -2,6 +2,25 @@
   "name": "saasaloy",
   "version": "0.0.0",
   "description": "Composable SaaS accelerator kit.",
+  "keywords": [
+    "saas",
+    "scaffold",
+    "starter",
+    "cli",
+    "astro",
+    "cloudflare-workers",
+    "drizzle",
+    "generator"
+  ],
+  "homepage": "https://github.com/mimukit/saasaloy#readme",
+  "bugs": {
+    "url": "https://github.com/mimukit/saasaloy/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mimukit/saasaloy.git",
+    "directory": "packages/cli"
+  },
   "license": "MIT",
   "type": "module",
   "bin": {
@@ -12,11 +31,15 @@
     "templates",
     "schemas/*.schema.json"
   ],
+  "publishConfig": {
+    "access": "public"
+  },
   "engines": {
     "node": ">=24.13.0"
   },
   "scripts": {
     "build": "tsup",
+    "prepublishOnly": "pnpm run build",
     "dev": "tsup --watch",
     "start": "node ./dist/index.js",
     "typecheck": "tsc --noEmit",
