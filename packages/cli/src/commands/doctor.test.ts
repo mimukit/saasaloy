@@ -1,8 +1,9 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
+import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { stripAnsi } from "../lib/tui.js";
 import { parseArgs, runDoctor } from "./doctor.js";
 
@@ -162,6 +163,74 @@ describe("runDoctor — what it reports and what it exits with", () => {
 
       expect(code).toBe(2);
       expect(out).not.toContain("saasaloy doctor .");
+    });
+  });
+
+  // #120: the Base box in project mode. Drift is information, so it never turns exit 0
+  // into 2, and an unrecorded base is reported and left alone.
+  describe("the Base section of a project", () => {
+    it("reports an unrecorded base as untracked, exits 0, and writes nothing", async () => {
+      const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-base-"));
+      temps.push(project);
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+
+      const { code, out } = await run([project]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("untracked");
+      expect(out).toContain("saasaloy update");
+      await expect(pathExists(join(project, ".saasaloy"))).resolves.toBeFalsy();
+      await expect(
+        pathExists(join(project, "saasaloy-lock.json"))
+      ).resolves.toBeFalsy();
+    });
+
+    it("names the recorded CLI, the drifted files, and the seed files it did not check", async () => {
+      const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-base-"));
+      temps.push(project);
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+      await writeFile(join(project, "AGENTS.md"), "a\n");
+      await writeFile(join(project, "CLAUDE.md"), "edited\n");
+      await writeFile(join(project, "README.md"), "rewritten\n");
+      await mkdir(join(project, ".saasaloy"));
+      await writeFile(
+        join(project, ".saasaloy", "manifest.json"),
+        JSON.stringify({
+          managed: {
+            "AGENTS.md": { module: "base", hash: hashContent("a\n") },
+            "CLAUDE.md": { module: "base", hash: hashContent("c\n") },
+            "README.md": { module: "base", hash: hashContent("seed\n") },
+          },
+        })
+      );
+      await writeFile(
+        join(project, "saasaloy-lock.json"),
+        JSON.stringify({
+          lockfileVersion: 1,
+          modules: {},
+          base: {
+            name: "web",
+            cliVersion: "0.3.0",
+            templateHash: "f".repeat(64),
+          },
+        })
+      );
+
+      const { code, out } = await run([project]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("recorded at CLI 0.3.0");
+      expect(out).toContain("1 file match");
+      expect(out).toContain("CLAUDE.md");
+      expect(out).toContain("edited since");
+      expect(out).toContain("seed, not checked: README.md");
+      expect(out).toContain("No problems found");
     });
   });
 

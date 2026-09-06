@@ -9,7 +9,12 @@ import {
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
-import { pathExists } from "../lib/fs-utils.js";
+import { BASE_MODULE, baseEntries, templateHash } from "../lib/base.js";
+import { hashContent, pathExists } from "../lib/fs-utils.js";
+import { loadLock } from "../lib/lock.js";
+import { loadManifest } from "../lib/manifest.js";
+import { baseTemplateDir } from "../lib/scaffold.js";
+import { readVersion } from "../version.js";
 import { stripAnsi } from "../lib/tui.js";
 import { parseArgs, runInit } from "./init.js";
 
@@ -217,6 +222,42 @@ describe("runInit — the template copy", () => {
     );
   });
 
+  it("records every base file in the manifest under the reserved `base` module (#120)", async () => {
+    const manifest = await loadManifest(target);
+    const entries = baseEntries(manifest);
+
+    expect(Object.keys(entries).length).toBeGreaterThan(10);
+    expect(entries["AGENTS.md"]).toMatchObject({
+      module: BASE_MODULE,
+      from: "AGENTS.md",
+    });
+    expect(entries[".gitignore"]).toMatchObject({ from: "_gitignore" });
+    for (const [rel, entry] of Object.entries(entries)) {
+      const onDisk = await readFile(join(target, ...rel.split("/")), "utf-8");
+      expect(entry.hash, `${rel} hash`).toBe(hashContent(onDisk));
+    }
+  });
+
+  it("records the base in the lock at the running CLI and the shipped template's hash (#120)", async () => {
+    const lock = await loadLock(target);
+
+    expect(lock.base).toStrictEqual({
+      name: "web",
+      cliVersion: await readVersion(),
+      templateHash: await templateHash(await baseTemplateDir()),
+    });
+    expect(lock.modules).toStrictEqual({});
+  });
+
+  it("never copies the base declaration into the project (#120)", async () => {
+    await expect(
+      pathExists(join(target, ".saasaloy-base.json"))
+    ).resolves.toBeFalsy();
+    await expect(
+      pathExists(join(target, "_saasaloy-base.json"))
+    ).resolves.toBeFalsy();
+  });
+
   it("scaffolds into a non-empty directory under --force", async () => {
     const { code } = await run([
       project,
@@ -229,6 +270,35 @@ describe("runInit — the template copy", () => {
     await expect(
       pathExists(join(target, "package.json"))
     ).resolves.toBeTruthy();
+  });
+});
+
+describe("runInit — base state persistence", () => {
+  it("fails when it cannot record the base manifest", async () => {
+    const project = "unrecordable-base";
+    const target = join(dir, project);
+    await mkdir(target, { recursive: true });
+    await writeFile(join(target, ".saasaloy"), "blocks the state directory\n");
+
+    try {
+      const result = await run([
+        project,
+        "--force",
+        "--no-install",
+        "--no-git",
+      ]);
+
+      expect(result.code).toBe(1);
+      expect(result.out).toContain("Couldn't record the base template");
+      expect(result.out).not.toContain(
+        "Created unrecordable-base successfully"
+      );
+      await expect(
+        pathExists(join(target, "package.json"))
+      ).resolves.toBeTruthy();
+    } finally {
+      await rm(target, { recursive: true, force: true });
+    }
   });
 });
 

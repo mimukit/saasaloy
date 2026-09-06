@@ -107,8 +107,9 @@ function formatError(err: ErrorObject): string {
 export interface SaasaloyConfig {
   aliases: Record<string, string>;
   /**
-   * The base app `saasaloy init` scaffolded (`web`). It is not a module: the tool never
-   * applied it, so it has no descriptor, no manifest entry and no lock entry. Until #98
+   * The base app `saasaloy init` scaffolded (`web`). It is not a module: it has no
+   * descriptor and is never in `installed`. Its files record under the reserved manifest
+   * module name `base`, and the lock's `base` object carries its provenance (#120). Until #98
    * the template listed it in `installed[]` and every engine carried an excuse for the
    * one name in that list it could say nothing about. Optional so a project scaffolded
    * before the field existed still validates; `loadConfig` migrates it.

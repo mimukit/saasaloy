@@ -1,3 +1,4 @@
+import { BASE_INTENT, BASE_MODULE } from "./base.js";
 import { toDiff } from "./patch/diff.js";
 import type {
   ModuleUpdatePlan,
@@ -64,7 +65,13 @@ function countLabel(n: number, noun: string): string {
 function renderModule(mod: ModuleUpdatePlan): string[] {
   const out: string[] = [`## ${mod.name}`, "", "### Intent", ""];
 
-  if (mod.intent.length > 0) {
+  if (mod.baseRecord) {
+    // The base has no commit range to read subjects from: the template ships inside the
+    // CLI. One line says what the agent needs to know (#120).
+    out.push(
+      `The base template shipped with a newer CLI. For every file below: ${BASE_INTENT}.`
+    );
+  } else if (mod.intent.length > 0) {
     out.push(
       "What changed upstream, from the commits touching this module:",
       ""
@@ -79,16 +86,23 @@ function renderModule(mod: ModuleUpdatePlan): string[] {
       } — read the diffs below to infer what the module intended.`
     );
   }
-  out.push(
-    "",
-    "### Provenance",
-    "",
-    `- Module: \`${mod.name}\``,
-    `- Source: \`${mod.comparison.source}\``,
-    `- Ref: \`${mod.comparison.ref}\``,
-    `- Base (your version): \`${mod.comparison.current}\``,
-    `- Theirs (new version): \`${mod.comparison.latest}\``
-  );
+  out.push("", "### Provenance", "");
+  if (mod.baseRecord) {
+    out.push(
+      `- Module: \`${mod.name}\` (the template \`saasaloy init\` rendered)`,
+      `- Source: \`${mod.comparison.source}\``,
+      `- Recorded (your version): \`${mod.comparison.current}\` — CLI version, then template hash`,
+      `- Running (new version): \`${mod.comparison.latest}\``
+    );
+  } else {
+    out.push(
+      `- Module: \`${mod.name}\``,
+      `- Source: \`${mod.comparison.source}\``,
+      `- Ref: \`${mod.comparison.ref}\``,
+      `- Base (your version): \`${mod.comparison.current}\``,
+      `- Theirs (new version): \`${mod.comparison.latest}\``
+    );
+  }
   if (mod.noMergeBase) {
     out.push(
       `- **no merge base — ${mod.noMergeBase}**: the original file can't be refetched, so the ` +
@@ -138,7 +152,7 @@ function renderFile(file: PlannedUpdateFile): string[] {
   const out: string[] = [
     `#### \`${file.target}\``,
     "",
-    `Source in the module: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`,
+    `Source in the ${file.module === BASE_MODULE ? "template" : "module"}: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`,
     "",
   ];
 

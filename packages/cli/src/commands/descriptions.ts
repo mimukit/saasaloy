@@ -12,9 +12,9 @@ export const DESCRIPTIONS = {
   add: "apply a module into the current project (resolves dependsOn)",
   env: "fill in the environment variables the installed modules declare (--check gates a deploy)",
   outdated:
-    "report each installed module's current vs latest commit (--check gates CI)",
+    "report the base template and each installed module, current vs latest (--check gates CI)",
   update:
-    "re-apply modules at a newer ref, with a merge plan for anything you edited",
+    "re-apply the base template and modules at a newer version, with a merge plan for anything you edited",
   remove: "undo a module's applied files via the manifest (offline)",
   list: "list the modules a registry offers, marking the ones installed here",
   new: "scaffold a new module in a registry repo (descriptor + files/ + skill stub)",

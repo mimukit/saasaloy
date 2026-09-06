@@ -14,9 +14,11 @@ saasaloy <command> [options]
 |---|---|
 | `init` | scaffold a new Saasaloy project (base: Astro landing + ui + config) |
 | `add` | apply a module into the current project (resolves `dependsOn`) |
-| `update` | re-apply modules at a newer ref, with a merge plan for anything you edited |
+| `outdated` | report the base template and each installed module, current vs latest (`--check` gates CI) |
+| `update` | re-apply the base template and modules at a newer version, with a merge plan for anything you edited |
 | `remove` | undo a module's applied files via the manifest (offline) |
 | `list` | list the modules a registry offers, marking the ones installed here |
+| `doctor` | validate module descriptors, or a project's state files against each other |
 
 `saasaloy help`, `saasaloy --help` and `saasaloy -h` all print the command list and exit
 0. Bare `saasaloy` opens a picker over the same list on a terminal, and prints the list
@@ -147,21 +149,31 @@ and [ADR 0029](../adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
+## `saasaloy outdated`
+
+```text
+saasaloy outdated [--check]
+```
+
+Report whether anything has moved, without touching a file. The first row is the base template: the template hash `saasaloy-lock.json` recorded against the one the running CLI ships, with the recorded and running CLI versions beside it. One row per installed module follows, comparing the lock's commit SHA with what its ref resolves to now.
+
+A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record, which includes every project scaffolded before the record existed and a project whose lock has a `base` object but whose manifest has no tracked base entries. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` adopts or re-adopts the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table.
+
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]
 ```
 
-Re-apply installed modules at a newer commit than `saasaloy-lock.json` records. With no
-module named it considers every installed module. A file you never touched is overwritten;
-a file you edited is left alone and routed into a **merge plan** — a document written to
-stdout describing what changed upstream, what you changed, and what the reconciliation has
-to preserve. `saasaloy update email | claude` is the designed pipeline.
+Re-apply the base template and installed modules at a newer version than `saasaloy-lock.json` records. With nothing named it considers the base and every installed module; `saasaloy update base` considers the base alone. A file you never touched is overwritten; a file you edited is left alone and routed into a **merge plan** — a document written to stdout describing what changed upstream, what you changed, and what the reconciliation has to preserve. `saasaloy update email | claude` is the designed pipeline.
+
+The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. There is no old template on disk to use as a merge base, so a drifted base file renders two-way, current file against the new render, with the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
+
+Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, while each missing file is recorded at the rendered template hash. The run records the running CLI, reports the adoption, and exits 0. Your existing edits become the baseline rather than drift, while the next update restores missing files. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
 
 | Flag | Effect |
 |---|---|
-| `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2. |
+| `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
@@ -261,12 +273,14 @@ interface. Pick one before you send anything.
 
 ## Project files
 
-A project uses three state files, but not from the start: `init` writes only
-`saasaloy.json`, and the first `saasaloy add` creates the other two. `saasaloy.json`
+A project uses three state files, and `init` writes all three. `saasaloy.json`
 carries the base app in its own `base` field (`"base": "web"`), and `installed[]` holds
 only the modules `saasaloy add` applied. A project scaffolded before that field existed
 lists `web` in `installed[]`; the CLI lifts it into `base` the next time it writes the
-file. Their keys are defined
+file. `.saasaloy/manifest.json` records every base file under the reserved module name
+`base`, and `saasaloy-lock.json` carries a `base` object naming the CLI version and the
+hash of the template that rendered it. A project scaffolded before that record existed has
+neither; `saasaloy update` adopts it. Their keys are defined
 by JSON Schema rather than repeated here, so the schema is always the current answer:
 
 | File | Schema |

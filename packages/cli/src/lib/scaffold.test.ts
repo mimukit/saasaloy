@@ -2,7 +2,8 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { copyTemplate, templateVars } from "./scaffold.js";
+import { hashContent, pathExists } from "./fs-utils.js";
+import { BASE_DECLARATION, copyTemplate, templateVars } from "./scaffold.js";
 
 describe("init template variables", () => {
   it("includes the CLI package version", () => {
@@ -115,10 +116,53 @@ describe("copyTemplate — the two conventions it applies", () => {
 
     const written = await copyTemplate(src, dest, {});
 
-    expect(written.toSorted()).toStrictEqual([
+    expect(written.map((file) => file.path).toSorted()).toStrictEqual([
       join(dest, "a.txt"),
       join(dest, "nested", "b.txt"),
     ]);
+  });
+
+  it("returns each file's rendered target, its source name and the hash of the rendered bytes (#120)", async () => {
+    await write("_gitignore", "dist\n");
+    await write("nested/b.txt", "hi {{PROJECT_NAME}}\n");
+
+    const written = await copyTemplate(src, dest, { PROJECT_NAME: "app" });
+
+    expect(
+      written
+        .map(({ from, target, hash }) => ({ from, target, hash }))
+        .toSorted((a, b) => a.target.localeCompare(b.target))
+    ).toStrictEqual([
+      { from: "_gitignore", target: ".gitignore", hash: hashContent("dist\n") },
+      {
+        from: "nested/b.txt",
+        target: "nested/b.txt",
+        hash: hashContent("hi app\n"),
+      },
+    ]);
+  });
+
+  it("skips the base declaration by exact name, before the underscore rename (#120)", async () => {
+    await write(BASE_DECLARATION, JSON.stringify({ seedFiles: [] }));
+    await write("a.txt", "a\n");
+
+    const written = await copyTemplate(src, dest, {});
+
+    expect(written.map((file) => file.target)).toStrictEqual(["a.txt"]);
+    await expect(
+      pathExists(join(dest, `.${BASE_DECLARATION.slice(1)}`))
+    ).resolves.toBeFalsy();
+  });
+
+  it("keeps the source names when asked, so a render can be diffed against the template (#120)", async () => {
+    await write("_gitignore", "dist\n");
+
+    const written = await copyTemplate(src, dest, {}, { keepNames: true });
+
+    expect(written.map((file) => file.path)).toStrictEqual([
+      join(dest, "_gitignore"),
+    ]);
+    expect(written[0]?.target).toBe(".gitignore");
   });
 
   it("overwrites a file already at the destination", async () => {

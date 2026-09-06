@@ -6,16 +6,20 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
+import { BASE_MODULE, templateHash } from "../lib/base.js";
 import { loadLock } from "../lib/lock.js";
+import { loadManifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
 import { REGISTRY_ENV, RemoteRegistrySource } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
 import { loadConfig } from "../lib/saasaloy-config.js";
+import { baseTemplateDir } from "../lib/scaffold.js";
 import { wrapForNote } from "../lib/tui.js";
-import { compareInstalled } from "../lib/updater.js";
+import { compareBase, compareInstalled } from "../lib/updater.js";
 import type { ModuleComparison, UpdateStatus } from "../lib/updater.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy outdated` — "has anything moved?", answered without touching a file (#50).
@@ -31,6 +35,11 @@ import { DESCRIPTIONS } from "./descriptions.js";
 //
 // An unreachable source is a row, never a throw. One dead repo must not hide the state of
 // every other module, and it does not fail `--check` either: a network blip is not drift.
+//
+// The base template is the first row (#120): the lock's `templateHash` against the one
+// the running CLI ships, with the two CLI versions as labels. An `untracked` base — a
+// project scaffolded before the record existed — is news, not drift, and `update` is
+// what records it; this command never writes.
 
 export interface Options {
   /** `--check`: exit non-zero when any module has moved, for CI. */
@@ -46,7 +55,8 @@ const HELP: CommandHelp = {
   describe: DESCRIPTIONS.outdated,
   usage: USAGE,
   flags: {
-    "--check": "exit non-zero when any module has moved (for CI)",
+    "--check":
+      "exit non-zero when the base template or any module has moved (for CI)",
   },
 };
 
@@ -76,6 +86,7 @@ const STATUS_COLOR: Record<UpdateStatus, (text: string) => string> = {
   pinned: pc.dim,
   local: pc.dim,
   unresolvable: pc.red,
+  untracked: pc.yellow,
 };
 
 const HEADERS = ["MODULE", "STATUS", "REF", "CURRENT", "LATEST"] as const;
@@ -101,7 +112,7 @@ function cells(comparison: ModuleComparison): string[] {
  */
 export function renderComparisons(comparisons: ModuleComparison[]): string[] {
   if (comparisons.length === 0) {
-    return [pc.dim("Nothing installed — `saasaloy add <module>` first.")];
+    return [pc.dim("No modules installed — `saasaloy add <module>` first.")];
   }
 
   const rows = comparisons.map(cells);
@@ -145,12 +156,30 @@ export function renderComparisons(comparisons: ModuleComparison[]): string[] {
 }
 
 /**
- * How many modules moved. Only `outdated` counts: a pinned module is frozen on purpose, a
- * local one has no commit to compare, and an unresolvable one is a failure to answer
- * rather than an answer — gating CI on any of the three would fail builds for no drift.
+ * How many rows moved, the base included. Only `outdated` counts: a pinned module is
+ * frozen on purpose, a local one has no commit to compare, an unresolvable one is a
+ * failure to answer rather than an answer, and an untracked base has nothing to compare
+ * yet — gating CI on any of the four would fail builds for no drift.
  */
 export function countDrift(comparisons: ModuleComparison[]): number {
   return comparisons.filter((c) => c.status === "outdated").length;
+}
+
+/** The closing line for a report with drift: which of the base and the modules moved. */
+export function describeDrift(comparisons: ModuleComparison[]): string {
+  const baseMoved = comparisons.some(
+    (c) => c.name === BASE_MODULE && c.status === "outdated"
+  );
+  const modules = comparisons.filter(
+    (c) => c.name !== BASE_MODULE && c.status === "outdated"
+  ).length;
+  const moduleText = `${modules} module${modules === 1 ? "" : "s"}`;
+  const subject = baseMoved
+    ? modules > 0
+      ? `The base template and ${moduleText}`
+      : "The base template"
+    : moduleText;
+  return `${subject} moved — run \`saasaloy update\` to apply.`;
 }
 
 /**
@@ -203,19 +232,23 @@ export async function runOutdated(argv: string[]): Promise<number> {
   try {
     const root = await findProjectRoot();
     const config = await loadConfig(root);
-    if (config.installed.length === 0) {
-      note(wrapForNote(renderComparisons([]).join("\n")), "Modules");
-      outro(pc.dim("0 modules"));
-      return EXIT_OK;
-    }
-
     const lock = await loadLock(root);
+    const manifest = await loadManifest(root);
     const registryOverride = !!process.env[REGISTRY_ENV];
-    if (registryOverride) {
+    if (registryOverride && config.installed.length > 0) {
       log.warn(
         `${REGISTRY_ENV} is set, so every module reads as local — unset it to compare against the registry.`
       );
     }
+
+    // The base first: it ships with the CLI, so its comparison needs no network and no
+    // registry, and it is the one row every project has.
+    const baseRow = compareBase({
+      lock,
+      manifest,
+      runningHash: await templateHash(await baseTemplateDir()),
+      runningVersion: await readVersion(),
+    });
 
     // One source per (repo, ref), the same cache `update` keeps, so a bare run resolves
     // each ref once however many modules share it.
@@ -238,29 +271,40 @@ export async function runOutdated(argv: string[]): Promise<number> {
       return source;
     };
 
-    const compared = await compareInstalled({
-      installed: config.installed,
-      lock,
-      registryOverride,
-      resolveRef: (_name, entry, ref) => remote(entry.source, ref).resolveSha(),
-    });
-    const comparisons = registryOverride ? asLocalRows(compared) : compared;
-
-    note(wrapForNote(renderComparisons(comparisons).join("\n")), "Modules");
-
-    if (registryOverride) {
-      // Nothing was compared, so there is nothing to gate on — `--check` exits 0 too.
-      outro(pc.dim("Nothing to compare — every module reads as local."));
-      return EXIT_OK;
+    let moduleRows: ModuleComparison[] = [];
+    if (config.installed.length > 0) {
+      const compared = await compareInstalled({
+        installed: config.installed,
+        lock,
+        registryOverride,
+        resolveRef: (_name, entry, ref) =>
+          remote(entry.source, ref).resolveSha(),
+      });
+      moduleRows = registryOverride ? asLocalRows(compared) : compared;
     }
 
+    note(wrapForNote(renderComparisons([baseRow]).join("\n")), "Base");
+    note(wrapForNote(renderComparisons(moduleRows).join("\n")), "Modules");
+
+    const comparisons = [baseRow, ...moduleRows];
     const drift = countDrift(comparisons);
     if (drift === 0) {
-      outro(pc.green("Everything is up to date."));
+      if (registryOverride && moduleRows.length > 0) {
+        // Nothing was compared, so there is nothing to gate on — `--check` exits 0 too.
+        outro(pc.dim("Nothing to compare — every module reads as local."));
+      } else if (baseRow.status === "untracked") {
+        outro(
+          pc.yellow(
+            "Modules are up to date; the base is untracked — run `saasaloy update` to record it."
+          )
+        );
+      } else {
+        outro(pc.green("Everything is up to date."));
+      }
       return EXIT_OK;
     }
 
-    const summary = `${drift} module${drift === 1 ? "" : "s"} moved — run \`saasaloy update\` to apply.`;
+    const summary = describeDrift(comparisons);
     // `--check` is the only thing that turns news into a non-zero exit. A bare run is a
     // report, and a report that failed the shell would be unusable interactively.
     if (opts.check) {

@@ -20,7 +20,10 @@ import {
   readDirNames,
 } from "../lib/fs-utils.js";
 import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
+import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
+import { loadLock, saveLock } from "../lib/lock.js";
 import { logger } from "../lib/logger.js";
+import { loadManifest, saveManifest } from "../lib/manifest.js";
 import {
   baseTemplateDir,
   copyTemplate,
@@ -29,14 +32,17 @@ import {
 import { stripAnsi, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy init <name>` — scaffold the near-inert base (Astro landing + @repo/ui
 // + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
-// (fixed common rules); nothing is generated. The one thing written rather than copied is
+// (fixed common rules); nothing is generated. Two things are written rather than copied:
 // the `.claude/skills/*` link for the skills the base carries — a per-machine symlink, not
-// a file (see linkAgentSkills). Churny modules (api, database, auth, admin, features) are
-// added later via `saasaloy add`, which copies their own skills in.
+// a file (see linkAgentSkills) — and the base's provenance, one manifest entry per rendered
+// file plus the lock's `base` record, so `outdated`/`update`/`doctor` can speak about the
+// base afterwards (#120, ADR 0032). Churny modules (api, database, auth, admin, features)
+// are added later via `saasaloy add`, which copies their own skills in.
 
 // wrangler and npm package names share this constraint.
 const NAME_PATTERN = /^[a-z0-9][a-z0-9-]*$/;
@@ -200,8 +206,8 @@ function bySkillOrder(a: string, b: string): number {
 // because the template's .gitignore ignores `.claude/skills/` (the link is a per-machine
 // artefact, and a skill shipped there would land ignored and never reach the owner's repo).
 // ADR 0015 is the same arrangement `saasaloy add` uses for module skills; `init` calls the
-// two helpers directly rather than going through the applier, because it writes no manifest
-// and ADR 0022's "the base is a pure copy" property should stay intact.
+// two helpers directly rather than going through the applier, because the base has no
+// descriptor to plan from — its files are recorded straight off the render (ADR 0032).
 //
 // Never throws, and never fails `init`: a link is a convenience, and losing it costs
 // discovery, not files. A path already occupied by something that isn't ours is reported
@@ -324,14 +330,36 @@ export async function runInit(argv: string[]): Promise<number> {
 
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
-  await copyTemplate(
-    await baseTemplateDir(),
+  const templateDir = await baseTemplateDir();
+  const written = await copyTemplate(
+    templateDir,
     target,
     templateVars(projectName)
   );
   s.stop(
     `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
   );
+
+  // Record what was just rendered: every file at the hash of its rendered bytes, and the
+  // template's own hash beside the CLI version. These ledgers decide whether later
+  // updates may overwrite files, so init must not report success if either write fails.
+  try {
+    const manifest = await loadManifest(target);
+    const lock = await loadLock(target);
+    recordBaseFiles(manifest, written);
+    lock.base = baseRecord(
+      await readVersion(),
+      await templateHash(templateDir)
+    );
+    await saveManifest(target, manifest);
+    await saveLock(target, lock);
+  } catch (error) {
+    cancel(
+      `Couldn't record the base template: ${errorMessage(error)}\n` +
+        `The scaffold files remain, but init cannot safely complete without its project state.`
+    );
+    return EXIT_FAILURE;
+  }
 
   // Before the install: husky's `prepare` script runs during `pnpm install` and needs a
   // repository to install its hooks into.

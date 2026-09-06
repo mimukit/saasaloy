@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://saasaloy.dev/schemas/manifest.schema.json",
   "title": ".saasaloy/manifest.json — managed-file tracking",
-  "description": "Records every file a module applied — copied source files and copied skill files — with the owning module and a content hash, so update/remove know exactly what to undo. Replaces in-file `// saasaloy:managed` markers (build spec §2.9 / §3.2). The base writes no manifest; it is created by the first `saasaloy add`.",
+  "description": "Records every file a module applied — copied source files and copied skill files — with the owning module and a content hash, so update/remove know exactly what to undo. Replaces in-file `// saasaloy:managed` markers (build spec §2.9 / §3.2). `saasaloy init` writes it first, with one entry per base template file under the reserved module name `base` (ADR 0032).",
   "type": "object",
   "additionalProperties": false,
   "required": ["managed"],
@@ -22,7 +22,7 @@
           "module": {
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]*$",
-            "description": "Name of the module that applied this file."
+            "description": "Name of the module that applied this file. `base` is reserved for the template `saasaloy init` rendered; it is never in saasaloy.json's `installed` list."
           },
           "hash": {
             "type": "string",

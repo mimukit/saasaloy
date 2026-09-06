@@ -1,6 +1,11 @@
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { baseRecord } from "./base.js";
 import {
+  checkBase,
   checkModule,
   checkPartialInstalls,
   checkProject,
@@ -9,6 +14,8 @@ import {
   resolveDoctorTarget,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
+import { hashContent } from "./fs-utils.js";
+import { emptyLock } from "./lock.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 
@@ -343,6 +350,90 @@ describe("checkPartialInstalls — a partial install (#49)", () => {
     expect(
       checkPartialInstalls({ installed: [], manifest: emptyManifest() })
     ).toStrictEqual([]);
+  });
+});
+
+describe("checkBase — the base's record and drift (#120)", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-doctor-base-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  async function tracked(files: Record<string, string>) {
+    const manifest = emptyManifest();
+    for (const [target, content] of Object.entries(files)) {
+      await writeFile(join(root, target), content, "utf-8");
+      manifest.managed[target] = { module: "base", hash: hashContent(content) };
+    }
+    const lock = { ...emptyLock(), base: baseRecord("0.0.0", "f".repeat(64)) };
+    return { lock, manifest };
+  }
+
+  it("reports an unrecorded project as untracked, with the seed list", async () => {
+    const report = await checkBase({
+      root,
+      lock: emptyLock(),
+      manifest: emptyManifest(),
+      seedFiles: ["README.md"],
+    });
+
+    expect(report.status).toBe("untracked");
+    expect(report.seed).toStrictEqual(["README.md"]);
+  });
+
+  it("counts matching files, names drifted and missing ones, and lists seed files unchecked", async () => {
+    const state = await tracked({
+      "AGENTS.md": "a\n",
+      "CLAUDE.md": "c\n",
+      "README.md": "seed\n",
+      "gone.md": "g\n",
+    });
+    await writeFile(join(root, "CLAUDE.md"), "edited\n", "utf-8");
+    await writeFile(join(root, "README.md"), "rewritten\n", "utf-8");
+    await rm(join(root, "gone.md"));
+
+    const report = await checkBase({
+      root,
+      ...state,
+      seedFiles: ["README.md"],
+    });
+
+    expect(report).toMatchObject({
+      status: "tracked",
+      matching: 1,
+      drifted: ["CLAUDE.md"],
+      missing: ["gone.md"],
+      seed: ["README.md"],
+    });
+    expect(report.record?.cliVersion).toBe("0.0.0");
+  });
+
+  it("never reads another module's files as base drift", async () => {
+    const state = await tracked({ "AGENTS.md": "a\n" });
+    await writeFile(join(root, "email.ts"), "x\n", "utf-8");
+    state.manifest.managed["email.ts"] = {
+      module: "email",
+      hash: "0".repeat(64),
+    };
+
+    const report = await checkBase({ root, ...state, seedFiles: [] });
+
+    expect(report.drifted).toStrictEqual([]);
+    expect(report.matching).toBe(1);
+  });
+});
+
+describe("checkPartialInstalls — the base is not a module (#120)", () => {
+  it("never reports the base's files as a partial install", () => {
+    const manifest = emptyManifest();
+    manifest.managed["AGENTS.md"] = { module: "base", hash: "a".repeat(64) };
+
+    expect(checkPartialInstalls({ installed: [], manifest })).toStrictEqual([]);
   });
 });
 
