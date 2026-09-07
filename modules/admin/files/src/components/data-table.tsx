@@ -10,7 +10,7 @@ import {
 } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
 import { useMemo } from "react";
-import type { KeyboardEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 
 import {
   Table,
@@ -221,37 +221,34 @@ export function DataTable<TRow extends object>({
                   // The vendored TableRow already styles this attribute, so the selected
                   // look comes from the same place every other table's does.
                   data-state={selectedId === id ? "selected" : undefined}
-                  // A row is only interactive when the caller asked for it. Making an
-                  // inert row focusable would put a tab stop on every line of the table.
-                  {...(onRowClick === undefined
-                    ? {}
-                    : {
-                        tabIndex: 0,
-                        role: "button" as const,
-                        onClick: () => {
-                          onRowClick(row);
-                        },
-                        onKeyDown: (
-                          event: KeyboardEvent<HTMLTableRowElement>
-                        ) => {
-                          if (event.key === "Enter" || event.key === " ") {
-                            event.preventDefault();
-                            onRowClick(row);
-                          }
-                        },
-                      })}
-                  className={cn(
-                    "border-border",
+                  // Pointer convenience only, and deliberately WITHOUT role or tabIndex.
+                  // `role="button"` on a <tr> takes the row out of the table's
+                  // accessibility tree: a screen reader in table mode stops seeing the row,
+                  // its cells, and their header associations. The keyboard path is the
+                  // button in the first cell below.
+                  onClick={
                     onRowClick === undefined
                       ? undefined
-                      : "focus-visible:ring-ring/50 cursor-pointer focus-visible:ring-[3px] focus-visible:outline-none"
+                      : () => {
+                          onRowClick(row);
+                        }
+                  }
+                  className={cn(
+                    "border-border",
+                    onRowClick === undefined ? undefined : "cursor-pointer"
                   )}
                 >
-                  {columns.map((column) => {
+                  {columns.map((column, index) => {
                     const content =
                       column.cell === undefined
                         ? renderValue(column.value(row))
                         : column.cell(row);
+
+                    const body = isEmptyValue(content) ? (
+                      <span className="text-muted-foreground">{EMPTY}</span>
+                    ) : (
+                      content
+                    );
 
                     return (
                       <TableCell
@@ -261,10 +258,24 @@ export function DataTable<TRow extends object>({
                           column.align === "end" && "text-right"
                         )}
                       >
-                        {isEmptyValue(content) ? (
-                          <span className="text-muted-foreground">{EMPTY}</span>
+                        {onRowClick === undefined || index !== 0 ? (
+                          body
                         ) : (
-                          content
+                          // One real control per row, in the first cell, so the row is
+                          // reachable by Tab and answers Enter and Space for free. It
+                          // stops the click from reaching the row's own handler, which
+                          // would otherwise fire `onRowClick` twice for one press.
+                          <button
+                            type="button"
+                            aria-current={selectedId === id ? true : undefined}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onRowClick(row);
+                            }}
+                            className="focus-visible:ring-ring/50 -mx-1 flex min-w-0 items-center rounded px-1 text-left focus-visible:ring-[3px] focus-visible:outline-none"
+                          >
+                            {body}
+                          </button>
                         )}
                       </TableCell>
                     );

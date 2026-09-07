@@ -52,8 +52,16 @@
           "target": "src/lib/redirect.ts"
         },
         {
+          "path": "files/src/lib/initials.ts",
+          "target": "src/lib/initials.ts"
+        },
+        {
           "path": "files/src/components/app-shell.tsx",
           "target": "src/components/app-shell.tsx"
+        },
+        {
+          "path": "files/src/components/nav.ts",
+          "target": "src/components/nav.ts"
         },
         {
           "path": "files/src/components/rail.tsx",

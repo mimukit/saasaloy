@@ -1,5 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { LogOutIcon } from "lucide-react";
+import { useEffect } from "react";
 
 import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
@@ -18,11 +19,13 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@repo/ui/components/tooltip";
+import { relabelThemeToggles } from "@repo/ui/lib/theme";
 import { cn } from "@repo/ui/lib/utils";
 
-import { navCount } from "@admin/components/app-shell";
-import type { NavAreas } from "@admin/components/app-shell";
+import { navCount } from "@admin/components/nav";
+import type { NavAreas } from "@admin/components/nav";
 import { useSignOut } from "@admin/components/sign-out-button";
+import { initialsOf } from "@admin/lib/initials";
 import type { AdminSession } from "@admin/lib/auth";
 
 // The far-left strip of the shell: one icon per top-level area, then a footer holding the
@@ -31,19 +34,6 @@ import type { AdminSession } from "@admin/lib/auth";
 //
 // A label never shows here, so every area needs a Tooltip: the icon alone is not an
 // accessible name, and the sr-only label below is what a screen reader announces.
-
-/** Up to two initials for the avatar, falling back to `?` for an unnameable account. */
-function initialsOf(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  return initials || "?";
-}
 
 export function Rail({
   areas,
@@ -56,6 +46,14 @@ export function Rail({
   // server clears the cookie, the cached session is dropped, and only then does the
   // router re-run the root guard.
   const { pending, error, signOut } = useSignOut();
+
+  // The theme is applied in src/main.tsx, before React mounts anything, so `setTheme`'s
+  // own relabel pass finds no toggle to rename. ThemeToggle ships the label for `system` —
+  // truthful for a first-time visitor, wrong on a painted dark page — so name it once here,
+  // after the button exists. The Astro host does the same from DOMContentLoaded.
+  useEffect(() => {
+    relabelThemeToggles();
+  }, []);
 
   const name = session.user.name || session.user.email;
 
@@ -138,7 +136,16 @@ export function Rail({
 
               <DropdownMenuSeparator />
 
-              <DropdownMenuItem disabled={pending} onClick={signOut}>
+              {/* `closeOnClick={false}` is what makes the error below reachable. Base UI
+                  closes a menu item on click by default, so the popup — and the only
+                  surface that reports a failed sign-out — would be gone before `signOut`
+                  resolves. Nothing has to close it on success: a successful sign-out
+                  navigates to /login, which unmounts the shell and this menu with it. */}
+              <DropdownMenuItem
+                closeOnClick={false}
+                disabled={pending}
+                onClick={signOut}
+              >
                 <LogOutIcon />
                 {pending ? "Signing out…" : "Sign out"}
               </DropdownMenuItem>

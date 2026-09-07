@@ -9,8 +9,8 @@ import {
 } from "@repo/ui/components/collapsible";
 import { cn } from "@repo/ui/lib/utils";
 
-import { navCount } from "@admin/components/app-shell";
-import type { NavArea } from "@admin/components/app-shell";
+import { navCount } from "@admin/components/nav";
+import type { NavArea } from "@admin/components/nav";
 
 // The second panel of the shell: the active area's tree. A title row carrying the area
 // name and an actions slot, then one collapsible group per NAV_AREAS group, each holding

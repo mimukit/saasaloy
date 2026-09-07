@@ -102,7 +102,7 @@ Active state is `aria-current`. TanStack Router sets it on the active `Link`, an
 
 ### Add a rail area and a nav group
 
-`NAV_AREAS` in `src/components/app-shell.tsx` is the one list to edit. An area is a rail icon plus the nav panel it opens:
+`NAV_AREAS` in `src/components/nav.ts` is the one list to edit. An area is a rail icon plus the nav panel it opens:
 
 ```tsx
 export const NAV_AREAS = [
@@ -125,9 +125,11 @@ export const NAV_AREAS = [
 
 - **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count`.
 - **A new group** is one entry in an area's `groups`, with a `label` and its own `items`. It renders as a collapsible block under the ones above it.
-- **A new rail area** is one entry in `NAV_AREAS`, with its own `icon`, `label`, `to` and `groups`. Nothing else in the shell changes: the rail renders every area, and `app-shell.tsx` picks the active one by longest matching `to` prefix.
+- **A new rail area** is one entry in `NAV_AREAS`, with its own `icon`, `label`, `to` and `groups`. Nothing else in the shell changes: the rail renders every area, and `areaFor(pathname)` in the same file picks the active one by longest matching `to` prefix.
 
 Keep the `as const`. It is what holds every `to` at a literal type the router can check, so a nav entry naming a route that does not exist fails `pnpm typecheck` instead of 404-ing in the browser. Widen `to` to `string` and that check is gone.
+
+`nav.ts` holds the data and the two rules that read it, and nothing else. It is a plain `.ts` module rather than part of `app-shell.tsx` so that all three shell files can import it without the rail and the nav panel importing their own composer.
 
 Read an optional count through the `navCount(entry)` helper rather than `entry.count`. Under `as const` an entry that omits `count` has no such key on its type at all, and the helper is the one signature that accepts both shapes.
 
@@ -320,7 +322,9 @@ error boundary catches both the loader's throw and the query's.
 
 ## Theme and font
 
-**The admin app carries its own token set.** `src/styles/admin.css` imports `@repo/ui/globals.css` and then redeclares the shadcn variables for `:root` and `.dark`. `packages/ui/src/styles/globals.css` still owns Tailwind's entrypoint, the `@source` globs, the `dark` custom variant and the base layer; `admin.css` only reassigns values. The landing page and the shared theme do not move, so the base `DESIGN.md` token fingerprint holds.
+**The admin app carries its own token set.** `src/styles/admin.css` imports `@repo/ui/globals.css` and then redeclares the shadcn variables for `:root` and `.dark`. `packages/ui/src/styles/globals.css` still owns Tailwind's entrypoint, the `dark` custom variant and the base layer; `admin.css` reassigns values and adds one `@source` line.
+
+That `@source` line is load-bearing. Tailwind scans content rather than imports, so `globals.css` names the primitives the landing page renders one file at a time — a blanket components glob would push this app's tooltip, menu, sheet, tabs, table, avatar and scroll-area utilities into the landing page stylesheet as well. This app renders all of them, so it scans the whole directory itself. Vendor a primitive only this app uses and it is already covered; drop the line and every shell primitive renders unstyled with no error.
 
 `src/main.tsx` imports `./styles/admin.css` and nothing else. **No route imports a stylesheet.** Two Tailwind entrypoints in one bundle means two copies of the base layer and a token set whose winner depends on import order.
 
@@ -331,9 +335,13 @@ Two tokens exist beyond the shadcn set, both surfaced through `@theme inline`:
 - `--status-open` (and `--status-open-foreground`) — the muted blue of `StatusPill`'s `open` tone and of a primary circular action.
 - `--accent-sort` — the orange on `DataTable`'s active sort header. It is reserved for one indicator at a time and for an AI surface. It is never a section background, and `StatusPill` deliberately has no orange tone.
 
-**Dark by default, and a stored choice always wins.** `applyStartingTheme()` in `src/main.tsx` runs above `createRoot`, reads the raw `theme` key, and calls `setTheme("dark")` when it is absent or `setTheme(getStoredTheme())` when it is not. The raw read matters: `setTheme("system")` deletes the key, so `getStoredTheme()` cannot tell a first visit from a deliberate `system` choice, and asking it would re-pin `dark` over someone's `system`.
+**Dark by default, and every stored choice wins — `system` included.** `applyStartingTheme()` in `src/main.tsx` runs above `createRoot` and is one line: `setTheme(hasChosenTheme() ? getStoredTheme() : "dark")`.
 
-`index.html` emits no `THEME_INIT_SCRIPT` — that is the Astro host's mechanism, and there is no Vite plugin here. The trade is one frame of the light palette on an empty body before the entry module runs. The toggle itself is a delegated `[data-theme-toggle]` click handler in `main.tsx`, because `@repo/ui`'s `ThemeToggle` block is inert chrome whose handling normally lives in that script. It cycles light → dark → system off what is painted, not off storage, so it still advances where storage is unwritable.
+The `theme` key alone cannot carry this. `setTheme("system")` DELETES it — that is how `@repo/ui`'s state machine spells "follow the OS", and the landing page depends on it — so a first visit and a deliberate `system` both read as an absent key. `hasChosenTheme()` separates them by reading a second key, `theme-chosen`, which `installThemeToggle()` writes on every press and nothing clears. Never chosen means dark; chosen with no `theme` key means `system`, resolved against the OS.
+
+`index.html` emits no `THEME_INIT_SCRIPT` — that is the Astro host's mechanism, and there is no Vite plugin here. The trade is one frame of the light palette on an empty body before the entry module runs. `main.tsx` calls `installThemeToggle()` from `@repo/ui/lib/theme` instead: `ThemeToggle` is inert chrome whose click handling normally lives in that script, and importing the handler keeps the cycle rule in one place. It cycles light → dark → system off what is painted, not off storage, so it still advances where storage is unwritable.
+
+The rail calls `relabelThemeToggles()` in a `useEffect`. `setTheme` renames every toggle it can find, but the theme is applied before React mounts the button, so without that call the control keeps `ThemeToggle`'s static `system` label over a painted dark page.
 
 ### The two dependencies the theme and the table add
 
@@ -422,8 +430,8 @@ files.
   into a typecheck failure instead of a 404.
 - **One stylesheet, `src/styles/admin.css`, imported once from `src/main.tsx`.** A second Tailwind
   entrypoint duplicates the base layer and makes the token set order-dependent.
-- **Dark is the default, and a stored choice wins.** Read the raw storage key before deciding; do
-  not ask `getStoredTheme()`, which cannot tell an unset key from a deliberate `system`.
+- **Dark is the default, and a stored choice wins.** Gate it on `hasChosenTheme()`. `getStoredTheme()`
+  alone cannot tell an unset key from a deliberate `system`, because `system` is spelled as no key.
 - **Orange is `--accent-sort` and nothing else.** One active sort indicator, or an AI surface. Never
   a section background and never a status pill.
 - **Not-found and error screens are the root route's.** Inherit `__root.tsx`'s

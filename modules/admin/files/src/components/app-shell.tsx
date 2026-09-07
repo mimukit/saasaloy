@@ -1,11 +1,5 @@
 import { useRouterState } from "@tanstack/react-router";
-import {
-  GaugeIcon,
-  LayoutDashboardIcon,
-  PanelLeftIcon,
-  UsersIcon,
-  XIcon,
-} from "lucide-react";
+import { PanelLeftIcon, XIcon } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -17,71 +11,17 @@ import {
   SheetTitle,
 } from "@repo/ui/components/sheet";
 
-import type { AdminSession } from "@admin/lib/auth";
 import { NavPanel } from "@admin/components/nav-panel";
+import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { Rail } from "@admin/components/rail";
+import type { AdminSession } from "@admin/lib/auth";
 
 // The shell every admin screen renders inside: an icon rail, a nav panel, and a content
 // panel, floating as separate rounded panels on the canvas with an 8px gutter between
 // them and to the viewport edge.
 //
-// Dropping src/routes/<feature>.tsx is enough to make a screen reachable — the router
-// plugin wires it up with no patch. Adding it to NAV_AREAS below is the separate,
-// optional step that puts it in the nav panel.
-//
-// The `to` values are checked against the generated route tree, so a nav entry pointing
-// at a route that does not exist fails `pnpm typecheck` instead of 404-ing at runtime.
-// That is the reason this list is written out rather than derived from the router at
-// runtime, and the reason it is `as const`: widening `to` to `string` would take the
-// check away.
-//
-// Shape, one area per top-level destination in the rail:
-//
-//   { label, to, icon, count?, groups: [{ label, items: [{ to, label, icon, count? }] }] }
-//
-// The seed ships one area, "Admin", with one group. A second area gets its own rail
-// icon and its own nav panel; nothing else in this file has to change.
-export const NAV_AREAS = [
-  {
-    label: "Admin",
-    to: "/",
-    icon: LayoutDashboardIcon,
-    groups: [
-      {
-        label: "Manage",
-        items: [
-          { to: "/", label: "Overview", icon: GaugeIcon },
-          { to: "/users", label: "Users", icon: UsersIcon },
-        ],
-      },
-    ],
-  },
-] as const;
-
-export type NavAreas = typeof NAV_AREAS;
-export type NavArea = NavAreas[number];
-export type NavGroup = NavArea["groups"][number];
-export type NavItem = NavGroup["items"][number];
-
-/**
- * The optional count on an area or a nav row.
- *
- * Read it through this helper rather than `entry.count`. NAV_AREAS is `as const`, which
- * is what keeps every `to` a literal the router can check — and it also means an entry
- * that omits `count` has no such key on its type at all. A parameter with an optional
- * `count` accepts both shapes and still rejects a wrong one.
- *
- * `label` is in the signature to carry that check, not because the count needs it. A
- * parameter whose every property is optional is a "weak type", and TypeScript rejects an
- * argument sharing no property with it — which is exactly the countless entry this helper
- * exists for. One required property both shapes already have settles it.
- */
-export function navCount(entry: {
-  readonly label: string;
-  readonly count?: number;
-}): number | undefined {
-  return entry.count;
-}
+// This file composes; it holds no navigation data. NAV_AREAS, its types, and the two
+// rules that read it live in ./nav.ts, which is the one file to edit to add a screen.
 
 export function AppShell({
   session,
@@ -98,13 +38,9 @@ export function AppShell({
     select: (state) => state.location.pathname,
   });
 
-  // The area the current path belongs to: the one whose `to` is the longest prefix of
-  // the path. With a single seeded area that always resolves to it, and adding a second
-  // area needs no change here.
-  const area =
-    NAV_AREAS.filter((candidate) => pathname.startsWith(candidate.to)).toSorted(
-      (a, b) => b.to.length - a.to.length
-    )[0] ?? NAV_AREAS[0];
+  // With a single seeded area this always resolves to it, and adding a second area needs
+  // no change here.
+  const area = areaFor(pathname);
 
   return (
     <div className="bg-background flex h-dvh gap-2 overflow-hidden p-2">

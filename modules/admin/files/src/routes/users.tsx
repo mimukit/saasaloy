@@ -1,10 +1,11 @@
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { IdCardIcon, ShieldIcon } from "lucide-react";
+import { IdCardIcon, RefreshCwIcon, ShieldIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
+import { Button } from "@repo/ui/components/button";
 
 import { DataTable } from "@admin/components/data-table";
 import type { DataTableColumn } from "@admin/components/data-table";
@@ -14,6 +15,7 @@ import { PageHeader } from "@admin/components/page-header";
 import { PageLayout } from "@admin/components/page-layout";
 import { StatusPill } from "@admin/components/status-pill";
 import { api } from "@admin/lib/api";
+import { initialsOf } from "@admin/lib/initials";
 
 // The worked example of a real admin screen, at `/users`. It is the one place in the
 // scaffold where every page primitive appears at once: a header with a count, a chip row,
@@ -72,19 +74,6 @@ type RoleFilter = (typeof ROLE_FILTERS)[number]["id"];
  */
 function roleOf(user: AdminUser): string {
   return user.role ?? "user";
-}
-
-/** Up to two initials for the row avatar, falling back to `?` for an unnameable account. */
-function initialsOf(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0] ?? "")
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
-  return initials || "?";
 }
 
 // The table's shape, at module scope. It depends on no state, so hoisting it out of the
@@ -296,24 +285,24 @@ function Users() {
 function UsersError({ error, reset }: ErrorComponentProps) {
   return (
     <PageLayout>
-      <PageHeader title="Users" description="The user list did not load." />
+      <PageHeader
+        title="Users"
+        description="The user list did not load."
+        actions={
+          <Button variant="outline" size="sm" onClick={reset}>
+            <RefreshCwIcon data-icon="inline-start" />
+            Try again
+          </Button>
+        }
+      />
 
       <div className="min-h-0 flex-1 overflow-auto p-4">
         <div
           role="alert"
           className="border-border text-muted-foreground max-w-2xl rounded-xl border p-4 text-sm"
         >
-          <p>
-            {error.message} GET /admin/users answers 403 unless the signed-in
-            account has the admin role.
-          </p>
-          <button
-            type="button"
-            onClick={reset}
-            className="text-foreground mt-3 underline underline-offset-4"
-          >
-            Try again
-          </button>
+          {error.message} GET /admin/users answers 403 unless the signed-in
+          account has the admin role.
         </div>
       </div>
     </PageLayout>
