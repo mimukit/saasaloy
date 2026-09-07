@@ -19,6 +19,10 @@ const NON_BINDING_KEYS = new Set([
   "compatibility_flags",
 ]);
 
+// The binding kinds `toResources` translates. Any other key in wrangler.jsonc is refused
+// before the build starts — the v1 contract is "ship what's declared", never "best-effort".
+const SUPPORTED_BINDING_KEYS = new Set(["d1_databases", "vars"]);
+
 export interface ServiceResources {
   /** The deployed Worker script. */
   script: cloudflare.WorkersScript;
@@ -42,17 +46,24 @@ export async function toResources(
 ): Promise<ServiceResources> {
   const { name, dir, config } = service;
 
+  // Refuse unsupported config before the build runs, so a wrong key fails in
+  // milliseconds instead of after a full `pnpm run build`.
+  const bindingKeys = Object.keys(config).filter(
+    (key) => !NON_BINDING_KEYS.has(key)
+  );
+  for (const key of bindingKeys) {
+    if (!SUPPORTED_BINDING_KEYS.has(key)) {
+      throw new Error(`infra doesn't support '${key}' yet`);
+    }
+  }
+
   await buildService(dir);
   const { content, contentSha256 } = await readBundle(dir, config);
 
   const databases: cloudflare.D1Database[] = [];
   const bindings: cloudflare.types.input.WorkersScriptBinding[] = [];
 
-  for (const key of Object.keys(config)) {
-    if (NON_BINDING_KEYS.has(key)) {
-      continue;
-    }
-
+  for (const key of bindingKeys) {
     switch (key) {
       case "d1_databases": {
         for (const entry of config.d1_databases ?? []) {
@@ -76,6 +87,7 @@ export async function toResources(
         break;
       }
       default: {
+        // Unreachable: the pre-build check above already refused every other key.
         throw new Error(`infra doesn't support '${key}' yet`);
       }
     }
