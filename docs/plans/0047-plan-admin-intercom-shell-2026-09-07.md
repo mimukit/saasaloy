@@ -60,7 +60,7 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - Move the account block out of the nav panel and into the rail footer, matching the screenshots. `sign-out-button.tsx` becomes a menu item or is called from one.
 - Verify in `.dev`: all routes render inside the shell, active state follows `aria-current`, not-found and access-denied still render inside the shell, keyboard focus order runs rail → nav → content.
 
-### Phase 4: page primitives (#123)
+### Phase 4: page primitives (#123) (built 2026-09-07)
 
 - Add `src/components/page-layout.tsx` (content column plus optional `detail` node; below `md` the detail renders in a `Sheet`), `page-header.tsx`, `filter-chips.tsx`, `data-table.tsx`, `status-pill.tsx`, `attribute-list.tsx`, `detail-panel.tsx`. Each takes plain props and callbacks, imports only React and `@repo/ui` (and `@tanstack/react-table` inside `data-table.tsx` only), and carries an in-file comment naming its Intercom counterpart.
 - `DataTable` wraps `@tanstack/react-table` (exact-pinned, added to the admin `package.json` via `pnpm deps:update`): a `columns` array with optional `sortable`, `rows`, `onRowClick`, `selectedId`, sticky header, row hover, `—` for empty cells, an `emptyState` slot. Sorting is client side. The sort indicator uses `--accent-sort`.
