@@ -393,7 +393,7 @@ for **`shadcn` bumps specifically**. The template's `AGENTS.md` documents swappi
 project's whole token set with `shadcn add <registry:style url>`, which works only
 because shadcn merges into the base's `globals.css` instead of overwriting it. The script
 runs that recipe for real against a fresh playground and asserts the base's own rules —
-the three `@source` globs, `@custom-variant dark`, `@layer base`, one each of `:root` /
+the `@source` rules, `@custom-variant dark`, `@layer base`, one each of `:root` /
 `.dark` / `@theme inline` — survived, `components.json` was untouched, and the swapped
 `--primary` reached the built CSS.
 

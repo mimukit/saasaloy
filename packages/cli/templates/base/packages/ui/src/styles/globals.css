@@ -11,7 +11,34 @@
    `astro dev`/`astro build` run with cwd = apps/web. Without these globs every utility
    class written inside packages/ui is silently dropped — no error, no warning, just
    missing CSS. A non-matching @source glob is equally silent, so both paths matter. */
-@source "../**/*.{ts,tsx}";
+@source "../*.{ts,tsx}";
+@source "../blocks/**/*.{ts,tsx}";
+@source "../containers/**/*.{ts,tsx}";
+@source "../content/**/*.{ts,tsx}";
+@source "../lib/**/*.{ts,tsx}";
+
+/* Components are listed one by one, and that is deliberate. Tailwind scans CONTENT, not
+   imports: a primitive nobody renders still pushes every class string it contains into
+   every stylesheet that pulls this file in. A blanket `../components/**` glob therefore
+   charges the landing page for primitives only an admin screen uses — measured at 71.5 kB
+   against 45.7 kB for the same page with the unused ones out of the scan.
+
+   So this list is the set the landing page and src/blocks/ actually render. Vendor a
+   primitive with `shadcn add` and one of two things is true:
+
+     - a block or an app page renders it → add its line here;
+     - only one app renders it → add an `@source` line in THAT app's own stylesheet
+       instead, the way apps/admin/src/styles/admin.css does for the shell primitives.
+
+   Get this wrong and the failure is the silent one the comment above describes: the class
+   never reaches the CSS and the component renders unstyled. */
+@source "../components/accordion.tsx";
+@source "../components/badge.tsx";
+@source "../components/button.tsx";
+@source "../components/card.tsx";
+@source "../components/input.tsx";
+@source "../components/label.tsx";
+@source "../components/separator.tsx";
 
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to

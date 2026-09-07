@@ -2,8 +2,8 @@
 // project can swap its whole token set with `shadcn add <registry:style url>` and keep
 // everything the base hand-wrote around those tokens.
 //
-// The template's globals.css is not stock shadcn output. It carries three `@source`
-// globs (without which every utility in packages/ui is silently dropped — see
+// The template's globals.css is not stock shadcn output. It carries a block of `@source`
+// rules (without which every utility in packages/ui is silently dropped — see
 // verify-css), a `@custom-variant dark`, and a `@layer base`. The preset recipe
 // documented in the template's AGENTS.md points shadcn at that same file and asks it to
 // merge. Today shadcn merges `:root` / `.dark` / `@theme inline` in place and leaves the
@@ -46,8 +46,15 @@ const playgroundDist = join(playground, "apps/web/dist");
 // a real failure mode, not a formatting preference: drop a @source glob and packages/ui
 // renders unstyled, drop @custom-variant and every `dark:` utility stops matching, drop
 // @layer base and the border/background reset goes with it.
+//
+// The packages/ui scan is a list rather than one `../**` glob, because Tailwind scans
+// content and not imports: a primitive nobody renders would otherwise be charged to every
+// stylesheet that imports this file. One sentinel line from each half of that list is
+// enough to catch a merge that ate the block.
 const MUST_SURVIVE = [
-  '@source "../**/*.{ts,tsx}";',
+  '@source "../blocks/**/*.{ts,tsx}";',
+  '@source "../lib/**/*.{ts,tsx}";',
+  '@source "../components/button.tsx";',
   '@source "../../../../apps/**/*.{ts,tsx,astro}";',
   '@source not "../../../../**/node_modules";',
   "@custom-variant dark (&:is(.dark *));",

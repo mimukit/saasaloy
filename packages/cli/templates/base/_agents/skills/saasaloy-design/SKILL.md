@@ -126,7 +126,7 @@ Use the package-local executable from the project root.
 pnpm --filter @repo/ui exec shadcn add <registry-style-url>
 ```
 
-Confirm that the three `@source` rules, `@custom-variant dark`, and `@layer base` remain in `globals.css`. Confirm that `components.json` did not change.
+Confirm that the `@source` rules, `@custom-variant dark`, and `@layer base` remain in `globals.css`. Confirm that `components.json` did not change.
 
 Stop and report the failure when the preset removes a required rule or changes `components.json`. Do not repair an unknown preset merge without approval.
 

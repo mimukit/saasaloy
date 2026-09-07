@@ -1,8 +1,9 @@
 /* The admin app's theme, and the ONLY stylesheet apps/admin imports (see src/main.tsx).
    It layers on `@repo/ui/globals.css` rather than replacing it: the shared file still
-   owns Tailwind's entrypoint, the @source globs, the `dark` custom variant and the base
-   layer. Everything below only reassigns values. packages/ui/src/styles/globals.css and
-   the landing page are untouched, so the base DESIGN.md token fingerprint still holds.
+   owns Tailwind's entrypoint, the `dark` custom variant and the base layer. Everything
+   below reassigns values, plus the one @source line the next block explains. The token
+   values in packages/ui/src/styles/globals.css are untouched, so the base DESIGN.md
+   token fingerprint still holds.
 
    Why an app-scoped token set at all: the landing page is a marketing surface on a
    neutral shadcn palette, and the backoffice is a dense, dark, panelled workspace. One
@@ -34,6 +35,18 @@
 
 @import "@repo/ui/globals.css";
 @import "@fontsource-variable/inter";
+
+/* The shell primitives, opted into by this app alone.
+
+   globals.css lists the primitives the landing page renders and stops there, because
+   Tailwind scans content rather than imports: a blanket components glob would push the
+   shell's tooltip, menu, sheet, tabs, table, avatar and scroll-area utilities into the
+   landing page stylesheet as well. This app renders all of them, so it asks for the whole
+   directory here.
+
+   FOUR levels up: from apps/admin/src/styles/ the path walks styles → src → admin →
+   apps → <root>. The same off-by-one trap the app glob in globals.css warns about. */
+@source "../../../../packages/ui/src/components/*.tsx";
 
 :root {
   /* 12px. The screenshots' panels read at about a 12px corner, one step above the
