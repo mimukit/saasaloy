@@ -38,6 +38,10 @@
         { "path": "files/index.html", "target": "index.html" },
         { "path": "files/src/main.tsx", "target": "src/main.tsx" },
         {
+          "path": "files/src/styles/admin.css",
+          "target": "src/styles/admin.css"
+        },
+        {
           "path": "files/src/routeTree.gen.ts",
           "target": "src/routeTree.gen.ts"
         },
