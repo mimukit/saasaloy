@@ -3,13 +3,6 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { Button } from "@repo/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
 import { Input } from "@repo/ui/components/input";
 import { Label } from "@repo/ui/components/label";
 
@@ -93,16 +86,21 @@ function LoginScreen() {
     setPending(false);
   }
 
+  // The shell's own geometry, minus the shell: the same canvas, the same rounded panel
+  // and the same hairline as a content panel, with one panel centred on it instead of
+  // three side by side. Signing in then swaps this panel for the full layout rather than
+  // changing the surface under it.
   return (
-    <main className="mx-auto flex min-h-dvh max-w-sm items-center px-6">
-      <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Sign in</CardTitle>
-          <CardDescription>
+    <main className="bg-background flex min-h-dvh items-center justify-center p-4">
+      <div className="bg-card text-card-foreground border-border w-full max-w-sm rounded-xl border">
+        <div className="border-border border-b px-5 py-4">
+          <h1 className="text-lg font-semibold tracking-tight">Sign in</h1>
+          <p className="text-muted-foreground mt-0.5 text-sm">
             The admin app is open to admin accounts only.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+          </p>
+        </div>
+
+        <div className="px-5 py-4">
           <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             <div className="flex flex-col gap-2">
               <Label htmlFor="email">Email</Label>
@@ -142,8 +140,8 @@ function LoginScreen() {
               {pending ? "Signing in…" : "Sign in"}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </main>
   );
 }

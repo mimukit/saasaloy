@@ -67,7 +67,7 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - `DetailPanel`: `Tabs` header, open-in-new and close actions, `ScrollArea` body of `Collapsible` groups each wrapping an `AttributeList`.
 - Verify: `pnpm typecheck` green, every primitive rendered by a route in Phase 5.
 
-### Phase 5: overview, users, login, docs (#123)
+### Phase 5: overview, users, login, docs (#123) (built 2026-09-07)
 
 - Restyle `src/routes/index.tsx`: `PageLayout` and `PageHeader` "Overview", the health result as a `StatusPill` and an `AttributeList`. Keep the loader + Query wiring and the `DashboardError` fallback.
 - Add `src/routes/users.tsx`: a `queryOptions` over `api.admin.users.$get()`, prefetched in the loader; `PageHeader` "Users" with the `total` count; `FilterChips` for All / Admins / Users filtering client-side by role; `DataTable` with name, email, role (`StatusPill`), verified, created; row click sets the selected user and `PageLayout` renders a `DetailPanel` with an `AttributeList` of that user's fields. The router plugin regenerates `routeTree.gen.ts`; commit the result, do not hand-edit it.

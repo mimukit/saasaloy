@@ -3,16 +3,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { RefreshCwIcon } from "lucide-react";
 
-import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
 
+import { AttributeList } from "@admin/components/attribute-list";
+import { PageHeader } from "@admin/components/page-header";
+import { PageLayout } from "@admin/components/page-layout";
+import { StatusPill } from "@admin/components/status-pill";
 import { api } from "@admin/lib/api";
 
 // The convention every admin screen follows, written once here so a feature module can
@@ -57,48 +53,84 @@ function Dashboard() {
   // The loader already resolved this, so `data` is present on the first render. The hook
   // is still what the component reads, because it subscribes: an invalidation anywhere in
   // the app re-renders this screen, which a value returned from the loader would not.
-  const { data, isFetching } = useQuery(healthQuery);
+  const { data, isFetching, dataUpdatedAt } = useQuery(healthQuery);
+
+  const status = data?.status;
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Overview</h1>
-          <p className="text-muted-foreground text-sm">
-            Live data from the api Worker.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={isFetching}
-          // Invalidation, not `refetch()`: marking the key stale refreshes every screen
-          // holding this query, and it is the same call a mutation's `onSuccess` makes.
-          onClick={() =>
-            queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })
-          }
-        >
-          <RefreshCwIcon data-icon="inline-start" />
-          {isFetching ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
+    // No `detail` prop here: the overview has nothing to select, so PageLayout renders a
+    // single column and no side panel. /users is the screen that passes one.
+    <PageLayout>
+      <PageHeader
+        title="Overview"
+        description="Live data from the api Worker."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            disabled={isFetching}
+            // Invalidation, not `refetch()`: marking the key stale refreshes every screen
+            // holding this query, and it is the same call a mutation's `onSuccess` makes.
+            onClick={() =>
+              queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })
+            }
+          >
+            <RefreshCwIcon data-icon="inline-start" />
+            {isFetching ? "Refreshing…" : "Refresh"}
+          </Button>
+        }
+      />
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Api health</CardTitle>
-          <CardDescription>
-            <code className="font-mono">GET /health</code>, called through{" "}
-            <code className="font-mono">hc&lt;AppType&gt;</code>. The response
-            is typed by the route file in apps/api, so a schema change there
-            fails this app&#39;s typecheck.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex items-center gap-2 text-sm">
-          <span className="text-muted-foreground">status</span>
-          <Badge variant="secondary">{data?.status}</Badge>
-        </CardContent>
-      </Card>
-    </main>
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <section
+          aria-labelledby="api-health"
+          className="border-border max-w-2xl rounded-xl border p-4"
+        >
+          <div className="mb-3 flex items-center gap-2">
+            <h2 id="api-health" className="text-sm font-medium">
+              Api health
+            </h2>
+            {/* The one live value on this screen, so it gets the pill rather than a row
+                of plain text. `open` is the muted blue the reference reserves for a
+                healthy state; anything other than "ok" falls back to neutral. */}
+            <StatusPill
+              label={status ?? "unknown"}
+              tone={status === "ok" ? "open" : "neutral"}
+            />
+          </div>
+
+          {/* The same label/value rows the detail panel uses, so the two screens read as
+              one system and neither invents its own field layout. */}
+          <AttributeList
+            items={[
+              {
+                label: "Endpoint",
+                value: <code className="font-mono text-xs">GET /health</code>,
+              },
+              {
+                label: "Client",
+                value: (
+                  <code className="font-mono text-xs">hc&lt;AppType&gt;</code>
+                ),
+              },
+              { label: "Status", value: status },
+              {
+                label: "Checked",
+                value:
+                  dataUpdatedAt === 0
+                    ? undefined
+                    : new Date(dataUpdatedAt).toLocaleTimeString(),
+              },
+            ]}
+          />
+
+          <p className="text-muted-foreground mt-3 text-sm">
+            The response is typed by the route file in apps/api, so a schema
+            change there fails this app&#39;s typecheck.
+          </p>
+        </section>
+      </div>
+    </PageLayout>
   );
 }
 
@@ -107,22 +139,27 @@ function Dashboard() {
 // button re-runs the loader.
 function DashboardError({ error, reset }: ErrorComponentProps) {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>The api did not answer</CardTitle>
-          <CardDescription>
-            {error.message} Check that apps/api is running on the origin
-            PUBLIC_API_URL names (http://localhost:4000 in dev).
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
+    <PageLayout>
+      <PageHeader
+        title="Overview"
+        description="The api did not answer."
+        actions={
           <Button variant="outline" size="sm" onClick={reset}>
             <RefreshCwIcon data-icon="inline-start" />
             Try again
           </Button>
-        </CardContent>
-      </Card>
-    </main>
+        }
+      />
+
+      <div className="min-h-0 flex-1 overflow-auto p-4">
+        <div
+          role="alert"
+          className="border-border text-muted-foreground max-w-2xl rounded-xl border p-4 text-sm"
+        >
+          {error.message} Check that apps/api is running on the origin
+          PUBLIC_API_URL names (http://localhost:4000 in dev).
+        </div>
+      </div>
+    </PageLayout>
   );
 }

@@ -1,6 +1,6 @@
 ---
 name: saasaloy-admin
-description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin, changing the admin-role guard or the login screen, debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, removing the module, or deploying the static bundle to Workers.
+description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, composing the page primitives (page layout, page header, filter chips, data table, status pill, attribute list, detail panel), adding a rail area or a nav group to the three-panel shell, changing the admin-scoped theme or the dark-by-default rule, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin, changing the admin-role guard or the login screen, debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, removing the module, or deploying the static bundle to Workers.
 ---
 
 # admin — the role-gated backoffice SPA
@@ -10,13 +10,15 @@ over Vite, built to static assets and served by a Worker with a single-page-appl
 It carries **no server code and no Cloudflare bindings**. Everything it knows, it asks `apps/api`
 for over the credentialed CORS spine, which is why it `dependsOn: ["api", "auth"]`.
 
-Two conventions define it, and both are file drops rather than patches:
+Three conventions define it, and the first two are file drops rather than patches:
 
 - **A screen is a file** under `src/routes/`. The router plugin regenerates `src/routeTree.gen.ts`
   and the screen is live, guarded, and typed — no descriptor patch, the admin twin of the schema
   barrel in `packages/db`.
 - **A request is a `queryOptions` object**, prefetched in the route's `loader` and read in the
   component with `useQuery`, over a single `hc<AppType>` client.
+- **A screen composes the page primitives** in `src/components/`. It writes no shell markup, no
+  table markup, and no colours of its own.
 
 ## Add a screen
 
@@ -26,6 +28,8 @@ Drop `src/routes/<feature>.tsx` with a `createFileRoute` whose id matches the fi
 // src/routes/widgets.tsx  →  /widgets
 import { queryOptions, useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
+import { PageHeader } from "@admin/components/page-header";
+import { PageLayout } from "@admin/components/page-layout";
 import { api } from "@admin/lib/api";
 
 const widgetsQuery = queryOptions({
@@ -46,13 +50,21 @@ function Widgets() {
   const { data } = useQuery(widgetsQuery);
   // `useQuery` types `data` as `T | undefined` and the repo compiles with `strict`, so read
   // it through `?.` even when the loader has already filled the cache.
-  return <main className="mx-auto max-w-3xl px-6 py-10">{data?.widgets.length ?? 0} widgets</main>;
+  return (
+    <PageLayout>
+      <PageHeader title="Widgets" count={data?.total} />
+      <div className="min-h-0 flex-1 overflow-auto p-4">…</div>
+    </PageLayout>
+  );
 }
 ```
 
 That is the whole registration. The file is a child of `src/routes/__root.tsx`, so it inherits the
-sidebar shell and the access gate with no work of its own. `src/routes/index.tsx` is the worked
-example in the scaffold; copy from it.
+shell and the access gate with no work of its own. `src/routes/users.tsx` is the worked example in
+the scaffold; copy from it.
+
+`PageLayout` fills the content panel the shell gives the route, so the route never sets its own page
+width, background or padding. A screen that reaches for `mx-auto max-w-3xl` is fighting the shell.
 
 Three things the plugin owns, so do not hand-write them:
 
@@ -66,15 +78,95 @@ Three things the plugin owns, so do not hand-write them:
 
 Not-found and error handling comes with the root route as well. `__root.tsx` carries a
 `notFoundComponent` and an `errorComponent`, both rendering `@repo/ui`'s `ErrorState`, so an
-address matching no file under `src/routes/` shows the themed 404 inside the sidebar shell, and a
+address matching no file under `src/routes/` shows the themed 404 inside the shell, and a
 throw during render shows a retry screen instead of a blank page. A feature module inherits both
 and registers neither: a second `notFoundComponent` on your own route captures every miss below it
 and answers with markup nobody else restyles. Change the words in
 `packages/ui/src/content/errors.ts`, not in a new component here.
 
-Adding the screen to `NAV_ITEMS` in `src/components/app-shell.tsx` is a separate, optional step.
-The `to` values are checked against the generated tree, so a nav entry for a route that does not
-exist fails `pnpm typecheck` rather than 404-ing in the browser.
+Putting the screen in the nav is a separate, optional step. See [The shell](#the-shell) below.
+
+## The shell
+
+Every route except `/login` renders inside `src/components/app-shell.tsx`, which lays out three floating panels on the canvas with an 8px gutter between them and to the viewport edge:
+
+| Panel | File | Width | What it holds |
+|---|---|---|---|
+| Icon rail | `src/components/rail.tsx` | 56px, no panel chrome | one icon per top-level area, each in a `Tooltip` with an optional count `Badge`; a footer with the theme toggle and an `Avatar` opening a `DropdownMenu` that carries the account name, the email and sign-out |
+| Nav panel | `src/components/nav-panel.tsx` | 240px, hidden below `md` | the active area's title row with actions, then `Collapsible` groups of rows with icon, label and right-aligned count |
+| Content panel | `app-shell.tsx` | the rest | the route, through `PageLayout` |
+
+Below `md` the nav panel leaves the row and reappears in a `Sheet` behind a toggle in the content header. The rail stays at every width. Nav state resets on every load: groups open by default, nothing written to `localStorage`, no server-side layout preference.
+
+Active state is `aria-current`. TanStack Router sets it on the active `Link`, and both the rail and the nav rows style themselves with `aria-[current=page]:` off that same attribute. There is no second "which page am I on" comparison to keep in step.
+
+### Add a rail area and a nav group
+
+`NAV_AREAS` in `src/components/app-shell.tsx` is the one list to edit. An area is a rail icon plus the nav panel it opens:
+
+```tsx
+export const NAV_AREAS = [
+  {
+    label: "Admin",
+    to: "/",
+    icon: LayoutDashboardIcon,
+    groups: [
+      {
+        label: "Manage",
+        items: [
+          { to: "/", label: "Overview", icon: GaugeIcon },
+          { to: "/users", label: "Users", icon: UsersIcon },
+        ],
+      },
+    ],
+  },
+] as const;
+```
+
+- **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count`.
+- **A new group** is one entry in an area's `groups`, with a `label` and its own `items`. It renders as a collapsible block under the ones above it.
+- **A new rail area** is one entry in `NAV_AREAS`, with its own `icon`, `label`, `to` and `groups`. Nothing else in the shell changes: the rail renders every area, and `app-shell.tsx` picks the active one by longest matching `to` prefix.
+
+Keep the `as const`. It is what holds every `to` at a literal type the router can check, so a nav entry naming a route that does not exist fails `pnpm typecheck` instead of 404-ing in the browser. Widen `to` to `string` and that check is gone.
+
+Read an optional count through the `navCount(entry)` helper rather than `entry.count`. Under `as const` an entry that omits `count` has no such key on its type at all, and the helper is the one signature that accepts both shapes.
+
+## Page primitives
+
+Seven components in `src/components/`, all of them plain props and callbacks. None imports `@repo/api`, `hono/client`, `@admin/lib/api` or `import.meta.env` — data reaches them from the route, and holding that line is what keeps them reusable by the next screen.
+
+| Component | Props | Notes |
+|---|---|---|
+| `PageLayout` | `children`, `detail?`, `detailLabel?`, `onDetailClose?`, `className?` | Fills the content panel. `detail` renders as a fourth panel at `md` and up, and in a `Sheet` below it; the same node either way. `detail` doubles as the open state, so passing `undefined` closes both placements. The width is read with `matchMedia`, not a CSS class, because a `md:hidden` sheet still mounts and would trap focus at desktop. |
+| `PageHeader` | `title`, `count?`, `description?`, `actions?`, `className?` | The screen's only `h1`. `count` is separate from `title` so the number stays out of the accessible heading text; `0` renders, `undefined` does not. |
+| `FilterChips` | `chips`, `selectedId`, `onSelect`, `label`, `className?` | A chip is `{ id, label, count? }`. Every chip is a real `button` carrying `aria-pressed`, and the styling keys off that attribute. It holds no selection state and runs no query — filtering is the route's. |
+| `DataTable` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `emptyState?`, `className?` | See below. |
+| `StatusPill` | `label`, `tone?`, `icon?`, `className?` | `tone` is `"neutral"` or `"open"`, and `open` is the muted blue keyed to `--status-open`. Mapping a domain value onto a tone is the caller's job. |
+| `AttributeList` | `items`, `className?` | An item is `{ label, value? }`. A `dl` with a 132px label column. `null`, `undefined` and `""` all render as an em dash, so no caller writes the dash. |
+| `DetailPanel` | `title`, `onClose`, `attributes?`, `groups?`, `tabs?`, `onOpenInNew?`, `className?` | A `Tabs` header with open-in-new and close actions, then a `ScrollArea` of `Collapsible` groups each wrapping an `AttributeList`. A group is `{ id, label, icon?, items, defaultOpen? }`; a tab is `{ id, label, content? }`, and a tab with no `content` renders an empty panel. |
+
+`DataTable` is the only file in the app that imports `@tanstack/react-table`, and that is the point: a caller describes its screen with `columns` and `rows` and never sees a `ColumnDef` or a sorting state. A column is:
+
+```tsx
+{ id, header, value, cell?, sortable?, align? }
+```
+
+`value(row)` is both the sort key and the cell content when `cell` is absent, so the two cannot fall out of step. `cell(row)` renders anything richer. `rowId(row)` is the row's identity — it keys the rows, matches `selectedId`, and is what `onRowClick` should store, because an index breaks the moment a sort reorders the table. Sorting is client side and two-state: a sortable header cycles ascending and descending with no unsorted third step, and the active header is the one place `--accent-sort` orange appears.
+
+Empty cells render `—` from the shared `EMPTY` constant in `attribute-list.tsx`, a boolean renders `Yes`/`No`, and a `Date` renders through `toLocaleDateString()`, so a column of dates needs no renderer.
+
+## The users screen, end to end
+
+`src/routes/users.tsx` is the worked example. It is the only screen that uses every primitive at once, and every row in it is real data from `GET /admin/users` — there are no demo rows to delete.
+
+- `usersQuery` is a `queryOptions` over `api.admin.users.$get()`, keyed `["admin", "users"]` and prefetched by the route's `loader`.
+- The row type is derived from the query's own return type, not written out by hand, so a field dropped in `apps/api` lands as a typecheck failure here.
+- `PageHeader` shows `data.total` — the api's count, not `rows.length`. The endpoint caps its answer at 100 users, so the loaded page and the real total can differ.
+- `FilterChips` narrows the loaded rows by role, in the component, with no refetch. The api takes no role parameter, so a chip press that fired a request would come back with the same page.
+- `DataTable` renders name, email, role, verified and created. The columns are a module-scope constant, not an array built in the render pass; the lint rule against components defined during render flags `cell` renderers that live inside the component body.
+- The selected user is `useState` in the route. The route builds the `DetailPanel` and hands it to `PageLayout` as `detail`, which is what lets one node be a side panel at desktop and a sheet below `md`.
+
+Copy that split when you add a screen: **the route owns the state and the data, the primitives own the pixels.**
 
 ## The gate: a session is never enough
 
@@ -124,7 +216,7 @@ export const Route = createFileRoute("/reports")({
 
 The screen needs no guard of its own. It is a child of `__root.tsx`, so it inherits `beforeLoad`, and a non-admin never reaches its loader. That inheritance is exactly what makes the server half easy to forget: the screen behaves correctly while the endpoint behind it answers anyone.
 
-`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` calls `requireAdmin`, then `auth.api.listUsers`, and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. Nothing in this app renders it yet; it exists to prove the gate and to be the pattern the next route copies.
+`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` calls `requireAdmin`, then `auth.api.listUsers`, and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
 
 Prove the server half yourself rather than trusting the screen. Sign in as a non-admin, take the cookie, and call the endpoint directly:
 
@@ -226,6 +318,30 @@ and one retry absorbs a dropped packet without sitting on a down api for seconds
 Give every data route an `errorComponent`. A down api is the ordinary case in dev, and the route's
 error boundary catches both the loader's throw and the query's.
 
+## Theme and font
+
+**The admin app carries its own token set.** `src/styles/admin.css` imports `@repo/ui/globals.css` and then redeclares the shadcn variables for `:root` and `.dark`. `packages/ui/src/styles/globals.css` still owns Tailwind's entrypoint, the `@source` globs, the `dark` custom variant and the base layer; `admin.css` only reassigns values. The landing page and the shared theme do not move, so the base `DESIGN.md` token fingerprint holds.
+
+`src/main.tsx` imports `./styles/admin.css` and nothing else. **No route imports a stylesheet.** Two Tailwind entrypoints in one bundle means two copies of the base layer and a token set whose winner depends on import order.
+
+The dark palette is a three-step neutral ramp measured off the reference screenshots — canvas darkest, panel one step lighter, hover and selected one step lighter again — with an opaque hairline rather than the base template's low-alpha white, which is invisible on a near-black canvas. The measured values are written into the header comment of `admin.css` beside the roles they fill; change a value there and update the comment with it. Light is a mapped cream variant and is first-class, not a fallback.
+
+Two tokens exist beyond the shadcn set, both surfaced through `@theme inline`:
+
+- `--status-open` (and `--status-open-foreground`) — the muted blue of `StatusPill`'s `open` tone and of a primary circular action.
+- `--accent-sort` — the orange on `DataTable`'s active sort header. It is reserved for one indicator at a time and for an AI surface. It is never a section background, and `StatusPill` deliberately has no orange tone.
+
+**Dark by default, and a stored choice always wins.** `applyStartingTheme()` in `src/main.tsx` runs above `createRoot`, reads the raw `theme` key, and calls `setTheme("dark")` when it is absent or `setTheme(getStoredTheme())` when it is not. The raw read matters: `setTheme("system")` deletes the key, so `getStoredTheme()` cannot tell a first visit from a deliberate `system` choice, and asking it would re-pin `dark` over someone's `system`.
+
+`index.html` emits no `THEME_INIT_SCRIPT` — that is the Astro host's mechanism, and there is no Vite plugin here. The trade is one frame of the light palette on an empty body before the entry module runs. The toggle itself is a delegated `[data-theme-toggle]` click handler in `main.tsx`, because `@repo/ui`'s `ThemeToggle` block is inert chrome whose handling normally lives in that script. It cycles light → dark → system off what is painted, not off storage, so it still advances where storage is unwritable.
+
+### The two dependencies the theme and the table add
+
+- **`@fontsource-variable/inter`** is a runtime `dependency`, imported from `admin.css` and set as `--font-sans` in a `@theme` block. It is the app's only face; no mono font is loaded. The body enables Inter's `cv11` and `ss01` sets and `tabular-nums`, because counts sit in right-aligned columns in the nav and the table.
+- **`@tanstack/react-table`** is a runtime `dependency`, imported by `src/components/data-table.tsx` and nowhere else. Features are registered once at module scope through `tableFeatures({ rowSortingFeature, ... })`; v9 has no global feature set, and naming them there is also what keeps the unused ones out of the bundle.
+
+Both are exact-pinned. Template and module-descriptor dependencies are invisible to pnpm, so move them with `pnpm deps:update` and never by hand-typing a version.
+
 ## Ports and CORS
 
 | Service | Port | Pinned in |
@@ -296,6 +412,20 @@ files.
 - **A screen is a file drop** under `src/routes/`, never a patch. Let the plugin rewrite
   `src/routeTree.gen.ts`; never hand-edit it.
 - **`tanstackRouter()` stays ahead of `react()`** in `vite.config.ts`.
+- **A screen composes the primitives.** Start from `PageLayout` and `PageHeader`; do not write shell
+  markup, table markup, or a page width of your own.
+- **A primitive takes plain props and callbacks.** Nothing under `src/components/` imports
+  `@repo/api`, `hono/client`, `@admin/lib/api`, or reads `import.meta.env`.
+- **`@tanstack/react-table` is imported by `data-table.tsx` and by nothing else.** A route that
+  imports a `ColumnDef` has skipped the wrapper the next screen depends on.
+- **`NAV_AREAS` stays `as const`.** That literal type is what turns a nav entry for a missing route
+  into a typecheck failure instead of a 404.
+- **One stylesheet, `src/styles/admin.css`, imported once from `src/main.tsx`.** A second Tailwind
+  entrypoint duplicates the base layer and makes the token set order-dependent.
+- **Dark is the default, and a stored choice wins.** Read the raw storage key before deciding; do
+  not ask `getStoredTheme()`, which cannot tell an unset key from a deliberate `system`.
+- **Orange is `--accent-sort` and nothing else.** One active sort indicator, or an AI surface. Never
+  a section background and never a status pill.
 - **Not-found and error screens are the root route's.** Inherit `__root.tsx`'s
   `notFoundComponent` and `errorComponent`; do not register a second pair on a feature route, and
   do not write error markup outside `@repo/ui`'s `ErrorState`.
