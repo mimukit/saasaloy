@@ -6,23 +6,23 @@ import { Button } from "@repo/ui/components/button";
 
 import { auth, forgetSession } from "@admin/lib/auth";
 
-// Sign-out is the one control both shells need: the admin sidebar has it, and so does the
-// access-denied panel a signed-in non-admin lands on. It lives in its own file so those two
-// share the order of operations rather than each re-deriving it.
+// Sign-out is the one control several surfaces need: the rail's account menu has it, and
+// so does the access-denied panel a signed-in non-admin lands on. The order of operations
+// lives in this one hook so those surfaces share it rather than each re-deriving it.
 //
 // That order matters. The server clears the httpOnly cookie, then the cached session is
 // dropped, and only then does the router re-run the root guard. Invalidating first would
 // re-run `beforeLoad` against the stale cache and put the user straight back where they were.
-export function SignOutButton({
-  variant = "ghost",
-}: {
-  variant?: "ghost" | "outline";
-}) {
+//
+// It is a hook rather than only a button because the rail renders sign-out as a menu item.
+// A menu's own item element carries the roving focus and the keyboard handling, so a button
+// smuggled inside it would be unreachable by keyboard.
+export function useSignOut() {
   const router = useRouter();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function handleSignOut() {
+  async function signOut() {
     setPending(true);
     setError(null);
     try {
@@ -45,6 +45,17 @@ export function SignOutButton({
     setPending(false);
   }
 
+  return { pending, error, signOut };
+}
+
+// The standalone control, for a surface with no menu to hang the action off.
+export function SignOutButton({
+  variant = "ghost",
+}: {
+  variant?: "ghost" | "outline";
+}) {
+  const { pending, error, signOut } = useSignOut();
+
   return (
     <div className="flex flex-col gap-2">
       <Button
@@ -52,7 +63,7 @@ export function SignOutButton({
         size="sm"
         className="w-full justify-start"
         disabled={pending}
-        onClick={handleSignOut}
+        onClick={signOut}
       >
         <LogOutIcon data-icon="inline-start" />
         {pending ? "Signing out…" : "Sign out"}

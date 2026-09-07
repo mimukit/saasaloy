@@ -38,7 +38,7 @@ Reused as is: `@repo/ui/lib/theme` (`getStoredTheme`, `setTheme`), `@repo/ui/blo
 
 Rejected at a line each: changing the shared `globals.css` so the whole monorepo turns dark (the landing page has its own design contract); a Vite plugin to inject the theme script (a one-line call in `main.tsx` does the job); system fonts (the design reads flat without a weight-500 geometric sans); static demo rows (the api already has real, typed, gated data); a shell-level detail slot (state would live above the route); a hand-rolled table (every module would reinvent sort).
 
-### Phase 1: admin theme and font (#123)
+### Phase 1: admin theme and font (#123) (built 2026-09-07)
 
 - Add `modules/admin/files/src/styles/admin.css`. It imports `@repo/ui/globals.css` and `@fontsource-variable/inter`, then redeclares the shadcn variables for `:root` (light: cream canvas, white panels, warm hairline) and `.dark` (measured from the screenshots: canvas about `oklch(0.14 0 0)`, panel about `oklch(0.20 0 0)`, hover row one step lighter, hairline at low-alpha white). Record the final measured values in the file's header comment. Set `--radius: 0.75rem` and add `--font-sans`, `--status-open`, `--accent-sort` in `@theme inline`.
 - `main.tsx` imports `./styles/admin.css` and drops the `globals.css` import. Keep the comment that no route imports a stylesheet again. Above `createRoot`, apply the theme: `setTheme("dark")` when `localStorage` has no `THEME_STORAGE_KEY`, else `setTheme(getStoredTheme())`, with a comment naming the dark-by-default decision.
@@ -52,7 +52,7 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - Pin any new `@base-ui/react` version change through `pnpm deps:update`; the ui package already depends on it.
 - Verify: `@repo/ui:typecheck` green in `.dev`, `pnpm lint` green in the tool repo, the landing page output unchanged (no block imports the new files).
 
-### Phase 3: the shell (#123)
+### Phase 3: the shell (#123) (built 2026-09-07)
 
 - Rewrite `src/components/app-shell.tsx` into the rail + nav panel + content panel layout on a canvas with an 8px gutter. Split into `rail.tsx` (areas with `Tooltip` and count `Badge`, footer with the theme toggle and an `Avatar` that opens a `DropdownMenu` holding the account name, email, and sign-out), `nav-panel.tsx` (title row with actions, `Collapsible` groups, rows with icon, label, and count), and `app-shell.tsx` as the composer.
 - Replace `NAV_ITEMS` with `NAV_AREAS`: each area has an icon, a label, a `to`, and groups of items. The seed ships one area, "Admin", with one group listing Overview (`/`) and Users (`/users`). Every `to` stays typed against the generated route tree.
