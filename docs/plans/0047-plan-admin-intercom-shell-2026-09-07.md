@@ -46,7 +46,7 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - Add the `## Apps` section to `packages/cli/templates/base/DESIGN.md` and run the official linter through `pnpm dlx` as the `saasaloy-design` skill prescribes. Confirm the fingerprint is untouched.
 - Verify in `.dev`: `saasaloy add admin`, `pnpm dev`, the shell paints dark with Inter on a fresh profile, the toggle cycles and persists, and `pnpm deps:verify` and the four-pass `pnpm lint` are green.
 
-### Phase 2: ui primitives in the base (#123)
+### Phase 2: ui primitives in the base (#123) (built 2026-09-07)
 
 - In `packages/cli/templates/base/packages/ui`, run `shadcn add tooltip dropdown-menu collapsible table avatar tabs scroll-area sheet`. Review each file for the repo's conventions (`data-icon` slots, `cn`, base-ui imports), the same way `button.tsx` and `accordion.tsx` were reviewed.
 - Pin any new `@base-ui/react` version change through `pnpm deps:update`; the ui package already depends on it.
