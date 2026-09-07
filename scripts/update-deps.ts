@@ -27,12 +27,10 @@
 // (ADR 0016 / plan Phase 7). Writes go through jsonc-parser (also a root devDependency)
 // so an edit lands on one line instead of reserializing the whole document (#93).
 //
-// Resolver policy (ADR 0016): per package, enumerate the npm `versions` map, DROP
-// prereleases, IGNORE dist-tags (never trust `latest`), cap at the highest eligible
-// version WITHIN the current major, and require the publish time to clear
-// `minimumReleaseAge` (read from pnpm-workspace.yaml). A newer major is surfaced as
-// `major-available` and crossed only with --allow-major; the cooldown is overridden
-// only with --allow-fresh. Each manifest resolves independently from npm.
+// Resolver policy (ADR 0016) lives in `dependency-policy.ts` as pure functions over a
+// packument, a clock value, and the flags. This file owns everything around it: the
+// npm fetch, the cooldown read from pnpm-workspace.yaml, the report, the picker, and
+// the writes. Each manifest resolves independently from npm.
 //
 // TypeScript, run directly by Node 24's type stripping — there is no build step. The
 // types are checked by `pnpm typecheck` through tsconfig.scripts.json (#54).
@@ -54,6 +52,21 @@ import type { Option } from "@clack/prompts";
 import { applyEdits, modify } from "jsonc-parser";
 import type { FormattingOptions, JSONPath } from "jsonc-parser";
 import pc from "picocolors";
+import {
+  ACTIONABLE,
+  classifySpec,
+  cmp,
+  evaluateDependency,
+  parseSemver,
+  specMajor,
+} from "./dependency-policy.ts";
+import type {
+  Packument,
+  PolicyCandidate,
+  Resolved,
+  SpecKind,
+  Status,
+} from "./dependency-policy.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -66,14 +79,6 @@ const root = resolve(import.meta.dirname, "..");
 /** The one guard every external-JSON site funnels through. */
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
-}
-
-/** The slice of an npm packument the resolver uses, normalized at the fetch boundary. */
-interface Packument {
-  /** version → ISO publish time. Empty when the registry omits it. */
-  time: Record<string, string>;
-  /** The published `versions` map; only its keys are read. */
-  versions: Record<string, unknown>;
 }
 
 // A manifest declares deps in `dependencies` / `devDependencies` only, but a
@@ -94,9 +99,6 @@ function isDepBucket(value: unknown): value is DepBucket {
     value === "optionalDependencies"
   );
 }
-
-/** How a version spec is written, which drives its status and what a write produces. */
-type SpecKind = "bare" | "exact" | "range";
 
 /** One scannable dependency lifted out of a manifest. */
 export interface Dep {
@@ -146,30 +148,14 @@ export interface Manifest extends ManifestFile {
   deps: Dep[];
 }
 
-/** What deps:update could pin for one dep, plus the context the report needs. */
-interface Resolved {
-  target: string | null;
-  targetOverall: string | null;
-  highestWithinMajor: string | null;
-  highestOverall: string | null;
-  newerMajor: boolean;
-}
-
-type Status =
-  | "up-to-date"
-  | "outdated"
-  | "range→exact"
-  | "bare→pinned"
-  | "major-available"
-  | "within-cooldown"
-  | "unresolved";
-
 /** One resolved (manifest, dep) pair — the unit the report and the picker render. */
 interface Row {
   manifest: Manifest;
   dep: Dep;
   resolved: Resolved | null;
   status: Status;
+  /** What the policy is willing to write for this row; empty when unresolved. */
+  candidates: PolicyCandidate[];
   error?: string;
 }
 
@@ -186,9 +172,6 @@ interface Candidate {
   kind: "primary" | "major";
   group: string;
 }
-
-/** A stable version as a numeric triple. */
-type Semver = [number, number, number];
 
 type SemverLevel = "major" | "minor" | "patch" | "none";
 
@@ -246,63 +229,6 @@ function isSkippedSpec(spec: string): boolean {
     spec.startsWith("file:") ||
     spec.includes("{{") // template token like {{PROJECT_NAME}}
   );
-}
-
-// --- Version-spec classification ---------------------------------------------
-// A spec's "kind" drives its status and what deps:update writes:
-//   exact  — "5.14.1"        → already pinned; bump only if a newer eligible exists
-//   range  — "^5", "~4.1"    → migrate to exact (range→exact)
-//   bare   — "" (no version) → pin it (bare→pinned); only descriptor arrays can be bare
-const EXACT_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
-
-function classifySpec(spec: string): SpecKind {
-  if (spec === "" || spec === "latest" || spec === "*") {
-    return "bare";
-  }
-  if (EXACT_RE.test(spec)) {
-    return "exact";
-  }
-  return "range";
-}
-
-// Leading major number of a spec, or null when there's nothing to anchor to (bare).
-function specMajor(spec: string): number | null {
-  const m = spec.match(/(\d+)/);
-  return m ? Number(m[1]) : null;
-}
-
-// --- Semver (stable-only) compare --------------------------------------------
-// We only ever compare stable versions (prereleases are dropped before this), so a
-// plain numeric triple compare is sufficient — no prerelease-precedence rules needed.
-// The parse returns null for anything that is not a bare triple and every caller
-// handles that null: the resolver only compares versions it already parsed, but a
-// manifest's CURRENT spec can be a prerelease pin (EXACT_RE admits `1.2.3-beta`), and
-// letting an unparsed capture flow into a comparison is how a bump decision goes
-// silently wrong.
-function parseSemver(v: string): Semver | null {
-  const m = v.match(/^(\d+)\.(\d+)\.(\d+)$/);
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3])] : null;
-}
-
-// A version that is not a stable triple sorts BELOW every version that is, so a real
-// release always reads as newer than an unparseable pin rather than comparing as equal.
-function cmp(a: string, b: string): number {
-  const pa = parseSemver(a);
-  const pb = parseSemver(b);
-  if (pa === null || pb === null) {
-    return (pa === null ? 0 : 1) - (pb === null ? 0 : 1);
-  }
-  return pa[0] - pb[0] || pa[1] - pb[1] || pa[2] - pb[2];
-}
-
-// An exact spec that EXACT_RE admits but parseSemver rejects: a prerelease or
-// build-metadata pin such as `1.3.0-rc.1`. It has no orderable stable triple, so NO
-// comparison against it can decide a bump — `cmp` sorts it BELOW every real release, so a
-// LOWER stable version would read as "outdated" and a default apply would write a
-// downgrade. Such a pin is reported and never written, which is the outcome the pre-#54
-// script reached by throwing on the unparsed capture.
-function isUnorderableExact(dep: Dep): boolean {
-  return dep.kind === "exact" && parseSemver(dep.spec) === null;
 }
 
 // --- pnpm-workspace.yaml: minimumReleaseAge (single source of truth) ---------
@@ -379,69 +305,6 @@ async function mapWithConcurrency<T, R>(
     Array.from({ length: Math.min(limit, items.length) }, worker)
   );
   return results;
-}
-
-// Resolve the versions deps:update could pin for one dep, plus the context the report
-// needs. `target` is the within-major pin (the safe default, independent of any flag);
-// `targetOverall` is the highest cooldown-eligible version across ALL majors — what a
-// deliberate major bump would write. Returns
-// { target, targetOverall, highestWithinMajor, highestOverall, newerMajor }.
-async function resolveVersion(
-  name: string,
-  curMajor: number | null,
-  minMinutes: number
-): Promise<Resolved> {
-  const doc = await fetchPackument(name);
-  const times = doc.time;
-  const now = Date.now();
-  const cooldownMs = minMinutes * 60 * 1000;
-
-  const stable = Object.keys(doc.versions).filter(
-    (v) => parseSemver(v) !== null
-  );
-  stable.sort(cmp);
-
-  const clearsCooldown = (v: string): boolean => {
-    if (flags.allowFresh) {
-      return true;
-    }
-    const t = times[v];
-    return t ? now - Date.parse(t) >= cooldownMs : false;
-  };
-
-  // The within-major cap is a property of the dep, not a flag: majors are opted into
-  // per-dep in the picker (or with --allow-major for non-interactive runs), never by
-  // silently lifting the cap here. Bare specs have no anchor, so nothing to cap against.
-  const withinMajor = (v: string): boolean => {
-    if (curMajor === null) {
-      return true;
-    }
-    const parsed = parseSemver(v);
-    return parsed !== null && parsed[0] === curMajor;
-  };
-
-  // Every `[length - 1]` below is guarded by the `.length` check in front of it.
-  const capped = stable.filter(withinMajor);
-  const highestWithinMajor = capped.length ? capped.at(-1)! : null;
-  const highestOverall = stable.length ? stable.at(-1)! : null;
-  const eligibleWithin = capped.filter(clearsCooldown);
-  const target = eligibleWithin.length ? eligibleWithin.at(-1)! : null;
-  const eligibleAll = stable.filter(clearsCooldown);
-  const targetOverall = eligibleAll.length ? eligibleAll.at(-1)! : null;
-  const highestOverallSemver =
-    highestOverall === null ? null : parseSemver(highestOverall);
-  const newerMajor =
-    curMajor !== null &&
-    highestOverallSemver !== null &&
-    highestOverallSemver[0] > curMajor;
-
-  return {
-    highestOverall,
-    highestWithinMajor,
-    newerMajor,
-    target,
-    targetOverall,
-  };
 }
 
 // --- Manifest discovery ------------------------------------------------------
@@ -617,41 +480,6 @@ export async function readManifestDeps(
     pushPatches();
   }
   return { deps, file: manifest.file, json, kind: manifest.kind, raw };
-}
-
-// --- Status decision ---------------------------------------------------------
-// Reduce a resolved dep to one status. Actionable statuses (what a default
-// deps:update would change) drive the non-zero exit code; the rest are informational.
-const ACTIONABLE = new Set<Status>(["outdated", "range→exact", "bare→pinned"]);
-
-function decideStatus(dep: Dep, r: Resolved): Status {
-  if (r.target === null) {
-    return "within-cooldown";
-  } // every eligible version is too fresh
-  if (dep.kind === "bare") {
-    return "bare→pinned";
-  }
-  if (dep.kind === "range") {
-    return "range→exact";
-  }
-  // exact — but only an orderable stable triple can be compared against the target, so an
-  // unorderable pin is reported as unresolved (non-actionable: no exit-1, no write) rather
-  // than being mis-read as outdated.
-  if (isUnorderableExact(dep)) {
-    return "unresolved";
-  }
-  if (cmp(r.target, dep.spec) > 0) {
-    return "outdated";
-  }
-  // target === current within major. A fresher within-major stable held back by the
-  // cooldown is transient; a newer major is the deliberate --allow-major path.
-  if (r.highestWithinMajor && cmp(r.highestWithinMajor, dep.spec) > 0) {
-    return "within-cooldown";
-  }
-  if (r.newerMajor) {
-    return "major-available";
-  }
-  return "up-to-date";
 }
 
 // --- Repo's own pins (for the shared-dep major-divergence note) --------------
@@ -928,38 +756,21 @@ function primaryGroupTitle(cur: string, target: string): string {
   return PRIMARY_GROUP_TITLE.migration; // range/bare migration — no diffable triple
 }
 
+// Lift the policy's candidates onto their rows and give each the report group the
+// picker lists it under.
 function buildCandidates(rows: Row[]): Candidate[] {
   const out: Candidate[] = [];
   for (const row of rows) {
-    const r = row.resolved;
-    if (!r) {
-      continue;
-    }
-    // Nothing is ever written over an unorderable exact pin — not even the opt-in major
-    // arm below, which would otherwise cross a major on a spec we cannot compare.
-    if (isUnorderableExact(row.dep)) {
-      continue;
-    }
-    const cur = row.dep.spec;
-    if (ACTIONABLE.has(row.status) && r.target && r.target !== cur) {
+    for (const c of row.candidates) {
       out.push({
-        group: primaryGroupTitle(cur, r.target),
-        kind: "primary",
+        group:
+          c.kind === "major"
+            ? MAJOR_GROUP_TITLE
+            : primaryGroupTitle(row.dep.spec, c.target),
+        kind: c.kind,
         row,
-        target: r.target,
+        target: c.target,
       });
-    }
-    if (r.newerMajor && r.targetOverall) {
-      const mo = parseSemver(r.targetOverall);
-      const cm = specMajor(cur);
-      if (mo && cm !== null && mo[0] > cm && r.targetOverall !== cur) {
-        out.push({
-          group: MAJOR_GROUP_TITLE,
-          kind: "major",
-          row,
-          target: r.targetOverall,
-        });
-      }
     }
   }
   return out;
@@ -1093,16 +904,20 @@ async function main(): Promise<void> {
   const rows = await mapWithConcurrency(jobs, 12, async ({ manifest, dep }) => {
     let row: Row;
     try {
-      const resolved = await resolveVersion(
-        dep.name,
-        specMajor(dep.spec),
-        minMinutes
-      );
-      row = { dep, manifest, resolved, status: decideStatus(dep, resolved) };
+      const packument = await fetchPackument(dep.name);
+      // `Date.now()` per evaluation, as before; one clock value for the whole run is a
+      // separate decision.
+      const decision = evaluateDependency(dep, packument, {
+        allowFresh: flags.allowFresh,
+        minimumReleaseAgeMinutes: minMinutes,
+        nowMs: Date.now(),
+      });
+      row = { dep, manifest, ...decision };
     } catch (error) {
       row = {
         manifest,
         dep,
+        candidates: [],
         resolved: null,
         status: "unresolved",
         error: error instanceof Error ? error.message : String(error),
