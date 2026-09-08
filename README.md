@@ -49,6 +49,7 @@ my-app/
   packages/db/         Drizzle schema + client (saasaloy add database-d1 | database-postgres)
   packages/auth/       Better Auth            (saasaloy add auth)
   packages/email/      email provider interface (saasaloy add email)
+  packages/queue/      background jobs + schedules (saasaloy add queue)
   .agents/skills/      agent skills, symlinked from .claude/skills/
   DESIGN.md            the design contract
   saasaloy.json        installed modules + alias map
@@ -62,6 +63,7 @@ my-app/
 | Database | Drizzle ORM on D1 (SQLite) or Postgres |
 | Auth | Better Auth |
 | Email | Cloudflare Email Sending, Plunk, or a console logger |
+| Background work | Cloudflare Queues and Cron Triggers, or an in-process runner |
 | Infra | wrangler per workspace, or Pulumi via the `infra` module |
 | Monorepo | Turborepo + pnpm |
 
@@ -87,9 +89,9 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 
 | Tier | Modules |
 |---|---|
-| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `infra` |
+| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `infra` |
 | Feature | `waitlist`, `teams`, `email-react` |
-| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console` |
+| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory` |
 | Driver | `database-d1`, `database-postgres` |
 
 `saasaloy add <name> --dry-run` prints what a module would do to your project before it does it. The one-table map of every module, what it gives you, and what it depends on is on the [Modules](docs/wiki/modules.md) page.
@@ -108,8 +110,9 @@ A few modules need something the free tier does not cover:
 | `email-plunk` | a [Plunk](https://www.useplunk.com) account and `PLUNK_API_KEY` |
 | `database-postgres` | a Postgres server reachable from a Worker, with its URL in `DATABASE_URL`. Install instead of `database-d1`, never alongside |
 | `sms` | a third-party SMS account for any real send. Cloudflare has no SMS product. `sms-console` is free |
+| `queue-cloudflare` | a Workers paid plan, and the two queues created once with `wrangler queues create`. Install `queue-memory` instead for local work |
 
-The console providers (`email-console`, `sms-console`, `logger-console`) log instead of sending, so local development needs no plan, domain, or key. Details for each are in the [Reference](docs/wiki/reference.md#email-providers).
+The local providers (`email-console`, `sms-console`, `logger-console`, `queue-memory`) log or run inline instead of calling a service, so local development needs no plan, domain, or key. Details for each are in the [Reference](docs/wiki/reference.md#email-providers).
 
 ## Deploy
 

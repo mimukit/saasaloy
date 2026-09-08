@@ -104,6 +104,16 @@ wrangler queues create app-jobs-dlq
 
 A binding pointing at a queue that does not exist fails the deploy, not the request, so you find out at `wrangler deploy` rather than in production. Queues need a Workers **paid plan**; `queue-memory` exists so local development needs neither the plan nor the queues.
 
+### `wrangler dev` does not deliver a message to your consumer
+
+`wrangler dev` binds `JOBS` and `JOBS_DLQ` locally and a `send()` against them succeeds, so the producer half runs offline with no account. It stops there. The local runtime does not hand the message back to the `queue` export, so a handler you are developing never runs, and no error says so. The cron trigger does not fire on its own either; trigger it by hand:
+
+```sh
+curl "http://127.0.0.1:8787/cdn-cgi/local/scheduled"
+```
+
+That runs `scheduled()` and enqueues the due schedules, and there the trail ends locally. **Develop a handler against `queue-memory`, which runs it inline**, and use `wrangler dev` under `queue-cloudflare` to check the bindings and the tick. The ack, retry and dead-letter split is covered by unit tests against a stubbed batch; proving it live needs a deployed Worker and a real queue.
+
 ### The two knobs
 
 Everything else in the consumer entry is Cloudflare's default and is fine. These two are worth turning:
@@ -142,6 +152,53 @@ Read state and return early, or write through a unique key and let the constrain
 
 `modules/infra` translates `wrangler.jsonc` bindings into provisioning steps. It does not yet handle `queues`, `triggers` or `send_email`, so installing `queue-cloudflare` in a project that uses `infra` gets you the bindings but not the queue creation. Run the two `wrangler queues create` commands by hand until the translator lands (issue #130).
 
-## Write a provider
+## `queue-memory`
 
-One file in `src/providers/`, exporting a factory that returns a `QueueProvider`: a `name` and an `enqueue(env, job, payload, options)`. Read the binding or secret off `env` inside that file and nowhere else, map every failure onto `QueueError`, and set `retryable` honestly. A provider that also needs a Worker export (a queue consumer, a cron tick) ships a second exported factory returning `{ queue?, scheduled? }` and appends it to the `handlers` array in `apps/api/src/worker.ts`. See `.agents/skills/create-provider/`.
+```sh
+saasaloy add queue queue-memory
+```
+
+The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It patches nothing but the `providers` array: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `.dev.vars` and background work runs.
+
+Install both providers side by side and let the variable choose. `QUEUE_PROVIDER=memory` locally, `cloudflare` in staging and production. The Cloudflare handlers stay installed and warn-and-return while `memory` is selected, so nothing runs twice.
+
+Three ways it differs from production, each deliberate:
+
+- **A handler's failure does not reach the caller.** `enqueue` records the failure and returns, because that is what a real enqueue does: the service accepts the message and the handler fails later, on the consumer. A route that behaved differently here would defeat the point of developing against this provider. Pass `memory({ rethrow: true })` in a test that wants the throw at the call site.
+- **`delaySeconds` is recorded, not slept.** Holding a `pnpm dev` request for ten minutes is not a useful simulation. The number is on the run so a test can assert on it.
+- **`durable: true` warns instead of being refused.** Nothing here survives the process, so nothing here is durable either, but refusing would mean a handler written for the Workflows path (issue #131) could not be run locally at all. The steps run inline and are recorded. Do not read a passing local run as proof the job resumes.
+
+### Assert on what it recorded
+
+The factory returns the provider **and** its recorder. Keep the value; `createQueue(env)` gives you the client, not the provider.
+
+```ts
+import { createQueue, queue } from "@repo/queue";
+import { memory } from "@repo/queue/providers/memory";
+
+const jobs = memory();
+queue.providers.push(jobs); // in a project, the install patch has already done this
+
+await createQueue({ QUEUE_PROVIDER: "memory" }).enqueue("send-digest", { userId: "u1" });
+
+jobs.ran;       // [{ job, payload, delaySeconds?, steps, sleeps }] — every run, in order
+jobs.failed;    // the subset whose handler threw, each with a normalized `error`
+jobs.steps;     // every ctx.step name across every run, flattened
+jobs.sleeps;    // every ctx.sleep duration, in seconds
+jobs.scheduled; // every schedule runDue fired
+jobs.reset();   // clear all five between tests
+```
+
+`runDue(at, env?)` stands in for the cron tick with no trigger and no clock:
+
+```ts
+await jobs.runDue(new Date("2026-09-08T02:00:00Z"));
+```
+
+It matches the schedule table against that UTC minute and **enqueues** each hit rather than calling the handler itself, exactly as the Cloudflare tick does, so a scheduled run goes through the same path as one a route enqueued. `env` defaults to selecting this provider.
+
+## Write a third provider
+
+One file in `src/providers/`, exporting a factory that returns a `QueueProvider`: a `name` and an `enqueue(env, job, payload, options)`. The core has already looked the job up and validated the payload by the time you are called, so serialize `{ job: job.name, payload }` and send it. Read the binding or secret off `env` inside that file and nowhere else, map every vendor failure onto `QueueError`, and set `retryable` honestly; a wrong `true` means the job runs twice. Honour `delaySeconds`, and refuse `job.durable` unless you can genuinely checkpoint.
+
+A provider whose service pushes work back into the Worker ships a second exported factory returning `{ queue?, scheduled? }` and appends it to the `handlers` array in `apps/api/src/worker.ts` with a second `plugin-array` patch. That handler must gate on `QUEUE_PROVIDER` and settle every message on every branch. `queue-cloudflare` is the worked binding example and `queue-memory` the local one; the authoring rules are in `.agents/skills/create-provider/`, mode `queue`.
