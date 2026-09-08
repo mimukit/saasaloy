@@ -17,7 +17,7 @@
 
 import { createKv, KvError } from "@repo/kv";
 import type { Context, MiddlewareHandler, Next } from "hono";
-import type { ConsumeResult, Policy } from "@repo/kv";
+import type { ConsumeResult, KvClient, Policy } from "@repo/kv";
 
 /** Prefix on every key this middleware builds, so a limiter key cannot collide with a cache key. */
 export const RATE_LIMIT_NAMESPACE = "ratelimit";
@@ -68,7 +68,7 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
     // deploy-time misconfiguration: it should be a loud 500, not a request quietly let
     // through by the fail-open path.
     const store = createKv(c.env);
-    const key = options.key?.(c) ?? defaultKey(policyName, c);
+    const key = options.key?.(c) ?? defaultKey(store, policyName, c);
 
     let result: ConsumeResult;
     try {
@@ -118,10 +118,24 @@ export function rateLimit(options: RateLimitOptions): MiddlewareHandler {
  * A missing `CF-Connecting-IP` counts as one shared "unknown" bucket rather than as an
  * unlimited pass. Locally that is every request, which is the right way round: a
  * developer sees the limiter work instead of finding out in production.
+ *
+ * The key goes through `store.key()`, so it carries `KV_KEY_PREFIX` and obeys the same
+ * namespace rules as a cache key. A `:` is not allowed in a part, and both the route
+ * pattern (`/users/:id`) and an IPv6 address hold one, so each is rewritten to `_` first.
+ * That rewrite cannot merge two buckets that were distinct: it maps `:` onto a character
+ * a route pattern and an address never use for anything else.
  */
-function defaultKey(policy: string, c: Context): string {
+function defaultKey(store: KvClient, policy: string, c: Context): string {
   const ip = c.req.header(CLIENT_IP_HEADER) ?? "unknown";
-  return `${RATE_LIMIT_NAMESPACE}:${policy}:${c.req.routePath}:${ip}`;
+  return store.key({
+    namespace: RATE_LIMIT_NAMESPACE,
+    parts: [policy, safePart(c.req.routePath), safePart(ip)],
+  });
+}
+
+/** A key part with the reserved separator taken out. `buildKey` refuses a raw `:`. */
+function safePart(value: string): string {
+  return value.replaceAll(":", "_");
 }
 
 /**
