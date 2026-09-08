@@ -104,7 +104,7 @@ export const auth = betterAuth({ plugins: [stripe()] });
       call: "cloudflareQueueHandlers",
       exportName: "worker",
       import: {
-        from: "@queue/providers/cloudflare",
+        from: "@repo/queue/providers/cloudflare",
         name: "cloudflareQueueHandlers",
       },
     };
