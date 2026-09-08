@@ -64,7 +64,13 @@ export type {
   SubscriptionInput,
   SubscriptionStatus,
 } from "./provider";
-export { requireBillingStore, setBillingStoreResolver } from "./store";
+export {
+  inBillingStore,
+  requireBillingStore,
+  setBillingStoreResolver,
+  setBillingStoreRunner,
+} from "./store";
+export type { BillingStoreRunner } from "./store";
 export { assertSubject, authorizeSubject, resolveSubject } from "./subject";
 export type { SubjectAction, SubjectContext, SubjectUser } from "./subject";
 export {

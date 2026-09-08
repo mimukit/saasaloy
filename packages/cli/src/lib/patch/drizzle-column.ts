@@ -28,11 +28,18 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 // `sqlite-core` and `pg-core`) and lets a descriptor ship a variant per dialect when it is
 // not. Nothing here checks the expression's meaning; the project's own typecheck does.
 //
-// Unlike its two siblings this codemod edits the AST directly rather than through
-// magicast's value proxies. `builders.raw` throws `MagicastError: Not implemented` on a
+// Unlike its two siblings this codemod does not write through the AST at all. Two things
+// rule that out. magicast's `builders.raw` throws `MagicastError: Not implemented` on a
 // member-expression callee, and a Drizzle column is a chained call
-// (`text("x").notNull().default(…)`) almost every time. Parsing the expression and
-// splicing its node in is what recast is for, and it keeps every other line's formatting.
+// (`text("x").notNull().default(…)`) almost every time. And recast reprints any subtree it
+// sees changed, putting a blank line before every property that is multi-line or carries a
+// leading comment — so a node pushed onto the columns object reformats columns this patch
+// never touched, which on `modules/auth`'s real `user` table is five spurious blank lines
+// that `remove` then cannot take back out.
+//
+// So the AST is read, never written: it supplies the guards and the byte offsets, and the
+// column goes in and comes out as text. The one place recast still prints is the named
+// import, which is a statement of its own and reprints alone.
 
 export interface DrizzleColumn {
   /** Exported binding holding the table, e.g. "user" in `export const user = sqliteTable(…)`. */
@@ -95,28 +102,17 @@ export function insertDrizzleColumn(
     return source;
   } // already there — never clobber
 
-  if (patch.import && !(patch.import.name in mod.imports)) {
-    mod.imports.$add({
-      from: patch.import.from,
-      imported: patch.import.name,
-      local: patch.import.name,
-    });
+  // Parsed for its errors only. The value is spliced in as text below, but a value that is
+  // not one expression is the descriptor's mistake and has to throw before anything is
+  // written, exactly as it did when the node was the thing being inserted.
+  parseExpressionNode(patch.value);
+
+  const withColumn = spliceColumn(source, columns, patch);
+  if (!withColumn) {
+    return source;
   }
 
-  // Cloned from a property the file already has, so the node carries whatever `type`
-  // discriminator this parser build uses (`ObjectProperty` under babel, `Property` under
-  // espree) instead of this file guessing one.
-  const [proto] = columns.properties;
-  columns.properties.push({
-    computed: false,
-    key: { name: patch.column, type: "Identifier" },
-    kind: "init",
-    shorthand: false,
-    type: proto?.type ?? "ObjectProperty",
-    value: parseExpressionNode(patch.value),
-  });
-
-  return print(source, mod);
+  return addImport(withColumn, patch);
 }
 
 /**
@@ -156,21 +152,139 @@ export function removeDrizzleColumn(
     return source;
   }
 
-  columns.properties.splice(at, 1);
-
-  // Guarded twice, as in ts-module.ts: magicast's delete trap throws when the local name
-  // isn't imported, and a binding the file still references elsewhere must keep its import
-  // or the file stops compiling. Deleting the column is exactly what can drop the last
-  // reference, so the question is asked after the splice rather than before it.
-  const program = mod.$ast as unknown as ProgramLike;
-  if (
-    patch.import &&
-    patch.import.name in mod.imports &&
-    !isReferenced(program, patch.import.name)
-  ) {
-    delete mod.imports[patch.import.name];
+  const withoutColumn = cutColumn(source, columns, at);
+  if (!withoutColumn) {
+    return source;
   }
 
+  return dropImport(withoutColumn, patch);
+}
+
+/**
+ * Add `column: <value>` to the columns object as text, or `undefined` when the object is
+ * not the shape this splice can read.
+ *
+ * Text rather than a node push, and that is the whole point. recast reprints a subtree it
+ * sees changed, and its printer puts a blank line before any property that is multi-line or
+ * carries a leading comment — so pushing onto the AST reformats properties this patch never
+ * touched. `modules/auth`'s own `user` table has five of them, and the file the `auth`
+ * manifest tracks would drift on `add` and stay drifted after `remove`. Splicing text leaves
+ * every byte outside the inserted line where it was, which is what makes the round trip
+ * byte-identical on the real schema files rather than only on a trimmed fixture.
+ *
+ * The value goes in verbatim, as `DrizzleColumn.value` already promises; nothing here
+ * re-renders it.
+ */
+function spliceColumn(
+  source: string,
+  columns: ObjectNode,
+  patch: DrizzleColumn
+): string | undefined {
+  const last = columns.properties.at(-1);
+  const end = offset(last, "end");
+  if (end === undefined) {
+    return undefined;
+  } // an empty columns object — the module that ships the file wrote none
+
+  const indent = indentOf(source, offset(last, "start") ?? end);
+  // The file's own trailing-comma style is kept: a comma already there means the new
+  // property carries one too, and a file written without one keeps not having one.
+  const comma = source.slice(end).trimStart().startsWith(",");
+  const at = comma ? end + source.slice(end).indexOf(",") + 1 : end;
+  const line = `${indent}${patch.column}: ${patch.value}`;
+
+  return comma
+    ? `${source.slice(0, at)}\n${line},${source.slice(at)}`
+    : `${source.slice(0, at)},\n${line}${source.slice(at)}`;
+}
+
+/**
+ * Take the property's own line back out, the mirror of `spliceColumn`, or `undefined` when
+ * it does not have a line to itself — a hand-compacted `{ a: x, b: y }` is not this cut's
+ * to reformat, so the caller leaves the file alone.
+ */
+function cutColumn(
+  source: string,
+  columns: ObjectNode,
+  at: number
+): string | undefined {
+  const property = columns.properties[at];
+  const start = offset(property, "start");
+  const end = offset(property, "end");
+  if (start === undefined || end === undefined) {
+    return undefined;
+  }
+
+  const from = source.lastIndexOf("\n", start) + 1;
+  const after = source.indexOf("\n", end);
+  const to = after === -1 ? source.length : after + 1;
+  const head = source.slice(from, start);
+  const tail = source.slice(end, to);
+
+  // Only whitespace before it on its line, and only a comma and the newline after it.
+  if (head.trim() !== "" || tail.replace(/^,/u, "").trim() !== "") {
+    return undefined;
+  }
+
+  return source.slice(0, from) + source.slice(to);
+}
+
+/** The leading whitespace of the line `at` sits on. */
+function indentOf(source: string, at: number): string {
+  const from = source.lastIndexOf("\n", at) + 1;
+  return /^[\t ]*/u.exec(source.slice(from, at))?.[0] ?? "";
+}
+
+/** A babel/recast node's byte offset, when the parser recorded one. */
+function offset(node: unknown, end: "end" | "start"): number | undefined {
+  const value = (node as Record<string, unknown> | undefined)?.[end];
+  return typeof value === "number" ? value : undefined;
+}
+
+/**
+ * Add the patch's named import, when it declares one the file lacks.
+ *
+ * Re-parsed from the text the column splice already produced, so recast only ever sees the
+ * import statement as changed and reprints that one line. The columns object is untouched
+ * source by then, which is what keeps its formatting.
+ */
+function addImport(source: string, patch: DrizzleColumn): string {
+  if (!patch.import) {
+    return source;
+  }
+  const mod = parseModule(source);
+  if (patch.import.name in mod.imports) {
+    return source;
+  }
+  mod.imports.$add({
+    from: patch.import.from,
+    imported: patch.import.name,
+    local: patch.import.name,
+  });
+  return print(source, mod);
+}
+
+/**
+ * Drop the import the patch brought, when nothing else reads it.
+ *
+ * Guarded twice, as in ts-module.ts: magicast's delete trap throws when the local name is
+ * not imported, and a binding the file still references elsewhere must keep its import or
+ * the file stops compiling. Cutting the column is exactly what can drop the last reference,
+ * so the question is asked against the source that no longer has it.
+ */
+function dropImport(source: string, patch: DrizzleColumn): string {
+  if (!patch.import) {
+    return source;
+  }
+  const mod = parseModule(source);
+  const program = mod.$ast as unknown as ProgramLike;
+  if (
+    !(patch.import.name in mod.imports) ||
+    isReferenced(program, patch.import.name)
+  ) {
+    return source;
+  }
+  delete mod.imports[patch.import.name];
   return print(source, mod);
 }
 

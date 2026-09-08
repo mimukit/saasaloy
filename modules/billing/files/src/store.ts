@@ -20,6 +20,11 @@ import type { BillingStore } from "./subscription";
 
 let resolver: (() => BillingStore | undefined) | undefined;
 
+/** How a job opens a scope of its own when nothing else has. See `setBillingStoreRunner`. */
+export type BillingStoreRunner = <T>(body: () => Promise<T>) => Promise<T>;
+
+let runner: BillingStoreRunner | undefined;
+
 /**
  * Tell `packages/billing` how to find the port for the work currently running.
  *
@@ -34,6 +39,43 @@ export function setBillingStoreResolver(
 }
 
 /**
+ * Tell `packages/billing` how to open a scope when it is not already inside one.
+ *
+ * `apps/api/src/billing-store.ts` calls this at module load with a function that opens the
+ * request-less client (`withDb` over the importable Workers `env`), builds the port and
+ * enters the scope. A queue consumer, the cron sweep and a provider's own webhook all run
+ * outside a billing route, so without this they would reach `requireBillingStore` with
+ * nothing in scope and lose the event.
+ */
+export function setBillingStoreRunner(run: BillingStoreRunner): void {
+  runner = run;
+}
+
+/**
+ * Run `body` with a `BillingStore` in scope, opening one only if none is.
+ *
+ * This is what every job wraps its work in. Inside a billing route the scope the route
+ * already opened is reused, so an inline provider such as `queue-memory` keeps writing
+ * through the request's own client and its transaction. Outside one — the Workers queue
+ * consumer, the scheduled tick, a vendor webhook posting to the auth plugin's endpoint —
+ * the registered runner opens a client for this message and closes it afterwards.
+ */
+export function inBillingStore<T>(body: () => Promise<T>): Promise<T> {
+  if (resolver?.()) {
+    return body();
+  }
+  if (!runner) {
+    throw new Error(
+      "No BillingStore is in scope and no runner is registered. " +
+        "`apps/api/src/billing-store.ts` calls `setBillingStoreRunner` at module load; " +
+        "import it from the Worker entry so the call has run before the first message arrives. " +
+        "See apps/api/src/billing-store.ts."
+    );
+  }
+  return runner(body);
+}
+
+/**
  * The port for the current unit of work, or a throw naming what has to wrap the caller.
  *
  * A throw rather than a lazily built client: this package has zero npm runtime
@@ -45,8 +87,8 @@ export function requireBillingStore(): BillingStore {
   if (!store) {
     throw new Error(
       "No BillingStore is in scope. Wrap the caller in `withBillingStore(createBillingStore(db), ...)` — " +
-        "a billing route does it inside `withDb`, and a queue consumer has to do it around `dispatch`. " +
-        "See apps/api/src/billing-store.ts."
+        "a billing route does it inside `withDb`, and a job body wraps itself in `inBillingStore(...)`, " +
+        "which opens one when the caller is not a route. See apps/api/src/billing-store.ts."
     );
   }
   return store;

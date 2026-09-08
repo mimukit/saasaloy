@@ -59,12 +59,14 @@ interface StripeEnv {
 
 const stripeEnv = env as unknown as StripeEnv;
 
+let client: Stripe | undefined;
+
 /**
- * The Stripe SDK client, built once.
+ * The Stripe SDK client, built on first use and kept.
  *
  * `httpClient` is Stripe's `fetch` client on purpose: the default Node client wants
- * `node:http`, which a Worker does not have. The key is read at module scope, so a missing
- * one fails on the Worker's first request rather than on its first checkout.
+ * `node:http`, which a Worker does not have. A missing key throws here, on the first call
+ * that actually needs Stripe, never at import.
  */
 function stripeClient(): Stripe {
   const key = stripeEnv.STRIPE_SECRET_KEY;
@@ -74,8 +76,34 @@ function stripeClient(): Stripe {
       "STRIPE_SECRET_KEY is not set. Put it in .dev.vars for local development and in `wrangler secret put STRIPE_SECRET_KEY` for a deployment."
     );
   }
-  return new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
+  client ??= new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });
+  return client;
 }
+
+/**
+ * The client the auth plugin holds, which defers the build to the first property read.
+ *
+ * `stripeAuthPlugin()` is evaluated while `packages/auth/src/auth.ts` is still being
+ * imported, so a client built eagerly there would demand `STRIPE_SECRET_KEY` from the whole
+ * Worker — sign-in included — the moment `billing-stripe` is installed. That would take the
+ * local provider away: `BILLING_PROVIDER=console` is meant to run the capability with no
+ * vendor account and no network, and a contributor without a key could not even sign in.
+ *
+ * A `Proxy` over an empty extensible object, so the `get` trap may answer anything without
+ * tripping a proxy invariant. Methods come back bound to the real client, because the
+ * plugin calls them as methods. Symbols are runtime and tooling probes (`Symbol.toStringTag`,
+ * `util.inspect.custom`) and a logger inspecting this value must not be what demands a key,
+ * so they answer off the empty target instead.
+ */
+const lazyStripeClient = new Proxy({} as Stripe, {
+  get(target, prop) {
+    if (typeof prop === "symbol") {
+      return Reflect.get(target, prop) as unknown;
+    }
+    const value = Reflect.get(stripeClient(), prop) as unknown;
+    return typeof value === "function" ? value.bind(stripeClient()) : value;
+  },
+});
 
 // ---------------------------------------------------------------------------
 // The plan table, mapped into the plugin's shape
@@ -179,7 +207,9 @@ export function stripeAuthPlugin() {
       },
     },
 
-    stripeClient: stripeClient(),
+    // The lazy one: this call runs at import, and `BILLING_PROVIDER=console` must not need
+    // a Stripe key. See `lazyStripeClient`.
+    stripeClient: lazyStripeClient,
     stripeWebhookSecret: stripeEnv.STRIPE_WEBHOOK_SECRET ?? "",
 
     subscription: {

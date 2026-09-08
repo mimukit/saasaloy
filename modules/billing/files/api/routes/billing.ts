@@ -212,7 +212,7 @@ export const billingRoute = new Hono<{
   // Move a live subscription to another plan. A vendor may answer with a hosted page
   // rather than applying it directly, so the response carries a url either way.
   .post("/change-plan", (c) =>
-    guard(c, async ({ client, host, subject }) => {
+    guard(c, async ({ client, host, store, subject }) => {
       const body = await readJson(c);
       const planId = requireString(body, "planId");
       const interval = requireInterval(body);
@@ -221,12 +221,18 @@ export const billingRoute = new Hono<{
 
       findPlan(plans, planId);
 
+      // The live row travels with the change for the same reason `cancel` and `restore`
+      // carry it: a provider gets no database, and a local one has to keep what the change
+      // does not touch — the trial above all.
+      const current = await currentSubscription(store, subject);
+
       const result = await client.changePlan(host, {
         cancelUrl,
         interval,
         planId,
         subject,
         successUrl,
+        ...(current === undefined ? {} : { current }),
       });
 
       await enqueue(c, result.event);
@@ -328,13 +334,23 @@ function enqueue(c: BillingContext, event: BillingEvent | undefined) {
   return createQueue(c.env).enqueue(BILLING_EVENT_JOB, event);
 }
 
-function readJson(c: BillingContext): Promise<Record<string, unknown>> {
-  return c.req.json<Record<string, unknown>>().catch(() => {
+// Both halves are the caller's mistake, so both answer 400. `null`, `[1,2]` and `"x"` are
+// all valid JSON and all pass `c.req.json()`, so the shape check has to come after the
+// parse — without it `requireString` reads a key off `null` and the route 500s on a body
+// the client got wrong.
+async function readJson(c: BillingContext): Promise<Record<string, unknown>> {
+  const body: unknown = await c.req.json().catch(() => {
+    throw new BillingError("invalid_request", "The request body is not JSON.");
+  });
+
+  if (typeof body !== "object" || body === null || Array.isArray(body)) {
     throw new BillingError(
       "invalid_request",
-      "The request body is not JSON object."
+      "The request body has to be a JSON object."
     );
-  });
+  }
+
+  return body as Record<string, unknown>;
 }
 
 function requireString(body: Record<string, unknown>, key: string): string {

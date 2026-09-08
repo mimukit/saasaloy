@@ -459,7 +459,11 @@ also the one where copying `email` goes wrong fastest. Five rules, in the order 
   signature-verified webhook. Re-implementing that against the raw SDK is a large amount of vendor
   code you would then have to keep correct. Export a second factory, `<vendor>AuthPlugin()`, from
   the same file and register it with a second `plugin-array` patch on `packages/auth/src/auth.ts`.
-  Two exports, still one file.
+  Two exports, still one file. **Build the vendor client lazily.** That factory is called while
+  `packages/auth/src/auth.ts` is being imported, so a client built eagerly makes your vendor's
+  secret a requirement for signing in, and takes `BILLING_PROVIDER=console` away from a
+  contributor who has no account. `billing-stripe` hands the plugin a `Proxy` that builds the
+  client on the first property read; copy that shape.
 - **Map the plugin's model onto the core's columns, and check the map covers every field the
   plugin writes.** Better Auth plugins let a project rename the model and every field
   (`schema.subscription.modelName` + `fields`). `modelName` is the **Drizzle export key**

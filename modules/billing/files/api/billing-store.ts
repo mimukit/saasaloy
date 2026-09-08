@@ -18,13 +18,15 @@ import {
   setBillingEnqueuer,
   setBillingNotifier,
   setBillingStoreResolver,
+  setBillingStoreRunner,
 } from "@repo/billing";
 import { createEmail } from "@repo/email";
 import { accountLocked } from "@repo/email/templates/account-locked";
 import { paymentFailed } from "@repo/email/templates/payment-failed";
 import { trialEnding } from "@repo/email/templates/trial-ending";
 import type { EmailEnv } from "@repo/email";
-import type { Db } from "@repo/db/client";
+import type { Db, DbBindings } from "@repo/db/client";
+import { withDb } from "@repo/db/client";
 import { user } from "@repo/db/schema/auth";
 import { billingEvent, billingSubscription } from "@repo/db/schema/billing";
 import { createQueue } from "@repo/queue";
@@ -61,6 +63,31 @@ const storeScope = new AsyncLocalStorage<BillingStore>();
 // `src/index.ts` imports that route, so both the fetch handler and the Worker's queue
 // consumer have the resolver in place before the first message arrives.
 setBillingStoreResolver(() => storeScope.getStore());
+
+// The other half of the same registration, and the one that makes the background paths
+// work at all. A billing route opens the scope itself, inside `withDb`. Nothing else does:
+// the Workers queue consumer calls `dispatch` from the platform's `queue()` handler, the
+// daily sweep arrives on the cron tick, and a vendor webhook posts to the endpoint the auth
+// plugin mounts under `/auth/*`. Each of those reaches a job body with no request in scope,
+// so the job asks for a scope here instead of throwing.
+//
+// `withDb` rather than `getDb` on purpose: under `database-postgres` the message owns a real
+// socket and something has to close it. There is no `executionCtx` to hand the close to out
+// here, so the no-op below lets `withDb` take its "nothing to keep alive on" branch — the
+// socket still closes when `body` settles, the runtime just is not asked to wait for it.
+setBillingStoreRunner((body) =>
+  withDb(
+    {
+      env: env as unknown as DbBindings,
+      executionCtx: {
+        waitUntil: () => {
+          // No request to keep alive. `withDb` closes the socket either way.
+        },
+      },
+    },
+    (db) => withBillingStore(createBillingStore(db), body)
+  )
+);
 
 // The other half of the same arrangement, for the other direction. A provider whose vendor
 // posts to its own webhook endpoint has no route to hand an event to, so it enqueues from

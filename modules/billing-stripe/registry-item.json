@@ -5,7 +5,7 @@
   "dependsOn": ["billing"],
   "dependencies": [],
   "envVars": {
-    "STRIPE_SECRET_KEY": "Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required whenever this provider is installed: the auth plugin builds its client at module load, so a missing key fails the Worker's first request rather than its first checkout.",
+    "STRIPE_SECRET_KEY": "Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required once BILLING_PROVIDER=stripe. The client is built on first use, so a project that keeps BILLING_PROVIDER=console runs the whole capability — sign-in included — with this unset; the throw then names the key on the first call that reaches Stripe.",
     "STRIPE_WEBHOOK_SECRET": "The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs."
   },
   "removeWarnings": [

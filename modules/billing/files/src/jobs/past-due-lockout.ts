@@ -1,6 +1,6 @@
 import { billingConfig } from "../config";
 import { notifyBilling } from "../notify";
-import { requireBillingStore } from "../store";
+import { inBillingStore, requireBillingStore } from "../store";
 import { invalidateEntitlements } from "../subscription";
 import type { BillingStore } from "../subscription";
 import type { RegisteredJob } from "./event";
@@ -122,12 +122,16 @@ export const pastDueLockoutJob = (): RegisteredJob => ({
   durable: false,
   name: BILLING_PAST_DUE_LOCKOUT_JOB,
   parse: (payload: unknown) => Promise.resolve(payload),
+  // The sweep only ever runs from the platform's cron tick, so there is never a request
+  // scope around it. `inBillingStore` is what opens one; see `../store.ts`.
   run: async () => {
-    await runPastDueLockout(
-      requireBillingStore(),
-      new Date(),
-      billingConfig().lockoutDays
-    );
+    await inBillingStore(async () => {
+      await runPastDueLockout(
+        requireBillingStore(),
+        new Date(),
+        billingConfig().lockoutDays
+      );
+    });
   },
 });
 

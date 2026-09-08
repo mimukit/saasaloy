@@ -13,6 +13,7 @@ import type {
   PortalInput,
   QuantityInput,
   SubjectInput,
+  Subscription,
   SubscriptionInput,
   SubscriptionStatus,
 } from "../provider";
@@ -95,17 +96,42 @@ function event(
  * The row a purchase produces. A plan carrying `trialDays` starts `trialing` with the trial
  * window filled in, which is what lets a project exercise the Phase 5 trial reminder with
  * no vendor; anything else starts `active`.
+ *
+ * A plan change keeps the trial it is already in rather than starting a new one. Stripe
+ * carries `trial_end` across an upgrade, and a local provider that reset the clock would
+ * hand a project a free month on every plan change and disagree with the vendor on the one
+ * flow it can test offline. The window is only carried while it is still running: a change
+ * made after the trial ended lands on the plan's own status.
  */
 function subscribed(
   input: CheckoutInput | ChangePlanInput,
-  now: Date
+  now: Date,
+  current?: Subscription
 ): SubscriptionInput {
   // Throws `not_found` naming the registered ids rather than writing a row for a plan the
   // project does not have. The route checks this too; a provider that trusted its caller
   // would be the one place the check is missing when a job enqueues a checkout later.
   const plan = findPlan(plans, input.planId);
   const trialDays = plan.trialDays;
-  const status: SubscriptionStatus = trialDays ? "trialing" : "active";
+
+  // A trial already running on the subject's row, if the caller carried one and it has not
+  // expired. `cancel`/`restore` reach this through `carried()` instead; only a plan change
+  // mints a fresh row over a live one.
+  const running = current?.trialEnd && current.trialEnd > now ? current : null;
+
+  let status: SubscriptionStatus = "active";
+  let trialStart: Date | null = null;
+  let trialEnd: Date | null = null;
+
+  if (running) {
+    status = "trialing";
+    trialStart = running.trialStart ?? now;
+    trialEnd = running.trialEnd;
+  } else if (trialDays) {
+    status = "trialing";
+    trialStart = now;
+    trialEnd = addDays(now, trialDays);
+  }
 
   return {
     billingInterval: input.interval === "yearly" ? "year" : "month",
@@ -124,8 +150,8 @@ function subscribed(
     ),
     seats: 1,
     status,
-    trialEnd: trialDays ? addDays(now, trialDays) : null,
-    trialStart: trialDays ? now : null,
+    trialEnd,
+    trialStart,
   };
 }
 
@@ -165,7 +191,11 @@ export function consoleBilling(): BillingProvider {
     ): Promise<CheckoutResult> {
       const now = new Date();
       return Promise.resolve({
-        event: event("subscription.changed", input, subscribed(input, now)),
+        event: event(
+          "subscription.changed",
+          input,
+          subscribed(input, now, input.current)
+        ),
         url: input.successUrl,
       });
     },

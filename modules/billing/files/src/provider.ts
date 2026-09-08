@@ -237,6 +237,16 @@ export interface ChangePlanInput {
   interval: PlanInterval;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * The subject's live row, when there is one, as the route already read it. Same field and
+   * same reason as `SubjectInput.current` below.
+   *
+   * A local provider needs it to keep what a plan change does not touch. A trial is the one
+   * that shows: Stripe carries `trial_end` across an upgrade, so a provider that minted the
+   * new row from the plan alone would restart the trial on every change and diverge from
+   * the vendor on the flow a project tests locally.
+   */
+  current?: Subscription;
 }
 
 export interface SubjectInput {

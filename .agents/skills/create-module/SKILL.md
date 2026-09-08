@@ -35,9 +35,10 @@ Consequence to know while authoring: a **capability** whose files all live in `s
 `api`) lands its whole workspace on disk from `add`, registers its aliases, and applies any
 `patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise
 such a module through the `.dev/` playground to see it end to end. A patch mutates a file another
-module owns, so patched files are **not** manifest-tracked as clean copies. `remove` reverses one
-patch kind, `chained-route`, and drops the other five with a warning telling the user to
-hand-revert them; generalising the inverse is #36. Everything else the applier does is fully
+module owns, so patched files are **not** manifest-tracked as clean copies. `remove` reverses the five
+kinds that edit a source or config file (`chained-route`, `wrangler-binding`,
+`plugin-array`, `const-array`, `drizzle-column`) and drops the two `package.json` kinds with
+a warning telling the user to hand-revert them; generalising the inverse is #36. Everything else the applier does is fully
 described by the descriptor.
 
 ## Shape of a module

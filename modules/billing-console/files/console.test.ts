@@ -278,6 +278,46 @@ describe("billing-console", () => {
     assert.equal(store.rows[0]?.billingInterval, "year");
   });
 
+  it("carries a running trial across a plan change instead of restarting it", async () => {
+    const client = createBilling(ENV);
+    await deliver(
+      store,
+      (
+        await client.createCheckout(HOST, {
+          cancelUrl: "https://app.test/cancel",
+          interval: "monthly",
+          planId: "pro",
+          subject: SUBJECT,
+          successUrl: "https://app.test/done",
+        })
+      ).event
+    );
+    const bought = store.rows[0];
+    assert.equal(bought?.status, "trialing");
+
+    // The route reads the live row and hands it over, which is the only way a provider with
+    // no database can know a trial is running. Stripe carries `trial_end` across an upgrade;
+    // restarting it here would hand every plan change another free fortnight.
+    await deliver(
+      store,
+      (
+        await client.changePlan(HOST, {
+          cancelUrl: "https://app.test/cancel",
+          current: bought,
+          interval: "yearly",
+          planId: "pro",
+          subject: SUBJECT,
+          successUrl: "https://app.test/done",
+        })
+      ).event
+    );
+
+    assert.equal(store.rows.length, 1);
+    assert.equal(store.rows[0]?.status, "trialing");
+    assert.deepEqual(store.rows[0]?.trialEnd, bought?.trialEnd);
+    assert.deepEqual(store.rows[0]?.trialStart, bought?.trialStart);
+  });
+
   it("lists no invoices, because it has no vendor to list them from", async () => {
     assert.deepEqual(
       await createBilling(ENV).listInvoices(HOST, { subject: SUBJECT }),

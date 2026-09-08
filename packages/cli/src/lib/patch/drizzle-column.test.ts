@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   drizzleColumnInsertRefusal,
@@ -26,6 +27,23 @@ export const user = pgTable("user", {
   banned: boolean("banned").default(false),
 });
 `;
+
+/**
+ * The two files this patch actually ships for, read from the module rather than trimmed
+ * into a fixture. They carry what the fixtures above do not: multi-line properties,
+ * comments between properties, and a table declared after the one being patched. recast
+ * reprints exactly those with extra blank lines, so a round trip that is byte-identical
+ * here is the promise the `auth` manifest depends on.
+ */
+function authSchema(dialect: "pg" | "sqlite"): string {
+  return readFileSync(
+    new URL(
+      `../../../../../modules/auth/files/db/schema/auth.${dialect}.ts`,
+      import.meta.url
+    ),
+    "utf-8"
+  );
+}
 
 const BILLING_CUSTOMER = {
   exportName: "user",
@@ -107,6 +125,22 @@ describe(removeDrizzleColumn, () => {
     const added = insertDrizzleColumn(PG, BILLING_CUSTOMER);
     expect(removeDrizzleColumn(added, BILLING_CUSTOMER)).toBe(PG);
   });
+
+  it.each(["sqlite", "pg"] as const)(
+    "round-trips the real auth.%s.ts byte for byte",
+    (dialect) => {
+      const before = authSchema(dialect);
+      const added = insertDrizzleColumn(before, BILLING_CUSTOMER);
+
+      // Everything outside the one added line is untouched: no property is reprinted and
+      // no blank line appears beside a multi-line column or a comment.
+      expect(added).toContain(
+        '  billingCustomerId: text("billing_customer_id"),\n'
+      );
+      expect(added.split("\n")).toHaveLength(before.split("\n").length + 1);
+      expect(removeDrizzleColumn(added, BILLING_CUSTOMER)).toBe(before);
+    }
+  );
 
   it("takes a declared import back out with the column", () => {
     const patch = {

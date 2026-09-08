@@ -15,7 +15,11 @@ import { describe, it } from "node:test";
 import { consoleBilling } from "../../billing-console/files/console.ts";
 import { billingEventJob, plans } from "../../billing/files/src/index.ts";
 import { applyEvent } from "../../billing/files/src/subscription.ts";
-import { setBillingStoreResolver } from "../../billing/files/src/store.ts";
+import {
+  requireBillingStore,
+  setBillingStoreResolver,
+  setBillingStoreRunner,
+} from "../../billing/files/src/store.ts";
 import type {
   BillableSubject,
   BillingEnv,
@@ -117,9 +121,26 @@ function fakeStore(seed: Subscription[] = []) {
  * The queue a project gets, built here rather than imported: the barrel's own tables are the
  * patch point a real install writes into, and a test may not depend on what a previous
  * `saasaloy add` left there.
+ *
+ * The store is registered as a **runner**, not as a standing resolver, which is what makes
+ * these tests run the path a deployed Worker runs. Nothing is in scope when `enqueue` is
+ * called here — no billing route, no request — so the job has to open the scope for itself
+ * through `inBillingStore`, exactly as it does under `queue-cloudflare`'s consumer, on the
+ * cron tick and on a vendor webhook. A resolver that answered from the start would hide
+ * that: the scope would already be open and every one of these tests would pass whether or
+ * not the job could open one.
  */
 function fakeQueue(store: BillingStore) {
-  setBillingStoreResolver(() => store);
+  let scoped: BillingStore | undefined;
+  setBillingStoreResolver(() => scoped);
+  setBillingStoreRunner(async (body) => {
+    scoped = store;
+    try {
+      return await body();
+    } finally {
+      scoped = undefined;
+    }
+  });
   const provider = memory({ rethrow: true });
   const queue = defineQueue({
     jobs: [billingEventJob()],
@@ -180,6 +201,24 @@ describe("entitlements with no subscription", () => {
 
     assert.equal(await hasFeature(store, SUBJECT, "teleport"), false);
     assert.equal(await limit(store, SUBJECT, "teleport"), 0);
+  });
+});
+
+describe("the event path outside a request", () => {
+  it("opens its own store scope, so a consumer needs no route around it", async () => {
+    const { rows, store } = fakeStore();
+
+    // The state a queue consumer, the cron tick and a vendor webhook are all in: no billing
+    // route has run, so nothing has put a store in scope. Asserted before the checkout so a
+    // regression here reads as "the scope was already open", not as a missing row.
+    assert.throws(() => requireBillingStore(), /No BillingStore is in scope/u);
+
+    await checkout(store, "pro");
+
+    assert.equal(rows.length, 1);
+    assert.equal((await currentPlan(store, SUBJECT)).id, "pro");
+    // And the scope closed again with the job, rather than leaking into whatever runs next.
+    assert.throws(() => requireBillingStore(), /No BillingStore is in scope/u);
   });
 });
 

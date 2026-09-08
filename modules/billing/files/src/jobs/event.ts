@@ -1,3 +1,4 @@
+import { inBillingStore } from "../store";
 import { handleBillingEvent, BILLING_EVENT_JOB } from "./event-handler";
 import type { BillingEventPayload } from "./event-handler";
 
@@ -37,7 +38,13 @@ export const billingEventJob = (): RegisteredJob => ({
   // by a caller, so the shape is a code path rather than an input to validate — and a
   // schema would be the core's first npm dependency.
   parse: (payload: unknown) => Promise.resolve(payload),
+  // `inBillingStore` rather than a bare call: a message reaches this handler from the
+  // Workers queue consumer or from a vendor webhook posting to the auth plugin's endpoint,
+  // and neither is a billing route, so nothing has put a `BillingStore` in scope. Inside a
+  // route — `queue-memory` dispatching inline — the route's own scope is reused.
   run: async (payload: unknown) => {
-    await handleBillingEvent(payload as BillingEventPayload);
+    await inBillingStore(async () => {
+      await handleBillingEvent(payload as BillingEventPayload);
+    });
   },
 });

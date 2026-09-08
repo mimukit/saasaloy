@@ -16,7 +16,7 @@ interface BillingProvider {
   name: string;
   createCheckout(env, ctx, { subject, planId, interval, successUrl, cancelUrl });
   createPortal(env, ctx, { subject, returnUrl });
-  changePlan(env, ctx, { subject, planId, interval, successUrl, cancelUrl });
+  changePlan(env, ctx, { subject, planId, interval, successUrl, cancelUrl, current? });
   cancel(env, ctx, { subject });
   restore(env, ctx, { subject });
   setQuantity(env, ctx, { subject, seats });
@@ -83,7 +83,7 @@ A `BillingError` is rendered as the api's `{ error: { code, message } }` envelop
 
 `applyEvent` takes a `BillingStore` port rather than a Drizzle client, because the core has zero npm dependencies. `apps/api/src/billing-store.ts` builds that port over the request's client, owns the `AsyncLocalStorage` scope, and registers a reader for it with `setBillingStoreResolver` at module load. A job handler — which gets only `(payload, ctx)` — reads the port back with `requireBillingStore()`. The scope lives in `apps/api` rather than in the core because `node:async_hooks` would force `"types": ["node"]` on every workspace that imports `@repo/billing`, `packages/queue` first. Same arrangement as `packages/auth/src/db-scope.ts`, and for the same reason.
 
-A queue consumer that dispatches outside a request has to enter that scope itself before calling `dispatch`. `queue-memory` needs nothing: it runs the job inline at `enqueue`, inside the route's scope.
+A job opens the scope itself. Both job bodies wrap their work in `inBillingStore(...)`, which reuses the scope a billing route already opened and otherwise calls the runner `apps/api/src/billing-store.ts` registers with `setBillingStoreRunner` — a `withDb` over the importable Workers `env` that closes its client when the message settles. That is what makes the three request-less paths work: the Workers queue consumer, the daily cron tick, and a vendor webhook posting to the endpoint the auth plugin mounts under `/auth/*`. A consumer needs to wrap nothing, and `queue-memory` running the job inline inside a route keeps writing through that request's own client.
 
 ## The event path
 
