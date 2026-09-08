@@ -5,18 +5,32 @@ import type {
   Subscription,
   SubscriptionInput,
   SubscriptionPatch,
+  BillingNotification,
 } from "@repo/billing";
 import {
   BILLING_EVENT_JOB,
+  billingConfig,
+  defaultPlan,
+  findPlan,
+  plans,
+  readLockoutDays,
+  setBillingConfig,
   setBillingEnqueuer,
+  setBillingNotifier,
   setBillingStoreResolver,
 } from "@repo/billing";
+import { createEmail } from "@repo/email";
+import { accountLocked } from "@repo/email/templates/account-locked";
+import { paymentFailed } from "@repo/email/templates/payment-failed";
+import { trialEnding } from "@repo/email/templates/trial-ending";
+import type { EmailEnv } from "@repo/email";
 import type { Db } from "@repo/db/client";
+import { user } from "@repo/db/schema/auth";
 import { billingEvent, billingSubscription } from "@repo/db/schema/billing";
 import { createQueue } from "@repo/queue";
 import type { QueueEnv } from "@repo/queue";
 import { env } from "cloudflare:workers";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, isNull, lt } from "drizzle-orm";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // The `BillingStore` port, built over this request's Drizzle client, and the scope a job
@@ -62,6 +76,95 @@ setBillingEnqueuer(async (event) => {
     event
   );
 });
+
+// The third registration, for the third thing a job handler cannot reach: `env`. A handler
+// signature is `(payload, ctx)` (packages/queue/src/provider.ts), so the daily lockout job
+// has no way to read `BILLING_LOCKOUT_DAYS` for itself, and the core never reads
+// `process.env`. Read once here, where the importable Workers `env` already is.
+setBillingConfig({
+  lockoutDays: readLockoutDays(
+    (env as unknown as { BILLING_LOCKOUT_DAYS?: string }).BILLING_LOCKOUT_DAYS
+  ),
+});
+
+/** What the billing emails call the project, and where they send the reader. */
+const appName =
+  (env as unknown as { BILLING_APP_NAME?: string }).BILLING_APP_NAME ??
+  "your app";
+const billingUrl =
+  (env as unknown as { BILLING_APP_URL?: string }).BILLING_APP_URL ??
+  "http://localhost:3001/billing";
+
+// And the fourth: how a billing email is actually sent. `packages/billing` decides when one
+// is owed and to whom (packages/billing/src/notify.ts); which provider sends it, what
+// `EMAIL_FROM` is and how the template renders are the email capability's business, and this
+// is the one file that holds both packages.
+//
+// Every call reaching here comes from a queue consumer or the scheduled sweep. No request
+// handler sends a billing email, which is what makes a webhook redelivery cost nothing: the
+// `billing_event` insert in `applyEvent` guards the whole side-effect body.
+setBillingNotifier(async (notification: BillingNotification) => {
+  await createEmail(env as unknown as EmailEnv).send({
+    to: notification.to.email,
+    ...content(notification),
+  });
+});
+
+function content(notification: BillingNotification) {
+  const { subscription, to } = notification;
+  const name = to.name ?? to.email;
+  const planName = planLabel(subscription.plan);
+
+  switch (notification.kind) {
+    case "trial.ending": {
+      return trialEnding({
+        appName,
+        billingUrl,
+        endsOn: day(subscription.trialEnd ?? subscription.periodEnd),
+        name,
+        planName,
+      });
+    }
+    case "payment.failed": {
+      return paymentFailed({
+        appName,
+        billingUrl,
+        // The date the sweep would lock this row, computed from the same number the sweep
+        // reads, so the email cannot promise a grace period the job does not honour.
+        lockoutOn: day(
+          new Date(
+            Date.now() + billingConfig().lockoutDays * 24 * 60 * 60 * 1000
+          )
+        ),
+        name,
+        planName,
+      });
+    }
+    default: {
+      return accountLocked({
+        appName,
+        billingUrl,
+        defaultPlanName: defaultPlan(plans).name,
+        name,
+        planName,
+      });
+    }
+  }
+}
+
+/** A plan's display name, or its raw id when the project has since dropped the tier. */
+function planLabel(id: string): string {
+  try {
+    return findPlan(plans, id).name;
+  } catch {
+    return id;
+  }
+}
+
+/** `2026-09-08`. Deliberately not localized: the Worker has no reader locale to use. */
+function day(at: Date | null | undefined): string {
+  return (at ?? new Date()).toISOString().slice(0, 10);
+}
 
 /**
  * Run `body` with `store` in scope.
@@ -110,6 +213,23 @@ export function createBillingStore(db: Db): BillingStore {
         );
     },
 
+    // The daily sweep's whole query. `locked_at is null` keeps it idempotent: a row this
+    // job already locked is out of the set, so a second tick on the same day locks nothing
+    // and sends no second email.
+    pastDueSince(before: Date) {
+      return db
+        .select()
+        .from(billingSubscription)
+        .where(
+          and(
+            eq(billingSubscription.status, "past_due"),
+            isNull(billingSubscription.lockedAt),
+            lt(billingSubscription.updatedAt, before)
+          )
+        )
+        .then((rows) => rows as Subscription[]);
+    },
+
     async patchSubscription(id: string, patch: SubscriptionPatch) {
       await db
         .update(billingSubscription)
@@ -120,6 +240,23 @@ export function createBillingStore(db: Db): BillingStore {
     // The insert is the dedupe, not a read-then-write. `(provider, provider_event_id)` is
     // the table's primary key, so the conflict comes from the database and no second
     // delivery can race past it. An empty `returning()` means the row was already there.
+    // Where a billing email goes. The default subject is a user, so this is one read of the
+    // `user` table by id. `teams` replaces `subject.ts` to bill an organization instead, and
+    // this method is the other half of that swap: it would read the organization's billing
+    // contact for `customerType === "organization"`. Until then an unknown type resolves to
+    // nothing and the core skips the send rather than failing the job.
+    async recipientFor(subject: BillableSubject) {
+      if (subject.customerType !== "user") {
+        return;
+      }
+      return await db
+        .select({ email: user.email, name: user.name })
+        .from(user)
+        .where(eq(user.id, subject.referenceId))
+        .limit(1)
+        .then((rows) => rows.at(0));
+    },
+
     recordEvent(record: BillingEventRecord) {
       return db
         .insert(billingEvent)

@@ -9,6 +9,8 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import { setBillingNotifier } from "./notify.ts";
+import type { BillingNotification, BillingRecipient } from "./notify.ts";
 import type {
   BillableSubject,
   BillingEvent,
@@ -29,12 +31,38 @@ const SUBJECT: BillableSubject = {
 };
 const NOW = new Date("2026-09-08T12:00:00.000Z");
 
+// Every billing email goes through the notifier port, so the fake below is the whole
+// mail system: a list the assertions read back. Registered once for the file; each
+// `fakeStore` clears it.
+const sent: BillingNotification[] = [];
+setBillingNotifier((notification) => {
+  sent.push(notification);
+  return Promise.resolve();
+});
+
 function fakeStore(seed: Subscription[] = []) {
   const rows = [...seed];
   const events = new Map<string, BillingEventRecord & { processedAt?: Date }>();
   const calls = { patch: 0, processed: 0, record: 0, upsert: 0 };
+  let recipient: BillingRecipient | undefined = {
+    email: "ada@example.com",
+    name: "Ada",
+  };
 
   const store: BillingStore = {
+    pastDueSince(before: Date) {
+      return Promise.resolve(
+        rows.filter(
+          (row) =>
+            row.status === "past_due" &&
+            !row.lockedAt &&
+            row.updatedAt.getTime() < before.getTime()
+        )
+      );
+    },
+    recipientFor() {
+      return Promise.resolve(recipient);
+    },
     latestSubscription(subject) {
       const matching = rows.filter(
         (row) =>
@@ -94,7 +122,19 @@ function fakeStore(seed: Subscription[] = []) {
     },
   };
 
-  return { calls, events, rows, store };
+  sent.length = 0;
+
+  return {
+    calls,
+    events,
+    rows,
+    /** Drop the address, so a test can drive the "nobody to write to" path. */
+    forgetRecipient() {
+      recipient = undefined;
+    },
+    sent,
+    store,
+  };
 }
 
 function subscriptionInput(
@@ -253,7 +293,9 @@ describe("applyEvent", () => {
 
     assert.equal(result.applied, true);
     assert.equal(result.subscription?.status, "trialing");
-    assert.equal(result.subscription?.reminderSentAt, null);
+    // The reminder is the event's whole point, so `reminderSentAt` is stamped here and the
+    // status is left exactly as the vendor sent it. See "applyEvent side effects" below.
+    assert.deepEqual(result.subscription?.reminderSentAt, NOW);
   });
 
   it("keeps the plan on payment.failed, so past_due still entitles it", async () => {
@@ -377,5 +419,124 @@ describe("applyEvent", () => {
 
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.status, "past_due");
+  });
+});
+
+describe("applyEvent side effects", () => {
+  it("clears lockedAt on a payment.succeeded that carries no subscription", async () => {
+    // Stripe's `invoice.paid` is exactly this shape: an invoice, no subscription state, so
+    // the provider enqueues the event with no projected row. Reading the current row back
+    // is the only way the one event that ends a lockout can end one.
+    const { calls, rows, store } = fakeStore([
+      makeRow({
+        lockedAt: new Date("2026-09-01T00:00:00.000Z"),
+        status: "past_due",
+      }),
+    ]);
+
+    const result = await applyEvent(
+      store,
+      { ...makeEvent("payment.succeeded"), subscription: undefined },
+      NOW
+    );
+
+    assert.equal(result.applied, true);
+    assert.equal(result.subscription?.lockedAt, null);
+    assert.equal(rows[0]?.lockedAt, null);
+    // The row was read, not rewritten: no provider state came with the event.
+    assert.equal(calls.upsert, 0);
+    assert.equal(calls.patch, 1);
+  });
+
+  it("sends one trial reminder per subscription and stamps reminderSentAt", async () => {
+    const { rows, sent: mail, store } = fakeStore();
+
+    const first = await applyEvent(store, makeEvent("trial.ending"), NOW);
+
+    assert.equal(first.notified, "trial.ending");
+    assert.equal(mail.length, 1);
+    assert.equal(mail[0]?.to.email, "ada@example.com");
+    assert.equal(mail[0]?.subscription.plan, "pro");
+    assert.deepEqual(rows[0]?.reminderSentAt, NOW);
+  });
+
+  it("sends no second reminder when the vendor sends trial_will_end twice", async () => {
+    const { sent: mail, store } = fakeStore();
+
+    await applyEvent(store, makeEvent("trial.ending"), NOW);
+    // A different event id, so `billing_event` does not stop it. `reminderSentAt` does.
+    await applyEvent(
+      store,
+      makeEvent("trial.ending", { providerEventId: "evt_trial_2" }),
+      NOW
+    );
+
+    assert.equal(mail.length, 1);
+  });
+
+  it("sends the payment-failed email on every distinct failure", async () => {
+    const { sent: mail, store } = fakeStore();
+
+    await applyEvent(
+      store,
+      makeEvent("payment.failed", {
+        subscription: subscriptionInput({ status: "past_due" }),
+      }),
+      NOW
+    );
+    await applyEvent(
+      store,
+      makeEvent("payment.failed", {
+        providerEventId: "evt_failed_2",
+        subscription: subscriptionInput({ status: "past_due" }),
+      }),
+      NOW
+    );
+
+    assert.equal(mail.length, 2);
+    assert.equal(mail[0]?.kind, "payment.failed");
+  });
+
+  it("sends the payment-failed email for an invoice event carrying no row", async () => {
+    const { sent: mail, store } = fakeStore([makeRow({ status: "past_due" })]);
+
+    const result = await applyEvent(
+      store,
+      { ...makeEvent("payment.failed"), subscription: undefined },
+      NOW
+    );
+
+    assert.equal(result.notified, "payment.failed");
+    assert.equal(mail.length, 1);
+  });
+
+  it("sends nothing on a replayed event, because the guard is above the send", async () => {
+    const { sent: mail, store } = fakeStore();
+
+    await applyEvent(store, makeEvent("payment.failed"), NOW);
+    await applyEvent(store, makeEvent("payment.failed"), NOW);
+
+    assert.equal(mail.length, 1);
+  });
+
+  it("skips the send, and does not throw, when the subject has no address", async () => {
+    const { forgetRecipient, rows, sent: mail, store } = fakeStore();
+    forgetRecipient();
+
+    const result = await applyEvent(store, makeEvent("trial.ending"), NOW);
+
+    assert.equal(result.applied, true);
+    assert.equal(result.notified, undefined);
+    assert.equal(mail.length, 0);
+    // No email went, so nothing claims one did. A later delivery may still find an address.
+    assert.equal(rows[0]?.reminderSentAt, null);
+  });
+
+  it("sends no email for a plain subscription.changed", async () => {
+    const { sent: mail, store } = fakeStore();
+
+    await applyEvent(store, makeEvent("subscription.changed"), NOW);
+
+    assert.equal(mail.length, 0);
   });
 });

@@ -2,11 +2,13 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "billing",
   "type": "saasaloy:capability",
-  "dependsOn": ["api", "database", "auth", "admin", "queue"],
+  "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {
     "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
-    "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset."
+    "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
+    "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
+    "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "removeWarnings": [
     "The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
@@ -64,6 +66,28 @@
       }
     },
     {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "pastDueLockoutJob",
+      "import": {
+        "name": "pastDueLockoutJob",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "pastDueLockoutSchedule",
+      "import": {
+        "name": "pastDueLockoutSchedule",
+        "from": "@repo/billing"
+      }
+    },
+    {
       "file": "apps/admin/src/components/app-shell.tsx",
       "kind": "const-array",
       "constName": "NAV_ITEMS",
@@ -90,6 +114,18 @@
     {
       "path": "files/admin/routes/billing.tsx",
       "target": "@admin/routes/billing.tsx"
+    },
+    {
+      "path": "files/email/templates/trial-ending.ts",
+      "target": "@email/templates/trial-ending.ts"
+    },
+    {
+      "path": "files/email/templates/payment-failed.ts",
+      "target": "@email/templates/payment-failed.ts"
+    },
+    {
+      "path": "files/email/templates/account-locked.ts",
+      "target": "@email/templates/account-locked.ts"
     },
     {
       "path": "files/db/schema/billing.sqlite.ts",
@@ -120,7 +156,13 @@
         },
         { "path": "files/src/store.ts", "target": "src/store.ts" },
         { "path": "files/src/enqueue.ts", "target": "src/enqueue.ts" },
+        { "path": "files/src/notify.ts", "target": "src/notify.ts" },
+        { "path": "files/src/config.ts", "target": "src/config.ts" },
         { "path": "files/src/jobs/event.ts", "target": "src/jobs/event.ts" },
+        {
+          "path": "files/src/jobs/past-due-lockout.ts",
+          "target": "src/jobs/past-due-lockout.ts"
+        },
         {
           "path": "files/src/jobs/event-handler.ts",
           "target": "src/jobs/event-handler.ts"

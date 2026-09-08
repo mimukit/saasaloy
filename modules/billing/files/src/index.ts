@@ -1,6 +1,13 @@
 import { defineBilling } from "./define";
 import type { BillingEnv } from "./provider";
 
+export {
+  billingConfig,
+  DEFAULT_LOCKOUT_DAYS,
+  readLockoutDays,
+  setBillingConfig,
+} from "./config";
+export type { BillingConfigValues } from "./config";
 export { defaultPlan, defineBilling, definePlans, findPlan } from "./define";
 export type { BillingClient, BillingConfig, BillingRegistry } from "./define";
 export { enqueueBillingEvent, setBillingEnqueuer } from "./enqueue";
@@ -13,6 +20,25 @@ export {
   reviveEvent,
 } from "./jobs/event-handler";
 export type { BillingEventPayload } from "./jobs/event-handler";
+export {
+  BILLING_PAST_DUE_LOCKOUT_CRON,
+  BILLING_PAST_DUE_LOCKOUT_JOB,
+  BILLING_PAST_DUE_LOCKOUT_SCHEDULE,
+  pastDueLockoutJob,
+  pastDueLockoutSchedule,
+  runPastDueLockout,
+} from "./jobs/past-due-lockout";
+export type {
+  LockoutResult,
+  RegisteredSchedule,
+} from "./jobs/past-due-lockout";
+export { notifyBilling, setBillingNotifier } from "./notify";
+export type {
+  BillingNotification,
+  BillingNotificationKind,
+  BillingNotifier,
+  BillingRecipient,
+} from "./notify";
 export { plans } from "./plans";
 export { BillingError, isLiveStatus, LIVE_STATUSES } from "./provider";
 export type {

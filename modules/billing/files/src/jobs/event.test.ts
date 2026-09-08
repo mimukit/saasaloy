@@ -60,6 +60,12 @@ function fakeStore() {
     markEventProcessed() {
       return Promise.resolve();
     },
+    pastDueSince() {
+      return Promise.resolve([]);
+    },
+    recipientFor() {
+      return Promise.resolve({ email: "billing@example.com", name: "Ada" });
+    },
     patchSubscription(id: string, patch: SubscriptionPatch) {
       const at = rows.findIndex((row) => row.id === id);
       if (at !== -1) {

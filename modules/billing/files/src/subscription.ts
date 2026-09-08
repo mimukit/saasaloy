@@ -1,3 +1,5 @@
+import { notifyBilling } from "./notify";
+import type { BillingNotificationKind, BillingRecipient } from "./notify";
 import { isLiveStatus } from "./provider";
 import type {
   BillableSubject,
@@ -62,6 +64,25 @@ export interface BillingStore {
   ): Promise<Subscription>;
   /** Write the core-only columns on one row. */
   patchSubscription(id: string, patch: SubscriptionPatch): Promise<void>;
+  /**
+   * Every row still `past_due` whose `past_due` window opened before `before` and which
+   * the lockout job has not locked yet. The daily job's whole query.
+   *
+   * "Opened before" is read off `updatedAt`, because the projection has one writer and it
+   * stamps that column on every vendor state change — so it is the moment the vendor last
+   * said `past_due`. A separate `pastDueSince` column would be a second thing to keep in
+   * step for no extra truth.
+   */
+  pastDueSince(before: Date): Promise<Subscription[]>;
+  /**
+   * Where a billing email for this subject goes, or nothing when the project can no longer
+   * resolve one — a deleted user, an organization with no billing contact.
+   *
+   * On the port rather than in the notifier because the answer is a database read, and
+   * `apps/api` is the workspace that owns the schema. `subject.ts` decides *what* a subject
+   * is; this decides where to write to it, and `teams` replaces both together.
+   */
+  recipientFor(subject: BillableSubject): Promise<BillingRecipient | undefined>;
 }
 
 /**
@@ -92,7 +113,25 @@ export interface ApplyEventResult {
   duplicate: boolean;
   /** The row as it stands after the write, when the event carried subscription state. */
   subscription?: Subscription;
+  /** Which billing email this event sent, if any. Nothing when it sent none. */
+  notified?: BillingNotificationKind;
 }
+
+/**
+ * The event types whose side effect needs the current row even when the vendor sent none
+ * with the event.
+ *
+ * Stripe is the reason this list exists. `invoice.paid` and `invoice.payment_failed` carry
+ * an invoice, not a subscription, so `stripeBilling` maps them with no projected row —
+ * correctly, since there is no vendor subscription state in them to project. But clearing a
+ * lockout and sending a dunning email both need the row, so the core reads it back rather
+ * than doing nothing at all on the one event that ends a lockout.
+ */
+const NEEDS_CURRENT_ROW = new Set<BillingEvent["type"]>([
+  "payment.succeeded",
+  "payment.failed",
+  "trial.ending",
+]);
 
 /**
  * Apply one normalized event to the projection.
@@ -125,13 +164,54 @@ export async function applyEvent(
       event.subject,
       project(event.type, event.subscription, now)
     );
+  } else if (NEEDS_CURRENT_ROW.has(event.type)) {
+    // No projected row on the event, but the side effect below needs one. See
+    // `NEEDS_CURRENT_ROW`: this is the `invoice.paid` path, and it is what ends a lockout.
+    subscription = await db.latestSubscription(event.subject);
+  }
 
+  let notified: BillingNotificationKind | undefined;
+
+  if (subscription) {
     // A successful payment is the one event that clears a lockout: the subject paid, so
     // whatever the daily job locked is released. `lockedAt` is core-only, so no provider
     // can set or clear it by accident.
     if (event.type === "payment.succeeded" && subscription.lockedAt) {
       await db.patchSubscription(subscription.id, { lockedAt: null });
       subscription = { ...subscription, lockedAt: null };
+    }
+
+    // The trial reminder is once per subscription, not once per delivery. `billing_event`
+    // already stops a redelivered event id, but a vendor may legitimately send
+    // `trial_will_end` twice under two ids — Stripe does, on a trial that gets extended —
+    // and the subject should still get one email. `reminderSentAt` is the row-level guard
+    // that covers that, and it is core-only for the same reason `lockedAt` is.
+    if (event.type === "trial.ending" && !subscription.reminderSentAt) {
+      const sent = await notify(
+        db,
+        "trial.ending",
+        event.subject,
+        subscription
+      );
+      if (sent) {
+        await db.patchSubscription(subscription.id, { reminderSentAt: now });
+        subscription = { ...subscription, reminderSentAt: now };
+        notified = "trial.ending";
+      }
+    }
+
+    // Every distinct failed charge is worth an email: dunning is a sequence, and the
+    // lockout job three failures later is the thing that finally changes the plan.
+    if (event.type === "payment.failed") {
+      const sent = await notify(
+        db,
+        "payment.failed",
+        event.subject,
+        subscription
+      );
+      if (sent) {
+        notified = "payment.failed";
+      }
     }
   }
 
@@ -141,8 +221,31 @@ export async function applyEvent(
   return {
     applied: true,
     duplicate: false,
+    ...(notified === undefined ? {} : { notified }),
     ...(subscription === undefined ? {} : { subscription }),
   };
+}
+
+/**
+ * Send one billing email, and report whether it went.
+ *
+ * A subject with no resolvable address is a skip, not a throw. The alternative is a job
+ * that fails, retries, fails again and finally dead-letters a *deleted user's* trial
+ * reminder — a queue full of work that can never succeed. The state write above it has
+ * already happened and is the part that matters.
+ */
+async function notify(
+  db: BillingStore,
+  kind: BillingNotificationKind,
+  subject: BillableSubject,
+  subscription: Subscription
+): Promise<boolean> {
+  const to = await db.recipientFor(subject);
+  if (!to?.email) {
+    return false;
+  }
+  await notifyBilling({ kind, subject, subscription, to });
+  return true;
 }
 
 /**

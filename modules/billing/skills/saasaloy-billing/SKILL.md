@@ -163,6 +163,25 @@ Normalized statuses: `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `in
 
 `trialing`, `active` and `past_due` all still entitle the paid plan. `past_due` is in that set on purpose: a failed payment keeps the plan until the daily lockout job sets `lockedAt`, after `BILLING_LOCKOUT_DAYS` (14 when unset). A locked row keeps its status and stops entitling its plan; `payment.succeeded` clears the lock. `lockedAt` and `reminderSentAt` are core-only columns and no provider ever writes them.
 
+Clearing the lock does not need a projected row on the event. Stripe's `invoice.paid` carries an invoice and no subscription, so `applyEvent` reads the subject's current row back for `payment.succeeded`, `payment.failed` and `trial.ending` when the event brings none. That is the whole reason the one event that ends a lockout can end one.
+
+## Trials, dunning, and the three emails
+
+Every billing side effect runs as a queue consumer or a scheduled job. None of them runs in a request handler, and that is a rule rather than a preference: a route that sent the payment-failed email would send it again on each webhook redelivery, and would send nothing at all when the charge fails while nobody is signed in — which is the normal case.
+
+| Trigger | Where it runs | What it does |
+|---|---|---|
+| `trial.ending` (Stripe's `customer.subscription.trial_will_end`, three days out) | `billing.event` consumer | Sends `trial-ending`, stamps `reminderSentAt`. Once per subscription, not once per delivery: a vendor that sends the event twice under two ids still sends one email. |
+| `payment.failed` (`invoice.payment_failed`) | `billing.event` consumer | Sends `payment-failed`, naming the date the lockout would run. Once per distinct failure, because dunning is a sequence. |
+| `billing.past-due-lockout`, daily at 03:00 UTC | `queue.schedules` → `queue.jobs` | Sets `lockedAt` on `past_due` rows last touched more than `BILLING_LOCKOUT_DAYS` ago, and sends `account-locked`. Idempotent: a locked row is out of the next sweep's set. |
+| `payment.succeeded` (`invoice.paid`) | `billing.event` consumer | Clears `lockedAt`. |
+
+The three templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/billing-store.ts` chooses which one to render and fills in `BILLING_APP_NAME` and `BILLING_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
+
+`packages/billing` sends nothing itself. It decides *when* an email is owed and *to whom* through two ports — `setBillingNotifier` in `src/notify.ts` and `BillingStore.recipientFor` — and `apps/api/src/billing-store.ts` supplies both, next to the store resolver and the enqueuer. That is what keeps `@repo/email` out of the core. A subject with no resolvable address is a skip, not a failure: the state write has already happened, and a job that retried forever over a deleted user's trial reminder would be worse.
+
+`BILLING_LOCKOUT_DAYS` reaches the sweep the same way: a job handler gets `(payload, ctx)` and no `env`, so `billing-store.ts` reads the var once at module load and calls `setBillingConfig`.
+
 ## Write a third provider
 
 One file in `src/providers/`, exporting a factory that returns a `BillingProvider`. Six steps:
