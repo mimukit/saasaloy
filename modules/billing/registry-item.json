@@ -1,0 +1,76 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api", "database", "auth", "admin", "queue"],
+  "dependencies": [],
+  "envVars": {
+    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
+    "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset."
+  },
+  "removeWarnings": [
+    "The deployed billing_subscription and billing_event tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/db/schema/billing.sqlite.ts",
+      "target": "@db/schema/billing.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/billing.pg.ts",
+      "target": "@db/schema/billing.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/schema/user-billing.sqlite.ts",
+      "target": "@db/schema/user-billing.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/user-billing.pg.ts",
+      "target": "@db/schema/user-billing.ts",
+      "onlyWith": "database-postgres"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/billing",
+      "aliases": { "@billing": "packages/billing/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/plans.ts", "target": "src/plans.ts" },
+        { "path": "files/src/subject.ts", "target": "src/subject.ts" },
+        {
+          "path": "files/src/subscription.ts",
+          "target": "src/subscription.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
+      ]
+    }
+  ]
+}
