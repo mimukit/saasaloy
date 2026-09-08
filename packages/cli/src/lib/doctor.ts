@@ -462,24 +462,49 @@ export interface PolicyBindingArgs {
  * the route, which is a broken deploy rather than a preference.
  *
  * The policy array is read the same way the `plugin-array` patch writes it: through
- * magicast, off `export const kv = defineKv({ policies: [...] })`. Each element is a bare
- * factory call, so the policy's real name comes from the `definePolicy({ name })` literal
- * in the file that call is imported from — the callee is not the name (`defaultPolicy()`
- * registers `"default"`, because `default` is a reserved word).
+ * magicast, off `export const kv = defineKv({ policies: [...] })`. Two element shapes
+ * carry a name. An inline `definePolicy({ name: "burst", ... })` holds it in its own
+ * first argument. A bare factory call holds it in the `definePolicy({ name })` literal in
+ * the file that call is imported from — there the callee is not the name
+ * (`defaultPolicy()` registers `"default"`, because `default` is a reserved word).
+ *
+ * An element in neither shape is reported rather than skipped. A silent skip is the worse
+ * answer: `doctor` would print "No problems found" for a policy that throws
+ * `not_supported` on the first request.
  */
 export function checkPolicyBindings(args: PolicyBindingArgs): Finding[] {
   const bound = new Set(rateLimitBindingNames(args.wrangler));
-  return registeredPolicyNames(args)
-    .filter((name) => !bound.has(bindingFor(name)))
-    .map((name) =>
-      finding(
-        "ratelimit",
-        `/policies/${name}`,
-        `policy "${name}" has no ${bindingFor(name)} entry in ${WRANGLER_FILE} — ` +
-          `consume({ policy: "${name}" }) throws not_supported on the first request. ` +
-          `Add the binding, or drop the policy from ${KV_INDEX_FILE}.`
-      )
-    );
+  const findings: Finding[] = [];
+
+  for (const entry of registeredPolicies(args)) {
+    if (entry.name === undefined) {
+      findings.push(
+        finding(
+          "ratelimit",
+          `/policies/${String(entry.index)}`,
+          `the policy at index ${String(entry.index)} of the \`policies\` array in ` +
+            `${KV_INDEX_FILE} has no name this check can read, so its RL_<NAME> binding ` +
+            `in ${WRANGLER_FILE} was not checked. Write it as ` +
+            `\`definePolicy({ name: "..." })\`, or as a factory exported from a file ` +
+            `under packages/kv/src/policies/.`
+        )
+      );
+      continue;
+    }
+    if (!bound.has(bindingFor(entry.name))) {
+      findings.push(
+        finding(
+          "ratelimit",
+          `/policies/${entry.name}`,
+          `policy "${entry.name}" has no ${bindingFor(entry.name)} entry in ${WRANGLER_FILE} — ` +
+            `consume({ policy: "${entry.name}" }) throws not_supported on the first request. ` +
+            `Add the binding, or drop the policy from ${KV_INDEX_FILE}.`
+        )
+      );
+    }
+  }
+
+  return findings;
 }
 
 function bindingFor(policy: string): string {
@@ -507,8 +532,14 @@ function rateLimitBindingNames(wrangler: string): string[] {
   return names;
 }
 
-/** Every policy name the `policies` array registers, in registration order. */
-function registeredPolicyNames(args: PolicyBindingArgs): string[] {
+/** One element of the `policies` array: its index, and its name when one can be read. */
+interface RegisteredPolicy {
+  index: number;
+  name: string | undefined;
+}
+
+/** Every element of the `policies` array, in registration order. */
+function registeredPolicies(args: PolicyBindingArgs): RegisteredPolicy[] {
   let mod;
   try {
     mod = parseModule(args.index);
@@ -523,26 +554,50 @@ function registeredPolicyNames(args: PolicyBindingArgs): string[] {
   }
 
   const imports = mod.imports as unknown as ModuleImports;
-  const names: string[] = [];
+  const policies: RegisteredPolicy[] = [];
   // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
   // the wrapped proxy (with `$callee`) only to an index read. ts-module.ts does the same.
   // oxlint-disable-next-line typescript/prefer-for-of
   for (let i = 0; i < array.length; i++) {
     const element: unknown = array[i];
-    const callee = calleeName(element);
-    if (callee === undefined) {
-      continue;
-    }
-    const from = imports[callee]?.from;
-    const source =
-      typeof from === "string" ? args.policySources[from] : undefined;
-    const name =
-      source === undefined ? undefined : policyNameIn(source, callee);
-    if (name !== undefined) {
-      names.push(name);
-    }
+    policies.push({ index: i, name: policyNameOf(element, args, imports) });
   }
-  return names;
+  return policies;
+}
+
+/** The name an element of the `policies` array registers, in either shape. */
+function policyNameOf(
+  element: unknown,
+  args: PolicyBindingArgs,
+  imports: ModuleImports
+): string | undefined {
+  const callee = calleeName(element);
+  if (callee === undefined) {
+    return undefined;
+  }
+
+  // Shape one: the call is `definePolicy({ name: "burst", ... })` right here, which is
+  // the shape `define.ts`'s docblock and `index.ts`'s comment both show.
+  const inline = inlineNameArgument(element);
+  if (inline !== undefined) {
+    return inline;
+  }
+
+  // Shape two: a bare factory call, whose name lives in the file it is imported from.
+  const from = imports[callee]?.from;
+  const source =
+    typeof from === "string" ? args.policySources[from] : undefined;
+  return source === undefined ? undefined : policyNameIn(source, callee);
+}
+
+/** The `name` string literal in the first argument of a magicast function-call proxy. */
+function inlineNameArgument(element: unknown): string | undefined {
+  const args: unknown = (element as { $args?: unknown }).$args;
+  if (!Array.isArray(args)) {
+    return undefined;
+  }
+  const name: unknown = asRecord(args[0]).name;
+  return typeof name === "string" ? name : undefined;
 }
 
 function calleeName(element: unknown): string | undefined {

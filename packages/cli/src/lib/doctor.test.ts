@@ -617,6 +617,35 @@ describe(checkPolicyBindings, () => {
     ]);
   });
 
+  it("reads an inline definePolicy element off its own argument", () => {
+    const args = policyArgs(wranglerWith("RL_STRICT", "RL_DEFAULT"));
+    args.index = KV_INDEX_SOURCE.replace(
+      "defaultPolicy()",
+      'defaultPolicy(), definePolicy({ limit: 5, name: "burst", periodSeconds: 10 })'
+    ).replace(
+      'import { defineKv } from "./define";',
+      'import { defineKv, definePolicy } from "./define";'
+    );
+
+    const findings = checkPolicyBindings(args);
+
+    expect(findings.map((f) => f.where)).toStrictEqual(["/policies/burst"]);
+    expect(findings[0]?.message).toContain("RL_BURST");
+  });
+
+  it("reports an element whose name it cannot read, rather than skipping it", () => {
+    const args = policyArgs(wranglerWith("RL_STRICT", "RL_DEFAULT"));
+    args.index = KV_INDEX_SOURCE.replace(
+      "defaultPolicy()",
+      "defaultPolicy(), mysteryPolicy()"
+    );
+
+    const findings = checkPolicyBindings(args);
+
+    expect(findings.map((f) => f.where)).toStrictEqual(["/policies/2"]);
+    expect(findings[0]?.message).toContain("index 2");
+  });
+
   it("says nothing when no policy is registered", () => {
     expect(
       checkPolicyBindings({
