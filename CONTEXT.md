@@ -60,6 +60,26 @@ _Avoid: task, worker, background job._
 A named binding of a five-field cron expression to a [job](#job), declared with `defineSchedule` in code and registered in `packages/queue`'s `schedules` table. A feature never patches `wrangler.jsonc` for one: `queue-cloudflare` installs a single `* * * * *` trigger, and its [handler set](#handler-set) matches every schedule against the tick truncated to the minute and enqueues the due ones. The tick enqueues, it never runs a job inline, so a scheduled run gets the same retries and dead-letter path as any other.
 _Avoid: cron job, timer — `cron` is the expression, a schedule is the registered pairing._
 
+### Plan
+A named tier of the product, declared in code in `packages/billing/src/plans.ts` with `definePlans`: an `id`, a display `name`, `features` (booleans), `limits` (numbers), an optional `trialDays`, and `providerIds` mapping a provider name to its price ids per interval. The list is the single source for both the [entitlement](#entitlement) answer and the provider's own price mapping — `billing-stripe` reads `providerIds.stripe.monthly` as the price id and `trialDays` as the free-trial length. Exactly one plan is the default: it carries no `providerIds` and it is what a subject with no live [subscription](#subscription) resolves to. There is no plan table and no seed step. The landing page's `pricing-table` [block](#block) keeps its own copy in `content/landing.ts` and is kept in step by hand.
+_Avoid: tier, package, product — a Stripe product is the vendor's object, a plan is the project's._
+
+### Subscription
+One row of `billing_subscription`: a [billable subject](#billable-subject)'s relationship to a [plan](#plan) as the payment provider currently reports it. Vendor-blind by construction — the vendor appears only in provider ids (`providerSubscriptionId`, `providerCustomerId`, `providerScheduleId`) — with a normalized `status` (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`) and two core-only columns the vendor knows nothing about, `lockedAt` and `reminderSentAt`. A subject has at most one **live** subscription at a time; older rows stay as history. Every write comes from a webhook the vendor sent, never from a route ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
+_Avoid: membership, licence. A Better Auth `subscription` model is the plugin's name for the same row, mapped onto this one._
+
+### Billable subject
+Who the bill is addressed to: an opaque `{ referenceId, customerType }` pair that `packages/billing/src/subject.ts` resolves from the request and authorizes. The default bills the user, so `customerType` is `"user"` and `referenceId` is the user id; installing `teams` overrides the same file under `onlyWith` to bill the active organization and check membership instead. Nothing else in the capability — no route, no job, no entitlement check — knows which of the two it is looking at, which is what lets a project move billing from users to organizations by replacing one file.
+_Avoid: customer, account, owner. The customer is the vendor's object, reached through `providerCustomerId`._
+
+### Entitlement
+The answer to "may this [billable subject](#billable-subject) do this", derived from its live [subscription](#subscription)'s [plan](#plan) and never stored: `hasFeature(name)` for a boolean, `limit(name)` for a number, `currentPlan()` for the plan itself. The `entitlements` module owns them, reads the [projection table](#projection-table) and the plan file, memoizes the resolved plan per request, and falls back to the default plan for a subject with no live row, a `lockedAt` row, or a project with no billing provider installed at all. `requireFeature(name)` is the route middleware over the same answer and returns HTTP 402 naming the feature.
+_Avoid: permission, role — those are auth's, and they answer "who are you", not "what did you pay for"._
+
+### Projection table
+A table the project owns, queries and migrates whose rows are a **copy** of a record some vendor holds: `billing_subscription` and `billing_event` are the first two. It is written only by the webhook path, keyed by the vendor's own ids, and rebuildable by replaying events, which is why the capability that owns it still takes [provider modules](#provider-module) — [ADR 0033](docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)'s first question says drivers, its second says providers, and the second wins because a vendor swap re-subscribes customers instead of moving rows ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
+_Avoid: cache, mirror. A cache may be dropped without consequence; a projection is queried on every request and is rebuilt from the vendor, not from the project._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 
