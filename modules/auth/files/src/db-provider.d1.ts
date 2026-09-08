@@ -1,6 +1,6 @@
 import { getDb } from "@repo/db/client";
-import type { DbBindings, DbRequestContext } from "@repo/db/client";
-import { dbScope } from "./db-scope";
+import type { Db, DbBindings, DbRequestContext } from "@repo/db/client";
+import { authDb as scopedAuthDb, dbScope } from "./db-scope";
 
 // The D1 half of auth's database wiring, selected by `onlyWith: "database-d1"`. Its
 // Postgres twin sits beside it as `db-provider.pg.ts`, and exactly one of the two lands
@@ -29,7 +29,17 @@ export const provider = "sqlite" as const;
  */
 export type AuthDbBindings = DbBindings;
 
-export { authDb } from "./db-scope";
+/**
+ * The request-scoped client, carrying this driver's `Db` type.
+ *
+ * `./db-scope.ts` builds it as a `Proxy` over an empty object and may not import
+ * `@repo/db/client` — the repo's own `node --test` run loads that file with no bundler,
+ * so a workspace import would not resolve. A `Proxy` is typed as its target, so the
+ * export arrives as `Record<string, unknown>` and `authDb.select` is `unknown`. This
+ * file already holds the driver's import, so the type is restored here, where `Db` means
+ * the D1 client and nothing in `./auth.ts` has to name a driver to query a table.
+ */
+export const authDb = scopedAuthDb as unknown as Db;
 
 /**
  * Run `body` with this request's database client in scope.
