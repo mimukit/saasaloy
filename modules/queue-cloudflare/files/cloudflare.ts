@@ -361,9 +361,9 @@ function readCode(cause: unknown): string | undefined {
   if (typeof cause !== "object" || cause === null) {
     return undefined;
   }
-  const { code, name } = cause as { code?: unknown; name?: unknown };
-  if (typeof code === "string") {
-    return code;
-  }
-  return typeof name === "string" && name !== "Error" ? name : undefined;
+  const { code } = cause as { code?: unknown };
+  // Only a real vendor `code` counts. `providerCode` is documented as the vendor's own
+  // code verbatim (`provider.ts`), so falling back to `name` would label a plain
+  // `TypeError` from the runtime as though Queues had returned it.
+  return typeof code === "string" ? code : undefined;
 }
