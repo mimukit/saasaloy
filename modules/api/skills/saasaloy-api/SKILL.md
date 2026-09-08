@@ -34,6 +34,24 @@ export type AppType = typeof app;
 export default app;
 ```
 
+`src/index.ts` is the Hono app and nothing else. The Worker entry is `src/worker.ts`, which is what `wrangler.jsonc`'s `main` points at:
+
+```ts
+// src/worker.ts
+import app from "./index";
+
+export function defineWorker(config: WorkerConfig): ExportedHandler<never> {
+  /* folds every handler set's queue and scheduled hooks into one object */
+}
+
+export const worker: ExportedHandler<never> = defineWorker({
+  fetch: app.fetch,
+  handlers: [],
+});
+
+export default worker;
+```
+
 Two bindings, and the split between them is the point:
 
 - **`base`** carries app-wide middleware and anything whose routes must stay opaque to the
@@ -191,6 +209,31 @@ Base `api` ships **zero bindings**. A capability or feature that needs one:
 
 Adding a binding is a structural edit to `api`'s scaffold, the same class of edit as adding a link
 to the chain.
+
+A nested binding is patched by the same `wrangler-binding` kind with a dotted `bindingType`. `queues.producers`, `queues.consumers` and `triggers.crons` all live under a parent object, so the patch names the full path; the engine creates the missing parent on `add` and takes it away again on `remove`, leaving the file byte-identical. There is no separate patch kind for it (ADR 0033).
+
+## The handler table: non-`fetch` exports register in `src/worker.ts`
+
+A Worker exports more than `fetch`. A queue consumer is a `queue` export, a Cron Trigger is a `scheduled` export, and both are the Worker's, not any one route's. They register in the `handlers` array in `src/worker.ts`, which is a registration table for the same reason the route chain is one: a table yields a type, and a `remove` that takes the line back out.
+
+A module that owns such an export ships a function returning a `HandlerSet`, then appends the call with a `plugin-array` patch:
+
+```jsonc
+{
+  "kind": "plugin-array",
+  "file": "apps/api/src/worker.ts",
+  "exportName": "worker",
+  "arrayProp": "handlers",
+  "call": "cloudflareQueueHandlers",
+  "import": { "name": "cloudflareQueueHandlers", "from": "@queue/providers/cloudflare" },
+}
+```
+
+Three rules hold here:
+
+- **`HandlerSet` is declared in `worker.ts`, not imported from a capability.** `api` depends on no capability, and every capability that registers a handler depends on `api`. An import the other way would invert that.
+- **`defineWorker` exports a hook only when a set declares it.** Cloudflare reads a `queue` export as a promise that the Worker consumes a queue, so an empty stub would claim a consumer that does not exist.
+- **`infra` is not the registration path.** A provider patches `wrangler.jsonc` and `worker.ts` directly, because `modules/infra` reads `wrangler.jsonc` after the fact and a project that never installs `infra` would otherwise get no binding at all.
 
 ## Logging: `c.get("log")`, never `console.log`
 

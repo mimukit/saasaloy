@@ -204,11 +204,15 @@ Field notes:
 
   | `kind` | What it does | Payload |
   | --- | --- | --- |
-  | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array | `bindingType`, `entry`, `matchOn` |
+  | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array, top-level or nested | `bindingType`, `entry`, `matchOn` |
   | `package-json-dependency` | upserts one dependency into a `package.json` section | `section`, `name`, `range` |
   | `package-json-script` | upserts one entry into a `package.json` `scripts` map | `name`, `value` |
   | `plugin-array` | appends a call into a TS module's plugin array | `exportName`, `arrayProp`, `call`, `import` |
   | `chained-route` | appends `.route(path, handler)` to a TS module's exported call chain | `exportName`, `path`, `call`, `import` |
+
+  `bindingType` takes a dotted path when the binding lives under a parent object — `queues.producers`, `queues.consumers`, `triggers.crons`. The engine creates the missing parent on `add` and unwinds it on `remove`, so the file comes back byte-identical. A value with no dot addresses a top-level array, exactly as before. Do not invent a patch kind for a nested binding (ADR 0033).
+
+  **A non-`fetch` Worker export registers in the handler table**, not through `infra`. `apps/api/src/worker.ts` is the Worker entry, and its `defineWorker({ fetch: app.fetch, handlers: [] })` call holds a `handlers` array. A module that ships a `queue` consumer or a `scheduled` tick exports a function returning `{ queue?, scheduled? }` and appends the call with a `plugin-array` patch on `exportName: "worker"`, `arrayProp: "handlers"`. `apps/api/src/index.ts` stays the Hono app, so the `chained-route` patch point is untouched. A module that needs both a binding and a handler carries both patches; the one-file rule constrains its runtime surface, not its descriptor.
 
   Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
   binding name, the dependency name, the script name, the callee, the route path), and an entry
