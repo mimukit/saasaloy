@@ -8,6 +8,7 @@
 // same key building, JSON encoding, size cap and TTL floor a deployed Worker uses.
 
 import assert from "node:assert/strict";
+import { readFile } from "node:fs/promises";
 import { afterEach, describe, it } from "node:test";
 import { memory } from "./memory.ts";
 import { defineKv, definePolicy } from "../index.ts";
@@ -207,6 +208,26 @@ describe("memory kv provider", () => {
         assert.equal(error.code, "invalid_ttl");
         return true;
       }
+    );
+  });
+});
+
+// The provider is the one file this module ships into a consumer's repo. A raw control
+// byte in it makes git call the file binary, so `git diff`, `git blame -L` and a merge
+// on it stop working for every project that ran `saasaloy add kv-memory`.
+describe("the shipped source", () => {
+  it("holds no raw control bytes", async () => {
+    const source = await readFile(
+      new URL("memory.ts", import.meta.url),
+      "utf-8"
+    );
+    // oxlint-disable-next-line no-control-regex -- reading for them is the point here
+    const offending = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/u.exec(source);
+
+    assert.equal(
+      offending,
+      null,
+      `memory.ts holds a raw control byte at index ${String(offending?.index)}`
     );
   });
 });
