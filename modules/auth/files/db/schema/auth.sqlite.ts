@@ -1,11 +1,5 @@
 import { sql } from "drizzle-orm";
-import {
-  index,
-  integer,
-  sqliteTable,
-  text,
-  uniqueIndex,
-} from "drizzle-orm/sqlite-core";
+import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
 // The SQLite half of Better Auth's tables, selected by `onlyWith: "database-d1"`. Its
 // Postgres twin sits beside it as `auth.pg.ts`, and exactly one of the two lands as
@@ -15,7 +9,7 @@ import {
 // form for its dialect, and what has to match is the shape a row comes back in.
 //
 // Hand-authored Drizzle snapshot of Better Auth's core schema (user/session/account/
-// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.2
+// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.3
 // (packages/auth/package.json) — NOT
 // generated at `add` time (no exec, deterministic, `--diff`-able; see the auth plan's
 // "Auth schema" decision). Column-for-column against that version's
@@ -31,16 +25,15 @@ import {
 // name (`ban_reason`) — the adapter does no case conversion, so renaming a property
 // silently detaches the field.
 //
-// Re-verifying against 1.7.2 moved one thing: `account` gained a required
-// `issuer` column and a unique index over (`issuer`, `accountId`). Better Auth writes
-// `local:credential` there for an email/password account and `local:oauth:<provider>`
-// for a linked social account, so the pair replaces (`providerId`, `accountId`) as the
-// row's identity. Both are below. A project that installed auth before this landed has
-// `account` rows with no `issuer`, and SQLite cannot add a NOT NULL column to a
-// populated table without a default, so the migration `db:generate` emits for this
-// column has to be hand-edited before it is applied. The auth skill carries the exact
-// edit. Nothing else moved: the other three tables and every admin-plugin field
-// match 1.7.2 column for column.
+// Re-verifying against 1.7.3 moved one thing, and it moved back: `account` LOST the
+// required `issuer` column and the unique index over (`issuer`, `accountId`) that
+// 1.7.2 had added. 1.7.3's `getAuthTables()` declares neither, so a snapshot that
+// still carries `issuer text NOT NULL` breaks every sign-up — the adapter never writes
+// the column and the insert fails the NOT NULL constraint. Both are gone below, and
+// (`providerId`, `accountId`) is the row's identity again. A project that applied the
+// 1.7.2 migration has the column and the index in its database; `db:generate` on this
+// snapshot emits the drop, and the auth skill carries it. Nothing else moved: the
+// other three tables and every admin-plugin field match 1.7.3 column for column.
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this
 // file into `packages/db/src/schema/` means database's existing barrel + migration
@@ -110,9 +103,6 @@ export const account = sqliteTable(
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     id: text("id").primaryKey(),
     idToken: text("id_token"),
-    // Added in better-auth 1.7.2. `local:credential` for an email/password account,
-    // `local:oauth:<provider>` for a linked social one.
-    issuer: text("issuer").notNull(),
     password: text("password"),
     providerId: text("provider_id").notNull(),
     refreshToken: text("refresh_token"),
@@ -126,13 +116,7 @@ export const account = sqliteTable(
       .notNull()
       .references(() => user.id, { onDelete: "cascade" }),
   },
-  (table) => [
-    uniqueIndex("account_issuer_account_id_uidx").on(
-      table.issuer,
-      table.accountId
-    ),
-    index("account_user_id_idx").on(table.userId),
-  ]
+  (table) => [index("account_user_id_idx").on(table.userId)]
 );
 
 export const verification = sqliteTable(

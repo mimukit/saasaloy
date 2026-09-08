@@ -246,28 +246,16 @@ also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same n
 
 **A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is not `"admin"`, so the guard denies them until you promote one.
 
-**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`). The worked example below is the SQLite/D1 form; a Postgres project hits the same backfill with `ALTER TABLE "account" ADD COLUMN "issuer" text NOT NULL DEFAULT 'local:credential'` and the same `UPDATE` before the index. `db:generate` emits exactly two statements for it, and the first one cannot run on a populated table:
+**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`); 1.7.3 took both back out, so the pinned snapshot no longer carries them and (`providerId`, `accountId`) is the row's identity again. A project that never applied the 1.7.2 migration needs nothing here. A project that already applied it gets the reverse from `db:generate`:
 
 ```sql
-ALTER TABLE `account` ADD `issuer` text NOT NULL;--> statement-breakpoint
-CREATE UNIQUE INDEX `account_issuer_account_id_uidx` ON `account` (`issuer`,`account_id`);
+DROP INDEX `account_issuer_account_id_uidx`;--> statement-breakpoint
+ALTER TABLE `account` DROP COLUMN `issuer`;
 ```
 
-SQLite refuses that `ALTER` with `Cannot add a NOT NULL column with default value NULL` as soon as `account` holds one row. Backfilling the column by hand first does not help: drizzle-kit diffs the schema against its own snapshot, never against the live database, so the emitted migration still tries to add `issuer` and then fails with `duplicate column name: issuer`.
+Read it before you apply it, because a `DROP COLUMN` is not reversible and SQLite rewrites the table to do it. Take a copy of the database first. A Postgres project gets the same two statements with `DROP INDEX "account_issuer_account_id_uidx"` and `ALTER TABLE "account" DROP COLUMN "issuer"`. Nothing reads the column after the drop: better-auth 1.7.3's `getAuthTables()` never writes it and the adapter never selects it.
 
-Edit the emitted migration instead. Give the column a default so the existing rows fill themselves, and correct the social accounts before the unique index goes on:
-
-```sql
-ALTER TABLE `account` ADD `issuer` text DEFAULT 'local:credential' NOT NULL;--> statement-breakpoint
-UPDATE `account` SET `issuer` = 'local:oauth:' || `provider_id` WHERE `provider_id` != 'credential';--> statement-breakpoint
-CREATE UNIQUE INDEX `account_issuer_account_id_uidx` ON `account` (`issuer`,`account_id`);
-```
-
-`local:credential` is the value better-auth writes for an email/password account, `local:oauth:<providerId>` for a linked social one, so those two statements reproduce what the library would have written itself. Keep the `DEFAULT` in the migration and out of the schema file; drizzle-kit compares the schema to its snapshot, so the extra clause never reads back as drift.
-
-Then apply it with the command from the installed driver's skill. Check it with `select id, provider_id, issuer from account`. If `CREATE UNIQUE INDEX` fails with `UNIQUE constraint failed`, two rows share a provider and an `account_id`; list them with `select issuer, account_id, count(*) from account group by 1, 2 having count(*) > 1` and delete the duplicate before you run the migration again.
-
-This sequence was run against drizzle-kit 0.31.10 and drizzle-orm 0.45.2, the versions `packages/db` pins, on a SQLite database holding one credential account and one linked GitHub account. A fresh project needs none of it: its `account` table is empty when the migration lands, so the generated SQL applies as emitted.
+Leaving the column in place is the option that breaks. The snapshot no longer declares it, so `db:generate` treats it as drift on every later run, and a fresh insert against a database that still has `issuer text NOT NULL` fails the constraint the moment 1.7.3 stops writing the value.
 
 ## Revocation: delete the session row
 
@@ -327,7 +315,7 @@ pnpm --filter @repo/db db:generate       # emits SQL for the new tables
 
 The rule has a guard in this repo. The snapshot's header names the version it was verified against, and `modules/auth/files/src/schema-version.test.ts` fails `pnpm test` when that string and `better-auth` in `modules/auth/files/package.json` disagree. It cannot check a column; it makes a bump that skipped the re-verification loud instead of silent. Do the comparison, fix what moved, then edit the header. Editing the header alone to get green is the one way to defeat it.
 
-The 1.6.25 → 1.7.2 pass is the worked example of what "re-verify" means here. It found one change, `account.issuer`, and the header says so. Both variants carry it.
+The 1.7.2 → 1.7.3 pass is the worked example of what "re-verify" means here. It found one change, and it was a removal: `account.issuer` and its unique index are gone from `getAuthTables()`, so they came out of both snapshots and the headers say so. The admin plugin's own `schema` export did not move.
 
 `db:generate` belongs to the `database` core and is the same command under either driver. **The
 apply step is the driver's**, and the command differs, so read the skill for the driver this
