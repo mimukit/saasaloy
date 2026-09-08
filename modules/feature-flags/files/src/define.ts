@@ -8,9 +8,10 @@
 //
 // Level 3 is the source of truth and the only writer of a real value. A **reader never
 // writes on a hit**: the one write it can do is publishing a document that was missing
-// entirely, which happens once per scope rather than once per colo per request. Write-back
-// on every read would scale KV writes with traffic, and Workers KV's free plan allows
-// 1,000 writes a day.
+// entirely. That is bounded at once per scope per location — a colo reading inside the
+// up-to-60-second window after a publish still sees null and republishes the same
+// content — rather than once per colo per request. Write-back on every read would scale
+// KV writes with traffic, and Workers KV's free plan allows 1,000 writes a day.
 
 import { createKv } from "@repo/kv";
 import { forgetCache, isolateTtlSeconds, readCache, writeCache } from "./cache";

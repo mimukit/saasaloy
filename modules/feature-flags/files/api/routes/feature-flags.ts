@@ -225,6 +225,12 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
 
       const key = c.req.param("key");
       const tenantId = c.req.param("tenantId");
+      if (!definitionFor(key)) {
+        return c.json(
+          errorBody("not_found", `No flag named "${key}" is registered.`),
+          404
+        );
+      }
 
       await withDb(c, (db) => deleteOverride(db, key, tenantId));
 

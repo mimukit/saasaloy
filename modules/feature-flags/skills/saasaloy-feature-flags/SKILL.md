@@ -30,7 +30,7 @@ A read walks three levels, cheapest first:
 
 A *value* then resolves in this order: the tenant override, the global row, the code default.
 
-**A reader never writes on a hit.** The only write a read can do is publishing a document that was missing entirely, which happens once per scope, not once per colo per request. Write-back on every read would scale KV writes with traffic, and the free plan allows 1,000 writes a day. Published this way, KV writes equal toggles.
+**A reader never writes on a hit.** The only write a read can do is publishing a document that was missing entirely, which happens once per scope per location (a colo reading inside the up-to-60-second window after a publish republishes the same content), not once per colo per request. Write-back on every read would scale KV writes with traffic, and the free plan allows 1,000 writes a day. Published this way, KV writes equal toggles.
 
 ## Reading a flag
 
