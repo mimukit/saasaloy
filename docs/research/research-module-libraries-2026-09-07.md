@@ -1,6 +1,6 @@
 # Research: libraries for the planned Saasaloy modules
 
-Research date is 2026-09-07. The repository reference is commit `d19f63e`. Module names and milestone numbers follow `docs/plans/plan-phase-3-modules-2026-07-22.md`. The `kv` pick is argued in full in [research-nitro-unstorage-2026-09-07.md](research-nitro-unstorage-2026-09-07.md).
+Research date is 2026-09-07. The repository reference is commit `d19f63e`. Module names and milestone numbers follow `docs/plans/plan-phase-3-modules-2026-07-22.md`.
 
 ## Recommendation
 
