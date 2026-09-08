@@ -70,7 +70,7 @@ The three follow-ups are recorded in ADR 0037's "Follow-ups" section, not filed 
 - [ ] Verify AGENTS.md's `storage` sentence matches the ADR; it already says provider shape.
 - [ ] Rewrite #127's Phase 3 quota criterion to the per-file cap, and file the follow-up issues: per-tenant quota with `usage-metering`; `infra` translator support for `r2_buckets`; resumable multipart upload UI in `file-uploads`.
 
-### Phase 2: the neutral core (`packages/storage`)
+### Phase 2: the neutral core (`packages/storage`) (built 2026-09-08)
 
 - [ ] `modules/storage/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars` for `STORAGE_PROVIDER`, `STORAGE_URL_SECRET` and `STORAGE_MAX_UPLOAD_BYTES`, scaffold `packages/storage` with alias `@storage`, patch `@repo/storage` into `apps/api/package.json`.
 - [ ] `provider.ts`: `StorageProvider` (`name`, `put`, `get`, `head`, `delete`, `list`, optional `presignPut`, `presignGet`, optional multipart four), `StorageEnv`, `StorageObject`, `UploadTarget`, `DownloadTarget`, `StorageError` with the six codes.

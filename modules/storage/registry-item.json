@@ -1,0 +1,58 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "storage",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {
+    "STORAGE_PROVIDER": "Which installed provider stores objects: `cloudflare` (add storage-cloudflare) or `memory` (add storage-memory). Always required — there is no default, so nothing writes to a real bucket by accident and nothing stops writing silently.",
+    "STORAGE_URL_SECRET": "HMAC key that signs the upload and download links the proxy route accepts. Required — nothing generates one. Make it with `openssl rand -base64 32`, put it in `.dev.vars` for local dev, and set it in production with `wrangler secret put STORAGE_URL_SECRET`.",
+    "STORAGE_MAX_UPLOAD_BYTES": "Per-file upload cap in bytes. Defaults to 104857600 (100 MiB), which is the Free-plan Worker request body limit. This is the only limit v1 enforces: a tenant can still accumulate objects without bound.",
+    "STORAGE_PROXY_URL": "Absolute origin the proxy route answers on (e.g. https://api.x.com), for a caller on another origin. Optional: with it unset a proxy link is root-relative."
+  },
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/storage",
+      "call": "storage",
+      "import": { "name": "storage", "from": "./routes/storage" }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/storage",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/storage.ts",
+      "target": "@api/routes/storage.ts"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/storage",
+      "aliases": { "@storage": "packages/storage/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/keys.ts", "target": "src/keys.ts" },
+        { "path": "files/src/token.ts", "target": "src/token.ts" },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-storage"]
+  }
+}
