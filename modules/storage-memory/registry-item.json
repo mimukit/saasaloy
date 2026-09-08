@@ -1,0 +1,25 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "storage-memory",
+  "type": "saasaloy:feature",
+  "dependsOn": ["storage"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/storage/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "storage",
+      "arrayProp": "providers",
+      "call": "memory",
+      "import": {
+        "name": "memory",
+        "from": "./providers/memory"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/memory.ts", "target": "@storage/providers/memory.ts" }
+  ],
+  "scaffolds": []
+}
