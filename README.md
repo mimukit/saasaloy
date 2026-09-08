@@ -90,7 +90,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 | Tier | Modules |
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `infra` |
-| Feature | `waitlist`, `teams`, `email-react`, `ratelimit` |
+| Feature | `waitlist`, `teams`, `email-react`, `ratelimit`, `feature-flags` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory` |
 | Driver | `database-d1`, `database-postgres` |
 

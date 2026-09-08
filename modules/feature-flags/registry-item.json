@@ -1,0 +1,111 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "feature-flags",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "database", "validators", "auth", "admin", "kv"],
+  "dependencies": [],
+  "envVars": {
+    "FLAGS_ISOLATE_TTL_SECONDS": "Seconds a Worker isolate serves its cached copy of the flag document before re-reading it from kv. Default 10, which puts a toggle in front of every location in about 70 seconds once Workers KV's own propagation window is added. Raise it to spend fewer KV reads and wait longer for a toggle; set it to 0 to skip the isolate cache and pay a KV read per request. A value that is not a whole number throws while the Worker initializes."
+  },
+  "removeWarnings": [
+    "The deployed feature_flag and feature_flag_override tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "The published flag documents survive it too. They have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the KV namespace until you delete them with `wrangler kv key delete`."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/flags",
+      "call": "featureFlags",
+      "import": {
+        "name": "featureFlags",
+        "from": "./routes/feature-flags"
+      }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/feature-flags",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/admin/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/feature-flags",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/flags", "label": "Flags" }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/feature-flags.ts",
+      "target": "@api/routes/feature-flags.ts"
+    },
+    {
+      "path": "files/api/lib/flags.ts",
+      "target": "@api/lib/flags.ts"
+    },
+    {
+      "path": "files/api/middleware/maintenance.ts",
+      "target": "@api/middleware/maintenance.ts"
+    },
+    {
+      "path": "files/db/schema/feature-flags.sqlite.ts",
+      "target": "@db/schema/feature-flags.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/feature-flags.pg.ts",
+      "target": "@db/schema/feature-flags.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/feature-flags.ts",
+      "target": "@db/repositories/feature-flags.ts"
+    },
+    {
+      "path": "files/validators/feature-flags.ts",
+      "target": "@validators/feature-flags.ts"
+    },
+    {
+      "path": "files/ui/blocks/feature-flags.tsx",
+      "target": "@ui/blocks/feature-flags.tsx"
+    },
+    {
+      "path": "files/admin/routes/flags.tsx",
+      "target": "@admin/routes/flags.tsx"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/feature-flags",
+      "aliases": { "@flags": "packages/feature-flags/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/document.ts", "target": "src/document.ts" },
+        { "path": "files/src/cache.ts", "target": "src/cache.ts" },
+        { "path": "files/src/hash.ts", "target": "src/hash.ts" },
+        { "path": "files/src/source.ts", "target": "src/source.ts" },
+        {
+          "path": "files/src/flags/system.ts",
+          "target": "src/flags/system.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-feature-flags"]
+  }
+}
