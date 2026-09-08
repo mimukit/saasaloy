@@ -59,6 +59,18 @@ const stringMessage: StandardSchema<{ message: string }> = {
   },
 };
 
+// A schema that throws rather than returning issues. Standard Schema does not forbid it,
+// so both `enqueue` and `dispatch` have to survive it as a `QueueError`.
+const explodingSchema: StandardSchema<{ message: string }> = {
+  "~standard": {
+    validate: () => {
+      throw new Error("schema exploded");
+    },
+    vendor: "test",
+    version: 1,
+  },
+};
+
 describe("createQueue — provider selection", () => {
   it("selects the provider QUEUE_PROVIDER names", () => {
     const a = recorder("memory");
@@ -183,6 +195,34 @@ describe("enqueue", () => {
     assert.equal(sent.length, 0);
   });
 
+  it("raises invalid_job when the schema itself throws, keeping the cause", async () => {
+    const { provider, sent } = recorder();
+    const queue = defineQueue({
+      jobs: [
+        defineJob<{ message: string }>({
+          handler: noop,
+          name: "greet",
+          schema: explodingSchema,
+        }),
+      ],
+      providers: [provider],
+      schedules: [],
+    });
+
+    await assert.rejects(
+      () =>
+        queue
+          .create({ QUEUE_PROVIDER: "memory" })
+          .enqueue("greet", { message: "hi" }),
+      (error: unknown) =>
+        error instanceof QueueError &&
+        error.code === "invalid_job" &&
+        error.retryable === false &&
+        (error.cause as Error).message === "schema exploded"
+    );
+    assert.equal(sent.length, 0);
+  });
+
   it("wraps a raw throw from a provider as provider_error, keeping the cause", async () => {
     const raw = new TypeError("fetch failed");
     const provider: QueueProvider = {
@@ -302,6 +342,28 @@ describe("dispatch", () => {
       () => queue.dispatch("greet", { message: 42 }),
       (error: unknown) =>
         error instanceof QueueError && error.code === "invalid_job"
+    );
+  });
+
+  it("raises invalid_job on delivery when the schema itself throws", async () => {
+    const queue = defineQueue({
+      jobs: [
+        defineJob<{ message: string }>({
+          handler: noop,
+          name: "greet",
+          schema: explodingSchema,
+        }),
+      ],
+      providers: [],
+      schedules: [],
+    });
+
+    await assert.rejects(
+      () => queue.dispatch("greet", { message: "hi" }),
+      (error: unknown) =>
+        error instanceof QueueError &&
+        error.code === "invalid_job" &&
+        error.retryable === false
     );
   });
 

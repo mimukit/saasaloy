@@ -92,7 +92,7 @@ export function defineQueue(config: QueueConfig): QueueRegistry {
           // still throw a `QueueError`, because `enqueue` promises exactly one error
           // shape.
           const job = find(name);
-          const parsed = await job.parse(payload);
+          const parsed = await parse(job, payload);
 
           try {
             await provider.enqueue(env, job, parsed, options);
@@ -115,7 +115,7 @@ export function defineQueue(config: QueueConfig): QueueRegistry {
       ctx: Partial<JobContext> = {}
     ): Promise<void> {
       const job = find(name);
-      const parsed = await job.parse(payload);
+      const parsed = await parse(job, payload);
 
       try {
         await job.run(parsed, resolveContext(ctx));
@@ -237,6 +237,28 @@ async function validate(
  * promise, and a consumer reading `retryable` off it would get `undefined`. Re-throw a
  * well-formed error untouched; wrap anything else, keeping the original in `cause`.
  */
+/**
+ * Validate a payload and keep the one-error-shape promise. `job.parse` already throws
+ * `QueueError("invalid_job")` when the schema *rejects* the payload, but a Standard
+ * Schema whose `validate` itself *throws* would otherwise escape as a raw `Error`. A
+ * schema that explodes is still the caller's problem, so it maps to `invalid_job` and
+ * stays non-retryable; re-running it would explode again.
+ */
+async function parse(job: Job, payload: unknown): Promise<unknown> {
+  try {
+    return await job.parse(payload);
+  } catch (error) {
+    if (error instanceof QueueError) {
+      throw error;
+    }
+    throw new QueueError(
+      "invalid_job",
+      `Payload for job "${job.name}" could not be validated — the schema threw`,
+      { cause: error, retryable: false }
+    );
+  }
+}
+
 function normalize(error: unknown, message: string): QueueError {
   if (error instanceof QueueError) {
     return error;
