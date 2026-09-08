@@ -202,17 +202,19 @@ The ranking uses three inputs. Dependency leverage first, as Phase 3 settled. Th
 
 ### P0: build next, in this order
 
-1. `queue` — unblocks eleven modules in this catalog. Nothing else comes close.
+> **Filed 2026-09-08.** The first five entries below were merged into five issues, each a provider-agnostic capability plus its provider modules: `queue` + `queue-cloudflare` + `queue-memory` (#125), `billing` + `billing-stripe` + `entitlements` (#126), `storage` + `storage-cloudflare` + `file-uploads` (#127), `multitenant` = `tenant-scoping` + `rbac` + `api-keys` (#128), `kv` + `kv-cloudflare` + `ratelimit` + `feature-flags` (#129). `cron` and `workflows` folded into #125; `webhooks-in`, `seats`, `trials` and `dunning` into #126; `data-export` and `import` into #127. #126 and #127 are blocked by #125. All five are `needs-planning` and await a grill. #125 Phase 1 owns the ADR that lets a stateful capability take providers at all.
+
+1. `queue` — unblocks eleven modules in this catalog. Nothing else comes close. (#125)
 2. `feedback` — cheapest proof that the machinery still holds after the admin and driver work.
-3. `billing` (Stripe) + `webhooks-in` — issue #14 is open, and every monetisation feature waits on it.
-4. `entitlements` — billing without a plan-to-feature map is a payment form, not a product.
-5. `storage` + `file-uploads` — second-highest fan-out; proves capability to feature chain.
-6. `cron` — cheap, and `trials`, `dunning`, `backups`, `newsletter` all wait on it.
-7. `kv` + `feature-flags` — cheap binding, and flags are the first thing a team wants once they deploy weekly.
-8. `ratelimit` — a GA binding and a one-file middleware. Every public API needs it before launch.
+3. `billing` (Stripe) + `webhooks-in` — every monetisation feature waits on it. (#126, superseding #14)
+4. `entitlements` — billing without a plan-to-feature map is a payment form, not a product. (#126)
+5. `storage` + `file-uploads` — second-highest fan-out; proves capability to feature chain. (#127)
+6. `cron` — cheap, and `trials`, `dunning`, `backups`, `newsletter` all wait on it. (#125)
+7. `kv` + `feature-flags` — cheap binding, and flags are the first thing a team wants once they deploy weekly. (#129)
+8. `ratelimit` — a GA binding and a one-file middleware. Every public API needs it before launch. (#129)
 9. `observability` — Workers Traces is in open beta with custom spans, so the module is a destination config plus middleware. Do it before `notifications`, because debugging a queue consumer without traces costs more than the module does.
-10. `tenant-scoping` + `rbac` — `teams` shipped the tables; B2B features need the guard and the roles before they are safe to write.
-11. `api-keys` — proves auth on a non-cookie path; needed by `webhooks-out` and `sdk`.
+10. `tenant-scoping` + `rbac` — `teams` shipped the tables; B2B features need the guard and the roles before they are safe to write. (#128)
+11. `api-keys` — proves auth on a non-cookie path; needed by `webhooks-out` and `sdk`. (#128)
 12. `audit-log` — the enterprise ask that every checklist puts second after RBAC, and cheap once `queue` exists.
 13. `mfa` — one Better Auth plugin, and enterprise buyers require it for admin roles.
 14. `notifications` — universal in kits; needs `queue`, `email`, and a table.
