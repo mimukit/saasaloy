@@ -8,6 +8,7 @@
   },
   "exports": {
     ".": "./src/index.ts",
+    "./entitlements": "./src/entitlements.ts",
     "./plans": "./src/plans.ts",
     "./subject": "./src/subject.ts",
     "./providers/*": "./src/providers/*.ts"
