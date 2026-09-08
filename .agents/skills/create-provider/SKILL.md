@@ -437,13 +437,90 @@ trigger. That recording surface sits on the value the factory returned, not on `
 the core knows nothing about it, and a test reaches it directly. Copy that shape rather than
 inventing a mock.
 
+## Mode: `billing`
+
+**Interface:** `BillingProvider` in `packages/billing/src/provider.ts`. `billing-stripe` is the
+vendor flavour, `billing-console` is the local one, and the capability's runbook is
+`modules/billing/skills/saasaloy-billing/SKILL.md`. Read
+[ADR 0034](../../../docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)
+before you start: it is what makes a payment capability take providers even though the project owns
+the table.
+
+This is the widest interface in the repo — seven methods plus an optional auth plugin — and it is
+also the one where copying `email` goes wrong fastest. Five rules, in the order they bite:
+
+- **A provider never writes the database.** `billing_subscription` has exactly one writer, the
+  event path, and the dedupe rule lives there. Nothing in your file imports a schema, a client or
+  `requireBillingStore`. A state change is reported, not written: return a `CheckoutResult.event`
+  when your vendor has no webhook, or let your webhook enqueue one when it does. Never both — a
+  provider that does both writes the projection twice and races itself.
+- **Wrap the vendor's Better Auth plugin when it has one.** Better Auth ships plugins for Stripe,
+  Polar, Dodo and Autumn, and each owns customer creation, checkout, the portal and a
+  signature-verified webhook. Re-implementing that against the raw SDK is a large amount of vendor
+  code you would then have to keep correct. Export a second factory, `<vendor>AuthPlugin()`, from
+  the same file and register it with a second `plugin-array` patch on `packages/auth/src/auth.ts`.
+  Two exports, still one file.
+- **Map the plugin's model onto the core's columns, and check the map covers every field the
+  plugin writes.** Better Auth plugins let a project rename the model and every field
+  (`schema.subscription.modelName` + `fields`). `modelName` is the **Drizzle export key**
+  (`billingSubscription`), not the SQL table name, and each field maps to a Drizzle property, not a
+  column name. Read the plugin's own schema file at the pinned version and account for every entry;
+  a field with no column fails at the first webhook, not at `pnpm typecheck`. Watch for fields the
+  plugin writes *outside* its declared schema — `@better-auth/stripe` writes `limits` whenever a
+  plan carries it, which is why `billing-stripe` does not pass `limits` through.
+- **`plans.ts` is the source of truth, and the plan id is what lands in the `plan` column.** Map
+  `providerIds.<yourName>.monthly` and `.yearly` onto the vendor's price fields and `trialDays`
+  onto its trial field. Leave the default plan out: it has no price and nobody buys it. Name the
+  vendor's plan after the plan **id**, because that is the string `entitlements` looks up.
+- **Wire `authorizeSubject` into the vendor's own authorization hook.** The plugin's endpoints are
+  reachable directly, so the rule in `@billing/subject.ts` has to guard them as well as the
+  capability's routes. That single file is what `teams` replaces to bill organizations.
+
+Codes are `invalid_request`, `not_found`, `card_declined`, `rate_limited`, `webhook_invalid` and
+`provider_error`. Map only vendor codes you have seen, keep the raw one in `providerCode`, and set
+`retryable` honestly: a rate limit and a connection failure earn it, a declined card never does.
+
+**Descriptor** (`billing-stripe`): two `plugin-array` patches — one per door Stripe reaches the
+project through — and one `package-json-dependency` per vendor package, into the **capability's**
+`package.json` and never into `packages/auth`:
+
+```jsonc
+{ "file": "packages/billing/src/index.ts", "kind": "plugin-array",
+  "exportName": "billing", "arrayProp": "providers", "call": "stripeBilling",
+  "import": { "name": "stripeBilling", "from": "./providers/stripe" } },
+{ "file": "packages/auth/src/auth.ts", "kind": "plugin-array",
+  "exportName": "auth", "arrayProp": "plugins", "call": "stripeAuthPlugin",
+  "import": { "name": "stripeAuthPlugin", "from": "@repo/billing/providers/stripe" } },
+{ "file": "packages/billing/package.json", "kind": "package-json-dependency",
+  "section": "dependencies", "name": "stripe", "range": "22.6.1" },
+{ "file": "packages/billing/package.json", "kind": "package-json-dependency",
+  "section": "peerDependencies", "name": "better-auth", "range": "1.7.3" }
+```
+
+The vendor's plugin peers on `better-auth`, so declare that as a **peer** dependency of
+`packages/billing` rather than a direct one. Two copies of Better Auth in one project is two
+session implementations.
+
+**Does your vendor need a column on `user`?** Better Auth plugins put the customer link on the
+`user` model and cannot be pointed at another table. `modules/billing` already adds
+`user.billingCustomerId` with a `drizzle-column` patch, so map the plugin's own field onto it
+(`schema.user.fields.stripeCustomerId: "billingCustomerId"`) rather than adding a second column.
+
+**The local provider is not optional here, and it is not a mock.** `billing-console` runs the whole
+flow — checkout, portal, change-plan, cancel, restore — with no account and no network, by
+returning the event the route enqueues. It has no auth plugin, so it patches one array. Two things
+it needs that a vendor provider does not: ids derived from the subject, so a second call converges
+on the row the first created instead of stacking a history row; and `SubjectInput.current`, the
+live row the route reads for it, because `cancel` and `restore` carry no plan and a provider with
+no webhook cannot learn one.
+
 ## Verify before you call it done
 
 The install path a provider must survive is a **clean project**, one command:
 
 ```sh
 pnpm play:reset
-cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-<provider>
+cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, billing-<provider>
 ```
 
 That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches
@@ -467,3 +544,5 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.
 - [ ] No skill folder — the capability's skill gains a row (and a runbook section if it needs one).
 - [ ] Installed twice on a clean playground: second run changes nothing.
+- [ ] Removed again: `saasaloy remove <capability>-<provider>` leaves every patched file
+      byte-identical to before the add.
