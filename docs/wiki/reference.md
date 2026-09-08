@@ -212,7 +212,7 @@ positionals are rejected with exit 2.
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is removed. |
-| `--diff` | print the plan plus a deletion diff per file and a reversal diff per `chained-route` patch, and stop. Nothing is removed. |
+| `--diff` | print the plan plus a deletion diff per file and a reversal diff per reversible patch, and stop. Nothing is removed. |
 | `--yes`, `-y` | skip every prompt, including the per-file drift confirmation. Drifted files then survive on disk, untracked. |
 | `--force` | remove the module even though other installed modules depend on it. |
 
@@ -315,8 +315,9 @@ descriptor's `$schema` at the matching file and your editor validates it as you 
 Two gaps are load-bearing enough to plan around.
 
 **`remove` leaves the two `package.json` patch kinds behind.**
-[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the three kinds that
-edit a config file — `chained-route`, `wrangler-binding` and `plugin-array` — taking the
+[#36](https://github.com/mimukit/saasaloy/issues/36). `remove` undoes the five kinds that
+edit a source or config file — `chained-route`, `wrangler-binding`, `plugin-array`,
+`const-array` and `drizzle-column` — taking the
 named import out with the edit when no other code in the file still references the
 identifier. Removing `email-cloudflare` now takes the `send_email` binding out of
 `apps/api/wrangler.jsonc` and the provider registration out of

@@ -36,7 +36,7 @@ Consequence to know while authoring: a **capability** whose files all live in `s
 `patches` (e.g. `database`'s D1 binding into `apps/api/wrangler.jsonc`) — all in one run. Exercise
 such a module through the `.dev/` playground to see it end to end. A patch mutates a file another
 module owns, so patched files are **not** manifest-tracked as clean copies. `remove` reverses one
-patch kind, `chained-route`, and drops the other four with a warning telling the user to
+patch kind, `chained-route`, and drops the other five with a warning telling the user to
 hand-revert them; generalising the inverse is #36. Everything else the applier does is fully
 described by the descriptor.
 
@@ -209,6 +209,7 @@ Field notes:
   | `package-json-script` | upserts one entry into a `package.json` `scripts` map | `name`, `value` |
   | `plugin-array` | appends a call into a TS module's plugin array | `exportName`, `arrayProp`, `call`, `import` |
   | `chained-route` | appends `.route(path, handler)` to a TS module's exported call chain | `exportName`, `path`, `call`, `import` |
+  | `drizzle-column` | adds one column to a Drizzle table another module ships | `exportName`, `column`, `value`, `import?` |
 
   `bindingType` takes a dotted path when the binding lives under a parent object — `queues.producers`, `queues.consumers`, `triggers.crons`. The engine creates the missing parent on `add` and unwinds it on `remove`, so the file comes back byte-identical. A value with no dot addresses a top-level array, exactly as before. Do not invent a patch kind for a nested binding (ADR 0033).
 
@@ -217,7 +218,7 @@ Field notes:
   Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
   binding name, the dependency name, the script name, the callee, the route path), and an entry
   already there is left exactly as the user last edited it, so a re-`add` is a byte-for-byte
-  no-op. `chained-route` is the only kind `remove` reverses, taking the link back out, and the
+  no-op. `chained-route` is one of five kinds `remove` reverses, taking the link back out, and the
   named import with it when the file no longer references the binding anywhere else; the other
   four are dropped from the manifest with a warning until #36 generalises the inverse.
 

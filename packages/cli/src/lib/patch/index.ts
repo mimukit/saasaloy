@@ -13,6 +13,13 @@ import {
 import type { ConstArrayInsert } from "./const-array.js";
 import { toDiff } from "./diff.js";
 import {
+  drizzleColumnInsertRefusal,
+  drizzleColumnRemoveRefusal,
+  insertDrizzleColumn,
+  removeDrizzleColumn,
+} from "./drizzle-column.js";
+import type { DrizzleColumn } from "./drizzle-column.js";
+import {
   matchWranglerBinding,
   removeWranglerBinding,
   upsertWranglerBinding,
@@ -58,6 +65,13 @@ export {
 } from "./const-array.js";
 export { toDiff } from "./diff.js";
 export {
+  type DrizzleColumn,
+  drizzleColumnInsertRefusal,
+  drizzleColumnRemoveRefusal,
+  insertDrizzleColumn,
+  removeDrizzleColumn,
+} from "./drizzle-column.js";
+export {
   type BindingMatch,
   matchWranglerBinding,
   removeWranglerBinding,
@@ -85,6 +99,7 @@ export {
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
   | ({ kind: "const-array" } & ConstArrayInsert)
+  | ({ kind: "drizzle-column" } & DrizzleColumn)
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
   | ({ kind: "package-json-script" } & PackageJsonScript)
@@ -100,6 +115,7 @@ export type PatchKind = Patch["kind"];
 const PATCH_KIND_KEYS: Record<PatchKind, true> = {
   "chained-route": true,
   "const-array": true,
+  "drizzle-column": true,
   "package-json-dependency": true,
   "package-json-script": true,
   "plugin-array": true,
@@ -191,6 +207,9 @@ function applyCodemod(source: string, patch: Patch): string {
     case "const-array": {
       return insertIntoConstArray(source, patch);
     }
+    case "drizzle-column": {
+      return insertDrizzleColumn(source, patch);
+    }
     case "wrangler-binding": {
       return upsertWranglerBinding(source, patch);
     }
@@ -213,9 +232,9 @@ function applyCodemod(source: string, patch: Patch): string {
   }
 }
 
-// The one table of kind → inverse codemod. The four kinds that edit a *config* file
-// reverse: `chained-route` (#83), then `wrangler-binding`, `plugin-array` and
-// `const-array` (#36). The two `package.json` kinds deliberately do not — uninstalling an
+// The one table of kind → inverse codemod. The five kinds that edit a *source or config*
+// file reverse: `chained-route` (#83), then `wrangler-binding`, `plugin-array` and
+// `const-array` (#36), then `drizzle-column` (#126). The two `package.json` kinds deliberately do not — uninstalling an
 // npm dependency isn't derivable offline and other code may already use it, and nothing
 // asks for a script back (0011-plan-remove-command-2026-07-25.md, non-goals). `remove`
 // drops-and-warns for every kind absent from this table, and both `isReversibleKind` and
@@ -228,6 +247,7 @@ type Inverse<K extends PatchKind> = (
 const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
   "chained-route": removeChainedRoute,
   "const-array": removeFromConstArray,
+  "drizzle-column": removeDrizzleColumn,
   "plugin-array": removeFromPluginArray,
   "wrangler-binding": removeWranglerBinding,
 };
@@ -283,11 +303,13 @@ type Refusal<K extends PatchKind> = (
 const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteInsertRefusal,
   "const-array": constArrayInsertRefusal,
+  "drizzle-column": drizzleColumnInsertRefusal,
   "package-json-script": packageJsonScriptRefusal,
 };
 
 const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteRemoveRefusal,
+  "drizzle-column": drizzleColumnRemoveRefusal,
   "plugin-array": pluginArrayRemoveRefusal,
   "wrangler-binding": wranglerBindingRemoveRefusal,
 };

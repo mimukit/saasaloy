@@ -158,9 +158,10 @@
               "package-json-script",
               "plugin-array",
               "const-array",
-              "chained-route"
+              "chained-route",
+              "drizzle-column"
             ],
-            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, and `chained-route` have removal inverses."
+            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, `chained-route`, `wrangler-binding` and `drizzle-column` have removal inverses."
           }
         },
         "allOf": [
@@ -207,6 +208,50 @@
                   "type": "string",
                   "minLength": 1,
                   "description": "Command the script runs (e.g. drizzle-kit generate). An entry already present under this key is never overwritten."
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "kind": { "const": "drizzle-column" } },
+              "required": ["kind"]
+            },
+            "then": {
+              "required": ["exportName", "column", "value"],
+              "properties": {
+                "exportName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Exported binding holding the Drizzle table — the name in `export const <name> = sqliteTable(\"…\", { … })`. The columns object is that call's second argument."
+                },
+                "column": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Property key added to the columns object (e.g. billingCustomerId). Also the match key: a table already carrying it is left alone, whatever it holds, and `remove` finds the column by it."
+                },
+                "value": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "The column expression, verbatim source (e.g. text(\"billing_customer_id\")). Written as-is and compared as-is on removal, so a column the user has since edited is refused rather than dropped. Ship one patch per dialect when the two builders differ."
+                },
+                "import": {
+                  "type": "object",
+                  "additionalProperties": false,
+                  "required": ["name", "from"],
+                  "description": "Named import the value needs, dropped again on `remove` when nothing else references it. Omit it when the table's other columns already import the builder.",
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Imported binding name (e.g. text)."
+                    },
+                    "from": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Module specifier to import from (e.g. drizzle-orm/sqlite-core)."
+                    }
+                  }
                 }
               }
             }
