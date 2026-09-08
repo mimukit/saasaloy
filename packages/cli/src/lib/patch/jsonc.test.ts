@@ -295,6 +295,168 @@ describe(wranglerBindingRemoveRefusal, () => {
   });
 });
 
+// A dotted `bindingType` addresses a nested array (`queues.producers`,
+// `queues.consumers`, `triggers.crons`). ADR 0033 makes it an extension of this kind,
+// not a new one, so the round trip has to hold to the byte.
+describe("dotted bindingType", () => {
+  it("creates the missing parent object and the array under it", () => {
+    const out = upsertWranglerBinding(WRANGLER, {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS", queue: "app-jobs" },
+    });
+    const parsed = JSON.parse(stripComments(out)) as {
+      queues: { producers: unknown[] };
+    };
+    expect(parsed.queues.producers).toStrictEqual([
+      { binding: "JOBS", queue: "app-jobs" },
+    ]);
+    expect(out).toContain("// Cloudflare Worker config");
+    expect(out).toContain("app-db");
+  });
+
+  it("appends into a nested array that already exists, keeping its siblings", () => {
+    const once = upsertWranglerBinding(WRANGLER, {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS", queue: "app-jobs" },
+    });
+    const twice = upsertWranglerBinding(once, {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS_DLQ", queue: "app-jobs-dlq" },
+    });
+    const parsed = JSON.parse(stripComments(twice)) as {
+      queues: { producers: { binding: string }[] };
+    };
+    expect(parsed.queues.producers.map((p) => p.binding)).toStrictEqual([
+      "JOBS",
+      "JOBS_DLQ",
+    ]);
+  });
+
+  it("shares a parent object between two different nested arrays", () => {
+    const withProducer = upsertWranglerBinding(WRANGLER, {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS", queue: "app-jobs" },
+    });
+    const out = upsertWranglerBinding(withProducer, {
+      bindingType: "queues.consumers",
+      entry: { max_retries: 3, queue: "app-jobs" },
+      matchOn: "queue",
+    });
+    const parsed = JSON.parse(stripComments(out)) as {
+      queues: { consumers: unknown[]; producers: unknown[] };
+    };
+    expect(parsed.queues.producers).toHaveLength(1);
+    expect(parsed.queues.consumers).toHaveLength(1);
+  });
+
+  it("is idempotent: re-inserting a nested entry returns the source byte-for-byte", () => {
+    const entry = { binding: "JOBS", queue: "app-jobs" };
+    const once = upsertWranglerBinding(WRANGLER, {
+      bindingType: "queues.producers",
+      entry,
+    });
+    expect(
+      upsertWranglerBinding(once, { bindingType: "queues.producers", entry })
+    ).toBe(once);
+  });
+
+  it("takes a bare string entry at a dotted path (triggers.crons)", () => {
+    const out = upsertWranglerBinding(WRANGLER, {
+      bindingType: "triggers.crons",
+      entry: "* * * * *",
+    });
+    const parsed = JSON.parse(stripComments(out)) as {
+      triggers: { crons: string[] };
+    };
+    expect(parsed.triggers.crons).toStrictEqual(["* * * * *"]);
+  });
+
+  it("removes back to byte-identical, taking the created parent with it", () => {
+    for (const patch of [
+      {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS", queue: "app-jobs" },
+      },
+      { bindingType: "triggers.crons", entry: "* * * * *" },
+    ]) {
+      const applied = upsertWranglerBinding(WRANGLER, patch);
+      expect(applied).not.toBe(WRANGLER);
+      expect(removeWranglerBinding(applied, patch)).toBe(WRANGLER);
+    }
+  });
+
+  it("removes the whole run of six patches back to byte-identical", () => {
+    const patches = [
+      {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS", queue: "app-jobs" },
+      },
+      {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS_DLQ", queue: "app-jobs-dlq" },
+      },
+      {
+        bindingType: "queues.consumers",
+        entry: {
+          dead_letter_queue: "app-jobs-dlq",
+          max_retries: 3,
+          queue: "app-jobs",
+        },
+        matchOn: "queue",
+      },
+      { bindingType: "triggers.crons", entry: "* * * * *" },
+    ];
+    let doc = WRANGLER;
+    for (const patch of patches) {
+      doc = upsertWranglerBinding(doc, patch);
+    }
+    expect(doc).toContain("queues");
+    for (const patch of patches.toReversed()) {
+      doc = removeWranglerBinding(doc, patch);
+    }
+    expect(doc).toBe(WRANGLER);
+  });
+
+  it("keeps a parent the file already had, deleting only the array it created", () => {
+    const preexisting = `{
+  "name": "api",
+  "triggers": {
+    "crons": [
+      "0 3 * * *"
+    ]
+  }
+}
+`;
+    const patch = { bindingType: "triggers.crons", entry: "* * * * *" };
+    const applied = upsertWranglerBinding(preexisting, patch);
+    expect(removeWranglerBinding(applied, patch)).toBe(preexisting);
+  });
+
+  it("leaves the file alone when the nested entry is already gone", () => {
+    expect(
+      removeWranglerBinding(WRANGLER, {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS" },
+      })
+    ).toBe(WRANGLER);
+  });
+
+  it("reports drift at a nested entry under its full dotted key", () => {
+    const drifted = upsertWranglerBinding(WRANGLER, {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS", queue: "someone-elses-queue" },
+    });
+    const patch = {
+      bindingType: "queues.producers",
+      entry: { binding: "JOBS", queue: "app-jobs" },
+    };
+    expect(wranglerBindingRemoveRefusal(drifted, patch)).toContain(
+      "queues.producers[binding=JOBS]"
+    );
+    expect(removeWranglerBinding(drifted, patch)).toBe(drifted);
+  });
+});
+
 // Cheap JSONC → JSON for assertions: drop `//` line comments. Good enough for the
 // controlled fixtures above (no `//` inside string values).
 function stripComments(text: string): string {

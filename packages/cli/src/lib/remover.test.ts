@@ -1168,6 +1168,88 @@ describe("executeRemovePlan — wrangler-binding reversal", () => {
     expect(result.patchRefusals).toStrictEqual([]);
     expect(result.patchesDropped).toHaveLength(1);
   });
+
+  // A provider whose bindings live under a nested key (ADR 0033: `queues.producers`,
+  // `queues.consumers`, `triggers.crons`). The property that matters is the same one
+  // the flat case has, held to the byte: `remove` gives back the file `add` was
+  // handed, with the `queues` and `triggers` parents gone too.
+  it("reverses a dotted-path binding set back to the byte-identical pre-patch file", async () => {
+    const dotted: ManifestPatch[] = [
+      {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS", queue: "app-jobs" },
+      },
+      {
+        bindingType: "queues.producers",
+        entry: { binding: "JOBS_DLQ", queue: "app-jobs-dlq" },
+      },
+      {
+        bindingType: "queues.consumers",
+        entry: {
+          dead_letter_queue: "app-jobs-dlq",
+          max_batch_size: 10,
+          max_retries: 3,
+          queue: "app-jobs",
+        },
+        matchOn: "queue",
+      },
+      { bindingType: "triggers.crons", entry: "* * * * *" },
+    ].map((binding) => ({
+      module: "queue-cloudflare",
+      file: WRANGLER_TARGET,
+      patch: {
+        file: WRANGLER_TARGET,
+        kind: "wrangler-binding",
+        ...binding,
+      } as ManifestPatch["patch"],
+    }));
+
+    let content = PRISTINE;
+    for (const entry of dotted) {
+      const applied = applyPatch(content, entry.patch, WRANGLER_TARGET);
+      expect(applied.changed).toBeTruthy();
+      content = applied.content;
+    }
+    // Really nested, not a flat key that happens to be spelled "queues.producers".
+    const patched = JSON.parse(
+      content
+        .split("\n")
+        .map((line) => line.replace(/\s*\/\/.*$/, ""))
+        .join("\n")
+    ) as {
+      queues: { consumers: unknown[]; producers: unknown[] };
+      triggers: { crons: string[] };
+    };
+    expect(patched.queues.producers).toHaveLength(2);
+    expect(patched.queues.consumers).toHaveLength(1);
+    expect(patched.triggers.crons).toStrictEqual(["* * * * *"]);
+    const abs = await writeWrangler(content);
+
+    const manifest = emptyManifest();
+    manifest.patches.push(...dotted);
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["queue-cloudflare"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("queue-cloudflare", config, manifest, lock);
+    expect(
+      plan.patches.every((entry) => entry.action === "revert")
+    ).toBeTruthy();
+
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(readFile(abs, "utf-8")).resolves.toBe(PRISTINE);
+    expect(result.patchRefusals).toStrictEqual([]);
+    expect(result.patchesReversed).toHaveLength(4);
+    expect(manifest.patches).toStrictEqual([]);
+  });
 });
 
 describe("executeRemovePlan — plugin-array reversal", () => {
