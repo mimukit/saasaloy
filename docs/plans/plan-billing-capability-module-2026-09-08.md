@@ -54,7 +54,7 @@ Rejected alternatives, one line each:
 - Plan-to-feature map in a seeded table. Needs an admin editor and a seed step before it beats a typed file.
 - `entitlements` inside `packages/billing`. The catalog settled the split.
 
-### Phase 1: ADR, auth bump and the neutral core
+### Phase 1: ADR, auth bump and the neutral core (#126)
 
 - [ ] Write ADR 0034 "Billing tables are a projection of the vendor's record": states why `billing` takes providers under ADR 0033's second question, adds the `billing` row to that ADR's table, states that a swap re-subscribes customers, and records the `auth` → `billing` dependency direction with the `HostContext` consequence. Adds `CONTEXT.md` entries for "Plan", "Subscription", "Billable subject", "Entitlement" and "Projection table".
 - [ ] Bump `better-auth` to 1.7.3 in `modules/auth/files/package.json` through `pnpm deps:update`, so `@better-auth/stripe` 1.7.3 resolves its peer.
@@ -66,7 +66,7 @@ Rejected alternatives, one line each:
 - [ ] `subscription.ts`: `currentSubscription(db, subject)` (latest live row) and `applyEvent(db, event)` for the console path and the consumer (`billing_event` insert-or-skip, `lockedAt` and `reminderSentAt` updates, `invalidateEntitlements`).
 - [ ] `package.json` exports `.`, `./providers/*`, `./plans`, `./subject`; `clean` with pinned `rimraf`. Unit tests: selection, `BillingError` wrapping, `applyEvent` on each event type and on a replayed event.
 
-### Phase 2: routes, the consumer and the admin page
+### Phase 2: routes, the consumer and the admin page (#126)
 
 - [ ] `files/api/routes/billing.ts` → `apps/api/src/routes/billing.ts`, registered by `chained-route` on `app`: `POST /checkout` (planId, interval, successUrl, cancelUrl), `POST /portal` (returnUrl), `GET /subscription`, `POST /cancel`, `POST /restore`, `POST /change-plan`, `GET /invoices`. Each runs behind the session, calls `resolveSubject`, builds a `HostContext` from the request headers and the `auth` instance, and runs inside `withAuthScope` (ADR 0029). `POST /checkout` refuses when a live subscription exists.
 - [ ] `@billing/jobs/event.ts` exporting `billingEventJob()`, registered into `queue.jobs` by `plugin-array`. The handler calls `applyEvent`. A `not_found` on the row is `retryable: true` for a checkout race.
@@ -74,7 +74,7 @@ Rejected alternatives, one line each:
 - [ ] `apps/admin` page `/billing` and its `const-array` NAV entry.
 - [ ] `saasaloy-billing` skill: contract, `HostContext`, the subject file and what `teams` overrides, the plan file and the pricing block rule, the webhook URL to register in Stripe and the events to subscribe (`checkout.session.completed`, `customer.subscription.created|updated|deleted|trial_will_end`, `invoice.payment_failed`, `invoice.paid`), `billing_event` growth, how to write a third provider.
 
-### Phase 3: `billing-stripe` and `billing-console`
+### Phase 3: `billing-stripe` and `billing-console` (#126)
 
 - [ ] `modules/billing-stripe`: `files/stripe.ts` → `@billing/providers/stripe.ts` exporting `stripeBilling()` and `stripeAuthPlugin()`. Patches: `plugin-array` `stripeBilling` into `billing.providers`; `plugin-array` `stripeAuthPlugin` into `auth.plugins` from `@repo/billing/providers/stripe`; `package-json-dependency` `stripe@22.6.1` and `@better-auth/stripe@1.7.3` into `packages/billing/package.json`, `better-auth` as a peer. `envVars` `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`. No wrangler binding.
 - [ ] `stripeAuthPlugin()` reads `env` from `cloudflare:workers` as `auth.ts` does, builds the `Stripe` client, maps `plans` into the plugin shape, maps `schema.subscription` onto `billing_subscription` and `user.billingCustomerId`, sets `createCustomerOnSignUp: false`, wires `authorizeSubject`, and in `onEvent` maps `customer.subscription.*`, `customer.subscription.trial_will_end`, `invoice.payment_failed` and `invoice.paid` onto the normalized events and enqueues `billing.event`.
@@ -84,7 +84,7 @@ Rejected alternatives, one line each:
 - [ ] `modules/billing-console`: `files/console.ts` → `@billing/providers/console.ts` exporting `consoleBilling()`, one `plugin-array` patch, no auth plugin. Ids are `console_<random>`; `createCheckout` writes an `active` (or `trialing` when the plan has `trialDays`) row and returns `successUrl` plus a synthetic `subscription.changed` event; `createPortal` returns `returnUrl`; `cancel`, `restore`, `changePlan` and `setQuantity` update the row; `listInvoices` returns an empty list.
 - [ ] `.agents/skills/create-provider/SKILL.md` gains a `billing` mode. End-to-end in `.dev`: `saasaloy add billing billing-stripe entitlements` typechecks; `stripe listen --forward-to` completes a checkout and the row appears; `BILLING_PROVIDER=console` completes the same flow with no network; `saasaloy remove billing-stripe` leaves `index.ts`, `auth.ts` and `package.json` byte-identical.
 
-### Phase 4: `entitlements`
+### Phase 4: `entitlements` (#126)
 
 - [ ] `modules/entitlements`: `saasaloy:feature`, `dependsOn: ["billing"]`, no provider required at runtime. File `@billing/entitlements.ts` exporting `hasFeature(db, subject, name)`, `limit(db, subject, name)`, `currentPlan(db, subject)` and `invalidateEntitlements(subject)`.
 - [ ] Resolution rule: the latest row for the subject whose status is `trialing`, `active` or `past_due` and whose `lockedAt` is null selects the plan; otherwise the default plan. Memoized per request in `c.var`.
@@ -92,7 +92,7 @@ Rejected alternatives, one line each:
 - [ ] Tests over `queue-memory` and `billing-console`: a free subject has no `pro` feature; after a console checkout it does; after `subscription.deleted` it does not; a locked subject resolves free.
 - [ ] `saasaloy-entitlements` skill: the plan file is the source of truth, the resolution rule, the 402 middleware, and that caching arrives with `kv`.
 
-### Phase 5: trial and dunning side effects
+### Phase 5: trial and dunning side effects (#126)
 
 - [ ] `trial.ending` (from Stripe's `customer.subscription.trial_will_end`, three days before) sends `trialEndingTemplate` through `createEmail` and sets `reminderSentAt`, once per subscription. Adds `email` to `billing`'s `dependsOn`. No daily trial scan.
 - [ ] `payment.failed` sends `paymentFailedTemplate`. `@billing/jobs/past-due-lockout.ts` runs daily by `defineSchedule`, sets `lockedAt` on `past_due` rows older than `BILLING_LOCKOUT_DAYS`, and sends `accountLockedTemplate`. `payment.succeeded` clears `lockedAt`.
