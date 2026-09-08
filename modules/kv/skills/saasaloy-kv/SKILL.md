@@ -14,6 +14,21 @@ map for dev and tests) — dropping one file into `src/providers/` and registeri
 
 Callers import `@repo/kv`, call `createKv(env)`, and never learn which provider is active.
 
+## Providers
+
+| Module | `KV_PROVIDER` | `minTtlSeconds` | `consume` | Needs |
+|---|---|---|---|---|
+| `kv-cloudflare` | `cloudflare` | 60 | yes, through the Rate Limiting binding | a KV namespace, plus the `kv_namespaces` and `ratelimits` entries its patches add to `apps/api/wrangler.jsonc` |
+| `kv-memory` | `memory` | 0 | yes, a real fixed-window count | nothing — no account, no binding, no network |
+
+`kv-memory` is per-isolate. Two `wrangler dev` processes, or two isolates of one deployed Worker, hold two unrelated maps. Use it for development and tests, never for anything shared.
+
+The two differ in three ways a test can see, and each one is a way to pass locally and fail in production:
+
+- **Consistency.** `kv-memory` reads back a write on the next line. Workers KV takes up to 60 seconds to reach another location.
+- **The TTL floor.** `set(key, value, { ttlSeconds: 5 })` works in memory and throws `invalid_ttl` on `kv-cloudflare`. Nothing rounds.
+- **How much `consume` reports.** `kv-memory` fills in `remaining` and `resetAt`. Cloudflare's binding returns `{ success }` alone, so a test asserting on `remaining` is asserting about the memory provider, not about the contract.
+
 ## Read and write from a route
 
 ```ts
@@ -101,7 +116,7 @@ const { success, remaining } = await store.consume({ policy: "strict", key: ip }
   is present rather than invent a number.
 
 `saasaloy add ratelimit` registers `strict`, `default` and `loose` and ships the Hono middleware.
-Add a fourth with `definePolicy` in `src/index.ts`.
+`kv-cloudflare` ships the matching `RL_STRICT`, `RL_DEFAULT` and `RL_LOOSE` bindings. Adding a fourth policy takes an edit in two places — see "Setting up `kv-cloudflare`" below.
 
 ## Errors
 
@@ -131,6 +146,49 @@ KV_PROVIDER = "memory"   // kv-memory, for local development and tests
 ```
 
 Swapping providers is the env var plus `saasaloy add kv-<provider>`. No call site changes.
+
+## Setting up `kv-cloudflare`
+
+`saasaloy add kv-cloudflare` writes four entries into `apps/api/wrangler.jsonc` and registers the provider. Two of them need a human afterwards.
+
+**1. Create the namespace and paste its id.** The patch writes a placeholder, because the CLI cannot create a namespace for you.
+
+```sh
+wrangler kv namespace create app-kv
+```
+
+```jsonc
+// apps/api/wrangler.jsonc
+"kv_namespaces": [{ "binding": "KV", "id": "<replace-me>" }] // ← paste the id it printed
+```
+
+Leave `binding` as `KV` unless you pass a different name to `cloudflare({ binding })` in `packages/kv/src/index.ts`. The binding name is the credential; there is no API token and no secret for this provider.
+
+**2. Check the `namespace_id` values on a busy account.** The three limiter entries ship as `"1001"`, `"1002"` and `"1003"`:
+
+```jsonc
+"ratelimits": [
+  { "name": "RL_STRICT",  "namespace_id": "1001", "simple": { "limit": 10,   "period": 10 } },
+  { "name": "RL_DEFAULT", "namespace_id": "1002", "simple": { "limit": 100,  "period": 60 } },
+  { "name": "RL_LOOSE",   "namespace_id": "1003", "simple": { "limit": 1000, "period": 60 } }
+]
+```
+
+Each `namespace_id` must be a unique positive integer **per Cloudflare account**. Cloudflare does not document what a collision does. If the account already runs limiters, change these three to numbers it does not use.
+
+**3. Add a fourth policy in both places.** `definePolicy` in `packages/kv/src/index.ts` registers the name; the binding is what enforces it. Add both, and keep the name in step: policy `burst` needs binding `RL_BURST`.
+
+```jsonc
+{ "name": "RL_BURST", "namespace_id": "1004", "simple": { "limit": 5, "period": 10 } }
+```
+
+`period` is **10 or 60, nothing else**. The provider throws `not_supported` on any other value rather than letting `wrangler deploy` fail later.
+
+**4. Know that the numbers can drift, and nothing checks them.** `wrangler.jsonc` holds the limits Cloudflare enforces. The `limit` and `periodSeconds` in `definePolicy` document the intent and drive the counting providers, and **editing them alone changes nothing on Cloudflare**. `saasaloy doctor` checks that every registered policy name has an `RL_<NAME>` binding; it never compares the numbers, because that would mean reading literal values out of a project's TypeScript.
+
+**5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter billing with it.
+
+**6. The `infra` module does not translate these yet.** `modules/infra`'s `translate.ts` handles `d1_databases` and `vars` only, so `kv_namespaces` and `ratelimits` in `wrangler.jsonc` do not become Pulumi resources. Create the namespace with `wrangler` as above and keep the ids in `wrangler.jsonc` until that gap closes.
 
 ## Limits worth knowing before you design around KV
 
