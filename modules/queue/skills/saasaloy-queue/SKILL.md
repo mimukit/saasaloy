@@ -74,6 +74,74 @@ One error shape, five codes.
 
 A provider maps its vendor code onto one of these and keeps the raw value in `providerCode`. The core never retries: `retryable` is the flag a consumer reads to choose between another delivery and the dead-letter queue.
 
+## Providers
+
+| Module | `QUEUE_PROVIDER` | Carries work with | Use it for |
+| --- | --- | --- | --- |
+| `queue-cloudflare` | `cloudflare` | Cloudflare Queues and one Cron Trigger | staging and production |
+| `queue-memory` | `memory` | the same Worker, inline | local dev and tests |
+
+`QUEUE_PROVIDER` is required in both directions. Install a provider and set the variable; installing one without setting it throws at `createQueue`, and setting it to a provider that is not installed throws too.
+
+## `queue-cloudflare`
+
+```sh
+saasaloy add queue queue-cloudflare
+```
+
+The module patches `apps/api/wrangler.jsonc` with two producer bindings (`JOBS` → `app-jobs`, `JOBS_DLQ` → `app-jobs-dlq`), one consumer on `app-jobs`, and one `* * * * *` Cron Trigger. It registers `cloudflare()` in the `providers` array in `packages/queue/src/index.ts` and `cloudflareQueueHandlers()` in the `handlers` array in `apps/api/src/worker.ts`. Both handlers gate on `QUEUE_PROVIDER`: when it names anything but `cloudflare` they write one warn line and return, so switching providers without removing this module does not run every job twice.
+
+A job declared `durable: true` is refused at `enqueue` with `QueueError("provider_error")` rather than run as a plain message. Cloudflare Queues cannot checkpoint, and downgrading in silence would drop the replay the handler asked for. The Workflows path is issue #131.
+
+### Create the queues first
+
+The bindings name queues; they do not create them. Run this once per Cloudflare account, before the first deploy:
+
+```sh
+wrangler queues create app-jobs
+wrangler queues create app-jobs-dlq
+```
+
+A binding pointing at a queue that does not exist fails the deploy, not the request, so you find out at `wrangler deploy` rather than in production. Queues need a Workers **paid plan**; `queue-memory` exists so local development needs neither the plan nor the queues.
+
+### The two knobs
+
+Everything else in the consumer entry is Cloudflare's default and is fine. These two are worth turning:
+
+- **`max_retries: 3`** in `apps/api/wrangler.jsonc`. How many deliveries a message gets before the platform routes it to `app-jobs-dlq` itself. Raise it for work that fails on a flaky upstream; lower it for work whose retry costs money.
+- **`backoffBaseSeconds`**, the first retry delay, passed to `cloudflareQueueHandlers({ backoffBaseSeconds: 30 })`. Each attempt doubles it, so the default gives 30, 60 and 120 seconds under `max_retries: 3`. A retryable failure is asked for again with that delay; a non-retryable one is sent to `JOBS_DLQ` and acked at once, without burning the attempts.
+
+### What the tick costs
+
+The Cron Trigger fires every minute, which is **1,440 Worker invocations a day** whether a schedule is due or not. A tick with nothing due does one `dueSchedules(now)` call in memory and returns, so the CPU cost is negligible, but the invocation count is real and it is what buys minute resolution for the whole schedule table. If nothing in the project is scheduled, remove the trigger from `apps/api/wrangler.jsonc`; the producer and consumer keep working without it.
+
+### Overlapping runs
+
+Cloudflare gives no lock. A schedule that fires every minute while its job takes 90 seconds has two runs in flight, and a retry can overlap the delivery it is retrying. The tick enqueues rather than running inline, which keeps the tick itself short, but it does not serialize anything. A job that must not overlap takes its own lock — a D1 row, or a KV key with a TTL once the `kv` capability lands (issue #129) — in the handler. The capability ships no lock of its own.
+
+### Write an idempotent handler
+
+Cloudflare Queues is at-least-once. A message can be delivered twice with no failure anywhere, so **every handler must be safe to run twice**. There is no `dedupeKey` and there will not be one: the check belongs where the work is, because only the handler knows what "already done" means.
+
+```ts
+export const chargeInvoiceJob = (): Job =>
+  defineJob<{ invoiceId: string }>({
+    name: "charge-invoice",
+    handler: async ({ invoiceId }, ctx) => {
+      const invoice = await ctx.step("load", () => db.invoice(invoiceId));
+      if (invoice.chargedAt) return; // a second delivery, or a retry after a timeout
+      await ctx.step("charge", () => payments.charge(invoice));
+      await ctx.step("mark", () => db.markCharged(invoiceId));
+    },
+  });
+```
+
+Read state and return early, or write through a unique key and let the constraint reject the duplicate. Do not use `ctx.attempt` as the test: attempt 0 can arrive twice.
+
+### `infra` does not know about these bindings yet
+
+`modules/infra` translates `wrangler.jsonc` bindings into provisioning steps. It does not yet handle `queues`, `triggers` or `send_email`, so installing `queue-cloudflare` in a project that uses `infra` gets you the bindings but not the queue creation. Run the two `wrangler queues create` commands by hand until the translator lands (issue #130).
+
 ## Write a provider
 
 One file in `src/providers/`, exporting a factory that returns a `QueueProvider`: a `name` and an `enqueue(env, job, payload, options)`. Read the binding or secret off `env` inside that file and nowhere else, map every failure onto `QueueError`, and set `retryable` honestly. A provider that also needs a Worker export (a queue consumer, a cron tick) ships a second exported factory returning `{ queue?, scheduled? }` and appends it to the `handlers` array in `apps/api/src/worker.ts`. See `.agents/skills/create-provider/`.

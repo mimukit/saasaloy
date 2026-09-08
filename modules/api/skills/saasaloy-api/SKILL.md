@@ -225,12 +225,13 @@ A module that owns such an export ships a function returning a `HandlerSet`, the
   "exportName": "worker",
   "arrayProp": "handlers",
   "call": "cloudflareQueueHandlers",
-  "import": { "name": "cloudflareQueueHandlers", "from": "@queue/providers/cloudflare" },
+  "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" },
 }
 ```
 
-Three rules hold here:
+Four rules hold here:
 
+- **The `import.from` is the package export, not a scaffold alias.** `apps/api` reaches into another workspace, so the specifier is `@repo/queue/providers/cloudflare`, resolved by the `"./providers/*"` entry in `packages/queue`'s `exports` map. `@queue` is a descriptor-target alias the CLI uses to place files; it is not a TypeScript path and does not resolve at runtime.
 - **`HandlerSet` is declared in `worker.ts`, not imported from a capability.** `api` depends on no capability, and every capability that registers a handler depends on `api`. An import the other way would invert that.
 - **`defineWorker` exports a hook only when a set declares it.** Cloudflare reads a `queue` export as a promise that the Worker consumes a queue, so an empty stub would claim a consumer that does not exist.
 - **`infra` is not the registration path.** A provider patches `wrangler.jsonc` and `worker.ts` directly, because `modules/infra` reads `wrangler.jsonc` after the fact and a project that never installs `infra` would otherwise get no binding at all.

@@ -1,0 +1,76 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "queue-cloudflare",
+  "type": "saasaloy:feature",
+  "dependsOn": ["queue"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "queues.producers",
+      "entry": {
+        "binding": "JOBS",
+        "queue": "app-jobs"
+      }
+    },
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "queues.producers",
+      "entry": {
+        "binding": "JOBS_DLQ",
+        "queue": "app-jobs-dlq"
+      }
+    },
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "queues.consumers",
+      "entry": {
+        "queue": "app-jobs",
+        "max_batch_size": 10,
+        "max_batch_timeout": 5,
+        "max_retries": 3,
+        "dead_letter_queue": "app-jobs-dlq"
+      },
+      "matchOn": "queue"
+    },
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "triggers.crons",
+      "entry": "* * * * *"
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "providers",
+      "call": "cloudflare",
+      "import": {
+        "name": "cloudflare",
+        "from": "./providers/cloudflare"
+      }
+    },
+    {
+      "file": "apps/api/src/worker.ts",
+      "kind": "plugin-array",
+      "exportName": "worker",
+      "arrayProp": "handlers",
+      "call": "cloudflareQueueHandlers",
+      "import": {
+        "name": "cloudflareQueueHandlers",
+        "from": "@repo/queue/providers/cloudflare"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/cloudflare.ts",
+      "target": "@queue/providers/cloudflare.ts"
+    }
+  ],
+  "scaffolds": []
+}

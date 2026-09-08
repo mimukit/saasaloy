@@ -387,6 +387,15 @@ export default defineConfig({
       ],
       rules: { "no-console": "off" },
     },
+    // A queue provider's Worker exports — the batch consumer and the cron tick — run
+    // outside a request, so there is no `c.get("log")` to reach for, and the capability
+    // core has zero runtime dependencies, so it cannot import `@repo/logger` either
+    // (ADR 0020, ADR 0033). The lines here are the gate warning and the dead-letter
+    // failures, both of which Workers Logs indexes from `console` directly.
+    {
+      files: ["modules/queue-*/files/**"],
+      rules: { "no-console": "off" },
+    },
     // The infra module is deploy tooling, in the same class as `scripts/**`
     // above: a Pulumi program reports its own progress on stdout, and the three
     // sites here are that report — an empty-discovery notice and the per-secret
