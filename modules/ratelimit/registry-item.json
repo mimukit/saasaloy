@@ -1,0 +1,57 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ratelimit",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "kv"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/kv/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "kv",
+      "arrayProp": "policies",
+      "call": "strictPolicy",
+      "import": {
+        "name": "strictPolicy",
+        "from": "./policies/ratelimit"
+      }
+    },
+    {
+      "file": "packages/kv/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "kv",
+      "arrayProp": "policies",
+      "call": "defaultPolicy",
+      "import": {
+        "name": "defaultPolicy",
+        "from": "./policies/ratelimit"
+      }
+    },
+    {
+      "file": "packages/kv/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "kv",
+      "arrayProp": "policies",
+      "call": "loosePolicy",
+      "import": {
+        "name": "loosePolicy",
+        "from": "./policies/ratelimit"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/kv/policies/ratelimit.ts",
+      "target": "@kv/policies/ratelimit.ts"
+    },
+    {
+      "path": "files/api/middleware/ratelimit.ts",
+      "target": "@api/middleware/ratelimit.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-ratelimit"]
+  }
+}
