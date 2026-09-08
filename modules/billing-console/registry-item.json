@@ -1,0 +1,25 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["billing"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/billing/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "billing",
+      "arrayProp": "providers",
+      "call": "consoleBilling",
+      "import": {
+        "name": "consoleBilling",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/console.ts", "target": "@billing/providers/console.ts" }
+  ],
+  "scaffolds": []
+}
