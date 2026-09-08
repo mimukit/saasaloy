@@ -5,7 +5,7 @@
 `database` becomes three modules. `modules/database` is the driver-neutral core, a `saasaloy:capability` with `dependsOn: ["api"]` that scaffolds `packages/db` with `package.json`, `tsconfig.json`, `src/schema.ts`, `src/schema/` and `src/repositories/`, and keeps only the `db:generate` script plus the `drizzle-orm` and `drizzle-kit` pins. It ships no `client.ts`, no `drizzle.config.ts` and no wrangler binding. Those come from a **driver**: `modules/database-d1` or `modules/database-postgres`, both typed `saasaloy:feature` with `dependsOn: ["database"]`, each naming the other in the descriptor's `conflictsWith` field so a project can only ever hold one. Cloudflare D1 stays the default. Settled while building issue [#85](https://github.com/mimukit/saasaloy/issues/85).
 
 ## Status
-accepted, amended 2026-08-31 (the new ADR that [ADR 0001](adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment requires before its rule may reach a stateful capability). See "Why a stateful capability gets a second implementation" below, and the amendment that retracts one of the consequences.
+accepted, amended 2026-08-31 and 2026-09-08 (the new ADR that [ADR 0001](adr-0001-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment requires before its rule may reach a stateful capability). See "Why a stateful capability gets a second implementation" below, and the amendment that retracts one of the consequences.
 
 ## Considered Options
 - **Keep `database` D1-only and ship `database-postgres` as its own capability**, scaffolding its own workspace. Rejected because it duplicates the schema barrel, the repository layer and the `@repo/db` package name, and every downstream module (`auth`, `waitlist`) would then have to know which of the two is installed before it could import anything.
@@ -52,6 +52,12 @@ A driver is a different shape from a provider, so it gets its own word.
 A provider module (`email-cloudflare`) is one file dropped into the capability's `providers/` folder plus a `plugin-array` patch that registers it. Several coexist in one project and `EMAIL_PROVIDER` picks between them at runtime. `.agents/skills/create-provider/SKILL.md` states the size test plainly. A provider is "deliberately tiny", and "if yours is growing a second file or a scaffold, you are probably authoring a capability".
 
 A driver breaks that test on purpose. It replaces files the capability would otherwise own (`client.ts`, `drizzle.config.ts`, `tsconfig.json`), it carries scaffolds of its own, and it excludes its siblings instead of sitting beside them. Mutual exclusion is the load-bearing difference. A provider list is additive and read at runtime; a driver set has exactly one member and the CLI enforces that at install time.
+
+## Amendment — 2026-09-08: the reason `database` takes drivers is ownership, not statefulness
+
+"Why a stateful capability gets a second implementation" above, and the "Driver, not provider" section below, both rest the choice on the word *stateful*. [ADR 0033](adr-0033-transient-state-capabilities-take-providers-2026-09-08.md) narrows that to the system-of-record test: drivers when the project owns the schema and the migrations and would have to move existing data to swap, providers when the platform owns the state or the service holds none. `database` sits on the driver side under either wording, so nothing in this record changes in substance.
+
+Two of its claims are now read through the new test. The shape argument in "Driver, not provider" stands whole: a driver replaces files and excludes its siblings, a provider adds one file and sits beside them. The state argument in that same section does not decide anything on its own, because `queue` and `kv` hold state and still take providers. And the one-file size test it quotes from `create-provider/SKILL.md` is about the provider's runtime file only; a binding provider may carry several descriptor patches, which ADR 0033 states.
 
 ## Both drivers ship a skill folder
 

@@ -53,14 +53,14 @@ Rejected alternatives, one line each:
 - Retrying every failure until `max_retries`. Makes `retryable` meaningless on Cloudflare and gives a bad payload three runs.
 - Workflows as the only runner. Queues are fan-out and buffering; Workflows are ordered runs with sleeps. Different cost and different consumers.
 
-### Phase 1: ADR and glossary
+### Phase 1: ADR and glossary (#125) (built 2026-09-08)
 
-- [ ] Write ADR 0033 "Transient-state capabilities take providers": amends ADR 0001's amendment and ADR 0026. States the system-of-record test, lists `queue`, `kv`, `email`, `sms`, `logger` on the provider side and `database`, `storage` on the driver side, and states that `database` stays on drivers.
-- [ ] The ADR states how a binding provider registers a handler export: through the `handlers` table in `apps/api/src/worker.ts` via `plugin-array`, never through `infra`, and that a binding provider may carry several patches (`email-cloudflare` already carries two).
-- [ ] The ADR records the `wrangler-binding` dotted-path extension and the `worker.ts` entry split as consequences.
-- [ ] Update `CONTEXT.md` "Provider module" and "Driver module" to the ADR's test, and add "Job", "Schedule" and "Handler set" entries.
-- [ ] `AGENTS.md` already states the philosophy (commit f7d7f9d). Verify its `queue` sentence matches the ADR and adjust if not.
-- [ ] File the two follow-up issues: `infra` translator support for `send_email`, `queues`, `triggers`, `workflows`; and Cloudflare Workflows behind `durable: true` in `queue-cloudflare`.
+- [x] Write ADR 0033 "Transient-state capabilities take providers": amends ADR 0001's amendment and ADR 0026. States the system-of-record test, lists `queue`, `kv`, `email`, `sms`, `logger` on the provider side and `database`, `storage` on the driver side, and states that `database` stays on drivers.
+- [x] The ADR states how a binding provider registers a handler export: through the `handlers` table in `apps/api/src/worker.ts` via `plugin-array`, never through `infra`, and that a binding provider may carry several patches (`email-cloudflare` already carries two).
+- [x] The ADR records the `wrangler-binding` dotted-path extension and the `worker.ts` entry split as consequences.
+- [x] Update `CONTEXT.md` "Provider module" and "Driver module" to the ADR's test, and add "Job", "Schedule" and "Handler set" entries.
+- [x] `AGENTS.md` already states the philosophy (commit f7d7f9d). Verify its `queue` sentence matches the ADR and adjust if not.
+- [x] File the two follow-up issues: `infra` translator support for `send_email`, `queues`, `triggers`, `workflows` ([#130](https://github.com/mimukit/saasaloy/issues/130)); and Cloudflare Workflows behind `durable: true` in `queue-cloudflare` ([#131](https://github.com/mimukit/saasaloy/issues/131)).
 
 ### Phase 2: CLI and `api` groundwork
 
