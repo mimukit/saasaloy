@@ -68,15 +68,15 @@ Rejected alternatives, one line each:
 - [ ] `modules/api` ships `src/worker.ts` with a local `defineWorker` and points `wrangler.jsonc` `main` at it. `src/index.ts` is unchanged. The `saasaloy-api` skill and `create-module` explain the handler table.
 - [ ] `vite.config.ts` and any build entry that names `src/index.ts` still resolve. Existing api tests pass.
 
-### Phase 3: the neutral core (`packages/queue`)
+### Phase 3: the neutral core (`packages/queue`) (built 2026-09-08)
 
-- [ ] `modules/queue/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars.QUEUE_PROVIDER` (`cloudflare` or `memory`, always required), scaffold `packages/queue` with alias `@queue`, patch `@repo/queue` into `apps/api/package.json`.
-- [ ] `provider.ts`: `QueueProvider` (`name`, `enqueue(env, job, payload, options)`), `QueueEnv`, `Job`, `Schedule`, `JobContext` (`step`, `sleep`, `attempt`), `EnqueueOptions` (`delaySeconds`), `QueueError` with the five codes.
-- [ ] `define.ts`: `defineQueue({ providers, jobs, schedules })`, `create(env)` selecting on `QUEUE_PROVIDER` with the same throw-never-fall-back rule as `email`, `defineJob` with optional Standard Schema, `defineSchedule`, and `dispatch(name, payload, ctx)` for providers to call, which validates and raises `unknown_job`.
-- [ ] `cron.ts`: five-field matcher with tests. Zero dependencies.
-- [ ] `index.ts` barrel with `queue = defineQueue({ providers: [], jobs: [exampleJob()], schedules: [] })` and `createQueue(env)`. `src/providers/.gitkeep` and `src/jobs/example.ts`.
-- [ ] `package.json` exports `.`, `./providers/*` and `./jobs/*`; `clean` script with pinned `rimraf`.
-- [ ] Unit tests: selection, unknown job, invalid payload, `QueueError` wrapping of a raw throw, cron matcher.
+- [x] `modules/queue/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars.QUEUE_PROVIDER` (`cloudflare` or `memory`, always required), scaffold `packages/queue` with alias `@queue`, patch `@repo/queue` into `apps/api/package.json`.
+- [x] `provider.ts`: `QueueProvider` (`name`, `enqueue(env, job, payload, options)`), `QueueEnv`, `Job`, `Schedule`, `JobContext` (`step`, `sleep`, `attempt`), `EnqueueOptions` (`delaySeconds`), `QueueError` with the five codes.
+- [x] `define.ts`: `defineQueue({ providers, jobs, schedules })`, `create(env)` selecting on `QUEUE_PROVIDER` with the same throw-never-fall-back rule as `email`, `defineJob` with optional Standard Schema, `defineSchedule`, and `dispatch(name, payload, ctx)` for providers to call, which validates and raises `unknown_job`.
+- [x] `cron.ts`: five-field matcher with tests. Zero dependencies.
+- [x] `index.ts` barrel with `queue = defineQueue({ providers: [], jobs: [exampleJob()], schedules: [] })` and `createQueue(env)`. `src/providers/.gitkeep` and `src/jobs/example.ts`.
+- [x] `package.json` exports `.`, `./providers/*` and `./jobs/*`; `clean` script with pinned `rimraf`.
+- [x] Unit tests: selection, unknown job, invalid payload, `QueueError` wrapping of a raw throw, cron matcher.
 
 ### Phase 4: `queue-cloudflare`
 

@@ -228,6 +228,7 @@ export default defineConfig({
         "modules/database/files/**",
         "modules/email*/files/**",
         "modules/logger*/files/**",
+        "modules/queue*/files/**",
       ],
       env: { node: false, serviceworker: true, worker: true },
     },
@@ -317,6 +318,9 @@ export default defineConfig({
       rules: {
         "vitest/no-import-node-test": "off",
         "vitest/prefer-importing-vitest-globals": "off",
+        // Same reason: `it.each` is vitest's, and `node:test`'s `it` has no `.each`, so
+        // a table-driven case here is written as a plain loop on purpose.
+        "vitest/prefer-each": "off",
         // `safeUrl`'s job is to refuse `javascript:alert(...)`, so the test that proves
         // it has to write that URL out. Splitting the literal to dodge the rule would
         // hide the one string the assertion is about. Off for these files only; it stays
@@ -343,6 +347,9 @@ export default defineConfig({
         "typescript/no-floating-promises": "off",
         "vitest/no-import-node-test": "off",
         "vitest/prefer-importing-vitest-globals": "off",
+        // Same reason: `it.each` is vitest's, and `node:test`'s `it` has no `.each`, so
+        // a table-driven case here is written as a plain loop on purpose.
+        "vitest/prefer-each": "off",
       },
     },
 
@@ -371,7 +378,13 @@ export default defineConfig({
     // provider — `modules/logger*/` does not exist yet, so that glob is
     // forward-looking on purpose (see #66).
     {
-      files: ["modules/*-console/files/**", "modules/logger*/files/**"],
+      files: [
+        "modules/*-console/files/**",
+        "modules/logger*/files/**",
+        // The queue module's example job: its whole body is one log line, which is
+        // what makes it a readable worked example of `ctx.step`.
+        "modules/queue/files/src/jobs/**",
+      ],
       rules: { "no-console": "off" },
     },
     // The infra module is deploy tooling, in the same class as `scripts/**`
