@@ -89,9 +89,9 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 
 | Tier | Modules |
 |---|---|
-| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `infra` |
+| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `infra` |
 | Feature | `waitlist`, `teams`, `email-react` |
-| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory` |
+| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory` |
 | Driver | `database-d1`, `database-postgres` |
 
 `saasaloy add <name> --dry-run` prints what a module would do to your project before it does it. The one-table map of every module, what it gives you, and what it depends on is on the [Modules](docs/wiki/modules.md) page.
@@ -111,8 +111,9 @@ A few modules need something the free tier does not cover:
 | `database-postgres` | a Postgres server reachable from a Worker, with its URL in `DATABASE_URL`. Install instead of `database-d1`, never alongside |
 | `sms` | a third-party SMS account for any real send. Cloudflare has no SMS product. `sms-console` is free |
 | `queue-cloudflare` | a Workers paid plan, and the two queues created once with `wrangler queues create`. Install `queue-memory` instead for local work |
+| `kv-cloudflare` | a Workers KV namespace created with `wrangler kv namespace create`, and its id pasted into `wrangler.jsonc`. `kv-memory` needs nothing |
 
-The local providers (`email-console`, `sms-console`, `logger-console`, `queue-memory`) log or run inline instead of calling a service, so local development needs no plan, domain, or key. Details for each are in the [Reference](docs/wiki/reference.md#email-providers).
+The local providers (`email-console`, `sms-console`, `logger-console`, `queue-memory`, `kv-memory`) log or run inline instead of calling a service, so local development needs no plan, domain, or key. Details for each are in the [Reference](docs/wiki/reference.md#email-providers).
 
 ## Deploy
 
