@@ -11,6 +11,10 @@ import { health } from "./routes/health";
 // vars (below); a capability or feature that adds a D1/R2/KV/Queue binding extends this
 // type and patches wrangler.jsonc.
 export interface Bindings {
+  // Open by design: a capability's env type (`LoggerEnv`, `EmailEnv`, `QueueEnv`) carries
+  // the same index signature, and `Bindings` has to stay assignable to them as modules
+  // add their own vars.
+  [key: string]: unknown;
   CORS_ORIGINS?: string;
   /** Which registered log provider writes. Optional — unset selects the only installed one. */
   LOGGER_PROVIDER?: string;
