@@ -3,6 +3,14 @@ import type { BillingEnv } from "./provider";
 
 export { defaultPlan, defineBilling, definePlans, findPlan } from "./define";
 export type { BillingClient, BillingConfig, BillingRegistry } from "./define";
+export { billingEventJob } from "./jobs/event";
+export type { RegisteredJob } from "./jobs/event";
+export {
+  BILLING_EVENT_JOB,
+  handleBillingEvent,
+  reviveEvent,
+} from "./jobs/event-handler";
+export type { BillingEventPayload } from "./jobs/event-handler";
 export { plans } from "./plans";
 export { BillingError, isLiveStatus, LIVE_STATUSES } from "./provider";
 export type {
@@ -28,6 +36,7 @@ export type {
   SubscriptionInput,
   SubscriptionStatus,
 } from "./provider";
+export { requireBillingStore, setBillingStoreResolver } from "./store";
 export { assertSubject, authorizeSubject, resolveSubject } from "./subject";
 export type { SubjectAction, SubjectContext, SubjectUser } from "./subject";
 export {

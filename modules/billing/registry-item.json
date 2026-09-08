@@ -26,9 +26,64 @@
       "section": "dependencies",
       "name": "@repo/billing",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "drizzle-orm",
+      "range": "0.45.2"
+    },
+    {
+      "file": "packages/queue/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/billing",
+      "call": "billingRoute",
+      "import": {
+        "name": "billingRoute",
+        "from": "./routes/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "billingEventJob",
+      "import": {
+        "name": "billingEventJob",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/billing", "label": "Billing" }
     }
   ],
   "files": [
+    {
+      "path": "files/api/routes/billing.ts",
+      "target": "@api/routes/billing.ts"
+    },
+    {
+      "path": "files/api/billing-store.ts",
+      "target": "@api/billing-store.ts"
+    },
+    {
+      "path": "files/admin/routes/billing.tsx",
+      "target": "@admin/routes/billing.tsx"
+    },
     {
       "path": "files/db/schema/billing.sqlite.ts",
       "target": "@db/schema/billing.ts",
@@ -66,11 +121,20 @@
           "path": "files/src/subscription.ts",
           "target": "src/subscription.ts"
         },
+        { "path": "files/src/store.ts", "target": "src/store.ts" },
+        { "path": "files/src/jobs/event.ts", "target": "src/jobs/event.ts" },
+        {
+          "path": "files/src/jobs/event-handler.ts",
+          "target": "src/jobs/event-handler.ts"
+        },
         {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
         }
       ]
     }
-  ]
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-billing"]
+  }
 }
