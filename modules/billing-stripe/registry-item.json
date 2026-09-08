@@ -1,0 +1,64 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing-stripe",
+  "type": "saasaloy:feature",
+  "dependsOn": ["billing"],
+  "dependencies": [],
+  "envVars": {
+    "STRIPE_SECRET_KEY": "Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required whenever this provider is installed: the auth plugin builds its client at module load, so a missing key fails the Worker's first request rather than its first checkout.",
+    "STRIPE_WEBHOOK_SECRET": "The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs."
+  },
+  "removeWarnings": [
+    "Removing this module does not cancel anything at Stripe. Cancel live subscriptions in the Stripe dashboard first, and delete the webhook endpoint you registered.",
+    "`stripe` and `@better-auth/stripe` stay in packages/billing/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs them."
+  ],
+  "patches": [
+    {
+      "file": "packages/billing/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "billing",
+      "arrayProp": "providers",
+      "call": "stripeBilling",
+      "import": {
+        "name": "stripeBilling",
+        "from": "./providers/stripe"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "stripeAuthPlugin",
+      "import": {
+        "name": "stripeAuthPlugin",
+        "from": "@repo/billing/providers/stripe"
+      }
+    },
+    {
+      "file": "packages/billing/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "stripe",
+      "range": "22.6.1"
+    },
+    {
+      "file": "packages/billing/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@better-auth/stripe",
+      "range": "1.7.3"
+    },
+    {
+      "file": "packages/billing/package.json",
+      "kind": "package-json-dependency",
+      "section": "peerDependencies",
+      "name": "better-auth",
+      "range": "1.7.3"
+    }
+  ],
+  "files": [
+    { "path": "files/stripe.ts", "target": "@billing/providers/stripe.ts" }
+  ],
+  "scaffolds": []
+}
