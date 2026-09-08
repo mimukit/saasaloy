@@ -86,8 +86,10 @@ A provider maps its vendor code onto one of these and keeps the raw value in `pr
 ## `queue-cloudflare`
 
 ```sh
-saasaloy add queue queue-cloudflare
+saasaloy add queue-cloudflare
 ```
+
+`add` takes one module per call. The `queue` core arrives with the provider through `dependsOn`, so do not name it as a second argument.
 
 The module patches `apps/api/wrangler.jsonc` with two producer bindings (`JOBS` → `app-jobs`, `JOBS_DLQ` → `app-jobs-dlq`), one consumer on `app-jobs`, and one `* * * * *` Cron Trigger. It registers `cloudflare()` in the `providers` array in `packages/queue/src/index.ts` and `cloudflareQueueHandlers()` in the `handlers` array in `apps/api/src/worker.ts`. Both handlers gate on `QUEUE_PROVIDER`: when it names anything but `cloudflare` they write one warn line and return, so switching providers without removing this module does not run every job twice.
 
@@ -155,12 +157,14 @@ Read state and return early, or write through a unique key and let the constrain
 ## `queue-memory`
 
 ```sh
-saasaloy add queue queue-memory
+saasaloy add queue-memory
 ```
+
+The `queue` core arrives through `dependsOn` here too.
 
 The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It patches nothing but the `providers` array: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `.dev.vars` and background work runs.
 
-Install both providers side by side and let the variable choose. `QUEUE_PROVIDER=memory` locally, `cloudflare` in staging and production. The Cloudflare handlers stay installed and warn-and-return while `memory` is selected, so nothing runs twice.
+Install both providers side by side and let the variable choose. `QUEUE_PROVIDER=memory` locally, `cloudflare` in staging and production. The Cloudflare handlers stay installed and warn-and-return while `memory` is selected, so nothing runs twice. One caveat if you switch a **deployed** Worker from `cloudflare` to `memory`: the gated consumer returns without acking or retrying, so any message already in `app-jobs` burns its `max_retries` redeliveries and then lands in `app-jobs-dlq`. Drain the queue before you switch, or expect to replay the dead-letter queue afterwards.
 
 Three ways it differs from production, each deliberate:
 
