@@ -82,7 +82,7 @@ The three follow-ups are recorded in ADR 0037's "Follow-ups" section, not filed 
 - [ ] `package.json` exports `.`, `./providers/*`; `clean` script with pinned `rimraf`.
 - [ ] Unit tests: provider selection, unset and unknown `STORAGE_PROVIDER`, key building and rejection, token sign/verify/expiry, the unset-secret throw, `expiresIn` clamping, `not_supported` from a provider missing an optional method, `StorageError` wrapping a raw throw.
 
-### Phase 3: `storage-cloudflare` and `storage-memory`
+### Phase 3: `storage-cloudflare` and `storage-memory` (built 2026-09-08)
 
 - [ ] `modules/storage-cloudflare`: one file `files/cloudflare.ts` at `@storage/providers/cloudflare.ts`, exporting `cloudflare()`.
 - [ ] Patches: `wrangler-binding` `r2_buckets` entry `{ binding: "BUCKET", bucket_name: "app-storage" }` matched on `binding`; `plugin-array` into `storage.providers`; `package-json-dependency` `aws4fetch` 1.0.20 into `packages/storage/package.json`.

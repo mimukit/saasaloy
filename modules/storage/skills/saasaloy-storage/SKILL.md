@@ -31,6 +31,44 @@ Nothing generates this for you. A signing key with a known default is a signing 
 | `STORAGE_MAX_UPLOAD_BYTES` | no | Per-file cap. Defaults to 104857600 (100 MiB). |
 | `STORAGE_PROXY_URL` | no | Origin the proxy route answers on, for a caller on another origin. |
 
+## Providers
+
+| Module | `STORAGE_PROVIDER` | Stores bytes in | Presigns | Multipart | Needs |
+|---|---|---|---|---|---|
+| `storage-cloudflare` | `cloudflare` | Cloudflare R2, through the `BUCKET` binding | Yes, once the four R2 API values are set | Yes | An R2 bucket. The four API values are optional. |
+| `storage-memory` | `memory` | A `Map` in the isolate | No — every link is a proxy link | Yes | Nothing. |
+
+`storage-cloudflare` is the default. `storage-memory` exists so local development and tests need no Cloudflare account and no network. Its store dies with the isolate, so a `wrangler dev` reload empties it and two isolates do not share it. Never run it in production.
+
+### Set up `storage-cloudflare`
+
+```sh
+pnpm wrangler r2 bucket create app-storage
+```
+
+`saasaloy add storage-cloudflare` writes the `r2_buckets` binding into `apps/api/wrangler.jsonc` as `{ "binding": "BUCKET", "bucket_name": "app-storage" }`. Change `bucket_name` if you named the bucket something else, and keep `binding` as `BUCKET` — that is the name the provider reads.
+
+The binding does every read and write and it needs no secret. It **cannot sign a URL**, which is what the four optional values buy:
+
+```sh
+# R2 → Manage API tokens → Create API token, Object Read & Write on this bucket
+pnpm wrangler secret put R2_ACCOUNT_ID
+pnpm wrangler secret put R2_ACCESS_KEY_ID
+pnpm wrangler secret put R2_SECRET_ACCESS_KEY
+pnpm wrangler secret put R2_BUCKET_NAME
+```
+
+With all four set, `createUploadUrl` returns a presigned R2 URL and the browser PUTs straight to R2: the bytes never touch the Worker, and nothing pays Worker CPU per megabyte. With **any one** of them missing, the provider signs nothing and the core returns a proxy link instead. The upload still works, it just streams through the Worker, where the Free plan caps a request body at 100 MB. `R2_BUCKET_NAME` must name the same bucket the `BUCKET` binding points at, or a signed link reads and writes a different bucket than the binding does.
+
+### Develop with `storage-memory`
+
+```sh
+./saasaloy add storage storage-memory
+echo 'STORAGE_PROVIDER=memory' >> apps/api/.dev.vars
+```
+
+Uploads, downloads, listing and multipart all work with no account. Every link is a proxy link, so `STORAGE_URL_SECRET` still has to be set — the first upload is where a missing one throws.
+
 ## Upload from a route
 
 ```ts
