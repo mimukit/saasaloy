@@ -38,6 +38,11 @@ const createdAtDefault = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 export const billingSubscription = sqliteTable(
   "billing_subscription",
   {
+    /**
+     * Which interval the subject is paying on — "month" or "year" as the vendor words it.
+     * Written by the provider, read by the admin page beside the price.
+     */
+    billingInterval: text("billing_interval"),
     /** Set when the vendor schedules the end, before it happens. */
     cancelAt: timestampMs("cancel_at"),
     cancelAtPeriodEnd: integer("cancel_at_period_end", { mode: "boolean" })
@@ -57,6 +62,10 @@ export const billingSubscription = sqliteTable(
     lockedAt: timestampMs("locked_at"),
     /** The provider's raw status and anything else it wants to keep, as JSON. */
     metadata: text("metadata", { mode: "json" }),
+    /** End of the interval currently paid for — the renewal date the admin page shows. */
+    periodEnd: timestampMs("period_end"),
+    /** Start of the interval currently paid for. */
+    periodStart: timestampMs("period_start"),
     /** The plan id from `packages/billing/src/plans.ts`, not a vendor price id. */
     plan: text("plan").notNull(),
     providerCustomerId: text("provider_customer_id").notNull(),

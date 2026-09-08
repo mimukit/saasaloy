@@ -3,6 +3,8 @@ import type { BillingEnv } from "./provider";
 
 export { defaultPlan, defineBilling, definePlans, findPlan } from "./define";
 export type { BillingClient, BillingConfig, BillingRegistry } from "./define";
+export { enqueueBillingEvent, setBillingEnqueuer } from "./enqueue";
+export type { BillingEnqueuer } from "./enqueue";
 export { billingEventJob } from "./jobs/event";
 export type { RegisteredJob } from "./jobs/event";
 export {

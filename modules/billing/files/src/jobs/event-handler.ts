@@ -21,11 +21,19 @@ type WireDate = string | Date | null | undefined;
 
 interface WireSubscription extends Omit<
   SubscriptionInput,
-  "cancelAt" | "canceledAt" | "endedAt" | "trialEnd" | "trialStart"
+  | "cancelAt"
+  | "canceledAt"
+  | "endedAt"
+  | "periodEnd"
+  | "periodStart"
+  | "trialEnd"
+  | "trialStart"
 > {
   cancelAt?: WireDate;
   canceledAt?: WireDate;
   endedAt?: WireDate;
+  periodEnd?: WireDate;
+  periodStart?: WireDate;
   trialEnd?: WireDate;
   trialStart?: WireDate;
 }
@@ -95,6 +103,8 @@ export function reviveEvent(payload: BillingEventPayload): BillingEvent {
             cancelAt: date(subscription.cancelAt) ?? null,
             canceledAt: date(subscription.canceledAt) ?? null,
             endedAt: date(subscription.endedAt) ?? null,
+            periodEnd: date(subscription.periodEnd) ?? null,
+            periodStart: date(subscription.periodStart) ?? null,
             trialEnd: date(subscription.trialEnd) ?? null,
             trialStart: date(subscription.trialStart) ?? null,
           },

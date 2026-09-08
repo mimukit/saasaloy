@@ -134,6 +134,16 @@ export interface SubscriptionInput {
   endedAt?: Date | null;
   trialStart?: Date | null;
   trialEnd?: Date | null;
+  /** Start of the interval currently paid for. */
+  periodStart?: Date | null;
+  /** End of it — the renewal date, and what the admin page shows beside the status. */
+  periodEnd?: Date | null;
+  /**
+   * Which interval the subject is paying on, in the vendor's own words ("month",
+   * "year"). Kept raw rather than mapped onto `PlanInterval`: it is a fact about the
+   * vendor's record, and `plan` already carries the entitlement-bearing half.
+   */
+  billingInterval?: string | null;
   /** The provider's raw status and anything else it wants to keep, verbatim. */
   metadata?: Record<string, unknown> | null;
 }
@@ -231,10 +241,19 @@ export interface ChangePlanInput {
 
 export interface SubjectInput {
   subject: BillableSubject;
+  /**
+   * The subject's live row, when there is one, as the route already read it.
+   *
+   * Supplied because a contract method gets no database — the projection has one writer
+   * and it is the event path (ADR 0034) — and `cancel` and `restore` carry no plan of
+   * their own. A vendor-backed provider ignores this: its own webhook returns the whole
+   * record. A local provider has no webhook, so without it the event it mints would have
+   * to guess the plan it is cancelling and would overwrite the row with the guess.
+   */
+  current?: Subscription;
 }
 
-export interface QuantityInput {
-  subject: BillableSubject;
+export interface QuantityInput extends SubjectInput {
   seats: number;
 }
 

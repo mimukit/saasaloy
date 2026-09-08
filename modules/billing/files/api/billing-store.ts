@@ -6,9 +6,16 @@ import type {
   SubscriptionInput,
   SubscriptionPatch,
 } from "@repo/billing";
-import { setBillingStoreResolver } from "@repo/billing";
+import {
+  BILLING_EVENT_JOB,
+  setBillingEnqueuer,
+  setBillingStoreResolver,
+} from "@repo/billing";
 import type { Db } from "@repo/db/client";
 import { billingEvent, billingSubscription } from "@repo/db/schema/billing";
+import { createQueue } from "@repo/queue";
+import type { QueueEnv } from "@repo/queue";
+import { env } from "cloudflare:workers";
 import { and, desc, eq } from "drizzle-orm";
 import { AsyncLocalStorage } from "node:async_hooks";
 
@@ -40,6 +47,21 @@ const storeScope = new AsyncLocalStorage<BillingStore>();
 // `src/index.ts` imports that route, so both the fetch handler and the Worker's queue
 // consumer have the resolver in place before the first message arrives.
 setBillingStoreResolver(() => storeScope.getStore());
+
+// The other half of the same arrangement, for the other direction. A provider whose vendor
+// posts to its own webhook endpoint has no route to hand an event to, so it enqueues from
+// inside `packages/billing` — which cannot import `@repo/queue`, because `packages/queue`
+// imports it back to register the job. This file holds both packages, so it supplies the
+// enqueuer. See `packages/billing/src/enqueue.ts`.
+//
+// `env` is the importable Workers one rather than a request's `c.env`: a webhook reaches
+// the plugin's endpoint, not a billing route, so there is no Hono context in scope by then.
+setBillingEnqueuer(async (event) => {
+  await createQueue(env as unknown as QueueEnv).enqueue(
+    BILLING_EVENT_JOB,
+    event
+  );
+});
 
 /**
  * Run `body` with `store` in scope.

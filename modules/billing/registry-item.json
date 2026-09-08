@@ -9,7 +9,7 @@
     "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset."
   },
   "removeWarnings": [
-    "The deployed billing_subscription and billing_event tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
   ],
   "patches": [
@@ -69,6 +69,13 @@
       "constName": "NAV_ITEMS",
       "key": "to",
       "entry": { "to": "/billing", "label": "Billing" }
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "user",
+      "column": "billingCustomerId",
+      "value": "text(\"billing_customer_id\")"
     }
   ],
   "files": [
@@ -93,16 +100,6 @@
       "path": "files/db/schema/billing.pg.ts",
       "target": "@db/schema/billing.ts",
       "onlyWith": "database-postgres"
-    },
-    {
-      "path": "files/db/schema/user-billing.sqlite.ts",
-      "target": "@db/schema/user-billing.ts",
-      "onlyWith": "database-d1"
-    },
-    {
-      "path": "files/db/schema/user-billing.pg.ts",
-      "target": "@db/schema/user-billing.ts",
-      "onlyWith": "database-postgres"
     }
   ],
   "scaffolds": [
@@ -122,6 +119,7 @@
           "target": "src/subscription.ts"
         },
         { "path": "files/src/store.ts", "target": "src/store.ts" },
+        { "path": "files/src/enqueue.ts", "target": "src/enqueue.ts" },
         { "path": "files/src/jobs/event.ts", "target": "src/jobs/event.ts" },
         {
           "path": "files/src/jobs/event-handler.ts",

@@ -181,8 +181,14 @@ export const billingRoute = new Hono<{
   // Cancel at period end. The row stays live until the vendor says otherwise, which is why
   // nothing here writes the table: the `subscription.changed` event does.
   .post("/cancel", (c) =>
-    guard(c, async ({ client, host, subject }) => {
-      const result = await client.cancel(host, { subject });
+    guard(c, async ({ client, host, store, subject }) => {
+      // Read first, so a provider with no webhook of its own can mint an event against the
+      // row that is actually there rather than against a guess. `stripeBilling` ignores it.
+      const current = await currentSubscription(store, subject);
+      const result = await client.cancel(host, {
+        subject,
+        ...(current === undefined ? {} : { current }),
+      });
       await enqueue(c, result?.event);
 
       return c.json({ url: result?.url ?? null }, 200);
@@ -191,8 +197,12 @@ export const billingRoute = new Hono<{
 
   // Undo a pending cancellation.
   .post("/restore", (c) =>
-    guard(c, async ({ client, host, subject }) => {
-      const result = await client.restore(host, { subject });
+    guard(c, async ({ client, host, store, subject }) => {
+      const current = await currentSubscription(store, subject);
+      const result = await client.restore(host, {
+        subject,
+        ...(current === undefined ? {} : { current }),
+      });
       await enqueue(c, result?.event);
 
       return c.json({ url: result?.url ?? null }, 200);
@@ -228,8 +238,13 @@ export const billingRoute = new Hono<{
   // Invoices come from the vendor, not from a table here. The projection holds the
   // subscription state and nothing else, so there is no second copy to fall out of step.
   .get("/invoices", (c) =>
-    guard(c, async ({ client, host, subject }) => {
-      const invoices = await client.listInvoices(host, { subject });
+    guard(c, async ({ client, host, store, subject }) => {
+      // The vendor keys invoices by customer, and the row is where the customer id lives.
+      const current = await currentSubscription(store, subject);
+      const invoices = await client.listInvoices(host, {
+        subject,
+        ...(current === undefined ? {} : { current }),
+      });
 
       return c.json({ invoices }, 200);
     })

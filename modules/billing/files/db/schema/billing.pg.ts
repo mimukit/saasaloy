@@ -41,6 +41,11 @@ const timestamptz = (name: string) =>
 export const billingSubscription = pgTable(
   "billing_subscription",
   {
+    /**
+     * Which interval the subject is paying on — "month" or "year" as the vendor words it.
+     * Written by the provider, read by the admin page beside the price.
+     */
+    billingInterval: text("billing_interval"),
     /** Set when the vendor schedules the end, before it happens. */
     cancelAt: timestamptz("cancel_at"),
     cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
@@ -58,6 +63,10 @@ export const billingSubscription = pgTable(
     lockedAt: timestamptz("locked_at"),
     /** The provider's raw status and anything else it wants to keep, as JSON. */
     metadata: jsonb("metadata"),
+    /** End of the interval currently paid for — the renewal date the admin page shows. */
+    periodEnd: timestamptz("period_end"),
+    /** Start of the interval currently paid for. */
+    periodStart: timestamptz("period_start"),
     /** The plan id from `packages/billing/src/plans.ts`, not a vendor price id. */
     plan: text("plan").notNull(),
     providerCustomerId: text("provider_customer_id").notNull(),

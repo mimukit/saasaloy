@@ -114,6 +114,49 @@ Subscribe these events and no others:
 
 Locally, forward them with `stripe listen --forward-to localhost:4000/auth/stripe/webhook`.
 
+## The providers
+
+`BILLING_PROVIDER` selects one, always. Unset or unknown throws at construction, in both directions: a deploy that quietly stops taking payments and a test run that quietly charges a real card are both worse than a throw.
+
+| Provider | `BILLING_PROVIDER` | Needs | Auth plugin |
+|---|---|---|---|
+| `billing-stripe` | `stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe` 22.6.1 + `@better-auth/stripe` 1.7.3 | yes — mounts the endpoints and the webhook |
+| `billing-console` | `console` | nothing | no |
+
+**`billing-console` is how you develop.** It completes checkout, portal, change-plan, cancel and restore with no account and no network, by handing the route a `CheckoutResult.event` the route enqueues. With `queue-memory` installed the consumer runs inline, so the row is there by the time the route answers. Its ids are `console_sub_…` and `console_cus_…`, derived from the subject, so a `console_`-prefixed id in a production table is a loud signal that the wrong provider is selected.
+
+`cancel` and `restore` carry no plan of their own, so the route reads the live row and passes it as `SubjectInput.current`. `billing-stripe` ignores that field — its webhook carries the whole record — and `billing-console` throws `not_found` without it rather than inventing a plan and writing the invention over the real row.
+
+**A provider with its own webhook enqueues through `enqueueBillingEvent`**, not through `@repo/queue`. `packages/queue` imports `packages/billing` to register `billingEventJob()`, so an import back would be a cycle. `apps/api/src/billing-store.ts` calls `setBillingEnqueuer` at module load, the same arrangement `setBillingStoreResolver` uses for the database.
+
+## The Stripe field map, and what to re-check on a version bump
+
+`billing-stripe` maps `@better-auth/stripe`'s own model onto the core's vendor-blind columns through `schema.subscription`. `modelName` is `"billingSubscription"` — the **Drizzle export key**, not the SQL table name — and every value below is a Drizzle property, not a column name.
+
+Checked against `@better-auth/stripe` **1.7.3**. These are all sixteen fields that version declares for its `subscription` model, plus the one it declares on `user`:
+
+| Plugin field | Core column | Plugin field | Core column |
+|---|---|---|---|
+| `plan` | `plan` | `cancelAtPeriodEnd` | `cancelAtPeriodEnd` |
+| `referenceId` | `referenceId` | `cancelAt` | `cancelAt` |
+| `stripeCustomerId` | `providerCustomerId` | `canceledAt` | `canceledAt` |
+| `stripeSubscriptionId` | `providerSubscriptionId` | `endedAt` | `endedAt` |
+| `stripeScheduleId` | `providerScheduleId` | `seats` | `seats` |
+| `status` | `status` | `billingInterval` | `billingInterval` |
+| `periodStart` | `periodStart` | `trialStart` | `trialStart` |
+| `periodEnd` | `periodEnd` | `trialEnd` | `trialEnd` |
+| `user.stripeCustomerId` | `user.billingCustomerId` | | |
+
+Three consequences worth holding:
+
+- **The customer link is a real column on `user`.** `modules/billing` adds `user.billingCustomerId` with a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, because a Better Auth plugin writes the customer id onto the `user` model and cannot be pointed at another table. `saasaloy remove billing` takes the column back out of the schema file; the deployed column survives until you generate and apply the migration.
+- **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts` and `entitlements` reads them there.
+- **The plugin's plan `name` is this project's plan *id*.** It lower-cases `name` and stores it in the `plan` column, which is the string `findPlan(plans, …)` looks up. Keep plan ids lower-case.
+
+**On a `better-auth` or `@better-auth/stripe` bump:** open the new version's schema module and diff its `subscription` and `user` field lists against the table above. A field the plugin writes with no column behind it fails at the first webhook, not at `pnpm typecheck`.
+
+**Two known limits of the Stripe path.** A subscription created by hand in the Stripe dashboard has no `referenceId` in its metadata, so `onEvent` cannot address a subject and enqueues nothing — the plugin's own handler still writes the row, but the queued side effects are skipped. And `invoice.paid` / `invoice.payment_failed` carry no subscription state worth projecting, so they enqueue the fact and no row; Stripe sends a `customer.subscription.updated` alongside whenever the plan or the status actually moved.
+
 ## Statuses and the lockout
 
 Normalized statuses: `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`. A provider maps its own vocabulary onto these and keeps the raw value in `metadata`.
