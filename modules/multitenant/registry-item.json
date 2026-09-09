@@ -1,0 +1,75 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "multitenant",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api", "database", "auth", "teams"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "The deployed project table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "Every route written against requireTenant or forTenant stops compiling once packages/auth/src/tenant.ts and packages/db/src/tenant.ts are gone. Rewrite or delete those routes before you remove this module."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/tenant",
+      "call": "tenantRoute",
+      "import": { "name": "tenantRoute", "from": "./routes/tenant" }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/projects",
+      "call": "projects",
+      "import": { "name": "projects", "from": "./routes/projects" }
+    }
+  ],
+  "files": [
+    { "path": "files/db/tenant.ts", "target": "@db/tenant.ts" },
+    {
+      "path": "files/db/tenant-column.sqlite.ts",
+      "target": "@db/tenant-column.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/tenant-column.pg.ts",
+      "target": "@db/tenant-column.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/tenant.typecheck.ts",
+      "target": "@db/tenant.typecheck.ts"
+    },
+    {
+      "path": "files/db/schema/projects.sqlite.ts",
+      "target": "@db/schema/projects.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/projects.pg.ts",
+      "target": "@db/schema/projects.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/organization-roles.ts",
+      "target": "@db/repositories/organization-roles.ts"
+    },
+    {
+      "path": "files/db/repositories/projects.ts",
+      "target": "@db/repositories/projects.ts"
+    },
+    { "path": "files/auth/tenant-rules.ts", "target": "@auth/tenant-rules.ts" },
+    { "path": "files/auth/tenant.ts", "target": "@auth/tenant.ts" },
+    { "path": "files/api/routes/tenant.ts", "target": "@api/routes/tenant.ts" },
+    {
+      "path": "files/api/routes/projects.ts",
+      "target": "@api/routes/projects.ts"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-multitenant"]
+  }
+}

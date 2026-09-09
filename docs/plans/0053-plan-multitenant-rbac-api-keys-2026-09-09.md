@@ -75,7 +75,7 @@ Rejected alternatives, one line each:
 - [ ] The teams skill documents `access.ts` as the permission vocabulary, that the three base roles must stay in `roles`, that a custom role picks from `statements`, and that adding a resource is an edit to this file.
 - [ ] `saasaloy add teams` in `.dev` typechecks on both drivers; `saasaloy remove teams` reverses both patches with the new call name.
 
-### Phase 2: `multitenant`
+### Phase 2: `multitenant` (#128) (built 2026-09-09)
 
 - [ ] `modules/multitenant/registry-item.json`: `saasaloy:feature`, `dependsOn: ["api", "database", "auth", "teams"]`, no npm dependency, two `chained-route` patches (`/tenant`, `/projects`), `removeWarnings` naming `project` and the compile break.
 - [ ] `files/db/tenant.ts` → `@db/tenant.ts`: `TenantId`, `asTenantId(value)` (documented as `requireTenant`'s to call), `TenantTable`, and `forTenant(db, tenantId)` over `Db` from `./client`.
