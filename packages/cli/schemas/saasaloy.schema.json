@@ -23,6 +23,11 @@
         "description": "Project-relative path prefix (POSIX separators, no leading slash)."
       }
     },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z0-9][a-z0-9-]*$",
+      "description": "The project's name, written once by `saasaloy init`. It is the `{{PROJECT_NAME}}` the base template was rendered with, so `update` re-renders with the same value rather than deriving one from the directory name. Absent in a project scaffolded before this field existed; the tool then falls back to the root package.json `name`."
+    },
     "base": {
       "type": "string",
       "pattern": "^[a-z0-9][a-z0-9-]*$",

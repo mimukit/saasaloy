@@ -13,6 +13,8 @@ import {
   isBaseTracked,
   listTemplateFiles,
   missingBaseTargets,
+  compileGlob,
+  ownedMatcher,
   readBaseDeclaration,
   recordBaseFiles,
   templateHash,
@@ -61,12 +63,14 @@ describe(readBaseDeclaration, () => {
 
     await expect(readBaseDeclaration(template)).resolves.toStrictEqual({
       seedFiles: ["README.md"],
+      ownedFiles: [],
     });
   });
 
   it("treats a template with no declaration as one with no seed files", async () => {
     await expect(readBaseDeclaration(template)).resolves.toStrictEqual({
       seedFiles: [],
+      ownedFiles: [],
     });
   });
 
@@ -210,6 +214,7 @@ describe(adoptBase, () => {
     const result = await adoptBase({
       root,
       cliVersion: "0.0.0",
+      projectName: basename(root),
       manifest,
       lock,
       templateDir: template,
@@ -219,6 +224,8 @@ describe(adoptBase, () => {
     expect(manifest.managed["a.txt"]).toStrictEqual({
       module: BASE_MODULE,
       hash: hashContent("edited by the owner\n"),
+      // The hash came off disk, so the next update must not read it as template output.
+      adopted: true,
       from: "a.txt",
     });
     expect(lock.base).toStrictEqual(
@@ -233,6 +240,7 @@ describe(adoptBase, () => {
     const result = await adoptBase({
       root,
       cliVersion: "0.0.0",
+      projectName: basename(root),
       manifest,
       lock: emptyLock(),
       templateDir: template,
@@ -253,6 +261,7 @@ describe(adoptBase, () => {
     await adoptBase({
       root,
       cliVersion: "0.0.0",
+      projectName: basename(root),
       manifest,
       lock: emptyLock(),
       templateDir: template,
@@ -268,6 +277,7 @@ describe(adoptBase, () => {
     await adoptBase({
       root,
       cliVersion: "0.0.0",
+      projectName: basename(root),
       manifest: emptyManifest(),
       lock: emptyLock(),
       templateDir: template,
@@ -281,6 +291,7 @@ describe(adoptBase, () => {
     await adoptBase({
       root,
       cliVersion: "0.0.0",
+      projectName: basename(root),
       manifest: emptyManifest(),
       lock: emptyLock(),
       templateDir: template,
@@ -315,6 +326,51 @@ describe("the shipped declaration", () => {
     await expect(
       readFile(join(dir, BASE_DECLARATION), "utf-8")
     ).resolves.toContain("seedFiles");
+  });
+
+  // #144: the template's own AGENTS.md says the project owns its blocks, components and
+  // globals.css. Until `ownedFiles` shipped, nothing enforced it and `update` overwrote
+  // every one of them.
+  it("claims the files AGENTS.md tells the owner to edit", async () => {
+    const dir = await baseTemplateDir();
+    const isOwned = ownedMatcher(await readBaseDeclaration(dir));
+    const shipped = (await listTemplateFiles(dir)).map((f) => f.target);
+
+    for (const target of [
+      "packages/ui/src/styles/globals.css",
+      "packages/ui/src/blocks/hero.tsx",
+      "packages/ui/src/components/badge.tsx",
+      "packages/ui/src/index.ts",
+      "apps/web/src/layouts/Layout.astro",
+      "apps/web/public/favicon.svg",
+    ]) {
+      expect(shipped, `${target} is claimed but not shipped`).toContain(target);
+      expect(isOwned(target), `${target} should be owned`).toBeTruthy();
+    }
+    for (const target of [
+      "package.json",
+      "AGENTS.md",
+      "apps/web/wrangler.jsonc",
+    ]) {
+      expect(
+        isOwned(target),
+        `${target} should stay template-owned`
+      ).toBeFalsy();
+    }
+  });
+});
+
+describe(compileGlob, () => {
+  it.each([
+    ["packages/ui/src/blocks/**", "packages/ui/src/blocks/hero.tsx", true],
+    ["packages/ui/src/blocks/**", "packages/ui/src/blocks/deep/x.tsx", true],
+    ["packages/ui/src/blocks/**", "packages/ui/src/lib/x.ts", false],
+    ["apps/web/public/favicon.*", "apps/web/public/favicon.ico", true],
+    ["apps/web/public/favicon.*", "apps/web/public/logo.svg", false],
+    ["packages/ui/src/index.ts", "packages/ui/src/index.ts", true],
+    ["packages/ui/src/index.ts", "packages/ui/src/index.tsx", false],
+  ])("matches %s against %s", (pattern, target, expected) => {
+    expect(compileGlob(pattern).test(target)).toBe(expected);
   });
 });
 
@@ -477,6 +533,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       lock: state.lock,
       templateDir: next,
       cliVersion: CLI,
+      projectName: basename(root),
       comparison: compareBase({
         ...state,
         runningHash: await templateHash(next),
@@ -580,6 +637,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
     const adoption = await adoptBase({
       root,
       cliVersion: CLI,
+      projectName: basename(root),
       manifest,
       lock,
       templateDir: template,
@@ -600,6 +658,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       ...state,
       templateDir: template,
       cliVersion: CLI,
+      projectName: basename(root),
       comparison,
     });
     const config = { aliases: {}, installed: [] };
@@ -747,6 +806,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       lock: state.lock,
       templateDir: next,
       cliVersion: CLI,
+      projectName: basename(root),
       comparison: compareBase({
         ...state,
         runningHash: await templateHash(next),

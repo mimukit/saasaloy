@@ -5,5 +5,15 @@
     "saasaloy.json",
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts"
+  ],
+  "ownedFiles": [
+    "packages/ui/src/styles/globals.css",
+    "packages/ui/src/blocks/**",
+    "packages/ui/src/components/**",
+    "packages/ui/src/containers/**",
+    "packages/ui/src/content/**",
+    "packages/ui/src/index.ts",
+    "apps/web/src/layouts/Layout.astro",
+    "apps/web/public/favicon.*"
   ]
 }

@@ -30,3 +30,6 @@ pnpm-debug.log*
 
 # Turborepo task cache
 .turbo
+
+# Pre-update copies written by `saasaloy update`, restored by `saasaloy update --abort`.
+.saasaloy/backups/

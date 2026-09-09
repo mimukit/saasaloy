@@ -29,6 +29,10 @@
             "pattern": "^[a-f0-9]{64}$",
             "description": "sha256 hex digest of the file's content as written."
           },
+          "adopted": {
+            "type": "boolean",
+            "description": "True when the hash is of bytes the tool found on disk rather than bytes it wrote — `saasaloy update` adopting a project that had no base record. Those bytes may carry hand edits, so `update` routes an adopted file to the merge plan instead of overwriting it. Cleared the first time the tool writes the file itself."
+          },
           "from": {
             "type": "string",
             "minLength": 1,

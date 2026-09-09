@@ -385,6 +385,10 @@ export interface PlannedUpdateFile {
   mine?: string;
   /** sha256 of `theirs` — what the manifest records once written. */
   newHash?: string;
+  /** The template hands this file over on first write; it is the project's afterwards. */
+  projectOwned?: boolean;
+  /** The manifest hash was adopted off disk, so it does not prove the file is untouched. */
+  adopted?: boolean;
   /**
    * Modules whose config patches also wrote to this file. A patched file's manifest
    * hash is deliberately not re-recorded (the patch belongs to another module, see
@@ -498,6 +502,14 @@ export interface ModuleUpdateInput {
    * longer ships them.
    */
   ignoreTargets?: ReadonlySet<string>;
+  /**
+   * Whether a target is source the project owns once it has been written — the base's
+   * blocks, components, `globals.css` and favicon (`ownedFiles` in `_saasaloy-base.json`).
+   * An owned file that is absent is still created or restored, because a project that
+   * never had it is not a project that edited it. An owned file that exists is never
+   * written: it goes to the merge plan whatever its hash says.
+   */
+  isOwned?: (target: string) => boolean;
   /**
    * Recorded patches other modules applied to files `theirs` ships, re-applied after an
    * overwrite through the same idempotent loop as the module's own (#120). A patch whose
@@ -667,11 +679,14 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     const owned = managed?.module === name ? managed : undefined;
     const mine = await readIfPresent(targetAbs);
 
+    const projectOwned = input.isOwned?.(ref.target) ?? false;
     const action = classifyUpdate(
       baseContent,
       theirsContent,
       mine,
-      owned?.hash
+      owned?.hash,
+      owned?.adopted ?? false,
+      projectOwned
     );
     const patchedBy = patchersOf(manifest, ref.target);
     files.push({
@@ -680,6 +695,8 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       target: ref.target,
       targetAbs,
       action,
+      ...(projectOwned ? { projectOwned: true } : {}),
+      ...(owned?.adopted ? { adopted: true } : {}),
       base: baseContent,
       theirs: theirsContent,
       mine,
@@ -703,12 +720,19 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     const targetAbs = resolveWithinRoot(root, target);
     const mine = await readIfPresent(targetAbs);
     const baseRef = baseFiles?.get(target);
+    // An adopted or project-owned file that is still on disk is never deleted for the
+    // same reason it is never overwritten: nothing here knows whose bytes those are.
+    const keep =
+      mine !== undefined &&
+      ((entry.adopted ?? false) || (input.isOwned?.(target) ?? false));
     removals.push({
       module: name,
       from: entry.from ?? baseRef?.from ?? target,
       target,
       targetAbs,
-      action: DELETE_ACTION[classifyTrackedFile(mine, entry.hash)],
+      action: keep
+        ? "delete-drift"
+        : DELETE_ACTION[classifyTrackedFile(mine, entry.hash)],
       base: baseRef ? await readFile(baseRef.abs, "utf-8") : undefined,
       mine,
     });
@@ -883,12 +907,20 @@ function newEnvVars(
  * The three-way verdict for one file. `base === theirs` short-circuits everything: the
  * module didn't touch this file, so whatever the user did to it is none of our business
  * (the rule that keeps `update` from re-proposing every hand-edit forever).
+ *
+ * Two rules stand between a recorded hash and a write. `adopted` says the hash came off
+ * disk rather than out of a render, so it proves nothing about who wrote those bytes.
+ * `projectOwned` says the template hands this file over once and never comes back for it.
+ * Either one sends an existing file to the merge plan; neither blocks creating or
+ * restoring a file that is not there, since an absent file carries no work to lose.
  */
 function classifyUpdate(
   base: string | undefined,
   theirs: string,
   mine: string | undefined,
-  managedHash: string | undefined
+  managedHash: string | undefined,
+  adopted: boolean,
+  projectOwned: boolean
 ): UpdateFileAction {
   if (base !== undefined && base === theirs) {
     return "skip";
@@ -901,6 +933,9 @@ function classifyUpdate(
   }
   if (managedHash === undefined) {
     return "conflict";
+  }
+  if (adopted || projectOwned) {
+    return "drift";
   }
   return hashContent(mine) === managedHash ? "overwrite" : "drift";
 }

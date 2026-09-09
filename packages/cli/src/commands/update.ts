@@ -23,15 +23,19 @@ import {
   missingBaseTargets,
   templateHash,
 } from "../lib/base.js";
+import { restoreLatestBackup, writeBackup } from "../lib/backup.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
 import {
   EXIT_FAILURE,
+  EXIT_MERGE_PENDING,
   EXIT_OK,
   EXIT_REFUSED,
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
+import { workingTreeState } from "../lib/git-state.js";
+import { resolveProjectName } from "../lib/project-name.js";
 import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
@@ -96,6 +100,10 @@ interface Options {
   dryRun: boolean;
   diff: boolean;
   yes: boolean;
+  /** `--force`: apply even though the git working tree has uncommitted changes. */
+  force: boolean;
+  /** `--abort`: restore the newest pre-update backup and exit. */
+  abort: boolean;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -105,12 +113,14 @@ const KNOWN_FLAGS = new Set([
   "--diff",
   "--yes",
   "-y",
+  "--force",
+  "--abort",
   "--help",
   "-h",
 ]);
 const VALUE_FLAGS = new Set(["--ref", "--out"]);
 const USAGE =
-  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]";
+  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort";
 const HELP: CommandHelp = {
   name: "update",
   describe: DESCRIPTIONS.update,
@@ -121,6 +131,8 @@ const HELP: CommandHelp = {
     "--out <path>": "write the merge plan to a file instead of stdout",
     "--dry-run": "show the plan and write nothing",
     "--diff": "show a per-file diff and write nothing",
+    "--force": "apply even with uncommitted changes in the working tree",
+    "--abort": "restore the files the last update replaced, then stop",
     "-y, --yes": "skip the confirmation prompt",
   },
 };
@@ -167,6 +179,8 @@ function parseArgs(argv: string[]): Options {
     dryRun: argv.includes("--dry-run"),
     diff: argv.includes("--diff"),
     yes: argv.includes("--yes") || argv.includes("-y"),
+    force: argv.includes("--force"),
+    abort: argv.includes("--abort"),
     unknown,
   };
 }
@@ -412,6 +426,26 @@ async function emitMergePlan(
   log.success(`Merge plan written to ${pc.cyan(out)}`, TUI_ON_STDERR);
 }
 
+/**
+ * Every project-relative path the plan may write or delete — what the backup copies. A
+ * file the plan will create has nothing to copy; `writeBackup` records it as absent so
+ * `--abort` deletes it again.
+ */
+function backupTargets(plan: UpdatePlan): string[] {
+  const targets = new Set<string>();
+  for (const mod of plan.modules) {
+    for (const file of [...mod.files, ...mod.removals]) {
+      if (!QUIET.has(file.action) && file.action !== "skip") {
+        targets.add(file.target);
+      }
+    }
+    for (const patch of mod.patches) {
+      targets.add(patch.file);
+    }
+  }
+  return [...targets].toSorted();
+}
+
 /** `owner/repo` → the two halves, or undefined when the lock's source isn't a remote slug. */
 function splitSlug(slug: string): [string, string] | undefined {
   const [owner, repo, ...rest] = slug.split("/");
@@ -458,6 +492,33 @@ export async function runUpdate(argv: string[]): Promise<number> {
     return exitCodeFor(error);
   }
 
+  // `--abort` is the whole command when it is given: it reads no registry, builds no
+  // plan, and only puts back what the last run replaced.
+  if (opts.abort) {
+    try {
+      const restored = await restoreLatestBackup(root);
+      for (const target of restored.restored) {
+        log.step(`${pc.green("restore")}  ${target}`, TUI_ON_STDERR);
+      }
+      for (const target of restored.removed) {
+        log.step(
+          `${pc.red("remove")}  ${target} ${pc.dim("(the update created it)")}`,
+          TUI_ON_STDERR
+        );
+      }
+      outro(
+        pc.green(
+          `Restored ${restored.restored.length} file${restored.restored.length === 1 ? "" : "s"} from ${restored.from}.`
+        ),
+        TUI_ON_STDERR
+      );
+      return EXIT_OK;
+    } catch (error) {
+      cancel(formatFailure(error), TUI_ON_STDERR);
+      return exitCodeFor(error);
+    }
+  }
+
   const outRefusal = await stateFileRefusal(root, opts.out);
   if (outRefusal) {
     cancel(outRefusal, TUI_ON_STDERR);
@@ -472,6 +533,19 @@ export async function runUpdate(argv: string[]): Promise<number> {
   // never be answered, so refuse and name the two ways forward. A preview writes nothing,
   // so it is exempt.
   const preview = opts.dryRun || opts.diff;
+
+  // Uncommitted work plus an update that writes files leaves nothing to compare the
+  // result against. A preview writes nothing, so it is exempt; `--force` says the user
+  // has read this and means it.
+  if (!preview && !opts.force && (await workingTreeState(root)) === "dirty") {
+    cancel(
+      "The working tree has uncommitted changes. Commit or stash them first, so `git diff` " +
+        "shows what this update did — or re-run with `--force`. Nothing was written.",
+      TUI_ON_STDERR
+    );
+    return EXIT_REFUSED;
+  }
+
   if (!opts.yes && !preview && !process.stdin.isTTY) {
     cancel(
       "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview.",
@@ -517,12 +591,23 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // then compare the recorded template hash against the one this CLI ships.
     let baseComparison: ModuleComparison | undefined;
     let templateDir: string | undefined;
+    // The name every `{{PROJECT_NAME}}` in the template renders to. Read from the project,
+    // never from the directory: a worktree or a CI checkout path is not a rename (#144).
+    const project = await resolveProjectName(root, config);
     if (wantsBase) {
       templateDir = await baseTemplateDir();
+      if (project.source === "directory") {
+        log.warn(
+          `No \`name\` in ${CONFIG_FILE} and no root package.json name — falling back to the directory ` +
+            `name ${pc.cyan(project.name)}. Set \`name\` in ${CONFIG_FILE} if that isn't this project's name.`,
+          TUI_ON_STDERR
+        );
+      }
       if (!isBaseTracked(lock, manifest)) {
         const adoption = await adoptBase({
           root,
           cliVersion,
+          projectName: project.name,
           manifest,
           lock,
           templateDir,
@@ -531,7 +616,8 @@ export async function runUpdate(argv: string[]): Promise<number> {
         const count = adoption.adopted.length;
         const lines = [
           `${preview ? "Would adopt" : "Adopted"} ${count} base file${count === 1 ? "" : "s"} at CLI ${pc.cyan(cliVersion)}, ` +
-            `each at the hash it has on disk — your edits are the baseline, not drift.`,
+            `each at the hash it has on disk. Those bytes may be yours, so the next update treats ` +
+            `every one of them as edited and offers a merge rather than a write.`,
         ];
         if (adoption.absent.length > 0) {
           lines.push(
@@ -686,6 +772,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
         lock,
         templateDir,
         cliVersion,
+        projectName: project.name,
         comparison: baseComparison,
       });
       cleanups.push(handle.cleanup);
@@ -910,6 +997,18 @@ export async function runUpdate(argv: string[]): Promise<number> {
       }
     }
 
+    // Copy everything the plan will touch, plus the state files, before a byte moves.
+    // `saasaloy update --abort` puts this back — the undo this command shipped without.
+    const backupDir = await writeBackup({
+      root,
+      targets: backupTargets(plan),
+      cliVersion,
+    });
+    log.info(
+      `Pre-update copies in ${pc.cyan(backupDir)} ${pc.dim("— `saasaloy update --abort` restores them")}`,
+      TUI_ON_STDERR
+    );
+
     // Capture the outcome rather than letting it throw, so the ledger writes below
     // still run on the failure path and the original error still wins afterwards.
     const outcome = await executeUpdatePlan(plan, {
@@ -962,10 +1061,12 @@ export async function runUpdate(argv: string[]): Promise<number> {
       );
     }
 
-    // Drift routing to a merge plan is the designed outcome, not a failure — exit 0
-    // whether or not anything was left for the agent to reconcile.
+    // Drift routing to a merge plan is the designed outcome, not a failure — but the run
+    // is unfinished, and a CI job that reads only the exit code has to be able to see
+    // that. 3 says "applied what it could, files are waiting on a merge"; 0 still means
+    // there is nothing left to do.
     outro(summarizeOutcome(plan, result), TUI_ON_STDERR);
-    return EXIT_OK;
+    return plan.needsMerge ? EXIT_MERGE_PENDING : EXIT_OK;
   } catch (error) {
     cancel(formatFailure(error), TUI_ON_STDERR);
     return exitCodeFor(error);

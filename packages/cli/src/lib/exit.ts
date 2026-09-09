@@ -7,13 +7,16 @@
 //   1 — something failed or the user cancelled: a fetch died, a write threw, Ctrl-C.
 //   2 — saasaloy refused by design: bad usage, a module conflict, an unmet requirement,
 //       an invalid manifest, or a prompt with no terminal to answer it in.
+//   3 — `update` applied what it could and left files for a human or an agent to merge.
+//       Everything it wrote is on disk; the run is unfinished, not failed.
 //
 // A wrapper script reads 2 as "the input is wrong, do not retry" and 1 as "transient,
-// a retry may work". Nothing else may take on a third meaning; add a code here first.
+// a retry may work". Nothing else may take on a fourth meaning; add a code here first.
 
 export const EXIT_OK = 0;
 export const EXIT_FAILURE = 1;
 export const EXIT_REFUSED = 2;
+export const EXIT_MERGE_PENDING = 3;
 
 /**
  * A failure saasaloy chose, thrown from a library that has no exit code to return.

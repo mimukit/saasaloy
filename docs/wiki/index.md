@@ -28,6 +28,8 @@ You want a project scaffolded and features installed into it.
 - [Remove a module](how-to/remove-a-module.md) — take one back out, and what stays behind.
 - [Deploy to Cloudflare](how-to/deploy-to-cloudflare.md) — ship each workspace, and the two
   placeholders that bite on a first remote deploy.
+- [`saasaloy update` overwrote work you own](runbooks/update-overwrote-my-work.md) — the
+  0.1.x overwrite bug: what it hit, how to get the files back, and what changed.
 
 ## Build a module
 

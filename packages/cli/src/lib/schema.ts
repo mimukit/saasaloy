@@ -107,6 +107,15 @@ function formatError(err: ErrorObject): string {
 export interface SaasaloyConfig {
   aliases: Record<string, string>;
   /**
+   * The project's own name, written once by `saasaloy init` and never rewritten. It is the
+   * `{{PROJECT_NAME}}` every base file was rendered with, so `update` re-renders the
+   * template with the same value instead of guessing from the directory — a git worktree,
+   * a renamed folder or a CI checkout path used to rewrite `package.json` `name`,
+   * `wrangler.jsonc` `name` and `siteName` to the folder's name. Optional so a project
+   * scaffolded before the field existed still validates; `resolveProjectName` falls back.
+   */
+  name?: string;
+  /**
    * The base app `saasaloy init` scaffolded (`web`). It is not a module: it has no
    * descriptor and is never in `installed`. Its files record under the reserved manifest
    * module name `base`, and the lock's `base` object carries its provenance (#120). Until #98
