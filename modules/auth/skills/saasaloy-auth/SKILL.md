@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first admin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first superadmin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -80,7 +80,7 @@ switched to Postgres. The cost on D1 is one property lookup per call. See ADR 00
 ```ts
 export const auth = betterAuth({
   // ...
-  plugins: [admin()],
+  plugins: [admin({ adminRoles: [...ADMIN_ROLES] })],
 });
 ```
 
@@ -185,11 +185,11 @@ export const widgets = new Hono<{ Bindings: AuthDbBindings }>().get("/", async (
 
 There is no `if` and no error body in that route, and that is the point. The gates throw a Hono `HTTPException`, `apps/api`'s `onError` catches it, and `ERROR_CODES` renders it as the one envelope the api publishes: `{ "error": { "code": "forbidden", "message": "role required: admin" } }` on a 403, `"unauthorized"` on a 401. Write the check by hand and you own that shape yourself, in every route, forever.
 
-Each gate returns the session, so the caller reads `session.user.id` without a second round trip. `requireRole` takes any string, so a `support` role later costs a call site rather than a rewrite. `requireAdmin` compares with `===` against the exported `ADMIN_ROLE`, which is the same constant `admin()` treats as privileged. `"Admin"` and `"administrator"` are not admins.
+Each gate returns the session, so the caller reads `session.user.id` without a second round trip. `requireRole` takes any string, so a `support` role later costs a call site rather than a rewrite; it also takes an array to demand any one of several roles. `requireAdmin` uses that form against the exported `ADMIN_ROLES`, so `admin` and `superadmin` both pass, and `requireSuperadmin` demands `superadmin` exactly. Every comparison is `===`, so `"Admin"` and `"administrator"` are not admins.
 
 `AuthDbBindings` is whichever binding shape the installed driver declares, so this route is one file under both drivers.
 
-**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `auth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-admin hook writes `"admin"`, and `client.admin.setRole({ userId, role: "admin" })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
+**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `auth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `client.admin.setRole({ userId, role: "admin" })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
 
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
@@ -206,13 +206,17 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 **The gate is the api's, not the browser's.** `apps/admin` also refuses a non-admin, in `beforeLoad`. That guard stops the SPA from asking; it cannot stop `curl`. A route that skips `requireAdmin` because the admin app already checks is open to anyone holding any session cookie.
 
-## Roles and the first admin
+## Roles and the first user
 
-Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), and treats `"admin"` as the privileged role. `apps/admin`'s guard reads exactly one thing:
+Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), and treats the roles in `adminRoles` as privileged.
+
+There are two site roles, and they are not interchangeable. `admin` runs `apps/admin`. `superadmin` does everything `admin` does and is the only role that may act inside an organization it does not belong to, through the `x-organization-id` header the `multitenant` module reads. Inside an organization an `admin` is an ordinary member: the site role grants nothing on a tenant route, which asks `requireTenant` and reads the caller's membership instead.
+
+`adminRoles` names both, so the plugin's own endpoints admit a `superadmin` as well as an `admin`. Leaving it at the default `["admin"]` would let `requireAdmin` pass a caller the plugin then refused. `apps/admin`'s guard reads the same pair:
 
 ```ts
 const { data } = await client.getSession();
-if (data?.user.role !== "admin") { /* denied */ }
+if (!ADMIN_ROLES.some((role) => data?.user.role === role)) { /* denied */ }
 ```
 
 `role` is typed on the client because `packages/auth/src/client.ts` pairs `adminClient()` with
@@ -221,14 +225,14 @@ being an unchecked cast.
 
 ### First user wins
 
-The first account to sign up on an empty `user` table gets `role: "admin"`. A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL.
+The first account to sign up on an empty `user` table gets `role: "superadmin"`. A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL. It writes `superadmin` rather than `admin` because the first account has to be able to grant every other one, and only `superadmin` crosses an organization boundary.
 
-**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the admin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from user`. Two sign-ups that land at the same instant both read an empty table and both become admin; that is accepted rather than locked, because a unique index on `role = 'admin'` would also block promoting a second admin later.
+**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the superadmin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from user`. Two sign-ups that land at the same instant both read an empty table and both become superadmin; that is accepted rather than locked, because a unique index on `role = 'superadmin'` would also block a deliberate second one later.
 
 If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against. The statement is the same under both drivers:
 
 ```sql
-update "user" set role = 'admin' where email = 'you@example.com';
+update "user" set role = 'superadmin' where email = 'you@example.com';
 ```
 
 **How you run it is the driver's business**, so read the skill for the driver this project
@@ -240,11 +244,11 @@ The change takes effect on the next `getSession` call, because sessions are DB-b
 is read off the user row — no re-login needed, and `cookieCache` is off (see the last boundary
 below).
 
-Once one admin exists, promote the rest through the API instead of SQL: `client.admin.setRole({
-userId, role: "admin" })`, which the server authorizes against the caller's own role. The plugin
+Once one superadmin exists, promote the rest through the API instead of SQL: `client.admin.setRole({
+userId, role: "admin" })`, which the server authorizes against the caller's own role. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that may cross an organization boundary. The plugin
 also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same namespace.
 
-**A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is not `"admin"`, so the guard denies them until you promote one.
+**A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is neither site role, so the guard denies them until you promote one.
 
 **`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`); 1.7.3 took both back out, so the pinned snapshot no longer carries them and (`providerId`, `accountId`) is the row's identity again. A project that never applied the 1.7.2 migration needs nothing here. A project that already applied it gets the reverse from `db:generate`:
 

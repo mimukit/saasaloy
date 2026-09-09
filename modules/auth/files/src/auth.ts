@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { user as userTable } from "@repo/db/schema/auth";
-import { ADMIN_ROLE } from "./authorize";
+import { ADMIN_ROLES, SUPERADMIN_ROLE } from "./authorize";
 import { authDb, provider } from "./db-provider";
 import { deriveCookieDomain, requireAuthSecret } from "./env";
 import type { AuthEnv } from "./env";
@@ -80,22 +80,26 @@ export const auth = betterAuth({
     requireEmailVerification: false, // needs the `email` capability; auth deliberately doesn't depend on it
   },
   database: drizzleAdapter(authDb, { provider }),
-  // First user wins. This is the ONLY automatic role promotion in the system, and it
-  // fires at most once per project: the hook reads the `user` table before the row is
-  // written, so it can only match on the very first sign-up. Without it a fresh
-  // `saasaloy add admin` scaffolds an admin app that denies every account, and the only
-  // way in is the `update user set role` SQL in the auth skill.
+  // First user wins, and it wins `superadmin`. This is the ONLY automatic role promotion
+  // in the system, and it fires at most once per project: the hook reads the `user` table
+  // before the row is written, so it can only match on the very first sign-up. Without it
+  // a fresh `saasaloy add admin` scaffolds an admin app that denies every account, and the
+  // only way in is the `update user set role` SQL in the auth skill.
+  //
+  // `superadmin` rather than `admin` because the first account has to be able to grant the
+  // rest, and `superadmin` is the only role that crosses an organization boundary. A later
+  // `admin` is granted through `client.admin.setRole`.
   //
   // WARNING — sign-up is open. Any account that reaches /signup before you do becomes
-  // the admin, and on a deployed api with a public origin that window is real. Sign up
-  // yourself as soon as the api answers, and check with
+  // the superadmin, and on a deployed api with a public origin that window is real. Sign
+  // up yourself as soon as the api answers, and check with
   // `select email, role from user`. The auth skill carries the recovery SQL for when
   // somebody else got there first, and `client.admin.setRole` promotes the rest once one
-  // admin exists.
+  // superadmin exists.
   //
   // Two first sign-ups that land at the same instant both read an empty table and both
-  // become admin. That is accepted, not engineered away: a unique index on
-  // `role = 'admin'` would also block the legitimate promotion of a second admin.
+  // become superadmin. That is accepted, not engineered away: a unique index on
+  // `role = 'superadmin'` would also block a deliberate second one.
   databaseHooks: {
     user: {
       create: {
@@ -107,7 +111,7 @@ export const auth = betterAuth({
           if (!(await noUsersYet())) {
             return;
           }
-          return { data: { ...newUser, role: ADMIN_ROLE } };
+          return { data: { ...newUser, role: SUPERADMIN_ROLE } };
         },
       },
     },
@@ -144,9 +148,15 @@ export const auth = betterAuth({
   //
   // `admin()` is the one plugin auth ships with. It adds `user.role`/`banned`/`banReason`/
   // `banExpires` and `session.impersonatedBy` (mirrored in `@db/schema/auth.ts`), gives every
-  // new user the default role `"user"`, and treats `"admin"` as the privileged role. It is on
-  // by default so a session carries a role from the first sign-up: `apps/admin`'s guard reads
-  // `session.user.role === "admin"`, and a role that only appears once some later module turns
-  // it on would make that guard silently deny everyone.
-  plugins: [admin()],
+  // new user the default role `"user"`, and treats the roles in `adminRoles` as privileged.
+  // It is on by default so a session carries a role from the first sign-up: `apps/admin`'s
+  // guard reads `user.role` against the same two strings, and a role that only appears once
+  // some later module turns it on would make that guard silently deny everyone.
+  //
+  // `adminRoles` names both site roles, so the plugin's own endpoints (`listUsers`,
+  // `setRole`, `banUser`, `impersonateUser`) admit a `superadmin` as well as an `admin`.
+  // Leaving it at the default `["admin"]` would let `requireAdmin` pass a `superadmin`
+  // that the plugin then refused, which is the one disagreement the pair must not have.
+  // The list comes from `./authorize.ts`, so the gate and the plugin read one source.
+  plugins: [admin({ adminRoles: [...ADMIN_ROLES] })],
 });

@@ -90,7 +90,9 @@ export const auth = betterAuth({ plugins: [stripe()] });
     const out = insertIntoPluginArray(source, STRIPE);
 
     expect(out).not.toBe(source);
-    expect(out).toContain("plugins: [admin(), stripe()]");
+    expect(out).toContain(
+      "plugins: [admin({ adminRoles: [...ADMIN_ROLES] }), stripe()]"
+    );
     expect(out).toContain('import { stripe } from "@better-auth/stripe";');
     // The module-scope export is what the codemod anchors on; a refactor that wraps it
     // in a factory would break every feature capability that patches it.

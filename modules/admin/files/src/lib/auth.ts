@@ -22,8 +22,19 @@ export const auth = createClient(apiBaseUrl);
 /** The signed-in session, shaped by better-auth's `admin()` plugin (so `user.role` exists). */
 export type AdminSession = typeof auth.$Infer.Session;
 
-/** The role the guard demands. better-auth's admin plugin writes this string into `user.role`. */
+/** The site-admin role. better-auth's admin plugin writes this string into `user.role`. */
 export const ADMIN_ROLE = "admin";
+
+/** The role above `admin`. The first account to sign up wins it. */
+export const SUPERADMIN_ROLE = "superadmin";
+
+/**
+ * The roles that open the shell. This is the browser's copy of `ADMIN_ROLES` in
+ * `packages/auth/src/authorize.ts`, because a bundle cannot import from
+ * `@repo/auth/server`. Change one list and change the other, or the SPA and the api
+ * disagree about who gets in.
+ */
+export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 
 // The root route's `beforeLoad` runs on every navigation, and an unmemoised getSession()
 // there costs a blocking round trip per click. One promise is kept and handed to every
@@ -57,7 +68,19 @@ export function forgetSession(): void {
   cached = null;
 }
 
-/** True when the session may enter the shell. A session alone is never enough. */
+/**
+ * True when the session may enter the shell. A session alone is never enough.
+ *
+ * Both site roles pass, matching `requireAdmin` on the api. The comparison stays `===`
+ * per entry: a fold or a substring test would let `"Admin"` and `"administrator"` in,
+ * and the api would then refuse every call the shell made.
+ */
 export function isAdmin(session: AdminSession | null): boolean {
-  return session?.user.role === ADMIN_ROLE;
+  const role = session?.user.role;
+  return ADMIN_ROLES.some((candidate) => role === candidate);
+}
+
+/** True only for `superadmin`. `isAdmin` is the shell guard; this is the narrower one. */
+export function isSuperadmin(session: AdminSession | null): boolean {
+  return session?.user.role === SUPERADMIN_ROLE;
 }
