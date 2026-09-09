@@ -2,6 +2,7 @@ import { env } from "cloudflare:workers";
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
+import { adminAc, defaultRoles } from "better-auth/plugins/admin/access";
 import { user as userTable } from "@repo/db/schema/auth";
 import { ADMIN_ROLES, SUPERADMIN_ROLE } from "./authorize";
 import { authDb, provider } from "./db-provider";
@@ -158,5 +159,17 @@ export const auth = betterAuth({
   // Leaving it at the default `["admin"]` would let `requireAdmin` pass a `superadmin`
   // that the plugin then refused, which is the one disagreement the pair must not have.
   // The list comes from `./authorize.ts`, so the gate and the plugin read one source.
-  plugins: [admin({ adminRoles: [...ADMIN_ROLES] })],
+  //
+  // `roles` has to name `superadmin` too. The plugin checks every entry of `adminRoles`
+  // against the keys of `roles` (falling back to its own `defaultRoles`, which are
+  // `admin` and `user`) and throws `Invalid admin roles: superadmin` while the Worker
+  // initializes when one is missing. `superadmin` gets `adminAc` — the same site-wide
+  // statements `admin` holds — because the two differ in rank, not in what they may do
+  // to the site. The organization-level split is `packages/auth/src/access.ts`'s job.
+  plugins: [
+    admin({
+      adminRoles: [...ADMIN_ROLES],
+      roles: { ...defaultRoles, [SUPERADMIN_ROLE]: adminAc },
+    }),
+  ],
 });
