@@ -187,12 +187,26 @@ function FlagCard({
   onClearOverride: FeatureFlagsProps["onClearOverride"];
 }) {
   // Local, so dragging the slider does not fire a request per pixel. The Save button is what
-  // commits, and the value resets to the server's on the next load.
-  const [percentage, setPercentage] = useState(flag.percentage ?? 0);
+  // commits. `base` records the server value the draft was taken from, so a refreshed row
+  // replaces the draft instead of leaving a stale number on the slider.
+  const serverPercentage = flag.percentage ?? 0;
+  const [draft, setDraft] = useState({
+    base: serverPercentage,
+    value: serverPercentage,
+  });
   const [tenantId, setTenantId] = useState("");
 
+  if (draft.base !== serverPercentage) {
+    setDraft({ base: serverPercentage, value: serverPercentage });
+  }
+
+  const percentage = draft.value;
+  const setPercentage = (value: number) => {
+    setDraft({ base: serverPercentage, value });
+  };
+
   const isPercentage = flag.type === "percentage";
-  const dirty = isPercentage && percentage !== (flag.percentage ?? 0);
+  const dirty = isPercentage && percentage !== serverPercentage;
 
   function addOverride(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -231,7 +245,9 @@ function FlagCard({
           onClick={() =>
             onSave(flag.key, {
               enabled: !flag.enabled,
-              percentage: isPercentage ? percentage : null,
+              // The server's value, not the draft: On/Off must not commit an
+              // uncommitted slider drag.
+              percentage: isPercentage ? serverPercentage : null,
             })
           }
         >
