@@ -49,6 +49,18 @@ import type { AuthRequestContext } from "../server";
  *   revoke from.
  * - `defaultPrefix: "sk_"` and `startingCharactersConfig.charactersLength: 8`, so the
  *   screen shows `sk_a1b2c` and a reader can tell two keys apart without holding either.
+ * - `enableMetadata: true` and `permissions.defaultPermissions`, together, are how a
+ *   scope reaches the row from a browser at all. `@better-auth/api-key` 1.7.2 refuses
+ *   `permissions` on any request that carries a `Request` or headers — it throws
+ *   `SERVER_ONLY_PROPERTY` (`dist/index.mjs`, the `isClientRequest` check on
+ *   `/api-key/create`), because the plugin has no idea whether the caller is allowed to
+ *   ask for that scope. This project does know: `apiKeyScopeGuard()` below is exactly
+ *   that check. So the screen sends the requested scope as `metadata.scope`, which is not
+ *   a server-only field, the guard validates it against the creator's own statements, and
+ *   `defaultPermissions` reads it back off the body and writes it to the `permissions`
+ *   column. Nothing is stripped and nothing is smuggled: the scope travels on a field the
+ *   plugin lets a client set, and it is only applied after the guard has passed it.
+ *   `metadata` itself is never stored — the plugin hardcodes `metadata: null` on create.
  *
  * `deferUpdates` stays off. It needs `advanced.backgroundTasks.handler`, and there is no
  * `waitUntil` behind that hook on Workers, so the `lastRequest` write stays synchronous.
@@ -57,8 +69,15 @@ import type { AuthRequestContext } from "../server";
 export function apiKeyPlugin() {
   return apiKey({
     defaultPrefix: "sk_",
+    enableMetadata: true,
     enableSessionForAPIKeys: false,
     keyExpiration: { defaultExpiresIn: null },
+    permissions: {
+      // An empty map when the body asks for nothing. The option's type has no `undefined`
+      // arm, and `{}` is the same answer said in the type's own vocabulary: a key that
+      // holds no statement, which `can()` denies for every pair.
+      defaultPermissions: (_referenceId, ctx) => scopeOf(ctx.body) ?? {},
+    },
     rateLimit: { enabled: false },
     references: "organization",
     requireName: true,
@@ -80,12 +99,18 @@ function field(source: unknown, name: string): unknown {
 /**
  * The requested scope, or `null` when the body asks for none.
  *
- * `null` means "do not check": create without `permissions` mints a key holding nothing,
- * and update with `permissions: null` clears one. Neither can exceed anything. A value
- * that is not a permission map falls through to the plugin's own validation.
+ * Two places carry it, and they are read in that order. `permissions` is the plugin's own
+ * field, which only a server-side `auth.api.createApiKey` call may set. `metadata.scope`
+ * is the browser's channel, described on `apiKeyPlugin` above. A request never sets both,
+ * because the one that can set `permissions` has no reason to go the long way round.
+ *
+ * `null` means "do not check": create with no scope mints a key holding nothing, and
+ * update with `permissions: null` clears one. Neither can exceed anything. A value that is
+ * not a permission map falls through to the plugin's own validation.
  */
-function requestedScope(body: unknown): Record<string, string[]> | null {
-  const permissions = field(body, "permissions");
+function scopeOf(body: unknown): Record<string, string[]> | null {
+  const permissions =
+    field(body, "permissions") ?? field(field(body, "metadata"), "scope");
   if (
     typeof permissions !== "object" ||
     permissions === null ||
@@ -173,7 +198,7 @@ export function apiKeyScopeGuard(): BetterAuthPlugin {
           matcher: (context) =>
             context.path !== undefined && GUARDED_PATHS.has(context.path),
           handler: createAuthMiddleware(async (ctx) => {
-            const scope = requestedScope(ctx.body);
+            const scope = scopeOf(ctx.body);
             if (!scope) {
               return;
             }
