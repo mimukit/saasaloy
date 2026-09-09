@@ -21,6 +21,9 @@ Every installable module in the default registry, in one place. This table is th
 | `sms-console` | feature (provider) | an `sms` provider that logs messages instead of sending |
 | `waitlist` | feature | a waitlist form plus its API route and table, on `api` + `database` + `validators`. Its table ships in a SQLite and a Postgres variant, so it installs under either driver |
 | `teams` | feature | Better Auth organizations, memberships and copy-ID invitations, plus a site-admin Teams screen, on `auth` + `admin` |
+| `multitenant` | feature | `requireTenant(c)` and the `forTenant(db, tenantId)` query guard, so every scoped route resolves one organization and every scoped query is filtered to it, on `teams`. Ships a worked `project` example and a compile-time isolation proof (`packages/db/src/tenant.typecheck.ts`) |
+| `rbac` | feature | runtime-defined organization roles on Better Auth's dynamic access control, a pure `can(principal, permissions)`, `requireCan(c, …)` on the write routes, and a `/roles` admin screen. `roleLockGuard` refuses the three base role names, on `multitenant` + `admin` |
+| `api-keys` | feature | organization-owned bearer credentials on `@better-auth/api-key`, stored as a SHA-256 hash with the plaintext shown once, scoped through the same `can()` a member goes through, plus an `/api-keys` admin screen. Registers a credential resolver so a bearer call resolves the same `Tenant` a cookie does, on `rbac` |
 | `infra` | capability | an `infra` workspace holding the Pulumi program that deploys every Worker in the project. Depends on nothing |
 
 Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one and a `--yes` run stops and names the options:
@@ -40,4 +43,4 @@ saasaloy add <name> --dry-run
 
 To list what a registry offers, including third-party ones, see [`saasaloy list`](reference.md#saasaloy-list). To publish a module of your own, start at [Contribute a module](how-to/contribute-a-module.md).
 
-_Verified against the descriptors in `modules/` on 2026-09-01._
+_Verified against the descriptors in `modules/` on 2026-09-09._

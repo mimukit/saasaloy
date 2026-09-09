@@ -107,7 +107,7 @@ Rejected alternatives, one line each:
 - [ ] `files/admin/routes/api-keys.tsx` → `@admin/routes/api-keys.tsx`: the active organization's keys through `auth.apiKey.list({ organizationId })` showing name, `start`, expiry, last used, enabled and the note that a scope is fixed at issue; a create form with a name, an optional expiry, and a scope picker limited to the caller's statements from `/tenant`; the plaintext key shown once in a copy box that clears on navigation; revoke through `auth.apiKey.delete`.
 - [ ] The `saasaloy-api-keys` skill: the bearer header, how a key resolves the same `Tenant`, that scopes are statements from `access.ts`, cannot exceed the creator's and do not follow a later role edit, why the plaintext exists only in the create response, the one write per request, that the plugin's own `rateLimit`, `remaining` and `refill` are off and `ratelimit` (#129) is the limiter, and the `curl` recipe.
 
-### Phase 5: verify on both drivers and close out
+### Phase 5: verify on both drivers and close out (#128) (built 2026-09-09)
 
 - [ ] In `.dev`, on `database-d1`: `saasaloy add api-keys` from a project holding only `admin` resolves `teams`, `multitenant` and `rbac`; a second run is a zero diff; `db:generate` and `db:migrate:local` apply; the first sign-up is `superadmin`; two more sign-ups, two organizations, one project each; `GET /projects` under org A never lists org B's row; the owner creates a `viewer` role with `project: ["read"]`, assigns it, and that member gets 403 on `DELETE /projects/:id` and sees no button; creating a role named `admin` is refused; deleting `viewer` while held is disabled in the screen; a key with `project: ["read"]` lists over `Bearer` and gets 403 on delete; a `viewer` cannot mint a key with `project: ["delete"]`; a revoked key gets 401; an expired key gets 401; the `superadmin` lists org B's projects with `x-organization-id`; an `admin` sending it gets 403; a key sending it gets 403.
 - [ ] The same steps on `database-postgres`, plus two requests into one live isolate on the bearer path, the ADR 0029 assertion.
@@ -117,7 +117,7 @@ Rejected alternatives, one line each:
 
 ## Open questions
 
-None left open by the grill on 2026-09-09. Rounds 1 to 4 (Q1 to Q21) closed the draft's seven questions and the eleven the answers opened. Three items are deferred by decision and filed as follow-up issues in Phase 5: the lint rule that refuses raw `db` on a `TenantTable`, the organization picker over the superadmin bypass with the all-organizations list route it needs, and an audit trail for role, key and bypass events.
+None left open by the grill on 2026-09-09. Rounds 1 to 4 (Q1 to Q21) closed the draft's seven questions and the eleven the answers opened. Three items are deferred by decision and filed as follow-up issues in Phase 5: the lint rule that refuses raw `db` on a `TenantTable`, the organization picker over the superadmin bypass with the all-organizations list route it needs, and an audit trail for role, key and bypass events. All three are filed: #140 (the lint rule), #141 (the picker and its list route) and #142 (the audit trail).
 
 ## Non-goals
 
