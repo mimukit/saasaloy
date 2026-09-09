@@ -88,7 +88,7 @@ Rejected alternatives, one line each:
 - [ ] The `saasaloy-multitenant` skill: the route recipe, the tenant column convention and why the four `teams` tables already meet it, what `TenantId` refuses, the resolver table and how a credential registers, the header contract and who may send it, the 401 and 403 rules, and the sentence that `requireAdmin`, `requireSuperadmin` and `requireTenant` are three different questions.
 - [ ] The database skill's "thin repository pattern" section gains the convention and points at `@repo/db/tenant`.
 
-### Phase 3: `rbac`
+### Phase 3: `rbac` (#128) (built 2026-09-09)
 
 - [ ] `modules/rbac/registry-item.json`: `saasaloy:feature`, `dependsOn: ["multitenant", "admin"]`, one `plugin-array` patch adding `roleLockGuard` to `auth.plugins`, one `const-array` patch adding `{ to: "/roles", label: "Roles" }`.
 - [ ] `files/auth/rbac-rules.ts` → `@auth/rbac-rules.ts`, import-free: `can(principal, permissions)` returning a `Decision` in the `authorize.ts` shape, true for `superadmin`, `authorize` over `statements` for the other two kinds, and the 403 message format. `rbac-rules.test.ts` covers each kind, a custom role, an unknown resource, and the superadmin arm.

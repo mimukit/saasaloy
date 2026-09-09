@@ -1,0 +1,60 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "rbac",
+  "type": "saasaloy:feature",
+  "dependsOn": ["multitenant", "admin"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "Custom roles stored in the organizationRole table survive this removal, and nothing reads them once packages/auth/src/rbac.ts is gone. Members holding a custom role resolve to the statements of a role name that no longer exists, which is no permissions at all. Reassign them to a base role before you remove this module.",
+    "Every route written against requireCan stops compiling once packages/auth/src/rbac.ts is gone. Rewrite them on requireTenant, or delete them, before you remove this module.",
+    "This module owns packages/api/src/routes/projects.ts, the permission-gated copy of multitenant's example, so removing it deletes that file while the /projects mount stays. Run saasaloy add multitenant to restore the ungated copy."
+  ],
+  "patches": [
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "roleLockGuard",
+      "import": {
+        "name": "roleLockGuard",
+        "from": "./plugins/role-lock"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/roles", "label": "Roles" }
+    }
+  ],
+  "files": [
+    { "path": "files/auth/rbac-rules.ts", "target": "@auth/rbac-rules.ts" },
+    { "path": "files/auth/rbac.ts", "target": "@auth/rbac.ts" },
+    {
+      "path": "files/auth/plugins/role-lock.ts",
+      "target": "@auth/plugins/role-lock.ts"
+    },
+    {
+      "path": "files/api/routes/projects.ts",
+      "target": "@api/routes/projects.ts"
+    },
+    {
+      "path": "files/admin/routes/roles.tsx",
+      "target": "@admin/routes/roles.tsx"
+    },
+    {
+      "path": "files/admin/components/role-workspace.tsx",
+      "target": "@admin/components/role-workspace.tsx"
+    },
+    {
+      "path": "files/admin/components/permission-grid.tsx",
+      "target": "@admin/components/permission-grid.tsx"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-rbac"]
+  }
+}
