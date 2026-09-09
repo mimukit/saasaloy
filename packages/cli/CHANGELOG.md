@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.2.0](https://github.com/mimukit/saasaloy/compare/v0.1.1...v0.2.0) (2026-09-09)
+
+### Features
+
+* **api:** split the worker entry from the hono app ([eb80983](https://github.com/mimukit/saasaloy/commit/eb809837b3b2329fe0b8f8af95d719db33f856d6))
+* **cli:** accept a dotted bindingType in wrangler-binding ([318cefd](https://github.com/mimukit/saasaloy/commit/318cefd3047f8dee6c20ff40d58a9c69e9784040))
+* **cli:** default doctor to the current directory ([7e56c51](https://github.com/mimukit/saasaloy/commit/7e56c51136cff384f7e08ff3946a60105f5e0692))
+* **cli:** default doctor to the current directory ([8a51072](https://github.com/mimukit/saasaloy/commit/8a51072e5e2bb3502ac79ca100aa1f59a94911e7))
+* **queue-cloudflare:** cloudflare queues provider and cron tick ([4cf4978](https://github.com/mimukit/saasaloy/commit/4cf4978515fe341f5dc7daae7dc39fb16b26c56a)), references [#131](https://github.com/mimukit/saasaloy/issues/131) [#130](https://github.com/mimukit/saasaloy/issues/130)
+* **queue-memory:** in-process provider for local dev and tests ([23f81a7](https://github.com/mimukit/saasaloy/commit/23f81a7407e5ad157e2e4716fcfa1680207a5558))
+* **queue:** add the neutral queue capability core ([f3ab6d7](https://github.com/mimukit/saasaloy/commit/f3ab6d77c6c75262b6504365b9ef1e74ede58bef)), references [#131](https://github.com/mimukit/saasaloy/issues/131)
+
+### Bug Fixes
+
+* **api:** keep Bindings assignable to a capability env ([533a19f](https://github.com/mimukit/saasaloy/commit/533a19ff2f02e04d98a28ca822ea37fbd673c72c))
+* **cli:** restore missing base files at an unmoved template hash ([8331853](https://github.com/mimukit/saasaloy/commit/8331853d16742ea384de61aacea189490bf8e808))
+* **cli:** stop update overwriting files the project owns ([cc30e55](https://github.com/mimukit/saasaloy/commit/cc30e55337994de061a7cc7deea83caa11018e16))
+* **infra:** refuse unsupported wrangler keys before the build ([8d2312f](https://github.com/mimukit/saasaloy/commit/8d2312fa267fc7402baebf0429f281e87a5a0a20))
+* **queue-cloudflare:** report only a real vendor code ([22c25e5](https://github.com/mimukit/saasaloy/commit/22c25e51383b6e88e0e56a4013006d348f868300))
+* **queue:** accept a cron step wider than its field ([d7ca562](https://github.com/mimukit/saasaloy/commit/d7ca562049fc917645f67afe45732e82e9359a1f))
+* **queue:** wrap a throwing schema as invalid_job ([950a961](https://github.com/mimukit/saasaloy/commit/950a9615a326b0738b767e7536a67791e2bb0838))
+
 ## [0.1.1](https://github.com/mimukit/saasaloy/compare/v0.1.0...v0.1.1) (2026-09-06)
 
 ### Bug Fixes
