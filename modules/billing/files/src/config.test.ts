@@ -22,7 +22,7 @@ describe("readLockoutDays", () => {
   it("falls back to 14 for unset, empty, non-numeric and non-positive values", () => {
     // The var is documented optional, and a typo that locked every past-due subject on the
     // first tick is worse than one the sweep ignores.
-    for (const raw of [undefined, "", " ", "soon", "-1", "0", "NaN"]) {
+    for (const raw of [undefined, "", " ", "soon", "-1", "0", "0.5", "NaN"]) {
       assert.equal(readLockoutDays(raw), DEFAULT_LOCKOUT_DAYS);
     }
   });

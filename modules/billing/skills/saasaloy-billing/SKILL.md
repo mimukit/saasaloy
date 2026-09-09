@@ -71,6 +71,8 @@ Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPl
 | `POST /billing/change-plan` | `planId`, `interval`, `successUrl`, `cancelUrl` | `{ url }` |
 | `GET /billing/invoices` | — | `{ invoices }` |
 
+`successUrl`, `cancelUrl` and `returnUrl` have to be absolute URLs **on the origin `BILLING_APP_URL` names**, and the route answers `invalid_request` otherwise. The vendor sends a browser to each of them, so an unchecked value turns a genuine provider URL into a redirect to somewhere else (CWE-601). Set `BILLING_APP_URL` to your admin app before you point the checkout anywhere but `http://localhost:3001`.
+
 `POST /billing/checkout` **refuses when a live subscription already exists**, with `invalid_request` and a message pointing at the portal. One live subscription per subject is the settled rule; the table keeps history rows, and add-ons are a follow-up issue.
 
 A `BillingError` is rendered as the api's `{ error: { code, message } }` envelope with a status per code: 400 for `invalid_request` and `webhook_invalid`, 402 for `card_declined`, 404 for `not_found`, 429 for `rate_limited`, 502 for `provider_error`.

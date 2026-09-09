@@ -156,11 +156,16 @@ function content(notification: BillingNotification) {
       return paymentFailed({
         appName,
         billingUrl,
-        // The date the sweep would lock this row, computed from the same number the sweep
-        // reads, so the email cannot promise a grace period the job does not honour.
+        // The date the sweep would lock this row, computed from the row's own `updatedAt`
+        // rather than the clock. The sweep selects `updatedAt < now - lockoutDays`, and a
+        // `payment.failed` event carries an invoice, not a subscription, so `applyEvent`
+        // reads the row instead of upserting it and `updatedAt` keeps the timestamp from
+        // when the status first turned `past_due`. Off the clock the email would name a
+        // date later than the one the job acts on.
         lockoutOn: day(
           new Date(
-            Date.now() + billingConfig().lockoutDays * 24 * 60 * 60 * 1000
+            subscription.updatedAt.getTime() +
+              billingConfig().lockoutDays * 24 * 60 * 60 * 1000
           )
         ),
         name,

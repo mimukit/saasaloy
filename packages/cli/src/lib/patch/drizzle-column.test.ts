@@ -112,6 +112,30 @@ describe(insertDrizzleColumn, () => {
       insertDrizzleColumn(SQLITE, BILLING_CUSTOMER).endsWith("\n")
     ).toBeTruthy();
   });
+
+  it("writes nothing when the local name already binds a different import", () => {
+    // Asked before the splice: `addImport` declining afterwards would leave the column
+    // reading whatever the file's own `text` resolves to.
+    const repointed = SQLITE.replace(
+      'import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";',
+      'import { integer, sqliteTable } from "drizzle-orm/sqlite-core";\nimport text from "./legacy.js";'
+    );
+    expect(
+      insertDrizzleColumn(repointed, {
+        ...BILLING_CUSTOMER,
+        import: { name: "text", from: "drizzle-orm/sqlite-core" },
+      })
+    ).toBe(repointed);
+  });
+
+  it("throws on a value that is more than one expression", () => {
+    expect(() =>
+      insertDrizzleColumn(SQLITE, {
+        ...BILLING_CUSTOMER,
+        value: 'text("billing_customer_id"); dropEverything()',
+      })
+    ).toThrow(/not a single expression/u);
+  });
 });
 
 describe(removeDrizzleColumn, () => {
@@ -217,6 +241,19 @@ describe(drizzleColumnInsertRefusal, () => {
     expect(drizzleColumnInsertRefusal(edited, BILLING_CUSTOMER)).toMatch(
       /holds text\("billing_customer_id"\)\.notNull\(\)/u
     );
+  });
+
+  it("reports a local name that binds a different import", () => {
+    const repointed = SQLITE.replace(
+      'import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";',
+      'import { integer, sqliteTable } from "drizzle-orm/sqlite-core";\nimport text from "./legacy.js";'
+    );
+    expect(
+      drizzleColumnInsertRefusal(repointed, {
+        ...BILLING_CUSTOMER,
+        import: { name: "text", from: "drizzle-orm/sqlite-core" },
+      })
+    ).toMatch(/would read the wrong builder/u);
   });
 
   it("has no objection to a clean apply", () => {

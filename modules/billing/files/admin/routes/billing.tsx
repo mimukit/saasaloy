@@ -277,13 +277,16 @@ function formatDate(value: string | number | Date) {
   return new Date(value).toLocaleDateString();
 }
 
-// Vendors report totals in the currency's minor unit, so divide by 100 rather than
-// rendering "999900" at a customer.
+// Vendors report totals in the currency's minor unit, so scale down rather than rendering
+// "999900" at a customer. The exponent comes from the currency, not a hard 100: JPY, KRW and
+// VND have no minor unit, and dividing those by 100 would render ¥9900 as ¥99.
 function formatAmount(amount: number, currency: string) {
-  return new Intl.NumberFormat(undefined, {
+  const format = new Intl.NumberFormat(undefined, {
     currency: currency.toUpperCase(),
     style: "currency",
-  }).format(amount / 100);
+  });
+  const digits = format.resolvedOptions().maximumFractionDigits ?? 2;
+  return format.format(amount / 10 ** digits);
 }
 
 function BillingError({ error, reset }: ErrorComponentProps) {

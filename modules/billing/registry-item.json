@@ -8,7 +8,7 @@
     "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
     "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
     "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
-    "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
+    "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "removeWarnings": [
     "The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",

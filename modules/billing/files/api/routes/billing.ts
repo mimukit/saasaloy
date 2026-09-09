@@ -52,6 +52,7 @@ export interface BillingBindings extends AuthDbBindings {
   [key: string]: unknown;
   BILLING_PROVIDER?: string;
   BILLING_LOCKOUT_DAYS?: string;
+  BILLING_APP_URL?: string;
   QUEUE_PROVIDER?: string;
 }
 
@@ -91,8 +92,8 @@ export const billingRoute = new Hono<{
       const body = await readJson(c);
       const planId = requireString(body, "planId");
       const interval = requireInterval(body);
-      const successUrl = requireString(body, "successUrl");
-      const cancelUrl = requireString(body, "cancelUrl");
+      const successUrl = requireUrl(c, body, "successUrl");
+      const cancelUrl = requireUrl(c, body, "cancelUrl");
 
       // Throws `not_found` naming the registered ids, so a typo in the plan picker is a
       // 404 with the answer in it rather than an empty price id reaching the vendor.
@@ -125,7 +126,7 @@ export const billingRoute = new Hono<{
   .post("/portal", (c) =>
     guard(c, async ({ client, host, subject }) => {
       const body = await readJson(c);
-      const returnUrl = requireString(body, "returnUrl");
+      const returnUrl = requireUrl(c, body, "returnUrl");
 
       const { url } = await client.createPortal(host, { returnUrl, subject });
 
@@ -216,8 +217,8 @@ export const billingRoute = new Hono<{
       const body = await readJson(c);
       const planId = requireString(body, "planId");
       const interval = requireInterval(body);
-      const successUrl = requireString(body, "successUrl");
-      const cancelUrl = requireString(body, "cancelUrl");
+      const successUrl = requireUrl(c, body, "successUrl");
+      const cancelUrl = requireUrl(c, body, "cancelUrl");
 
       findPlan(plans, planId);
 
@@ -362,6 +363,49 @@ function requireString(body: Record<string, unknown>, key: string): string {
     );
   }
   return value;
+}
+
+/**
+ * A redirect target the vendor will send a browser to, checked against this project's own
+ * origin.
+ *
+ * Every one of these five values leaves the Worker and comes back as a browser redirect
+ * from the payment provider. A non-empty string is not enough: a caller who passes their
+ * own origin gets a genuine provider url that lands the visitor somewhere else, which is
+ * the open-redirect shape (CWE-601). The origin comes from `BILLING_APP_URL`, the same var
+ * the billing emails link to, so one setting decides where billing may send a reader.
+ */
+function requireUrl(
+  c: BillingContext,
+  body: Record<string, unknown>,
+  key: string
+): string {
+  const value = requireString(body, key);
+  const allowed = new URL(billingAppUrl(c)).origin;
+
+  let url: URL;
+  try {
+    url = new URL(value);
+  } catch {
+    throw new BillingError(
+      "invalid_request",
+      `"${key}" has to be an absolute URL.`
+    );
+  }
+
+  if (url.origin !== allowed) {
+    throw new BillingError(
+      "invalid_request",
+      `"${key}" has to be on ${allowed}, the origin BILLING_APP_URL names.`
+    );
+  }
+
+  return url.toString();
+}
+
+/** The project's billing page. Same default as `apps/api/src/billing-store.ts`. */
+function billingAppUrl(c: BillingContext): string {
+  return c.env.BILLING_APP_URL ?? "http://localhost:3001/billing";
 }
 
 function requireInterval(body: Record<string, unknown>): PlanInterval {

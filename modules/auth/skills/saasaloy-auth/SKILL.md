@@ -253,6 +253,8 @@ DROP INDEX `account_issuer_account_id_uidx`;--> statement-breakpoint
 ALTER TABLE `account` DROP COLUMN `issuer`;
 ```
 
+Take the index identifier from your own generated migration rather than from the snippet above. Drizzle derives it from the schema the 1.7.2 migration was generated against, so a project that kept better-auth's own naming sees `account_issuer_accountId_uidx` instead, and a `DROP INDEX` on a name that is not there fails and leaves `issuer` in place.
+
 Read it before you apply it, because a `DROP COLUMN` is not reversible and SQLite rewrites the table to do it. Take a copy of the database first. A Postgres project gets the same two statements with `DROP INDEX "account_issuer_account_id_uidx"` and `ALTER TABLE "account" DROP COLUMN "issuer"`. Nothing reads the column after the drop: better-auth 1.7.3's `getAuthTables()` never writes it and the adapter never selects it.
 
 Leaving the column in place is the option that breaks. The snapshot no longer declares it, so `db:generate` treats it as drift on every later run, and a fresh insert against a database that still has `issuer text NOT NULL` fails the constraint the moment 1.7.3 stops writing the value.

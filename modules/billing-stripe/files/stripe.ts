@@ -393,11 +393,17 @@ function project(
 
 /** Which of this project's plans a Stripe price id belongs to. */
 function planOf(priceId: string | undefined): string {
-  const plan = plans.find((candidate) =>
-    Object.values(candidate.providerIds[PROVIDER_NAME] ?? {}).includes(
-      priceId ?? ""
-    )
-  );
+  // Both sides reject the empty string. The scaffolded `plans.ts` ships `pro` with
+  // `providerIds.stripe = { monthly: "", yearly: "" }` for the project to fill in, so a
+  // plain `includes(priceId ?? "")` matches an unset id against an unfilled plan and
+  // projects `pro` onto a subscription nobody bought.
+  const plan = priceId
+    ? plans.find((candidate) =>
+        Object.values(candidate.providerIds[PROVIDER_NAME] ?? {}).some(
+          (id) => id === priceId
+        )
+      )
+    : undefined;
   if (!plan) {
     throw new BillingError(
       "not_found",

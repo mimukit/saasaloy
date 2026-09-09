@@ -31,11 +31,15 @@ let values: BillingConfigValues = { lockoutDays: DEFAULT_LOCKOUT_DAYS };
  * silently locked every past-due subject on the first tick is worse than ignoring it.
  */
 export function readLockoutDays(raw: string | undefined): number {
-  const days = Number(raw);
+  // Floor before the guard, not after. `"0.5"` is finite and above zero, so testing first
+  // would pass it through and `Math.floor` would hand the sweep a `lockoutDays` of 0 —
+  // exactly the every-row lockout this fallback exists to prevent. `Math.floor(NaN)` is
+  // `NaN`, so `Number.isFinite` still catches a non-numeric value.
+  const days = Math.floor(Number(raw));
   if (!raw || !Number.isFinite(days) || days <= 0) {
     return DEFAULT_LOCKOUT_DAYS;
   }
-  return Math.floor(days);
+  return days;
 }
 
 /**

@@ -107,6 +107,14 @@ export function insertDrizzleColumn(
   // written, exactly as it did when the node was the thing being inserted.
   parseExpressionNode(patch.value);
 
+  // Asked before the splice, not after. `addImport` returns early when the local name is
+  // already bound to something else, but by then the column is written and it reads a
+  // builder this file never imported. `chained-route.ts` asks the same question at the same
+  // point, for the same reason.
+  if (patch.import && foreignBinding(mod.imports, patch.import)) {
+    return source;
+  }
+
   const withColumn = spliceColumn(source, columns, patch);
   if (!withColumn) {
     return source;
@@ -312,6 +320,9 @@ export function drizzleColumnInsertRefusal(
   if (at !== -1 && valueDrift(columns, at, patch)) {
     return `${JSON.stringify(patch.column)} on ${JSON.stringify(patch.exportName)} holds ${printed(columns, at)}, not the ${patch.value} this patch adds`;
   }
+  if (at === -1 && patch.import) {
+    return insertBindingConflict(mod.imports, patch);
+  }
   return undefined;
 }
 
@@ -366,7 +377,13 @@ function parseExpressionNode(code: string): unknown {
   const declaration = parseModule(`const __drizzleColumn = ${code};`).$ast as {
     body: { declarations?: { init?: unknown }[] }[];
   };
-  const init = declaration.body[0]?.declarations?.[0]?.init;
+  // Exactly one statement, not merely a first one that parsed. `text("x"); other()` yields
+  // two statements with an `init` on the first, and `spliceColumn` writes the value
+  // verbatim, so accepting it leaves a schema file that no longer parses.
+  const init =
+    declaration.body.length === 1
+      ? declaration.body[0]?.declarations?.[0]?.init
+      : undefined;
   if (!init) {
     throw new TypeError(
       `drizzle-column value is not a single expression: ${JSON.stringify(code)}`
@@ -398,6 +415,17 @@ function valueDrift(
 
 function collapse(code: string): string {
   return code.replaceAll(/\s+/gu, "");
+}
+
+function insertBindingConflict(
+  imports: ModuleImports,
+  patch: DrizzleColumn
+): string | undefined {
+  const held = patch.import ? foreignBinding(imports, patch.import) : undefined;
+  if (!held || !patch.import) {
+    return undefined;
+  }
+  return `${describeBinding(patch.import.name, held)}, so ${JSON.stringify(patch.column)} would read the wrong builder`;
 }
 
 function removeBindingConflict(
