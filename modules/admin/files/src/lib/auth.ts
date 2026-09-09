@@ -79,8 +79,3 @@ export function isAdmin(session: AdminSession | null): boolean {
   const role = session?.user.role;
   return ADMIN_ROLES.some((candidate) => role === candidate);
 }
-
-/** True only for `superadmin`. `isAdmin` is the shell guard; this is the narrower one. */
-export function isSuperadmin(session: AdminSession | null): boolean {
-  return session?.user.role === SUPERADMIN_ROLE;
-}
