@@ -206,6 +206,33 @@ export function isBaseTracked(lock: Lockfile, manifest: Manifest): boolean {
   );
 }
 
+/**
+ * Base targets the manifest tracks that are not on disk — the files `update` classifies as
+ * `restore`. `compareBase` needs this because `templateHash` only says whether the *template*
+ * moved: a file deleted from disk (or recorded absent by `adoptBase`) leaves the hash equal,
+ * so without this the base reads `current` and the restore never runs (#120).
+ *
+ * Seed files are excluded. They are recorded but never updated, so a missing one produces no
+ * plan action and would leave the base permanently `outdated` with nothing to apply.
+ */
+export async function missingBaseTargets(
+  root: string,
+  manifest: Manifest,
+  templateDir: string
+): Promise<string[]> {
+  const seed = new Set((await readBaseDeclaration(templateDir)).seedFiles);
+  const missing: string[] = [];
+  for (const target of Object.keys(baseEntries(manifest))) {
+    if (seed.has(target)) {
+      continue;
+    }
+    if ((await readIfPresent(resolveWithinRoot(root, target))) === undefined) {
+      missing.push(target);
+    }
+  }
+  return missing.toSorted((a, b) => (a < b ? -1 : 1));
+}
+
 /** The template rendered with a project's own vars, in a temp dir the caller removes. */
 export interface RenderedTemplate {
   dir: string;

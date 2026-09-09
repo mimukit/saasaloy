@@ -12,6 +12,7 @@ import {
   baseUpdateInput,
   isBaseTracked,
   listTemplateFiles,
+  missingBaseTargets,
   readBaseDeclaration,
   recordBaseFiles,
   templateHash,
@@ -333,6 +334,44 @@ function actionOf(mod: ModuleUpdatePlan, target: string) {
     ?.action;
 }
 
+describe(missingBaseTargets, () => {
+  it("names tracked base files that are not on disk", async () => {
+    await declare([]);
+    await write(root, "kept.txt", "here\n");
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, [
+      { target: "kept.txt", from: "kept.txt", hash: hashContent("here\n") },
+      { target: "gone.txt", from: "gone.txt", hash: hashContent("gone\n") },
+    ]);
+
+    await expect(
+      missingBaseTargets(root, manifest, template)
+    ).resolves.toStrictEqual(["gone.txt"]);
+  });
+
+  it("ignores a missing seed file, which no plan would restore anyway", async () => {
+    await declare(["seed.txt"]);
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, [
+      { target: "seed.txt", from: "seed.txt", hash: hashContent("seed\n") },
+    ]);
+
+    await expect(
+      missingBaseTargets(root, manifest, template)
+    ).resolves.toStrictEqual([]);
+  });
+
+  it("ignores entries another module owns", async () => {
+    await declare([]);
+    const manifest = emptyManifest();
+    manifest.managed["theirs.txt"] = { module: "waitlist", hash: "a" };
+
+    await expect(
+      missingBaseTargets(root, manifest, template)
+    ).resolves.toStrictEqual([]);
+  });
+});
+
 describe(compareBase, () => {
   const running = { runningHash: "a".repeat(64), runningVersion: "0.2.0" };
   const tracked = trackedState;
@@ -351,6 +390,31 @@ describe(compareBase, () => {
     expect(row.current).toContain("bbbbbbb");
     expect(row.latest).toContain("0.2.0");
     expect(row.latest).toContain("aaaaaaa");
+  });
+
+  // The bug this guards: `adoptBase` records an absent template file so "the next update
+  // restores it", but a same-CLI re-run has an unmoved template hash. Comparing the hash
+  // alone reported `current`, so the restore never ran on the version that recorded it.
+  it("is outdated at an unmoved hash when a tracked file is missing from disk", () => {
+    const row = compareBase({
+      ...tracked("a".repeat(64)),
+      ...running,
+      missingTargets: ["a.txt"],
+    });
+
+    expect(row.status).toBe("outdated");
+    expect(row.detail).toContain("missing from disk");
+  });
+
+  it("carries no missing-file detail when the hash itself moved", () => {
+    const row = compareBase({
+      ...tracked("b".repeat(64)),
+      ...running,
+      missingTargets: ["a.txt"],
+    });
+
+    expect(row.status).toBe("outdated");
+    expect(row.detail).toBeUndefined();
   });
 
   it("is untracked with no lock record, pointing at `saasaloy update`", () => {
@@ -503,6 +567,60 @@ describe("baseUpdateInput — classifying base files through the module engine",
 
     expect(actionOf(base, "AGENTS.md")).toBe("restore");
     await cleanup();
+  });
+
+  // The whole loop `adoptBase`'s message promises, on one CLI: adopt a project whose file
+  // is absent, then update against the *same* template and get the file back. Before
+  // `missingTargets`, this second run reported "already at" and wrote nothing.
+  it("restores an adopted-absent file on a re-run at the same template hash", async () => {
+    await declare([]);
+    await write(template, "AGENTS.md", "v1 {{PROJECT_NAME}}\n");
+    const manifest = emptyManifest();
+    const lock = emptyLock();
+    const adoption = await adoptBase({
+      root,
+      cliVersion: CLI,
+      manifest,
+      lock,
+      templateDir: template,
+    });
+    expect(adoption.absent).toStrictEqual(["AGENTS.md"]);
+
+    const state = { manifest, lock };
+    const comparison = compareBase({
+      ...state,
+      runningHash: await templateHash(template),
+      runningVersion: CLI,
+      missingTargets: await missingBaseTargets(root, manifest, template),
+    });
+    expect(comparison.status).toBe("outdated");
+
+    const handle = await baseUpdateInput({
+      root,
+      ...state,
+      templateDir: template,
+      cliVersion: CLI,
+      comparison,
+    });
+    const config = { aliases: {}, installed: [] };
+    const plan = await buildUpdatePlan({
+      root,
+      config,
+      ...state,
+      inputs: [handle.input],
+      considered: [],
+    });
+    expect(actionOf(plan.modules[0]!, "AGENTS.md")).toBe("restore");
+    await executeUpdatePlan(plan, { root, config, ...state });
+
+    await expect(readFile(join(root, "AGENTS.md"), "utf-8")).resolves.toBe(
+      `v1 ${basename(root)}\n`
+    );
+    // And the third run is genuinely quiet.
+    await expect(
+      missingBaseTargets(root, manifest, template)
+    ).resolves.toStrictEqual([]);
+    await handle.cleanup();
   });
 
   it("re-applies a module's recorded patch after overwriting the file it patched", async () => {
