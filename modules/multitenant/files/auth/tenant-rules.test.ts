@@ -18,11 +18,13 @@ import {
   FORBIDDEN,
   NO_ACTIVE_ORGANIZATION,
   ORGANIZATION_HEADER,
+  UNKNOWN_ORGANIZATION,
   headerDenial,
   noOrganizationDenial,
   pickResolver,
   resolveStatements,
   superadminTenant,
+  unknownOrganizationDenial,
 } from "./tenant-rules.ts";
 import type { ResolvedStatements, TenantId } from "./tenant-rules.ts";
 
@@ -58,6 +60,16 @@ describe("the fixed messages", () => {
 
   it("refuses a forbidden header with 403 and nothing else", () => {
     assert.deepEqual(headerDenial(), { status: 403, message: FORBIDDEN });
+  });
+
+  it("answers 404 for a header naming no organization", () => {
+    // A superadmin may send the header, so this is not 403. The id is simply not a
+    // tenant, and answering here keeps it out of `asTenantId`.
+    assert.equal(UNKNOWN_ORGANIZATION, "unknown organization");
+    assert.deepEqual(unknownOrganizationDenial(), {
+      status: 404,
+      message: UNKNOWN_ORGANIZATION,
+    });
   });
 });
 

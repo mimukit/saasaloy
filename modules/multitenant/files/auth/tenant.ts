@@ -1,6 +1,8 @@
 import { withDb } from "@repo/db/client";
 import { asTenantId } from "@repo/db/tenant";
 import { listOrganizationRoles } from "@repo/db/repositories/organization-roles";
+import { organizationExists } from "@repo/db/repositories/organizations";
+import { APIError } from "better-auth/api";
 import { HTTPException } from "hono/http-exception";
 import { roles } from "./access";
 import { auth } from "./auth";
@@ -16,6 +18,7 @@ import {
   pickResolver,
   resolveStatements,
   superadminTenant,
+  unknownOrganizationDenial,
 } from "./tenant-rules";
 import type {
   Principal,
@@ -47,6 +50,7 @@ export {
   FORBIDDEN,
   NO_ACTIVE_ORGANIZATION,
   ORGANIZATION_HEADER,
+  UNKNOWN_ORGANIZATION,
 } from "./tenant-rules";
 export type {
   ApiKeyPrincipal,
@@ -138,7 +142,8 @@ export async function loadStatements(
  *    key from quietly falling back to whatever session cookie rode along with it.
  * 2. Otherwise the session has to exist, or this is a 401.
  * 3. `x-organization-id` is honoured only for `superadmin`, and refused for everyone
- *    else — refused, not ignored, so a caller who sends it learns they may not.
+ *    else — refused, not ignored, so a caller who sends it learns they may not. The id it
+ *    names is looked up, so a superadmin's typo is a 404 rather than a fabricated tenant.
  * 4. Otherwise the session's active organization, verified by membership through
  *    `getActiveMember`. It reads the session and the `member` row in one call, so a
  *    membership revoked after `setActive` fails closed on the very next request rather
@@ -162,6 +167,14 @@ export async function resolveTenant(
     if (session.user.role !== SUPERADMIN_ROLE) {
       return { denial: headerDenial(), tenant: null };
     }
+    // The header is a raw request value and `asTenantId` brands whatever it is handed, so
+    // the id has to be a real organization before it becomes a `TenantId`. Without this
+    // read a typo resolves to a tenant that does not exist: every scoped select returns
+    // nothing and the first scoped insert fails on the foreign key as a 500.
+    const known = await withDb(c, (db) => organizationExists(db, header));
+    if (!known) {
+      return { denial: unknownOrganizationDenial(), tenant: null };
+    }
     return {
       denial: null,
       tenant: superadminTenant(session.user.id, asTenantId(header)),
@@ -171,11 +184,18 @@ export async function resolveTenant(
   // `getActiveMember` throws when the session has no active organization, and again when
   // the caller is no longer a member of the one it names. Both are the same answer here,
   // and both are the fixed 403 rather than the plugin's own body.
+  //
+  // Only `APIError` is swallowed. A blanket catch would turn a database outage into the
+  // same fixed 403, and `apps/admin` matches on that message to tell the operator to pick
+  // an organization — advice that is wrong and unfollowable when the database is down.
   const active = await withAuthScope(c, async () => {
     try {
       return await auth.api.getActiveMember({ headers: c.req.raw.headers });
-    } catch {
-      return null;
+    } catch (error) {
+      if (error instanceof APIError) {
+        return null;
+      }
+      throw error;
     }
   });
   if (!active) {

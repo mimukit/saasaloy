@@ -58,6 +58,10 @@
       "target": "@db/repositories/organization-roles.ts"
     },
     {
+      "path": "files/db/repositories/organizations.ts",
+      "target": "@db/repositories/organizations.ts"
+    },
+    {
       "path": "files/db/repositories/projects.ts",
       "target": "@db/repositories/projects.ts"
     },

@@ -41,6 +41,13 @@ export const NO_ACTIVE_ORGANIZATION = "no active organization";
 export const FORBIDDEN = "forbidden";
 
 /**
+ * The message a `superadmin` sees when `x-organization-id` names no organization. Fixed
+ * for the same reason `NO_ACTIVE_ORGANIZATION` is: the SPA tells a typo apart from a
+ * refusal by this string.
+ */
+export const UNKNOWN_ORGANIZATION = "unknown organization";
+
+/**
  * A resolved permission set: resource name to the actions held on it. This is
  * `access.ts`'s `statements` shape with the literal types dropped, because a role stored
  * in the database is parsed at runtime and cannot carry them.
@@ -238,4 +245,14 @@ export function headerDenial(): Denial {
  */
 export function noOrganizationDenial(): Denial {
   return { status: 403, message: NO_ACTIVE_ORGANIZATION };
+}
+
+/**
+ * 404 when a `superadmin` names an organization that does not exist. They may send the
+ * header, so this is not 403; the id they sent is simply not a tenant. Answering 404 here
+ * keeps a typo out of `asTenantId`, which brands whatever it is handed and would otherwise
+ * carry a fabricated id into every query on the request.
+ */
+export function unknownOrganizationDenial(): Denial {
+  return { status: 404, message: UNKNOWN_ORGANIZATION };
 }

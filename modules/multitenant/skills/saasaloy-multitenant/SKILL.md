@@ -81,7 +81,7 @@ It refuses, in order of how likely each is to be the bug:
 
 `x-organization-id` names an organization to act inside. It is honoured **only** on the cookie path and **only** when the session's role is `superadmin`.
 
-- A `superadmin` sending it gets that organization, with `principal: { kind: "superadmin", userId }`.
+- A `superadmin` sending it gets that organization, with `principal: { kind: "superadmin", userId }`. The id is looked up first, so a typo is 404 `unknown organization` rather than a tenant that does not exist.
 - Any other signed-in caller sending it gets 403 `forbidden`. Refused, not ignored — a silently ignored header reads as "it worked" to whoever sent it.
 - Beside a bearer credential it is 403 whatever it says. A key is bound to one organization.
 
@@ -96,6 +96,7 @@ Every one of these renders through api's `ERROR_CODES` envelope, so a caller par
 | Signed out | 401 | `sign in first` |
 | No active organization, or membership revoked | 403 | `no active organization` |
 | `x-organization-id` from a caller who may not send it | 403 | `forbidden` |
+| `x-organization-id` from a `superadmin` naming no organization | 404 | `unknown organization` |
 | A claimed bearer credential that fails (`api-keys`) | 401 | `invalid api key` |
 | A `can()` refusal (`rbac`) | 403 | `permission required: <resource>:<action>` |
 

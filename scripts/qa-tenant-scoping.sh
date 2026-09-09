@@ -79,6 +79,10 @@ c=$(code u3 -H "x-organization-id: $B_ID" "$API/tenant")
 check "a member sending the header is 403" 403 "$c"
 check "and the message is forbidden" forbidden \
   "$(as u3 -H "x-organization-id: $B_ID" "$API/tenant" | jq -r .error.message)"
+c=$(code u1 -H "x-organization-id: org_does_not_exist" "$API/tenant")
+check "a superadmin typo is 404, not a fabricated tenant" 404 "$c"
+check "and the message is unknown organization" "unknown organization" \
+  "$(as u1 -H "x-organization-id: org_does_not_exist" "$API/tenant" | jq -r .error.message)"
 
 echo
 echo "== P2-8. tenant isolation on /projects"

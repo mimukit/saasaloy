@@ -44,12 +44,16 @@ export interface RoleBearer {
 }
 
 /**
- * A refusal. `status` is one of the two api's `ERROR_CODES` already maps (`401:
- * "unauthorized"`, `403: "forbidden"`), and `message` becomes `error.message` in the
- * envelope `onError` renders. It is never empty, because `errorSchema` rejects that.
+ * A refusal. `status` is one of the three api's `ERROR_CODES` already maps (`401:
+ * "unauthorized"`, `403: "forbidden"`, `404: "not_found"`), and `message` becomes
+ * `error.message` in the envelope `onError` renders. It is never empty, because
+ * `errorSchema` rejects that.
+ *
+ * The union is closed on purpose. A gate answers one of these three and nothing else, so
+ * adding a status is a decision made here rather than at a call site.
  */
 export interface Denial {
-  readonly status: 401 | 403;
+  readonly status: 401 | 403 | 404;
   readonly message: string;
 }
 
