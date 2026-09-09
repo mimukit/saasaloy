@@ -85,7 +85,24 @@ export function forTenant(db: Db, tenantId: TenantId) {
   return {
     /** Every column of `table` belonging to this organization. */
     select<T extends TenantTable>(table: T, where?: SQL) {
-      return db.select().from(table).where(scope(table, where));
+      // The third cast, and it is dialect-driven. `database-postgres`' `.from()` guards
+      // its argument with `TableLikeHasEmptySelection<T> extends true ? DrizzleTypeError
+      // : T`, and a bare generic `T` cannot be shown to fail that test from inside a
+      // generic function, so `tsc` refuses it under Postgres and accepts it under D1.
+      // The public signature above is the strict one, and `T extends TenantTable` is
+      // already a real table of this project's dialect.
+      // The row type is restated rather than inferred, for the same reason: it is
+      // `T["$inferSelect"][]`, which is what `.from(project)` would have inferred at a
+      // concrete call site. The builder is a thenable and every call site awaits it.
+      // Cast the BUILDER, not the method. `const from = db.select().from` drops the
+      // receiver, and Drizzle's `from` reads `this`, so that version throws at runtime
+      // while it typechecks.
+      const builder = db.select() as unknown as {
+        from: (table: DialectTable) => {
+          where: (condition: SQL | undefined) => Promise<T["$inferSelect"][]>;
+        };
+      };
+      return builder.from(table).where(scope(table, where));
     },
 
     /**
