@@ -109,8 +109,19 @@ _Avoid: file variant, dialect flag, conditional patch (patches carry no conditio
 The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings.
 
 ### Copy-in update (`--diff`)
-The update path for existing projects: hash a managed file — match → clean overwrite; drift (hand-edited) → route to AI-merge rather than clobber.
+The update path for existing projects: hash a managed file — match → clean overwrite; drift (hand-edited) → route to AI-merge rather than clobber. Two records override the hash and force the merge path: an [adopted entry](#adopted-entry) and an [owned file](#owned-file) ([ADR 0034](docs/adr/adr-0034-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
 _Avoid: versioned-package update._
+
+### Adopted entry
+A `.saasaloy/manifest.json` entry whose hash the CLI took off disk rather than from bytes it wrote — what `saasaloy update` records for a project that had no base record. The flag exists because the two facts differ: the hash proves the file has not changed *since adoption*, not that the template wrote it. An adopted entry never earns an overwrite; it goes to the [AI-assisted merge](#ai-assisted-merge) until the CLI writes the file itself.
+_Avoid: pristine entry, baseline hash._
+
+### Owned file
+A base-template file the template ships once and the project owns afterwards — `globals.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
+_Avoid: user file, editable file._
+
+### Seed file
+A base-template file the owner is meant to rewrite — `DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts.
 
 ### AI-assisted merge
 The structured, agent-consumable merge plan `--diff` emits for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.

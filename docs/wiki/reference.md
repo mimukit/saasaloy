@@ -162,14 +162,15 @@ A base row reads `current`, `outdated`, or `untracked`. `untracked` means the pr
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--force] [--yes]
+saasaloy update --abort
 ```
 
 Re-apply the base template and installed modules at a newer version than `saasaloy-lock.json` records. With nothing named it considers the base and every installed module; `saasaloy update base` considers the base alone. A file you never touched is overwritten; a file you edited is left alone and routed into a **merge plan** — a document written to stdout describing what changed upstream, what you changed, and what the reconciliation has to preserve. `saasaloy update email | claude` is the designed pipeline.
 
-The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. There is no old template on disk to use as a merge base, so a drifted base file renders two-way, current file against the new render, with the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
+The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. There is no old template on disk to use as a merge base, so a drifted base file renders two-way, current file against the new render, with the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated. Files it declares as owned — `packages/ui/src/styles/globals.css`, everything under `blocks/`, `components/`, `containers/` and `content/`, `packages/ui/src/index.ts`, `apps/web/src/layouts/Layout.astro` and `apps/web/public/favicon.*` — are created when absent and never written again. The template hands them over once, and the upstream change reaches you through the merge plan instead. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
 
-Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, while each missing file is recorded at the rendered template hash. The run records the running CLI, reports the adoption, and exits 0. Your existing edits become the baseline rather than drift, while the next update restores missing files. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
+Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, while each missing file is recorded at the rendered template hash. The run records the running CLI, reports the adoption, and exits 0. Each adopted entry is flagged `adopted`, because the hash came off your disk and says nothing about who wrote those bytes: the next update treats every one of those files as edited and offers a merge rather than a write. Missing files are still restored. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
 
 | Flag | Effect |
 |---|---|
@@ -177,6 +178,8 @@ Two cases stop before anything is applied. A project with no usable base record 
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
+| `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
+| `--abort` | restore the newest pre-update backup and stop. Reads no registry and builds no plan. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 
 The confirmation gates on **stdin**, not stdout: the merge plan goes to stdout, so a
@@ -187,6 +190,14 @@ preview (`--dry-run`, `--diff`) writes nothing and is exempt.
 `update` runs the same `conflictsWith` check `add` does, because a new version can
 introduce a `dependsOn` on a second driver, and it reports any environment variable the new
 version added that the lock has no record of.
+
+Before it writes anything, `update` copies every file the plan will touch — plus
+`saasaloy.json`, `saasaloy-lock.json`, `package.json` and `.saasaloy/manifest.json` — into
+`.saasaloy/backups/<timestamp>/`, and prints the path. `saasaloy update --abort` puts that
+copy back, including deleting the files the run created. The directory is gitignored.
+
+Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and
+left files waiting on a merge, 2 for a refusal, 1 for a failure.
 
 ## `saasaloy remove`
 

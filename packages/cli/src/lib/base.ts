@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
 import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { basename, join, posix } from "node:path";
+import { join, posix } from "node:path";
 import { hashContent, readIfPresent, resolveWithinRoot } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
 import { saveLock } from "./lock.js";
@@ -55,6 +55,42 @@ export const BASE_INTENT =
 export interface BaseDeclaration {
   /** Project-relative POSIX paths the owner is meant to rewrite; recorded, never updated. */
   seedFiles: string[];
+  /**
+   * Globs for files the template ships once and the project owns afterwards — the blocks,
+   * the components, `globals.css`, the favicon. The template's own `AGENTS.md` has always
+   * said so; until this list nothing enforced it, and an update overwrote them. An owned
+   * file that is absent is still created or restored. An owned file that exists goes to
+   * the merge plan, never to a write. `**` matches any number of segments, `*` one.
+   */
+  ownedFiles: string[];
+}
+
+/**
+ * A `*`/`**` glob compiled against project-relative POSIX targets. Deliberately small:
+ * the declaration is ours, so the patterns are the handful this file documents rather
+ * than arbitrary user input.
+ */
+export function compileGlob(pattern: string): RegExp {
+  const source = pattern
+    .split("/")
+    .map((segment) =>
+      segment === "**"
+        ? "[^\0]*"
+        : segment
+            .replaceAll(/[.+^${}()|[\]\\]/g, String.raw`\$&`)
+            .replaceAll("*", "[^/]*")
+    )
+    .join("/")
+    .replaceAll("[^\0]*/", "(?:[^\0]*/)?");
+  return new RegExp(`^${source}$`);
+}
+
+/** The predicate `update` asks whether a target is the project's rather than the template's. */
+export function ownedMatcher(
+  declaration: BaseDeclaration
+): (target: string) => boolean {
+  const patterns = declaration.ownedFiles.map(compileGlob);
+  return (target: string) => patterns.some((re) => re.test(target));
 }
 
 /** One file the template ships, before and after the `_` → `.` rename. */
@@ -77,9 +113,12 @@ export async function readBaseDeclaration(
 ): Promise<BaseDeclaration> {
   const raw = await readIfPresent(join(templateDir, BASE_DECLARATION));
   if (raw === undefined) {
-    return { seedFiles: [] };
+    return { seedFiles: [], ownedFiles: [] };
   }
-  const parsed = JSON.parse(raw) as { seedFiles?: unknown };
+  const parsed = JSON.parse(raw) as {
+    seedFiles?: unknown;
+    ownedFiles?: unknown;
+  };
   const seedFiles = parsed.seedFiles;
   if (
     !Array.isArray(seedFiles) ||
@@ -89,7 +128,19 @@ export async function readBaseDeclaration(
       `${BASE_DECLARATION} must declare "seedFiles" as a list of project-relative paths.`
     );
   }
-  return { seedFiles: seedFiles as string[] };
+  const ownedFiles = parsed.ownedFiles ?? [];
+  if (
+    !Array.isArray(ownedFiles) ||
+    !ownedFiles.every((entry) => typeof entry === "string" && entry !== "")
+  ) {
+    throw new Error(
+      `${BASE_DECLARATION} must declare "ownedFiles" as a list of project-relative globs.`
+    );
+  }
+  return {
+    seedFiles: seedFiles as string[],
+    ownedFiles: ownedFiles as string[],
+  };
 }
 
 /** Every file the template ships, sorted by target, the declaration excluded. */
@@ -169,8 +220,11 @@ export function baseEntries(manifest: Manifest): Record<string, ManagedEntry> {
   return out;
 }
 
-/** What `recordBaseFiles` needs of a file: the same three fields `copyTemplate` returns. */
-export type BaseFileRecord = Pick<WrittenFile, "target" | "from" | "hash">;
+/** What `recordBaseFiles` needs of a file: the three fields `copyTemplate` returns, plus provenance. */
+export type BaseFileRecord = Pick<WrittenFile, "target" | "from" | "hash"> & {
+  /** The hash came off disk, not out of the render — see `ManagedEntry.adopted`. */
+  adopted?: boolean;
+};
 
 /**
  * Replace the base's manifest entries with `files`. Entries other modules own are left
@@ -190,6 +244,7 @@ export function recordBaseFiles(
     manifest.managed[file.target] = {
       module: BASE_MODULE,
       hash: file.hash,
+      ...(file.adopted ? { adopted: true } : {}),
       from: file.from,
     };
   }
@@ -244,17 +299,26 @@ export interface RenderedTemplate {
  * Render the bundled template for `root` into a temp dir, source names kept, so each
  * file's `from` resolves inside the render and its `hash` is of the bytes `init` would
  * have written for this project.
+ *
+ * `projectName` is the project's own name, read from `saasaloy.json` — never
+ * `basename(root)`. The directory is the wrong source: a git worktree, a renamed folder
+ * or a CI checkout path all differ from the name `init` rendered with, and substituting
+ * one of those rewrites `package.json` `name`, `wrangler.jsonc` `name` and `siteName` to
+ * a name the project never chose.
  */
 export async function renderTemplate(
   root: string,
-  templateDir: string
+  templateDir: string,
+  projectName: string
 ): Promise<RenderedTemplate> {
   const dir = await mkdtemp(join(tmpdir(), "saasaloy-base-render-"));
   const files = await copyTemplate(
     templateDir,
     dir,
-    templateVars(basename(root)),
-    { keepNames: true }
+    templateVars(projectName),
+    {
+      keepNames: true,
+    }
   );
   return {
     dir,
@@ -267,6 +331,8 @@ export interface AdoptBaseArgs {
   root: string;
   /** The running CLI's version — the record says the base was adopted here. */
   cliVersion: string;
+  /** The project's own name, from `saasaloy.json` — never the directory's. */
+  projectName: string;
   /** Loaded state, mutated in place and saved unless `dryRun`. */
   manifest: Manifest;
   lock: Lockfile;
@@ -292,11 +358,23 @@ export interface AdoptBaseResult {
  * a template file missing from disk is recorded at its rendered hash, which `update`
  * reads as "tracked but missing" and restores. Adoption records the present, not the
  * past: it skips at most one generation of base changes.
+ *
+ * A file recorded off disk is flagged `adopted`, and that flag is the whole safety of
+ * this step. Without it the next `update` reads the recorded hash as proof the file is
+ * untouched template output and overwrites every hand edit in the project — the failure
+ * this flag exists to end. An adopted file goes to the merge plan instead.
  */
 export async function adoptBase(args: AdoptBaseArgs): Promise<AdoptBaseResult> {
-  const { root, cliVersion, manifest, lock, dryRun = false } = args;
+  const {
+    root,
+    cliVersion,
+    projectName,
+    manifest,
+    lock,
+    dryRun = false,
+  } = args;
   const templateDir = args.templateDir ?? (await baseTemplateDir());
-  const render = await renderTemplate(root, templateDir);
+  const render = await renderTemplate(root, templateDir, projectName);
   try {
     const files: BaseFileRecord[] = [];
     const adopted: string[] = [];
@@ -312,6 +390,7 @@ export async function adoptBase(args: AdoptBaseArgs): Promise<AdoptBaseResult> {
           target: file.target,
           from: file.from,
           hash: hashContent(mine),
+          adopted: true,
         });
       }
     }
@@ -340,6 +419,8 @@ export interface BaseUpdateArgs {
   templateDir: string;
   /** The running CLI's version, written into the record a clean run moves to. */
   cliVersion: string;
+  /** The project's own name, from `saasaloy.json` — never the directory's. */
+  projectName: string;
   /** The `outdated` row from `compareBase`, carried into the plan for the summary. */
   comparison: ModuleComparison;
 }
@@ -365,9 +446,18 @@ export interface BaseUpdateHandle {
 export async function baseUpdateInput(
   args: BaseUpdateArgs
 ): Promise<BaseUpdateHandle> {
-  const { root, manifest, lock, templateDir, cliVersion, comparison } = args;
-  const render = await renderTemplate(root, templateDir);
-  const seed = new Set((await readBaseDeclaration(templateDir)).seedFiles);
+  const {
+    root,
+    manifest,
+    lock,
+    templateDir,
+    cliVersion,
+    projectName,
+    comparison,
+  } = args;
+  const render = await renderTemplate(root, templateDir, projectName);
+  const declaration = await readBaseDeclaration(templateDir);
+  const seed = new Set(declaration.seedFiles);
   const shipped = render.files.filter((file) => !seed.has(file.target));
   const targets = new Set(shipped.map((file) => file.target));
   return {
@@ -392,6 +482,7 @@ export async function baseUpdateInput(
       noMergeBase: BASE_NO_MERGE_BASE,
       intent: [],
       ignoreTargets: seed,
+      isOwned: ownedMatcher(declaration),
       reapplyPatches: manifest.patches.filter((patch) =>
         targets.has(patch.file)
       ),

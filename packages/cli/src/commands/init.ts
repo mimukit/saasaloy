@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { readdir } from "node:fs/promises";
+import { readdir, readFile } from "node:fs/promises";
 import { basename, join, resolve } from "node:path";
 import {
   cancel,
@@ -16,9 +16,11 @@ import type { LinkState } from "../lib/fs-utils.js";
 import {
   classifyLink,
   createDirLink,
+  hashContent,
   pathExists,
   readDirNames,
 } from "../lib/fs-utils.js";
+import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
 import { loadLock, saveLock } from "../lib/lock.js";
@@ -343,6 +345,23 @@ export async function runInit(argv: string[]): Promise<number> {
   // Record what was just rendered: every file at the hash of its rendered bytes, and the
   // template's own hash beside the CLI version. These ledgers decide whether later
   // updates may overwrite files, so init must not report success if either write fails.
+  // The project's own name, recorded once. `update` re-renders this template to compare
+  // against and needs the same `{{PROJECT_NAME}}` it was rendered with here; without this
+  // it fell back to the directory name, and a git worktree or a CI checkout path then
+  // rewrote `package.json` `name`, `wrangler.jsonc` `name` and `siteName` (#144). The
+  // template ships the file without a name so the file it ships stays schema-valid.
+  try {
+    const config = await loadConfig(target);
+    await saveConfig(target, { ...config, name: projectName });
+    const entry = written.find((file) => file.target === CONFIG_FILE);
+    if (entry) {
+      entry.hash = hashContent(await readFile(entry.path, "utf-8"));
+    }
+  } catch (error) {
+    cancel(`Couldn't record the project name: ${errorMessage(error)}`);
+    return EXIT_FAILURE;
+  }
+
   try {
     const manifest = await loadManifest(target);
     const lock = await loadLock(target);

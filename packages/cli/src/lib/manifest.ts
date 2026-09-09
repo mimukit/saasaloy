@@ -16,6 +16,14 @@ export interface ManagedEntry {
   module: string;
   hash: string;
   /**
+   * The hash is of bytes found on disk, not bytes the tool wrote (`adoptBase`). Those
+   * bytes may hold hand edits the tool knows nothing about, so an adopted entry never
+   * earns the `overwrite` verdict: `classifyUpdate` sends it to the merge plan instead.
+   * Dropped the first time the tool writes the file itself, which is when the recorded
+   * hash finally describes template output.
+   */
+  adopted?: boolean;
+  /**
    * Module-relative source path this file was copied from (e.g. `files/lib/email.ts`).
    * `update` needs it to fetch the same file at two commit SHAs, which the hash alone
    * can't express. Optional: entries written before this shipped don't carry it, and

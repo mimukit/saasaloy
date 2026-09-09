@@ -171,6 +171,22 @@ function renderFile(file: PlannedUpdateFile): string[] {
     );
   }
 
+  if (file.projectOwned) {
+    out.push(
+      "This file is yours: the template ships it once and never writes it again. The " +
+        "template's copy moved, so the change is shown below for you to take what you want " +
+        "from it. Nothing here was written.",
+      ""
+    );
+  } else if (file.adopted) {
+    out.push(
+      "Saasaloy adopted this file rather than writing it, so the hash it records came off " +
+        "your disk and proves nothing about who wrote these bytes. It is treated as edited " +
+        "and was left alone.",
+      ""
+    );
+  }
+
   if (file.patchedBy && file.patchedBy.length > 0) {
     out.push(
       `Note: \`${file.patchedBy.join("`, `")}\` also applied a config patch to this file. Part of ` +

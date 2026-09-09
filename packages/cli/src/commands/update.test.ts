@@ -1,3 +1,4 @@
+import { execFileSync } from "node:child_process";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
@@ -18,6 +19,7 @@ import {
   recordBaseFiles,
   templateHash,
 } from "../lib/base.js";
+import { EXIT_MERGE_PENDING } from "../lib/exit.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { emptyLock, loadLock, saveLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
@@ -534,7 +536,8 @@ describe("runUpdate — the base template (#120)", () => {
 
     const { code, err, out } = await runBoth(["--yes"]);
 
-    expect(code).toBe(0);
+    // 3, not 0: the run applied what it could and left a file waiting on a merge.
+    expect(code).toBe(EXIT_MERGE_PENDING);
     expect(out).toContain("# Saasaloy merge plan");
     expect(out).toContain("## base");
     expect(out).toContain(BASE_INTENT);
@@ -563,7 +566,7 @@ describe("runUpdate — the base template (#120)", () => {
     expect(diff.err).toContain("- old agent rules, plus mine");
 
     const applied = await runBoth(["--yes", "--out", "plan.md"]);
-    expect(applied.code).toBe(0);
+    expect(applied.code).toBe(EXIT_MERGE_PENDING);
     expect(applied.out).toBe("");
     await expect(
       readFile(join(project, "plan.md"), "utf-8")
@@ -616,5 +619,120 @@ describe("runUpdate — the base template (#120)", () => {
 
     expect(code).toBe(2);
     expect(err).toContain("--ref");
+  });
+
+  // The incident this whole group of tests exists for (#144). A project adopted on one
+  // run had every hand-edited file recorded at its own hash, and the next run read that
+  // hash as proof the file was untouched template output and overwrote it.
+  it("offers a merge for an adopted file rather than overwriting it", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    state.manifest.managed["AGENTS.md"]!.adopted = true;
+    await saveManifest(project, state.manifest);
+
+    const { code, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_MERGE_PENDING);
+    expect(out).toContain("AGENTS.md");
+    expect(out).toContain("adopted this file");
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "old agent rules\n"
+    );
+  });
+
+  it("never writes a file the template declares the project owns", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    const owned = join("packages", "ui", "src", "styles", "globals.css");
+    await writeFile(join(project, owned), ":root { --mine: 1; }\n", "utf-8");
+    // Recorded at the bytes on disk: by hash alone this file is pristine and writable.
+    state.manifest.managed[owned.replaceAll("\\", "/")]!.hash = hashContent(
+      ":root { --mine: 1; }\n"
+    );
+    await saveManifest(project, state.manifest);
+
+    const { code } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_MERGE_PENDING);
+    await expect(readFile(join(project, owned), "utf-8")).resolves.toBe(
+      ":root { --mine: 1; }\n"
+    );
+  });
+
+  it("takes the project name from saasaloy.json, not from the directory", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as Record<string, unknown>;
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ ...config, name: "unishopr" }),
+      "utf-8"
+    );
+
+    await runBoth(["--yes"]);
+
+    const pkg = JSON.parse(
+      await readFile(join(project, "package.json"), "utf-8")
+    ) as { name?: string };
+    expect(pkg.name).toBe("unishopr");
+    expect(pkg.name).not.toBe(basename(project));
+  });
+
+  it("backs up what it touches, and `--abort` puts it back", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+
+    const applied = await runBoth(["--yes"]);
+    expect(applied.code).toBe(0);
+    expect(applied.err).toContain(".saasaloy/backups");
+    const updated = await readFile(join(project, "AGENTS.md"), "utf-8");
+    expect(updated).not.toBe("old agent rules\n");
+
+    const aborted = await runBoth(["--abort"]);
+    expect(aborted.code).toBe(0);
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "old agent rules\n"
+    );
+    expect((await lockOnDisk()).base).toStrictEqual(
+      baseRecord("0.0.0", "f".repeat(64))
+    );
+  });
+
+  it("refuses `--abort` when there is no backup", async () => {
+    await scaffolded();
+
+    const { code, err } = await runBoth(["--abort"]);
+
+    expect(code).toBe(2);
+    expect(err).toContain("No backup to restore");
+  });
+
+  it("refuses a dirty git working tree, and applies under --force", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    const git = (...args: string[]) =>
+      execFileSync("git", args, { cwd: project, stdio: "ignore" });
+    git("init", "--initial-branch=main");
+    git("config", "user.email", "test@example.com");
+    git("config", "user.name", "test");
+    git("add", "AGENTS.md");
+    git("commit", "-m", "base");
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "edited, uncommitted\n",
+      "utf-8"
+    );
+
+    const refused = await runBoth(["--yes"]);
+    expect(refused.code).toBe(2);
+    expect(refused.err).toContain("uncommitted changes");
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "edited, uncommitted\n"
+    );
+
+    const forced = await runBoth(["--yes", "--force"]);
+    expect(forced.code).toBe(EXIT_MERGE_PENDING);
   });
 });
