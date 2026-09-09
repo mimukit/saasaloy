@@ -17,5 +17,15 @@ import { ac, roles } from "../access";
 // customer stored at runtime, which is why the admin screens read the resolved principal
 // from `GET /tenant` and run `can()` instead.
 export function organizationClientPlugin() {
-  return organizationClient({ ac, roles });
+  return organizationClient({
+    ac,
+    roles,
+
+    // The client's own copy of the server's `dynamicAccessControl`. It adds nothing at
+    // runtime; it decides whether `auth.organization.listRoles`, `createRole`,
+    // `updateRole` and `deleteRole` exist on the inferred client type at all. Without it
+    // the `/roles` screen in `rbac` does not compile. Keep the two flags in step with
+    // `./organization.ts`.
+    dynamicAccessControl: { enabled: true },
+  });
 }
