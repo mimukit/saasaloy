@@ -176,7 +176,7 @@ Leave `binding` as `KV` unless you pass a different name to `cloudflare({ bindin
 
 Each `namespace_id` must be a unique positive integer **per Cloudflare account**. Cloudflare does not document what a collision does. If the account already runs limiters, change these three to numbers it does not use.
 
-**3. Add a fourth policy in both places.** `definePolicy` in `packages/kv/src/index.ts` registers the name; the binding is what enforces it. Add both, and keep the name in step: policy `burst` needs binding `RL_BURST`.
+**3. Add a fourth policy in both places.** Write the `definePolicy` factory in `packages/kv/src/policies/ratelimit.ts` and add the call to the `policies` array in `packages/kv/src/index.ts`; the binding is what enforces it. Add both, and keep the name in step: policy `burst` needs binding `RL_BURST`.
 
 ```jsonc
 { "name": "RL_BURST", "namespace_id": "1004", "simple": { "limit": 5, "period": 10 } }
