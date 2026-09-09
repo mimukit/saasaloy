@@ -135,6 +135,34 @@ signature does not change when the project switches driver.
 A repository written against the shared Drizzle query builder works on either driver. One reaching
 for driver-specific SQL does not, so keep it on the builder where you can.
 
+### A table that belongs to an organization
+
+Once `multitenant` is installed, a table a request reads on behalf of one organization follows the
+**tenant column convention**, and its repository goes through `forTenant` rather than raw `db`:
+
+```ts
+// packages/db/src/schema/project.ts
+export const project = sqliteTable(
+  "project",
+  { id: text("id").primaryKey(), organizationId: tenantColumn(), name: text("name").notNull() },
+  (table) => [tenantIndex(table, "project")]
+);
+
+// packages/db/src/repositories/project.ts
+export function listProjects(db: Db, tenantId: TenantId) {
+  return forTenant(db, tenantId).select(project);
+}
+```
+
+`tenantColumn()` and `tenantIndex()` come from `@repo/db/tenant-column` and expand to
+`text("organization_id").notNull().references(() => organization.id)` plus one index. The property
+name has to be `organizationId`: `forTenant` reads it, so a table naming it `orgId` does not fit
+`TenantTable` even when the column underneath is right.
+
+`TenantId` is a branded string that only `requireTenant` mints, from `@repo/db/tenant`. A repository
+taking a plain `string` organization id has thrown the guard away. The compile-time guarantees, and
+the `tenant.typecheck.ts` file that proves them, live in the `saasaloy-multitenant` skill.
+
 ## `withDb` and the `@repo/db/client` contract
 
 The core's `package.json` declares the `./client` export, but the file behind it,
