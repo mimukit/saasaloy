@@ -28,8 +28,9 @@ import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy doctor [path]` — validate module descriptors before they reach a stranger's
 // machine. It checks a local folder: one module (`doctor modules/waitlist`) or a whole
-// registry (`doctor modules`, the default). Validating a remote coordinate — the consumer
-// asking "is this module safe to add?" — is a separate command and a follow-up issue.
+// registry (`doctor modules`). Nothing named defaults to the current directory. Validating
+// a remote coordinate — the consumer asking "is this module safe to add?" — is a separate
+// command and a follow-up issue.
 //
 // A path carrying a `saasaloy.json` is checked as a project instead: the rules there read
 // `installed` against `.saasaloy/manifest.json` and report a module that owns no files
@@ -56,8 +57,8 @@ const HELP: CommandHelp = {
   flags: {},
 };
 
-/** The directory checked when nothing is named — the registry layout of this repo. */
-const DEFAULT_PATH = "modules";
+/** The directory checked when nothing is named — the current directory. */
+const DEFAULT_PATH = ".";
 
 export function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
@@ -174,23 +175,15 @@ export async function runDoctor(argv: string[]): Promise<number> {
   const path = opts.path ?? DEFAULT_PATH;
   try {
     if (!(await pathExists(path))) {
-      // The default path only exists in a registry repo, so a user standing in a
-      // scaffolded project lands here — and the refusal is the only place they can learn
-      // the project mode exists. Name `doctor .` when their directory carries a
-      // `saasaloy.json` (#107). A path they typed themselves gets the plain refusal.
-      const hint =
-        opts.path === undefined && (await pathExists(CONFIG_FILE))
-          ? ` Run \`saasaloy doctor .\` to check this project instead.`
-          : "";
       cancel(
-        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.${hint}`
+        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.`
       );
       return EXIT_REFUSED;
     }
 
     // A path carrying a `saasaloy.json` is a project, not a registry, so the project
-    // rules run instead of the descriptor ones (#107). The default path stays `modules`,
-    // so `saasaloy doctor` in a registry repo behaves exactly as it did.
+    // rules run instead of the descriptor ones (#107). The default path is the current
+    // directory, so `saasaloy doctor` picks project or registry mode by what's there.
     if (await pathExists(join(path, CONFIG_FILE))) {
       return await reportProject(path);
     }

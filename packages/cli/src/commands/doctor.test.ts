@@ -128,9 +128,8 @@ describe("runDoctor — what it reports and what it exits with", () => {
     expect(out).not.toContain("saasaloy doctor .");
   });
 
-  // #107. The default path is the registry layout, which a scaffolded project does not
-  // have, so a bare `doctor` there refuses. That refusal is where the project user has to
-  // find the project mode.
+  // #107. The default path is the current directory, so a bare `doctor` run inside a
+  // scaffolded project lands in project mode without needing `doctor .` named explicitly.
   describe("a bare run inside a project", () => {
     const original = process.cwd();
 
@@ -138,23 +137,22 @@ describe("runDoctor — what it reports and what it exits with", () => {
       process.chdir(original);
     });
 
-    it("names `doctor .` when the directory carries a saasaloy.json", async () => {
+    it("checks the project directly, with no path named", async () => {
       const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-project-"));
       temps.push(project);
       await writeFile(
         join(project, "saasaloy.json"),
-        JSON.stringify({ installed: [] })
+        JSON.stringify({ aliases: {}, installed: [] })
       );
       process.chdir(project);
 
       const { code, out } = await run([]);
 
-      expect(code).toBe(2);
-      expect(out).toContain("No such path: modules");
-      expect(out).toContain("saasaloy doctor .");
+      expect(code).toBe(0);
+      expect(out).not.toContain("No such path");
     });
 
-    it("stays silent about it in a directory that is no project", async () => {
+    it("checks the registry layout in a directory that is no project", async () => {
       const plain = await mkdtemp(join(tmpdir(), "saasaloy-doctor-plain-"));
       temps.push(plain);
       process.chdir(plain);
@@ -162,7 +160,7 @@ describe("runDoctor — what it reports and what it exits with", () => {
       const { code, out } = await run([]);
 
       expect(code).toBe(2);
-      expect(out).not.toContain("saasaloy doctor .");
+      expect(out).toContain("No module folders in .");
     });
   });
 
