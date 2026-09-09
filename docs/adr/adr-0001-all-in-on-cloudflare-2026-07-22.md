@@ -3,7 +3,7 @@
 Saasaloy commits to Cloudflare (D1 + R2 + Workers) as the only target, so the multi-cloud adapter layer is cut entirely — no `core` capability interfaces, no per-provider adapter packages (`db-neon`, `store-s3`, `deploy-*`), and no `saasaloy migrate db`. The wedge is that Cloudflare's building blocks are mature but nobody assembles *and maintains* them; committing to one provider is what keeps the module surface small enough to keep current. See build-spec [§2.2](../plans/plan-saasaloy-build-spec-2026-07-21.md).
 
 ## Status
-accepted (amended 2026-08-04 — see below)
+accepted (amended 2026-08-04 and 2026-09-08 — see below)
 
 ## Considered Options
 - Swappable multi-cloud adapters behind capability interfaces — cut: swappability serves other people's stacks, a product concern deferred with the personal-first scope.
@@ -29,3 +29,9 @@ Consequences of the amendment:
 - This does **not** reopen `saasaloy migrate db`, a `core` interfaces package, or per-provider *deploy* targets. Applying the amendment to a stateful capability requires a new ADR.
 
 References: issue [#15](https://github.com/mimukit/saasaloy/issues/15), `docs/plans/plan-email-capability-module-2026-08-04.md`. Glossary: `CONTEXT.md` → "Provider module".
+
+## Amendment — 2026-09-08: the stateless/stateful line becomes the system-of-record test
+
+The amendment above allows a provider module where the capability "wraps a stateless third-party service", and holds every stateful capability to one provider. That wording does not decide `queue`, which holds messages nobody queries, and it does not decide `kv`, which holds entries with a TTL. [ADR 0033](adr-0033-transient-state-capabilities-take-providers-2026-09-08.md) replaces the line with the question the 2026-08-04 split was really asking: does the project own the schema and the migrations, and would a swap move existing data? Drivers when yes, providers when no. `queue`, `kv`, `email`, `sms` and `logger` take providers; `database` and `storage` take drivers.
+
+The sentence "applying the amendment to a stateful capability requires a new ADR" is satisfied by ADR 0033 for the capabilities that record names, and it stays in force for any capability it does not name. Everything else here stands: Cloudflare is the default provider a project installs, a provider is a `saasaloy:feature` module owned by its capability, the multi-provider surface stays inside the capability's workspace, and `saasaloy migrate db` stays cut. "Default" here names what `saasaloy add <capability>` installs first, never a runtime fallback: `<CAP>_PROVIDER` selects the provider on every request, and an unset or unknown value throws instead of reaching for Cloudflare.

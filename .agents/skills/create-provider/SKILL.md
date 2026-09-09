@@ -15,7 +15,8 @@ probably authoring a capability, not a provider — go back to `create-module`.
 
 **Ground truth:** `docs/plans/plan-email-capability-module-2026-08-04.md` (the design this pattern
 came from), [ADR 0001](../../../docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md) (when a
-capability may be multi-provider at all), [ADR 0020](../../../docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)
+capability may be multi-provider at all), [ADR 0033](../../../docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)
+(the test that decides provider vs driver), [ADR 0020](../../../docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)
 (where the vendor dependency goes).
 
 ## Is a provider module the right shape here?
@@ -23,7 +24,7 @@ capability may be multi-provider at all), [ADR 0020](../../../docs/adr/adr-0020-
 ADR 0001 commits the stack to Cloudflare and cuts the multi-cloud adapter layer. Its 2026-08-04
 amendment carves out exactly one exception, and a new provider must land inside it:
 
-- **Stateful infrastructure stays single-provider** — a database, an object store, a queue. Swapping
+- **Stateful infrastructure stays single-provider** — a database, an object store. Swapping
   one is a data migration, and an adapter layer would hide a difference that matters.
 - **Stateless third-party services may be multi-provider** when the capability owns the
   abstraction — sending email, sending an SMS. There is no migration; the endpoint is
@@ -32,6 +33,12 @@ amendment carves out exactly one exception, and a new provider must land inside 
   log pipeline — sits comfortably *inside* the amendment rather than at its edge. It is stateless
   and carries nothing to migrate; the test the amendment is really applying is "would swapping this
   be a data migration?", not "is there a vendor?".
+- **Transient platform state is provider territory too.** A queue holds a message for seconds and
+  the platform, not the project, is its system of record. Nothing is queried after the fact and
+  nothing is migrated, so `queue` takes providers even though it is a binding and not an HTTP
+  endpoint. [ADR 0033](../../../docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)
+  states the test and lists which side each capability sits on. Read it before you assume "has
+  state" means "driver".
 
 A stateful capability can still offer a **choice made once, at install time**, without becoming
 multi-provider. That is a driver module, and `database-d1` / `database-postgres` are the only pair
@@ -104,7 +111,7 @@ one is its own module:
 | `envVars` | none — the binding *is* the credential | the API key |
 
 One mode below per capability that owns a provider interface. The rules above hold for all of them;
-each mode covers only what is different. Add a mode (`kv`, `queue`, …) when a third capability grows
+each mode covers only what is different. Add a mode (`kv`, `storage`, …) when another capability grows
 an interface — and read the mode you're writing for, not the one you remember: `sms` and `email`
 look alike and disagree about `retryable`, which is the difference that costs money.
 
@@ -322,13 +329,121 @@ valid `From`, and `To` numbers returning documented errors (21211 invalid, 21612
 opted-out, 21408 no international permission). Use them to prove your code mapping instead of
 guessing at it.
 
+## Mode: `queue`
+
+**Interface:** `QueueProvider` in `packages/queue/src/provider.ts`. `queue-cloudflare` is the
+binding flavour, `queue-memory` is the local one, and the capability's runbook is
+`modules/queue/skills/saasaloy-queue/SKILL.md`.
+
+The interface itself is one method:
+
+```ts
+import { QueueError } from "../provider";
+import type { EnqueueOptions, Job, QueueEnv, QueueProvider } from "../provider";
+
+export function upstash(): QueueProvider {
+  return {
+    name: "upstash", // the value QUEUE_PROVIDER must hold to select this provider
+    async enqueue(env: QueueEnv, job: Job, payload: unknown, options: EnqueueOptions) {
+      // …serialize { job: job.name, payload } and hand it to the service
+    },
+  };
+}
+```
+
+What a provider copied from `email` gets wrong here:
+
+- **The core has already done the lookup and the validation.** `job` is a registered job and
+  `payload` has already been through its schema. Don't look the name up again, don't re-validate,
+  and don't reach into the `jobs` table. Send `{ job: job.name, payload }` and nothing else: the
+  job table holds everything a consumer needs to run it.
+- **`enqueue` returns void, and returns fast.** There is no message id in the contract, on purpose,
+  because a provider that batches has no single id to give back. Never run the handler, retry, or
+  sleep inside `enqueue` on a provider that has a real service behind it; the caller is a request.
+- **Refuse `job.durable` unless you can actually checkpoint.** A handler asking for a durable run
+  and getting a plain message still runs, but it loses the replay it asked for, and it loses it
+  silently. Throw `QueueError("provider_error")` naming the limitation. `queue-memory` is the one
+  documented exception: it warns instead of throwing, because a local provider that refuses would
+  make a durable job undevelopable.
+- **Honour `options.delaySeconds` or say you cannot.** Passing it through to a service that ignores
+  it turns a delayed job into an immediate one, which reads as a scheduling bug months later.
+- **Codes are `invalid_job`, `unknown_job`, `too_large`, `rate_limited`, `provider_error`.** The
+  first two belong to the core; a provider raises the last three. Map only vendor codes you have
+  seen and let the rest fall through to `provider_error` / `retryable: false`. A wrong
+  `retryable: true` means the job runs twice.
+
+**The second export, when the platform delivers rather than being polled.** A provider whose
+service pushes work back into the Worker (a Queues consumer, a Cron Trigger) ships a *second*
+factory in the same file returning `{ queue?, scheduled? }`, and registers it with a second
+`plugin-array` patch on `apps/api/src/worker.ts`. That is the handler table from ADR 0033, and it
+is the only route for a non-`fetch` Worker export. Two rules bind that half:
+
+- **Gate on `QUEUE_PROVIDER` and return with one warn line when it names another provider.** The
+  module installs as a unit, so a project that switched providers without removing yours would
+  otherwise run every job twice. Warn rather than throw: the handlers are the Worker's, and
+  throwing fails a batch another provider is legitimately handling.
+- **Settle every message on every branch** — ack, retry, or dead-letter. A message left unsettled
+  is redelivered when the visibility timeout expires, which reads as a job that ran twice for no
+  reason. Read `QueueError.retryable` to choose; the core never retries for you.
+- **A cron tick enqueues, it never runs a job inline.** Call `dueSchedules(new Date(tick))` and
+  enqueue one message per hit, so a scheduled run gets the same retries and dead-lettering as any
+  other.
+
+**Descriptor, local flavour** (`queue-memory`, the minimum: no binding, no dependency, no secret):
+
+```jsonc
+{
+  "name": "queue-memory",
+  "type": "saasaloy:feature",
+  "dependsOn": ["queue"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
+      "exportName": "queue", "arrayProp": "providers", "call": "memory",
+      "import": { "name": "memory", "from": "./providers/memory" } }
+  ],
+  "files": [{ "path": "files/memory.ts", "target": "@queue/providers/memory.ts" }],
+  "scaffolds": []
+}
+```
+
+**Descriptor, binding flavour** (`queue-cloudflare`): the same `plugin-array` patch, plus a
+`wrangler-binding` patch per binding and a second `plugin-array` for the handler set. The binding
+patches use the **dotted `bindingType`** the CLI gained for this capability, so a nested Wrangler
+key is one patch and removal unwinds the parents it created:
+
+```jsonc
+{ "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+  "bindingType": "queues.producers", "entry": { "binding": "JOBS", "queue": "app-jobs" } },
+{ "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+  "bindingType": "queues.consumers", "matchOn": "queue",
+  "entry": { "queue": "app-jobs", "max_batch_size": 10, "max_retries": 3 } },
+{ "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+  "bindingType": "triggers.crons", "entry": "* * * * *" },
+{ "file": "apps/api/src/worker.ts", "kind": "plugin-array",
+  "exportName": "worker", "arrayProp": "handlers", "call": "cloudflareQueueHandlers",
+  "import": { "name": "cloudflareQueueHandlers", "from": "@repo/queue/providers/cloudflare" } }
+```
+
+Pick `matchOn` to name the entry's own identifying field: `binding` for a producer (the default),
+`queue` for a consumer, and nothing at all for `triggers.crons`, whose entries are bare strings
+matched by equality.
+
+**Every capability that can be developed offline owes a local provider.** `queue-memory` runs the
+job inline in the same Worker, records each `ctx.step` name and `ctx.sleep` duration, keeps a
+`failed` list, and exposes `runDue(now)` so a test can fire the schedule table without a cron
+trigger. That recording surface sits on the value the factory returned, not on `QueueProvider`:
+the core knows nothing about it, and a test reaches it directly. Copy that shape rather than
+inventing a mock.
+
 ## Verify before you call it done
 
 The install path a provider must survive is a **clean project**, one command:
 
 ```sh
 pnpm play:reset
-cd .dev/playground && ./saasaloy add email-<provider>   # or logger-<provider>
+cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-<provider>
 ```
 
 That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches
@@ -339,11 +454,14 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
 
 ## Authoring checklist
 
-- [ ] The capability is a stateless third-party service, not stateful infrastructure (ADR 0001).
+- [ ] The capability is on the provider side of the system-of-record test (ADR 0001, ADR 0033).
 - [ ] `modules/<capability>-<provider>/registry-item.json`, `name` matching the directory.
 - [ ] `type: saasaloy:feature`, `dependsOn: ["<capability>"]`, `scaffolds: []`.
 - [ ] Exactly one file, targeted at `@<capability>/providers/<provider>.ts`.
 - [ ] A `plugin-array` patch registering it on the capability's barrel.
+- [ ] A non-`fetch` Worker export, if any, registered through the `handlers` array in
+      `apps/api/src/worker.ts` with a second `plugin-array` patch, and gated on the capability's
+      `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
 - [ ] `envVars` declares every secret the provider reads; none baked into files.
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.

@@ -1,0 +1,25 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "queue-memory",
+  "type": "saasaloy:feature",
+  "dependsOn": ["queue"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "providers",
+      "call": "memory",
+      "import": {
+        "name": "memory",
+        "from": "./providers/memory"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/memory.ts", "target": "@queue/providers/memory.ts" }
+  ],
+  "scaffolds": []
+}

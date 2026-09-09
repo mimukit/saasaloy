@@ -15,6 +15,13 @@ const SHIPPED_AUTH = fileURLToPath(
   new URL("../../../../../modules/auth/files/src/auth.ts", import.meta.url)
 );
 
+// The handler table in `api`'s Worker entry, read off disk for the same reason: a
+// `queue` provider patches this literal array, and a refactor that hoists `handlers`
+// out of the `defineWorker` call would break every one of them.
+const SHIPPED_WORKER = fileURLToPath(
+  new URL("../../../../../modules/api/files/src/worker.ts", import.meta.url)
+);
+
 const AUTH = `import { betterAuth } from "better-auth";
 import { organization } from "better-auth/plugins";
 
@@ -88,6 +95,26 @@ export const auth = betterAuth({ plugins: [stripe()] });
     // The module-scope export is what the codemod anchors on; a refactor that wraps it
     // in a factory would break every feature capability that patches it.
     expect(out).toContain("export const auth = betterAuth({");
+  });
+
+  it("finds the handler table in the shipped modules/api `worker.ts`, and gives it back", async () => {
+    const source = await readFile(SHIPPED_WORKER, "utf-8");
+    const patch = {
+      arrayProp: "handlers",
+      call: "cloudflareQueueHandlers",
+      exportName: "worker",
+      import: {
+        from: "@repo/queue/providers/cloudflare",
+        name: "cloudflareQueueHandlers",
+      },
+    };
+    const out = insertIntoPluginArray(source, patch);
+
+    expect(out).toContain("handlers: [cloudflareQueueHandlers()]");
+    // The table is `api`'s registration point for every non-`fetch` export (ADR 0033),
+    // so the anchor and the byte-identical undo are both part of its contract.
+    expect(out).toContain("export const worker: ExportedHandler<never> =");
+    expect(removeFromPluginArray(out, patch)).toBe(source);
   });
 });
 

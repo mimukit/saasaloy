@@ -204,11 +204,15 @@ Field notes:
 
   | `kind` | What it does | Payload |
   | --- | --- | --- |
-  | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array | `bindingType`, `entry`, `matchOn` |
+  | `wrangler-binding` | upserts a binding into a `wrangler.jsonc` array, top-level or nested | `bindingType`, `entry`, `matchOn` |
   | `package-json-dependency` | upserts one dependency into a `package.json` section | `section`, `name`, `range` |
   | `package-json-script` | upserts one entry into a `package.json` `scripts` map | `name`, `value` |
   | `plugin-array` | appends a call into a TS module's plugin array | `exportName`, `arrayProp`, `call`, `import` |
   | `chained-route` | appends `.route(path, handler)` to a TS module's exported call chain | `exportName`, `path`, `call`, `import` |
+
+  `bindingType` takes a dotted path when the binding lives under a parent object — `queues.producers`, `queues.consumers`, `triggers.crons`. The engine creates the missing parent on `add` and unwinds it on `remove`, so the file comes back byte-identical. A value with no dot addresses a top-level array, exactly as before. Do not invent a patch kind for a nested binding (ADR 0033).
+
+  **A non-`fetch` Worker export registers in the handler table**, not through `infra`. `apps/api/src/worker.ts` is the Worker entry, and its `defineWorker({ fetch: app.fetch, handlers: [] })` call holds a `handlers` array. A module that ships a `queue` consumer or a `scheduled` tick exports a function returning `{ queue?, scheduled? }` and appends the call with a `plugin-array` patch on `exportName: "worker"`, `arrayProp: "handlers"`. `apps/api/src/index.ts` stays the Hono app, so the `chained-route` patch point is untouched. A module that needs both a binding and a handler carries both patches; the one-file rule constrains its runtime surface, not its descriptor.
 
   Every kind is idempotent and never clobbers. Each one has a match key it checks first (the
   binding name, the dependency name, the script name, the callee, the route path), and an entry
@@ -273,6 +277,28 @@ file where a capability already auto-discovers it.
   register it with a `chained-route` patch (below). The drop alone mounts nothing.
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
+- **`queue`** scaffolds `packages/queue` with a **job table** and a **schedule table**, both plain
+  array literals in `src/index.ts`. Background work is two parts, the same shape as a route. Drop
+  `files/queue/jobs/<feature>.ts` → `@queue/jobs/<feature>.ts`, exporting a **factory**
+  (`export const sendDigestJob = (): Job => defineJob({ name: "send-digest", handler })`), then
+  register the call with a `plugin-array` patch on `exportName: "queue"`, `arrayProp: "jobs"`. A
+  job that also runs on a clock adds a second `plugin-array` patch on `arrayProp: "schedules"`,
+  whose `call` is a `defineSchedule({ name, cron, job })` factory. The drop alone registers
+  nothing: nothing scans `jobs/`, and an unregistered job name fails `enqueue` with `unknown_job`.
+  A factory, not a bare constant, because the table registers a *call* and that is what the patch
+  appends and `remove` takes back out.
+
+  ```jsonc
+  { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
+    "exportName": "queue", "arrayProp": "jobs", "call": "sendDigestJob",
+    "import": { "name": "sendDigestJob", "from": "./jobs/digest" } },
+  { "file": "packages/queue/src/index.ts", "kind": "plugin-array",
+    "exportName": "queue", "arrayProp": "schedules", "call": "nightlyDigest",
+    "import": { "name": "nightlyDigest", "from": "./jobs/digest" } }
+  ```
+
+  A feature module `dependsOn` `queue`, never a provider. The user picks `queue-cloudflare` or
+  `queue-memory` and sets `QUEUE_PROVIDER`, exactly as with `email`.
 - **UI goes into `packages/ui`, as a block.** A module that ships user-facing UI targets
   `@ui/blocks/<name>.tsx` and follows the same rules the base blocks follow: one file, one
   component export named for the block (`Waitlist`), copy as in-file prop defaults, reached at its

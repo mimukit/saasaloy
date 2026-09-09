@@ -1,0 +1,45 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "queue",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {
+    "QUEUE_PROVIDER": "Which installed provider runs background work: `cloudflare` (add queue-cloudflare) or `memory` (add queue-memory). Always required — there is no default, so nothing runs by accident and nothing stops running silently."
+  },
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/queue",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/queue",
+      "aliases": { "@queue": "packages/queue/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/cron.ts", "target": "src/cron.ts" },
+        {
+          "path": "files/src/jobs/example.ts",
+          "target": "src/jobs/example.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-queue"]
+  }
+}

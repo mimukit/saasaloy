@@ -24,7 +24,7 @@
     "typecheck": "pnpm run typecheck:scripts && turbo run typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "turbo run test && pnpm run test:modules && pnpm run test:scripts",
-    "test:modules": "node --test \"modules/*/files/**/*.test.ts\"",
+    "test:modules": "node --import ./scripts/ts-resolve-hook.ts --test \"modules/*/files/**/*.test.ts\"",
     "test:scripts": "node --test \"scripts/**/*.test.ts\"",
     "cli": "node packages/cli/dist/index.js",
     "cli:dev": "pnpm --filter saasaloy dev",

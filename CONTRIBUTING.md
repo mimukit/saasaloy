@@ -81,9 +81,9 @@ Two rules for a test under `modules/`:
 - Import with the explicit `.ts` extension (`from "./env.ts"`). Node resolves the real file. Shipped
   payload code keeps the extensionless style the bundler expects.
 
-Test only a payload file with no imports. Anything reaching `cloudflare:workers`, `better-auth`, or a
-`@repo/*` workspace package will not resolve outside a scaffolded project; extract the pure part
-into its own file first, the way `auth.ts` extracted `env.ts`.
+A payload file may import a sibling. `pnpm test:modules` runs with `--import ./scripts/ts-resolve-hook.ts`, a `registerHooks` resolver that appends `.ts` to an extensionless relative specifier, so `import { defineQueue } from "./define"` inside a payload resolves under `node --test` without putting a non-portable extension into every generated project. The hook touches relative specifiers only.
+
+What still will not resolve is anything outside the payload: `cloudflare:workers`, `better-auth`, or a `@repo/*` workspace package all need a scaffolded project. Extract the pure part into its own file first, the way `auth.ts` extracted `env.ts`.
 
 ### The two suites `pnpm test` does not run
 

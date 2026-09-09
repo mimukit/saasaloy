@@ -35,10 +35,20 @@ and patches `@repo/validators` into `apps/api/package.json`, so api routes valid
 the same files a browser bundle imports. Request shapes live there; database column shapes stay in
 `packages/db`.
 
-A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`) is a narrow feature: one file into a
+`queue` is the capability that scaffolds `packages/queue` (`@repo/queue`): a job table, a schedule table, a five-field cron matcher and a provider registry, with zero runtime dependencies. It merges what the catalog listed as `queue`, `cron` and `workflows`, because to a caller they are one thing: run work outside the request. It `dependsOn` `api` and patches `@repo/queue` into `apps/api/package.json`. `QUEUE_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0033 for why a queue takes providers rather than drivers.
+
+A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.
+
+The one-file rule constrains a provider's runtime surface, not its descriptor. `queue-cloudflare`
+ships one file and six patches: four `wrangler-binding` entries, one `plugin-array` into the
+capability's `providers` array, and one into the `handlers` array in `apps/api/src/worker.ts`. That
+last one is how any module registers a non-`fetch` Worker export, and it is the only way (ADR 0033).
+`queue-memory` is the same capability with the smallest possible descriptor: one file, one patch,
+no binding and no env var, so a project develops and tests background work with no vendor account
+and no network.
 
 A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several
 providers coexist behind one interface and a runtime env var picks one; a project holds exactly one

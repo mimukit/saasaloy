@@ -1,7 +1,7 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "api",
-  "main": "src/index.ts",
+  "main": "src/worker.ts",
   "compatibility_date": "2026-07-21",
   // Same port `vite dev` uses (see vite.config.ts), so `wrangler dev` is a drop-in
   // swap for the Vite loop — useful because Vite's dev middleware reflects an
@@ -23,5 +23,6 @@
   },
   // No bindings in the base `api` module. Capabilities and features that need a
   // D1 database, R2 bucket, KV namespace, or Queue patch this file to add their own
-  // binding (via the jsonc-parser patch engine) — see the `saasaloy-api` skill.
+  // binding (via the jsonc-parser patch engine) — see the `saasaloy-api` skill. A
+  // nested binding (`queues.producers`, `triggers.crons`) is patched the same way.
 }

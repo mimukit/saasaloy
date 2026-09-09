@@ -5,7 +5,7 @@ import {
   modify,
   parseTree,
 } from "jsonc-parser";
-import type { FormattingOptions } from "jsonc-parser";
+import type { FormattingOptions, Node } from "jsonc-parser";
 
 // `jsonc-parser` edits for `wrangler.jsonc` binding/route changes (build spec §3.4).
 // It rewrites only the touched region and leaves comments + surrounding formatting
@@ -13,7 +13,14 @@ import type { FormattingOptions } from "jsonc-parser";
 // comments Cloudflare configs rely on.
 
 export interface WranglerBinding {
-  /** Top-level array to upsert into, e.g. "d1_databases", "kv_namespaces", "routes". */
+  /**
+   * Array to upsert into, e.g. "d1_databases", "kv_namespaces", "routes".
+   *
+   * A value with a dot addresses a **nested** array — "queues.producers",
+   * "queues.consumers", "triggers.crons" (ADR 0033). Missing parent objects are
+   * created on insert and unwound on removal, so the round trip is byte-identical.
+   * A value with no dot keeps the top-level behaviour exactly.
+   */
   bindingType: string;
   /**
    * The value to insert: an object (a binding or a route, matched by `matchOn`) or a
@@ -48,7 +55,8 @@ export function upsertWranglerBinding(
     return source;
   } // unparseable — leave it to the caller/validator to surface
 
-  const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
+  const bindingPath = splitBindingType(patch.bindingType);
+  const arrayNode = findNodeAtLocation(root, bindingPath);
   const formattingOptions = inferFormatting(source);
 
   if (arrayNode?.type === "array") {
@@ -71,7 +79,7 @@ export function upsertWranglerBinding(
 
     const edits = modify(
       source,
-      [patch.bindingType, existing.length],
+      [...bindingPath, existing.length],
       patch.entry,
       {
         formattingOptions,
@@ -81,8 +89,9 @@ export function upsertWranglerBinding(
     return applyEdits(source, edits);
   }
 
-  // No array (or a non-array value) at that key — create the array fresh.
-  const edits = modify(source, [patch.bindingType], [patch.entry], {
+  // No array (or a non-array value) at that key — create the array fresh. `modify`
+  // creates any missing parent object along a nested path on its way there.
+  const edits = modify(source, bindingPath, [patch.entry], {
     formattingOptions,
   });
   return applyEdits(source, edits);
@@ -117,7 +126,8 @@ export function removeWranglerBinding(
     return source;
   } // unparseable — leave it to the caller/validator to surface
 
-  const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
+  const bindingPath = splitBindingType(patch.bindingType);
+  const arrayNode = findNodeAtLocation(root, bindingPath);
   if (arrayNode?.type !== "array") {
     return source;
   } // no array — nothing of ours to take out
@@ -133,11 +143,13 @@ export function removeWranglerBinding(
     return source;
   } // the user's entry now — not ours to delete
 
-  // Last one out takes the array with it; the forward direction created it.
-  const path =
+  // Last one out takes the array with it; the forward direction created it. On a
+  // nested path it takes every parent the forward direction created too, so
+  // `queues` and `triggers` never survive as empty objects.
+  const path: (number | string)[] =
     existing.length === 1
-      ? [patch.bindingType]
-      : [patch.bindingType, index as number | string];
+      ? emptiedAncestorPath(root, bindingPath)
+      : [...bindingPath, index];
   // Same formatting the forward direction infers, for the same reason: jsonc-parser's
   // raw deletion leaves the removed element's separator and indent behind (`} ]`), which
   // the generated project's own `prettier --check` would then fail.
@@ -169,6 +181,35 @@ export function wranglerBindingRemoveRefusal(
     return undefined;
   }
   return `${match.key} holds ${JSON.stringify(match.current)} now, not the entry that was applied, so it is not ours to delete`;
+}
+
+/**
+ * A `bindingType` as a `jsonc-parser` location path. "d1_databases" stays one
+ * segment; "queues.producers" becomes two, which is the whole of the dotted-path
+ * extension ADR 0033 asks for.
+ */
+function splitBindingType(bindingType: string): string[] {
+  return bindingType.split(".");
+}
+
+/**
+ * The shallowest prefix of `bindingPath` that deleting the array would leave empty.
+ *
+ * Removing the last entry of `queues.producers` should take `producers` **and** the
+ * `queues` object the forward direction created, so the file returns to its
+ * pre-patch bytes. A parent holding a sibling (`queues.consumers` is still there)
+ * stops the walk, and so does a top-level path, which has no parent to unwind.
+ */
+function emptiedAncestorPath(root: Node, bindingPath: string[]): string[] {
+  let cut = bindingPath.length;
+  for (let depth = bindingPath.length - 1; depth >= 1; depth -= 1) {
+    const parent = findNodeAtLocation(root, bindingPath.slice(0, depth));
+    if (parent?.type !== "object" || (parent.children?.length ?? 0) !== 1) {
+      break;
+    }
+    cut = depth;
+  }
+  return bindingPath.slice(0, cut);
 }
 
 /** Where the entry the forward direction would call "already present" sits, or -1. */
@@ -218,7 +259,10 @@ export function matchWranglerBinding(
   if (!root) {
     return undefined;
   }
-  const arrayNode = findNodeAtLocation(root, [patch.bindingType]);
+  const arrayNode = findNodeAtLocation(
+    root,
+    splitBindingType(patch.bindingType)
+  );
   if (arrayNode?.type !== "array") {
     return undefined;
   }

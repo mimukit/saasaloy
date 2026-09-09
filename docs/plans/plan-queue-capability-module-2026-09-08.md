@@ -53,14 +53,14 @@ Rejected alternatives, one line each:
 - Retrying every failure until `max_retries`. Makes `retryable` meaningless on Cloudflare and gives a bad payload three runs.
 - Workflows as the only runner. Queues are fan-out and buffering; Workflows are ordered runs with sleeps. Different cost and different consumers.
 
-### Phase 1: ADR and glossary
+### Phase 1: ADR and glossary (#125) (built 2026-09-08)
 
-- [ ] Write ADR 0033 "Transient-state capabilities take providers": amends ADR 0001's amendment and ADR 0026. States the system-of-record test, lists `queue`, `kv`, `email`, `sms`, `logger` on the provider side and `database`, `storage` on the driver side, and states that `database` stays on drivers.
-- [ ] The ADR states how a binding provider registers a handler export: through the `handlers` table in `apps/api/src/worker.ts` via `plugin-array`, never through `infra`, and that a binding provider may carry several patches (`email-cloudflare` already carries two).
-- [ ] The ADR records the `wrangler-binding` dotted-path extension and the `worker.ts` entry split as consequences.
-- [ ] Update `CONTEXT.md` "Provider module" and "Driver module" to the ADR's test, and add "Job", "Schedule" and "Handler set" entries.
-- [ ] `AGENTS.md` already states the philosophy (commit f7d7f9d). Verify its `queue` sentence matches the ADR and adjust if not.
-- [ ] File the two follow-up issues: `infra` translator support for `send_email`, `queues`, `triggers`, `workflows`; and Cloudflare Workflows behind `durable: true` in `queue-cloudflare`.
+- [x] Write ADR 0033 "Transient-state capabilities take providers": amends ADR 0001's amendment and ADR 0026. States the system-of-record test, lists `queue`, `kv`, `email`, `sms`, `logger` on the provider side and `database`, `storage` on the driver side, and states that `database` stays on drivers.
+- [x] The ADR states how a binding provider registers a handler export: through the `handlers` table in `apps/api/src/worker.ts` via `plugin-array`, never through `infra`, and that a binding provider may carry several patches (`email-cloudflare` already carries two).
+- [x] The ADR records the `wrangler-binding` dotted-path extension and the `worker.ts` entry split as consequences.
+- [x] Update `CONTEXT.md` "Provider module" and "Driver module" to the ADR's test, and add "Job", "Schedule" and "Handler set" entries.
+- [x] `AGENTS.md` already states the philosophy (commit f7d7f9d). Verify its `queue` sentence matches the ADR and adjust if not.
+- [x] File the two follow-up issues: `infra` translator support for `send_email`, `queues`, `triggers`, `workflows` ([#130](https://github.com/mimukit/saasaloy/issues/130)); and Cloudflare Workflows behind `durable: true` in `queue-cloudflare` ([#131](https://github.com/mimukit/saasaloy/issues/131)).
 
 ### Phase 2: CLI and `api` groundwork
 
@@ -68,15 +68,15 @@ Rejected alternatives, one line each:
 - [ ] `modules/api` ships `src/worker.ts` with a local `defineWorker` and points `wrangler.jsonc` `main` at it. `src/index.ts` is unchanged. The `saasaloy-api` skill and `create-module` explain the handler table.
 - [ ] `vite.config.ts` and any build entry that names `src/index.ts` still resolve. Existing api tests pass.
 
-### Phase 3: the neutral core (`packages/queue`)
+### Phase 3: the neutral core (`packages/queue`) (built 2026-09-08)
 
-- [ ] `modules/queue/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars.QUEUE_PROVIDER` (`cloudflare` or `memory`, always required), scaffold `packages/queue` with alias `@queue`, patch `@repo/queue` into `apps/api/package.json`.
-- [ ] `provider.ts`: `QueueProvider` (`name`, `enqueue(env, job, payload, options)`), `QueueEnv`, `Job`, `Schedule`, `JobContext` (`step`, `sleep`, `attempt`), `EnqueueOptions` (`delaySeconds`), `QueueError` with the five codes.
-- [ ] `define.ts`: `defineQueue({ providers, jobs, schedules })`, `create(env)` selecting on `QUEUE_PROVIDER` with the same throw-never-fall-back rule as `email`, `defineJob` with optional Standard Schema, `defineSchedule`, and `dispatch(name, payload, ctx)` for providers to call, which validates and raises `unknown_job`.
-- [ ] `cron.ts`: five-field matcher with tests. Zero dependencies.
-- [ ] `index.ts` barrel with `queue = defineQueue({ providers: [], jobs: [exampleJob()], schedules: [] })` and `createQueue(env)`. `src/providers/.gitkeep` and `src/jobs/example.ts`.
-- [ ] `package.json` exports `.`, `./providers/*` and `./jobs/*`; `clean` script with pinned `rimraf`.
-- [ ] Unit tests: selection, unknown job, invalid payload, `QueueError` wrapping of a raw throw, cron matcher.
+- [x] `modules/queue/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars.QUEUE_PROVIDER` (`cloudflare` or `memory`, always required), scaffold `packages/queue` with alias `@queue`, patch `@repo/queue` into `apps/api/package.json`.
+- [x] `provider.ts`: `QueueProvider` (`name`, `enqueue(env, job, payload, options)`), `QueueEnv`, `Job`, `Schedule`, `JobContext` (`step`, `sleep`, `attempt`), `EnqueueOptions` (`delaySeconds`), `QueueError` with the five codes.
+- [x] `define.ts`: `defineQueue({ providers, jobs, schedules })`, `create(env)` selecting on `QUEUE_PROVIDER` with the same throw-never-fall-back rule as `email`, `defineJob` with optional Standard Schema, `defineSchedule`, and `dispatch(name, payload, ctx)` for providers to call, which validates and raises `unknown_job`.
+- [x] `cron.ts`: five-field matcher with tests. Zero dependencies.
+- [x] `index.ts` barrel with `queue = defineQueue({ providers: [], jobs: [exampleJob()], schedules: [] })` and `createQueue(env)`. `src/providers/.gitkeep` and `src/jobs/example.ts`.
+- [x] `package.json` exports `.`, `./providers/*` and `./jobs/*`; `clean` script with pinned `rimraf`.
+- [x] Unit tests: selection, unknown job, invalid payload, `QueueError` wrapping of a raw throw, cron matcher.
 
 ### Phase 4: `queue-cloudflare`
 
