@@ -1,4 +1,4 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
@@ -13,7 +13,7 @@ import {
 } from "@repo/ui/components/card";
 
 import { ApiKeyWorkspace } from "@admin/components/api-key-workspace";
-import { api } from "@admin/lib/api";
+import { tenantQuery } from "@admin/lib/tenant";
 
 // `/api-keys` — the active organization's machine credentials.
 //
@@ -29,23 +29,6 @@ import { api } from "@admin/lib/api";
 // The screen is scoped to the caller's active organization, behind the site-admin root
 // guard, exactly as `/teams` and `/roles` are. An organization picker over the superadmin
 // bypass is a filed follow-up.
-
-/**
- * The resolved tenant. The fetcher throws on a non-2xx, so a 403 lands in `error` rather
- * than in the cache as data — and the two 403 messages mean different things:
- * `no active organization` is "pick an organization first", anything else is a refusal.
- */
-const tenantQuery = queryOptions({
-  queryKey: ["tenant"],
-  queryFn: async () => {
-    const res = await api.tenant.$get();
-    if (!res.ok) {
-      const body = (await res.json()) as { error?: { message?: string } };
-      throw new Error(body.error?.message ?? `The api answered ${res.status}.`);
-    }
-    return res.json();
-  },
-});
 
 export const Route = createFileRoute("/api-keys")({
   loader: ({ context }) => context.queryClient.ensureQueryData(tenantQuery),
