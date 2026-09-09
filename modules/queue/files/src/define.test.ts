@@ -59,6 +59,16 @@ const stringMessage: StandardSchema<{ message: string }> = {
   },
 };
 
+// A schema that fails with an empty `issues` array. Standard Schema marks a failure by
+// the presence of `issues`, so this result carries no `value` and must still be rejected.
+const silentFailureSchema: StandardSchema<{ message: string }> = {
+  "~standard": {
+    validate: () => ({ issues: [] }),
+    vendor: "test",
+    version: 1,
+  },
+};
+
 // A schema that throws rather than returning issues. Standard Schema does not forbid it,
 // so both `enqueue` and `dispatch` have to survive it as a `QueueError`.
 const explodingSchema: StandardSchema<{ message: string }> = {
@@ -191,6 +201,31 @@ describe("enqueue", () => {
         error instanceof QueueError &&
         error.code === "invalid_job" &&
         /message: message must be a string/.test(error.message)
+    );
+    assert.equal(sent.length, 0);
+  });
+
+  it("raises invalid_job when the schema fails with no issues listed", async () => {
+    const { provider, sent } = recorder();
+    const queue = defineQueue({
+      jobs: [
+        defineJob<{ message: string }>({
+          handler: noop,
+          name: "greet",
+          schema: silentFailureSchema,
+        }),
+      ],
+      providers: [provider],
+      schedules: [],
+    });
+
+    await assert.rejects(
+      () =>
+        queue
+          .create({ QUEUE_PROVIDER: "memory" })
+          .enqueue("greet", { message: "hi" }),
+      (error: unknown) =>
+        error instanceof QueueError && error.code === "invalid_job"
     );
     assert.equal(sent.length, 0);
   });

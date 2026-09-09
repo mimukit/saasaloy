@@ -116,9 +116,17 @@ function parseField(token: string, spec: FieldSpec): Set<number> {
       throw invalid(`Malformed ${spec.label} term "${term}".`);
     }
 
+    // A step counts values, so the field's own range does not bound it. Vixie cron takes
+    // `*/60` in minutes and `*/24` in hours: the loop below selects the first value and
+    // then runs past `end`, which is exactly "once per range".
     let step = 1;
     if (stepText !== undefined) {
-      step = toInt(stepText, spec, term);
+      if (!/^\d+$/.test(stepText)) {
+        throw invalid(
+          `"${stepText}" is not a number in the ${spec.label} step of "${term}".`
+        );
+      }
+      step = Number(stepText);
       if (step < 1) {
         throw invalid(
           `Step must be 1 or more in ${spec.label} term "${term}".`

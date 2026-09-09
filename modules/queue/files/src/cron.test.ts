@@ -39,6 +39,14 @@ describe("matchesCron — field forms", () => {
     assert.equal(matchesCron("*/15 * * * *", at(2026, 9, 8, 4, 46)), false);
   });
 
+  it("takes a step wider than the field, the way vixie cron does", () => {
+    // `*/60` and `*/24` count values, so each selects only the first one in its field.
+    assert.equal(matchesCron("*/60 * * * *", at(2026, 9, 8, 4, 0)), true);
+    assert.equal(matchesCron("*/60 * * * *", at(2026, 9, 8, 4, 30)), false);
+    assert.equal(matchesCron("0 */24 * * *", at(2026, 9, 8, 0, 0)), true);
+    assert.equal(matchesCron("0 */24 * * *", at(2026, 9, 8, 12, 0)), false);
+  });
+
   it("honours a range and a comma list", () => {
     assert.equal(matchesCron("0 9-17 * * *", at(2026, 9, 8, 17, 0)), true);
     assert.equal(matchesCron("0 9-17 * * *", at(2026, 9, 8, 18, 0)), false);

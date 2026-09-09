@@ -215,13 +215,17 @@ async function validate(
   payload: unknown
 ): Promise<unknown> {
   const result = await schema["~standard"].validate(payload);
-  if (result.issues && result.issues.length > 0) {
-    const detail = result.issues
-      .map((issue) => {
-        const path = issue.path?.join(".");
-        return path ? `${path}: ${issue.message}` : issue.message;
-      })
-      .join("; ");
+  // Standard Schema marks a failure by the *presence* of `issues`, not by its length. A
+  // failure result carries no `value`, so an empty `issues` array must still throw rather
+  // than hand `undefined` on to the handler.
+  if (result.issues) {
+    const detail =
+      result.issues
+        .map((issue) => {
+          const path = issue.path?.join(".");
+          return path ? `${path}: ${issue.message}` : issue.message;
+        })
+        .join("; ") || "the schema reported no detail";
     throw new QueueError(
       "invalid_job",
       `Payload for job "${name}" failed validation — ${detail}`
