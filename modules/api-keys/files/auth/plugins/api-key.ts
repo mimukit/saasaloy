@@ -60,7 +60,18 @@ import type { AuthRequestContext } from "../server";
  *   `defaultPermissions` reads it back off the body and writes it to the `permissions`
  *   column. Nothing is stripped and nothing is smuggled: the scope travels on a field the
  *   plugin lets a client set, and it is only applied after the guard has passed it.
- *   `metadata` itself is never stored — the plugin hardcodes `metadata: null` on create.
+ *
+ *   `metadata.scope` is a request-time transport, and its stored value is not
+ *   authoritative. The plugin does persist it: it defaults `metadata` to `null` and then
+ *   copies the body's value over that default before the adapter `create`, and
+ *   `/api-key/update` overwrites the column whenever `enableMetadata` is on. So a created
+ *   key holds two copies of its scope, and only `permissions` decides anything —
+ *   `apiKeyTenant` in `../resolvers/api-key.ts` reads `verified.permissions`, `can()`
+ *   reads what that resolver returns, and the `/api-keys` screen renders
+ *   `row.permissions`.
+ *   `defaultPermissions` runs on create only, so a `metadata.scope` written later never
+ *   reaches `permissions` and the two copies drift apart with no effect on authorization.
+ *   Read `permissions`. Never read `metadata.scope` off a stored row.
  *
  * `deferUpdates` stays off. It needs `advanced.backgroundTasks.handler`, and there is no
  * `waitUntil` behind that hook on Workers, so the `lastRequest` write stays synchronous.
@@ -86,8 +97,21 @@ export function apiKeyPlugin() {
   });
 }
 
-/** The two endpoints that write a key's scope. `get`, `list` and `delete` write none. */
-const GUARDED_PATHS = new Set(["/api-key/create", "/api-key/update"]);
+/**
+ * The one endpoint that writes a key's scope.
+ *
+ * `/api-key/update` is deliberately not here, and adding it would be reachable code that
+ * protects nothing. `permissions` on update is a server-only property, so a request
+ * carrying headers is refused by the plugin before any scope lands, and a server-side call
+ * carrying none has no session for the guard to read. `defaultPermissions` runs on create
+ * only, so a `metadata.scope` sent to update never reaches the `permissions` column
+ * either. A guard there would also read the wrong organization: the update body has no
+ * `organizationId` field, so it would fall back to the caller's active organization rather
+ * than the key's. A scope is a snapshot at issue time — revoke and re-issue (ADR 0036).
+ *
+ * `get`, `list` and `delete` write no scope.
+ */
+const GUARDED_PATHS = new Set(["/api-key/create"]);
 
 /** Read one property off an unknown body without asserting the whole shape. */
 function field(source: unknown, name: string): unknown {
@@ -218,9 +242,10 @@ export function apiKeyScopeGuard(): BetterAuthPlugin {
               return;
             }
 
-            // The caller's membership role. There is no Hono context in a hook and no
-            // `auth` to call without an import cycle, so the row is read through the
-            // adapter the plugin itself uses.
+            // The caller's membership role, read through the adapter the plugin itself
+            // uses. `auth.api.getActiveMember` is not an option here: it wants request
+            // headers and a Hono context to open a database client from, and a Better Auth
+            // hook has neither. The adapter is already bound to this request.
             const membership = await ctx.context.adapter.findOne<MemberRow>({
               model: "member",
               where: [
