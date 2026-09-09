@@ -1,0 +1,107 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "api-keys",
+  "type": "saasaloy:feature",
+  "dependsOn": ["rbac"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "The deployed apikey table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment the bearer resolver goes, so tell the machine callers before you remove this module, not after.",
+    "The @better-auth/api-key dependency stays in packages/auth/package.json. A package-json-dependency patch has no removal inverse, so drop the line by hand and run pnpm install."
+  ],
+  "patches": [
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@better-auth/api-key",
+      "range": "1.7.2"
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "apiKeyPlugin",
+      "import": {
+        "name": "apiKeyPlugin",
+        "from": "./plugins/api-key"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "apiKeyScopeGuard",
+      "import": {
+        "name": "apiKeyScopeGuard",
+        "from": "./plugins/api-key"
+      }
+    },
+    {
+      "file": "packages/auth/src/client.ts",
+      "kind": "plugin-array",
+      "exportName": "authClientPlugins",
+      "arrayProp": "plugins",
+      "call": "apiKeyClientPlugin",
+      "import": {
+        "name": "apiKeyClientPlugin",
+        "from": "./plugins/api-key-client"
+      }
+    },
+    {
+      "file": "packages/auth/src/tenant.ts",
+      "kind": "plugin-array",
+      "exportName": "tenantResolvers",
+      "arrayProp": "resolvers",
+      "call": "apiKeyTenant",
+      "import": {
+        "name": "apiKeyTenant",
+        "from": "./resolvers/api-key"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/api-keys", "label": "API keys" }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/db/schema/api-keys.sqlite.ts",
+      "target": "@db/schema/api-keys.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/api-keys.pg.ts",
+      "target": "@db/schema/api-keys.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/auth/plugins/api-key.ts",
+      "target": "@auth/plugins/api-key.ts"
+    },
+    {
+      "path": "files/auth/plugins/api-key-client.ts",
+      "target": "@auth/plugins/api-key-client.ts"
+    },
+    {
+      "path": "files/auth/resolvers/api-key.ts",
+      "target": "@auth/resolvers/api-key.ts"
+    },
+    {
+      "path": "files/admin/routes/api-keys.tsx",
+      "target": "@admin/routes/api-keys.tsx"
+    },
+    {
+      "path": "files/admin/components/api-key-workspace.tsx",
+      "target": "@admin/components/api-key-workspace.tsx"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-api-keys"]
+  }
+}
