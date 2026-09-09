@@ -11,12 +11,12 @@
     "./client": "./src/client.ts"
   },
   "dependencies": {
-    "better-auth": "1.7.2",
-    "hono": "4.13.5",
+    "better-auth": "1.7.3",
+    "hono": "4.13.7",
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260903.1",
+    "@cloudflare/workers-types": "5.20260906.1",
     "@repo/tsconfig": "workspace:*",
     "@types/node": "26.4.1",
     "rimraf": "6.1.3",

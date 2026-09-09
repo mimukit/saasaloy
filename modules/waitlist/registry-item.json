@@ -24,7 +24,7 @@
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "hono",
-      "range": "4.13.5"
+      "range": "4.13.7"
     },
     {
       "file": "apps/web/package.json",

@@ -35,7 +35,7 @@
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
-      "range": "5.20260903.1"
+      "range": "5.20260906.1"
     },
     {
       "file": "packages/db/package.json",
