@@ -65,7 +65,7 @@ Rejected alternatives, one line each:
 - Row-level security in Postgres. D1 has none, and the guard has to be the same on both drivers.
 - Extending `teams`'s member list with a role picker. That component belongs to `teams`.
 
-### Phase 1: groundwork in `auth`, `database` and `teams`
+### Phase 1: groundwork in `auth`, `database` and `teams` (#128) (built 2026-09-09)
 
 - [ ] `modules/auth`: `SUPERADMIN_ROLE` in `authorize.ts`, `decide()` gains an "any of these roles" form so `requireAdmin` admits `admin` or `superadmin` while `requireRole` stays exact, `requireSuperadmin` in `server.ts`, `admin({ adminRoles: ["admin", "superadmin"] })` in `auth.ts`, the first-user-wins hook writes `SUPERADMIN_ROLE`, and the three warning texts name the new role. `modules/admin/files/src/lib/auth.ts` admits both roles. Tests in `server.test.ts` cover the exact and the any-of forms.
 - [ ] `modules/database/files/package.json` gains `"./tenant"` and `"./tenant-column"`. `modules/auth/files/package.json` gains `"./tenant"`, `"./rbac"` and `"./access"`. A comment in each names the module that fills the entry.
