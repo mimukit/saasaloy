@@ -228,6 +228,11 @@ export interface CompareBaseArgs {
   runningHash: string;
   /** `readVersion()` of the running CLI. */
   runningVersion: string;
+  /**
+   * Tracked base targets that are not on disk — `missingBaseTargets()`. They make the base
+   * `outdated` on their own, because the template hash cannot see them (#120).
+   */
+  missingTargets?: readonly string[];
 }
 
 /** `0.2.0 (bbbbbbb)` — the version is the label, the hash is the verdict (#120). */
@@ -241,9 +246,14 @@ function baseLabel(version: string, hash: string): string {
  * `cliVersion`s as labels: `current` when the hashes agree, `outdated` when they differ,
  * `untracked` when the project carries no usable record. Never `local`: the template has
  * no working-copy override, and a registry override says nothing about it.
+ *
+ * A tracked file missing from disk also makes the base `outdated`, at an unchanged hash.
+ * `adoptBase` records an absent template file so the next update restores it, and the hash
+ * alone would report `current` on the same CLI and never restore anything.
  */
 export function compareBase(args: CompareBaseArgs): ModuleComparison {
   const { lock, manifest, runningHash, runningVersion } = args;
+  const missing = args.missingTargets ?? [];
   const latest = baseLabel(runningVersion, runningHash);
   if (!isBaseTracked(lock, manifest) || !lock.base) {
     return {
@@ -257,13 +267,20 @@ export function compareBase(args: CompareBaseArgs): ModuleComparison {
         "not recorded — run `saasaloy update` to adopt the base at this CLI",
     };
   }
+  const moved = lock.base.templateHash !== runningHash;
   return {
     name: BASE_MODULE,
     source: BASE_SOURCE,
     ref: BASE_REF,
     current: baseLabel(lock.base.cliVersion, lock.base.templateHash),
     latest,
-    status: lock.base.templateHash === runningHash ? "current" : "outdated",
+    status: moved || missing.length > 0 ? "outdated" : "current",
+    // Say why, or an unmoved hash beside `outdated` reads as a bug.
+    ...(!moved && missing.length > 0
+      ? {
+          detail: `${missing.length} tracked file${missing.length === 1 ? " is" : "s are"} missing from disk`,
+        }
+      : {}),
   };
 }
 

@@ -20,6 +20,7 @@ import {
   BASE_MODULE,
   baseUpdateInput,
   isBaseTracked,
+  missingBaseTargets,
   templateHash,
 } from "../lib/base.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
@@ -581,6 +582,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
         manifest,
         runningHash: await templateHash(templateDir),
         runningVersion: cliVersion,
+        missingTargets: await missingBaseTargets(root, manifest, templateDir),
       });
     }
 

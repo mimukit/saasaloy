@@ -300,6 +300,8 @@ describe(runOutdated, () => {
   describe("the base row", () => {
     async function trackedBase(hash: string): Promise<void> {
       await writeProject([], {});
+      // On disk, or the row reads `outdated` on the missing file rather than on the hash.
+      await writeFile(join(project, "AGENTS.md"), "# base\n", "utf-8");
       await mkdir(join(project, ".saasaloy"), { recursive: true });
       await writeFile(
         join(project, ".saasaloy", "manifest.json"),

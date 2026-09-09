@@ -135,7 +135,10 @@ describe("runUpdate --out", () => {
 describe("runUpdate — the confirmation gate (#98)", () => {
   let project: string;
 
-  beforeAll(async () => {
+  // A fresh project per test. A run that gets past the gate adopts the base and records
+  // every template file as missing from this empty directory, so a shared project would
+  // leave the next test facing a 53-file restore plan instead of the gate.
+  beforeEach(async () => {
     project = await mkdtemp(join(tmpdir(), "saasaloy-update-tty-"));
     await writeFile(
       join(project, "saasaloy.json"),
@@ -145,12 +148,9 @@ describe("runUpdate — the confirmation gate (#98)", () => {
     process.chdir(project);
   });
 
-  afterEach(() => {
+  afterEach(async () => {
     process.stdin.isTTY = ORIGINAL_STDIN_TTY;
     process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
-  });
-
-  afterAll(async () => {
     process.chdir(dir);
     await rm(project, { recursive: true, force: true });
   });

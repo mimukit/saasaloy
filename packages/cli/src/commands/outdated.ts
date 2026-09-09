@@ -6,7 +6,7 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
-import { BASE_MODULE, templateHash } from "../lib/base.js";
+import { BASE_MODULE, missingBaseTargets, templateHash } from "../lib/base.js";
 import { loadLock } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -243,11 +243,13 @@ export async function runOutdated(argv: string[]): Promise<number> {
 
     // The base first: it ships with the CLI, so its comparison needs no network and no
     // registry, and it is the one row every project has.
+    const templateDir = await baseTemplateDir();
     const baseRow = compareBase({
       lock,
       manifest,
-      runningHash: await templateHash(await baseTemplateDir()),
+      runningHash: await templateHash(templateDir),
       runningVersion: await readVersion(),
+      missingTargets: await missingBaseTargets(root, manifest, templateDir),
     });
 
     // One source per (repo, ref), the same cache `update` keeps, so a bare run resolves
