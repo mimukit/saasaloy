@@ -8,7 +8,7 @@ import { defineConfig } from "vitest/config";
 //
 // Both are slower than a unit test and neither should hold up `pnpm test`. They run as
 // `pnpm test:e2e` and `pnpm test:matrix`; the workflows that schedule them belong to
-// plan-ship-the-cli-2026-08-01.md.
+// 0017-plan-ship-the-cli-2026-08-01.md.
 export default defineConfig({
   test: {
     environment: "node",

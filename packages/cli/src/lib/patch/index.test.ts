@@ -308,7 +308,7 @@ export const auth = betterAuth({
 
   it("returns undefined for the package.json kinds, which stay drop-and-warn", () => {
     // Uninstalling an npm dependency is not derivable offline and other code may use it
-    // (plan-remove-command-2026-07-25.md, non-goals); no scope line asks for scripts.
+    // (0011-plan-remove-command-2026-07-25.md, non-goals); no scope line asks for scripts.
     expect(
       reversePatch(API_PACKAGE_JSON, SCRIPT_PATCH, "package.json")
     ).toBeUndefined();

@@ -14,7 +14,7 @@ modules/
     skills/saasaloy-<name>/  # skill folder, installed to the consumer's .agents/skills/saasaloy-<name>/ (+ a .claude/skills symlink)
 ```
 
-See `docs/plans/plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in
+See `docs/plans/0001-plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in
 Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `billing`, …). The first to land
 is `api` (a capability — it carries `scaffolds[]`; see ADR 0013 for the scaffolds/files split). A
 capability built on a vendor SDK encapsulates it in the workspace it scaffolds — other workspaces

@@ -138,14 +138,14 @@ project holds exactly one: `requiresOneOf` on the core stops it at zero, `confli
 each driver stops it at two. The `database` core carries the tables, the schema barrel and
 `db:generate`; the driver carries the client, the dialect and the migrate commands. Switch
 by removing one driver and adding the other, which moves no data
-([ADR 0026](../adr/adr-0026-database-driver-split-2026-08-28.md)).
+([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)).
 
 `auth` and `waitlist` install under either driver. Each ships its table declarations twice,
 once against `sqlite-core` and once against `pg-core`, and the descriptor's `onlyWith`
 condition installs the variant matching the driver already in the project; `--dry-run`
 prints which source it chose. Because that choice is made at install time, switching driver
 later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
-and [ADR 0029](../adr/adr-0029-auth-holds-a-request-scoped-db-client-2026-08-31.md).
+and [ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md).
 
 See [Add a module](how-to/add-a-module.md) for the workflow.
 

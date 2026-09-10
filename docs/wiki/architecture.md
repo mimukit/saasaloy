@@ -13,7 +13,7 @@ defined once in [`CONTEXT.md`](../../CONTEXT.md). The decisions behind the desig
 There is the **tool repo** (this one: the CLI, the module registry, the base template) and
 there is the **generated project** (what `saasaloy init` produces on your machine). They
 never merge. The tool repo does not run its own modules on itself
-([ADR 0011](../adr/adr-0011-tool-repo-never-self-syncs-2026-07-22.md)).
+([ADR 0011](../adr/0011-adr-tool-repo-never-self-syncs-2026-07-22.md)).
 
 ## The CLI
 
@@ -34,14 +34,14 @@ reusable machinery under `lib/`, split into seams:
 | Schemas | `lib/schema.ts` | ajv validation of every descriptor and state file |
 
 The CLI ships as one binary with the base template and the JSON schemas bundled inside it
-([ADR 0008](../adr/adr-0008-saasaloy-init-single-binary-2026-07-22.md)), so `init` needs no
+([ADR 0008](../adr/0008-adr-saasaloy-init-single-binary-2026-07-22.md)), so `init` needs no
 network at all.
 
 ## The registry is the repo
 
 `saasaloy add waitlist` resolves against `mimukit/saasaloy` on GitHub. There is no
 intermediate package registry and no publish step
-([ADR 0012](../adr/adr-0012-remote-first-registry-repo-is-the-registry-2026-07-23.md)).
+([ADR 0012](../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)).
 
 A remote install resolves in this order:
 
@@ -83,7 +83,7 @@ compares each target against the manifest hash and classifies it: `create`, `ove
 (tracked and unmodified), `unchanged`, `drift` (tracked but hand-edited) or `conflict`
 (exists and never ours). Only the first three are written. Drift and conflict are held
 back and reported
-([ADR 0006](../adr/adr-0006-copy-in-updates-manifest-hash-tracking-2026-07-22.md)).
+([ADR 0006](../adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)).
 
 **The lock is the reproducibility anchor.** A repeat `add` of a module already in the lock
 reuses its recorded SHA instead of resolving `main` again, so the same install produces the
@@ -96,18 +96,18 @@ unset. Everything else resolves the ref afresh.
 Capabilities scaffold a workspace and establish conventions — a routes directory, a schema
 barrel, a providers folder. Features drop files into those conventions and declare what
 they need through `dependsOn`
-([ADR 0005](../adr/adr-0005-two-tier-convention-based-modules-2026-07-22.md)). A capability
+([ADR 0005](../adr/0005-adr-two-tier-convention-based-modules-2026-07-22.md)). A capability
 brings its vendor SDK with it and encapsulates it, so nothing else in the project imports
 that SDK directly
-([ADR 0020](../adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)).
+([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 Convention-based file drops cover most of what a module needs. The rest is **config
 patches**: structural edits to a file some other module owns, such as adding a Worker
 binding to `wrangler.jsonc` or registering a provider in an exported array. Those run
 through AST-aware codemods rather than string replacement
-([ADR 0010](../adr/adr-0010-config-patch-magicast-jsonc-parser-2026-07-22.md)), and are
+([ADR 0010](../adr/0010-adr-config-patch-magicast-jsonc-parser-2026-07-22.md)), and are
 recorded flat in the manifest
-([ADR 0019](../adr/adr-0019-module-patches-applied-flat-array-2026-07-24.md)).
+([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)).
 
 The asymmetry to know about: a patch is applied forward by every kind, but only
 `chained-route` has an inverse `remove` can run. The other four are dropped from the
@@ -117,28 +117,28 @@ manifest with a warning. See [Known limitations](reference.md#known-limitations)
 
 `saasaloy init` writes an Astro landing page, a shared UI package and a shared TypeScript
 config, and stops
-([ADR 0003](../adr/adr-0003-base-is-landing-page-only-2026-07-22.md)). The design layer —
+([ADR 0003](../adr/0003-adr-base-is-landing-page-only-2026-07-22.md)). The design layer —
 tokens, theme, the component styling conventions — ships in that base rather than arriving
 with a later module
-([ADR 0022](../adr/adr-0022-design-layer-ships-in-the-base-2026-08-06.md)), and so does its
+([ADR 0022](../adr/0022-adr-design-layer-ships-in-the-base-2026-08-06.md)), and so does its
 written contract: a seeded `DESIGN.md` plus a `saasaloy-design` skill that re-derives it
 when the UI changes
-([ADR 0027](../adr/adr-0027-design-contract-ships-in-the-base-2026-08-28.md)). `add` plays
+([ADR 0027](../adr/0027-adr-design-contract-ships-in-the-base-2026-08-28.md)). `add` plays
 along: when a module's plan writes into `packages/ui/`, it prints a reminder to re-run the
 skill. Everything
 churny is a module you install when you need it, which is what keeps an unused capability
 from aging in your repo.
 
 The target runtime is Cloudflare throughout
-([ADR 0001](../adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)).
+([ADR 0001](../adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)).
 
 ## Agent-native by construction
 
 A generated project carries `AGENTS.md` and `CLAUDE.md` as committed, static files, and a
 module that ships an agent skill installs it into `.agents/skills/` with a
 `.claude/skills/` symlink pointing at it
-([ADR 0007](../adr/adr-0007-agent-native-static-agents-md-copied-skills-2026-07-22.md),
-[ADR 0015](../adr/adr-0015-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
+([ADR 0007](../adr/0007-adr-agent-native-static-agents-md-copied-skills-2026-07-22.md),
+[ADR 0015](../adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)).
 Those links are tracked in the manifest, so unlike config patches they are removed when the
 module is.
 

@@ -10,7 +10,7 @@ Cloudflare edge. It's a [Pulumi](https://www.pulumi.com) program (`@pulumi/cloud
 that never duplicates a service's config: capabilities keep declaring their resources in
 their own `wrangler.jsonc` (unchanged contract), and `infra` **discovers** those files,
 **translates** their bindings into Cloudflare resources, and **deploys** the built
-Worker. See [ADR 0021](../../../docs/adr/adr-0021-pulumi-iac-engine-for-infra-2026-07-25.md)
+Worker. See [ADR 0021](../../../docs/adr/0021-adr-pulumi-iac-engine-for-infra-2026-07-25.md)
 for why Pulumi (provider optionality) over wrangler-native, Alchemy, SST, or Terraform.
 
 ## Credentials setup (first run only)
@@ -92,7 +92,7 @@ provider), so they can never leak into a deployed Worker's secret store — no m
 
 `infra` deploys to Cloudflare exclusively. The IaC engine (Pulumi) was chosen for future
 provider optionality, but v1 builds none of it — no GCP/AWS/Neon/PlanetScale code ships
-here (ADR 0021, extending [ADR 0001](../../../docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md)).
+here (ADR 0021, extending [ADR 0001](../../../docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)).
 Multi-cloud, if it ever happens, is a deliberate later migration — never a config toggle.
 
 ## Conventions to honor

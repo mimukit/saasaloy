@@ -10,7 +10,7 @@ import type { ReactElement } from "react";
  * export condition, so a JSX template cannot satisfy the core's synchronous
  * `(props) => EmailContent`. The core contract is left exactly as it is and this type
  * lives here instead; see
- * `docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md`.
+ * `docs/adr/0036-adr-react-email-is-an-opt-in-render-engine-2026-09-03.md`.
  *
  * The only thing that changes at a call site is one `await`:
  *

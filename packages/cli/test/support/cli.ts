@@ -11,7 +11,7 @@ import { fileURLToPath } from "node:url";
 const PACKAGE_DIR = resolve(fileURLToPath(new URL("../..", import.meta.url)));
 
 /**
- * Point the harness at another binary. `plan-ship-the-cli-2026-08-01.md`'s release smoke
+ * Point the harness at another binary. `0017-plan-ship-the-cli-2026-08-01.md`'s release smoke
  * test runs this same suite against an installed tarball rather than `dist/`, so the
  * binary under test is a parameter, not a constant. Give it a path to an executable (the
  * `saasaloy` bin) or to a `.js` entry point; a `.js` path is run through the current node.

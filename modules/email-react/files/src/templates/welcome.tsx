@@ -22,7 +22,7 @@ import { defineReactTemplate } from "../define";
 // The `await` inside the spread is the one difference from a tagged template.
 // `@react-email/render` renders asynchronously under the `workerd` export condition, so
 // this template returns a promise. See
-// docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md.
+// docs/adr/0036-adr-react-email-is-an-opt-in-render-engine-2026-09-03.md.
 
 export interface WelcomeProps {
   /** Display name of the person receiving this. JSX escapes it. */

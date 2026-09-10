@@ -13,7 +13,7 @@ One `saasaloy update` run rewrites files nobody expected it to touch:
 
 ## Why
 
-Two causes, both fixed in the CLI ([ADR 0034](../../adr/adr-0034-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
+Two causes, both fixed in the CLI ([ADR 0034](../../adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
 
 A project with no base record was **adopted**: every base file was recorded at the hash it had on disk, edits and all. The next run read that hash as proof the file was untouched template output and overwrote it.
 

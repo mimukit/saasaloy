@@ -108,7 +108,7 @@ Anyone who hit this needs one of two things:
 ## Why there is no faster lever
 
 Merging is publishing
-([ADR 0012](../../adr/adr-0012-remote-first-registry-repo-is-the-registry-2026-07-23.md)),
+([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)),
 and the repo has no CI: there is no `.github/` directory, and `pnpm lint` is a declared
 no-op that runs no tasks. Review is the only thing between a descriptor and every
 downstream install. [#46](https://github.com/mimukit/saasaloy/issues/46) adds the gate that

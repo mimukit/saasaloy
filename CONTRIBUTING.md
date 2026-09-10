@@ -206,7 +206,7 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 ### Why the playground is a git repository
 
 `play:init` no longer runs `git init` itself — `saasaloy init` does, for every project it
-scaffolds (see [ADR 0024](docs/adr/adr-0024-saasaloy-init-initialises-a-git-repository-2026-08-09.md)).
+scaffolds (see [ADR 0024](docs/adr/0024-adr-saasaloy-init-initialises-a-git-repository-2026-08-09.md)).
 The playground gets its repository the same way a user's project does, which is the point:
 the two paths no longer differ.
 
@@ -282,7 +282,7 @@ deliberate convention here (`func-style`, `no-inline-comments`, `no-await-in-loo
 correctness rule is in it, and none should be.** `no-control-regex` is the worked example:
 it is a Possible Problems rule, it fires in exactly two places, and it is suppressed at
 those two lines rather than in the block. Re-tightening one is a code change, not a
-config change — see [ADR 0023](docs/adr/adr-0023-generated-projects-ship-a-lint-and-hook-toolchain-2026-08-09.md).
+config change — see [ADR 0023](docs/adr/0035-adr-generated-projects-ship-a-lint-and-hook-toolchain-2026-08-09.md).
 
 ### Commit hooks
 
@@ -352,7 +352,7 @@ explodes every compact one-line array a hand-authored descriptor holds — `depe
 imports have to resolve in the root `node_modules`, and pnpm's isolated layout will not surface a
 `packages/cli` dependency there. Keep the two pins on the same version.
 
-**Resolution policy** (see [ADR 0016](docs/adr/adr-0016-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
+**Resolution policy** (see [ADR 0016](docs/adr/0016-adr-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
 per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores
 `dist-tags`** (never trusts `latest`), caps the pre-checked default at the **highest eligible version
 within the current major**, and requires the publish time to clear `minimumReleaseAge` (read from

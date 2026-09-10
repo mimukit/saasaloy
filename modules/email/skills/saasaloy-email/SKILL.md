@@ -149,7 +149,7 @@ await mail.send({ to: user.email, ...(await welcome({ name, appName, ctaUrl })) 
 ```
 
 The core contract, `deriveText()` and every provider are untouched by that module — see
-[ADR 0031](../../../../docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md). The
+[ADR 0031](../../../../docs/adr/0036-adr-react-email-is-an-opt-in-render-engine-2026-09-03.md). The
 full runbook (the `defineReactTemplate` helper, the preview-wrapper convention, when to pick which
 idiom) is the **`saasaloy-email-react`** skill, which that module installs.
 

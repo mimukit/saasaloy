@@ -36,7 +36,7 @@ await mail.send({ to: user.email, ...(await welcome({ name, appName, ctaUrl })) 
 
 Forget the `await` and you spread a `Promise` into the message, so `subject` and `html` arrive as
 `undefined` and the send fails at the provider rather than at the template. TypeScript catches it;
-do not silence it with a cast. [ADR 0031](../../../../docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md)
+do not silence it with a cast. [ADR 0031](../../../../docs/adr/0036-adr-react-email-is-an-opt-in-render-engine-2026-09-03.md)
 records why the core was not widened to `EmailContent | Promise<EmailContent>` instead.
 
 The `waitUntil` and `try/catch` shapes in the `saasaloy-email` skill work unchanged — the promise
@@ -178,7 +178,7 @@ it states what the package needs rather than relying on the base to keep saying 
 
 React Email renders inside the Worker at request time, because template props are per-recipient and
 "render at build time" degenerates into placeholder substitution. That costs bundle size, measured
-and recorded in [ADR 0031](../../../../docs/adr/adr-0031-react-email-is-an-opt-in-render-engine-2026-09-03.md).
+and recorded in [ADR 0031](../../../../docs/adr/0036-adr-react-email-is-an-opt-in-render-engine-2026-09-03.md).
 There is no budget gate on it: the module is opt-in, so only a project that adds it pays.
 
 ## Pinned React

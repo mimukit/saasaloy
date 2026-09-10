@@ -217,7 +217,7 @@ function applyCodemod(source: string, patch: Patch): string {
 // reverse: `chained-route` (#83), then `wrangler-binding`, `plugin-array` and
 // `const-array` (#36). The two `package.json` kinds deliberately do not — uninstalling an
 // npm dependency isn't derivable offline and other code may already use it, and nothing
-// asks for a script back (plan-remove-command-2026-07-25.md, non-goals). `remove`
+// asks for a script back (0011-plan-remove-command-2026-07-25.md, non-goals). `remove`
 // drops-and-warns for every kind absent from this table, and both `isReversibleKind` and
 // `reversePatch` read it, so adding an inverse stays one edit.
 type Inverse<K extends PatchKind> = (

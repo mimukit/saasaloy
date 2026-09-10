@@ -13,10 +13,10 @@ rules; this one covers only what is different when the module you're writing is 
 A provider module is deliberately tiny. If yours is growing a second file or a scaffold, you are
 probably authoring a capability, not a provider — go back to `create-module`.
 
-**Ground truth:** `docs/plans/plan-email-capability-module-2026-08-04.md` (the design this pattern
-came from), [ADR 0001](../../../docs/adr/adr-0001-all-in-on-cloudflare-2026-07-22.md) (when a
-capability may be multi-provider at all), [ADR 0033](../../../docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)
-(the test that decides provider vs driver), [ADR 0020](../../../docs/adr/adr-0020-capability-owns-its-vendor-packages-2026-07-24.md)
+**Ground truth:** `docs/plans/0020-plan-email-capability-module-2026-08-04.md` (the design this pattern
+came from), [ADR 0001](../../../docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md) (when a
+capability may be multi-provider at all), [ADR 0033](../../../docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)
+(the test that decides provider vs driver), [ADR 0020](../../../docs/adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)
 (where the vendor dependency goes).
 
 ## Is a provider module the right shape here?
@@ -36,7 +36,7 @@ amendment carves out exactly one exception, and a new provider must land inside 
 - **Transient platform state is provider territory too.** A queue holds a message for seconds and
   the platform, not the project, is its system of record. Nothing is queried after the fact and
   nothing is migrated, so `queue` takes providers even though it is a binding and not an HTTP
-  endpoint. [ADR 0033](../../../docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)
+  endpoint. [ADR 0033](../../../docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)
   states the test and lists which side each capability sits on. Read it before you assume "has
   state" means "driver".
 
@@ -87,7 +87,7 @@ near-identical runbooks.
 > each ship a skill folder, carry `scaffolds[]`, and replace files the capability would otherwise
 > own. They can do that because they exclude each other with `conflictsWith`, so a project installs
 > exactly one and receives exactly one runbook. That is a **driver module**, recorded in
-> [ADR 0026](../../../docs/adr/adr-0026-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
+> [ADR 0026](../../../docs/adr/0026-adr-database-driver-split-2026-08-28.md) and `CONTEXT.md`, not
 > a licence to grow a provider. If your module is mutually exclusive with a sibling, read that ADR.
 > If it is one of several that coexist behind an interface, every rule on this page still binds
 > you.
