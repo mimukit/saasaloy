@@ -25,7 +25,10 @@ built to static assets and served by a Worker with a single-page-application fal
 `dependsOn` `api` and `auth`, gates every route on `session.user.role === "admin"` in the root
 layout's `beforeLoad`, and calls the api through `hc<AppType>` with `credentials: "include"`. Its
 extension point is a file drop: a feature module writes `src/routes/<feature>.tsx` and the router
-plugin registers it, no patch — the admin-side twin of the schema barrel.
+plugin registers it, no patch — the admin-side twin of the schema barrel. The screen inherits a
+three-panel shell (icon rail, nav panel, content panel) on the app's own dark-by-default token set,
+and composes the page primitives the module ships — page layout, page header, filter chips, data
+table, status pill, attribute list, detail panel — so it needs no styling work of its own.
 
 `teams` is a feature module on `auth` and `admin`. It enables Better Auth organizations, drops the organization schema into `packages/db`, and adds the site-admin `/teams` screen. The screen covers organization creation, active-organization switching, members, and copy-ID invitations. Better Auth's nested teams-within-an-organization feature stays off.
 

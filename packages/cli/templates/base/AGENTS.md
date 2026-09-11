@@ -147,6 +147,13 @@ pnpm --filter @repo/ui exec shadcn add dialog
 - Never `npx` (see Never Do).
 - The CLI writes into `src/components/`. Anything it appends to `package.json` arrives
   as a range — **re-pin it to an exact version**.
+- **Add the primitive to a `@source` list, or it renders unstyled.** `globals.css` names
+  the components it scans one file at a time, because Tailwind scans content rather than
+  imports and a blanket glob charges every app for every primitive. A primitive the
+  landing page or `src/blocks/` renders gets an `@source "../components/<name>.tsx";` line
+  in `globals.css`; a primitive only one app renders gets its `@source` line in that app's
+  own stylesheet, the way `apps/admin/src/styles/admin.css` takes the whole directory.
+  Nothing errors when you skip this — the classes just never reach the CSS.
 - `style` is `base-nova` (Base UI) and is fixed at init — the CLI cannot change it later.
 - `rsc` is `false`, so the CLI strips the `"use client"` directive for you. It means
   nothing in Astro, and the vendored primitives don't carry it.
@@ -163,7 +170,7 @@ pnpm --filter @repo/ui exec shadcn add https://tweakcn.com/r/themes/modern-minim
 ```
 
 The CLI merges the preset's `:root`, `.dark` and `@theme inline` blocks **into** the
-existing ones, so the file's hand-written parts — the three `@source` globs, the
+existing ones, so the file's hand-written parts — the `@source` rules, the
 `@custom-variant dark`, the `@layer base` rules — stay put, and `components.json` is not
 touched. It usually *extends* `@theme inline` with mappings the base does not carry
 (fonts, tracking, shadows); that is expected.

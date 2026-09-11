@@ -11,6 +11,7 @@
 import { Route as rootRouteImport } from "./routes/__root";
 import { Route as IndexRouteImport } from "./routes/index";
 import { Route as LoginRouteImport } from "./routes/login";
+import { Route as UsersRouteImport } from "./routes/users";
 
 const IndexRoute = IndexRouteImport.update({
   id: "/",
@@ -22,31 +23,40 @@ const LoginRoute = LoginRouteImport.update({
   path: "/login",
   getParentRoute: () => rootRouteImport,
 } as any);
+const UsersRoute = UsersRouteImport.update({
+  id: "/users",
+  path: "/users",
+  getParentRoute: () => rootRouteImport,
+} as any);
 
 export interface FileRoutesByFullPath {
   "/": typeof IndexRoute;
   "/login": typeof LoginRoute;
+  "/users": typeof UsersRoute;
 }
 export interface FileRoutesByTo {
   "/": typeof IndexRoute;
   "/login": typeof LoginRoute;
+  "/users": typeof UsersRoute;
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport;
   "/": typeof IndexRoute;
   "/login": typeof LoginRoute;
+  "/users": typeof UsersRoute;
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath;
-  fullPaths: "/" | "/login";
+  fullPaths: "/" | "/login" | "/users";
   fileRoutesByTo: FileRoutesByTo;
-  to: "/" | "/login";
-  id: "__root__" | "/" | "/login";
+  to: "/" | "/login" | "/users";
+  id: "__root__" | "/" | "/login" | "/users";
   fileRoutesById: FileRoutesById;
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute;
   LoginRoute: typeof LoginRoute;
+  UsersRoute: typeof UsersRoute;
 }
 
 declare module "@tanstack/react-router" {
@@ -65,12 +75,20 @@ declare module "@tanstack/react-router" {
       preLoaderRoute: typeof LoginRouteImport;
       parentRoute: typeof rootRouteImport;
     };
+    "/users": {
+      id: "/users";
+      path: "/users";
+      fullPath: "/users";
+      preLoaderRoute: typeof UsersRouteImport;
+      parentRoute: typeof rootRouteImport;
+    };
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   LoginRoute: LoginRoute,
+  UsersRoute: UsersRoute,
 };
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

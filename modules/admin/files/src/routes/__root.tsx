@@ -114,9 +114,9 @@ function RootLayout() {
   );
 }
 
-// What an address that matches no route renders. It sits inside AppShell, so the sidebar
-// stays usable and the visitor can click their way out instead of reaching for the back
-// button.
+// What an address that matches no route renders. It sits inside AppShell, so the rail and
+// nav panel stay usable and the visitor can click their way out instead of reaching for the
+// back button.
 //
 // Only an admin ever sees this screen, and that is the guard working rather than a hole in
 // it. The router resolves `beforeLoad` top-down before it installs the not-found boundary,
@@ -146,12 +146,21 @@ function RootNotFound() {
 // deny path, so it renders the panel rather than a stack trace; anything else is a real
 // render failure and gets the same ErrorState every other app in the repo shows.
 //
+// The deny path renders inside AppShell. The error carries the session, so the shell has
+// what it needs, and the refusal reads as a screen of this app rather than as a crash. The
+// generic branch below does not: a render failure may be the shell itself, and wrapping the
+// fallback in the thing that just threw would take the fallback down with it.
+//
 // `reset` is the router's own retry: it re-runs the failed match in place, which is the one
 // action that can clear a transient render error without a full page load. The home link is
 // the way out when it cannot.
 function RootError({ error, reset }: ErrorComponentProps) {
   if (error instanceof NotAdminError) {
-    return <AccessDenied session={error.session} />;
+    return (
+      <AppShell session={error.session}>
+        <AccessDenied session={error.session} />
+      </AppShell>
+    );
   }
 
   return (

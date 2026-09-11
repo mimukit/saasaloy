@@ -16,9 +16,17 @@ import { SignOutButton } from "@admin/components/sign-out-button";
 // guard reads their valid session, which is a loop the address bar makes look like a bug.
 // Telling them plainly that the account lacks the role, and offering the one action that
 // can change the outcome, ends the interaction instead of spinning it.
+//
+// It renders inside AppShell, in the content panel, like every other screen. The rail and
+// nav panel around it are inert for this visitor — every link they hold re-runs the guard
+// and lands back here — but a screen that drops the shell reads as a crash rather than a
+// refusal, and the guard, not the chrome, is what keeps the data out of reach.
 export function AccessDenied({ session }: { session: AdminSession }) {
   return (
-    <main className="mx-auto flex min-h-dvh max-w-lg items-center px-6">
+    // A `div`, not a `main`: this renders inside AppShell's content panel, which is
+    // already the document's `<main>`, and a nested main landmark breaks landmark
+    // navigation for a screen reader.
+    <div className="mx-auto flex h-full max-w-lg items-center px-6 py-10">
       <Card className="w-full">
         <CardHeader>
           <ShieldAlertIcon className="text-muted-foreground size-5" />
@@ -33,6 +41,6 @@ export function AccessDenied({ session }: { session: AdminSession }) {
           <SignOutButton variant="outline" />
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

@@ -160,6 +160,10 @@ components:
 
 The base uses a neutral, content-first system. It gives a new product a clear structure without choosing a brand palette for the owner. Product identity enters through the theme tokens, the product brief, and the copy.
 
+## Apps
+
+An app may carry its own token set in its own stylesheet on top of these tokens, importing `packages/ui/src/styles/globals.css` first and reassigning the semantic custom properties after it. The admin app does that, and its skill documents the values.
+
 ## Colors
 
 The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive color is the only chromatic semantic token in the seed.

@@ -1,7 +1,7 @@
 // Canary for the tool repo's `scripts/verify-css` smoke test. Tailwind's class
 // detection is text-based — it scans source files as plain text and never imports them —
 // so this constant needs no consumer to make the utility below reach the built CSS. It
-// reaches it only if globals.css's `@source "../**/*.{ts,tsx}"` glob is actually
+// reaches it only if globals.css's `@source "../lib/**/*.{ts,tsx}"` glob is actually
 // matching packages/ui, which is the exact failure the smoke test exists to catch.
 //
 // The utility is an arbitrary property (`[--saasaloy-css-probe:1]`) so it compiles to a

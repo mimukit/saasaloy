@@ -38,6 +38,10 @@
         { "path": "files/index.html", "target": "index.html" },
         { "path": "files/src/main.tsx", "target": "src/main.tsx" },
         {
+          "path": "files/src/styles/admin.css",
+          "target": "src/styles/admin.css"
+        },
+        {
           "path": "files/src/routeTree.gen.ts",
           "target": "src/routeTree.gen.ts"
         },
@@ -48,8 +52,52 @@
           "target": "src/lib/redirect.ts"
         },
         {
+          "path": "files/src/lib/initials.ts",
+          "target": "src/lib/initials.ts"
+        },
+        {
           "path": "files/src/components/app-shell.tsx",
           "target": "src/components/app-shell.tsx"
+        },
+        {
+          "path": "files/src/components/nav.ts",
+          "target": "src/components/nav.ts"
+        },
+        {
+          "path": "files/src/components/rail.tsx",
+          "target": "src/components/rail.tsx"
+        },
+        {
+          "path": "files/src/components/nav-panel.tsx",
+          "target": "src/components/nav-panel.tsx"
+        },
+        {
+          "path": "files/src/components/page-layout.tsx",
+          "target": "src/components/page-layout.tsx"
+        },
+        {
+          "path": "files/src/components/page-header.tsx",
+          "target": "src/components/page-header.tsx"
+        },
+        {
+          "path": "files/src/components/filter-chips.tsx",
+          "target": "src/components/filter-chips.tsx"
+        },
+        {
+          "path": "files/src/components/data-table.tsx",
+          "target": "src/components/data-table.tsx"
+        },
+        {
+          "path": "files/src/components/status-pill.tsx",
+          "target": "src/components/status-pill.tsx"
+        },
+        {
+          "path": "files/src/components/attribute-list.tsx",
+          "target": "src/components/attribute-list.tsx"
+        },
+        {
+          "path": "files/src/components/detail-panel.tsx",
+          "target": "src/components/detail-panel.tsx"
         },
         {
           "path": "files/src/components/access-denied.tsx",
@@ -70,6 +118,10 @@
         {
           "path": "files/src/routes/index.tsx",
           "target": "src/routes/index.tsx"
+        },
+        {
+          "path": "files/src/routes/users.tsx",
+          "target": "src/routes/users.tsx"
         }
       ]
     }

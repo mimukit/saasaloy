@@ -10,6 +10,18 @@
 /** localStorage key holding the visitor's explicit choice. `system` clears it. */
 export const THEME_STORAGE_KEY = "theme";
 
+/**
+ * localStorage key marking that the visitor has used a toggle at least once.
+ *
+ * THEME_STORAGE_KEY alone cannot carry that fact, because `system` is spelled as an
+ * absent key — so a first visit and a deliberate `system` read the same. A host that
+ * wants a default other than the OS preference (the admin app starts on dark) needs to
+ * tell those two apart, and this key is the only difference between them.
+ *
+ * `installThemeToggle` writes it on every press. Nothing clears it.
+ */
+export const THEME_CHOICE_KEY = "theme-chosen";
+
 /** Attribute on `<html>` carrying the *chosen* state — also the JS-present marker. */
 export const THEME_ATTRIBUTE = "data-theme";
 
@@ -72,8 +84,119 @@ export function setTheme(theme: Theme): void {
   root.setAttribute(THEME_ATTRIBUTE, theme);
   root.classList.toggle("dark", resolveTheme(theme) === "dark");
 
+  relabelThemeToggles(theme);
+}
+
+/**
+ * Give every `[data-theme-toggle]` in the document the accessible name of the state it is
+ * in. `setTheme` calls this, so a host only needs it directly for the one case `setTheme`
+ * cannot cover: a toggle that MOUNTS AFTER the theme was applied.
+ *
+ * That is the ordinary case in a React host. `theme-toggle.tsx` renders a static
+ * `aria-label` for `system` — the truthful value for a first-time visitor — and the theme
+ * is applied in the entry module, before React has mounted anything. Without this call the
+ * button announces "Theme: system" over a painted dark page until the first press.
+ *
+ * The Astro host gets the same repair from THEME_INIT_SCRIPT's `DOMContentLoaded` handler.
+ *
+ * `data-theme` is author-writable, so an unrecognised value falls back to the stored
+ * choice rather than setting `aria-label="undefined"`.
+ */
+export function relabelThemeToggles(theme?: Theme): void {
+  const root = document.documentElement;
+  const painted = theme ?? root.getAttribute(THEME_ATTRIBUTE);
+  const named =
+    painted !== null && THEME_ORDER.includes(painted as Theme)
+      ? (painted as Theme)
+      : getStoredTheme();
+
   for (const trigger of root.querySelectorAll(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
-    trigger.setAttribute("aria-label", THEME_LABELS[theme]);
+    trigger.setAttribute("aria-label", THEME_LABELS[named]);
+  }
+}
+
+/**
+ * Install the toggle's click behaviour on `document`, and answer with a function that
+ * removes it again.
+ *
+ * A host that inlines THEME_INIT_SCRIPT already has this and must NOT call it — the two
+ * listeners would both fire and the cycle would advance twice per press. It exists for the
+ * host that cannot inline the script: a Vite SPA's `index.html` substitutes only `%VITE_*%`
+ * values, so it has no way to reach a TypeScript constant. Such an app calls this once from
+ * its entry module instead of pasting a second copy of the cycle rule.
+ *
+ * It cycles from what is PAINTED, not from what is stored, for the reason the shared script
+ * gives: where storage is unwritable the write is a no-op, so reading storage would answer
+ * the same value forever and every press would land on the same theme.
+ */
+export function installThemeToggle(): () => void {
+  function onClick(event: MouseEvent): void {
+    const { target } = event;
+    if (!(target instanceof Element)) {
+      return;
+    }
+    if (!target.closest(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
+      return;
+    }
+
+    const painted = document.documentElement.getAttribute(THEME_ATTRIBUTE);
+    // An unrecognised `data-theme` gives index -1 and starts the cycle at the head of
+    // THEME_ORDER.
+    const index = painted === null ? -1 : THEME_ORDER.indexOf(painted as Theme);
+    const next = THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? "light";
+
+    setTheme(next);
+
+    // After `setTheme`, and unconditionally: a `system` press CLEARS THEME_STORAGE_KEY, so
+    // this key is the only record that the visitor pressed anything at all.
+    try {
+      localStorage.setItem(THEME_CHOICE_KEY, "1");
+    } catch {
+      // Unwritable storage costs persistence, not the current page.
+    }
+  }
+
+  // The OS half of the same job, and the reason this is not click-only. THEME_INIT_SCRIPT
+  // registers its own matchMedia listener; a host that calls this function instead does
+  // not have that script, so without this listener a visitor on `system` keeps the palette
+  // resolved at load until the next reload.
+  //
+  // It repaints only while the state is `system`. A visitor who picked light or dark said
+  // so deliberately, and the OS must not overrule that.
+  const media = window.matchMedia(OS_DARK_QUERY);
+
+  function onOsChange(): void {
+    if (getStoredTheme() === "system") {
+      setTheme("system");
+    }
+  }
+
+  document.addEventListener("click", onClick);
+  media.addEventListener("change", onOsChange);
+
+  return () => {
+    document.removeEventListener("click", onClick);
+    media.removeEventListener("change", onOsChange);
+  };
+}
+
+/**
+ * Whether the visitor has ever used a toggle in this origin.
+ *
+ * A host whose default is the OS preference never needs this — `getStoredTheme()` already
+ * answers `system` for an unset key. A host with a different default (the admin app starts
+ * on dark) does: without it, a deliberate `system` choice and a first visit are the same
+ * absent key, and the default would overwrite the choice on every load.
+ */
+export function hasChosenTheme(): boolean {
+  try {
+    return (
+      localStorage.getItem(THEME_CHOICE_KEY) !== null ||
+      localStorage.getItem(THEME_STORAGE_KEY) !== null
+    );
+  } catch {
+    // Unreadable storage keeps nothing, so nothing was ever chosen.
+    return false;
   }
 }
 

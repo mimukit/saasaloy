@@ -38,7 +38,7 @@ Reused as is: `@repo/ui/lib/theme` (`getStoredTheme`, `setTheme`), `@repo/ui/blo
 
 Rejected at a line each: changing the shared `globals.css` so the whole monorepo turns dark (the landing page has its own design contract); a Vite plugin to inject the theme script (a one-line call in `main.tsx` does the job); system fonts (the design reads flat without a weight-500 geometric sans); static demo rows (the api already has real, typed, gated data); a shell-level detail slot (state would live above the route); a hand-rolled table (every module would reinvent sort).
 
-### Phase 1: admin theme and font (#123)
+### Phase 1: admin theme and font (#123) (built 2026-09-07)
 
 - Add `modules/admin/files/src/styles/admin.css`. It imports `@repo/ui/globals.css` and `@fontsource-variable/inter`, then redeclares the shadcn variables for `:root` (light: cream canvas, white panels, warm hairline) and `.dark` (measured from the screenshots: canvas about `oklch(0.14 0 0)`, panel about `oklch(0.20 0 0)`, hover row one step lighter, hairline at low-alpha white). Record the final measured values in the file's header comment. Set `--radius: 0.75rem` and add `--font-sans`, `--status-open`, `--accent-sort` in `@theme inline`.
 - `main.tsx` imports `./styles/admin.css` and drops the `globals.css` import. Keep the comment that no route imports a stylesheet again. Above `createRoot`, apply the theme: `setTheme("dark")` when `localStorage` has no `THEME_STORAGE_KEY`, else `setTheme(getStoredTheme())`, with a comment naming the dark-by-default decision.
@@ -46,13 +46,13 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - Add the `## Apps` section to `packages/cli/templates/base/DESIGN.md` and run the official linter through `pnpm dlx` as the `saasaloy-design` skill prescribes. Confirm the fingerprint is untouched.
 - Verify in `.dev`: `saasaloy add admin`, `pnpm dev`, the shell paints dark with Inter on a fresh profile, the toggle cycles and persists, and `pnpm deps:verify` and the four-pass `pnpm lint` are green.
 
-### Phase 2: ui primitives in the base (#123)
+### Phase 2: ui primitives in the base (#123) (built 2026-09-07)
 
 - In `packages/cli/templates/base/packages/ui`, run `shadcn add tooltip dropdown-menu collapsible table avatar tabs scroll-area sheet`. Review each file for the repo's conventions (`data-icon` slots, `cn`, base-ui imports), the same way `button.tsx` and `accordion.tsx` were reviewed.
 - Pin any new `@base-ui/react` version change through `pnpm deps:update`; the ui package already depends on it.
 - Verify: `@repo/ui:typecheck` green in `.dev`, `pnpm lint` green in the tool repo, the landing page output unchanged (no block imports the new files).
 
-### Phase 3: the shell (#123)
+### Phase 3: the shell (#123) (built 2026-09-07)
 
 - Rewrite `src/components/app-shell.tsx` into the rail + nav panel + content panel layout on a canvas with an 8px gutter. Split into `rail.tsx` (areas with `Tooltip` and count `Badge`, footer with the theme toggle and an `Avatar` that opens a `DropdownMenu` holding the account name, email, and sign-out), `nav-panel.tsx` (title row with actions, `Collapsible` groups, rows with icon, label, and count), and `app-shell.tsx` as the composer.
 - Replace `NAV_ITEMS` with `NAV_AREAS`: each area has an icon, a label, a `to`, and groups of items. The seed ships one area, "Admin", with one group listing Overview (`/`) and Users (`/users`). Every `to` stays typed against the generated route tree.
@@ -60,14 +60,14 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 - Move the account block out of the nav panel and into the rail footer, matching the screenshots. `sign-out-button.tsx` becomes a menu item or is called from one.
 - Verify in `.dev`: all routes render inside the shell, active state follows `aria-current`, not-found and access-denied still render inside the shell, keyboard focus order runs rail → nav → content.
 
-### Phase 4: page primitives (#123)
+### Phase 4: page primitives (#123) (built 2026-09-07)
 
 - Add `src/components/page-layout.tsx` (content column plus optional `detail` node; below `md` the detail renders in a `Sheet`), `page-header.tsx`, `filter-chips.tsx`, `data-table.tsx`, `status-pill.tsx`, `attribute-list.tsx`, `detail-panel.tsx`. Each takes plain props and callbacks, imports only React and `@repo/ui` (and `@tanstack/react-table` inside `data-table.tsx` only), and carries an in-file comment naming its Intercom counterpart.
 - `DataTable` wraps `@tanstack/react-table` (exact-pinned, added to the admin `package.json` via `pnpm deps:update`): a `columns` array with optional `sortable`, `rows`, `onRowClick`, `selectedId`, sticky header, row hover, `—` for empty cells, an `emptyState` slot. Sorting is client side. The sort indicator uses `--accent-sort`.
 - `DetailPanel`: `Tabs` header, open-in-new and close actions, `ScrollArea` body of `Collapsible` groups each wrapping an `AttributeList`.
 - Verify: `pnpm typecheck` green, every primitive rendered by a route in Phase 5.
 
-### Phase 5: overview, users, login, docs (#123)
+### Phase 5: overview, users, login, docs (#123) (built 2026-09-07)
 
 - Restyle `src/routes/index.tsx`: `PageLayout` and `PageHeader` "Overview", the health result as a `StatusPill` and an `AttributeList`. Keep the loader + Query wiring and the `DashboardError` fallback.
 - Add `src/routes/users.tsx`: a `queryOptions` over `api.admin.users.$get()`, prefetched in the loader; `PageHeader` "Users" with the `total` count; `FilterChips` for All / Admins / Users filtering client-side by role; `DataTable` with name, email, role (`StatusPill`), verified, created; row click sets the selected user and `PageLayout` renders a `DetailPanel` with an `AttributeList` of that user's fields. The router plugin regenerates `routeTree.gen.ts`; commit the result, do not hand-edit it.

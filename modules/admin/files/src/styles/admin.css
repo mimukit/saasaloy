@@ -1,0 +1,172 @@
+/* The admin app's theme, and the ONLY stylesheet apps/admin imports (see src/main.tsx).
+   It layers on `@repo/ui/globals.css` rather than replacing it: the shared file still
+   owns Tailwind's entrypoint, the `dark` custom variant and the base layer. Everything
+   below reassigns values, plus the one @source line the next block explains. The token
+   values in packages/ui/src/styles/globals.css are untouched, so the base DESIGN.md
+   token fingerprint still holds.
+
+   Why an app-scoped token set at all: the landing page is a marketing surface on a
+   neutral shadcn palette, and the backoffice is a dense, dark, panelled workspace. One
+   token set cannot be both. The base DESIGN.md `## Apps` section records that an app may
+   carry its own set here.
+
+   MEASURED DARK VALUES. Every dark value below was sampled from the reference
+   screenshots, not invented. The three-step neutral ramp and the hairline are the
+   palette; everything else is derived from them.
+
+     role                     sRGB       oklch                          source
+     canvas (--background)    #080808    oklch(0.134 0 0)               mockup-1, strip left of the icon rail
+     panel  (--card)          #13161b    oklch(0.199 0.011 260.66)      mockup-1, empty area of the nav and content panels
+     hover/selected           #1c2026    oklch(0.242 0.013 258.37)      mockup-1, the active "Your inbox" row and the "2 Open" chip
+     hairline (--border)      #373c43    oklch(0.354 0.014 256.77)      mockup-1, the rule under the content-panel header
+     body text (--foreground) #fafafa    oklch(0.985 0 0)               mockup-1, the active nav row label
+     muted text               #c8c6c5    oklch(0.828 0.003 48.71)       mockup-1, the "User" column header and the row counts
+     status pill fill         #2e476b    oklch(0.395 0.069 257.5)       mockup-1, the "Open" pill in the Status column
+     sort accent              #f6825a    oklch(0.729 0.152 39.51)       mockup-1, the "Last activity" sort header; mockup-3, the Copilot tab underline
+
+   The ramp carries a faint blue cast (chroma 0.011-0.014 around hue 258) rather than
+   pure grey. That is what the screenshots hold, and dropping it to `0 0` makes the
+   panels read flat against the canvas, so it is kept.
+
+   LIGHT is a mapped variant, not a second measurement — the screenshots are dark only.
+   It follows the Intercom marketing surface instead: a cream canvas, white panels, and a
+   warm hairline, so the same three-step ramp reads in reverse. Light is first-class; the
+   app just starts on dark (see src/main.tsx). */
+
+@import "@repo/ui/globals.css";
+@import "@fontsource-variable/inter";
+
+/* The shell primitives, opted into by this app alone.
+
+   globals.css lists the primitives the landing page renders and stops there, because
+   Tailwind scans content rather than imports: a blanket components glob would push the
+   shell's tooltip, menu, sheet, tabs, table, avatar and scroll-area utilities into the
+   landing page stylesheet as well. This app renders all of them, so it asks for the whole
+   directory here.
+
+   FOUR levels up: from apps/admin/src/styles/ the path walks styles → src → admin →
+   apps → <root>. The same off-by-one trap the app glob in globals.css warns about. */
+@source "../../../../packages/ui/src/components/*.tsx";
+
+:root {
+  /* 12px. The screenshots' panels read at about a 12px corner, one step above the
+     base template's 0.625rem. Everything derived from --radius follows. */
+  --radius: 0.75rem;
+  --background: oklch(0.96 0.008 73.74);
+  --foreground: oklch(0.197 0.005 67.53);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.197 0.005 67.53);
+  --popover: oklch(1 0 0);
+  --popover-foreground: oklch(0.197 0.005 67.53);
+  --primary: oklch(0.258 0.007 67.5);
+  --primary-foreground: oklch(0.96 0.008 73.74);
+  --secondary: oklch(0.933 0.011 76.6);
+  --secondary-foreground: oklch(0.258 0.007 67.5);
+  --muted: oklch(0.933 0.011 76.6);
+  --muted-foreground: oklch(0.517 0.016 74.29);
+  --accent: oklch(0.933 0.011 76.6);
+  --accent-foreground: oklch(0.258 0.007 67.5);
+  --destructive: oklch(0.501 0.178 28.7);
+  --border: oklch(0.853 0.012 79.78);
+  --input: oklch(0.853 0.012 79.78);
+  --ring: oklch(0.712 0.018 79.32);
+  --chart-1: oklch(0.258 0.007 67.5);
+  --chart-2: oklch(0.517 0.016 74.29);
+  --chart-3: oklch(0.712 0.018 79.32);
+  --chart-4: oklch(0.853 0.012 79.78);
+  --chart-5: oklch(0.933 0.011 76.6);
+
+  /* The rail and the nav panel are `sidebar` surfaces. They sit on the canvas as
+     panels, so they take the panel fill rather than a fourth tone. */
+  --sidebar: oklch(1 0 0);
+  --sidebar-foreground: oklch(0.197 0.005 67.53);
+  --sidebar-primary: oklch(0.258 0.007 67.5);
+  --sidebar-primary-foreground: oklch(0.96 0.008 73.74);
+  --sidebar-accent: oklch(0.933 0.011 76.6);
+  --sidebar-accent-foreground: oklch(0.258 0.007 67.5);
+  --sidebar-border: oklch(0.853 0.012 79.78);
+  --sidebar-ring: oklch(0.712 0.018 79.32);
+
+  /* The two accents the shadcn set has no role for. `status-open` is the muted blue
+     pill in the Status column and the circular primary action; `accent-sort` is the
+     orange on the active sort header and on an AI surface. Orange is never a section
+     background — one indicator at a time, which is why it is a colour and not a pair. */
+  --status-open: oklch(0.915 0.024 256.11);
+  --status-open-foreground: oklch(0.347 0.067 253.68);
+  --accent-sort: oklch(0.579 0.158 41.66);
+}
+
+.dark {
+  --background: oklch(0.134 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.199 0.011 260.66);
+  --card-foreground: oklch(0.985 0 0);
+
+  /* A menu opens ABOVE a panel, so it takes the hover tone rather than the panel tone;
+     at the panel tone it would disappear into whatever it covers. */
+  --popover: oklch(0.242 0.013 258.37);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.985 0 0);
+  --primary-foreground: oklch(0.199 0.011 260.66);
+  --secondary: oklch(0.242 0.013 258.37);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.242 0.013 258.37);
+  --muted-foreground: oklch(0.828 0.003 48.71);
+  --accent: oklch(0.242 0.013 258.37);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+
+  /* An opaque hairline, not the base template's `oklch(1 0 0 / 10%)`. On a #080808
+     canvas a 10% white border is invisible where two panels meet, and the panel edge
+     is what separates the layout. */
+  --border: oklch(0.354 0.014 256.77);
+  --input: oklch(0.354 0.014 256.77);
+  --ring: oklch(0.354 0.014 256.77);
+  --chart-1: oklch(0.743 0.11 256.84);
+  --chart-2: oklch(0.729 0.152 39.51);
+  --chart-3: oklch(0.828 0.003 48.71);
+  --chart-4: oklch(0.354 0.014 256.77);
+  --chart-5: oklch(0.242 0.013 258.37);
+  --sidebar: oklch(0.199 0.011 260.66);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.985 0 0);
+  --sidebar-primary-foreground: oklch(0.199 0.011 260.66);
+  --sidebar-accent: oklch(0.242 0.013 258.37);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(0.354 0.014 256.77);
+  --sidebar-ring: oklch(0.354 0.014 256.77);
+  --status-open: oklch(0.395 0.069 257.5);
+  --status-open-foreground: oklch(0.985 0 0);
+  --accent-sort: oklch(0.729 0.152 39.51);
+}
+
+/* The shared globals.css already maps every shadcn token to a `--color-*` utility. This
+   block adds only what is new here: the sans face and the two extra accents. */
+@theme inline {
+  --color-status-open: var(--status-open);
+  --color-status-open-foreground: var(--status-open-foreground);
+  --color-accent-sort: var(--accent-sort);
+}
+
+@theme {
+  /* "Inter Variable" is the family @fontsource-variable/inter registers; the fallbacks
+     are Tailwind's own system stack, so a failed font file degrades rather than breaks.
+     The design reference uses Saans, which is not free to redistribute — Inter is the
+     substitute the plan settles on, and it is the only face the app loads. */
+  --font-sans:
+    "Inter Variable", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
+    "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+}
+
+@layer base {
+  body {
+    /* Inter ships contextual alternates and tabular figures behind feature flags. `cv11`
+       gives the single-storey `l`/`g` the reference type uses; `ss01` is Inter's own
+       stylistic set for the same. Counts in the nav and the table sit in a right-aligned
+       column, so figures have to be the same width. */
+    font-feature-settings:
+      "cv11" 1,
+      "ss01" 1;
+    font-variant-numeric: tabular-nums;
+  }
+}
