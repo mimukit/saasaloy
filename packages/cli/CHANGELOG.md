@@ -1,5 +1,58 @@
 # Changelog
 
+## [0.3.0](https://github.com/mimukit/saasaloy/compare/v0.2.0...v0.3.0) (2026-09-11)
+
+### Features
+
+* **admin:** add the page primitives a screen builds on ([93c6e5f](https://github.com/mimukit/saasaloy/commit/93c6e5f615fc8fefc39ba09e63966943c87a6016)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+* **admin:** render the overview and users screens ([6f34720](https://github.com/mimukit/saasaloy/commit/6f347205d1b5bfbf03ece93a6e0502e01195bb77)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+* **admin:** scope a dark-first theme and inter to the admin app ([2e04cb9](https://github.com/mimukit/saasaloy/commit/2e04cb9bd645dc902a14e45c772def83e2074acf)), references [#080808](https://github.com/mimukit/saasaloy/issues/080808) [#13161b](https://github.com/mimukit/saasaloy/issues/13161b) [#1c2026](https://github.com/mimukit/saasaloy/issues/1c2026) [#373c43](https://github.com/mimukit/saasaloy/issues/373c43) [#c8c6c5](https://github.com/mimukit/saasaloy/issues/c8c6c5) [#123](https://github.com/mimukit/saasaloy/issues/123)
+* **admin:** split the shell into three panels ([60f5eee](https://github.com/mimukit/saasaloy/commit/60f5eee0f1a9bc68c5164879450ed1ce866f30bc)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+* **api-keys:** add organization-owned bearer credentials ([6bf41cd](https://github.com/mimukit/saasaloy/commit/6bf41cdbfe011e8491cb82a6ded30ac0139c057e)), references [#128](https://github.com/mimukit/saasaloy/issues/128) [#129](https://github.com/mimukit/saasaloy/issues/129) [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **auth:** add the superadmin role above admin ([afc3fae](https://github.com/mimukit/saasaloy/commit/afc3fae4b0d7126abbb47ec569e784f9a3c86ad7)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **billing-console:** add the local billing provider ([9da631e](https://github.com/mimukit/saasaloy/commit/9da631e056b950e2e8de44d8a1628d5cdf22b266))
+* **billing-stripe:** add the stripe billing provider ([03d9bcd](https://github.com/mimukit/saasaloy/commit/03d9bcd4b6f05cdf865717759459afda1bc6e39a))
+* **billing:** add the routes, the event consumer and the admin page ([5388a36](https://github.com/mimukit/saasaloy/commit/5388a36c3d02a5a8c495977f5954e217c614f7cd)), references [#126](https://github.com/mimukit/saasaloy/issues/126)
+* **billing:** add the vendor-blind billing core ([e02c41e](https://github.com/mimukit/saasaloy/commit/e02c41e26cda9daa6b57096e408f657d0faea9fd))
+* **billing:** carry what a real provider needs ([220ea5a](https://github.com/mimukit/saasaloy/commit/220ea5aeceb7802c9006a0f1ca2581bc64fb5c92))
+* **billing:** send the trial and dunning emails from the queue ([56d3dd9](https://github.com/mimukit/saasaloy/commit/56d3dd9f6d6b6e7b7a340e3ac9ade5124808320e))
+* **cli:** add the drizzle-column patch kind ([590ff93](https://github.com/mimukit/saasaloy/commit/590ff932358f508e9bd56555f8cb6f0fad92b93a))
+* **cli:** check every rate limit policy has its binding ([9215db7](https://github.com/mimukit/saasaloy/commit/9215db72c83c1dc0abe5aac0fdabb435272436ac))
+* **entitlements:** resolve what a plan allows from the project's tables ([e8be36f](https://github.com/mimukit/saasaloy/commit/e8be36f6a502e578e6dbb08cf56ee64b8f627b31))
+* **feature-flags:** add typed flags over a published kv document ([b43e3cc](https://github.com/mimukit/saasaloy/commit/b43e3cce0369ae3ed12e79f115a734a1306ff299))
+* **kv:** add the kv-cloudflare and kv-memory providers ([4c97a3f](https://github.com/mimukit/saasaloy/commit/4c97a3fe44e7085b5073382da4f6031281df2a23))
+* **kv:** add the provider-agnostic kv capability core ([8e919d6](https://github.com/mimukit/saasaloy/commit/8e919d6a5e6ddffdbc92052edb9a6b4fb9061167)), references [#129](https://github.com/mimukit/saasaloy/issues/129)
+* **multitenant:** resolve the tenant and guard every scoped query ([1c15040](https://github.com/mimukit/saasaloy/commit/1c150402774e3eefad6836fa9c369f3f79b59d3a)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **ratelimit:** add per-route limits over the kv contract ([b02227a](https://github.com/mimukit/saasaloy/commit/b02227a4b62de70578f650206cf711879d5a745b))
+* **rbac:** gate a tenant route on runtime-defined roles ([a88d1ca](https://github.com/mimukit/saasaloy/commit/a88d1ca5b2e9a5d35f1aa45ef045ba1e2b78c4a6)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **storage:** add the r2 and memory storage providers ([8440d88](https://github.com/mimukit/saasaloy/commit/8440d88a90cb83be608b9dd9a4acd918097717d7))
+* **storage:** add the vendor-blind storage core ([9cf7520](https://github.com/mimukit/saasaloy/commit/9cf7520068227ca344d8479e8e3a03702134bf35))
+* **teams:** seed the permission vocabulary and dynamic roles ([27559e0](https://github.com/mimukit/saasaloy/commit/27559e08a54f0f6f8fe6f4b4df6de12ddb04f802)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **ui:** vendor eight base-ui primitives into the template ([78815c0](https://github.com/mimukit/saasaloy/commit/78815c029f3d6bbe3695e30f7f29ea6b8ff0d3c8)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+
+### Bug Fixes
+
+* **admin:** let a system theme choice survive a reload ([f4e9cb3](https://github.com/mimukit/saasaloy/commit/f4e9cb34feb01a70bed9d258401844ef3bd0e54a)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+* **api-keys:** carry a key's scope on a field a browser may set ([83d3882](https://github.com/mimukit/saasaloy/commit/83d38828382d7c58277de6cfad920c0f95ebeccd)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **api-keys:** drop /api-key/update from the scope guard ([9167507](https://github.com/mimukit/saasaloy/commit/91675076b108bc06862d321870ea9e5f829aff31)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **auth:** declare superadmin in the admin plugin's roles ([1fb865c](https://github.com/mimukit/saasaloy/commit/1fb865cacbd4de0c14a9bb43a283c1442ead9e4d)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **auth:** pin better-auth 1.7.3 and drop account.issuer ([c4e1234](https://github.com/mimukit/saasaloy/commit/c4e1234e09c1252debdc217338080a6f74d6ca1c))
+* **auth:** restore the type on the request-scoped database client ([9a10f7b](https://github.com/mimukit/saasaloy/commit/9a10f7ba72964c95b6dd610c03f479559503a21a))
+* **billing:** close the review findings on the billing capability ([d8cdd60](https://github.com/mimukit/saasaloy/commit/d8cdd600cdfe33ae8c3bb54a0360ea6e388e202e)), closes [#133](https://github.com/mimukit/saasaloy/issues/133)
+* **billing:** run the background paths and unblock sign-up ([a41cad4](https://github.com/mimukit/saasaloy/commit/a41cad4cc6a7b05c49ebfa4662734d73a311600c))
+* **cli:** read an inline definePolicy in the doctor policy check ([af8ae2e](https://github.com/mimukit/saasaloy/commit/af8ae2e07c8afd9d313e16c6c2e2be51b4261687))
+* **cli:** use $prepend for the drizzle-column import patch ([f4b45d9](https://github.com/mimukit/saasaloy/commit/f4b45d9066ffd64fb4f0e0b6f81a89ad12715df8))
+* **feature-flags:** 404 the override delete for an unknown flag ([9ee7344](https://github.com/mimukit/saasaloy/commit/9ee73448584cbacb52f4d47931c3f194fba15567))
+* **feature-flags:** re-sync the flag card slider with the server ([00ece52](https://github.com/mimukit/saasaloy/commit/00ece5266b228106e8faf9e7857db4b6f28ed9be))
+* **kv-memory:** drop the raw NUL bytes from the bucket key ([f5005ca](https://github.com/mimukit/saasaloy/commit/f5005cac08a38302026f1b8399f1a7f43be9986f))
+* **multitenant:** make the scoped select compile under postgres ([7f29596](https://github.com/mimukit/saasaloy/commit/7f295969d1ebaf3aacc81d4fc72f9dc5d416d22e)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **multitenant:** refuse a header naming no organization ([63a3b3e](https://github.com/mimukit/saasaloy/commit/63a3b3eeb6585162b1f9e14417ea6d4e973ed94f)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **ratelimit:** build the default limiter key through store.key ([3299d47](https://github.com/mimukit/saasaloy/commit/3299d47a9f5e714da9133d925d37ad136c95f01e))
+* **repo:** clear the lint errors the dependency bump introduced ([4859da3](https://github.com/mimukit/saasaloy/commit/4859da3b92ea9d3156014dc95c26bb291bb55a57))
+* **teams:** turn on dynamic roles in the client plugin ([1da61e1](https://github.com/mimukit/saasaloy/commit/1da61e19b62250e1bd85cf3b5af2c74e842e7d30)), references [#128](https://github.com/mimukit/saasaloy/issues/128)
+* **ui,admin:** correct four review findings from PR [#124](https://github.com/mimukit/saasaloy/issues/124) ([c08fa89](https://github.com/mimukit/saasaloy/commit/c08fa89556f553b84fbc62ca690c7a457e55f2f8))
+* **ui:** scan only the primitives a stylesheet's own app renders ([28f23b0](https://github.com/mimukit/saasaloy/commit/28f23b03ee68076e1f0fe5751291dfd4b46662aa)), references [#123](https://github.com/mimukit/saasaloy/issues/123)
+
 ## [0.2.0](https://github.com/mimukit/saasaloy/compare/v0.1.1...v0.2.0) (2026-09-09)
 
 ### Features
