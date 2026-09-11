@@ -46,6 +46,13 @@ export default {
     // the source of truth instead.
     "hue-degree-notation": "number",
     "lightness-notation": "number",
+    // Stylelint 17.15.0 added `at-rule-prelude-no-invalid`, which checks an at-rule's
+    // prelude against the CSS grammar. Tailwind's `@apply` takes a list of utility
+    // class names, which no grammar describes, so every use in `globals.css` is
+    // reported. Ignore that one at-rule rather than turning the rule off — it still
+    // validates `@media`, `@supports` and the rest.
+    "at-rule-prelude-no-invalid": [true, { ignoreAtRules: ["apply"] }],
+
     "at-rule-no-unknown": [
       true,
       {

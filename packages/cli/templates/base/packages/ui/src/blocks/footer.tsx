@@ -56,8 +56,12 @@ export function Footer({
   siteName = "Acme",
   tagline = landing.footer.tagline,
   groups = defaultGroups,
-  year = new Date().getFullYear(),
+  year: yearProp,
 }: FooterProps) {
+  // Read the clock in the body, not as a destructuring default. The React Compiler cannot
+  // safely reorder a call expression in a parameter default and bails out of the component.
+  const year = yearProp ?? new Date().getFullYear();
+
   return (
     <footer className="border-border/60 mt-8 border-t">
       <div className="mx-auto w-full max-w-6xl px-6 py-14">

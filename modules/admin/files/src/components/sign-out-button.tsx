@@ -37,9 +37,12 @@ export function SignOutButton({
       setError(
         "Could not reach the api, so you are still signed in. Try again."
       );
-    } finally {
-      setPending(false);
     }
+
+    // Not a `finally` block: the React Compiler cannot lower one, so it bails out of the
+    // whole component. The `catch` above is unconditional and nothing returns early, so
+    // control always reaches here.
+    setPending(false);
   }
 
   return (

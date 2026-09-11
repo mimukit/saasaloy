@@ -63,32 +63,34 @@ function LoginScreen() {
         setError(
           signInError.message ?? "Sign-in failed. Check the email and password."
         );
-        return;
+      } else {
+        // The cookie is set, so the cached session is now wrong. Drop it, re-run the root guard,
+        // and let it decide where this account may go — the shell for an admin, the denied panel
+        // for anyone else. This screen deliberately does not make that call.
+        forgetSession();
+        await router.invalidate();
+
+        // Back to the page the guard interrupted, or / when there was none. The second gate
+        // is the router's own route tree: `getMatchedRoutes` returns an undefined third
+        // element for a path no route claims, so a value that survived the shape check but
+        // names nothing real still lands on /. The guard runs again on arrival, so this
+        // navigation grants no access on its own.
+        const destination = resolveDestination(
+          search.redirect,
+          (pathname) => router.getMatchedRoutes(pathname)[2] !== undefined
+        );
+        await router.navigate({ href: destination });
       }
-
-      // The cookie is set, so the cached session is now wrong. Drop it, re-run the root guard,
-      // and let it decide where this account may go — the shell for an admin, the denied panel
-      // for anyone else. This screen deliberately does not make that call.
-      forgetSession();
-      await router.invalidate();
-
-      // Back to the page the guard interrupted, or / when there was none. The second gate
-      // is the router's own route tree: `getMatchedRoutes` returns an undefined third
-      // element for a path no route claims, so a value that survived the shape check but
-      // names nothing real still lands on /. The guard runs again on arrival, so this
-      // navigation grants no access on its own.
-      const destination = resolveDestination(
-        search.redirect,
-        (pathname) => router.getMatchedRoutes(pathname)[2] !== undefined
-      );
-      await router.navigate({ href: destination });
     } catch {
       setError(
         "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev)."
       );
-    } finally {
-      setPending(false);
     }
+
+    // Not a `finally` block: the React Compiler cannot lower one, so it bails out of the
+    // whole component. The `catch` above is unconditional and nothing returns early, so
+    // control always reaches here.
+    setPending(false);
   }
 
   return (

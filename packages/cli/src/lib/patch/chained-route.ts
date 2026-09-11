@@ -66,7 +66,7 @@ export function insertChainedRoute(
 
   // Ensure the named import exists (magicast keys imports by local name).
   if (!(patch.import.name in mod.imports)) {
-    mod.imports.$add({
+    mod.imports.$prepend({
       from: patch.import.from,
       imported: patch.import.name,
       local: patch.import.name,
