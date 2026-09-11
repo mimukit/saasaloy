@@ -1,6 +1,6 @@
 ---
 name: saasaloy-sms
-description: Runbook for the sms capability — a provider-agnostic text sender in packages/sms with per-provider modules (sms-console today). Use when sending an SMS from a route, authoring an SMS template, choosing or switching SMS_PROVIDER, estimating what a body costs in segments, writing a custom SMS provider, or working out what consent and STOP handling the project still owes.
+description: Runbook for the sms capability — a provider-agnostic text sender in packages/sms with per-provider modules (sms-console for development, sms-khudebarta for Bangladesh). Use when sending an SMS from a route, authoring an SMS template, choosing or switching SMS_PROVIDER, estimating what a body costs in segments, writing a custom SMS provider, or working out what consent and STOP handling the project still owes.
 ---
 
 # sms — provider-agnostic texting from `packages/sms`
@@ -8,7 +8,7 @@ description: Runbook for the sms capability — a provider-agnostic text sender 
 `packages/sms` (`@repo/sms`) is the capability core: a template convention, a segment
 estimator, and a **provider registry**. It has **zero runtime dependencies** and knows nothing
 about any particular SMS service. Each provider ships as its own module — `sms-console` (dev)
-today — dropping one file into `src/providers/` and registering itself in the array in
+and `sms-khudebarta` (Bangladesh) today — dropping one file into `src/providers/` and registering itself in the array in
 `src/index.ts`.
 
 Callers import `@repo/sms`, call `createSms(env)`, and never learn which provider is active.
@@ -89,7 +89,7 @@ carrying its payload — nobody has a second copy of a one-time code — so a si
 
 | Var | What | Required |
 |---|---|---|
-| `SMS_PROVIDER` | Which registered provider sends: `console`, … | **Always**, even with one provider installed |
+| `SMS_PROVIDER` | Which registered provider sends: `console`, `khudebarta`, … | **Always**, even with one provider installed |
 | `SMS_FROM` | Default sender — an E.164 number, a short code, or an alphanumeric id | Only if your provider needs one |
 
 `SMS_PROVIDER` has **no default** on purpose. A default would mean a production deploy can
@@ -185,6 +185,7 @@ numbers that legitimately disagree is worse than one estimate whose name says it
 | Module | Provider name | Needs | Adds |
 |---|---|---|---|
 | `sms-console` | `console` | nothing | nothing — logs the message and its segment count |
+| `sms-khudebarta` | `khudebarta` | a Khudebarta account, an API key and secret, a registered sender id | `KHUDEBARTA_API_KEY`, `KHUDEBARTA_SECRET_KEY`, optional `KHUDEBARTA_API_URL`; sends to Bangladeshi (`+880`) numbers only |
 
 Installing another provider is the same command again (`saasaloy add sms-<provider>`); the codemod
 appends to the `providers` array idempotently, so several can be registered at once and
@@ -211,6 +212,31 @@ domain you probably already own; the alternative here is buying a number and reg
 > typically a **live one-time code**, printed next to the phone number it was issued to. In
 > production that is a working second factor sitting in your log retention, readable by anyone with
 > dashboard access. The provider is for `wrangler dev` and tests; production selects a real one.
+
+### Khudebarta (Bangladesh)
+
+`sms-khudebarta` sends through [Khudebarta](https://khudebarta.com/), a Bangladeshi bulk-SMS gateway, with one HTTPS `POST` to `/sendtext`. It adds no npm dependency and no binding.
+
+Setup:
+
+1. Open a Khudebarta account and get the API key and the secret key from the portal.
+2. Register a sender id (masking or non-masking) with Khudebarta. The gateway rejects a sender it has not approved.
+3. Run `saasaloy add sms-khudebarta`.
+4. Put `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` in `apps/api/.dev.vars` for local work, and set them with `wrangler secret put` for a deployed Worker.
+5. Set `SMS_PROVIDER=khudebarta` and `SMS_FROM` to the registered sender id.
+
+Leave `KHUDEBARTA_API_URL` unset unless Khudebarta gave your account a different host. It defaults to `https://portal.khudebarta.com:3770`. An override must use HTTPS: Workers strip a custom port from a plain `http://` subrequest, so the vendor's documented HTTP endpoint on `:3775` lands on port 80 and every send fails. The provider does not check the scheme.
+
+What this provider does differently:
+
+- **Bangladesh only.** Every recipient must start with `+880`. Any other number raises `invalid_number`, and the check covers the whole `to` list before the first request goes out, so nothing is sent. International traffic needs another provider.
+- **`SMS_FROM` is required here.** The gateway needs a sender id on every message, so a send with no `from` and no `SMS_FROM` raises `invalid_message`.
+- **One request per recipient.** The gateway's bulk form reports one status for the whole batch, which hides a partial rejection. The provider sends to each recipient in turn and throws on the first rejection. Recipients before it stay sent, and the error does not say how many.
+- **One subrequest per recipient.** Cloudflare allows 50 subrequests per invocation on the free plan and 1000 on paid, so a large `to` list fails partway. Put a broadcast on the `queue` capability, one job per recipient or per small batch.
+- **A 15-second timeout per request.** A timeout raises `provider_error` with `retryable: false`, because the gateway may already have accepted and billed the message.
+- **Only status `-62` is retryable.** It is the one code where the gateway confirms it did not accept the message. `providerCode` carries the gateway's numeric status on every rejection, so a wrong API key reads `account_error` with `providerCode: "-66"`.
+
+Delivery reports, inbound messages and the balance API are not wired up. `messageId` is the gateway's `Message_ID`, which is the key a later delivery-report feature would match on.
 
 ## Compliance: what the provider handles and what you owe
 
@@ -239,17 +265,15 @@ than marketing ones.** If you are unsure which one you're sending, you're sendin
 
 ## Not proven yet
 
-Three parts of the interface ship as *contracts*, not as tested behavior, because nothing installed
-today can raise them: `sms-console` needs no sender, has no account, and accepts any body length.
+`sms-khudebarta` exercises two contracts that `sms-console` could not. It requires a sender, so it raises `invalid_message` when `from` is missing. It has an account to fail, so `account_error` now has a source: a bad key, an empty balance, an unapproved sender id or a blocked account.
 
-- **Optional `from`** — nothing shipped ever says "I need a sender".
-- **`account_error`** — no shipped provider has an account to fail.
-- **`message_too_long`** — no shipped provider has a cap.
+Three error codes still ship as *contracts*, not as tested behavior, because no installed provider raises them. Khudebarta publishes no equivalent for any of them.
 
-They are shaped against Twilio's real API rather than guessed at, and the first real provider
-module exercises all three against Twilio's free test credentials and magic numbers. Until then,
-treat them as designed-but-unexercised: if you write a provider and one of them fits badly, say so
-rather than working around it.
+- **`unroutable`**: no shipped provider tells a well-formed number with no route apart from an invalid one.
+- **`message_too_long`**: no shipped provider has a cap.
+- **`rate_limited`**: no shipped provider reports a rate limit.
+
+They are shaped against Twilio's real API rather than guessed at. Treat them as designed but unexercised: if you write a provider and one of them fits badly, say so rather than working around it.
 
 ## Writing a custom provider in your own project
 

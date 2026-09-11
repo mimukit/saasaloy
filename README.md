@@ -107,7 +107,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `infra` |
 | Feature | `waitlist`, `teams`, `multitenant`, `rbac`, `api-keys`, `entitlements`, `email-react`, `ratelimit`, `feature-flags` |
-| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe` |
+| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe` |
 | Driver | `database-d1`, `database-postgres` |
 
 What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the free tier, and every local provider runs with no account at all.
