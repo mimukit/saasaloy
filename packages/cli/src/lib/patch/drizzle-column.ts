@@ -264,7 +264,7 @@ function addImport(source: string, patch: DrizzleColumn): string {
   if (patch.import.name in mod.imports) {
     return source;
   }
-  mod.imports.$add({
+  mod.imports.$prepend({
     from: patch.import.from,
     imported: patch.import.name,
     local: patch.import.name,
