@@ -64,8 +64,9 @@ because it might depend on the target and there is no way to tell.
 
 `remove` cleans up its own files, its skill symlinks, the now-empty directories it
 created, the `saasaloy.json` aliases whose target directory is gone, and every config
-patch the module applied to a config file: a `chained-route` link, a `wrangler-binding`
-entry, a `plugin-array` element. Reversing one takes the edit out and the named import
+patch the module applied to a source or config file: a `chained-route` link, a
+`wrangler-binding` entry, a `plugin-array` or `const-array` element, a `drizzle-column`
+column. Reversing one takes the edit out and the named import
 with it, but only when no other code still references the identifier, so a hand-written
 `app.use(waitlist.middleware)` is never left unbound. A binding array in
 `apps/api/wrangler.jsonc` goes too once the last entry in it is gone, because the base

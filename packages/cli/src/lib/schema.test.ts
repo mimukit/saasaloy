@@ -140,6 +140,11 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
     key: "to",
     entry: { to: "/teams", label: "Teams" },
   },
+  "drizzle-column": {
+    exportName: "user",
+    column: "billingCustomerId",
+    value: 'text("billing_customer_id")',
+  },
   "package-json-dependency": { name: "zod", version: "4.4.3" },
   "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
   "plugin-array": {

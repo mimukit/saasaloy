@@ -37,7 +37,9 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `queue` is the capability that scaffolds `packages/queue` (`@repo/queue`): a job table, a schedule table, a five-field cron matcher and a provider registry, with zero runtime dependencies. It merges what the catalog listed as `queue`, `cron` and `workflows`, because to a caller they are one thing: run work outside the request. It `dependsOn` `api` and patches `@repo/queue` into `apps/api/package.json`. `QUEUE_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0033 for why a queue takes providers rather than drivers.
 
-A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`) is a narrow feature: one file into a
+`billing` is the capability that scaffolds `packages/billing` (`@repo/billing`): a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscription`, and a provider registry, with zero runtime dependencies and no payment vendor named anywhere in it. `BILLING_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0034 for why a payment capability takes providers even though the project owns the table.
+
+A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`, `billing-stripe`, `billing-console`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.
@@ -49,6 +51,12 @@ last one is how any module registers a non-`fetch` Worker export, and it is the 
 `queue-memory` is the same capability with the smallest possible descriptor: one file, one patch,
 no binding and no env var, so a project develops and tests background work with no vendor account
 and no network.
+
+`billing-stripe` shows the other end of the same rule: one file with **two** exports, because
+Stripe reaches the project through two doors — the capability's `providers` array and Better Auth's
+`plugins` array — so it carries two `plugin-array` patches and three `package-json-dependency`
+patches. `billing-console` is its local twin: one file, one patch, no secret, and the whole
+checkout flow with no network.
 
 A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several
 providers coexist behind one interface and a runtime env var picks one; a project holds exactly one

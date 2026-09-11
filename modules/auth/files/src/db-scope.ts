@@ -39,7 +39,7 @@ export const dbScope = new AsyncLocalStorage<object>();
  * Properties that answer `undefined` outside a scope instead of throwing.
  *
  * `_` is the load-bearing one. `drizzleAdapter(db, config)` reads `db._?.schema` in its
- * own body (`@better-auth/drizzle-adapter@1.7.2`, `drizzle-adapter.ts`), which runs
+ * own body (`@better-auth/drizzle-adapter@1.7.3`, `dist/index.mjs`), which runs
  * while `./auth.ts` is still being imported — before any request exists. Throwing there
  * would take the Worker down on load rather than on a misuse. The adapter reads it to
  * build a relation-key map for `findOne`/`findMany` calls that pass `join`, and it

@@ -1,0 +1,180 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
+  "dependencies": [],
+  "envVars": {
+    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
+    "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
+    "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
+    "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
+  },
+  "removeWarnings": [
+    "The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
+    "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "drizzle-orm",
+      "range": "0.45.2"
+    },
+    {
+      "file": "packages/queue/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/billing",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/billing",
+      "call": "billingRoute",
+      "import": {
+        "name": "billingRoute",
+        "from": "./routes/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "billingEventJob",
+      "import": {
+        "name": "billingEventJob",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "pastDueLockoutJob",
+      "import": {
+        "name": "pastDueLockoutJob",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "pastDueLockoutSchedule",
+      "import": {
+        "name": "pastDueLockoutSchedule",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/billing", "label": "Billing" }
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "user",
+      "column": "billingCustomerId",
+      "value": "text(\"billing_customer_id\")"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/billing.ts",
+      "target": "@api/routes/billing.ts"
+    },
+    {
+      "path": "files/api/billing-store.ts",
+      "target": "@api/billing-store.ts"
+    },
+    {
+      "path": "files/admin/routes/billing.tsx",
+      "target": "@admin/routes/billing.tsx"
+    },
+    {
+      "path": "files/email/templates/trial-ending.ts",
+      "target": "@email/templates/trial-ending.ts"
+    },
+    {
+      "path": "files/email/templates/payment-failed.ts",
+      "target": "@email/templates/payment-failed.ts"
+    },
+    {
+      "path": "files/email/templates/account-locked.ts",
+      "target": "@email/templates/account-locked.ts"
+    },
+    {
+      "path": "files/db/schema/billing.sqlite.ts",
+      "target": "@db/schema/billing.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/billing.pg.ts",
+      "target": "@db/schema/billing.ts",
+      "onlyWith": "database-postgres"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/billing",
+      "aliases": { "@billing": "packages/billing/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/plans.ts", "target": "src/plans.ts" },
+        { "path": "files/src/subject.ts", "target": "src/subject.ts" },
+        {
+          "path": "files/src/subscription.ts",
+          "target": "src/subscription.ts"
+        },
+        { "path": "files/src/store.ts", "target": "src/store.ts" },
+        { "path": "files/src/enqueue.ts", "target": "src/enqueue.ts" },
+        { "path": "files/src/notify.ts", "target": "src/notify.ts" },
+        { "path": "files/src/config.ts", "target": "src/config.ts" },
+        { "path": "files/src/jobs/event.ts", "target": "src/jobs/event.ts" },
+        {
+          "path": "files/src/jobs/past-due-lockout.ts",
+          "target": "src/jobs/past-due-lockout.ts"
+        },
+        {
+          "path": "files/src/jobs/event-handler.ts",
+          "target": "src/jobs/event-handler.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-billing"]
+  }
+}

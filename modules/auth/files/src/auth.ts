@@ -112,9 +112,32 @@ export const auth = betterAuth({
       },
     },
   },
-  advanced: cookieDomain
-    ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
-    : undefined,
+  advanced: {
+    // The adapter's schema check is off, and it has to be. Better Auth 1.7.3 registers
+    // `findDrizzleSchemaProblems(config.schema ?? db._?.fullSchema ?? {})` on every
+    // adapter (`@better-auth/drizzle-adapter/dist/index.mjs`, and `checksSchema` in
+    // `@better-auth/core/dist/db/schema-check.mjs` is the switch). Neither source can
+    // answer here. `authDb` is a request-scoped proxy holding no client of its own, so
+    // `db._` is not a schema registry, and the check falls back to `{}` — which reads as
+    // "tables user, session, account, verification are missing" and turns EVERY
+    // `auth.api.*` call, sign-up included, into a 500.
+    //
+    // Passing `config.schema` instead would fix the read and break the composition: the
+    // expected set grows with the plugin array, so `billing-stripe` pushing `stripe()`
+    // would need the `subscription` model in that object too, and every later plugin
+    // another table. A capability module would then have to patch this file to add a
+    // table name, which is exactly the coupling the plugin-array patch point exists to
+    // avoid.
+    //
+    // Nothing is lost that the project does not already have. The tables come from
+    // `@db/schema/auth.ts`, which this module ships and `saasaloy` owns, and drizzle-kit
+    // generates the migrations from those same declarations — so a drift the check would
+    // report is a drift `pnpm db:generate` already reports first.
+    database: { validateSchema: false },
+    ...(cookieDomain
+      ? { crossSubDomainCookies: { domain: cookieDomain, enabled: true } }
+      : {}),
+  },
   // Also the patch point for feature capabilities (`billing` pushing `stripe()`,
   // `teams` pushing `organization()`). Keep this an array literal (never omit it, never
   // hoist it to a named const) — `insertIntoPluginArray` needs a real array to push into.

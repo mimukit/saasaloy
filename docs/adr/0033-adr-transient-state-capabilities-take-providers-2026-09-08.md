@@ -33,6 +33,7 @@ The doubtful case is `storage`. R2 holds objects the project does address direct
 | `logger` | providers | The sink owns the lines; nothing reads them back through the capability. |
 | `queue` | providers | The platform owns the messages, they are transient, and no consumer queries them. |
 | `kv` | providers | The platform owns the entries and they carry a TTL. |
+| `billing` | providers | The vendor owns the customer and the subscription. The project's table is a projection of that record, and a swap re-subscribes rather than migrates ([ADR 0034](adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)). |
 | `database` | drivers | The project owns the schema and the migrations, and queries the rows. |
 | `storage` | drivers | The project addresses objects by key, and a swap moves every object. |
 

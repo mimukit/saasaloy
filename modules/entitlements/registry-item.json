@@ -1,0 +1,26 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "entitlements",
+  "type": "saasaloy:feature",
+  "dependsOn": ["billing"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "Any route still wrapped in requireFeature() or requireWithinLimit() loses its import when this module goes. Search apps/api for both names before you remove it."
+  ],
+  "patches": [],
+  "files": [
+    {
+      "path": "files/entitlements.ts",
+      "target": "@billing/entitlements.ts"
+    },
+    {
+      "path": "files/api/require-feature.ts",
+      "target": "@api/middleware/require-feature.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-entitlements"]
+  }
+}
