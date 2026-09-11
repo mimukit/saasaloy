@@ -1,12 +1,14 @@
 import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
-import { ADMIN_ROLE, decide } from "./authorize";
-import type { Denial } from "./authorize";
+import { ADMIN_ROLES, SUPERADMIN_ROLE, decide } from "./authorize";
+import type { Denial, RoleDemand } from "./authorize";
 import { withAuthScope } from "./db-provider";
 import type { AuthDbBindings } from "./db-provider";
 
 export { auth } from "./auth";
 export { ADMIN_ROLE } from "./authorize";
+export { ADMIN_ROLES, SUPERADMIN_ROLE } from "./authorize";
+export type { RoleDemand } from "./authorize";
 
 // Re-exported so a route reaches the scope and the binding shape through one entry
 // point. `apps/api/src/routes/auth.ts` imports only `hono` and this module, and no route
@@ -93,8 +95,12 @@ export async function requireSession(c: AuthRequestContext) {
  *
  * One role per user: `decide` compares with `===`, so a comma-joined `"admin,support"` is
  * refused even though better-auth's own plugin would accept it. See `hasRole`.
+ *
+ * `role` takes an array to demand any one of several roles. That form has exactly one
+ * caller today, `requireAdmin` with `ADMIN_ROLES`; everything else passes one string and
+ * gets the exact comparison.
  */
-export async function requireRole(c: AuthRequestContext, role: string) {
+export async function requireRole(c: AuthRequestContext, role: RoleDemand) {
   const { denial, session } = decide(await getSession(c), role);
   if (denial) {
     throw denialError(denial);
@@ -102,7 +108,23 @@ export async function requireRole(c: AuthRequestContext, role: string) {
   return session;
 }
 
-/** The session, or a 401/403. The gate every administrative route opens with. */
+/**
+ * The session, or a 401/403. The gate every administrative route opens with.
+ *
+ * It admits `admin` and `superadmin`, because `superadmin` sits above `admin` and every
+ * backoffice route an `admin` may call, a `superadmin` may call too. It grants nothing
+ * inside an organization: a tenant route asks `requireTenant`, which reads the caller's
+ * membership and not this role.
+ */
 export async function requireAdmin(c: AuthRequestContext) {
-  return requireRole(c, ADMIN_ROLE);
+  return requireRole(c, ADMIN_ROLES);
+}
+
+/**
+ * The session, or a 401/403, for the one role above `admin`. Exact: an `admin` is
+ * refused. This is the gate for anything that crosses an organization boundary, such as
+ * the `x-organization-id` bypass the `multitenant` module reads.
+ */
+export async function requireSuperadmin(c: AuthRequestContext) {
+  return requireRole(c, SUPERADMIN_ROLE);
 }

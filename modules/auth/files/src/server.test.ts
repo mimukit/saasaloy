@@ -23,17 +23,27 @@ import { fileURLToPath } from "node:url";
 import { describe, it } from "node:test";
 import {
   ADMIN_ROLE,
+  ADMIN_ROLES,
   SIGNED_OUT,
+  SUPERADMIN_ROLE,
   decide,
   hasRole,
   roleDenial,
 } from "./authorize.ts";
 
-describe("ADMIN_ROLE", () => {
-  it("is the string better-auth's admin() plugin treats as privileged", () => {
-    // `admin()` is registered with its defaults in ./auth.ts, so `adminRoles` is
-    // `["admin"]`. Change this string and the plugin stops agreeing with the gate.
+describe("the site roles", () => {
+  it("names the two strings better-auth's admin() plugin is registered with", () => {
+    // ./auth.ts passes `adminRoles: [...ADMIN_ROLES]`. Change either string here and
+    // the plugin stops agreeing with the gate.
     assert.equal(ADMIN_ROLE, "admin");
+    assert.equal(SUPERADMIN_ROLE, "superadmin");
+  });
+
+  it("opens apps/admin to both of them", () => {
+    // `requireAdmin` demands this list, and `apps/admin/src/lib/auth.ts` keeps its own
+    // copy of the same pair because a browser bundle cannot import from
+    // `@repo/auth/server`. The two have to stay equal.
+    assert.deepEqual([...ADMIN_ROLES], [ADMIN_ROLE, SUPERADMIN_ROLE]);
   });
 });
 
@@ -90,6 +100,36 @@ describe("hasRole", () => {
     }
   });
 
+  it("accepts any one role from an array, which is the requireAdmin form", () => {
+    // `requireAdmin` passes `ADMIN_ROLES`, so both site roles pass one demand.
+    assert.equal(hasRole({ user: { role: "admin" } }, ADMIN_ROLES), true);
+    assert.equal(hasRole({ user: { role: "superadmin" } }, ADMIN_ROLES), true);
+    assert.equal(hasRole({ user: { role: "user" } }, ADMIN_ROLES), false);
+  });
+
+  it("compares each entry of an array exactly, with no fold and no substring", () => {
+    for (const role of [
+      "Admin",
+      "SUPERADMIN",
+      "administrator",
+      "admin,superadmin",
+    ]) {
+      assert.equal(
+        hasRole({ user: { role } }, ADMIN_ROLES),
+        false,
+        `${role} must not satisfy the any-of form`
+      );
+    }
+    assert.equal(hasRole({ user: {} }, ADMIN_ROLES), false);
+    assert.equal(hasRole({ user: { role: null } }, ADMIN_ROLES), false);
+  });
+
+  it("refuses everything when the array is empty", () => {
+    // An empty list is a demand nothing satisfies, never an absent demand. Getting
+    // this backwards would open the gate to anyone signed in.
+    assert.equal(hasRole({ user: { role: "admin" } }, []), false);
+  });
+
   it("matches any role string, not only admin", () => {
     // `requireRole` is the primitive and `requireAdmin` is one caller of it, so a
     // second role later costs a call site rather than a rewrite.
@@ -118,6 +158,14 @@ describe("roleDenial", () => {
   it("names the role it demanded", () => {
     assert.equal(roleDenial(ADMIN_ROLE).message, "role required: admin");
     assert.equal(roleDenial("support").message, "role required: support");
+  });
+
+  it("names every role it would have accepted, for the any-of form", () => {
+    assert.equal(
+      roleDenial(ADMIN_ROLES).message,
+      "role required: admin or superadmin"
+    );
+    assert.equal(roleDenial(ADMIN_ROLES).status, 403);
   });
 });
 
@@ -179,6 +227,44 @@ describe("decide", () => {
     );
   });
 
+  it("passes either site role when the demand is the any-of form", () => {
+    // This is `requireAdmin`. Both roles get into `apps/admin`; `superadmin` sits
+    // above `admin`, so refusing it here would lock out the first account created.
+    for (const role of [ADMIN_ROLE, SUPERADMIN_ROLE]) {
+      const session = { user: { role } };
+      assert.equal(decide(session, ADMIN_ROLES).denial, null);
+      assert.equal(decide(session, ADMIN_ROLES).session, session);
+    }
+  });
+
+  it("keeps the single-string form exact, which is requireSuperadmin", () => {
+    // `requireSuperadmin` must refuse an `admin`. The any-of form exists for
+    // `requireAdmin` alone, and adding a role to it here would erase that line.
+    assert.equal(decide(admin, SUPERADMIN_ROLE).denial?.status, 403);
+    assert.equal(
+      decide(admin, SUPERADMIN_ROLE).denial?.message,
+      "role required: superadmin"
+    );
+    assert.equal(
+      decide({ user: { role: SUPERADMIN_ROLE } }, SUPERADMIN_ROLE).denial,
+      null
+    );
+  });
+
+  it("refuses a signed-in caller against the any-of form with 403", () => {
+    assert.deepEqual(
+      decide(plain, ADMIN_ROLES).denial,
+      roleDenial(ADMIN_ROLES)
+    );
+    assert.equal(decide(plain, ADMIN_ROLES).session, null);
+  });
+
+  it("treats an empty array as a demand nothing meets", () => {
+    // Same rule as the empty string below: the "no role wanted" case keys off
+    // `undefined`, not off falsiness or emptiness.
+    assert.equal(decide(admin, []).denial?.status, 403);
+  });
+
   it("treats an empty-string role as a demand, not as no demand", () => {
     // The `role` check keys off `undefined`, not off falsiness. A `""` role slipping
     // through as "no role demanded" would open the gate.
@@ -194,7 +280,12 @@ describe("server.ts wiring", () => {
   );
 
   it("exports the three helpers the api routes call", () => {
-    for (const name of ["requireSession", "requireRole", "requireAdmin"]) {
+    for (const name of [
+      "requireSession",
+      "requireRole",
+      "requireAdmin",
+      "requireSuperadmin",
+    ]) {
       assert.match(
         source,
         new RegExp(`export async function ${name}\\(`),
@@ -207,8 +298,20 @@ describe("server.ts wiring", () => {
     assert.match(source, /export async function getSession\(/);
   });
 
-  it("re-exports ADMIN_ROLE from the decision core rather than restating it", () => {
+  it("re-exports the role constants from the decision core rather than restating them", () => {
     assert.match(source, /export \{ ADMIN_ROLE \} from "\.\/authorize"/);
+    assert.match(
+      source,
+      /export \{ ADMIN_ROLES, SUPERADMIN_ROLE \} from "\.\/authorize"/
+    );
+  });
+
+  it("gives requireAdmin the any-of list and requireSuperadmin the exact role", () => {
+    // The two helpers hold no condition, so the only thing that distinguishes them
+    // is which demand they pass. Swapping these would make `requireSuperadmin` admit
+    // an `admin`, and nothing else in this file would notice.
+    assert.match(source, /return requireRole\(c, ADMIN_ROLES\);/);
+    assert.match(source, /return requireRole\(c, SUPERADMIN_ROLE\);/);
   });
 
   it("routes every refusal through the tested core and one HTTPException", () => {

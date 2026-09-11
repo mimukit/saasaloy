@@ -104,6 +104,34 @@ _Avoid: signed URL (that is only the `direct: true` case), upload link._
 Signing a vendor URL so the holder can read or write one object for a fixed window with no further credential — `aws4fetch` with `signQuery: true` against R2's S3-compatible endpoint. It is an **optional** contract method: a provider that cannot presign returns nothing and the core issues a proxy [upload target](#upload-target) instead. `storage-cloudflare` presigns only when all four R2 API variables are set, because the R2 Workers binding reads and writes but cannot sign. A presigned URL is a bearer credential that cannot be revoked before it expires, and it cannot enforce a byte cap, so `complete` checks the real size and deletes an oversize object.
 _Avoid: signed request, pre-signed (one word, no hyphen)._
 
+## Tenancy & authorization
+
+### Tenant
+The organization one request acts for, plus the [principal](#principal) that asked, resolved once per request by `requireTenant(c)` in `packages/auth/src/tenant.ts`. It is the only source of a [`TenantId`](#tenantid), and a route reads `organizationId` off it to scope every query. A caller who belongs to no organization gets HTTP 403 with the message `no active organization`; there is no unscoped fallback.
+_Avoid: workspace, account, customer. The row is an `organization`, and the resolved pair is a tenant._
+
+### `TenantId`
+An organization id that has been through `requireTenant`. It is a `string` at runtime and a branded distinct type at compile time, minted only by `asTenantId` in `packages/db/src/tenant.ts`. A slug, a user id, or an `x-organization-id` header value the route read itself does not fit, which is what stops a request body from choosing its own tenant.
+
+### Principal
+Who a request is acting as inside a tenant, in one of three kinds: `superadmin`, `member`, or `apiKey`. A `member` and an `apiKey` each carry the resolved statements they hold; a `superadmin` carries none, because `can()` answers true for that kind before it reads any. `GET /tenant` returns the principal, so a screen runs the same `can()` the api runs.
+_Avoid: actor, subject, identity._
+
+### Credential resolver
+A module's answer to "this request carries my kind of credential, and here is the [tenant](#tenant) it resolves to". It is an entry in the `tenantResolvers` [registration table](#registration-table) in `packages/auth/src/tenant.ts`, with a synchronous `claims(headers)` and an async `resolve(c)`. `claims` asks whether the credential is mine, never whether it is valid: once a resolver claims a request, `resolve` either returns a tenant or throws, and the session cookie is never consulted. That is what stops a revoked API key from falling back to a cookie riding along with it. `api-keys` registers the one resolver that ships, for `Authorization: Bearer`.
+_Avoid: auth strategy, credential provider (a [provider module](#provider-module) is a different thing)._
+
+### Base role
+One of the three organization roles this project declares in `packages/auth/src/access.ts`: `owner`, `admin`, `member`. Their statements are compiled in, so an operator cannot rename, re-scope or delete one. `roleLockGuard` refuses `create-role`, `update-role` and `delete-role` on any of the three names, whatever permission the caller holds.
+_Avoid: default role, built-in role._
+
+### Custom role
+An organization role an operator creates at runtime, stored as an `organizationRole` row and resolved by `loadStatements` alongside the base roles. It carries only statements declared in `access.ts`, so a custom role can narrow or recombine the vocabulary and never extend it. Deleting one is refused while a member still holds it.
+
+### `superadmin` against `admin`
+Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, and the only one that crosses organizations, by sending `x-organization-id`. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.
+_Avoid: root, owner (an organization [base role](#base-role) is called owner)._
+
 ## Registry & applier
 
 ### Applier

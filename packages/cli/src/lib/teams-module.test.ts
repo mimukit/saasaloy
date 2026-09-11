@@ -22,22 +22,37 @@ describe("teams module descriptor", () => {
     await expect(validateRegistryItem(descriptor)).resolves.toMatchObject({
       valid: true,
     });
+    // No driver here. The schema ships in two dialects under `onlyWith`, the same
+    // shape `modules/auth` uses, so `teams` installs on either driver.
     expect(descriptor.dependsOn).toStrictEqual([
       "api",
       "database",
-      "database-d1",
       "auth",
       "admin",
     ]);
     expect(descriptor.files).toStrictEqual(
       expect.arrayContaining([
         {
-          path: "files/db/schema/teams.ts",
+          path: "files/db/schema/teams.sqlite.ts",
           target: "@db/schema/teams.ts",
+          onlyWith: "database-d1",
+        },
+        {
+          path: "files/db/schema/teams.pg.ts",
+          target: "@db/schema/teams.ts",
+          onlyWith: "database-postgres",
+        },
+        {
+          path: "files/auth/access.ts",
+          target: "@auth/access.ts",
         },
         {
           path: "files/auth/plugins/organization.ts",
           target: "@auth/plugins/organization.ts",
+        },
+        {
+          path: "files/auth/plugins/organization-client.ts",
+          target: "@auth/plugins/organization-client.ts",
         },
       ])
     );
@@ -64,10 +79,12 @@ describe("teams module descriptor", () => {
           kind: "plugin-array",
           exportName: "authClientPlugins",
           arrayProp: "plugins",
-          call: "organizationClient",
+          // The wrapper, not `organizationClient` itself: the patch engine records a
+          // zero-argument call, and the client plugin needs `{ ac, roles }`.
+          call: "organizationClientPlugin",
           import: {
-            name: "organizationClient",
-            from: "better-auth/client/plugins",
+            name: "organizationClientPlugin",
+            from: "./plugins/organization-client",
           },
         },
       ])
@@ -82,6 +99,7 @@ describe("teams module descriptor", () => {
     expect(warnings[0]).toMatch(/organization/);
     expect(warnings[0]).toMatch(/member/);
     expect(warnings[0]).toMatch(/invitation/);
+    expect(warnings[0]).toMatch(/organizationRole/);
     expect(warnings[0]).toMatch(/drop migration/);
   });
 

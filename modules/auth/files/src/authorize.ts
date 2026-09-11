@@ -9,12 +9,29 @@
 // already has and gets an answer.
 
 /**
- * The role better-auth's `admin()` plugin treats as privileged. `./auth.ts` registers
- * the plugin with its defaults, so `adminRoles` is `["admin"]` and every new account
- * gets `"user"`. `apps/admin` keeps its own copy in `src/lib/auth.ts`, because a browser
- * bundle cannot import from `@repo/auth/server`; the two strings have to agree.
+ * The site-admin role. `./auth.ts` registers better-auth's `admin()` plugin with
+ * `adminRoles: [ADMIN_ROLE, SUPERADMIN_ROLE]`, and every new account gets `"user"`.
+ * `apps/admin` keeps its own copy in `src/lib/auth.ts`, because a browser bundle cannot
+ * import from `@repo/auth/server`; the strings have to agree.
+ *
+ * An `admin` runs `apps/admin`. Inside an organization it is an ordinary member: the
+ * site role grants nothing on a tenant route.
  */
 export const ADMIN_ROLE = "admin";
+
+/**
+ * The role above `admin`. The first account to sign up wins it (the hook in
+ * `./auth.ts`), and only it may act inside an organization it does not belong to,
+ * through the `x-organization-id` header the `multitenant` module reads. Everything
+ * `admin` may do, `superadmin` may do, which is why `requireAdmin` admits either.
+ */
+export const SUPERADMIN_ROLE = "superadmin";
+
+/**
+ * The roles that open `apps/admin`. `requireAdmin` demands one of these, and
+ * `apps/admin/src/lib/auth.ts` keeps its own copy of the same pair.
+ */
+export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 
 /**
  * What the gate reads off a session. Structural on purpose, so better-auth's inferred
@@ -27,12 +44,16 @@ export interface RoleBearer {
 }
 
 /**
- * A refusal. `status` is one of the two api's `ERROR_CODES` already maps (`401:
- * "unauthorized"`, `403: "forbidden"`), and `message` becomes `error.message` in the
- * envelope `onError` renders. It is never empty, because `errorSchema` rejects that.
+ * A refusal. `status` is one of the three api's `ERROR_CODES` already maps (`401:
+ * "unauthorized"`, `403: "forbidden"`, `404: "not_found"`), and `message` becomes
+ * `error.message` in the envelope `onError` renders. It is never empty, because
+ * `errorSchema` rejects that.
+ *
+ * The union is closed on purpose. A gate answers one of these three and nothing else, so
+ * adding a status is a decision made here rather than at a call site.
  */
 export interface Denial {
-  readonly status: 401 | 403;
+  readonly status: 401 | 403 | 404;
   readonly message: string;
 }
 
@@ -44,12 +65,24 @@ export const SIGNED_OUT: Denial = { status: 401, message: "sign in first" };
  * authenticated, so signing in again cannot help, and a 401 would bounce them through
  * a login they have just completed.
  */
-export function roleDenial(role: string): Denial {
-  return { status: 403, message: `role required: ${role}` };
+export function roleDenial(role: RoleDemand): Denial {
+  const named = typeof role === "string" ? role : role.join(" or ");
+  return { status: 403, message: `role required: ${named}` };
 }
 
 /**
- * Whether the session carries exactly this role. The comparison is `===` and stays
+ * What a route demands: one exact role, or any one of a set. The any-of form exists for
+ * `requireAdmin`, which admits `admin` and `superadmin`; `requireRole` and
+ * `requireSuperadmin` pass a single string and stay exact.
+ *
+ * An empty array is a demand nothing satisfies, not an absent demand. `decide` keys the
+ * "no role wanted" case off `undefined`, so an accidentally empty list fails closed.
+ */
+export type RoleDemand = string | readonly string[];
+
+/**
+ * Whether the session carries this role. A string demands exactly that role; an array
+ * demands any one of them, each compared the same exact way. The comparison is `===` and stays
  * that way: a case fold or a substring test would let `"Admin"` and `"administrator"`
  * past a check whose whole job is to be exact.
  *
@@ -61,8 +94,11 @@ export function roleDenial(role: string): Denial {
  * compares with `===` against its own copy of the constant. Splitting here alone would
  * admit a caller the SPA still refuses. Store one role, or change both halves together.
  */
-export function hasRole(session: RoleBearer, role: string): boolean {
-  return session.user.role === role;
+export function hasRole(session: RoleBearer, role: RoleDemand): boolean {
+  const held = session.user.role;
+  return typeof role === "string"
+    ? held === role
+    : role.some((candidate) => held === candidate);
 }
 
 /**
@@ -78,7 +114,8 @@ export type Decision<S extends RoleBearer> =
 /**
  * The whole gate rule, as one pure function. Pass the session (or `null` when there is
  * none) and the role the route demands; omit `role` to ask only whether anybody is signed
- * in.
+ * in. Pass an array to demand any one of several roles, which is how `requireAdmin`
+ * admits both `admin` and `superadmin` without a second decision path.
  *
  * The rule lives here rather than in `./server.ts` so a test can execute it. `./server.ts`
  * cannot be imported by a test in this repo, because it pulls `hono` and `better-auth`, so
@@ -88,7 +125,7 @@ export type Decision<S extends RoleBearer> =
  */
 export function decide<S extends RoleBearer>(
   session: S | null | undefined,
-  role?: string
+  role?: RoleDemand
 ): Decision<S> {
   if (!session) {
     return { denial: SIGNED_OUT, session: null };

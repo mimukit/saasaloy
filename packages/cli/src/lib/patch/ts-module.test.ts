@@ -90,7 +90,11 @@ export const auth = betterAuth({ plugins: [stripe()] });
     const out = insertIntoPluginArray(source, STRIPE);
 
     expect(out).not.toBe(source);
-    expect(out).toContain("plugins: [admin(), stripe()]");
+    // The shipped array is multi-line, so assert on the appended element and on the
+    // element that was already there rather than on one printed line. Pinning the whole
+    // line made this test fail every time `modules/auth` changed an option.
+    expect(out).toContain("adminRoles: [...ADMIN_ROLES]");
+    expect(out).toContain("stripe()");
     expect(out).toContain('import { stripe } from "@better-auth/stripe";');
     // The module-scope export is what the codemod anchors on; a refactor that wraps it
     // in a factory would break every feature capability that patches it.

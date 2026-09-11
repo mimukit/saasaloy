@@ -2,11 +2,11 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "teams",
   "type": "saasaloy:feature",
-  "dependsOn": ["api", "database", "database-d1", "auth", "admin"],
+  "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed organization, member, and invitation tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
+    "The deployed organization, member, invitation, and organizationRole tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
   ],
   "patches": [
     {
@@ -25,10 +25,10 @@
       "kind": "plugin-array",
       "exportName": "authClientPlugins",
       "arrayProp": "plugins",
-      "call": "organizationClient",
+      "call": "organizationClientPlugin",
       "import": {
-        "name": "organizationClient",
-        "from": "better-auth/client/plugins"
+        "name": "organizationClientPlugin",
+        "from": "./plugins/organization-client"
       }
     },
     {
@@ -41,12 +41,26 @@
   ],
   "files": [
     {
-      "path": "files/db/schema/teams.ts",
-      "target": "@db/schema/teams.ts"
+      "path": "files/db/schema/teams.sqlite.ts",
+      "target": "@db/schema/teams.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/teams.pg.ts",
+      "target": "@db/schema/teams.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/auth/access.ts",
+      "target": "@auth/access.ts"
     },
     {
       "path": "files/auth/plugins/organization.ts",
       "target": "@auth/plugins/organization.ts"
+    },
+    {
+      "path": "files/auth/plugins/organization-client.ts",
+      "target": "@auth/plugins/organization-client.ts"
     },
     {
       "path": "files/admin/routes/teams.tsx",

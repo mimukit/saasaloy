@@ -6,9 +6,14 @@
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
     "typecheck": "tsc --noEmit"
   },
+  "//exports": "No patch kind edits an exports map, so entries a feature module fills are declared here up front. './access' is filled by teams (src/access.ts, the permission vocabulary), './tenant' by multitenant (src/tenant.ts, requireTenant and the resolver table), './rbac' by rbac (src/rbac.ts, requireCan) and './rbac-rules' by rbac as well (src/rbac-rules.ts, the import-free can()). './rbac' pulls hono and the auth instance, so only './access' and './rbac-rules' are safe in a browser bundle; apps/admin imports can() from the latter to hide a control. Until each module is installed its subpath resolves to nothing and nothing imports it.",
   "exports": {
     "./server": "./src/server.ts",
-    "./client": "./src/client.ts"
+    "./client": "./src/client.ts",
+    "./access": "./src/access.ts",
+    "./tenant": "./src/tenant.ts",
+    "./rbac": "./src/rbac.ts",
+    "./rbac-rules": "./src/rbac-rules.ts"
   },
   "dependencies": {
     "better-auth": "1.7.3",
