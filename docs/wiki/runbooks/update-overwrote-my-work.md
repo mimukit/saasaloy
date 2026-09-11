@@ -49,12 +49,14 @@ If the run happened before backups shipped and the work was never committed, git
 
 ## Stop it happening again
 
-Upgrade the CLI. From the version carrying ADR 0034:
+Upgrade the CLI. From 0.2.0, the release carrying ADR 0034:
 
 - an adopted file is never overwritten, only offered as a merge;
 - the files the template hands over stay yours;
-- the project name comes from `saasaloy.json`, never from the directory;
+- the project name comes from `saasaloy.json` first, then the root `package.json`, and only falls back to the directory name for a project scaffolded before either was written, with a warning (`packages/cli/src/lib/project-name.ts`);
 - every run writes `.saasaloy/backups/<timestamp>/` first, and `saasaloy update --abort` restores it;
 - a dirty git working tree is refused without `--force`.
 
 Commit or stash before any update anyway. It costs one command and it is the only recovery that never depends on the tool behaving.
+
+_Verified against `main`@`42cbf03` on 2026-09-11._

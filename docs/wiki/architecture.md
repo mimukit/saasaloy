@@ -17,9 +17,12 @@ never merge. The tool repo does not run its own modules on itself
 
 ## The CLI
 
-`packages/cli/src/index.ts` is a dispatcher and nothing more: it maps four command names
-to four handlers and prints help for anything else. The work lives in `commands/`, and the
-reusable machinery under `lib/`, split into seams:
+`packages/cli/src/index.ts` is a bootstrap and nothing more: it calls `main()` in
+`cli.ts`, which dispatches against the command registry in `commands/index.ts` and prints
+help for anything else. The registry holds nine commands, in the order help and the picker
+render them: `init`, `add`, `env`, `outdated`, `update`, `remove`, `list`, `new`,
+`doctor`. The work lives in `commands/`, and the reusable machinery under `lib/`, split
+into seams:
 
 | Seam | File | Responsibility |
 |---|---|---|
@@ -101,6 +104,10 @@ brings its vendor SDK with it and encapsulates it, so nothing else in the projec
 that SDK directly
 ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
+The descriptor still knows two types, `saasaloy:capability` and `saasaloy:feature`, but a capability with more than one possible implementation splits its second half into a [provider module](../../CONTEXT.md#provider-module) or a [driver module](../../CONTEXT.md#driver-module), both typed `saasaloy:feature`. A provider adds one file to the capability's `providers/` folder and registers it with a `plugin-array` patch; several coexist, and the runtime env var `<CAP>_PROVIDER` picks one, with no default in either direction ([ADR 0033](../adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `email`, `sms`, `logger`, `queue`, `kv`, `storage` and `billing` are on that side. A provider that needs a non-`fetch` Worker entry point registers a [handler set](../../CONTEXT.md#handler-set) through the `handlers` table in `apps/api/src/worker.ts`, never through `infra`.
+
+A driver instead **replaces** files the capability would own, so exactly one is ever installed: `database-d1` and `database-postgres` name each other in `conflictsWith`, and `database` names both in `requiresOneOf` ([ADR 0026](../adr/0026-adr-database-driver-split-2026-08-28.md)). Which side a capability lands on is a three-question test, and the deciding question is replace-files versus add-one-file ([ADR 0037](../adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)).
+
 Convention-based file drops cover most of what a module needs. The rest is **config
 patches**: structural edits to a file some other module owns, such as adding a Worker
 binding to `wrangler.jsonc` or registering a provider in an exported array. Those run
@@ -109,9 +116,7 @@ through AST-aware codemods rather than string replacement
 recorded flat in the manifest
 ([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)).
 
-The asymmetry to know about: a patch is applied forward by every kind, but only
-`chained-route` has an inverse `remove` can run. The other four are dropped from the
-manifest with a warning. See [Known limitations](reference.md#known-limitations).
+The asymmetry to know about: the engine applies seven kinds forward, and five of them have an inverse `remove` can run (`chained-route`, `const-array`, `drizzle-column`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
 
 ## The base is nearly empty
 
@@ -142,4 +147,4 @@ module that ships an agent skill installs it into `.agents/skills/` with a
 Those links are tracked in the manifest, so unlike config patches they are removed when the
 module is.
 
-_Verified against `main`@`0f8b7a7` on 2026-08-30._
+_Verified against `main`@`42cbf03` on 2026-09-11._

@@ -68,3 +68,8 @@ pages:
       - packages/cli/src/lib/schema.ts
       - packages/cli/src/lib/lock.ts
       - modules/*/registry-item.json
+  - path: runbooks/update-overwrote-my-work.md
+    mode: how-to
+    documents:
+      - packages/cli/src/commands/update.ts
+      - packages/cli/CHANGELOG.md

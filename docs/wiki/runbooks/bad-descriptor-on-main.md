@@ -54,6 +54,8 @@ The local source uses the same loader and the same schema validation as a remote
 the error you get here is the error downstream users are getting. `--dry-run` stops before
 anything is written.
 
+`saasaloy doctor` answers the same question on a checkout and needs no scaffolded project. It validates descriptors against the same schema (`packages/cli/src/lib/schema.ts`) plus rules of its own, and it reports every finding rather than the first: `saasaloy doctor /tmp/saasaloy-check/modules` checks the whole registry, `saasaloy doctor /tmp/saasaloy-check/modules/<name>` checks one module. A run with findings exits 2, the refusal code.
+
 ## 3. Revert on `main`
 
 There is no artifact to invalidate and no release to yank. The revert commit becomes the
@@ -109,12 +111,14 @@ Anyone who hit this needs one of two things:
 
 Merging is publishing
 ([ADR 0012](../../adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)),
-and the repo has no CI: there is no `.github/` directory, and `pnpm lint` is a declared
-no-op that runs no tasks. Review is the only thing between a descriptor and every
-downstream install. [#46](https://github.com/mimukit/saasaloy/issues/46) adds the gate that
-would have caught this.
+and CI does not validate descriptors. `.github/workflows/ci.yml` runs `pnpm lint`,
+`pnpm typecheck`, `pnpm test` and `pnpm verify:content` on every push and pull request, and
+no step calls `saasaloy doctor` over `modules/`. Review is still the only thing between a
+descriptor and every downstream install.
+[#46](https://github.com/mimukit/saasaloy/issues/46) adds the gate that would have caught
+this.
 
-Until then, the cheap prevention is step 2 run *before* the merge. See
+Until then, the cheap prevention is `saasaloy doctor modules` or step 2, run *before* the merge. See
 [Contribute a module](../how-to/contribute-a-module.md#test-it-before-you-open-the-pr).
 
-_Verified against `main`@`48d32d7` on 2026-08-09._
+_Verified against `main`@`42cbf03` on 2026-09-11._

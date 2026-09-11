@@ -35,4 +35,4 @@ Every module you install brings its own `saasaloy-<name>` skill into the same `.
 - [Getting started](../getting-started.md) — scaffold and run the project first.
 - [Add a module](add-a-module.md) — install the API, database, auth and features.
 
-_Verified against `main`@`a21fcce` on 2026-08-31._
+_Verified against `main`@`42cbf03` on 2026-09-11._

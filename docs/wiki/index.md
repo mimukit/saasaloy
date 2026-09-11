@@ -5,13 +5,11 @@ demand. The scaffolded base is a landing page and a UI package; the API, databas
 and product features arrive later, one `saasaloy add` at a time, as files you own and can
 edit.
 
-The CLI ships five commands: `init`, `add`, `update`, `remove`, `list`. Nothing else exists yet.
+The CLI ships nine commands: `init`, `add`, `env`, `outdated`, `update`, `remove`, `list`, `new`, `doctor`.
 
 Two things worth knowing before you pick a page:
 
-- **The CLI is not published to npm.** Installing it today means cloning this repo and
-  linking the built binary. [Getting started](getting-started.md) walks that path.
-  [#46](https://github.com/mimukit/saasaloy/issues/46) tracks the publish.
+- **The CLI is published to npm as `saasaloy`** (0.3.0 today). `npm install -g saasaloy` installs it, or prefix commands with `npx`. [Getting started](getting-started.md) walks that path.
 - **The registry is this repo.** `mimukit/saasaloy` is the default registry, so
   `saasaloy add waitlist` fetches `modules/waitlist/` from it on GitHub at a resolved
   commit SHA. There is no package registry in between.
@@ -54,4 +52,4 @@ You want to publish a module other projects can install.
 - [`CONTRIBUTING.md`](../../CONTRIBUTING.md) covers development in this repo: the
   `.dev/playground`, the scripts, and the dependency update flow.
 
-_Verified against `main`@`a21fcce` on 2026-08-31._
+_Verified against `main`@`42cbf03` on 2026-09-11._

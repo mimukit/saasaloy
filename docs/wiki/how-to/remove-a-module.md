@@ -15,7 +15,7 @@ saasaloy remove waitlist
 ```
 
 With no module name you get a picker over the modules listed in `saasaloy.json`. Naming a
-module that isn't installed exits 1 without touching anything.
+module that isn't installed prints `<name> isn't installed — nothing to remove.` and exits 2 without touching anything. With nothing installed at all, the run prints `Nothing installed.` and exits 0.
 
 The plan tags every file it tracks:
 
@@ -36,14 +36,24 @@ when there is an edit to undo, `drift → left` when the line is yours now and t
 why, `already gone` when nothing is left to undo, and `untrack` for a patch kind `remove`
 cannot reverse.
 
+## Warnings the module declares
+
+A module descriptor may carry a `removeWarnings` array, and `add` copies it into `.saasaloy/manifest.json` at install time. `remove` prints each entry after the plan, so the warning is there even when the registry is not. `billing` declares two, one of which reads:
+
+```text
+The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
+```
+
+`entitlements` declares one, about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
+
 ## Hand-edited files
 
 For each drifted file, `remove` asks whether to delete it anyway, defaulting to no. A file
 you decline is left on disk and dropped from the manifest, which makes it yours: a later
 `add` of the same module classifies it as a `conflict` and leaves it alone.
 
-Under `--yes` no prompts run at all, so **every drifted file survives, untracked**. That
-is the designed outcome, not a failure, and the command exits 0. If you want drifted files
+Under `--yes` no prompts run at all, so **every drifted file survives, untracked**. The plan says so up front: with `--yes` each drifted file is tagged `drift → kept (untracked)` instead of `drift → confirm`. That
+is the designed outcome, not a failure, and the command exits 0. Whatever survives is listed again at the end under **Drift survivors**. If you want drifted files
 gone in a scripted run, delete them yourself afterwards.
 
 ## Modules other modules depend on
@@ -77,7 +87,7 @@ ships it and the next provider install needs it there.
 Nothing is reverse-patched blindly. A route you repointed at your own handler, a binding
 whose value you edited, a plugin call you gave arguments: each is left where it is and
 reported with the reason, because it no longer matches what the manifest recorded. The
-record is still dropped, so the module stops being tracked either way. Three things
+record is still dropped, so the module stops being tracked either way. Four things
 `remove` does not touch:
 
 - **The two `package.json` patch kinds stay.** `remove` prints one warning per patched
@@ -88,10 +98,11 @@ record is still dropped, so the module stops being tracked either way. Three thi
 - **npm dependencies stay in your root `package.json`.** `add` merges them in; `remove`
   has no dependency handling at all.
 - **Environment variables you set for the module** are left alone, wherever you put them.
+- **The wire-up for a UI block you imported by hand stays.** `add` writes a block into the ui package but never edits a page, so nothing recorded which page you put it on. When `remove` deletes such a file it prints a **Wire-up left behind** note listing it, and the import and the tag are yours to take out. Leave them and the build fails.
 
 ## Related
 
 - [Add a module](add-a-module.md)
 - [Reference](../reference.md#saasaloy-remove) for the full flag list
 
-_Verified against `main`@`1b27579` on 2026-08-30._
+_Verified against `main`@`42cbf03` on 2026-09-11._

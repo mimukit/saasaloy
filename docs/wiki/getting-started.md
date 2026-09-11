@@ -9,7 +9,7 @@ on disk, and its landing page running at `http://localhost:3000`.
   `.nvmrc` all say 24.13.0, and `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node
   fails the install rather than breaking later. `nvm use` picks the floor up from `.nvmrc`, which
   is also the version CI runs.
-- **pnpm 11 or newer.** The repo is pinned to `pnpm@11.14.0`.
+- **pnpm 11 or newer.** The repo and the scaffolded project both pin `pnpm@12.3.4`.
 
 Nothing here needs a Cloudflare account. `saasaloy init` scaffolds a static Astro site and
 touches no cloud service.
@@ -41,8 +41,7 @@ Check the install worked:
 saasaloy --help
 ```
 
-You should see the five commands: `init`, `add`, `update`, `remove`, `list`, and the
-global `--help`/`--version` flags below them. If the shell can't find
+You should see the nine commands: `init`, `add`, `env`, `outdated`, `update`, `remove`, `list`, `new`, `doctor`, and the global `--help`/`--version` flags below them. If the shell can't find
 `saasaloy`, pnpm's global bin directory isn't on your `PATH` — `pnpm setup` puts it there.
 
 > **Working on Saasaloy itself?** Don't install the published CLI. Clone the repo and use
@@ -64,7 +63,9 @@ scaffold into the current directory, or a path like `./apps/my-app` — the last
 segment becomes the project name. Omit the name entirely and the CLI asks for it.
 
 `init` copies the base template, then offers to run `pnpm install` for you. Say yes and it
-installs; say no and it prints the command in the next steps.
+installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree.
+
+`init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init`. Any other flag stops the command with an error instead of being ignored.
 
 If the target directory already has files in it, `init` stops and tells you to re-run with
 `--force`. A `.git` directory on its own doesn't count as non-empty, so you can scaffold
@@ -92,6 +93,8 @@ my-app/
   .agents/skills/      three bundled agent skills (symlinked from .claude/skills/)
   DESIGN.md            the design contract, derived from what packages/ui ships
   saasaloy.json        alias map + the list of installed modules
+  saasaloy-lock.json   the template and module versions this project was built at
+  .saasaloy/manifest.json  one entry per file the CLI wrote, at its hash
   turbo.json
 ```
 
@@ -128,4 +131,4 @@ from any subdirectory.
 - [Architecture](architecture.md) if you want to know what the CLI is doing to your
   project before you let it.
 
-_Verified against `main`@`a21fcce` on 2026-08-31._
+_Verified against `main`@`42cbf03` on 2026-09-11._
