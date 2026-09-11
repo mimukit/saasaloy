@@ -229,7 +229,7 @@ Leave `KHUDEBARTA_API_URL` unset unless Khudebarta gave your account a different
 
 What this provider does differently:
 
-- **Bangladesh only.** Every recipient must start with `+880`. Any other number raises `invalid_number`, and the check covers the whole `to` list before the first request goes out, so nothing is sent. International traffic needs another provider.
+- **Bangladesh only.** Every recipient must be `+880` followed by ten digits. Any other number raises `invalid_number`, and the check covers the whole `to` list before the first request goes out, so nothing is sent. International traffic needs another provider.
 - **`SMS_FROM` is required here.** The gateway needs a sender id on every message, so a send with no `from` and no `SMS_FROM` raises `invalid_message`.
 - **One request per recipient.** The gateway's bulk form reports one status for the whole batch, which hides a partial rejection. The provider sends to each recipient in turn and throws on the first rejection. Recipients before it stay sent, and the error does not say how many.
 - **One subrequest per recipient.** Cloudflare allows 50 subrequests per invocation on the free plan and 1000 on paid, so a large `to` list fails partway. Put a broadcast on the `queue` capability, one job per recipient or per small batch.
