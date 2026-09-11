@@ -1,0 +1,50 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "storage-cloudflare",
+  "type": "saasaloy:feature",
+  "dependsOn": ["storage"],
+  "dependencies": [],
+  "envVars": {
+    "R2_ACCOUNT_ID": "Cloudflare account id, from the dashboard URL or `wrangler whoami`. One of four optional values that together let this provider hand a browser a presigned URL. Leave them unset and reads and writes still work through the R2 binding — every upload and download just streams through the Worker's proxy route instead.",
+    "R2_ACCESS_KEY_ID": "Access key id of an R2 API token with Object Read & Write on the bucket, from R2 → Manage API tokens. The Worker binding is a different credential and cannot sign a URL, which is why this exists. Set it in `.dev.vars` locally and with `wrangler secret put R2_ACCESS_KEY_ID` in production.",
+    "R2_SECRET_ACCESS_KEY": "Secret access key shown once when the R2 API token is created. A secret: never in wrangler.jsonc, never in a repo. `wrangler secret put R2_SECRET_ACCESS_KEY` in production.",
+    "R2_BUCKET_NAME": "Name of the bucket the S3-compatible URL addresses, e.g. `app-storage`. It must be the bucket the `BUCKET` binding points at, or a presigned link will read and write a different bucket than the binding does."
+  },
+  "patches": [
+    {
+      "file": "apps/api/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "r2_buckets",
+      "entry": {
+        "binding": "BUCKET",
+        "bucket_name": "app-storage"
+      },
+      "matchOn": "binding"
+    },
+    {
+      "file": "packages/storage/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "aws4fetch",
+      "range": "1.0.20"
+    },
+    {
+      "file": "packages/storage/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "storage",
+      "arrayProp": "providers",
+      "call": "cloudflare",
+      "import": {
+        "name": "cloudflare",
+        "from": "./providers/cloudflare"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/cloudflare.ts",
+      "target": "@storage/providers/cloudflare.ts"
+    }
+  ],
+  "scaffolds": []
+}

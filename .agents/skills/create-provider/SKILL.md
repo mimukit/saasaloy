@@ -615,13 +615,74 @@ on the row the first created instead of stacking a history row; and `SubjectInpu
 live row the route reads for it, because `cancel` and `restore` carry no plan and a provider with
 no webhook cannot learn one.
 
+## Mode: `storage`
+
+**Interface:** `StorageProvider` in `packages/storage/src/provider.ts`. `storage-cloudflare` (R2) and `storage-memory` are the worked examples; the capability's runbook is `modules/storage/skills/saasaloy-storage/SKILL.md`.
+
+Object storage is stateful, so read [ADR 0037](../../../docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md) before you start. It adds the third question to ADR 0033's test: an alternate implementation that **adds one file** is a provider, one that **replaces files the core owns** is a driver. `storage` sits on the provider side because R2 speaks S3, so `storage-s3` is the same code with a different endpoint. The consequence is written into the runbook rather than hidden: a provider swap copies bytes by hand, and no migration is promised.
+
+```ts
+import { StorageError } from "../provider";
+import type { StorageEnv, StorageObject, StorageProvider } from "../provider";
+
+export function s3(): StorageProvider {
+  return {
+    name: "s3", // the value STORAGE_PROVIDER must hold to select this provider
+    async put(env: StorageEnv, key: string, body, options): Promise<StorageObject> { … },
+    async get(env, key) { … },   // resolve `null` for an absent key — absence is not an error
+    async head(env, key) { … },
+    async delete(env, key) { … },
+    async list(env, options) { … },
+    // presigning and multipart are optional; implement only what the vendor has
+  };
+}
+```
+
+Five contract points, and each one is a way to get a `storage-<x>` wrong:
+
+- **Five methods are required, the rest are optional.** `put`, `get`, `head`, `delete` and `list` must exist. `presignPut`, `presignGet`, `createMultipartUpload`, `uploadPart`, `presignPart`, `completeMultipart` and `abortMultipart` may be absent, and the core answers a call to an absent one with `StorageError` code `not_supported`. Do not stub one to return a lie. `storage-memory` implements multipart for real because the export job in `file-uploads` chains pages into one multipart upload, and a stub would strand local development at the first interesting job.
+- **`undefined` from a presign method means "I cannot sign", and it is not a failure.** The core reads it and falls back to the capability's own proxy route, so the browser does the same `PUT` either way. `storage-cloudflare` returns `undefined` unless all four of `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET_NAME` are set — one module, both modes, no second descriptor. A provider with no signing at all simply omits the methods.
+- **Absence is `null`, not a throw.** `get` and `head` resolve `null` for a key that names no object. Keep `not_found` for an operation that needed the object to be there, such as completing a multipart upload that no longer exists.
+- **Normalize every failure into `StorageError`** with one of the six codes (`not_found`, `invalid_key`, `too_large`, `rate_limited`, `not_supported`, `provider_error`), the vendor's raw code in `providerCode`, and an honest `retryable`. Map only codes you have actually seen and let the rest fall through to `provider_error` / `retryable: false`. The core never retries, so `retryable` is advice to a queue consumer, not an instruction to the package.
+- **Do not sign a content-type header on a presigned PUT.** A signed header must be reproduced byte for byte and a browser normalizes what it sends, so signing it turns a working upload into a 403 nobody can fix. The feature's `complete` step heads the real object, and that is where size and type are enforced — a presigned PUT cannot carry a size cap at all.
+
+Keys arrive already built and already checked. The core runs `assertValidKey` before it calls you, so never repair, re-prefix or re-encode a key; escape it for a URL if your vendor needs that, and nothing more.
+
+**Descriptor, binding-plus-SDK flavour.** `storage-cloudflare` needs all three patch kinds, which is the fullest a provider ever gets:
+
+```jsonc
+{
+  "name": "storage-cloudflare",
+  "type": "saasaloy:feature",
+  "dependsOn": ["storage"],
+  "dependencies": [],
+  "envVars": { "R2_ACCOUNT_ID": "…", "R2_ACCESS_KEY_ID": "…", "R2_SECRET_ACCESS_KEY": "…", "R2_BUCKET_NAME": "…" },
+  "patches": [
+    { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+      "bindingType": "r2_buckets", "entry": { "binding": "BUCKET", "bucket_name": "app-storage" },
+      "matchOn": "binding" },
+    { "file": "packages/storage/package.json", "kind": "package-json-dependency",
+      "section": "dependencies", "name": "aws4fetch", "range": "1.0.20" },
+    { "file": "packages/storage/src/index.ts", "kind": "plugin-array",
+      "exportName": "storage", "arrayProp": "providers", "call": "cloudflare",
+      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } }
+  ],
+  "files": [{ "path": "files/cloudflare.ts", "target": "@storage/providers/cloudflare.ts" }],
+  "scaffolds": []
+}
+```
+
+`r2_buckets` entries are keyed by `binding`, which is also the `matchOn` default. It is written out above so a reader comparing this with `email-cloudflare`'s `matchOn: "name"` does not have to guess which one applies here. `storage-memory` is the minimal end of the same shape: no binding, no dependency, no secret, one `plugin-array` patch.
+
+**Testing a storage provider in this repo.** The root `node_modules` holds dev tooling only, so a provider's npm dependency is not installed here and `../provider` does not resolve to the capability core. Both `storage-cloudflare` and `storage-memory` carry a repo-only `provider.ts` at the module root that re-exports `modules/storage/files/src/provider.ts`, and `storage-cloudflare` carries an `aws4fetch-stub.ts` its test maps onto the `aws4fetch` specifier with a `node:module` resolve hook. Neither file is in `files[]`, so neither ships. Copy that arrangement rather than skipping the tests. A fake binding proves the provider calls the vendor correctly; a real bucket is what proves the vendor call works.
+
 ## Verify before you call it done
 
 The install path a provider must survive is a **clean project**, one command:
 
 ```sh
 pnpm play:reset
-cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, billing-<provider>
+cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, billing-, storage-<provider>
 ```
 
 That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches

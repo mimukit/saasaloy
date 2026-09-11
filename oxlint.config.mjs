@@ -330,6 +330,20 @@ export default defineConfig({
       },
     },
 
+    // --- Storage provider tests reject with a vendor's error object --------
+    // A storage provider's job is to map a vendor failure onto one of six codes, so
+    // the test hands its fake binding the exact `Error` R2 throws — carrying `code`
+    // or `status` — and asserts what comes back out. The rejection reason is held in
+    // a table variable rather than written inline, which is the one shape
+    // `prefer-promise-reject-errors` cannot see through without type information,
+    // and `lint:types` does not reach a payload file (its tsconfig resolves only
+    // inside a scaffolded project). Every reason in that table is an `Error`; the
+    // tuple type says so.
+    {
+      files: ["modules/storage-*/files/**/*.test.ts"],
+      rules: { "prefer-promise-reject-errors": "off" },
+    },
+
     // --- Maintainer script tests also run on node:test ---------------------
     // `pnpm test:scripts` runs `scripts/**/*.test.ts` under `node --test`, because
     // `scripts/` has no build step at all: Node 24 strips the types and runs the file

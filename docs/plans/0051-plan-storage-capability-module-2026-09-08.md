@@ -18,7 +18,7 @@ Platform facts checked on 2026-09-08. The R2 Workers binding reads and writes bu
 
 | Decision | Resolution |
 |----------|-----------|
-| Providers, not drivers, and ADR 0033 gains a third question | ADR 0033's second question ("would a swap move data?") answers yes for `storage`: bytes do not follow the code. Two things override it. A `storage-s3` module is one file plus a registration patch, because R2 speaks S3, so it never breaks the provider size test the way `database-postgres` breaks it. And the local provider must sit beside the real one, which is the whole reason the shape exists. ADR 0035 adds the third question — does the alternate implementation replace files the core owns, or add one? — moves the `storage` row to the provider side, and states plainly that a provider swap copies bytes by hand and no migration is promised. |
+| Providers, not drivers, and ADR 0033 gains a third question | ADR 0033's second question ("would a swap move data?") answers yes for `storage`: bytes do not follow the code. Two things override it. A `storage-s3` module is one file plus a registration patch, because R2 speaks S3, so it never breaks the provider size test the way `database-postgres` breaks it. And the local provider must sit beside the real one, which is the whole reason the shape exists. ADR 0037 adds the third question — does the alternate implementation replace files the core owns, or add one? — moves the `storage` row to the provider side, and states plainly that a provider swap copies bytes by hand and no migration is promised. |
 | One upload method, two possible targets | The client exposes `createUploadUrl(key, options)` returning `{ url, method, headers, expiresAt, direct }`. `direct: true` is a presigned S3 URL the browser PUTs to. `direct: false` is a URL to the proxy route the capability ships, which streams the body through the binding. The UI does the same PUT either way, so `storage-memory` and an R2 bucket with no API token both work, and presign stays an optional contract method. `createDownloadUrl` mirrors it. |
 | The core holds no table, and `storage` does not depend on `database` | Grilled and reversed: the draft justified a capability-owned table with "export and import need it", and both folded into `file-uploads`, leaving that feature as the only consumer. `packages/storage` is bytes, keys, tokens and the proxy route, with `dependsOn: ["api"]`. `file-uploads` owns `storage_object` and `file_job`. A later `backups` or `images` that wants records depends on `file-uploads` or ships its own; the cost is recorded here rather than paid by every storage install. |
 | The proxy route is authorized by an HMAC token, not by a session | `packages/storage` signs `{ key, method, exp, maxBytes, contentType }` with Web Crypto HMAC-SHA256 under `STORAGE_URL_SECRET` and puts it in the URL query. The proxy route verifies before it reads a byte. Web Crypto keeps the core at zero npm dependencies, and a token is what makes the two targets interchangeable to the caller. |
@@ -60,15 +60,17 @@ Rejected alternatives, one line each:
 - Validate-the-whole-file-in-memory import. Caps the file at Worker memory and still breaks the 100-parameter batch.
 - `data-export` and `import` as separate modules. Considered and rejected; the trade is recorded in the decision table.
 
-### Phase 1: ADR and glossary
+### Phase 1: ADR and glossary (built 2026-09-08)
 
-- [ ] Write ADR 0035 "An alternate implementation that adds one file is a provider": adds the third question to ADR 0033's test, moves the `storage` row to the provider side, states that a provider swap copies bytes by hand with no migration promised, and records the HMAC proxy token and the feature-owned object table as consequences.
+The three follow-ups are recorded in ADR 0037's "Follow-ups" section, not filed on GitHub: the unattended run that built this phase creates no issues. File them by hand.
+
+- [ ] Write ADR 0037 "An alternate implementation that adds one file is a provider": adds the third question to ADR 0033's test, moves the `storage` row to the provider side, states that a provider swap copies bytes by hand with no migration promised, and records the HMAC proxy token and the feature-owned object table as consequences.
 - [ ] Renumber if ADR 0033 or 0034 land on `main` under different numbers; both are on issue branches today.
 - [ ] Update `CONTEXT.md` "Provider module" and "Driver module" to the sharpened test, and add "Object", "Object key", "Upload target" and "Presign" entries.
 - [ ] Verify AGENTS.md's `storage` sentence matches the ADR; it already says provider shape.
 - [ ] Rewrite #127's Phase 3 quota criterion to the per-file cap, and file the follow-up issues: per-tenant quota with `usage-metering`; `infra` translator support for `r2_buckets`; resumable multipart upload UI in `file-uploads`.
 
-### Phase 2: the neutral core (`packages/storage`)
+### Phase 2: the neutral core (`packages/storage`) (built 2026-09-08)
 
 - [ ] `modules/storage/registry-item.json`: `saasaloy:capability`, `dependsOn: ["api"]`, `envVars` for `STORAGE_PROVIDER`, `STORAGE_URL_SECRET` and `STORAGE_MAX_UPLOAD_BYTES`, scaffold `packages/storage` with alias `@storage`, patch `@repo/storage` into `apps/api/package.json`.
 - [ ] `provider.ts`: `StorageProvider` (`name`, `put`, `get`, `head`, `delete`, `list`, optional `presignPut`, `presignGet`, optional multipart four), `StorageEnv`, `StorageObject`, `UploadTarget`, `DownloadTarget`, `StorageError` with the six codes.
@@ -80,7 +82,7 @@ Rejected alternatives, one line each:
 - [ ] `package.json` exports `.`, `./providers/*`; `clean` script with pinned `rimraf`.
 - [ ] Unit tests: provider selection, unset and unknown `STORAGE_PROVIDER`, key building and rejection, token sign/verify/expiry, the unset-secret throw, `expiresIn` clamping, `not_supported` from a provider missing an optional method, `StorageError` wrapping a raw throw.
 
-### Phase 3: `storage-cloudflare` and `storage-memory`
+### Phase 3: `storage-cloudflare` and `storage-memory` (built 2026-09-08)
 
 - [ ] `modules/storage-cloudflare`: one file `files/cloudflare.ts` at `@storage/providers/cloudflare.ts`, exporting `cloudflare()`.
 - [ ] Patches: `wrangler-binding` `r2_buckets` entry `{ binding: "BUCKET", bucket_name: "app-storage" }` matched on `binding`; `plugin-array` into `storage.providers`; `package-json-dependency` `aws4fetch` 1.0.20 into `packages/storage/package.json`.
