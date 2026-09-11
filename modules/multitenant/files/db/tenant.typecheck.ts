@@ -1,4 +1,4 @@
-import { project } from "./schema/projects";
+import { projects } from "./schema/projects";
 import { asTenantId, forTenant } from "./tenant";
 import type { Db } from "./client";
 
@@ -55,19 +55,23 @@ scoped.insert(notScoped, { id: "x" });
 // ignored, so a request body spread into `values` cannot smuggle another organization's
 // id past the guard.
 // @ts-expect-error organizationId is supplied by forTenant, never by the caller
-scoped.insert(project, { id: "p_1", name: "one", organizationId: "org_other" });
+scoped.insert(projects, {
+  id: "p_1",
+  name: "one",
+  organizationId: "org_other",
+});
 
-// @ts-expect-error name is not optional on project
-scoped.insert(project, { id: "p_1" });
+// @ts-expect-error name is not optional on projects
+scoped.insert(projects, { id: "p_1" });
 
 // 4. An update may not set the tenant id either, which is how a row would be moved
 // between organizations.
 // @ts-expect-error organizationId is not settable through the guard
-scoped.update(project, { organizationId: "org_other" });
+scoped.update(projects, { organizationId: "org_other" });
 
 // The shapes that are supposed to compile. They are here so a change that broke the
 // guard by making everything an error would fail this file too, rather than passing it.
-scoped.select(project);
-scoped.insert(project, { id: "p_1", name: "one" });
-scoped.update(project, { name: "renamed" });
-scoped.delete(project);
+scoped.select(projects);
+scoped.insert(projects, { id: "p_1", name: "one" });
+scoped.update(projects, { name: "renamed" });
+scoped.delete(projects);

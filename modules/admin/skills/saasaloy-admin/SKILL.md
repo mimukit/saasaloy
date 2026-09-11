@@ -239,7 +239,7 @@ show the order.
 
 The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on both halves (`admin()` server-side, `adminClient()` in `packages/auth/src/client.ts`). Drop the client half and `session.user.role` stops being typed.
 
-**The first account to sign up becomes the admin.** A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` writes `role: "admin"` when the `user` table is still empty, so a fresh project reaches this shell without SQL. Every account after it keeps the plugin's `"user"` default and lands on `AccessDenied`. Sign-up is open, so claim that first slot the moment the api answers; if somebody beat you to it, the `wrangler d1 execute` one-liner in the `saasaloy-auth` skill flips the row. That skill owns the rule and the recovery path both.
+**The first account to sign up becomes the admin.** A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` writes `role: "admin"` when the `users` table is still empty, so a fresh project reaches this shell without SQL. Every account after it keeps the plugin's `"user"` default and lands on `AccessDenied`. Sign-up is open, so claim that first slot the moment the api answers; if somebody beat you to it, the `wrangler d1 execute` one-liner in the `saasaloy-auth` skill flips the row. That skill owns the rule and the recovery path both.
 
 **A deep link survives the login hop.** The guard records the path it turned an anonymous visitor
 away from as `?redirect=` on `/login`, and `login.tsx` navigates there after `forgetSession()` and

@@ -13,7 +13,7 @@ description: Runbook for the feature-flags module — typed flags with per-tenan
 | `apps/api/src/routes/feature-flags.ts` | the admin API at `/flags` |
 | `apps/api/src/lib/flags.ts` | `flagsFor(c)`, the database source, and `sessionIsAdmin` |
 | `apps/api/src/middleware/maintenance.ts` | the 503 page middleware |
-| `packages/db/src/schema/feature-flags.ts` | `feature_flag` and `feature_flag_override` |
+| `packages/db/src/schema/feature-flags.ts` | `feature_flags` and `feature_flag_overrides` |
 | `packages/db/src/repositories/feature-flags.ts` | every query those tables need |
 | `packages/validators/src/feature-flags.ts` | the write body schema, shared by the route and `hc` |
 | `packages/ui/src/blocks/feature-flags.tsx` + `apps/admin/src/routes/flags.tsx` | the Flags screen |
@@ -168,8 +168,19 @@ The kv settings apply too: `KV_PROVIDER` selects the store and `KV_KEY_PREFIX` p
 | `FLAGS_ISOLATE_TTL_SECONDS is "10s"` at startup | Whole seconds, no unit. Use `10`. |
 | The admin screen shows a value a live route does not | Expected for about a minute after a toggle. The screen reads the database; the route reads the published document. |
 
+## Upgrading from singular table names
+
+This module used to name its tables `feature_flag` and `feature_flag_override`. It now names them `feature_flags` and `feature_flag_overrides`. A project that installed the old names upgrades them with one migration:
+
+1. Run `saasaloy update feature-flags` to take the new schema file.
+2. Run `pnpm --filter @repo/db db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `feature_flag` → `feature_flags`, and `feature_flag_override` → `feature_flag_overrides`.
+4. Read the generated SQL before you apply it. It must rename the tables and the `feature_flag_override_key_tenant_idx` index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm --filter @repo/db db:generate` again.
+6. Apply the migration with your driver's command, then open the admin Flags screen to confirm that it lists your flags.
+
 ## What `remove` leaves behind
 
-The `feature_flag` and `feature_flag_override` tables survive removal — run `db:generate` and read the drop migration before applying it. The published documents survive too: they have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the namespace until `wrangler kv key delete` removes them.
+The `feature_flags` and `feature_flag_overrides` tables survive removal — run `db:generate` and read the drop migration before applying it. The published documents survive too: they have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the namespace until `wrangler kv key delete` removes them.
 
 If you wired `maintenance()` into `apps/api/src/index.ts` by hand, remove that line yourself. `saasaloy remove` does not undo an edit you made.

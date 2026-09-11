@@ -148,7 +148,7 @@ function Billing() {
             <CardTitle>Current plan</CardTitle>
             <CardDescription>
               Resolved from the latest live row in{" "}
-              <code className="font-mono">billing_subscription</code>, falling
+              <code className="font-mono">billing_subscriptions</code>, falling
               back to the default plan when there is none.
             </CardDescription>
           </CardHeader>

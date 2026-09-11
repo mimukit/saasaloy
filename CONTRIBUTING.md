@@ -121,6 +121,14 @@ repo that installs modules rather than hosting them. The `create-module` skill r
 the skeleton and keeps the judgment: which tier, which conventions, and how thin a vertical slice can
 be. One scaffolder, not two.
 
+A module that ships a table names it in plural snake_case, and exports it under the camelCase
+plural: `featureFlagOverrides` on `feature_flag_overrides`. That covers Better Auth plugin tables
+too. The adapter runs with `usePlural: true` and finds a table by its export key, so a singular key
+type-checks and then fails every auth call. A plugin with a custom `modelName: "X"` needs the export
+`Xs`. `pnpm test:scripts` runs `scripts/table-names.test.ts`, which checks every
+`modules/*/files/db/schema/*.{pg,sqlite}.ts` file. The rule and its reasons are in
+[ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md).
+
 ### Checking a descriptor you wrote
 
 `saasaloy doctor [path]` validates module descriptors against `registry-item.schema.json` and against

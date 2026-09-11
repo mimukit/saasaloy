@@ -1,4 +1,4 @@
-// Guards the one rule each `apikey` schema variant's header states about itself: the
+// Guards the one rule each `api_keys` schema variant's header states about itself: the
 // snapshot is hand-authored against a named `@better-auth/api-key` version, so a bump
 // that skips the re-verification has to fail something. This is the twin of
 // `modules/auth/files/src/schema-version.test.ts`, and it exists for the same reason.
@@ -50,7 +50,7 @@ const VARIANTS = [
 for (const variant of VARIANTS) {
   const schemaSource = read(variant.path);
 
-  describe(`the ${variant.dialect} apikey schema snapshot header`, () => {
+  describe(`the ${variant.dialect} api_keys schema snapshot header`, () => {
     it("names an @better-auth/api-key version in the form the test can read", () => {
       // The header writes `@better-auth/api-key@1.7.2`. Reword the sentence freely; keep
       // that token, or this test goes quiet instead of going red.

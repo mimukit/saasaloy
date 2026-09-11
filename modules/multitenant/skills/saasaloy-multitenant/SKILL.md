@@ -7,7 +7,7 @@ description: Runbook for the multitenant feature, which resolves which organizat
 
 The `multitenant` feature answers one question on every request: **which organization is this for, and who is asking?** `teams` shipped the organizations. This ships the boundary around them.
 
-It adds `requireTenant(c)` to `packages/auth`, the branded `TenantId` and the `forTenant` wrapper to `packages/db`, `GET /tenant` to the api, and a worked `project` example you delete once your own tables exist.
+It adds `requireTenant(c)` to `packages/auth`, the branded `TenantId` and the `forTenant` wrapper to `packages/db`, `GET /tenant` to the api, and a worked `projects` example you delete once your own tables exist.
 
 ## The route recipe
 
@@ -22,7 +22,7 @@ const rows = await withDb(c, (db) => listProjects(db, tenant.organizationId));
 ```ts
 // packages/db/src/repositories/projects.ts
 export function listProjects(db: Db, tenantId: TenantId) {
-  return forTenant(db, tenantId).select(project);
+  return forTenant(db, tenantId).select(projects);
 }
 ```
 
@@ -30,7 +30,7 @@ export function listProjects(db: Db, tenantId: TenantId) {
 
 The queries live in a repository, not in the route. `drizzle-orm` belongs to `@repo/db` and no other workspace imports it (ADR 0020), so a route cannot write `eq(...)` even when it wants to.
 
-**The one gap:** a handler that ignores `forTenant` and writes `db.select().from(project)` still compiles. Convention and review cover that in v1; a lint rule that refuses raw `db` on a tenant table is a filed follow-up. Read a scoped route for the `forTenant(` call the same way you read it for the `requireTenant(` call.
+**The one gap:** a handler that ignores `forTenant` and writes `db.select().from(projects)` still compiles. Convention and review cover that in v1; a lint rule that refuses raw `db` on a tenant table is a filed follow-up. Read a scoped route for the `forTenant(` call the same way you read it for the `requireTenant(` call.
 
 ## Three different questions
 
@@ -49,10 +49,10 @@ A site `admin` is an ordinary member on every tenant route. The site role grants
 Every table a request may read on behalf of one organization declares the same column and the same index:
 
 ```ts
-export const project = sqliteTable(
-  "project",
+export const projects = sqliteTable(
+  "projects",
   { id: text("id").primaryKey(), organizationId: tenantColumn(), /* ... */ },
-  (table) => [tenantIndex(table, "project")]
+  (table) => [tenantIndex(table, "projects")]
 );
 ```
 
@@ -64,7 +64,7 @@ Three parts matter, each for its own reason:
 - **`notNull` is not negotiable.** A nullable tenant column makes a row belonging to no organization, which every scoped query silently omits and no guard ever refuses.
 - **The index carries every scoped read.** Without it each one is a full scan.
 
-The four `teams` tables already meet the convention. `member`, `invitation` and `organizationRole` were hand-written that way; `apikey` gets there through the API-key plugin's `referenceId` field rename. `organization` itself is the parent and carries no tenant column.
+The `teams` and `api-keys` tables already meet the convention. `members`, `invitations` and `organization_roles` were hand-written that way; `api_keys` gets there through the API-key plugin's `referenceId` field rename. `organizations` itself is the parent and carries no tenant column.
 
 ## What `TenantId` refuses
 
@@ -116,7 +116,7 @@ A resolver has a `name`, a synchronous `claims(headers)` and an async `resolve(c
 
 ## Roles are loaded once
 
-On the member path, `requireTenant` reads that organization's `organizationRole` rows in one query and resolves the caller's statements onto the principal. `rbac`'s `can()` then reads the answer instead of asking again, so a route with three permission checks still pays for one round trip.
+On the member path, `requireTenant` reads that organization's `organization_roles` rows in one query and resolves the caller's statements onto the principal. `rbac`'s `can()` then reads the answer instead of asking again, so a route with three permission checks still pays for one round trip.
 
 The merge has four cases, all in `resolveStatements` in `tenant-rules.ts` and all covered by `tenant-rules.test.ts`: a base role with a stored row of the same name resolves to the static role widened by the row; a base role alone resolves to itself; a custom role resolves to its stored row; a name matching neither resolves to nothing. The last one is the decision that matters — a deleted role fails closed for its holders rather than falling back to `member`.
 
@@ -126,4 +126,15 @@ The merge has four cases, all in `resolveStatements` in `tenant-rules.ts` and al
 - **Do not mint a `TenantId` outside `requireTenant`.** `asTenantId` exists for that one caller. Calling it on a request-supplied value hands out another organization's rows.
 - **Do not widen `Tenant.organizationId` to `string`.** Every guarantee above turns into a naming convention the moment you do.
 - **Do not resolve the tenant in middleware.** The `chained-route` patch kind registers routes, not `.use()` links (ADR 0028), so a middleware convention would have no way to install itself.
-- **The `project` table and its routes are an example.** Delete them once your own scoped tables exist. `remove multitenant` names `project` in its warning, and every route written against `requireTenant` or `forTenant` stops compiling when this module goes.
+- **The `projects` table and its routes are an example.** Delete them once your own scoped tables exist. `remove multitenant` names `projects` in its warning, and every route written against `requireTenant` or `forTenant` stops compiling when this module goes.
+
+## Upgrading from singular table names
+
+A project that installed `multitenant` before the tables became plural has a `project` table in its database. `projects` is this module's example table, not a Better Auth table, so the adapter never looks it up. A project that already deleted the example has nothing to do here. Otherwise, move it to the new name like this:
+
+1. Update `auth` first, because its schema rename and `usePlural: true` land together. Then run `saasaloy update multitenant` to take the new schema file.
+2. Run `pnpm db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `project` → `projects`.
+4. Read the generated SQL before you apply it. It must rename the table and its index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
+6. Apply the migration, then sign in once to confirm the adapter finds every table.

@@ -65,7 +65,7 @@ A named tier of the product, declared in code in `packages/billing/src/plans.ts`
 _Avoid: tier, package, product — a Stripe product is the vendor's object, a plan is the project's._
 
 ### Subscription
-One row of `billing_subscription`: a [billable subject](#billable-subject)'s relationship to a [plan](#plan) as the payment provider currently reports it. Vendor-blind by construction — the vendor appears only in provider ids (`providerSubscriptionId`, `providerCustomerId`, `providerScheduleId`) — with a normalized `status` (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`) and two core-only columns the vendor knows nothing about, `lockedAt` and `reminderSentAt`. A subject has at most one **live** subscription at a time; older rows stay as history. Every write comes from a webhook the vendor sent, never from a route ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
+One row of `billing_subscriptions`: a [billable subject](#billable-subject)'s relationship to a [plan](#plan) as the payment provider currently reports it. Vendor-blind by construction — the vendor appears only in provider ids (`providerSubscriptionId`, `providerCustomerId`, `providerScheduleId`) — with a normalized `status` (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`) and two core-only columns the vendor knows nothing about, `lockedAt` and `reminderSentAt`. A subject has at most one **live** subscription at a time; older rows stay as history. Every write comes from a webhook the vendor sent, never from a route ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
 _Avoid: membership, licence. A Better Auth `subscription` model is the plugin's name for the same row, mapped onto this one._
 
 ### Billable subject
@@ -77,8 +77,12 @@ The answer to "may this [billable subject](#billable-subject) do this", derived 
 _Avoid: permission, role — those are auth's, and they answer "who are you", not "what did you pay for"._
 
 ### Projection table
-A table the project owns, queries and migrates whose rows are a **copy** of a record some vendor holds: `billing_subscription` and `billing_event` are the first two. It is written only by the webhook path, keyed by the vendor's own ids, and rebuildable by replaying events, which is why the capability that owns it still takes [provider modules](#provider-module) — [ADR 0033](docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)'s first question says drivers, its second says providers, and the second wins because a vendor swap re-subscribes customers instead of moving rows ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
+A table the project owns, queries and migrates whose rows are a **copy** of a record some vendor holds: `billing_subscriptions` and `billing_events` are the first two. It is written only by the webhook path, keyed by the vendor's own ids, and rebuildable by replaying events, which is why the capability that owns it still takes [provider modules](#provider-module) — [ADR 0033](docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)'s first question says drivers, its second says providers, and the second wins because a vendor swap re-subscribes customers instead of moving rows ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
 _Avoid: cache, mirror. A cache may be dropped without consequence; a projection is queried on every request and is rebuilt from the vendor, not from the project._
+
+### Table name
+The SQL name of a table a module or project ships, always plural snake_case: `users`, `feature_flag_overrides`, `waitlist_entries`. The Drizzle **export key** is the camelCase form of the same plural, a column stays singular (`user_id`), and an index starts with its table name. Better Auth's tables follow the rule because `drizzleAdapter` runs with `usePlural: true`, which looks each model up by `<model>s` export key and appends that `s` to a plugin's custom `modelName` too ([ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md)).
+_Avoid: model name for the SQL name. A model name is Better Auth's key (`user`, `apikey`); the export key and the table name are the project's._
 
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
@@ -126,7 +130,7 @@ One of the three organization roles this project declares in `packages/auth/src/
 _Avoid: default role, built-in role._
 
 ### Custom role
-An organization role an operator creates at runtime, stored as an `organizationRole` row and resolved by `loadStatements` alongside the base roles. It carries only statements declared in `access.ts`, so a custom role can narrow or recombine the vocabulary and never extend it. Deleting one is refused while a member still holds it.
+An organization role an operator creates at runtime, stored as an `organization_roles` row and resolved by `loadStatements` alongside the base roles. It carries only statements declared in `access.ts`, so a custom role can narrow or recombine the vocabulary and never extend it. Deleting one is refused while a member still holds it.
 
 ### `superadmin` against `admin`
 Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, and the only one that crosses organizations, by sending `x-organization-id`. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.

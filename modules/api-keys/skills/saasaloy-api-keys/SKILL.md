@@ -7,7 +7,7 @@ description: Runbook for the api-keys feature, which gives an organization beare
 
 The `api-keys` feature answers the third tenant question: **how does a caller with no cookie get the same answers?** `multitenant` resolves which organization a request is for, `rbac` gates what may be done in it, and this ships the credential a machine presents.
 
-It adds `@better-auth/api-key` to `packages/auth`, the `apikey` snapshot to `packages/db`, a bearer resolver into `multitenant`'s `tenantResolvers` table, the `apiKeyScopeGuard()` plugin, and the `/api-keys` screen in `apps/admin`.
+It adds `@better-auth/api-key` to `packages/auth`, the `api_keys` snapshot to `packages/db`, a bearer resolver into `multitenant`'s `tenantResolvers` table, the `apiKeyScopeGuard()` plugin, and the `/api-keys` screen in `apps/admin`.
 
 ## Calling the api with a key
 
@@ -88,9 +88,11 @@ The columns stay in the snapshot because the plugin writes `requestCount` regard
 
 `verifyApiKey` writes `lastRequest` on every request, synchronously. That is accepted by decision and it is the cost of the "last used" column on the screen. A key hot enough for that write to matter wants a limiter in front of it, which is `ratelimit`'s job.
 
-## The `apikey` table
+## The `api_keys` table
 
 It meets the tenant column convention like every other scoped table, and it gets there through a rename rather than a hand-written column: `apiKeyPlugin()` sets `schema.apikey.fields.referenceId: "organizationId"`, and `references: "organization"` makes that id an organization id. The Drizzle property name is what the adapter matches, so the rename in `packages/auth/src/plugins/api-key.ts` and the snapshot in `packages/db/src/schema/api-keys.ts` change together or the adapter writes into a column that is not there.
+
+`apiKeyPlugin()` also sets `schema.apikey.modelName: "apiKey"`. `packages/auth/src/auth.ts` passes `usePlural: true` to the Drizzle adapter, so the adapter appends `s` to the model name and looks that key up in the schema object. With `modelName: "apiKey"` it asks for `apiKeys`, which is the export in `packages/db/src/schema/api-keys.ts`, stored as the `api_keys` table. Without it the adapter asks for `apikeys`, finds no such export, and every key call throws. Change the `modelName` and the export key together.
 
 The snapshot is hand-authored against `@better-auth/api-key@1.7.2` and ships in two dialects, selected by `onlyWith`. A version bump means re-verifying every column against that version's `apiKeySchema()`; the repo's `schema-version.test.ts` fails the build until the header and the pinned range agree again.
 
@@ -105,4 +107,15 @@ The snapshot is hand-authored against `@better-auth/api-key@1.7.2` and ships in 
 
 `saasaloy remove api-keys` reverses five patches: the two server plugins, the client plugin, the bearer resolver, and the `/api-keys` nav entry.
 
-Two things it does not do. The `apikey` table survives, so run `db:generate` and read the drop migration before applying it — and tell the machine callers first, because every key stops working the moment the resolver goes. The `@better-auth/api-key` line in `packages/auth/package.json` also survives, because a `package-json-dependency` patch has no removal inverse; drop it by hand and run `pnpm install`.
+Two things it does not do. The `api_keys` table survives, so run `db:generate` and read the drop migration before applying it — and tell the machine callers first, because every key stops working the moment the resolver goes. The `@better-auth/api-key` line in `packages/auth/package.json` also survives, because a `package-json-dependency` patch has no removal inverse; drop it by hand and run `pnpm install`.
+
+## Upgrading from singular table names
+
+A project that installed `api-keys` before the tables became plural has an `apikey` table in its database. Move it to the new name like this:
+
+1. Update `auth` first, because its schema rename and `usePlural: true` land together. Then run `saasaloy update api-keys` to take the new schema file and the `modelName: "apiKey"` option.
+2. Run `pnpm db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `apikey` → `api_keys`.
+4. Read the generated SQL before you apply it. It must rename the table and its indexes (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
+6. Apply the migration, then call the API once with an existing key to confirm the adapter finds the table.

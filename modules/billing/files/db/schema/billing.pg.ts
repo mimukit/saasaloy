@@ -38,8 +38,8 @@ import {
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
-export const billingSubscription = pgTable(
-  "billing_subscription",
+export const billingSubscriptions = pgTable(
+  "billing_subscriptions",
   {
     /**
      * Which interval the subject is paying on — "month" or "year" as the vendor words it.
@@ -90,19 +90,19 @@ export const billingSubscription = pgTable(
   (table) => [
     // The vendor's subscription id is the row's identity, so a redelivered webhook
     // converges on one row instead of inserting a second.
-    uniqueIndex("billing_subscription_provider_subscription_id_uidx").on(
+    uniqueIndex("billing_subscriptions_provider_subscription_id_uidx").on(
       table.providerSubscriptionId
     ),
     // Every entitlement check is a read by subject, so this index is the hot path.
-    index("billing_subscription_reference_id_idx").on(
+    index("billing_subscriptions_reference_id_idx").on(
       table.referenceId,
       table.customerType
     ),
   ]
 );
 
-export const billingEvent = pgTable(
-  "billing_event",
+export const billingEvents = pgTable(
+  "billing_events",
   {
     /** The provider name, matching `BillingProvider.name`. Half of the primary key. */
     provider: text("provider").notNull(),

@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { withDb } from "@repo/db/client";
 import type { DbBindings } from "@repo/db/client";
-import { waitlist as waitlistTable } from "@repo/db/schema/waitlist";
+import { waitlistEntries as waitlistTable } from "@repo/db/schema/waitlist";
 import { errorBody } from "@repo/validators/common";
 import { waitlistInput } from "@repo/validators/waitlist";
 import { Hono } from "hono";

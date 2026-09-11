@@ -46,7 +46,7 @@ get the other variant. There is no data migration; see ADR 0026.
 | File | Convention it extends |
 |------|------------------------|
 | `apps/api/src/routes/waitlist.ts` | api's route-module contract — a chained sub-app under `export const waitlist` |
-| `packages/db/src/schema/waitlist.ts` | db's `schema/*.ts` glob — one table, `waitlist`, in the installed driver's dialect |
+| `packages/db/src/schema/waitlist.ts` | db's `schema/*.ts` glob — one table, `waitlist_entries`, in the installed driver's dialect |
 | `packages/validators/src/waitlist.ts` | validators' one-file-per-feature rule — `@repo/validators/waitlist` |
 | `packages/ui/src/blocks/waitlist.tsx` | ui's blocks folder — one file, one component export, same as every base block |
 | `apps/web/src/components/WaitlistForm.tsx` | the app's own island — supplies the block's `onSubmit` |
@@ -127,7 +127,7 @@ The table only exists once its migration is generated and applied — this modul
 pre-generated SQL**:
 
 ```sh
-pnpm --filter @repo/db db:generate       # emits SQL for the new `waitlist` table
+pnpm --filter @repo/db db:generate       # emits SQL for the new `waitlist_entries` table
 ```
 
 `db:generate` belongs to the `database` core and is the same command under either driver. **The
@@ -148,13 +148,31 @@ queries the column can ignore this. If yours does, rescale the old rows once, af
 before the first read:
 
 ```sql
-UPDATE waitlist SET created_at = created_at * 1000 WHERE created_at < 100000000000;
+UPDATE waitlist_entries SET created_at = created_at * 1000 WHERE created_at < 100000000000;
 ```
 
 The `WHERE` clause is what makes it safe to run twice: a genuine millisecond timestamp is already
 past that bound, so a second run touches nothing. Apply it with the same command your driver's
 skill gives for migrations. Postgres projects are unaffected — `timestamptz` never carried the
 seconds form.
+
+## Upgrading from singular table names
+
+This module used to name its table `waitlist`. It now names it `waitlist_entries`, and the Drizzle
+export is `waitlistEntries`. The file stays `packages/db/src/schema/waitlist.ts`. A project that
+installed the old name upgrades it with one migration:
+
+1. Run `saasaloy update waitlist` to take the new schema file.
+2. Run `pnpm --filter @repo/db db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table.
+   Pick the rename from the old name: `waitlist` → `waitlist_entries`.
+4. Read the generated SQL before you apply it. It must rename the table and its unique `email`
+   index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a
+   table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm --filter @repo/db db:generate`
+   again.
+6. Apply the migration with your driver's command, then submit the waitlist form to confirm that
+   the insert succeeds.
 
 ## The route's responses
 

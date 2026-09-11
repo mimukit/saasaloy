@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { project } from "../schema/projects";
+import { projects } from "../schema/projects";
 import { forTenant } from "../tenant";
 import type { TenantId } from "../tenant";
 import type { Db } from "../client";
@@ -16,7 +16,7 @@ import type { Db } from "../client";
 
 /** Every project of this organization. Never another organization's, by construction. */
 export function listProjects(db: Db, tenantId: TenantId) {
-  return forTenant(db, tenantId).select(project);
+  return forTenant(db, tenantId).select(projects);
 }
 
 /**
@@ -31,16 +31,16 @@ export function createProject(
   tenantId: TenantId,
   values: { id: string; name: string }
 ) {
-  return forTenant(db, tenantId).insert(project, values);
+  return forTenant(db, tenantId).insert(projects, values);
 }
 
 /**
  * Delete one project of this organization by id.
  *
- * The tenant filter is already on the statement; `eq(project.id, id)` is ANDed with it.
+ * The tenant filter is already on the statement; `eq(projects.id, id)` is ANDed with it.
  * Another organization's row id therefore deletes nothing rather than deleting their row,
  * which is the whole isolation guarantee in one line.
  */
 export function deleteProject(db: Db, tenantId: TenantId, id: string) {
-  return forTenant(db, tenantId).delete(project, eq(project.id, id));
+  return forTenant(db, tenantId).delete(projects, eq(projects.id, id));
 }

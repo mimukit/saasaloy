@@ -11,7 +11,7 @@ import { HTTPException } from "hono/http-exception";
 
 // The worked example: three scoped routes, written the way every scoped route in this
 // project should be written. Read it as the recipe, then delete it once your own tables
-// exist. `remove multitenant` names the `project` table in its warning.
+// exist. `remove multitenant` names the `projects` table in its warning.
 //
 // THE RECIPE IS TWO LINES PER HANDLER:
 //

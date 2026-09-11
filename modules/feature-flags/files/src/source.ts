@@ -10,10 +10,10 @@
 import type { FlagValue } from "./document";
 
 export interface FlagSource {
-  /** Every row of `feature_flag`, keyed by flag key. The values that apply to everyone. */
+  /** Every row of `feature_flags`, keyed by flag key. The values that apply to everyone. */
   loadGlobal(): Promise<Record<string, FlagValue>>;
   /**
-   * Every row of `feature_flag_override` for one tenant, keyed by flag key. A tenant with no
+   * Every row of `feature_flag_overrides` for one tenant, keyed by flag key. A tenant with no
    * overrides returns `{}` — that is not an error, and it is the common case.
    */
   loadTenant(tenantId: string): Promise<Record<string, FlagValue>>;

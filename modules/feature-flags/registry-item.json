@@ -8,7 +8,7 @@
     "FLAGS_ISOLATE_TTL_SECONDS": "Seconds a Worker isolate serves its cached copy of the flag document before re-reading it from kv. Default 10, which puts a toggle in front of every location in about 70 seconds once Workers KV's own propagation window is added. Raise it to spend fewer KV reads and wait longer for a toggle; set it to 0 to skip the isolate cache and pay a KV read per request. A value that is not a whole number throws while the Worker initializes."
   },
   "removeWarnings": [
-    "The deployed feature_flag and feature_flag_override tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "The deployed feature_flags and feature_flag_overrides tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "The published flag documents survive it too. They have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the KV namespace until you delete them with `wrangler kv key delete`."
   ],
   "patches": [

@@ -2,7 +2,7 @@ import { currentSubscription, defaultPlan, findPlan, plans } from "./index";
 import type { BillableSubject, BillingStore, Plan } from "./index";
 
 // What a subject is allowed to do, answered from the project's own two sources: the plan
-// table in `plans.ts` and the live row in `billing_subscription`. Nothing here calls a
+// table in `plans.ts` and the live row in `billing_subscriptions`. Nothing here calls a
 // payment provider, and nothing here needs one installed — a project with `billing` and
 // `entitlements` and no provider at all still resolves every subject to the default plan and
 // gates features on it. That is the whole reason `entitlements` is its own module.

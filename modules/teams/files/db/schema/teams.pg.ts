@@ -5,7 +5,7 @@ import {
   timestamp,
   uniqueIndex,
 } from "drizzle-orm/pg-core";
-import { user } from "./auth";
+import { users } from "./auth";
 
 // The Postgres half of the organization tables, selected by
 // `onlyWith: "database-postgres"`. Its SQLite twin sits beside it as `teams.sqlite.ts`,
@@ -19,14 +19,14 @@ import { user } from "./auth";
 // with its nested teams feature disabled. Keep property names aligned with the plugin
 // adapter. A Better Auth version change requires a new column-for-column check.
 //
-// `organizationRole` is here because `organizationPlugin()` sets
+// `organizationRoles` is here because `organizationPlugin()` sets
 // `dynamicAccessControl: { enabled: true }`. Turning that option off does not remove the
 // table; drop the table and the option together, or `createRole` writes into nothing.
 //
 // THE TENANT COLUMN CONVENTION: every table a request may read on behalf of one
 // organization declares `organizationId: text("organization_id").notNull().references(()
-// => organization.id)` plus one index on it. `member`, `invitation` and
-// `organizationRole` all follow it below, which is what lets `forTenant` from
+// => organizations.id)` plus one index on it. `members`, `invitations` and
+// `organizationRoles` all follow it below, which is what lets `forTenant` from
 // `@repo/db/tenant` accept them.
 
 // `timestamptz`, for the reason `auth.pg.ts` spells out: a bare `timestamp` drops the
@@ -35,7 +35,7 @@ import { user } from "./auth";
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
-export const organization = pgTable("organization", {
+export const organizations = pgTable("organizations", {
   createdAt: timestamptz("created_at").notNull(),
   id: text("id").primaryKey(),
   logo: text("logo"),
@@ -44,27 +44,27 @@ export const organization = pgTable("organization", {
   slug: text("slug").notNull().unique(),
 });
 
-export const member = pgTable(
-  "member",
+export const members = pgTable(
+  "members",
   {
     createdAt: timestamptz("created_at").notNull(),
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organizations.id),
     role: text("role").notNull().default("member"),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id),
+      .references(() => users.id),
   },
   (table) => [
-    index("member_organization_id_idx").on(table.organizationId),
-    index("member_user_id_idx").on(table.userId),
+    index("members_organization_id_idx").on(table.organizationId),
+    index("members_user_id_idx").on(table.userId),
   ]
 );
 
-export const invitation = pgTable(
-  "invitation",
+export const invitations = pgTable(
+  "invitations",
   {
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     email: text("email").notNull(),
@@ -72,16 +72,16 @@ export const invitation = pgTable(
     id: text("id").primaryKey(),
     inviterId: text("inviter_id")
       .notNull()
-      .references(() => user.id),
+      .references(() => users.id),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organizations.id),
     role: text("role"),
     status: text("status").notNull().default("pending"),
   },
   (table) => [
-    index("invitation_organization_id_idx").on(table.organizationId),
-    index("invitation_email_idx").on(table.email),
+    index("invitations_organization_id_idx").on(table.organizationId),
+    index("invitations_email_idx").on(table.email),
   ]
 );
 
@@ -93,14 +93,14 @@ export const invitation = pgTable(
 // `admin` would extend the static `admin`. `rbac`'s `roleLockGuard()` refuses those
 // three names on write; the unique index below only stops one organization from holding
 // two rows for one name.
-export const organizationRole = pgTable(
-  "organizationRole",
+export const organizationRoles = pgTable(
+  "organization_roles",
   {
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     id: text("id").primaryKey(),
     organizationId: text("organization_id")
       .notNull()
-      .references(() => organization.id),
+      .references(() => organizations.id),
     permission: text("permission").notNull(),
     role: text("role").notNull(),
     updatedAt: timestamptz("updated_at")
@@ -109,9 +109,9 @@ export const organizationRole = pgTable(
       .$onUpdate(() => new Date()),
   },
   (table) => [
-    index("organization_role_organization_id_idx").on(table.organizationId),
-    index("organization_role_role_idx").on(table.role),
-    uniqueIndex("organization_role_organization_id_role_uidx").on(
+    index("organization_roles_organization_id_idx").on(table.organizationId),
+    index("organization_roles_role_idx").on(table.role),
+    uniqueIndex("organization_roles_organization_id_role_uidx").on(
       table.organizationId,
       table.role
     ),

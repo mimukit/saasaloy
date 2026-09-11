@@ -57,7 +57,7 @@ export interface BillingEventPayload {
  * Apply one delivered event to the projection.
  *
  * Idempotence is not solved twice here. `applyEvent` inserts `(provider,
- * providerEventId)` into `billing_event` first and returns early on the primary-key
+ * providerEventId)` into `billing_events` first and returns early on the primary-key
  * conflict, so a redelivered message runs no side effect a second time — which
  * at-least-once delivery makes mandatory rather than optional.
  */

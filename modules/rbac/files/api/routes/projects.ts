@@ -29,7 +29,7 @@ import { HTTPException } from "hono/http-exception";
 //
 // `requireCan` IS `requireTenant` plus `can`, and it returns the same `Tenant`. Never
 // call both in one handler: the second call re-resolves the session and re-runs the
-// `organizationRole` query for an answer it already has.
+// `organization_roles` query for an answer it already has.
 //
 // Read is left on `requireTenant`. `member` holds `project: ["read"]` in `access.ts`, so
 // gating the read would be the same check written twice, and a route that lists nothing

@@ -14,7 +14,7 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 //
 // It exists because a table is not extensible by the file-drop route every other schema
 // change takes. `packages/db` merges every `src/schema/*.ts` into one object and
-// drizzle-kit reads the same glob, so a second file declaring `sqliteTable("user", …)`
+// drizzle-kit reads the same glob, so a second file declaring `sqliteTable("users", …)`
 // collides with the one `auth` ships, in both. A one-to-one side table holds the same fact
 // but not the same shape: Better Auth's own plugins write their columns onto the `user`
 // model through a field map and cannot be pointed at another table, so `billing` needs the
@@ -34,7 +34,7 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 // (`text("x").notNull().default(…)`) almost every time. And recast reprints any subtree it
 // sees changed, putting a blank line before every property that is multi-line or carries a
 // leading comment — so a node pushed onto the columns object reformats columns this patch
-// never touched, which on `modules/auth`'s real `user` table is five spurious blank lines
+// never touched, which on `modules/auth`'s real `users` table is five spurious blank lines
 // that `remove` then cannot take back out.
 //
 // So the AST is read, never written: it supplies the guards and the byte offsets, and the
@@ -42,7 +42,7 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 // import, which is a statement of its own and reprints alone.
 
 export interface DrizzleColumn {
-  /** Exported binding holding the table, e.g. "user" in `export const user = sqliteTable(…)`. */
+  /** Exported binding holding the table, e.g. "users" in `export const users = sqliteTable(…)`. */
   exportName: string;
   /** Property key to add to the columns object, e.g. "billingCustomerId". */
   column: string;
@@ -175,7 +175,7 @@ export function removeDrizzleColumn(
  * Text rather than a node push, and that is the whole point. recast reprints a subtree it
  * sees changed, and its printer puts a blank line before any property that is multi-line or
  * carries a leading comment — so pushing onto the AST reformats properties this patch never
- * touched. `modules/auth`'s own `user` table has five of them, and the file the `auth`
+ * touched. `modules/auth`'s own `users` table has five of them, and the file the `auth`
  * manifest tracks would drift on `add` and stay drifted after `remove`. Splicing text leaves
  * every byte outside the inserted line where it was, which is what makes the round trip
  * byte-identical on the real schema files rather than only on a trimmed fixture.

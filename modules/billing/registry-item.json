@@ -11,7 +11,7 @@
     "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "removeWarnings": [
-    "The deployed billing_subscription and billing_event tables survive this removal, and so does the user.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
+    "The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
   ],
   "patches": [
@@ -97,7 +97,7 @@
     {
       "file": "packages/db/src/schema/auth.ts",
       "kind": "drizzle-column",
-      "exportName": "user",
+      "exportName": "users",
       "column": "billingCustomerId",
       "value": "text(\"billing_customer_id\")"
     }

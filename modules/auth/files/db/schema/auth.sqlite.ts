@@ -8,8 +8,8 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // is generating SQL for. Parity is semantic, not textual — each column is the idiomatic
 // form for its dialect, and what has to match is the shape a row comes back in.
 //
-// Hand-authored Drizzle snapshot of Better Auth's core schema (user/session/account/
-// verification) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.3
+// Hand-authored Drizzle snapshot of Better Auth's core schema (users/sessions/accounts/
+// verifications) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.3
 // (packages/auth/package.json) — NOT
 // generated at `add` time (no exec, deterministic, `--diff`-able; see the auth plan's
 // "Auth schema" decision). Column-for-column against that version's
@@ -25,7 +25,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // name (`ban_reason`) — the adapter does no case conversion, so renaming a property
 // silently detaches the field.
 //
-// Re-verifying against 1.7.3 moved one thing, and it moved back: `account` LOST the
+// Re-verifying against 1.7.3 moved one thing, and it moved back: `accounts` LOST the
 // required `issuer` column and the unique index over (`issuer`, `accountId`) that
 // 1.7.2 had added. 1.7.3's `getAuthTables()` declares neither, so a snapshot that
 // still carries `issuer text NOT NULL` breaks every sign-up — the adapter never writes
@@ -44,7 +44,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 const timestampMs = (name: string) => integer(name, { mode: "timestamp_ms" });
 const createdAtDefault = sql`(cast(unixepoch('subsecond') * 1000 as integer))`;
 
-export const user = sqliteTable("user", {
+export const users = sqliteTable("users", {
   createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
   email: text("email").notNull().unique(),
   emailVerified: integer("email_verified", { mode: "boolean" })
@@ -67,8 +67,8 @@ export const user = sqliteTable("user", {
   banExpires: timestampMs("ban_expires"),
 });
 
-export const session = sqliteTable(
-  "session",
+export const sessions = sqliteTable(
+  "sessions",
   {
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     expiresAt: timestampMs("expires_at").notNull(),
@@ -82,7 +82,7 @@ export const session = sqliteTable(
     userAgent: text("user_agent"),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
     // --- admin plugin --- set only while an admin impersonates this user; the
     // plugin hides impersonated sessions from `listSessions` by reading it.
     impersonatedBy: text("impersonated_by"),
@@ -91,11 +91,11 @@ export const session = sqliteTable(
     // schema block even when the teams module is not installed.
     activeOrganizationId: text("active_organization_id"),
   },
-  (table) => [index("session_user_id_idx").on(table.userId)]
+  (table) => [index("sessions_user_id_idx").on(table.userId)]
 );
 
-export const account = sqliteTable(
-  "account",
+export const accounts = sqliteTable(
+  "accounts",
   {
     accessToken: text("access_token"),
     accessTokenExpiresAt: timestampMs("access_token_expires_at"),
@@ -114,13 +114,13 @@ export const account = sqliteTable(
       .$onUpdate(() => new Date()),
     userId: text("user_id")
       .notNull()
-      .references(() => user.id, { onDelete: "cascade" }),
+      .references(() => users.id, { onDelete: "cascade" }),
   },
-  (table) => [index("account_user_id_idx").on(table.userId)]
+  (table) => [index("accounts_user_id_idx").on(table.userId)]
 );
 
-export const verification = sqliteTable(
-  "verification",
+export const verifications = sqliteTable(
+  "verifications",
   {
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     expiresAt: timestampMs("expires_at").notNull(),
@@ -132,5 +132,5 @@ export const verification = sqliteTable(
       .$onUpdate(() => new Date()),
     value: text("value").notNull(),
   },
-  (table) => [index("verification_identifier_idx").on(table.identifier)]
+  (table) => [index("verifications_identifier_idx").on(table.identifier)]
 );

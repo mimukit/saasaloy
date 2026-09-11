@@ -12,7 +12,7 @@ import type { Db } from "./client";
 // for the driver the project holds. One file, both drivers.
 //
 // WHAT THIS DOES NOT DO: nothing stops a route from importing `db` and writing a raw
-// `db.select().from(project)`. v1 enforces the wrapper by convention and by the
+// `db.select().from(projects)`. v1 enforces the wrapper by convention and by the
 // `saasaloy-multitenant` skill; a lint rule that refuses raw `db` on a tenant table is a
 // filed follow-up. Review a scoped route for the `forTenant(` call the way you review it
 // for the `requireTenant(` call.
@@ -92,7 +92,7 @@ export function forTenant(db: Db, tenantId: TenantId) {
       // The public signature above is the strict one, and `T extends TenantTable` is
       // already a real table of this project's dialect.
       // The row type is restated rather than inferred, for the same reason: it is
-      // `T["$inferSelect"][]`, which is what `.from(project)` would have inferred at a
+      // `T["$inferSelect"][]`, which is what `.from(projects)` would have inferred at a
       // concrete call site. The builder is a thenable and every call site awaits it.
       // Cast the BUILDER, not the method. `const from = db.select().from` drops the
       // receiver, and Drizzle's `from` reads `this`, so that version throws at runtime

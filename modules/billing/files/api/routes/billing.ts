@@ -38,7 +38,7 @@ import { createBillingStore, withBillingStore } from "../billing-store";
 // `createBilling(c.env)` picks one from `BILLING_PROVIDER`; which key that provider reads
 // is exactly what this file must not learn, which is why `env` goes in whole.
 //
-// Nothing here writes `billing_subscription`. The projection is written from the event
+// Nothing here writes `billing_subscriptions`. The projection is written from the event
 // path only (ADR 0034): a provider's webhook, or `billing-console`'s `CheckoutResult.event`,
 // enqueues `billing.event` and the consumer applies it. That keeps one writer, one dedupe
 // rule, and one code path to test.

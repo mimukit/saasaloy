@@ -229,7 +229,7 @@ export async function resolveTenant(
  *
  *   const tenant = await requireTenant(c);
  *   const rows = await withDb(c, (db) =>
- *     forTenant(db, tenant.organizationId).select(project)
+ *     forTenant(db, tenant.organizationId).select(projects)
  *   );
  *
  * `tenant.organizationId` is the only `TenantId` in the project. `forTenant` takes

@@ -546,7 +546,7 @@ the table.
 This is the widest interface in the repo — seven methods plus an optional auth plugin — and it is
 also the one where copying `email` goes wrong fastest. Five rules, in the order they bite:
 
-- **A provider never writes the database.** `billing_subscription` has exactly one writer, the
+- **A provider never writes the database.** `billing_subscriptions` has exactly one writer, the
   event path, and the dedupe rule lives there. Nothing in your file imports a schema, a client or
   `requireBillingStore`. A state change is reported, not written: return a `CheckoutResult.event`
   when your vendor has no webhook, or let your webhook enqueue one when it does. Never both — a

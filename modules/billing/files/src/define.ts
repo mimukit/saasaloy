@@ -134,7 +134,7 @@ export function definePlans(configs: PlanConfig[]): Plan[] {
   if (duplicate) {
     throw new BillingError(
       "invalid_request",
-      `Two plans share the id "${duplicate}". A plan id is what billing_subscription.plan stores, so it has to be unique.`
+      `Two plans share the id "${duplicate}". A plan id is what billing_subscriptions.plan stores, so it has to be unique.`
     );
   }
 

@@ -1,5 +1,5 @@
 import { and, eq } from "drizzle-orm";
-import { featureFlag, featureFlagOverride } from "../schema/feature-flags";
+import { featureFlags, featureFlagOverrides } from "../schema/feature-flags";
 import type { Db } from "../client";
 
 // Every query the flag tables need, in one file, written once for both dialects. The table
@@ -30,20 +30,20 @@ export interface OverrideRowInput {
 
 /** Every global row. The admin screen's list, and the global document's contents. */
 export function listFlags(db: Db) {
-  return db.select().from(featureFlag);
+  return db.select().from(featureFlags);
 }
 
 /** Every override, for the admin screen. Small by construction: one row per flag per tenant. */
 export function listOverrides(db: Db) {
-  return db.select().from(featureFlagOverride);
+  return db.select().from(featureFlagOverrides);
 }
 
 /** One tenant's overrides. What the tenant document is published from. */
 export function listOverridesForTenant(db: Db, tenantId: string) {
   return db
     .select()
-    .from(featureFlagOverride)
-    .where(eq(featureFlagOverride.tenantId, tenantId));
+    .from(featureFlagOverrides)
+    .where(eq(featureFlagOverrides.tenantId, tenantId));
 }
 
 /**
@@ -56,7 +56,7 @@ export function listOverridesForTenant(db: Db, tenantId: string) {
 export function upsertFlag(db: Db, input: FlagRowInput) {
   const now = new Date();
   return db
-    .insert(featureFlag)
+    .insert(featureFlags)
     .values({
       description: input.description ?? null,
       enabled: input.enabled,
@@ -66,7 +66,7 @@ export function upsertFlag(db: Db, input: FlagRowInput) {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: featureFlag.key,
+      target: featureFlags.key,
       set: {
         description: input.description ?? null,
         enabled: input.enabled,
@@ -81,7 +81,7 @@ export function upsertFlag(db: Db, input: FlagRowInput) {
 export function upsertOverride(db: Db, input: OverrideRowInput) {
   const now = new Date();
   return db
-    .insert(featureFlagOverride)
+    .insert(featureFlagOverrides)
     .values({
       enabled: input.enabled,
       flagKey: input.flagKey,
@@ -90,7 +90,7 @@ export function upsertOverride(db: Db, input: OverrideRowInput) {
       updatedAt: now,
     })
     .onConflictDoUpdate({
-      target: [featureFlagOverride.flagKey, featureFlagOverride.tenantId],
+      target: [featureFlagOverrides.flagKey, featureFlagOverrides.tenantId],
       set: {
         enabled: input.enabled,
         percentage: input.percentage,
@@ -108,11 +108,11 @@ export function upsertOverride(db: Db, input: OverrideRowInput) {
  */
 export function deleteOverride(db: Db, flagKey: string, tenantId: string) {
   return db
-    .delete(featureFlagOverride)
+    .delete(featureFlagOverrides)
     .where(
       and(
-        eq(featureFlagOverride.flagKey, flagKey),
-        eq(featureFlagOverride.tenantId, tenantId)
+        eq(featureFlagOverrides.flagKey, flagKey),
+        eq(featureFlagOverrides.tenantId, tenantId)
       )
     );
 }

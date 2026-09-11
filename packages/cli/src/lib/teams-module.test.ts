@@ -99,7 +99,7 @@ describe("teams module descriptor", () => {
     expect(warnings[0]).toMatch(/organization/);
     expect(warnings[0]).toMatch(/member/);
     expect(warnings[0]).toMatch(/invitation/);
-    expect(warnings[0]).toMatch(/organizationRole/);
+    expect(warnings[0]).toMatch(/organization_roles/);
     expect(warnings[0]).toMatch(/drop migration/);
   });
 

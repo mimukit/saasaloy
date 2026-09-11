@@ -6,7 +6,7 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed apikey table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment the bearer resolver goes, so tell the machine callers before you remove this module, not after.",
+    "The deployed api_keys table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment the bearer resolver goes, so tell the machine callers before you remove this module, not after.",
     "The @better-auth/api-key dependency stays in packages/auth/package.json. A package-json-dependency patch has no removal inverse, so drop the line by hand and run pnpm install."
   ],
   "patches": [

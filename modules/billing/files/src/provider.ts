@@ -51,7 +51,7 @@ export type PlanInterval = "monthly" | "yearly";
 
 /** What a caller passes `definePlans`. See CONTEXT.md → "Plan". */
 export interface PlanConfig {
-  /** Stable identifier, stored in `billing_subscription.plan` and read by entitlements. */
+  /** Stable identifier, stored in `billing_subscriptions.plan` and read by entitlements. */
   id: string;
   /** What the plan is called on a page. */
   name: string;
@@ -113,7 +113,7 @@ export function isLiveStatus(status: string): status is SubscriptionStatus {
 }
 
 /**
- * The part of a `billing_subscription` row a provider projects from the vendor's record.
+ * The part of a `billing_subscriptions` row a provider projects from the vendor's record.
  * Everything here comes from the vendor; the core owns `lockedAt` and `reminderSentAt`
  * and never lets a provider write them.
  */
@@ -148,7 +148,7 @@ export interface SubscriptionInput {
   metadata?: Record<string, unknown> | null;
 }
 
-/** A `billing_subscription` row as the core reads it back. See CONTEXT.md → "Subscription". */
+/** A `billing_subscriptions` row as the core reads it back. See CONTEXT.md → "Subscription". */
 export interface Subscription extends SubscriptionInput {
   id: string;
   referenceId: string;
@@ -175,7 +175,7 @@ export type BillingEventType =
 /**
  * One normalized event, as the provider's webhook hands it to the `billing.event` job.
  * `(provider, providerEventId)` is the dedupe key: `applyEvent` inserts it into
- * `billing_event` first and returns early on a conflict, so a redelivery runs no side
+ * `billing_events` first and returns early on a conflict, so a redelivery runs no side
  * effect twice.
  */
 export interface BillingEvent {

@@ -15,13 +15,13 @@ import { tenantColumn, tenantIndex } from "../tenant-column";
 // dialect it is generating SQL for. Parity is semantic, not textual — each column is the
 // idiomatic form for its dialect, and what has to match is the shape a row comes back in.
 //
-// Hand-authored Drizzle snapshot of the API-key plugin's `apikey` table, pinned to
-// @better-auth/api-key@1.7.2 (the range this module's descriptor patches into
-// packages/auth/package.json). Column for column against that version's `apiKeySchema()`
-// plus the Drizzle adapter's Postgres type mapping: string→text, boolean→boolean,
-// number→integer, date→timestamp. A version bump implies re-verifying this file;
-// `schema-version.test.ts` beside it fails the build until the header and the pinned
-// range agree again.
+// Hand-authored Drizzle snapshot of the API-key plugin's `apikey` model, stored as the
+// `api_keys` table, pinned to @better-auth/api-key@1.7.2 (the range this module's
+// descriptor patches into packages/auth/package.json). Column for column against that
+// version's `apiKeySchema()` plus the Drizzle adapter's Postgres type mapping:
+// string→text, boolean→boolean, number→integer, date→timestamp. A version bump implies
+// re-verifying this file; `schema-version.test.ts` beside it fails the build until the
+// header and the pinned range agree again.
 //
 // THE PROPERTY NAME IS WHAT THE ADAPTER MATCHES, not the SQL column name. The plugin's
 // own field is `referenceId`, and `apiKeyPlugin()` in
@@ -40,8 +40,8 @@ import { tenantColumn, tenantIndex } from "../tenant-column";
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
-export const apikey = pgTable(
-  "apikey",
+export const apiKeys = pgTable(
+  "api_keys",
   {
     // Which set of plugin options issued this key. One configuration ships here, so every
     // row carries the same value; the column exists because the plugin writes it.
@@ -93,8 +93,8 @@ export const apikey = pgTable(
   (table) => [
     // Every bearer call looks a key up by its hash. Without this index that is a
     // sequential scan on the hot path of every machine request.
-    index("apikey_key_idx").on(table.key),
-    tenantIndex(table, "apikey"),
-    index("apikey_config_id_idx").on(table.configId),
+    index("api_keys_key_idx").on(table.key),
+    tenantIndex(table, "api_keys"),
+    index("api_keys_config_id_idx").on(table.configId),
   ]
 );

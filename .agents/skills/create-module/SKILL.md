@@ -405,6 +405,12 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
   what makes copy-in updates land cleanly.
 - Don't emit sentinel comments (`// saasaloy:managed`) — tracking is the manifest's job.
 - A schema change implies a migration downstream; note it in your module's skill.
+- **Name every table in plural snake_case** and export it under the camelCase plural:
+  `featureFlagOverrides` on `feature_flag_overrides`, `waitlistEntries` on `waitlist_entries`.
+  Columns stay singular, and an index starts with its table name. A Better Auth plugin table
+  follows the rule too: the adapter runs with `usePlural: true` and asks for `<model>s`, so a
+  plugin with `modelName: "X"` needs the export `Xs`. Ship both `.pg.ts` and `.sqlite.ts` with
+  the same names; `scripts/table-names.test.ts` checks all of it (ADR 0038).
 
 ## Conventions to honor
 

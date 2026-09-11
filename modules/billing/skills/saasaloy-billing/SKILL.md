@@ -5,7 +5,7 @@ description: Runbook for the billing capability — provider-agnostic subscripti
 
 # billing — provider-agnostic subscriptions from `packages/billing`
 
-`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscription`, and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
+`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
 
 Callers import `@repo/billing`, call `createBilling(env)`, and never learn who takes the money. It is the same shape as `@repo/email` and `@repo/queue`, on purpose (ADR 0033, ADR 0034).
 
@@ -79,7 +79,7 @@ A `BillingError` is rendered as the api's `{ error: { code, message } }` envelop
 
 ## The projection, and who writes it
 
-`billing_subscription` and `billing_event` are a **projection of the vendor's record**, not the record itself (ADR 0034). Every id that identifies a row upstream is a provider id, every write comes from an event the vendor sent, and the whole table is rebuildable by replaying events.
+`billing_subscriptions` and `billing_events` are a **projection of the vendor's record**, not the record itself (ADR 0034). Every id that identifies a row upstream is a provider id, every write comes from an event the vendor sent, and the whole table is rebuildable by replaying events.
 
 **No route writes the table.** The one writer is `applyEvent`, reached from the `billing.event` job. That keeps one dedupe rule and one code path to test.
 
@@ -91,14 +91,14 @@ A job opens the scope itself. Both job bodies wrap their work in `inBillingStore
 
 ```
 vendor webhook → provider verifies the signature → maps onto a BillingEvent
-  → enqueue("billing.event", event) → consumer → applyEvent → billing_subscription
+  → enqueue("billing.event", event) → consumer → applyEvent → billing_subscriptions
 ```
 
 Normalized event types: `subscription.changed`, `subscription.deleted`, `trial.ending`, `payment.failed`, `payment.succeeded`. A vendor event that maps to none of them is dropped in the provider and never enqueued.
 
-`applyEvent` inserts `(provider, providerEventId)` into `billing_event` **first** and returns early on the primary-key conflict. Every side effect below that insert — the row write, the lock clear, the emails — sits inside the guarded body, so a redelivered event runs none of them a second time. At-least-once delivery makes that mandatory, not optional.
+`applyEvent` inserts `(provider, providerEventId)` into `billing_events` **first** and returns early on the primary-key conflict. Every side effect below that insert — the row write, the lock clear, the emails — sits inside the guarded body, so a redelivered event runs none of them a second time. At-least-once delivery makes that mandatory, not optional.
 
-`billing_event` is never pruned. It grows by a handful of rows per subscription per month, which is the price of the dedupe guarantee surviving a vendor's redelivery window.
+`billing_events` is never pruned. It grows by a handful of rows per subscription per month, which is the price of the dedupe guarantee surviving a vendor's redelivery window.
 
 ## Register the webhook
 
@@ -133,7 +133,7 @@ Locally, forward them with `stripe listen --forward-to localhost:4000/auth/strip
 
 ## The Stripe field map, and what to re-check on a version bump
 
-`billing-stripe` maps `@better-auth/stripe`'s own model onto the core's vendor-blind columns through `schema.subscription`. `modelName` is `"billingSubscription"` — the **Drizzle export key**, not the SQL table name — and every value below is a Drizzle property, not a column name.
+`billing-stripe` maps `@better-auth/stripe`'s own model onto the core's vendor-blind columns through `schema.subscription`. `modelName` is `"billingSubscription"`, singular. `packages/auth/src/auth.ts` passes `usePlural: true` to the Drizzle adapter, so the adapter asks the schema object for `<modelName>s`, and `"billingSubscription"` resolves to the export `billingSubscriptions`. The adapter matches the **Drizzle export key**, never the SQL table name, and every value below is a Drizzle property, not a column name.
 
 Checked against `@better-auth/stripe` **1.7.3**. These are all sixteen fields that version declares for its `subscription` model, plus the one it declares on `user`:
 
@@ -147,11 +147,11 @@ Checked against `@better-auth/stripe` **1.7.3**. These are all sixteen fields th
 | `status` | `status` | `billingInterval` | `billingInterval` |
 | `periodStart` | `periodStart` | `trialStart` | `trialStart` |
 | `periodEnd` | `periodEnd` | `trialEnd` | `trialEnd` |
-| `user.stripeCustomerId` | `user.billingCustomerId` | | |
+| `user.stripeCustomerId` | `users.billingCustomerId` | | |
 
 Three consequences worth holding:
 
-- **The customer link is a real column on `user`.** `modules/billing` adds `user.billingCustomerId` with a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, because a Better Auth plugin writes the customer id onto the `user` model and cannot be pointed at another table. `saasaloy remove billing` takes the column back out of the schema file; the deployed column survives until you generate and apply the migration.
+- **The customer link is a real column on `users`.** `modules/billing` adds `users.billingCustomerId` with a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, because a Better Auth plugin writes the customer id onto the `user` model and cannot be pointed at another table. `saasaloy remove billing` takes the column back out of the schema file; the deployed column survives until you generate and apply the migration.
 - **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts` and `entitlements` reads them there.
 - **The plugin's plan `name` is this project's plan *id*.** It lower-cases `name` and stores it in the `plan` column, which is the string `findPlan(plans, …)` looks up. Keep plan ids lower-case.
 
@@ -183,6 +183,17 @@ The three templates ship into `@email/templates/` and are ordinary email templat
 `packages/billing` sends nothing itself. It decides *when* an email is owed and *to whom* through two ports — `setBillingNotifier` in `src/notify.ts` and `BillingStore.recipientFor` — and `apps/api/src/billing-store.ts` supplies both, next to the store resolver and the enqueuer. That is what keeps `@repo/email` out of the core. A subject with no resolvable address is a skip, not a failure: the state write has already happened, and a job that retried forever over a deleted user's trial reminder would be worse.
 
 `BILLING_LOCKOUT_DAYS` reaches the sweep the same way: a job handler gets `(payload, ctx)` and no `env`, so `billing-store.ts` reads the var once at module load and calls `setBillingConfig`.
+
+## Upgrading from singular table names
+
+A project that installed billing before the tables became plural has `billing_subscription` and `billing_event` in its database. Move them to the new names like this:
+
+1. Run `saasaloy update auth` first, then `saasaloy update billing` to take the new schema file. Billing adds its column to the `users` export, so it needs the auth rename in place.
+2. Run `pnpm db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `billing_subscription` → `billing_subscriptions`, `billing_event` → `billing_events`.
+4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `billing_subscription_*` → `billing_subscriptions_*`), and it must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
+6. Apply the migration with the command from the installed driver's skill. Then sign in once and open the billing page to confirm the adapter finds every table.
 
 ## Write a third provider
 

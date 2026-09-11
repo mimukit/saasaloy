@@ -47,7 +47,7 @@ const PROVIDER_NAME = "console";
 
 /**
  * Everything this provider mints carries this prefix, so a `console_`-prefixed id in a
- * `billing_subscription` row is a loud signal that a deployment is running the local
+ * `billing_subscriptions` row is a loud signal that a deployment is running the local
  * provider — a mistake worth being able to spot in a query.
  */
 const PREFIX = "console_";

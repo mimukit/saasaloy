@@ -464,7 +464,7 @@ describe("applyEvent side effects", () => {
     const { sent: mail, store } = fakeStore();
 
     await applyEvent(store, makeEvent("trial.ending"), NOW);
-    // A different event id, so `billing_event` does not stop it. `reminderSentAt` does.
+    // A different event id, so `billing_events` does not stop it. `reminderSentAt` does.
     await applyEvent(
       store,
       makeEvent("trial.ending", { providerEventId: "evt_trial_2" }),

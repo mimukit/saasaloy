@@ -2577,8 +2577,8 @@ describe("listModuleFiles — onlyWith (#99)", () => {
         ],
       },
       {
-        [SQLITE]: "export const waitlist = sqliteTable();\n",
-        [PG]: "export const waitlist = pgTable();\n",
+        [SQLITE]: "export const waitlistEntries = sqliteTable();\n",
+        [PG]: "export const waitlistEntries = pgTable();\n",
         [D1_PROVIDER]: "export const provider = 'sqlite';\n",
         [PG_PROVIDER]: "export const provider = 'pg';\n",
         "files/api/routes/waitlist.ts": "export const waitlistRoute = 1;\n",
