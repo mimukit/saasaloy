@@ -88,7 +88,7 @@ modules/sms-khudebarta/
   files/khudebarta.test.ts   →  repo-only, runs under `pnpm test:modules`
 ```
 
-### Phase 1: the descriptor (#146)
+### Phase 1: the descriptor (#146) (built 2026-09-11)
 
 `modules/sms-khudebarta/registry-item.json`. `type: "saasaloy:feature"`, `dependsOn: ["sms"]`, empty `dependencies` and `scaffolds`. One `plugin-array` patch on `packages/sms/src/index.ts` registering `khudebarta` into `providers`. One file entry targeting `@sms/providers/khudebarta.ts`.
 
@@ -100,7 +100,7 @@ modules/sms-khudebarta/
 
 The sender comes from the capability's existing `SMS_FROM`, so this module declares no env var of its own for it.
 
-### Phase 2: the provider (#146)
+### Phase 2: the provider (#146) (built 2026-09-11)
 
 `files/khudebarta.ts`, one exported factory `khudebarta(): SmsProvider` with `name: "khudebarta"`.
 
@@ -113,7 +113,7 @@ The sender comes from the capability's existing `SMS_FROM`, so this module decla
 - Do not touch `estimatedSegments`, do not retry, do not sleep, do not truncate.
 - Map a thrown `fetch` failure, including an abort, to `SmsError("provider_error", …, { retryable: false, cause })`.
 
-### Phase 3: the test (#146)
+### Phase 3: the test (#146) (built 2026-09-11)
 
 `modules/sms-khudebarta/provider.ts`, a one-line shim re-exporting `../sms/files/src/provider`, so `files/khudebarta.ts`'s `../provider` import resolves in this repo the way it will in a generated project. `billing-console/index.ts` carries the same shim with a comment explaining why it is not shipped; copy that shape.
 
@@ -127,7 +127,7 @@ The sender comes from the capability's existing `SMS_FROM`, so this module decla
 - A missing `from` throws `invalid_message`; a missing credential throws `provider_error`.
 - The request body carries `toUser` with the `+` stripped.
 
-### Phase 4: the capability runbook (#146)
+### Phase 4: the capability runbook (#146) (built 2026-09-11)
 
 Update `modules/sms/skills/saasaloy-sms/SKILL.md`:
 
