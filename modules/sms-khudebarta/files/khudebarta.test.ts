@@ -113,6 +113,8 @@ describe("khudebarta: success", () => {
     const [call] = calls;
     assert.equal(call.url, "https://portal.khudebarta.com:3770/sendtext");
     assert.equal(call.init.method, "POST");
+    // Workers reject `redirect: "error"`, so the provider must ask for `"manual"`.
+    assert.equal(call.init.redirect, "manual");
     assert.ok(call.init.signal instanceof AbortSignal);
     assert.deepEqual(call.body, {
       apikey: "key",
@@ -183,6 +185,12 @@ describe("khudebarta: refused before any request", () => {
     assert.match(error.message, /\+14155550123/);
     assert.equal(calls.length, 0);
   });
+
+  it("throws invalid_number for a +880 number with the wrong length", async () => {
+    const error = await sendError(ENV, message({ to: ["+880"] }));
+    assert.equal(error.code, "invalid_number");
+    assert.equal(calls.length, 0);
+  });
 });
 
 describe("khudebarta: rejections", () => {
@@ -240,11 +248,27 @@ describe("khudebarta: rejections", () => {
     });
   }
 
-  it("makes -62 the only retryable status", () => {
-    assert.deepEqual(
-      table.filter((row) => row[3]).map(([status]) => status),
-      ["-62"]
-    );
+  it("accepts a numeric Status of 0", async () => {
+    respondWith({ Status: 0, Message_ID: 4242 });
+    const result = await khudebarta().send(ENV, message());
+    assert.deepEqual(result, { messageId: "4242" });
+  });
+
+  it("throws provider_error, not retryable, when the body has no Status", async () => {
+    respondWith({ Text: "ACCEPTD" });
+    const error = await sendError(ENV, message());
+    assert.equal(error.code, "provider_error");
+    assert.equal(error.retryable, false);
+    assert.equal(error.providerCode, undefined);
+    assert.match(error.message, /no Status/);
+  });
+
+  it("throws provider_error when Status is 0 but Message_ID is missing", async () => {
+    respondWith({ Status: "0" });
+    const error = await sendError(ENV, message());
+    assert.equal(error.code, "provider_error");
+    assert.equal(error.retryable, false);
+    assert.match(error.message, /Message_ID/);
   });
 
   it("maps an undocumented status to provider_error, not retryable", async () => {
@@ -271,6 +295,33 @@ describe("khudebarta: rejections", () => {
 });
 
 describe("khudebarta: transport failures", () => {
+  it("maps a non-JSON body to provider_error, not retryable, naming the HTTP status", async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response("<html>Bad Gateway</html>", { status: 502 })
+      )) as typeof fetch;
+
+    const error = await sendError(ENV, message());
+    assert.equal(error.code, "provider_error");
+    assert.equal(error.retryable, false);
+    assert.match(error.message, /unreadable response \(HTTP 502\)/);
+  });
+
+  it("refuses a redirect instead of following it", async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(
+        new Response(null, {
+          status: 302,
+          headers: { location: "https://elsewhere.example/sendtext" },
+        })
+      )) as typeof fetch;
+
+    const error = await sendError(ENV, message());
+    assert.equal(error.code, "provider_error");
+    assert.equal(error.retryable, false);
+    assert.match(error.message, /redirect \(HTTP 302\)/);
+  });
+
   it("maps a thrown fetch to provider_error, not retryable, with the cause", async () => {
     const failure = new TypeError("connection reset");
     globalThis.fetch = (() => Promise.reject(failure)) as typeof fetch;

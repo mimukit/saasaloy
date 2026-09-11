@@ -37,6 +37,9 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 const BANGLADESH_PREFIX = "+880";
 
+/** `+880` and the ten national digits of a Bangladeshi mobile number. */
+const BANGLADESH_NUMBER = /^\+880\d{10}$/;
+
 interface KhudebartaPayload {
   apikey: string;
   secretkey: string;
@@ -86,7 +89,7 @@ export function khudebarta(): SmsProvider {
       // Checked across the whole list before the first request: a prefix check is free and
       // deterministic, so spending a real SMS on the recipients before a bad one is waste.
       for (const recipient of message.to) {
-        if (!recipient.startsWith(BANGLADESH_PREFIX)) {
+        if (!BANGLADESH_NUMBER.test(recipient)) {
           throw new SmsError(
             "invalid_number",
             `khudebarta: ${recipient} is not a Bangladeshi number. This provider sends to ` +
@@ -101,7 +104,9 @@ export function khudebarta(): SmsProvider {
           : DEFAULT_API_URL;
       const endpoint = `${baseUrl.replace(/\/+$/, "")}/sendtext`;
 
-      let firstMessageId: string | undefined;
+      // The core guarantees a non-empty `to`, so the loop runs at least once. The first
+      // recipient's id is the representative; the rest are in Khudebarta's portal.
+      let messageId = "";
 
       for (const recipient of message.to) {
         const payload: KhudebartaPayload = {
@@ -114,13 +119,13 @@ export function khudebarta(): SmsProvider {
           messageContent: message.body,
         };
 
-        const messageId = await sendOne(endpoint, payload);
-        firstMessageId ??= messageId;
+        const id = await sendOne(endpoint, payload);
+        if (!messageId) {
+          messageId = id;
+        }
       }
 
-      // The core guarantees a non-empty `to`, so the loop ran at least once. The first
-      // recipient's id is the representative; the rest are in Khudebarta's portal.
-      return { messageId: firstMessageId ?? "" };
+      return { messageId };
     },
   };
 }
@@ -136,8 +141,9 @@ async function sendOne(
       headers: { "content-type": "application/json" },
       body: JSON.stringify(payload),
       // The body carries both credentials. Following a redirect would replay them at whatever
-      // host the redirect names, so refuse instead.
-      redirect: "error",
+      // host the redirect names. Workers do not implement `redirect: "error"` (the Request
+      // constructor throws on it), so ask for the raw 3xx and refuse it below.
+      redirect: "manual",
       signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
     });
   } catch (error) {
@@ -150,6 +156,15 @@ async function sendOne(
       "provider_error",
       timedOut ? "khudebarta: request timed out" : "khudebarta: request failed",
       { cause: error, retryable: false }
+    );
+  }
+
+  if (response.status >= 300 && response.status < 400) {
+    // Not followed, by design: see `redirect` above. Nothing was sent.
+    throw new SmsError(
+      "provider_error",
+      `khudebarta: refused redirect (HTTP ${response.status})`,
+      { retryable: false }
     );
   }
 
