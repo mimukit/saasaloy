@@ -6,7 +6,7 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "Custom roles stored in the organizationRole table survive this removal, and nothing reads them once packages/auth/src/rbac.ts is gone. Members holding a custom role resolve to the statements of a role name that no longer exists, which is no permissions at all. Reassign them to a base role before you remove this module.",
+    "Custom roles stored in the organization_roles table survive this removal, and nothing reads them once packages/auth/src/rbac.ts is gone. Members holding a custom role resolve to the statements of a role name that no longer exists, which is no permissions at all. Reassign them to a base role before you remove this module.",
     "Every route written against requireCan stops compiling once packages/auth/src/rbac.ts is gone. Rewrite them on requireTenant, or delete them, before you remove this module.",
     "This module owns apps/api/src/routes/projects.ts, the permission-gated copy of multitenant's example, so removing it deletes that file while the /projects mount stays. Run saasaloy add multitenant to restore the ungated copy."
   ],

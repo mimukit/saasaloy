@@ -8,7 +8,7 @@ import { integer, pgTable, text, timestamp } from "drizzle-orm/pg-core";
 // Parity here is semantic, not textual. Each column is the idiomatic form for its dialect,
 // and what has to match is the shape a row comes back in: an integer key, a unique email,
 // and a millisecond-resolution creation time.
-export const waitlist = pgTable("waitlist", {
+export const waitlistEntries = pgTable("waitlist_entries", {
   // `timestamptz`, so the stored instant carries no ambiguity about the server's zone, and
   // `defaultNow()` so the database clock stamps a row the route did not stamp. Postgres
   // keeps microseconds, which covers the milliseconds the SQLite variant stores.

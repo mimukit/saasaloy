@@ -27,7 +27,7 @@ export const projects = new Hono<{ Bindings: AuthDbBindings }>()
   });
 ```
 
-`requireCan` **is** `requireTenant` plus `can`, and it returns the same `Tenant`. Never call both in one handler: the second call re-resolves the session and re-runs the `organizationRole` query for an answer it already has.
+`requireCan` **is** `requireTenant` plus `can`, and it returns the same `Tenant`. Never call both in one handler: the second call re-resolves the session and re-runs the `organization_roles` query for an answer it already has.
 
 Reads usually stay on `requireTenant`. `member` holds `project: ["read"]` in `access.ts`, so gating a read is the same check written twice. Gate a read when some members must not see the rows at all, not by reflex.
 
@@ -72,7 +72,7 @@ await auth.organization.createRole({
 });
 ```
 
-Assign it with `updateMemberRole`. It takes effect on the member's next request: `requireTenant` reads the `organizationRole` rows fresh each time.
+Assign it with `updateMemberRole`. It takes effect on the member's next request: `requireTenant` reads the `organization_roles` rows fresh each time.
 
 Three rules the screen enforces and you should keep:
 
@@ -82,7 +82,7 @@ Three rules the screen enforces and you should keep:
 
 ## `can()` is pure, and it runs in two places
 
-`packages/auth/src/rbac-rules.ts` imports nothing at runtime. `requireTenant` already ran the one `organizationRole` query and merged the statements onto the principal, so `can(principal, permissions)` is a function over data the request already holds. A route with three permission checks still pays for one round trip.
+`packages/auth/src/rbac-rules.ts` imports nothing at runtime. `requireTenant` already ran the one `organization_roles` query and merged the statements onto the principal, so `can(principal, permissions)` is a function over data the request already holds. A route with three permission checks still pays for one round trip.
 
 `apps/admin` imports the same function from `@repo/auth/rbac-rules`, fetches `GET /tenant` once per page, and hides a control the caller may not use. Better Auth's `checkRolePermission` is deliberately not used: it knows the static roles only, so it answers wrongly for every custom role.
 

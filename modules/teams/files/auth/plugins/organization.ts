@@ -16,7 +16,7 @@ export function organizationPlugin() {
     ac,
     roles,
 
-    // Runtime-defined roles, stored per organization in the `organizationRole` table
+    // Runtime-defined roles, stored per organization in the `organization_roles` table
     // (`packages/db/src/schema/teams.ts` carries the snapshot). `hasPermission` loads
     // that organization's rows and merges each one over the static role of the same
     // name, so a customer defines a role without a deploy.

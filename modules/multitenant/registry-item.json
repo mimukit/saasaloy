@@ -6,7 +6,7 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed project table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "The deployed projects table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "Every route written against requireTenant or forTenant stops compiling once packages/auth/src/tenant.ts and packages/db/src/tenant.ts are gone. Rewrite or delete those routes before you remove this module."
   ],
   "patches": [

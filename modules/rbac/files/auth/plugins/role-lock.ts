@@ -6,7 +6,7 @@ import { findLockedRole, roleLockDenial } from "../rbac-rules";
 // The lock on the three base roles, as a Better Auth plugin.
 //
 // `teams` turns on `dynamicAccessControl`, so an organization stores its own roles in the
-// `organizationRole` table and `hasPermission` merges each stored row OVER the static
+// `organization_roles` table and `hasPermission` merges each stored row OVER the static
 // role of the same name. That merge is the hole this plugin closes: a row named `admin`
 // would silently widen the static `admin` in `packages/auth/src/access.ts`, and a row
 // named `member` would widen every ordinary member in that organization at once. Neither
@@ -21,7 +21,7 @@ import { findLockedRole, roleLockDenial } from "../rbac-rules";
 // would otherwise be free to overwrite the base roles.
 
 /**
- * The three endpoints that write the `organizationRole` table. `list-roles` and
+ * The three endpoints that write the `organization_roles` table. `list-roles` and
  * `get-role` are absent on purpose — reading a base role is fine, and the `/roles` screen
  * lists all of them.
  */

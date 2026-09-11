@@ -1,6 +1,6 @@
 import { index, text } from "drizzle-orm/pg-core";
 import type { AnyPgColumn } from "drizzle-orm/pg-core";
-import { organization } from "./schema/teams";
+import { organizations } from "./schema/teams";
 
 // The Postgres half of the tenant column convention, selected by
 // `onlyWith: "database-postgres"`. Its SQLite twin sits beside it as
@@ -9,9 +9,9 @@ import { organization } from "./schema/teams";
 //
 // THE CONVENTION, in one line: every table a request may read on behalf of one
 // organization declares `organizationId: text("organization_id").notNull().references(()
-// => organization.id)` plus one index on that column. `member`, `invitation` and
-// `organizationRole` from `teams` were hand-written that way before this helper existed,
-// and `apikey` from `api-keys` gets there through the plugin's own field rename. The two
+// => organizations.id)` plus one index on that column. `members`, `invitations` and
+// `organization_roles` from `teams` were hand-written that way before this helper existed,
+// and `api_keys` from `api-keys` gets there through the plugin's own field rename. The two
 // functions below are the same declaration, written once, for every table a project adds
 // afterwards.
 //
@@ -23,7 +23,7 @@ import { organization } from "./schema/teams";
  * The tenant column. Use it as the `organizationId` property of a scoped table, and
  * nothing else:
  *
- *   export const project = pgTable("project", { organizationId: tenantColumn(), ... })
+ *   export const projects = pgTable("projects", { organizationId: tenantColumn(), ... })
  *
  * The property name matters as much as the column name. `forTenant` reads
  * `table.organizationId`, so a table that names the property `orgId` does not fit
@@ -32,13 +32,13 @@ import { organization } from "./schema/teams";
  * `notNull` is not negotiable. A nullable tenant column makes a row that belongs to no
  * organization, which every scoped query then silently omits and no guard ever refuses.
  *
- * `text` rather than `uuid`, because `organization.id` is the Better Auth plugin's own
+ * `text` rather than `uuid`, because `organizations.id` is the Better Auth plugin's own
  * generated string id and a foreign key has to match the column it points at.
  */
 export function tenantColumn() {
   return text("organization_id")
     .notNull()
-    .references(() => organization.id);
+    .references(() => organizations.id);
 }
 
 /**
@@ -46,7 +46,7 @@ export function tenantColumn() {
  * three `teams` tables. Every scoped read filters on this column, so without it each one
  * is a sequential scan.
  *
- *   (table) => [tenantIndex(table, "project")]
+ *   (table) => [tenantIndex(table, "projects")]
  */
 export function tenantIndex(
   table: { organizationId: AnyPgColumn },

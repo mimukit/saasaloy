@@ -7,12 +7,12 @@ import {
   removeDrizzleColumn,
 } from "./drizzle-column.js";
 
-// The shape the codemod is written against: `modules/auth`'s `user` table, trimmed to the
+// The shape the codemod is written against: `modules/auth`'s `users` table, trimmed to the
 // columns that matter here. The `pg` twin below differs only in its builders, which is the
 // case one patch has to serve without a second variant.
 const SQLITE = `import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 
-export const user = sqliteTable("user", {
+export const users = sqliteTable("users", {
   email: text("email").notNull().unique(),
   id: text("id").primaryKey(),
   banned: integer("banned", { mode: "boolean" }).default(false),
@@ -21,7 +21,7 @@ export const user = sqliteTable("user", {
 
 const PG = `import { boolean, pgTable, text } from "drizzle-orm/pg-core";
 
-export const user = pgTable("user", {
+export const users = pgTable("users", {
   email: text("email").notNull().unique(),
   id: text("id").primaryKey(),
   banned: boolean("banned").default(false),
@@ -46,7 +46,7 @@ function authSchema(dialect: "pg" | "sqlite"): string {
 }
 
 const BILLING_CUSTOMER = {
-  exportName: "user",
+  exportName: "users",
   column: "billingCustomerId",
   value: 'text("billing_customer_id")',
 } as const;
@@ -84,7 +84,7 @@ describe(insertDrizzleColumn, () => {
   });
 
   it("leaves the source untouched when the export is not a table call", () => {
-    const notATable = 'export const user = "nope";\n';
+    const notATable = 'export const users = "nope";\n';
     expect(insertDrizzleColumn(notATable, BILLING_CUSTOMER)).toBe(notATable);
   });
 
@@ -227,7 +227,7 @@ describe(drizzleColumnInsertRefusal, () => {
   it("names an export that is not a table call", () => {
     expect(
       drizzleColumnInsertRefusal(
-        'export const user = "nope";\n',
+        'export const users = "nope";\n',
         BILLING_CUSTOMER
       )
     ).toMatch(/not a Drizzle table call/u);

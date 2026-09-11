@@ -5,7 +5,7 @@ description: Runbook for the teams feature, which adds Better Auth organizations
 
 # teams
 
-The `teams` feature adds Better Auth organizations to `packages/auth`, organization tables to `packages/db`, and a site-admin-only Teams screen to `apps/admin`. The product calls this capability "teams", but Better Auth's nested teams-within-an-organization feature stays disabled. There is no `team` table, `teamMember` table, or `session.activeTeamId` column.
+The `teams` feature adds Better Auth organizations to `packages/auth`, organization tables to `packages/db`, and a site-admin-only Teams screen to `apps/admin`. The product calls this capability "teams", but Better Auth's nested teams-within-an-organization feature stays disabled. There is no `team` table, `teamMember` table, or `sessions.activeTeamId` column.
 
 ## Admin screen boundaries
 
@@ -27,7 +27,7 @@ There is no invitation-acceptance UI in this module. That flow belongs in `apps/
 
 `statements` spreads Better Auth's `defaultStatements` (`organization`, `member`, `invitation`, `team`, `ac`) and adds `project` and `apiKey`, each with `create`, `read`, `update` and `delete`. Keep the spread first. The plugin's own endpoints authorize against those names, so dropping one turns off a built-in endpoint rather than a feature of this project.
 
-`owner`, `admin` and `member` are the base roles, and all three must stay in the exported `roles` map. `updateMemberRole` refuses a role name that exists in neither that map nor the `organizationRole` table, so removing one strands its holders. They are also locked: the `rbac` module's `roleLockGuard()` refuses `createRole`, `updateRole` and `deleteRole` for those three names, because a stored row of the same name would silently extend the static role.
+`owner`, `admin` and `member` are the base roles, and all three must stay in the exported `roles` map. `updateMemberRole` refuses a role name that exists in neither that map nor the `organization_roles` table, so removing one strands its holders. They are also locked: the `rbac` module's `roleLockGuard()` refuses `createRole`, `updateRole` and `deleteRole` for those three names, because a stored row of the same name would silently extend the static role.
 
 A custom role picks from whatever `statements` holds at the moment it is created. So adding a resource is an edit to this file, then a deploy, and only then can a customer grant it.
 
@@ -37,7 +37,7 @@ The file imports `better-auth/plugins/access` and `better-auth/plugins/organizat
 
 `packages/auth/src/plugins/organization.ts` owns the server options. It keeps `teams.enabled` false, leaves `sendInvitationEmail` unset, passes `ac` and `roles` from `access.ts`, and enables `dynamicAccessControl`. `packages/auth/src/plugins/organization-client.ts` passes the same `ac` and `roles` to the client plugin. Both halves have to agree, or the browser offers a control the server refuses.
 
-`dynamicAccessControl` is what makes the `organizationRole` table live. Turning the option off does not remove the table; drop both together, or `createRole` writes into nothing.
+`dynamicAccessControl` is what makes the `organization_roles` table live. Turning the option off does not remove the table; drop both together, or `createRole` writes into nothing.
 
 The descriptor applies two `plugin-array` patches. One adds `organizationPlugin()` to `packages/auth/src/auth.ts`. The other adds `organizationClientPlugin()` to `authClientPlugins` in `packages/auth/src/client.ts`. Keep both calls at zero arguments because the patch engine records and reverses that exact shape. That is why the options live in the two wrapper files and not in the patch.
 
@@ -45,15 +45,15 @@ The descriptor also applies a `const-array` patch to `NAV_ITEMS`. Its stable ide
 
 ## Schema and migrations
 
-`packages/db/src/schema/teams.ts` is a hand-written Better Auth 1.7.2 snapshot for `organization`, `member`, `invitation`, and `organizationRole`. `packages/db/src/schema/auth.ts` pre-declares the nullable `session.activeOrganizationId` field. Keep the Better Auth property names because its adapter matches those names.
+`packages/db/src/schema/teams.ts` is a hand-written Better Auth 1.7.2 snapshot for the `organizations`, `members`, `invitations`, and `organization_roles` tables. `packages/db/src/schema/auth.ts` pre-declares the nullable `sessions.activeOrganizationId` field. Keep the Better Auth property names because its adapter matches those names.
 
 The module ships the snapshot in two dialects, `teams.sqlite.ts` and `teams.pg.ts`, and `onlyWith` installs the one matching the project's driver. Edit one table and edit its twin. A mismatch only shows up on the other driver's first install, long after the edit.
 
-`member`, `invitation` and `organizationRole` each follow the tenant column convention: a `organizationId` property on an `organization_id` column, `notNull`, `references(() => organization.id)`, and one index. That is what lets `forTenant` from `@repo/db/tenant` accept them once `multitenant` is installed.
+The `members`, `invitations` and `organization_roles` tables each follow the tenant column convention: a `organizationId` property on an `organization_id` column, `notNull`, `references(() => organizations.id)`, and one index. That is what lets `forTenant` from `@repo/db/tenant` accept them once `multitenant` is installed.
 
 Run `pnpm --filter @repo/db db:generate` after a schema change. Review the migration before you apply it. Then use the active database driver skill for the migration command.
 
-Removing `teams` deletes its managed files and reverses the plugin and navigation patches. It does not drop deployed tables. The remove command warns that `organization`, `member`, `invitation`, and `organizationRole` survive, so review any generated drop migration before applying it.
+Removing `teams` deletes its managed files and reverses the plugin and navigation patches. It does not drop deployed tables. The remove command warns that the `organizations`, `members`, `invitations`, and `organization_roles` tables survive, so review any generated drop migration before applying it.
 
 ## Conventions to honor
 
@@ -65,3 +65,14 @@ Removing `teams` deletes its managed files and reverses the plugin and navigatio
 - Keep invitation delivery optional. Do not add an `email` dependency for the copy-ID flow.
 - Use the organization client methods from `@repo/auth/client`. Do not import Better Auth directly into `apps/admin`.
 - Run database migrations by hand after you review the generated SQL.
+
+## Upgrading from singular table names
+
+A project that installed `teams` before the tables became plural has `organization`, `member`, `invitation` and `organizationRole` in its database. Move them to the new names like this:
+
+1. Update `auth` first, because its schema rename and `usePlural: true` land together. Then run `saasaloy update teams` to take the new schema file.
+2. Run `pnpm db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `organization` → `organizations`, `member` → `members`, `invitation` → `invitations`, `organizationRole` → `organization_roles`.
+4. Read the generated SQL before you apply it. It must rename tables and indexes (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
+6. Apply the migration, then sign in once to confirm the adapter finds every table.

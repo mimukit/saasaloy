@@ -27,8 +27,8 @@ import { trialEnding } from "@repo/email/templates/trial-ending";
 import type { EmailEnv } from "@repo/email";
 import type { Db, DbBindings } from "@repo/db/client";
 import { withDb } from "@repo/db/client";
-import { user } from "@repo/db/schema/auth";
-import { billingEvent, billingSubscription } from "@repo/db/schema/billing";
+import { users } from "@repo/db/schema/auth";
+import { billingEvents, billingSubscriptions } from "@repo/db/schema/billing";
 import { createQueue } from "@repo/queue";
 import type { QueueEnv } from "@repo/queue";
 import { env } from "cloudflare:workers";
@@ -129,7 +129,7 @@ const billingUrl =
 //
 // Every call reaching here comes from a queue consumer or the scheduled sweep. No request
 // handler sends a billing email, which is what makes a webhook redelivery cost nothing: the
-// `billing_event` insert in `applyEvent` guards the whole side-effect body.
+// `billing_events` insert in `applyEvent` guards the whole side-effect body.
 setBillingNotifier(async (notification: BillingNotification) => {
   await createEmail(env as unknown as EmailEnv).send({
     to: notification.to.email,
@@ -220,10 +220,10 @@ export function createBillingStore(db: Db): BillingStore {
       return (
         db
           .select()
-          .from(billingSubscription)
+          .from(billingSubscriptions)
           .where(subjectMatches(subject))
           // Newest first, so a resubscribe wins over the history rows the table keeps.
-          .orderBy(desc(billingSubscription.createdAt))
+          .orderBy(desc(billingSubscriptions.createdAt))
           .limit(1)
           .then((rows) => rows.at(0) as Subscription | undefined)
       );
@@ -235,12 +235,12 @@ export function createBillingStore(db: Db): BillingStore {
       at: Date
     ) {
       await db
-        .update(billingEvent)
+        .update(billingEvents)
         .set({ processedAt: at })
         .where(
           and(
-            eq(billingEvent.provider, provider),
-            eq(billingEvent.providerEventId, providerEventId)
+            eq(billingEvents.provider, provider),
+            eq(billingEvents.providerEventId, providerEventId)
           )
         );
     },
@@ -251,12 +251,12 @@ export function createBillingStore(db: Db): BillingStore {
     pastDueSince(before: Date) {
       return db
         .select()
-        .from(billingSubscription)
+        .from(billingSubscriptions)
         .where(
           and(
-            eq(billingSubscription.status, "past_due"),
-            isNull(billingSubscription.lockedAt),
-            lt(billingSubscription.updatedAt, before)
+            eq(billingSubscriptions.status, "past_due"),
+            isNull(billingSubscriptions.lockedAt),
+            lt(billingSubscriptions.updatedAt, before)
           )
         )
         .then((rows) => rows as Subscription[]);
@@ -264,16 +264,16 @@ export function createBillingStore(db: Db): BillingStore {
 
     async patchSubscription(id: string, patch: SubscriptionPatch) {
       await db
-        .update(billingSubscription)
+        .update(billingSubscriptions)
         .set(patch)
-        .where(eq(billingSubscription.id, id));
+        .where(eq(billingSubscriptions.id, id));
     },
 
     // The insert is the dedupe, not a read-then-write. `(provider, provider_event_id)` is
     // the table's primary key, so the conflict comes from the database and no second
     // delivery can race past it. An empty `returning()` means the row was already there.
     // Where a billing email goes. The default subject is a user, so this is one read of the
-    // `user` table by id. `teams` replaces `subject.ts` to bill an organization instead, and
+    // `users` table by id. `teams` replaces `subject.ts` to bill an organization instead, and
     // this method is the other half of that swap: it would read the organization's billing
     // contact for `customerType === "organization"`. Until then an unknown type resolves to
     // nothing and the core skips the send rather than failing the job.
@@ -282,19 +282,19 @@ export function createBillingStore(db: Db): BillingStore {
         return;
       }
       return await db
-        .select({ email: user.email, name: user.name })
-        .from(user)
-        .where(eq(user.id, subject.referenceId))
+        .select({ email: users.email, name: users.name })
+        .from(users)
+        .where(eq(users.id, subject.referenceId))
         .limit(1)
         .then((rows) => rows.at(0));
     },
 
     recordEvent(record: BillingEventRecord) {
       return db
-        .insert(billingEvent)
+        .insert(billingEvents)
         .values(record)
         .onConflictDoNothing()
-        .returning({ provider: billingEvent.provider })
+        .returning({ provider: billingEvents.provider })
         .then((rows) => rows.length > 0);
     },
 
@@ -305,7 +305,7 @@ export function createBillingStore(db: Db): BillingStore {
       // absent from both the insert and the update on purpose: they are core-only columns
       // and `patchSubscription` is the only writer.
       return db
-        .insert(billingSubscription)
+        .insert(billingSubscriptions)
         .values({
           ...input,
           createdAt: now,
@@ -316,7 +316,7 @@ export function createBillingStore(db: Db): BillingStore {
         })
         .onConflictDoUpdate({
           set: { ...input, updatedAt: now },
-          target: billingSubscription.providerSubscriptionId,
+          target: billingSubscriptions.providerSubscriptionId,
         })
         .returning()
         .then((rows) => rows[0] as Subscription);
@@ -326,7 +326,7 @@ export function createBillingStore(db: Db): BillingStore {
 
 function subjectMatches(subject: BillableSubject) {
   return and(
-    eq(billingSubscription.referenceId, subject.referenceId),
-    eq(billingSubscription.customerType, subject.customerType)
+    eq(billingSubscriptions.referenceId, subject.referenceId),
+    eq(billingSubscriptions.customerType, subject.customerType)
   );
 }

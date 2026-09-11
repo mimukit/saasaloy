@@ -3,7 +3,7 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { adminAc, defaultRoles } from "better-auth/plugins/admin/access";
-import { user as userTable } from "@repo/db/schema/auth";
+import { users as userTable } from "@repo/db/schema/auth";
 import { ADMIN_ROLES, SUPERADMIN_ROLE } from "./authorize";
 import { authDb, provider } from "./db-provider";
 import { deriveCookieDomain, requireAuthSecret } from "./env";
@@ -38,7 +38,7 @@ const cookieDomain = deriveCookieDomain(authEnv);
 // Auth's published development key. See ./env.ts for the rule and the escape hatch.
 const secret = requireAuthSecret(authEnv);
 
-// Is the `user` table still empty? A one-row `select` rather than a `count(*)`, because
+// Is the `users` table still empty? A one-row `select` rather than a `count(*)`, because
 // the only question is existence and the driver stops at the first row.
 //
 // Reads through `authDb`, the same request-scoped proxy the adapter below takes, not a
@@ -80,12 +80,18 @@ export const auth = betterAuth({
     enabled: true,
     requireEmailVerification: false, // needs the `email` capability; auth deliberately doesn't depend on it
   },
-  database: drizzleAdapter(authDb, { provider }),
+  // `usePlural` maps Better Auth's singular model names (`user`) to this project's plural
+  // export keys (`users`). The adapter finds a table by its export key in the schema object
+  // (`schema[model]`), never by its SQL name. Remove `usePlural`, or export a singular key,
+  // and every auth call throws `The model "user" was not found in the schema object`; tsc
+  // does not catch it. `usePlural` appends a plain `s`, to a custom `modelName` too, so a
+  // plugin with `modelName: "X"` needs the export key `Xs`. See ADR 0038.
+  database: drizzleAdapter(authDb, { provider, usePlural: true }),
   // First user wins, and it wins `superadmin`. This is the ONLY automatic role promotion
-  // in the system, and it fires at most once per project: the hook reads the `user` table
+  // in the system, and it fires at most once per project: the hook reads the `users` table
   // before the row is written, so it can only match on the very first sign-up. Without it
   // a fresh `saasaloy add admin` scaffolds an admin app that denies every account, and the
-  // only way in is the `update user set role` SQL in the auth skill.
+  // only way in is the `update users set role` SQL in the auth skill.
   //
   // `superadmin` rather than `admin` because the first account has to be able to grant the
   // rest, and `superadmin` is the only role that crosses an organization boundary. A later
@@ -94,7 +100,7 @@ export const auth = betterAuth({
   // WARNING — sign-up is open. Any account that reaches /signup before you do becomes
   // the superadmin, and on a deployed api with a public origin that window is real. Sign
   // up yourself as soon as the api answers, and check with
-  // `select email, role from user`. The auth skill carries the recovery SQL for when
+  // `select email, role from users`. The auth skill carries the recovery SQL for when
   // somebody else got there first, and `client.admin.setRole` promotes the rest once one
   // superadmin exists.
   //
@@ -124,7 +130,7 @@ export const auth = betterAuth({
     // `@better-auth/core/dist/db/schema-check.mjs` is the switch). Neither source can
     // answer here. `authDb` is a request-scoped proxy holding no client of its own, so
     // `db._` is not a schema registry, and the check falls back to `{}` — which reads as
-    // "tables user, session, account, verification are missing" and turns EVERY
+    // "tables users, sessions, accounts, verifications are missing" and turns EVERY
     // `auth.api.*` call, sign-up included, into a 500.
     //
     // Passing `config.schema` instead would fix the read and break the composition: the

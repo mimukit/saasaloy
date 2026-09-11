@@ -69,7 +69,7 @@ export const member = ac.newRole({
 /**
  * The three roles the plugin falls back on when an organization has stored none of its
  * own. Every one of them has to stay in this map: `updateMemberRole` refuses a role name
- * that exists in neither this map nor the `organizationRole` table, so removing one
+ * that exists in neither this map nor the `organization_roles` table, so removing one
  * strands its holders.
  */
 export const roles = { owner, admin, member };

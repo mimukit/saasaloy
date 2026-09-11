@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { organization } from "../schema/teams";
+import { organizations } from "../schema/teams";
 import type { Db } from "../client";
 
 // The existence check behind the `superadmin` header path, and it lives here for the
@@ -22,9 +22,9 @@ export async function organizationExists(
   organizationId: string
 ): Promise<boolean> {
   const rows = await db
-    .select({ id: organization.id })
-    .from(organization)
-    .where(eq(organization.id, organizationId))
+    .select({ id: organizations.id })
+    .from(organizations)
+    .where(eq(organizations.id, organizationId))
     .limit(1);
   return rows.length > 0;
 }

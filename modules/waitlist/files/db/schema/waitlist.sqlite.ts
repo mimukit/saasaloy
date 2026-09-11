@@ -8,7 +8,7 @@ import { integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 //
 // The table declarations are the only part of this module that knows the dialect. Drizzle's
 // query builder is neutral at call time, so `files/api/routes/waitlist.ts` is one file.
-export const waitlist = sqliteTable("waitlist", {
+export const waitlistEntries = sqliteTable("waitlist_entries", {
   // `timestamp_ms`, not `timestamp`. Drizzle's `timestamp` mode stores whole seconds, so two
   // signups inside the same second sort arbitrarily and a `Date` loses its milliseconds on
   // the round trip. Postgres `timestamptz` keeps sub-second precision natively, and storing

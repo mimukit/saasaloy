@@ -58,6 +58,8 @@ the current request's client out of an `AsyncLocalStorage` in `packages/auth/src
 Postgres by wrapping the driver's `withDb`, which also closes the socket on
 `c.executionCtx.waitUntil`; under D1 by opening a binding stub and running the body.
 
+**The adapter runs with `usePlural: true`.** Better Auth asks for singular models (`user`, `session`), and the tables here are plural (`users`, `sessions`). The Drizzle adapter finds a table by its export key in the schema object, never by its SQL name, and `usePlural` appends an `s` to every model name, a custom `modelName` included. Keep the flag and the plural export keys together: remove one and every auth call throws `The model "user" was not found in the schema object`, which `pnpm typecheck` does not catch. A plugin with `modelName: "X"` needs the export key `Xs`. The naming rule is in the `saasaloy-database` skill under `## Table names`, and ADR 0038 records it.
+
 **Every `auth.handler` and `auth.api.*` call runs inside `withAuthScope`.** `apps/api/src/routes/auth.ts`
 already wraps the handler, and `getSession(c)` already wraps its own read, so ordinary use needs
 nothing. Reach for the wrapper by hand only when calling `auth.api.*` yourself:
@@ -225,20 +227,20 @@ being an unchecked cast.
 
 ### First user wins
 
-The first account to sign up on an empty `user` table gets `role: "superadmin"`. A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL. It writes `superadmin` rather than `admin` because the first account has to be able to grant every other one, and only `superadmin` crosses an organization boundary.
+The first account to sign up on an empty `users` table gets `role: "superadmin"`. A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL. It writes `superadmin` rather than `admin` because the first account has to be able to grant every other one, and only `superadmin` crosses an organization boundary.
 
-**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the superadmin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from user`. Two sign-ups that land at the same instant both read an empty table and both become superadmin; that is accepted rather than locked, because a unique index on `role = 'superadmin'` would also block a deliberate second one later.
+**Sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/signup` before you do becomes the superadmin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from users`. Two sign-ups that land at the same instant both read an empty table and both become superadmin; that is accepted rather than locked, because a unique index on `role = 'superadmin'` would also block a deliberate second one later.
 
 If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against. The statement is the same under both drivers:
 
 ```sql
-update "user" set role = 'superadmin' where email = 'you@example.com';
+update users set role = 'superadmin' where email = 'you@example.com';
 ```
 
 **How you run it is the driver's business**, so read the skill for the driver this project
 installed — `saasaloy-database-d1` or `saasaloy-database-postgres` — for the console it hands you.
-Swap `update` for `select email, role from "user"` to check it landed. (`user` is a reserved word
-in Postgres and needs the quotes there; SQLite accepts them too.)
+Swap `update` for `select email, role from users` to check it landed. The plural table name
+needs no quotes: Postgres reserves `user`, not `users`.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role
 is read off the user row — no re-login needed, and `cookieCache` is off (see the last boundary
@@ -248,18 +250,18 @@ Once one superadmin exists, promote the rest through the API instead of SQL: `cl
 userId, role: "admin" })`, which the server authorizes against the caller's own role. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that may cross an organization boundary. The plugin
 also carries `listUsers`, `banUser`, `impersonateUser` and friends on the same namespace.
 
-**A project that installed auth before this shipped needs a migration.** The four new `user` fields and `session.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is neither site role, so the guard denies them until you promote one.
+**A project that installed auth before this shipped needs a migration.** The four new `users` fields and `sessions.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is neither site role, so the guard denies them until you promote one.
 
-**`account.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`); 1.7.3 took both back out, so the pinned snapshot no longer carries them and (`providerId`, `accountId`) is the row's identity again. A project that never applied the 1.7.2 migration needs nothing here. A project that already applied it gets the reverse from `db:generate`:
+**`accounts.issuer` is the one that needs a hand.** better-auth 1.7.2 made it required and put a unique index over (`issuer`, `accountId`); 1.7.3 took both back out, so the pinned snapshot no longer carries them and (`providerId`, `accountId`) is the row's identity again. A project that never applied the 1.7.2 migration needs nothing here. A project that already applied it gets the reverse from `db:generate`:
 
 ```sql
-DROP INDEX `account_issuer_account_id_uidx`;--> statement-breakpoint
-ALTER TABLE `account` DROP COLUMN `issuer`;
+DROP INDEX `accounts_issuer_account_id_uidx`;--> statement-breakpoint
+ALTER TABLE `accounts` DROP COLUMN `issuer`;
 ```
 
 Take the index identifier from your own generated migration rather than from the snippet above. Drizzle derives it from the schema the 1.7.2 migration was generated against, so a project that kept better-auth's own naming sees `account_issuer_accountId_uidx` instead, and a `DROP INDEX` on a name that is not there fails and leaves `issuer` in place.
 
-Read it before you apply it, because a `DROP COLUMN` is not reversible and SQLite rewrites the table to do it. Take a copy of the database first. A Postgres project gets the same two statements with `DROP INDEX "account_issuer_account_id_uidx"` and `ALTER TABLE "account" DROP COLUMN "issuer"`. Nothing reads the column after the drop: better-auth 1.7.3's `getAuthTables()` never writes it and the adapter never selects it.
+Read it before you apply it, because a `DROP COLUMN` is not reversible and SQLite rewrites the table to do it. Take a copy of the database first. A Postgres project gets the same two statements with `DROP INDEX "accounts_issuer_account_id_uidx"` and `ALTER TABLE "accounts" DROP COLUMN "issuer"`. Nothing reads the column after the drop: better-auth 1.7.3's `getAuthTables()` never writes it and the adapter never selects it.
 
 Leaving the column in place is the option that breaks. The snapshot no longer declares it, so `db:generate` treats it as drift on every later run, and a fresh insert against a database that still has `issuer text NOT NULL` fails the constraint the moment 1.7.3 stops writing the value.
 
@@ -269,9 +271,9 @@ Sessions are DB-backed on purpose (build-spec §2.5) — revoking one is a delet
 denylist needed:
 
 ```sql
-delete from session where id = '...';
+delete from sessions where id = '...';
 -- or, to kill every session for a user:
-delete from session where user_id = '...';
+delete from sessions where user_id = '...';
 ```
 
 The next authed request with that cookie gets `401` from `getSession`.
@@ -310,9 +312,9 @@ non-admin browser grants nothing; the server authorizes every call.
 ## Schema: hand-authored, never generated at `add` time
 
 `packages/db/src/schema/auth.ts` (one of `auth.sqlite.ts` and `auth.pg.ts`, chosen by the
-installed driver) is a **checked-in Drizzle snapshot** of Better Auth's core tables (`user`, `session`, `account`, `verification`) plus the
-fields the `admin` plugin adds (`user.role`, `banned`, `ban_reason`, `ban_expires`, and
-`session.impersonated_by`), pinned to the exact `better-auth` version in
+installed driver) is a **checked-in Drizzle snapshot** of Better Auth's core tables (`users`, `sessions`, `accounts`, `verifications`) plus the
+fields the `admin` plugin adds (`users.role`, `banned`, `ban_reason`, `ban_expires`, and
+`sessions.impersonated_by`), pinned to the exact `better-auth` version in
 `packages/auth/package.json` — not run through a generator at add-time (no exec, deterministic, `--diff`-able). If you bump `better-auth`, **re-verify this file against the new version's schema** (`@better-auth/core`'s `getAuthTables()`, and the admin plugin's own `schema` export) before shipping — fix the snapshot, not the adapter config, on a mismatch. The adapter matches on the Drizzle **property** name (`banReason`), not the SQL column name (`ban_reason`), and does no case conversion. It's picked up by database's existing barrel + migration scripts same as any other table:
 
 ```sh
@@ -321,7 +323,7 @@ pnpm --filter @repo/db db:generate       # emits SQL for the new tables
 
 The rule has a guard in this repo. The snapshot's header names the version it was verified against, and `modules/auth/files/src/schema-version.test.ts` fails `pnpm test` when that string and `better-auth` in `modules/auth/files/package.json` disagree. It cannot check a column; it makes a bump that skipped the re-verification loud instead of silent. Do the comparison, fix what moved, then edit the header. Editing the header alone to get green is the one way to defeat it.
 
-The 1.7.2 → 1.7.3 pass is the worked example of what "re-verify" means here. It found one change, and it was a removal: `account.issuer` and its unique index are gone from `getAuthTables()`, so they came out of both snapshots and the headers say so. The admin plugin's own `schema` export did not move.
+The 1.7.2 → 1.7.3 pass is the worked example of what "re-verify" means here. It found one change, and it was a removal: `accounts.issuer` and its unique index are gone from `getAuthTables()`, so they came out of both snapshots and the headers say so. The admin plugin's own `schema` export did not move.
 
 `db:generate` belongs to the `database` core and is the same command under either driver. **The
 apply step is the driver's**, and the command differs, so read the skill for the driver this
@@ -330,6 +332,17 @@ project installed: `saasaloy-database-d1` or `saasaloy-database-postgres`.
 Both variants have to stay in step. Edit one table and edit its twin — `add auth` installs only the
 one matching the project's driver, so a mismatch shows up on the other driver's first install, long
 after the edit.
+
+## Upgrading from singular table names
+
+A project that installed auth before the tables became plural has `user`, `session`, `account` and `verification` in its database. Move them to the new names like this:
+
+1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `billing`.
+2. Run `pnpm db:generate`.
+3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `user` → `users`, `session` → `sessions`, `account` → `accounts`, `verification` → `verifications`.
+4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `session_user_id_idx` → `sessions_user_id_idx`, `account_user_id_idx` → `accounts_user_id_idx`, `verification_identifier_idx` → `verifications_identifier_idx`). It must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
+5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
+6. Apply the migration with the command from the installed driver's skill, then sign in once to confirm the adapter finds every table.
 
 ## Boundaries to honor
 

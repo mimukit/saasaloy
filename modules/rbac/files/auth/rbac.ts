@@ -28,7 +28,7 @@ export type {
  *   await withDb(c, (db) => deleteProject(db, tenant.organizationId, id));
  *
  * It is `requireTenant` plus `can`, and it returns the same `Tenant`, so a route never
- * calls both. Resolution runs once and the one `organizationRole` query with it: three
+ * calls both. Resolution runs once and the one `organization_roles` query with it: three
  * `requireCan` lines in one handler would cost three queries if this asked Better Auth's
  * `hasPermission` instead, which is why `can` reads the statements already on the
  * principal.

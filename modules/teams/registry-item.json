@@ -6,7 +6,7 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed organization, member, invitation, and organizationRole tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
+    "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
   ],
   "patches": [
     {

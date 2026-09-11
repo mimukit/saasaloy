@@ -72,7 +72,7 @@ D1 is SQLite, so table files import from `drizzle-orm/sqlite-core`:
 // packages/db/src/schema/waitlist.ts
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 
-export const waitlist = sqliteTable("waitlist", {
+export const waitlistEntries = sqliteTable("waitlist_entries", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),

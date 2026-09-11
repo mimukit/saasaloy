@@ -6,7 +6,7 @@ import { tenantColumn, tenantIndex } from "../tenant-column";
 // `projects.sqlite.ts`, and exactly one of the two lands as
 // `packages/db/src/schema/projects.ts`.
 //
-// `project` is a real table with one string column, and it exists to be the thing the
+// `projects` is a real table with one string column, and it exists to be the thing the
 // tenant guard is demonstrated and proved on: `packages/db/src/tenant.typecheck.ts`
 // compiles against it, `apps/api/src/routes/projects.ts` reads it through `forTenant`,
 // and the A/B isolation check in the QA script inserts one row per organization and
@@ -20,8 +20,8 @@ import { tenantColumn, tenantIndex } from "../tenant-column";
 const timestamptz = (name: string) =>
   timestamp(name, { mode: "date", withTimezone: true });
 
-export const project = pgTable(
-  "project",
+export const projects = pgTable(
+  "projects",
   {
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     id: text("id").primaryKey(),
@@ -30,5 +30,5 @@ export const project = pgTable(
     // every table a request reads on behalf of one organization.
     organizationId: tenantColumn(),
   },
-  (table) => [tenantIndex(table, "project")]
+  (table) => [tenantIndex(table, "projects")]
 );

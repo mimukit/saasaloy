@@ -34,14 +34,14 @@ import { authorizeSubject } from "../subject";
 // session, the portal, cancel, restore, and the signature-verified webhook that writes the
 // subscription row. This file's whole job is to make that engine speak the capability's
 // vocabulary: the plan table maps into the plugin's shape, the plugin's model maps onto
-// `billing_subscription`'s vendor-blind columns, `authorizeSubject` becomes
+// `billing_subscriptions`'s vendor-blind columns, `authorizeSubject` becomes
 // `authorizeReference`, a Stripe event becomes a normalized `BillingEvent`, and a Stripe
 // error becomes a `BillingError` with the raw code in `providerCode`.
 //
 // Nothing here writes the database. The plugin's own webhook handler writes the row
 // synchronously — that is the point of using it — and `onEvent` only enqueues the
 // normalized event so the *side effects* (emails, the lockout clear) run on the queue,
-// dedupe through `billing_event`, and never block Stripe's delivery (ADR 0034).
+// dedupe through `billing_events`, and never block Stripe's delivery (ADR 0034).
 //
 // `env` comes from `cloudflare:workers` rather than from a request, for the same reason
 // `packages/auth/src/auth.ts` reads it that way: the Better Auth instance is a module-scope
@@ -119,7 +119,7 @@ const lazyStripeClient = new Proxy({} as Stripe, {
  *
  * `limits` is deliberately NOT passed through. The plugin writes `limits` onto the
  * subscription row whenever a plan carries it (`onSubscriptionCreated`, in the published
- * `@better-auth/stripe` 1.7.3 `dist/index.mjs`), and `billing_subscription` has no such
+ * `@better-auth/stripe` 1.7.3 `dist/index.mjs`), and `billing_subscriptions` has no such
  * column. Limits are read from `plans.ts` by `entitlements` and never need to round-trip
  * through the vendor.
  */
@@ -160,8 +160,8 @@ function priceIds(plan: Plan): {
  * before any handler of ours runs.
  *
  * `schema` is the whole reason the core's columns can be vendor-blind. Every field the
- * plugin writes is mapped onto a Drizzle property of `billingSubscription`, and the
- * customer link is mapped onto `user.billingCustomerId`, which `modules/billing` adds to
+ * plugin writes is mapped onto a Drizzle property of `billingSubscriptions`, and the
+ * customer link is mapped onto `users.billingCustomerId`, which `modules/billing` adds to
  * `auth`'s own table with its `drizzle-column` patch. The list below is checked against
  * the `@better-auth/stripe` 1.7.3 schema and is complete for that version; the
  * `saasaloy-billing` skill carries the same list and the instruction to re-check it on a
@@ -182,6 +182,10 @@ export function stripeAuthPlugin() {
 
     schema: {
       subscription: {
+        // Singular on purpose. `packages/auth/src/auth.ts` passes `usePlural: true`, so the
+        // adapter appends an `s` and asks the schema object for `billingSubscriptions`, the
+        // export key in `@db/schema/billing.ts`. Writing the plural here would make it look
+        // for `billingSubscriptionss`.
         modelName: "billingSubscription",
         fields: {
           billingInterval: "billingInterval",

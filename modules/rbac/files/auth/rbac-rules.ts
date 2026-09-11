@@ -92,7 +92,7 @@ const ALLOWED: PermissionDecision = { denial: null, allowed: true };
 /**
  * May this principal do all of these things?
  *
- * Pure, and deliberately so. `requireTenant` already ran the one `organizationRole` query
+ * Pure, and deliberately so. `requireTenant` already ran the one `organization_roles` query
  * and merged the statements onto the principal, so a route with three `requireCan` lines
  * still pays for one round trip. Better Auth's own `auth.api.hasPermission` would ask the
  * database again per check and could not be tested here at all.

@@ -9,7 +9,7 @@ import type {
 } from "./provider";
 
 // Reading the projection, and writing it from a normalized event. Everything that touches
-// `billing_subscription` and `billing_event` goes through here, so the dedupe rule lives in
+// `billing_subscriptions` and `billing_events` goes through here, so the dedupe rule lives in
 // one place and a provider never writes a row itself (ADR 0034).
 //
 // The database arrives as a **port**, not as a Drizzle client. `packages/billing` has zero
@@ -19,7 +19,7 @@ import type {
 // fake, and leaves the SQL in the one workspace that owns the schema. `apps/api` builds
 // the port over its request-scoped client (ADR 0029) and hands it in.
 
-/** What `applyEvent` writes into `billing_event`. */
+/** What `applyEvent` writes into `billing_events`. */
 export interface BillingEventRecord {
   provider: string;
   providerEventId: string;
@@ -109,7 +109,7 @@ export async function currentSubscription(
 export interface ApplyEventResult {
   /** False only when the event was already recorded, so no side effect ran. */
   applied: boolean;
-  /** True when `(provider, providerEventId)` was already in `billing_event`. */
+  /** True when `(provider, providerEventId)` was already in `billing_events`. */
   duplicate: boolean;
   /** The row as it stands after the write, when the event carried subscription state. */
   subscription?: Subscription;
@@ -136,7 +136,7 @@ const NEEDS_CURRENT_ROW = new Set<BillingEvent["type"]>([
 /**
  * Apply one normalized event to the projection.
  *
- * The `billing_event` insert comes **first**, and a conflict returns immediately. That
+ * The `billing_events` insert comes **first**, and a conflict returns immediately. That
  * ordering is the dedupe guarantee: every side effect below it — the row write, the lock
  * clear, and in Phase 5 the emails — sits inside the guarded body, so a vendor redelivering
  * the same event id runs none of them a second time.
@@ -181,7 +181,7 @@ export async function applyEvent(
       subscription = { ...subscription, lockedAt: null };
     }
 
-    // The trial reminder is once per subscription, not once per delivery. `billing_event`
+    // The trial reminder is once per subscription, not once per delivery. `billing_events`
     // already stops a redelivered event id, but a vendor may legitimately send
     // `trial_will_end` twice under two ids — Stripe does, on a trial that gets extended —
     // and the subject should still get one email. `reminderSentAt` is the row-level guard

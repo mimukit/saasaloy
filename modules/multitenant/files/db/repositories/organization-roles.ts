@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { organizationRole } from "../schema/teams";
+import { organizationRoles } from "../schema/teams";
 import type { Db } from "../client";
 
 // The one query the tenant resolver runs, and the reason it lives here rather than in
@@ -34,9 +34,9 @@ export function listOrganizationRoles(
 ): Promise<StoredRole[]> {
   return db
     .select({
-      permission: organizationRole.permission,
-      role: organizationRole.role,
+      permission: organizationRoles.permission,
+      role: organizationRoles.role,
     })
-    .from(organizationRole)
-    .where(eq(organizationRole.organizationId, organizationId));
+    .from(organizationRoles)
+    .where(eq(organizationRoles.organizationId, organizationId));
 }

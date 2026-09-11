@@ -36,6 +36,11 @@ import type { AuthRequestContext } from "../server";
  * - `schema.apikey.fields.referenceId: "organizationId"` renames the field the Drizzle
  *   adapter looks for. It is the only reason `packages/db/src/schema/api-keys.ts` meets
  *   the tenant column convention, so the rename and the snapshot change together.
+ * - `schema.apikey.modelName: "apiKey"`. `auth.ts` passes `usePlural: true` to the
+ *   Drizzle adapter, so the adapter asks the schema object for `<modelName>s`. That
+ *   resolves to the `apiKeys` export, stored as the `api_keys` table. Without it the
+ *   adapter appends `s` to the plugin's own model name `apikey` and asks for `apikeys`,
+ *   which is not a word and not an export.
  * - `enableSessionForAPIKeys: false`. The plugin's mocked session carries no
  *   `activeOrganizationId`, so it would resolve to no tenant at all. The bearer resolver
  *   in `../resolvers/api-key.ts` turns a verified key into a `Tenant` instead, and that
@@ -92,7 +97,12 @@ export function apiKeyPlugin() {
     rateLimit: { enabled: false },
     references: "organization",
     requireName: true,
-    schema: { apikey: { fields: { referenceId: "organizationId" } } },
+    schema: {
+      apikey: {
+        modelName: "apiKey",
+        fields: { referenceId: "organizationId" },
+      },
+    },
     startingCharactersConfig: { charactersLength: 8 },
   });
 }

@@ -164,7 +164,7 @@ Table files import from `drizzle-orm/pg-core`:
 // packages/db/src/schema/waitlist.ts
 import { pgTable, serial, text, timestamp } from "drizzle-orm/pg-core";
 
-export const waitlist = pgTable("waitlist", {
+export const waitlistEntries = pgTable("waitlist_entries", {
   id: serial("id").primaryKey(),
   email: text("email").notNull().unique(),
   createdAt: timestamp("created_at").notNull().defaultNow(),

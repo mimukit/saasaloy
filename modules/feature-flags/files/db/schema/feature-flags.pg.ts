@@ -21,7 +21,7 @@ import {
 // A key with no row is not an error: `flag()` falls back to the code default in
 // `packages/feature-flags/src/index.ts`. A row appears the first time somebody toggles the
 // flag, which is why nothing seeds this table at install time.
-export const featureFlag = pgTable("feature_flag", {
+export const featureFlags = pgTable("feature_flags", {
   // `timestamptz`, matching the millisecond integers the SQLite twin stores: both come back
   // as a `Date` with sub-second precision, which is what makes a route body port between
   // the two drivers unchanged.
@@ -53,11 +53,11 @@ export const featureFlag = pgTable("feature_flag", {
 // no row inherits the global one — the absence is the inheritance, so turning an override
 // off means deleting the row rather than storing "same as global".
 //
-// `flagKey` is the key text, not a foreign key to `feature_flag.id`. A global row only
+// `flagKey` is the key text, not a foreign key to `feature_flags.id`. A global row only
 // exists once somebody has toggled the flag, so an override can legitimately be the first
 // row either table has for that key, and a constraint would forbid the ordinary case.
-export const featureFlagOverride = pgTable(
-  "feature_flag_override",
+export const featureFlagOverrides = pgTable(
+  "feature_flag_overrides",
   {
     createdAt: timestamp("created_at", { mode: "date", withTimezone: true })
       .notNull()
@@ -76,7 +76,7 @@ export const featureFlagOverride = pgTable(
       .defaultNow(),
   },
   (table) => [
-    uniqueIndex("feature_flag_override_key_tenant_idx").on(
+    uniqueIndex("feature_flag_overrides_key_tenant_idx").on(
       table.flagKey,
       table.tenantId
     ),

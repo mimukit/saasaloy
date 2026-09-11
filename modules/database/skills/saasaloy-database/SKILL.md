@@ -74,7 +74,7 @@ names it.
 // packages/db/src/schema/waitlist.ts
 import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";
 
-export const waitlist = sqliteTable("waitlist", {
+export const waitlistEntries = sqliteTable("waitlist_entries", {
   id: integer("id").primaryKey({ autoIncrement: true }),
   email: text("email").notNull().unique(),
   createdAt: integer("created_at", { mode: "timestamp" }).notNull(),
@@ -85,7 +85,7 @@ That's the whole step, with no edit anywhere else. Two mechanisms both react to 
 
 - **Runtime:** `src/schema.ts` (the schema barrel) merges every `src/schema/*.ts` into one `schema`
   object via Vite's `import.meta.glob`, which the api Worker's Vite bundles. The driver's `getDb`
-  passes that object to Drizzle, so `db.query.waitlist` and relational queries work.
+  passes that object to Drizzle, so `db.query.waitlistEntries` and relational queries work.
 - **Migrations:** the driver's `drizzle.config.ts` points drizzle-kit at the same
   `./src/schema/*.ts` glob, so `db:generate` sees the new table and emits SQL for it.
 
@@ -125,6 +125,25 @@ A plugin or a module that adds columns to a table puts them in the group they be
 
 The rule holds for the first migration only. Postgres adds a new column at the end of the physical table and cannot move it, so a column that a later migration adds lands after `updated_at` in the database. Still declare it in its group in the table file. Do not rebuild a table that holds data only to restore the order.
 
+## Table names
+
+Every table name is plural and snake_case: `users`, `feature_flags`, `billing_subscriptions`. The Drizzle export is the camelCase form of the same plural (`featureFlags`), and the file is kebab-case (`feature-flags.ts`). A singular table name is never the rule, whichever module defines the table.
+
+- **Pluralize the last word only.** `feature_flag_overrides`, not `feature_flags_overrides`. A join table names both sides and pluralizes the last one: `team_members`.
+- **Keep a column singular.** A foreign key names the singular row it points at, `user_id` and `organization_id`, never `users_id`.
+- **Name an index after the plural table.** Write `<table>_<columns>_idx`, for example `sessions_user_id_idx`. Drizzle names foreign keys from the table names on its own.
+- **Use a count noun for a mass noun.** A table of waitlist rows is `waitlist_entries`, and a table of audit rows is `audit_events`. Do not append an `s` to a word that has no plural.
+
+**Better Auth's tables follow the rule too.** `src/schema/auth.ts` exports `users`, `sessions`, `accounts` and `verifications`, and `packages/auth/src/auth.ts` passes `usePlural: true` to `drizzleAdapter`. The adapter never reads the SQL table name. It finds a table by its **export key** in the schema object, and `usePlural` changes the model name it asks for from `user` to `users`. Three consequences:
+
+- Removing `usePlural`, or exporting a singular key, makes every auth call throw `The model "user" was not found in the schema object`. Sign-up and sign-in stop working, and `tsc` does not catch it.
+- A Better Auth plugin, or a module that adds auth tables, must export plural keys and plural table names: `organizations`, `members`, `invitations`. A snapshot that arrives singular fails the same way, so rename it when you add it.
+- `usePlural` only appends an `s`, and it appends it to a custom `modelName` too (`getModelName` in `@better-auth/core`). The export key must therefore be `<modelName>s`. When a plain `s` gives the wrong word, set the plugin's `modelName` to the stem that takes the `s`, and name the SQL table correctly in `pgTable()` or `sqliteTable()`. The adapter never reads the SQL name, so the two can differ. `api-keys` does this: `modelName: "apiKey"` gives the export `apiKeys` on the `api_keys` table. `billing-stripe` sets `modelName: "billingSubscription"`, so the export is `billingSubscriptions`. Re-check each plugin's model names when you add it and on every `better-auth` version bump.
+
+A raw SQL statement uses the plural name without quotes: `select email, role from users`. The singular `user` is a reserved word in Postgres, and the plural form avoids the quoting.
+
+Renaming a table that already holds data is a migration, not an edit. `db:generate` asks whether the table was renamed or dropped and created again. Answer "renamed", then read the SQL before you apply it.
+
 ## A table is not a request schema
 
 `src/schema/<name>.ts` describes the column shape a row is stored in. It is not the shape a client
@@ -146,11 +165,11 @@ Drizzle its relational metadata in `getDb`:
 
 ```ts
 // packages/db/src/repositories/waitlist.ts
-import { waitlist } from "../schema/waitlist";
+import { waitlistEntries } from "../schema/waitlist";
 import type { Db } from "../client";
 
 export function listWaitlist(db: Db) {
-  return db.select().from(waitlist);
+  return db.select().from(waitlistEntries);
 }
 ```
 
@@ -169,21 +188,21 @@ Once `multitenant` is installed, a table a request reads on behalf of one organi
 **tenant column convention**, and its repository goes through `forTenant` rather than raw `db`:
 
 ```ts
-// packages/db/src/schema/project.ts
-export const project = sqliteTable(
-  "project",
+// packages/db/src/schema/projects.ts
+export const projects = sqliteTable(
+  "projects",
   { id: text("id").primaryKey(), organizationId: tenantColumn(), name: text("name").notNull() },
-  (table) => [tenantIndex(table, "project")]
+  (table) => [tenantIndex(table, "projects")]
 );
 
-// packages/db/src/repositories/project.ts
+// packages/db/src/repositories/projects.ts
 export function listProjects(db: Db, tenantId: TenantId) {
-  return forTenant(db, tenantId).select(project);
+  return forTenant(db, tenantId).select(projects);
 }
 ```
 
 `tenantColumn()` and `tenantIndex()` come from `@repo/db/tenant-column` and expand to
-`text("organization_id").notNull().references(() => organization.id)` plus one index. The property
+`text("organization_id").notNull().references(() => organizations.id)` plus one index. The property
 name has to be `organizationId`: `forTenant` reads it, so a table naming it `orgId` does not fit
 `TenantTable` even when the column underneath is right.
 

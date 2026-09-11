@@ -1,6 +1,6 @@
 ---
 name: saasaloy-entitlements
-description: Runbook for the entitlements feature — resolving what a subject's plan allows from plans.ts and the billing_subscription projection, gating a route with requireFeature or requireWithinLimit, and reading the 402 it returns. Use when adding a feature flag or a numeric limit to a plan, gating an API route behind a plan, or working out why a subject resolves to the free plan.
+description: Runbook for the entitlements feature — resolving what a subject's plan allows from plans.ts and the billing_subscriptions projection, gating a route with requireFeature or requireWithinLimit, and reading the 402 it returns. Use when adding a feature flag or a numeric limit to a plan, gating an API route behind a plan, or working out why a subject resolves to the free plan.
 ---
 
 # entitlements — what a plan allows, answered from your own tables
@@ -14,7 +14,7 @@ It calls no payment provider and needs none installed. A project with `billing` 
 Two sources, both yours:
 
 - `packages/billing/src/plans.ts` — the plan table, in code. `features` are booleans, `limits` are numbers, `-1` means unmetered. Exactly one plan carries no `providerIds`, and that one is the default.
-- `billing_subscription` — the projection, written only from the event path.
+- `billing_subscriptions` — the projection, written only from the event path.
 
 ## The resolution rule
 
