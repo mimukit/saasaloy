@@ -97,6 +97,34 @@ That's the whole step, with no edit anywhere else. Two mechanisms both react to 
 Tables are the one place the dialect leaks into the core. A schema written against one driver's
 dialect does not port to the other by itself.
 
+
+## Column order
+
+Every table declares its columns in one fixed order. Drizzle emits `CREATE TABLE` columns in the order of the object's keys, so the table file decides the order a person sees in `psql`, in a dump and in a database client. Alphabetical order is never the rule, and neither is the order a field happened to be added in. Better Auth's tables in `src/schema/auth.ts` follow the same rule: the adapter matches columns by property name, so the order is invisible to it.
+
+Declare columns in these groups, top to bottom. Skip a group the table does not have.
+
+| # | Group | What goes in it | Examples |
+| --- | --- | --- | --- |
+| 1 | Primary key | `id()`, always the first column. `uuid` with the `uuidv7()` default, on every table, Better Auth's included. | `id` |
+| 2 | Row identifiers | The other names this row is known by, in this order: the customer-facing number, then the import keys. | `display_number`, `legacy_id`, `legacy_number` |
+| 3 | References | Foreign keys, the owner first (`user_id`, `order_id`), then other foreign keys, then soft references to rows or systems with no foreign key. | `user_id`, `affiliate_user_id`, `payment_id`, `legacy_product_id`, `gateway_tran_id`, `coupon_id` |
+| 4 | Defining data | The columns that say what the row is, most-read first. | `type`, `name`, `email`, `url`, `provider_id`, `token` |
+| 5 | Amounts | Money, rates, quantities, weights and points. A currency code sits directly before the amounts it applies to. | `currency`, `price`, `amount`, `quantity`, `weight` |
+| 6 | Status and lifecycle | `status` first, then its reason, its flags, the time it changed, and who changed it. | `status`, `cancel_reason`, `verified`, `verified_at`, `verified_by_user_id`, `expires_at` |
+| 7 | Detail | Long free text, import history, raw payloads and `jsonb` documents, read with the row but never filtered on. | `description`, `overview`, `account_type`, `route`, `others` |
+| 8 | Timestamps | `...timestamps()`, always last: `created_at`, then `updated_at`. | `created_at`, `updated_at` |
+
+Three tie-breaks settle the order inside a group:
+
+- Put a companion column directly after the column it qualifies: `email_verified` after `email`, `access_token_expires_at` after `access_token`, `foreign_price` after `foreign_currency`.
+- Put a column that records who changed a state beside that state, in group 6, even when it is a foreign key. `verified_by_user_id` goes after `verified_at`, not with `user_id`.
+- Otherwise put the column a query or a screen reads most often first.
+
+A plugin or a module that adds columns to a table puts them in the group they belong to, with a `--- <plugin> ---` comment above them. It does not append them after the timestamps.
+
+The rule holds for the first migration only. Postgres adds a new column at the end of the physical table and cannot move it, so a column that a later migration adds lands after `updated_at` in the database. Still declare it in its group in the table file. Do not rebuild a table that holds data only to restore the order.
+
 ## A table is not a request schema
 
 `src/schema/<name>.ts` describes the column shape a row is stored in. It is not the shape a client
