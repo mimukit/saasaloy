@@ -44,7 +44,7 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `billing` is the capability that scaffolds `packages/billing` (`@repo/billing`): a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscription`, and a provider registry, with zero runtime dependencies and no payment vendor named anywhere in it. `BILLING_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0034 for why a payment capability takes providers even though the project owns the table.
 
-A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `queue-cloudflare`, `queue-memory`, `billing-stripe`, `billing-console`) is a narrow feature: one file into a
+A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `billing-stripe`, `billing-console`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.

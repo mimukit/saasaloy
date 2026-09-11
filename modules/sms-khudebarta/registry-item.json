@@ -1,0 +1,29 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "sms-khudebarta",
+  "type": "saasaloy:feature",
+  "dependsOn": ["sms"],
+  "dependencies": [],
+  "envVars": {
+    "KHUDEBARTA_API_KEY": "Khudebarta API key, from the Khudebarta portal under the account's API settings, issued together with the secret key. Read from apps/api/.dev.vars in local dev and from a Workers secret (`wrangler secret put KHUDEBARTA_API_KEY`) in production. Unset, every send through this provider throws SmsError(\"provider_error\") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError(\"account_error\") with providerCode \"-66\".",
+    "KHUDEBARTA_SECRET_KEY": "Khudebarta secret key, issued in the Khudebarta portal alongside KHUDEBARTA_API_KEY. Read from apps/api/.dev.vars in local dev and from a Workers secret (`wrangler secret put KHUDEBARTA_SECRET_KEY`) in production. Unset, every send through this provider throws SmsError(\"provider_error\") before the request is built; set but wrong, the gateway rejects the send and it surfaces as SmsError(\"account_error\") with providerCode \"-67\".",
+    "KHUDEBARTA_API_URL": "Base URL of the Khudebarta gateway, without a trailing path. Optional: it defaults to https://portal.khudebarta.com:3770, and only an account Khudebarta assigned a different host or port needs to set it. It must use HTTPS. Cloudflare Workers strip a custom port from a plain `http://` subrequest, so an http URL with a port silently lands on port 80 and every send fails against the wrong service. The provider does not check this for you."
+  },
+  "patches": [
+    {
+      "file": "packages/sms/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "sms",
+      "arrayProp": "providers",
+      "call": "khudebarta",
+      "import": {
+        "name": "khudebarta",
+        "from": "./providers/khudebarta"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/khudebarta.ts", "target": "@sms/providers/khudebarta.ts" }
+  ],
+  "scaffolds": []
+}
