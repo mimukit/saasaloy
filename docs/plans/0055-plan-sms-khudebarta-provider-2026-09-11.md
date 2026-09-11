@@ -88,7 +88,7 @@ modules/sms-khudebarta/
   files/khudebarta.test.ts   →  repo-only, runs under `pnpm test:modules`
 ```
 
-### Phase 1: the descriptor
+### Phase 1: the descriptor (#146)
 
 `modules/sms-khudebarta/registry-item.json`. `type: "saasaloy:feature"`, `dependsOn: ["sms"]`, empty `dependencies` and `scaffolds`. One `plugin-array` patch on `packages/sms/src/index.ts` registering `khudebarta` into `providers`. One file entry targeting `@sms/providers/khudebarta.ts`.
 
@@ -100,7 +100,7 @@ modules/sms-khudebarta/
 
 The sender comes from the capability's existing `SMS_FROM`, so this module declares no env var of its own for it.
 
-### Phase 2: the provider
+### Phase 2: the provider (#146)
 
 `files/khudebarta.ts`, one exported factory `khudebarta(): SmsProvider` with `name: "khudebarta"`.
 
@@ -113,7 +113,7 @@ The sender comes from the capability's existing `SMS_FROM`, so this module decla
 - Do not touch `estimatedSegments`, do not retry, do not sleep, do not truncate.
 - Map a thrown `fetch` failure, including an abort, to `SmsError("provider_error", …, { retryable: false, cause })`.
 
-### Phase 3: the test
+### Phase 3: the test (#146)
 
 `modules/sms-khudebarta/provider.ts`, a one-line shim re-exporting `../sms/files/src/provider`, so `files/khudebarta.ts`'s `../provider` import resolves in this repo the way it will in a generated project. `billing-console/index.ts` carries the same shim with a comment explaining why it is not shipped; copy that shape.
 
@@ -127,7 +127,7 @@ The sender comes from the capability's existing `SMS_FROM`, so this module decla
 - A missing `from` throws `invalid_message`; a missing credential throws `provider_error`.
 - The request body carries `toUser` with the `+` stripped.
 
-### Phase 4: the capability runbook
+### Phase 4: the capability runbook (#146)
 
 Update `modules/sms/skills/saasaloy-sms/SKILL.md`:
 
@@ -138,7 +138,7 @@ Update `modules/sms/skills/saasaloy-sms/SKILL.md`:
 - Correct the claim that there is no provider with an account to fail.
 - State the two operational limits: one subrequest per recipient against Cloudflare's 50-free / 1000-paid cap, so a broadcast belongs on the `queue` capability; and the 15-second request timeout, whose abort is not retryable because the message may already have been accepted and billed.
 
-### Phase 5: registry wiring and verification
+### Phase 5: registry wiring and verification (#146)
 
 There is no registry index file. `modules/` is the registry, discovered by directory, so the only listings to update are two hand-maintained prose tables. `scripts/build-cli-readme.ts` does not generate either.
 
