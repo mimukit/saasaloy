@@ -23,7 +23,7 @@ _Avoid: placement, install step._
 A unit of capability or feature installed by `saasaloy add`.
 
 ### Capability module
-A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, `sms`, and the Phase-3 set (`queue`, which absorbs `cron` and `workflows`, plus `storage`, `kv`, `realtime`, `ai`, `observability`, `ratelimit`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)). A capability with more than one possible implementation scaffolds only the neutral part and leaves the rest to a [provider module](#provider-module) or a [driver module](#driver-module); the system-of-record test picks which ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `database` splits from `database-d1` and `database-postgres` on the driver side ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md)), `email` from `email-cloudflare` and `email-console` on the provider side.
+A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, `sms`, and the Phase-3 set (`queue`, which absorbs `cron` and `workflows`, plus `storage`, `kv`, `realtime`, `ai`, `observability`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)). A capability with more than one possible implementation scaffolds only the neutral part and leaves the rest to a [provider module](#provider-module) or a [driver module](#driver-module); the system-of-record test picks which ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `database` splits from `database-d1` and `database-postgres` on the driver side ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md)), `email` from `email-cloudflare` and `email-console` on the provider side.
 
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
@@ -166,6 +166,28 @@ The first 12 hexadecimal characters of the SHA-256 hash for `packages/ui/src/sty
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
+
+## Key-value, limits & flags
+
+### Namespace
+The owning segment at the front of every `kv` key, so two modules cannot collide on the same string. `buildKey({ namespace, parts })` joins the namespace and its parts with `:`, which is why neither a namespace nor a part may contain that character, and a built key over 512 bytes is refused with `invalid_key` rather than truncated. A namespace is a naming rule inside one store, not a second store: on Workers KV every namespaced key still lives in the one `KV` binding.
+_Avoid: prefix, bucket, partition. Avoid using it for Cloudflare's own `kv_namespaces` binding entry, which is the store itself._
+
+### Policy
+A **named** rate limit registered in `packages/kv` through `definePolicy`, carrying the name and nothing else across the contract: `consume({ policy, key })` takes `"strict"`, never a number. The numbers live with the provider (`RL_<NAME>` entries under `ratelimits` in `wrangler.jsonc` on Cloudflare), because the Rate Limiting binding fixes its `limit` and `period` at config time and reports no count back. An unregistered policy name raises `not_supported`. The two halves can drift, so `saasaloy doctor` checks that every registered policy has a matching `RL_<NAME>` binding, by name only.
+_Avoid: rule, tier, quota. A policy is not a counter; the contract has no `increment`._
+
+### Flag
+A named switch read through the typed `flag(key, { subjectId, tenantId })` helper, either boolean or a percentage rollout. The database is the source of truth and the KV document is a published copy: an admin toggle writes both, a reader never writes on a hit, and an isolate-local cache in front of KV means a change reaches a warm Worker in about 70 seconds. Resolution runs tenant override, then global row, then the default written in code. A percentage flag buckets a subject with a synchronous FNV-1a hash, so the same subject lands in the same bucket on every request.
+_Avoid: toggle (that is the admin action), experiment, A/B test._
+
+### Kill switch
+A [flag](#flag) under the `kill.` prefix that guards a whole integration rather than one feature's behaviour: `assertEnabled("payments")` throws while `kill.payments` is off, and returns while it is on. It exists so an operator can shut payments, AI or email off without a deploy.
+_Avoid: circuit breaker, which trips itself on errors. A person turns a kill switch._
+
+### Maintenance mode
+The reserved `system.maintenance` [flag](#flag). While it is on, a normal request gets a custom 503 page, and an admin session plus a configured path list pass through, so the operator can still reach the app that turned it on.
+_Avoid: downtime, outage. Maintenance mode is deliberate._
 
 ## The two repos
 

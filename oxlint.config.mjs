@@ -227,6 +227,7 @@ export default defineConfig({
         "modules/auth/files/**",
         "modules/database/files/**",
         "modules/email*/files/**",
+        "modules/kv*/files/**",
         "modules/logger*/files/**",
         "modules/queue*/files/**",
       ],

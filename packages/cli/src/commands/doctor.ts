@@ -5,8 +5,10 @@ import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
   checkPartialInstalls,
+  checkPolicyBindings,
   checkProject,
   checkTarget,
+  readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
 import type { BaseReport, ModuleReport } from "../lib/doctor.js";
@@ -125,9 +127,14 @@ async function reportProject(path: string): Promise<number> {
   note(wrapForNote(renderBase(base)), "Base");
   // Two halves of the same question: a module installed that owns nothing (#107), and a
   // module that owns work but was never marked installed (#49).
+  // A third question, asked only on a project running `kv-cloudflare`: does every rate
+  // limit policy registered in `packages/kv` have the `RL_<NAME>` binding its `consume`
+  // resolves to (#129)?
+  const policyState = await readPolicyState(path, config.installed);
   const findings = [
     ...checkProject({ config, manifest }),
     ...checkPartialInstalls({ installed: config.installed, manifest }),
+    ...(policyState ? checkPolicyBindings(policyState) : []),
   ];
   if (findings.length === 0) {
     const count = config.installed.length;

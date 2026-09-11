@@ -1,0 +1,23 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "kv-memory",
+  "type": "saasaloy:feature",
+  "dependsOn": ["kv"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/kv/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "kv",
+      "arrayProp": "providers",
+      "call": "memory",
+      "import": {
+        "name": "memory",
+        "from": "./providers/memory"
+      }
+    }
+  ],
+  "files": [{ "path": "files/memory.ts", "target": "@kv/providers/memory.ts" }],
+  "scaffolds": []
+}

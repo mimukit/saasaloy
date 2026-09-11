@@ -1,0 +1,43 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "kv",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {
+    "KV_PROVIDER": "Which installed provider stores values: `cloudflare` (add kv-cloudflare) or `memory` (add kv-memory). Always required — there is no default, so a deploy never silently swaps its store and a test run never silently reaches a real one.",
+    "KV_KEY_PREFIX": "Optional prefix put in front of every key `buildKey` produces (e.g. `staging:`). Lets two environments share one namespace without colliding. Empty by default."
+  },
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/kv",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/kv",
+      "aliases": { "@kv": "packages/kv/src" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/src/index.ts", "target": "src/index.ts" },
+        { "path": "files/src/define.ts", "target": "src/define.ts" },
+        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
+        { "path": "files/src/keys.ts", "target": "src/keys.ts" },
+        { "path": "files/src/cached.ts", "target": "src/cached.ts" },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-kv"]
+  }
+}

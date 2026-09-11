@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,10 +8,14 @@ import {
   checkBase,
   checkModule,
   checkPartialInstalls,
+  checkPolicyBindings,
   checkProject,
   checkTarget,
+  KV_INDEX_FILE,
+  readPolicyState,
   registryModuleNames,
   resolveDoctorTarget,
+  WRANGLER_FILE,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
 import { hashContent } from "./fs-utils.js";
@@ -514,5 +518,184 @@ describe(checkProject, () => {
 
     expect(findings).toHaveLength(1);
     expect(findings[0]?.module).toBe("auth");
+  });
+});
+
+// #129. The rate limit policy rule, run over plain sources: every policy the `kv`
+// registry holds must have its `RL_<NAME>` binding in `wrangler.jsonc`. Names only — the
+// numbers on either side are allowed to differ, and do.
+const POLICY_SOURCE = `import { definePolicy } from "../define";
+
+export function strictPolicy() {
+  return definePolicy({ limit: 10, name: "strict", periodSeconds: 10 });
+}
+
+export function defaultPolicy() {
+  return definePolicy({ limit: 100, name: "default", periodSeconds: 60 });
+}
+`;
+
+const KV_INDEX_SOURCE = `import { defineKv } from "./define";
+import { defaultPolicy, strictPolicy } from "./policies/ratelimit";
+
+export const kv = defineKv({
+  policies: [strictPolicy(), defaultPolicy()],
+  providers: [],
+});
+`;
+
+function wranglerWith(...names: string[]): string {
+  const entries = names
+    .map(
+      (name, index) =>
+        `    { "name": "${name}", "namespace_id": "100${index + 1}", "simple": { "limit": 10, "period": 10 } }`
+    )
+    .join(",\n");
+  return `{\n  // a comment, because this is jsonc\n  "name": "api",\n  "ratelimits": [\n${entries}\n  ]\n}\n`;
+}
+
+function policyArgs(
+  wrangler: string
+): Parameters<typeof checkPolicyBindings>[0] {
+  return {
+    index: KV_INDEX_SOURCE,
+    policySources: { "./policies/ratelimit": POLICY_SOURCE },
+    wrangler,
+  };
+}
+
+describe(checkPolicyBindings, () => {
+  it("says nothing when every policy has its binding", () => {
+    expect(
+      checkPolicyBindings(policyArgs(wranglerWith("RL_STRICT", "RL_DEFAULT")))
+    ).toStrictEqual([]);
+  });
+
+  it("names the missing binding, not the policy's numbers", () => {
+    const findings = checkPolicyBindings(
+      policyArgs(wranglerWith("RL_DEFAULT"))
+    );
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.module).toBe("ratelimit");
+    expect(findings[0]?.where).toBe("/policies/strict");
+    expect(findings[0]?.message).toContain("RL_STRICT");
+  });
+
+  it("reads the name off definePolicy, not off the factory's own name", () => {
+    // `defaultPolicy()` registers the policy called "default": `default` is a reserved
+    // word, so the export cannot be named after it.
+    const findings = checkPolicyBindings(policyArgs(wranglerWith("RL_STRICT")));
+
+    expect(findings.map((f) => f.where)).toStrictEqual(["/policies/default"]);
+    expect(findings[0]?.message).toContain("RL_DEFAULT");
+  });
+
+  it("ignores a number that drifted on either side", () => {
+    const args = policyArgs(
+      wranglerWith("RL_STRICT", "RL_DEFAULT").replace(
+        '"limit": 10',
+        '"limit": 500'
+      )
+    );
+    args.policySources["./policies/ratelimit"] = POLICY_SOURCE.replace(
+      "limit: 10",
+      "limit: 3"
+    );
+
+    expect(checkPolicyBindings(args)).toStrictEqual([]);
+  });
+
+  it("reports every policy when wrangler.jsonc has no ratelimits at all", () => {
+    const findings = checkPolicyBindings({
+      ...policyArgs('{ "name": "api" }\n'),
+    });
+
+    expect(findings.map((f) => f.where)).toStrictEqual([
+      "/policies/strict",
+      "/policies/default",
+    ]);
+  });
+
+  it("reads an inline definePolicy element off its own argument", () => {
+    const args = policyArgs(wranglerWith("RL_STRICT", "RL_DEFAULT"));
+    args.index = KV_INDEX_SOURCE.replace(
+      "defaultPolicy()",
+      'defaultPolicy(), definePolicy({ limit: 5, name: "burst", periodSeconds: 10 })'
+    ).replace(
+      'import { defineKv } from "./define";',
+      'import { defineKv, definePolicy } from "./define";'
+    );
+
+    const findings = checkPolicyBindings(args);
+
+    expect(findings.map((f) => f.where)).toStrictEqual(["/policies/burst"]);
+    expect(findings[0]?.message).toContain("RL_BURST");
+  });
+
+  it("reports an element whose name it cannot read, rather than skipping it", () => {
+    const args = policyArgs(wranglerWith("RL_STRICT", "RL_DEFAULT"));
+    args.index = KV_INDEX_SOURCE.replace(
+      "defaultPolicy()",
+      "defaultPolicy(), mysteryPolicy()"
+    );
+
+    const findings = checkPolicyBindings(args);
+
+    expect(findings.map((f) => f.where)).toStrictEqual(["/policies/2"]);
+    expect(findings[0]?.message).toContain("index 2");
+  });
+
+  it("says nothing when no policy is registered", () => {
+    expect(
+      checkPolicyBindings({
+        index: "export const kv = defineKv({ policies: [], providers: [] });\n",
+        policySources: {},
+        wrangler: '{ "name": "api" }\n',
+      })
+    ).toStrictEqual([]);
+  });
+});
+
+describe(readPolicyState, () => {
+  let root = "";
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-policies-"));
+    await mkdir(join(root, "packages/kv/src/policies"), { recursive: true });
+    await mkdir(join(root, "apps/api"), { recursive: true });
+    await writeFile(join(root, KV_INDEX_FILE), KV_INDEX_SOURCE);
+    await writeFile(
+      join(root, "packages/kv/src/policies/ratelimit.ts"),
+      POLICY_SOURCE
+    );
+    await writeFile(join(root, WRANGLER_FILE), wranglerWith("RL_DEFAULT"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { force: true, recursive: true });
+  });
+
+  it("reads the index, the policy file and wrangler.jsonc", async () => {
+    const state = await readPolicyState(root, ["kv", "kv-cloudflare"]);
+
+    expect(state).toBeDefined();
+    expect(checkPolicyBindings(state!).map((f) => f.where)).toStrictEqual([
+      "/policies/strict",
+    ]);
+  });
+
+  it("does not apply without kv-cloudflare — no other provider reads wrangler.jsonc", async () => {
+    await expect(
+      readPolicyState(root, ["kv", "kv-memory"])
+    ).resolves.toBeUndefined();
+  });
+
+  it("does not apply before kv is installed", async () => {
+    await rm(join(root, KV_INDEX_FILE));
+
+    await expect(
+      readPolicyState(root, ["kv-cloudflare"])
+    ).resolves.toBeUndefined();
   });
 });

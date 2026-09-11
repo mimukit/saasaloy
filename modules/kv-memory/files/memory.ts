@@ -1,0 +1,265 @@
+import { KvError } from "../provider";
+import type {
+  ConsumeResult,
+  KvEnv,
+  KvListOptions,
+  KvListResult,
+  KvProvider,
+  KvSetOptions,
+  ResolvedConsumeRequest,
+} from "../provider";
+
+// The local provider: a `Map` in this Worker's own memory. No account, no binding, no
+// network — which is what makes `pnpm dev` and `pnpm test` work on a machine that
+// cannot reach Cloudflare (AGENTS.md, "Ship a local provider").
+//
+// Set `KV_PROVIDER=memory` to select it. It registers in the `providers` array in
+// packages/kv/src/index.ts exactly like any other provider, so the key building, the
+// JSON encoding, the size cap, the TTL floor and the error normalization under test are
+// the real ones; only the store differs.
+//
+// Two things it is honestly better at than `kv-cloudflare`, and both are traps if you
+// design around them:
+//
+// - **It is immediately consistent.** A write is readable on the next line. Workers KV
+//   takes up to 60 seconds to propagate, so a route that passes here can still fail in
+//   production.
+// - **It counts exactly.** `consume` runs a real fixed window and fills in `remaining`
+//   and `resetAt`. Cloudflare's Rate Limiting binding returns `{ success }` alone and
+//   counts per location, so a test that asserts on `remaining` is asserting about this
+//   provider, not about the contract.
+//
+// It is also per-isolate. Two `wrangler dev` workers, or two isolates of one deployed
+// Worker, hold two unrelated maps. That is fine for development and for a test, and
+// wrong for anything shared.
+
+interface Entry {
+  value: string;
+  /** Unix milliseconds, or `undefined` for an entry that never expires. */
+  expiresAt?: number;
+}
+
+interface Window {
+  count: number;
+  /** Unix milliseconds when this window ends and the count restarts. */
+  resetAt: number;
+}
+
+/** Workers KV's own default page size, so `list` pages the same way here. */
+const DEFAULT_PAGE_SIZE = 1000;
+
+/** KV's cap on one `list` page. */
+const MAX_PAGE_SIZE = 1000;
+
+export interface MemoryKvOptions {
+  /** Page size when `list` is called without a `limit`. Default 1000, as on KV. */
+  pageSize?: number;
+}
+
+/**
+ * The provider, plus the two handles a test needs. `reset()` empties both the store and
+ * the rate limit windows, which is what an `afterEach` wants; `size()` is the assertion
+ * surface for "the write did not land".
+ */
+export interface MemoryKvProvider extends KvProvider {
+  reset(): void;
+  size(): number;
+}
+
+export function memory(options: MemoryKvOptions = {}): MemoryKvProvider {
+  const pageSize = clampPageSize(options.pageSize ?? DEFAULT_PAGE_SIZE);
+  const entries = new Map<string, Entry>();
+  const windows = new Map<string, Window>();
+
+  /**
+   * Read through the expiry. An expired entry is dropped on the way past rather than
+   * swept on a timer: a Worker has no reliable timer, and a `setInterval` would keep an
+   * isolate alive.
+   */
+  function live(key: string, now: number): Entry | undefined {
+    const entry = entries.get(key);
+    if (!entry) {
+      return undefined;
+    }
+    if (entry.expiresAt !== undefined && now >= entry.expiresAt) {
+      entries.delete(key);
+      return undefined;
+    }
+    return entry;
+  }
+
+  return {
+    consume(_env: KvEnv, request: ResolvedConsumeRequest): ConsumeResult {
+      const { key, policy } = request;
+      const now = Date.now();
+      const periodMs = policy.periodSeconds * 1000;
+
+      // A fixed window, not a sliding one: the count restarts on a period boundary, so
+      // a burst straddling a boundary can spend two budgets back to back. That is what
+      // Cloudflare's own limiter does, and matching it here keeps a test honest.
+      const startedAt = Math.floor(now / periodMs) * periodMs;
+      const resetAt = startedAt + periodMs;
+      const bucket = JSON.stringify([policy.name, key, startedAt]);
+
+      // Drop finished windows on the way past, for the same reason `live` does.
+      for (const [name, window] of windows) {
+        if (now >= window.resetAt) {
+          windows.delete(name);
+        }
+      }
+
+      const count = (windows.get(bucket)?.count ?? 0) + 1;
+      windows.set(bucket, { count, resetAt });
+
+      return {
+        remaining: Math.max(0, policy.limit - count),
+        resetAt,
+        success: count <= policy.limit,
+      };
+    },
+
+    delete(_env: KvEnv, key: string): Promise<void> {
+      entries.delete(key);
+      return Promise.resolve();
+    },
+
+    get(_env: KvEnv, key: string): Promise<string | null> {
+      return Promise.resolve(live(key, Date.now())?.value ?? null);
+    },
+
+    /**
+     * A real cursor, not a page number. Keys are listed in lexicographic order — the
+     * order Workers KV lists in — and the cursor carries the last key of the page just
+     * returned, so the next page starts strictly after it. A key inserted behind the
+     * cursor is therefore missed and one inserted ahead of it is seen, which is exactly
+     * how KV behaves while a namespace changes underneath a scan.
+     */
+    list(_env: KvEnv, listOptions: KvListOptions): Promise<KvListResult> {
+      const now = Date.now();
+      const prefix = listOptions.prefix ?? "";
+      const limit = clampPageSize(listOptions.limit ?? pageSize);
+      const after = decodeCursor(listOptions.cursor);
+
+      const matching: string[] = [];
+      for (const key of entries.keys()) {
+        if (key.startsWith(prefix) && live(key, now)) {
+          matching.push(key);
+        }
+      }
+      matching.sort();
+
+      const start = after === undefined ? 0 : upperBound(matching, after);
+      const keys = matching.slice(start, start + limit);
+      const complete = start + keys.length >= matching.length;
+
+      if (complete) {
+        return Promise.resolve({ complete: true, keys });
+      }
+      return Promise.resolve({
+        complete: false,
+        // Non-null by construction: an incomplete page holds at least one key.
+        cursor: encodeCursor(keys.at(-1) as string),
+        keys,
+      });
+    },
+
+    /**
+     * No floor. Memory has no propagation window, so a one-second TTL means one second
+     * and a test can watch an entry expire without sleeping for a minute.
+     */
+    minTtlSeconds: 0,
+
+    name: "memory",
+
+    reset(): void {
+      entries.clear();
+      windows.clear();
+    },
+
+    set(
+      _env: KvEnv,
+      key: string,
+      value: string,
+      setOptions: KvSetOptions
+    ): Promise<void> {
+      const { ttlSeconds } = setOptions;
+      entries.set(key, {
+        value,
+        ...(ttlSeconds === undefined
+          ? {}
+          : { expiresAt: Date.now() + ttlSeconds * 1000 }),
+      });
+      return Promise.resolve();
+    },
+
+    size(): number {
+      const now = Date.now();
+      let count = 0;
+      for (const key of entries.keys()) {
+        if (live(key, now)) {
+          count += 1;
+        }
+      }
+      return count;
+    },
+  };
+}
+
+function clampPageSize(limit: number): number {
+  if (!Number.isInteger(limit) || limit <= 0) {
+    throw new KvError(
+      "not_supported",
+      `A list page size must be a positive whole number, got ${String(limit)}.`
+    );
+  }
+  return Math.min(limit, MAX_PAGE_SIZE);
+}
+
+// The cursor is opaque on purpose: hex over the key's UTF-8 bytes. It reads as "do not
+// parse me" loudly enough that nobody builds one by hand, which is the habit that breaks
+// the day the provider changes how it pages.
+const encoder = new TextEncoder();
+const decoder = new TextDecoder();
+
+const HEX_CURSOR = /^(?:[0-9a-f]{2})*$/;
+
+function encodeCursor(key: string): string {
+  return Array.from(encoder.encode(key), (byte) =>
+    byte.toString(16).padStart(2, "0")
+  ).join("");
+}
+
+function decodeCursor(cursor: string | undefined): string | undefined {
+  if (cursor === undefined) {
+    return undefined;
+  }
+  if (!HEX_CURSOR.test(cursor)) {
+    throw new KvError(
+      "not_supported",
+      "The list cursor is not one this provider issued. Pass back the `cursor` from " +
+        "the previous page unchanged."
+    );
+  }
+
+  const bytes = new Uint8Array(cursor.length / 2);
+  for (let index = 0; index < bytes.length; index += 1) {
+    bytes[index] = Number.parseInt(cursor.slice(index * 2, index * 2 + 2), 16);
+  }
+  return decoder.decode(bytes);
+}
+
+/** Index of the first entry in the sorted array strictly greater than `key`. */
+function upperBound(sorted: string[], key: string): number {
+  let low = 0;
+  let high = sorted.length;
+  while (low < high) {
+    const middle = Math.floor((low + high) / 2);
+    // Non-null by construction: `middle` is always inside the array.
+    if ((sorted[middle] as string) <= key) {
+      low = middle + 1;
+    } else {
+      high = middle;
+    }
+  }
+  return low;
+}

@@ -111,7 +111,7 @@ one is its own module:
 | `envVars` | none — the binding *is* the credential | the API key |
 
 One mode below per capability that owns a provider interface. The rules above hold for all of them;
-each mode covers only what is different. Add a mode (`kv`, `storage`, …) when another capability grows
+each mode covers only what is different. Add a mode (`storage`, …) when another capability grows
 an interface — and read the mode you're writing for, not the one you remember: `sms` and `email`
 look alike and disagree about `retryable`, which is the difference that costs money.
 
@@ -436,6 +436,103 @@ job inline in the same Worker, records each `ctx.step` name and `ctx.sleep` dura
 trigger. That recording surface sits on the value the factory returned, not on `QueueProvider`:
 the core knows nothing about it, and a test reaches it directly. Copy that shape rather than
 inventing a mock.
+
+## Mode: `kv`
+
+**Interface:** `KvProvider` in `packages/kv/src/provider.ts`. `kv-cloudflare` is the binding
+flavour, `kv-memory` the local one, and the capability's runbook is
+`modules/kv/skills/saasaloy-kv/SKILL.md`.
+
+```ts
+import { KvError } from "../provider";
+import type {
+  ConsumeResult, KvEnv, KvListOptions, KvListResult, KvProvider, KvSetOptions,
+  ResolvedConsumeRequest,
+} from "../provider";
+
+export function upstash(): KvProvider {
+  return {
+    name: "upstash",       // the value KV_PROVIDER must hold to select this provider
+    minTtlSeconds: 0,      // the shortest TTL this store accepts, in seconds
+    async get(env: KvEnv, key: string): Promise<string | null> { /* … */ },
+    async set(env: KvEnv, key: string, value: string, options: KvSetOptions) { /* … */ },
+    async delete(env: KvEnv, key: string): Promise<void> { /* … */ },
+    async list(env: KvEnv, options: KvListOptions): Promise<KvListResult> { /* … */ },
+    // optional — leave it off if the store cannot count
+    async consume(env: KvEnv, request: ResolvedConsumeRequest): Promise<ConsumeResult> { /* … */ },
+  };
+}
+```
+
+Six contract points that are easy to get wrong, and this capability's core does more for you than
+`email`'s does:
+
+- **You store strings, and nothing else.** The core owns `JSON.stringify` / `JSON.parse`, the
+  25 MiB `too_large` check, the 512-byte key check and the namespace rules. Don't re-encode, don't
+  re-measure, and don't build a key. `set` hands you a string that has already passed every check.
+- **`minTtlSeconds` is a declaration, not a clamp.** The core compares against it and throws
+  `invalid_ttl` before you are called. Never round a TTL up yourself: the whole point of the floor
+  is that the same call cannot expire at a different time on a different provider with nothing in
+  the logs to say so. `options.ttlSeconds` arrives either absent or already legal.
+- **A miss returns `null` from `get`. It is not an error.** `delete` on an absent key succeeds.
+- **`list` must page with a real cursor.** Return `{ keys, cursor, complete }`, where `cursor` is
+  present exactly when `complete` is false and is **opaque** to the caller — pass through the
+  vendor's own token, or base64 something of your own. A `list` shipped without a paging test is a
+  `list` nobody has ever run past page one; `modules/kv-memory/files/memory.test.ts` pages 2,500
+  keys for that reason.
+- **`consume` receives a resolved `Policy`, and a refusal is a value.** The core looks the policy
+  name up in the table and throws `not_supported` for an unregistered one, so you never do that
+  lookup. Return `{ success: false }` when the budget is spent — never throw. `remaining` and
+  `resetAt` are **optional and must stay honest**: Cloudflare's Rate Limiting binding reports
+  `{ success }` alone, so `kv-cloudflare` returns exactly that rather than inventing a number a
+  caller would put in a `RateLimit-Remaining` header. Fill them in only if your store really counts.
+- **Omit `consume` entirely if the store cannot count.** The core then throws `not_supported`
+  naming the provider, on the first call rather than at construction. A stub returning
+  `{ success: true }` is worse than no method: it silently disables every rate limit in the project.
+
+Failure codes are `invalid_key`, `invalid_ttl`, `too_large`, `rate_limited`, `not_supported` and
+`provider_error`; the first three are usually the core's. Map the vendor's own code onto one, keep
+the raw value in `providerCode`, and set `retryable` honestly — `kv-cloudflare` parses the HTTP
+status out of `KV PUT failed: 429 …` and maps 429 and the 5xx family to retryable, everything else
+to `provider_error` / `retryable: false`.
+
+**Descriptor, binding flavour (`kv-cloudflare`):** one `kv_namespaces` entry matched on `binding`,
+three `ratelimits` entries matched on `name`, and the registration patch.
+
+```jsonc
+{
+  "name": "kv-cloudflare",
+  "type": "saasaloy:feature",
+  "dependsOn": ["kv"],
+  "dependencies": [],
+  "envVars": {},                            // the bindings are the credential
+  "patches": [
+    { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+      "bindingType": "kv_namespaces", "matchOn": "binding",
+      "entry": { "binding": "KV", "id": "<replace-me>" } },
+    { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
+      "bindingType": "ratelimits", "matchOn": "name",
+      "entry": { "name": "RL_STRICT", "namespace_id": "1001",
+                 "simple": { "limit": 10, "period": 10 } } },
+    { "file": "packages/kv/src/index.ts", "kind": "plugin-array",
+      "exportName": "kv", "arrayProp": "providers", "call": "cloudflare",
+      "import": { "name": "cloudflare", "from": "./providers/cloudflare" } }
+  ],
+  "files": [{ "path": "files/cloudflare.ts", "target": "@kv/providers/cloudflare.ts" }],
+  "scaffolds": []
+}
+```
+
+`kv_namespaces` is matched on `binding` and `ratelimits` on `name`, because that is the key each
+array is identified by — get it wrong and a second `add` appends a duplicate instead of doing
+nothing. An HTTP provider (`kv-upstash`) drops both wrangler patches and adds its SDK through a
+`package-json-dependency` patch into `packages/kv/package.json`, exactly as `email-resend` does.
+
+One repo-only wrinkle worth copying. A provider file reads `../provider`, which resolves inside a
+scaffolded project but not inside `modules/<capability>-<provider>/files/`. To run a `node:test`
+suite against the file in place, add a one-line re-export shim beside the module —
+`modules/kv-memory/provider.ts` holding `export * from "../kv/files/src/provider";` — and leave it
+out of the descriptor's `files` list so it never ships. `queue-memory` and `kv-memory` both do this.
 
 ## Mode: `billing`
 

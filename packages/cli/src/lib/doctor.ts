@@ -1,3 +1,5 @@
+import { findNodeAtLocation, getNodeValue, parseTree } from "jsonc-parser";
+import { parseModule } from "magicast";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { BASE_MODULE, baseEntries, isBaseTracked } from "./base.js";
@@ -11,6 +13,7 @@ import {
 } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
 import type { Manifest } from "./manifest.js";
+import type { ModuleImports } from "./patch/ts-ast.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
 import { isValidRange } from "./semver.js";
@@ -423,6 +426,321 @@ export function checkProject(args: ProjectCheckArgs): Finding[] {
         `installed but owns no files in .saasaloy/manifest.json — run \`saasaloy remove ${name}\` to drop it.`
       )
     );
+}
+
+// ---------------------------------------------------------------------------
+// The rate limit policy rule (#129).
+// ---------------------------------------------------------------------------
+
+/** Where `kv` keeps its registry, and the file the `plugin-array` patches write into. */
+export const KV_INDEX_FILE = "packages/kv/src/index.ts";
+/** The Worker config `kv-cloudflare` puts its `ratelimits` entries in. */
+export const WRANGLER_FILE = "apps/api/wrangler.jsonc";
+/** The provider whose limiter needs a binding per policy. Without it there is nothing to check. */
+const CLOUDFLARE_KV_MODULE = "kv-cloudflare";
+
+export interface PolicyBindingArgs {
+  /** The source of `packages/kv/src/index.ts`. */
+  index: string;
+  /** Import specifier, exactly as `index.ts` writes it, → that module's source. */
+  policySources: Record<string, string>;
+  /** The source of `apps/api/wrangler.jsonc`. */
+  wrangler: string;
+}
+
+/**
+ * Every registered rate limit policy whose `RL_<NAME>` binding is missing from
+ * `wrangler.jsonc` (#129).
+ *
+ * **Names only, never numbers.** A policy's `limit` and `periodSeconds` in
+ * `policies/ratelimit.ts` and the `limit`/`period` in `wrangler.jsonc` are two separate
+ * numbers that Cloudflare never reconciles, and the one that applies is the Worker
+ * config's. Editing only the TypeScript changes nothing on Cloudflare, and that drift is
+ * documented in the `saasaloy-ratelimit` skill rather than checked here: a project is
+ * entitled to run `kv-memory` on a tighter budget than it deploys with. A *missing*
+ * binding is different — `consume` throws `not_supported` on the first request through
+ * the route, which is a broken deploy rather than a preference.
+ *
+ * The policy array is read the same way the `plugin-array` patch writes it: through
+ * magicast, off `export const kv = defineKv({ policies: [...] })`. Two element shapes
+ * carry a name. An inline `definePolicy({ name: "burst", ... })` holds it in its own
+ * first argument. A bare factory call holds it in the `definePolicy({ name })` literal in
+ * the file that call is imported from — there the callee is not the name
+ * (`defaultPolicy()` registers `"default"`, because `default` is a reserved word).
+ *
+ * An element in neither shape is reported rather than skipped. A silent skip is the worse
+ * answer: `doctor` would print "No problems found" for a policy that throws
+ * `not_supported` on the first request.
+ */
+export function checkPolicyBindings(args: PolicyBindingArgs): Finding[] {
+  const bound = new Set(rateLimitBindingNames(args.wrangler));
+  const findings: Finding[] = [];
+
+  for (const entry of registeredPolicies(args)) {
+    if (entry.name === undefined) {
+      findings.push(
+        finding(
+          "ratelimit",
+          `/policies/${String(entry.index)}`,
+          `the policy at index ${String(entry.index)} of the \`policies\` array in ` +
+            `${KV_INDEX_FILE} has no name this check can read, so its RL_<NAME> binding ` +
+            `in ${WRANGLER_FILE} was not checked. Write it as ` +
+            `\`definePolicy({ name: "..." })\`, or as a factory exported from a file ` +
+            `under packages/kv/src/policies/.`
+        )
+      );
+      continue;
+    }
+    if (!bound.has(bindingFor(entry.name))) {
+      findings.push(
+        finding(
+          "ratelimit",
+          `/policies/${entry.name}`,
+          `policy "${entry.name}" has no ${bindingFor(entry.name)} entry in ${WRANGLER_FILE} — ` +
+            `consume({ policy: "${entry.name}" }) throws not_supported on the first request. ` +
+            `Add the binding, or drop the policy from ${KV_INDEX_FILE}.`
+        )
+      );
+    }
+  }
+
+  return findings;
+}
+
+function bindingFor(policy: string): string {
+  return `RL_${policy.toUpperCase()}`;
+}
+
+/** The `name` of every entry in wrangler.jsonc's top-level `ratelimits` array. */
+function rateLimitBindingNames(wrangler: string): string[] {
+  const root = parseTree(wrangler);
+  if (!root) {
+    return [];
+  }
+  const node = findNodeAtLocation(root, ["ratelimits"]);
+  if (node?.type !== "array") {
+    return [];
+  }
+  const names: string[] = [];
+  for (const child of node.children ?? []) {
+    const value: unknown = getNodeValue(child);
+    const name = asRecord(value).name;
+    if (typeof name === "string") {
+      names.push(name);
+    }
+  }
+  return names;
+}
+
+/** One element of the `policies` array: its index, and its name when one can be read. */
+interface RegisteredPolicy {
+  index: number;
+  name: string | undefined;
+}
+
+/** Every element of the `policies` array, in registration order. */
+function registeredPolicies(args: PolicyBindingArgs): RegisteredPolicy[] {
+  let mod;
+  try {
+    mod = parseModule(args.index);
+  } catch {
+    return [];
+  } // unparseable — `add` would have refused it, and this rule is not the place to say so
+
+  const callArg = mod.exports.kv?.$args?.[0];
+  const array: unknown = callArg?.policies;
+  if (!Array.isArray(array)) {
+    return [];
+  }
+
+  const imports = mod.imports as unknown as ModuleImports;
+  const policies: RegisteredPolicy[] = [];
+  // Indexed, not for-of: magicast's array proxy hands raw AST nodes to an iterator and
+  // the wrapped proxy (with `$callee`) only to an index read. ts-module.ts does the same.
+  // oxlint-disable-next-line typescript/prefer-for-of
+  for (let i = 0; i < array.length; i++) {
+    const element: unknown = array[i];
+    policies.push({ index: i, name: policyNameOf(element, args, imports) });
+  }
+  return policies;
+}
+
+/** The name an element of the `policies` array registers, in either shape. */
+function policyNameOf(
+  element: unknown,
+  args: PolicyBindingArgs,
+  imports: ModuleImports
+): string | undefined {
+  const callee = calleeName(element);
+  if (callee === undefined) {
+    return undefined;
+  }
+
+  // Shape one: the call is `definePolicy({ name: "burst", ... })` right here, which is
+  // the shape `define.ts`'s docblock and `index.ts`'s comment both show.
+  const inline = inlineNameArgument(element);
+  if (inline !== undefined) {
+    return inline;
+  }
+
+  // Shape two: a bare factory call, whose name lives in the file it is imported from.
+  const from = imports[callee]?.from;
+  const source =
+    typeof from === "string" ? args.policySources[from] : undefined;
+  return source === undefined ? undefined : policyNameIn(source, callee);
+}
+
+/** The `name` string literal in the first argument of a magicast function-call proxy. */
+function inlineNameArgument(element: unknown): string | undefined {
+  const args: unknown = (element as { $args?: unknown }).$args;
+  if (!Array.isArray(args)) {
+    return undefined;
+  }
+  const name: unknown = asRecord(args[0]).name;
+  return typeof name === "string" ? name : undefined;
+}
+
+function calleeName(element: unknown): string | undefined {
+  if (typeof element !== "object" || element === null) {
+    return undefined;
+  }
+  const record = element as { $type?: unknown; $callee?: unknown };
+  return record.$type === "function-call" && typeof record.$callee === "string"
+    ? record.$callee
+    : undefined;
+}
+
+/**
+ * The `name` literal of the `definePolicy({ ... })` call inside the factory `export`
+ * called `callee` — `strictPolicy` → `"strict"`.
+ *
+ * A plain AST walk rather than an evaluation: the factory is a one-line return in every
+ * file this ships, and running a project's own module to read a string would be a much
+ * larger promise than `doctor` makes anywhere else. A factory that computes its name
+ * reads as absent here and is simply not checked, which is the honest answer.
+ */
+function policyNameIn(source: string, callee: string): string | undefined {
+  let program: unknown;
+  try {
+    program = parseModule(source).$ast;
+  } catch {
+    return undefined;
+  }
+
+  const factory = findNode(
+    program,
+    (node) =>
+      (node.type === "FunctionDeclaration" ||
+        node.type === "VariableDeclarator") &&
+      asRecord(node.id).name === callee
+  );
+  if (!factory) {
+    return undefined;
+  }
+
+  const call = findNode(
+    factory,
+    (node) =>
+      node.type === "CallExpression" &&
+      asRecord(node.callee).name === "definePolicy"
+  );
+  const argument = asArray(call?.arguments)[0];
+  const property = asArray(asRecord(argument).properties).find(
+    (entry) => asRecord(asRecord(entry).key).name === "name"
+  );
+  const value = asRecord(asRecord(property).value).value;
+  return typeof value === "string" ? value : undefined;
+}
+
+/** First node in `root` (depth first) the predicate accepts. */
+function findNode(
+  root: unknown,
+  accept: (node: Record<string, unknown> & { type: string }) => boolean
+): (Record<string, unknown> & { type: string }) | undefined {
+  if (Array.isArray(root)) {
+    for (const child of root) {
+      const found = findNode(child, accept);
+      if (found) {
+        return found;
+      }
+    }
+    return undefined;
+  }
+  if (typeof root !== "object" || root === null) {
+    return undefined;
+  }
+  const node = root as Record<string, unknown> & { type?: unknown };
+  if (typeof node.type === "string") {
+    const typed = node as Record<string, unknown> & { type: string };
+    if (accept(typed)) {
+      return typed;
+    }
+  }
+  for (const [key, value] of Object.entries(node)) {
+    // recast's own bookkeeping; walking it re-walks the whole file.
+    if (key === "loc" || key === "comments" || key === "original") {
+      continue;
+    }
+    const found = findNode(value, accept);
+    if (found) {
+      return found;
+    }
+  }
+  return undefined;
+}
+
+/**
+ * Read what `checkPolicyBindings` needs off a project on disk, or `undefined` when the
+ * rule does not apply here.
+ *
+ * It applies only with `kv-cloudflare` installed. Every other provider keeps its budgets
+ * in its own store or counts them itself, so `wrangler.jsonc` says nothing about them and
+ * reporting a "missing" binding would be noise on a project that never wanted one.
+ */
+export async function readPolicyState(
+  root: string,
+  installed: string[]
+): Promise<PolicyBindingArgs | undefined> {
+  if (!installed.includes(CLOUDFLARE_KV_MODULE)) {
+    return undefined;
+  }
+  const index = await readIfPresent(resolveWithinRoot(root, KV_INDEX_FILE));
+  const wrangler = await readIfPresent(resolveWithinRoot(root, WRANGLER_FILE));
+  if (index === undefined || wrangler === undefined) {
+    return undefined;
+  }
+
+  const policySources: Record<string, string> = {};
+  for (const specifier of relativeImportsIn(index)) {
+    const source = await readIfPresent(
+      resolveWithinRoot(
+        root,
+        posix.join(posix.dirname(KV_INDEX_FILE), `${specifier}.ts`)
+      )
+    );
+    if (source !== undefined) {
+      policySources[specifier] = source;
+    }
+  }
+  return { index, policySources, wrangler };
+}
+
+/** Every relative specifier `index.ts` imports from — the candidates a policy can live in. */
+function relativeImportsIn(index: string): string[] {
+  let mod;
+  try {
+    mod = parseModule(index);
+  } catch {
+    return [];
+  }
+  const imports = mod.imports as unknown as ModuleImports;
+  const specifiers = new Set<string>();
+  for (const held of Object.values(imports)) {
+    if (typeof held?.from === "string" && held.from.startsWith(".")) {
+      specifiers.add(held.from);
+    }
+  }
+  return [...specifiers];
 }
 
 export interface DoctorTarget {
