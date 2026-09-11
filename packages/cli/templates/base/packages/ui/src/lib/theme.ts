@@ -156,10 +156,27 @@ export function installThemeToggle(): () => void {
     }
   }
 
+  // The OS half of the same job, and the reason this is not click-only. THEME_INIT_SCRIPT
+  // registers its own matchMedia listener; a host that calls this function instead does
+  // not have that script, so without this listener a visitor on `system` keeps the palette
+  // resolved at load until the next reload.
+  //
+  // It repaints only while the state is `system`. A visitor who picked light or dark said
+  // so deliberately, and the OS must not overrule that.
+  const media = window.matchMedia(OS_DARK_QUERY);
+
+  function onOsChange(): void {
+    if (getStoredTheme() === "system") {
+      setTheme("system");
+    }
+  }
+
   document.addEventListener("click", onClick);
+  media.addEventListener("change", onOsChange);
 
   return () => {
     document.removeEventListener("click", onClick);
+    media.removeEventListener("change", onOsChange);
   };
 }
 

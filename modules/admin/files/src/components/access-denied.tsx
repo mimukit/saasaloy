@@ -23,7 +23,10 @@ import { SignOutButton } from "@admin/components/sign-out-button";
 // refusal, and the guard, not the chrome, is what keeps the data out of reach.
 export function AccessDenied({ session }: { session: AdminSession }) {
   return (
-    <main className="mx-auto flex h-full max-w-lg items-center px-6 py-10">
+    // A `div`, not a `main`: this renders inside AppShell's content panel, which is
+    // already the document's `<main>`, and a nested main landmark breaks landmark
+    // navigation for a screen reader.
+    <div className="mx-auto flex h-full max-w-lg items-center px-6 py-10">
       <Card className="w-full">
         <CardHeader>
           <ShieldAlertIcon className="text-muted-foreground size-5" />
@@ -38,6 +41,6 @@ export function AccessDenied({ session }: { session: AdminSession }) {
           <SignOutButton variant="outline" />
         </CardContent>
       </Card>
-    </main>
+    </div>
   );
 }

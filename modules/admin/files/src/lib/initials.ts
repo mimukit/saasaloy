@@ -15,8 +15,11 @@ export function initialsOf(name: string): string {
     .split(/\s+/)
     .map((part) => part[0] ?? "")
     .join("")
-    .slice(0, 2)
-    .toUpperCase();
+    // Uppercase BEFORE slicing. `toUpperCase` can expand one character into two —
+    // "ß" becomes "SS" — so slicing first would return three characters and break the
+    // two-initial contract the avatar circle is sized for.
+    .toUpperCase()
+    .slice(0, 2);
 
   return initials || "?";
 }
