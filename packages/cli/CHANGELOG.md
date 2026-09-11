@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.4.0](https://github.com/mimukit/saasaloy/compare/v0.3.0...v0.4.0) (2026-09-11)
+
+### Features
+
+* **sms-khudebarta:** add the khudebarta sms provider ([ef609a9](https://github.com/mimukit/saasaloy/commit/ef609a9c7aa9145e7d076737b43873d0bd73d7c9)), references [#146](https://github.com/mimukit/saasaloy/issues/146)
+
+### Bug Fixes
+
+* **sms-khudebarta:** refuse redirects with manual mode ([b2f2dcd](https://github.com/mimukit/saasaloy/commit/b2f2dcd9f7a351567c30381061c7936373194057)), references [#146](https://github.com/mimukit/saasaloy/issues/146)
+
 ## [0.3.0](https://github.com/mimukit/saasaloy/compare/v0.2.0...v0.3.0) (2026-09-11)
 
 ### Features
