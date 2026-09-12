@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.5.0](https://github.com/mimukit/saasaloy/compare/v0.4.0...v0.5.0) (2026-09-12)
+
+### ⚠ BREAKING CHANGES
+
+* **database:** a project that already applied the singular
+  migrations must run db:generate, answer "renamed" for each table, and
+  read the SQL before applying it. Update auth before teams, api-keys
+  and billing, because usePlural and the schema rename work together.
+
+### Bug Fixes
+
+* **database:** name every table in plural snake_case ([c355f93](https://github.com/mimukit/saasaloy/commit/c355f93caa521a7ef129a59198be6d796084ae04))
+
 ## [0.4.0](https://github.com/mimukit/saasaloy/compare/v0.3.0...v0.4.0) (2026-09-11)
 
 ### Features
