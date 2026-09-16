@@ -34,9 +34,10 @@ import { planWritesUi } from "../lib/design.js";
 import { DEV_VARS_EXAMPLE, writeDevVarsExample } from "../lib/dev-vars.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
-import { loadLock, LOCK_FILE, saveLock, upsertLock } from "../lib/lock.js";
+import { persistLedger } from "../lib/ledger.js";
+import { loadLock, LOCK_FILE, upsertLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
-import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
+import { loadManifest } from "../lib/manifest.js";
 import type { Manifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -54,7 +55,7 @@ import {
 } from "../lib/requires.js";
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import type { Graph } from "../lib/resolve.js";
-import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
@@ -455,7 +456,8 @@ export async function persistState(input: PersistInput): Promise<unknown[]> {
 
   // Pin the source + ref + commit SHA per module (ADR 0012). Only the freshly installed
   // ones: an already-installed dependency keeps the SHA it was fetched at, so the lock
-  // never misstates on-disk provenance.
+  // never misstates on-disk provenance. This is a claim about a fetch rather than a
+  // record of disk, so it stays here and never enters the ledger.
   try {
     upsertLock(
       input.lock,
@@ -469,19 +471,13 @@ export async function persistState(input: PersistInput): Promise<unknown[]> {
   }
 
   // Record whatever actually landed even if a mid-plan write failed — a written file the
-  // manifest doesn't know about would classify as a conflict next run.
-  const saves: [string, () => Promise<void>][] = [
-    [MANIFEST_FILE, () => saveManifest(input.root, input.manifest)],
-    [CONFIG_FILE, () => saveConfig(input.root, input.config)],
-    [LOCK_FILE, () => saveLock(input.root, input.lock)],
-  ];
-  for (const [file, save] of saves) {
-    try {
-      await save();
-    } catch (error) {
-      failures.push(error);
-      log.warn(`Couldn't write ${file} — ${formatFailure(error)}.`);
-    }
+  // manifest doesn't know about would classify as a conflict next run. `persistLedger`
+  // owns the rule; this command owns the wording (#150).
+  for (const failure of await persistLedger(input)) {
+    failures.push(failure.error);
+    log.warn(
+      `Couldn't write ${failure.file} — ${formatFailure(failure.error)}.`
+    );
   }
 
   return failures;

@@ -3,7 +3,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RefusalError } from "./exit.js";
-import { emptyManifest, loadManifest, saveManifest } from "./manifest.js";
+import {
+  emptyManifest,
+  loadManifest,
+  recordLink,
+  recordManagedFile,
+  recordPatch,
+  saveManifest,
+  untrackLink,
+  untrackManagedFile,
+  untrackPatch,
+} from "./manifest.js";
 import type { ManifestPatch } from "./manifest.js";
 import { PATCH_KINDS } from "./patch/index.js";
 
@@ -120,5 +130,207 @@ describe("loadManifest — validation on load", () => {
     });
     await saveManifest(root, manifest);
     await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+});
+
+// #150. The record half. Seven sites used to build these entries inline, in four shapes;
+// `applier` wrote a managed entry without `adopted` while `base` wrote one with it, and
+// the patch dedupe was copied into `applier` and `updater` word for word. These tests own
+// the shapes now, so a new write site inherits them instead of re-deriving them.
+
+function patchEntry(module: string, file: string): ManifestPatch {
+  return {
+    file,
+    module,
+    patch: { file, kind: "package-json-dependency" } as ManifestPatch["patch"],
+  };
+}
+
+describe(recordManagedFile, () => {
+  it("writes module, hash and from", () => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, {
+      from: "files/x.ts",
+      hash: HASH,
+      module: "email",
+      target: "apps/api/src/x.ts",
+    });
+
+    expect(manifest.managed["apps/api/src/x.ts"]).toStrictEqual({
+      from: "files/x.ts",
+      hash: HASH,
+      module: "email",
+    });
+  });
+
+  // The drop rule from the `ManagedEntry` comment, made structural: `adopted` exists only
+  // where it is passed `true`, so a real write cannot carry it forward by accident.
+  it("keeps adopted only when it is true", () => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, {
+      adopted: true,
+      hash: HASH,
+      module: "base",
+      target: "apps/web/astro.config.mjs",
+    });
+
+    expect(manifest.managed["apps/web/astro.config.mjs"]).toStrictEqual({
+      adopted: true,
+      hash: HASH,
+      module: "base",
+    });
+  });
+
+  it.each([undefined, false])("drops adopted when it is %s", (adopted) => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, {
+      adopted,
+      hash: HASH,
+      module: "base",
+      target: "apps/web/astro.config.mjs",
+    });
+
+    expect(manifest.managed["apps/web/astro.config.mjs"]).not.toHaveProperty(
+      "adopted"
+    );
+  });
+
+  // The tool writes the file it once adopted, so the recorded hash finally describes
+  // template output and the entry earns the `overwrite` verdict again.
+  it("drops adopted when a real write replaces an adopted entry", () => {
+    const manifest = emptyManifest();
+    const target = "apps/web/astro.config.mjs";
+    recordManagedFile(manifest, {
+      adopted: true,
+      hash: HASH,
+      module: "base",
+      target,
+    });
+
+    recordManagedFile(manifest, {
+      hash: "b".repeat(64),
+      module: "base",
+      target,
+    });
+
+    expect(manifest.managed[target]).toStrictEqual({
+      hash: "b".repeat(64),
+      module: "base",
+    });
+  });
+
+  it("omits from rather than storing undefined", () => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, {
+      hash: HASH,
+      module: "email",
+      target: "apps/api/src/x.ts",
+    });
+
+    expect(manifest.managed["apps/api/src/x.ts"]).not.toHaveProperty("from");
+  });
+});
+
+describe(untrackManagedFile, () => {
+  it("drops the entry and leaves the others alone", () => {
+    const manifest = emptyManifest();
+    recordManagedFile(manifest, {
+      hash: HASH,
+      module: "email",
+      target: "a.ts",
+    });
+    recordManagedFile(manifest, {
+      hash: HASH,
+      module: "email",
+      target: "b.ts",
+    });
+
+    untrackManagedFile(manifest, "a.ts");
+
+    expect(Object.keys(manifest.managed)).toStrictEqual(["b.ts"]);
+  });
+
+  it("is a no-op for an entry that was never tracked", () => {
+    const manifest = emptyManifest();
+
+    untrackManagedFile(manifest, "gone.ts");
+
+    expect(manifest.managed).toStrictEqual({});
+  });
+});
+
+describe(recordPatch, () => {
+  it("appends the entry", () => {
+    const manifest = emptyManifest();
+
+    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
+
+    expect(manifest.patches).toHaveLength(1);
+  });
+
+  // A `--force` re-apply lands the same op again. Recorded twice, `remove` would reverse
+  // it twice — the dedupe is what keeps the record one-to-one with disk.
+  it("dedupes a structurally equal entry", () => {
+    const manifest = emptyManifest();
+
+    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
+    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
+
+    expect(manifest.patches).toHaveLength(1);
+  });
+
+  it("keeps two entries that differ by module", () => {
+    const manifest = emptyManifest();
+
+    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
+    recordPatch(manifest, patchEntry("email", "apps/api/package.json"));
+
+    expect(manifest.patches.map((patch) => patch.module)).toStrictEqual([
+      "database",
+      "email",
+    ]);
+  });
+});
+
+describe(untrackPatch, () => {
+  it("drops the structurally equal entry only", () => {
+    const manifest = emptyManifest();
+    recordPatch(manifest, patchEntry("database", "apps/api/package.json"));
+    recordPatch(manifest, patchEntry("email", "apps/api/package.json"));
+
+    untrackPatch(manifest, patchEntry("database", "apps/api/package.json"));
+
+    expect(manifest.patches.map((patch) => patch.module)).toStrictEqual([
+      "email",
+    ]);
+  });
+
+  // `remove` walks a plan loaded separately from the manifest it edits, so the two sides
+  // are never the same object. Structural equality is the whole point.
+  it("matches a separately built equal entry, not reference identity", () => {
+    const manifest = emptyManifest();
+    manifest.patches.push(patchEntry("database", "apps/api/package.json"));
+
+    untrackPatch(manifest, patchEntry("database", "apps/api/package.json"));
+
+    expect(manifest.patches).toStrictEqual([]);
+  });
+});
+
+describe("recordLink and untrackLink", () => {
+  it("records source to link, then drops it", () => {
+    const manifest = emptyManifest();
+
+    recordLink(manifest, ".agents/skills/email", ".claude/skills/email");
+    expect(manifest.links).toStrictEqual({
+      ".agents/skills/email": ".claude/skills/email",
+    });
+
+    untrackLink(manifest, ".agents/skills/email");
+    expect(manifest.links).toStrictEqual({});
   });
 });

@@ -1052,7 +1052,10 @@ describe("persistState — the finally path (#49)", () => {
     expect(stripAnsi(out)).toContain("saasaloy-lock.json");
   });
 
-  it("writes the config and the lock when the manifest cannot be written", async () => {
+  // The ordering rule itself — every save runs even after one fails — is `persistLedger`'s
+  // now, and lib/ledger.test.ts injects the failures. What stays here is that `add` turns
+  // each returned failure into a warning line the user can act on.
+  it("warns by name when the manifest cannot be written", async () => {
     // A regular file where the manifest's directory belongs: `mkdir` refuses it.
     await writeFile(join(root, ".saasaloy"), "not a directory\n", "utf-8");
 
@@ -1060,12 +1063,6 @@ describe("persistState — the finally path (#49)", () => {
 
     expect(failures).toHaveLength(1);
     expect(stripAnsi(out)).toContain("manifest.json");
-    await expect(
-      readJson<{ installed: string[] }>("saasaloy.json")
-    ).resolves.toHaveProperty("installed", ["widget"]);
-    await expect(
-      readJson<Lockfile>("saasaloy-lock.json")
-    ).resolves.toHaveProperty("modules.widget.resolved", PERSIST_SHA);
   });
 
   it("reports every failure and still throws none", async () => {
@@ -1169,6 +1166,28 @@ describe("applyAndPersist (#49)", () => {
         }
       ).installed
     ).toStrictEqual([]);
+  });
+
+  // #150. The two errors are not the same failure. A blocked manifest still leaves the
+  // config and the lock describing disk, and the apply error is what stopped the run.
+  it("throws the apply error, and still writes the config and the lock", async () => {
+    await mkdir(join(root, "apps", "web"), { recursive: true });
+    await mkdir(join(root, "apps", "api"), { recursive: true });
+    await symlink(outside, join(root, "apps", "api", "src"), "dir");
+    await writeFile(join(root, ".saasaloy"), "not a directory\n", "utf-8");
+
+    const { error } = await run(
+      planOf([file("apps/web/widget.ts"), file("apps/api/src/widget.ts")])
+    );
+
+    expect(stripAnsi(String(error))).toContain("symlink");
+    expect(stripAnsi(String(error))).not.toContain("not a directory");
+    await expect(
+      readFile(join(root, "saasaloy.json"), "utf-8")
+    ).resolves.toContain("installed");
+    await expect(
+      pathExists(join(root, "saasaloy-lock.json"))
+    ).resolves.toBeTruthy();
   });
 
   it("fails the run when a save fails on an otherwise clean apply", async () => {

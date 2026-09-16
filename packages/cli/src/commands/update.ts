@@ -36,8 +36,9 @@ import {
 } from "../lib/exit.js";
 import { workingTreeState } from "../lib/git-state.js";
 import { resolveProjectName } from "../lib/project-name.js";
+import { persistLedger } from "../lib/ledger.js";
 import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
-import { loadManifest, MANIFEST_FILE, saveManifest } from "../lib/manifest.js";
+import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -49,7 +50,7 @@ import {
 import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
-import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
@@ -1024,20 +1025,15 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     // Record whatever actually landed even if a mid-plan write failed — the ledger must
     // describe the real on-disk state (`add`'s invariant; #49 owns real transactionality
-    // for both commands). All three are attempted together: awaiting them in sequence
-    // would let a failed manifest save skip the config and lock, which is the same
-    // partial ledger this step exists to prevent.
-    const saves = await Promise.allSettled([
-      saveManifest(root, manifest),
-      saveConfig(root, config),
-      saveLock(root, lock),
-    ]);
+    // for both commands). `persistLedger` runs all three even when one fails, so a failed
+    // manifest save never skips the config and the lock (#150).
+    const failures = await persistLedger({ config, lock, manifest, root });
     if (!outcome.ok) {
       throw outcome.error;
     }
-    const failedSave = saves.find((save) => save.status === "rejected");
+    const failedSave = failures[0];
     if (failedSave) {
-      throw failedSave.reason;
+      throw failedSave.error;
     }
     const result: UpdateResult = outcome.value;
 

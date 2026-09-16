@@ -8,7 +8,7 @@ import {
   resolveWithinRoot,
 } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
-import { samePatchEntry } from "./manifest.js";
+import { untrackLink, untrackManagedFile, untrackPatch } from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { isReversibleKind, reversePatch } from "./patch/index.js";
 import type { PatchResult } from "./patch/index.js";
@@ -443,7 +443,7 @@ export async function executeRemovePlan(
     }
     // Untrack in every case — a declined/survivor drift file becomes user-owned
     // (it classifies as a `conflict` on a future re-add, same as any untracked file).
-    delete manifest.managed[file.target];
+    untrackManagedFile(manifest, file.target);
   }
 
   const linksRemoved: PlannedRemoveLink[] = [];
@@ -464,7 +464,7 @@ export async function executeRemovePlan(
       linkConflicts.push(link);
     }
     // Drop the links entry either way (ADR 0015 symmetry with `add`).
-    delete manifest.links[link.target];
+    untrackLink(manifest, link.target);
   }
 
   // Reverse what can be reversed, then untrack every entry either way. The four kinds
@@ -503,9 +503,7 @@ export async function executeRemovePlan(
     // `runRemove` saves the manifest from a `finally`: an entry still listed after its
     // file was already rewritten is a ledger that lies about disk. Anything this loop
     // never reached stays tracked, which is the point.
-    manifest.patches = manifest.patches.filter(
-      (p) => !samePatchEntry(p, entry)
-    );
+    untrackPatch(manifest, entry);
   }
 
   const prunedDirs = await pruneEmptyDirs(root, [
