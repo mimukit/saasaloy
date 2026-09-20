@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -42,18 +42,21 @@ export function resolveConnectionString(env: DbBindings): string {
 there, so adding the binding switches a project onto the pooled path with no code change. Neither
 one is read from `process.env`: a Worker has no process, and both arrive on `c.env`.
 
-### Local dev: `apps/api/.dev.vars`
+### Local dev: `apps/api/.env`
 
-Wrangler reads `.dev.vars` beside the Worker and puts each key on `env`. Write the local URL there:
+`saasaloy add database-postgres` puts `DATABASE_URL` in `packages/env/.env.example`, the project's
+one key list. Fill it in and distribute it:
 
 ```sh
-# apps/api/.dev.vars
-DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/app"
+saasaloy env        # prompts for each unset key, writes packages/env/.env
+pnpm env:setup      # writes apps/api/.env from the key list and that file
 ```
 
-The base template's `.gitignore` already lists `.dev.vars`, so the file stays out of git. It also
-carries a `!.dev.vars.example` exception, so commit an `apps/api/.dev.vars.example` with the key and
-no value if you want it documented for the next person.
+Wrangler reads `apps/api/.env` beside the Worker and puts each key on `env`. Both files are
+gitignored; the example is tracked, and its local default is the line above.
+
+`DATABASE_URL` is a **checkout-owned key** (`CHECKOUT_OWNED_KEYS` in `packages/env/src/services.ts`),
+so a per-branch value you set survives every later `pnpm env:setup`.
 
 `drizzle.config.ts` loads that same file when `DATABASE_URL` is absent from the shell environment,
 so `db:migrate` and a `vite dev` Worker agree on one URL with no second place to edit. An explicit
@@ -67,7 +70,7 @@ docker run -d --name app-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:
 
 ### Production: a Workers secret
 
-`.dev.vars` is local-only and never deploys. In production `DATABASE_URL` is a **secret**, because
+`apps/api/.env` is local-only and never deploys. In production `DATABASE_URL` is a **secret**, because
 it carries the password:
 
 ```sh

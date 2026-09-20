@@ -80,7 +80,7 @@ export function plunk(): EmailProvider {
       if (!apiKey) {
         throw new EmailError(
           "provider_error",
-          "No `PLUNK_API_KEY` on this Worker's env. Set it in apps/api/.dev.vars for local " +
+          "No `PLUNK_API_KEY` on this Worker's env. Set it in packages/env/.env, run pnpm env:setup for local " +
             "development and with `wrangler secret put PLUNK_API_KEY` for a deployed Worker. " +
             "It must be the project's secret key (`sk_...`), not the public key (`pk_...`)."
         );

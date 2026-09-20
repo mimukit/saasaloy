@@ -9,6 +9,8 @@ import {
   mayShareTarget,
 } from "./collisions.js";
 import type { OwnedCollision, StaleOwner } from "./collisions.js";
+import { servicesFor } from "./env-example.js";
+import type { ServiceName } from "./env-example.js";
 import {
   assertNoSymlinkPath,
   classifyLink,
@@ -147,8 +149,14 @@ export interface Plan {
   devDependencies: string[];
   /** Union of env vars declared (name → description) — reported, not written. */
   envVars: Record<string, string>;
-  /** Union of the local-dev values declared for those vars — written into `.dev.vars.example`. */
+  /** Union of the local-dev values declared for those vars — written into `packages/env/.env.example`. */
   devVars: Record<string, string>;
+  /** Which services read each declared var, unioned across the modules that declared it. */
+  envServices: Record<string, ServiceName[]>;
+  /** Modules that declared a var with no `envServices`, so the `PUBLIC_` fallback decided. */
+  envServicesGuessed: string[];
+  /** Declared vars that may stay empty — each gets a `# Blank on purpose` line. */
+  envOptional: string[];
   /** Aliases the installed scaffolds register into saasaloy.json (applied by executePlan). */
   aliases: Record<string, string>;
   /** Human-readable notes where a scaffold alias would redefine an existing one to a new path. */
@@ -527,6 +535,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const devDependencies: string[] = [];
   const envVars: Record<string, string> = {};
   const devVars: Record<string, string> = {};
+  const envServices: Record<string, ServiceName[]> = {};
+  const envServicesGuessed = new Set<string>();
+  const envOptional = new Set<string>();
   const removeWarnings: Record<string, string[]> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
@@ -663,8 +674,23 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     for (const [key, value] of Object.entries(item.devVars ?? {})) {
       devVars[key] = value;
     }
+    for (const key of item.envOptional ?? []) {
+      envOptional.add(key);
+    }
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
+      if (!item.envServices) {
+        envServicesGuessed.add(name);
+      }
+      // Two modules can declare one key (`PUBLIC_API_URL` comes from `admin` and
+      // `waitlist`). The sections union: a key both an admin and a web module read is
+      // written into both files, from one line in the key list.
+      envServices[key] = [
+        ...new Set([
+          ...(envServices[key] ?? []),
+          ...servicesFor(key, item.envServices),
+        ]),
+      ];
     }
     if (item.removeWarnings && item.removeWarnings.length > 0) {
       removeWarnings[name] = [...item.removeWarnings];
@@ -742,6 +768,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     dependencies,
     devDependencies,
     devVars,
+    envOptional: [...envOptional].toSorted(),
+    envServices,
+    envServicesGuessed: [...envServicesGuessed].toSorted(),
     envVars,
     aliases,
     aliasConflicts,

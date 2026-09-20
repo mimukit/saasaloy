@@ -162,7 +162,7 @@ saasaloy add queue-memory
 
 The `queue` core arrives through `dependsOn` here too.
 
-The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It patches nothing but the `providers` array: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `.dev.vars` and background work runs.
+The local provider. It runs the job **inline, in the same Worker, the moment it is enqueued**, so `pnpm dev` and `pnpm test` need no Cloudflare account, no paid plan and no network. It patches nothing but the `providers` array: no binding, no cron trigger, no handler set, no env var of its own. Set `QUEUE_PROVIDER=memory` in `packages/env/.env`, run `pnpm env:setup`, and background work runs.
 
 Install both providers side by side and let the variable choose. `QUEUE_PROVIDER=memory` locally, `cloudflare` in staging and production. The Cloudflare handlers stay installed and warn-and-return while `memory` is selected, so nothing runs twice. One caveat if you switch a **deployed** Worker from `cloudflare` to `memory`: the gated consumer returns without acking or retrying, so any message already in `app-jobs` burns its `max_retries` redeliveries and then lands in `app-jobs-dlq`. Drain the queue before you switch, or expect to replay the dead-letter queue afterwards.
 

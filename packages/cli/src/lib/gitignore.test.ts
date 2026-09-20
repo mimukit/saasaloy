@@ -10,9 +10,6 @@ const BASE_IGNORE = [
   ".env",
   ".env.*",
   "!.env.example",
-  ".dev.vars",
-  ".dev.vars.*",
-  "!.dev.vars.example",
   "*.pem",
   "",
   "node_modules/",
@@ -43,10 +40,10 @@ describe(compilePattern, () => {
   });
 
   it("matches an unanchored pattern at any depth", () => {
-    const rule = compilePattern(".dev.vars")!;
-    expect(rule.test.test("apps/api/.dev.vars")).toBeTruthy();
-    expect(rule.test.test(".dev.vars")).toBeTruthy();
-    expect(rule.test.test("apps/api/.dev.varsX")).toBeFalsy();
+    const rule = compilePattern(".env")!;
+    expect(rule.test.test("apps/api/.env")).toBeTruthy();
+    expect(rule.test.test(".env")).toBeTruthy();
+    expect(rule.test.test("apps/api/.envX")).toBeFalsy();
   });
 
   it("anchors a pattern carrying a slash to the .gitignore's own directory", () => {
@@ -76,15 +73,15 @@ describe(compilePattern, () => {
 
 describe(parseGitignore, () => {
   it("keeps only the lines that carry a pattern", () => {
-    expect(parseGitignore(BASE_IGNORE)).toHaveLength(8);
+    expect(parseGitignore(BASE_IGNORE)).toHaveLength(5);
   });
 });
 
 describe(isPathIgnored, () => {
-  it("says yes for the two files `env` writes, from the base template's ignore", async () => {
+  it("says yes for the file `env` writes, from the base template's ignore", async () => {
     await write(".gitignore", BASE_IGNORE);
     await expect(
-      isPathIgnored(root, "apps/api/.dev.vars")
+      isPathIgnored(root, "packages/env/.env")
     ).resolves.toBeTruthy();
     await expect(isPathIgnored(root, "apps/web/.env")).resolves.toBeTruthy();
   });
@@ -92,7 +89,7 @@ describe(isPathIgnored, () => {
   it("honours a later negation over an earlier match", async () => {
     await write(".gitignore", BASE_IGNORE);
     await expect(
-      isPathIgnored(root, "apps/api/.dev.vars.example")
+      isPathIgnored(root, "packages/env/.env.example")
     ).resolves.toBeFalsy();
     await expect(
       isPathIgnored(root, "apps/web/.env.example")
@@ -103,24 +100,20 @@ describe(isPathIgnored, () => {
     await write(
       ".gitignore",
       BASE_IGNORE.split("\n")
-        .filter((line) => !line.includes("dev.vars"))
+        .filter((line) => line !== ".env")
         .join("\n")
     );
+    await expect(isPathIgnored(root, "packages/env/.env")).resolves.toBeFalsy();
     await expect(
-      isPathIgnored(root, "apps/api/.dev.vars")
-    ).resolves.toBeFalsy();
-    await expect(isPathIgnored(root, "apps/web/.env")).resolves.toBeTruthy();
+      isPathIgnored(root, "apps/web/.env.local")
+    ).resolves.toBeTruthy();
   });
 
   it("reads a nested .gitignore, which can re-include what the root excluded", async () => {
     await write(".gitignore", BASE_IGNORE);
-    await write("apps/api/.gitignore", "!.dev.vars");
-    await expect(
-      isPathIgnored(root, "apps/api/.dev.vars")
-    ).resolves.toBeFalsy();
-    await expect(
-      isPathIgnored(root, "apps/web/.dev.vars")
-    ).resolves.toBeTruthy();
+    await write("apps/api/.gitignore", "!.env");
+    await expect(isPathIgnored(root, "apps/api/.env")).resolves.toBeFalsy();
+    await expect(isPathIgnored(root, "apps/web/.env")).resolves.toBeTruthy();
   });
 
   it("ignores everything under an ignored directory", async () => {
@@ -133,15 +126,11 @@ describe(isPathIgnored, () => {
   it("treats a project with no .git as not ignored, so `env` refuses", async () => {
     await write(".gitignore", BASE_IGNORE);
     await rm(join(root, ".git"), { force: true, recursive: true });
-    await expect(
-      isPathIgnored(root, "apps/api/.dev.vars")
-    ).resolves.toBeFalsy();
+    await expect(isPathIgnored(root, "packages/env/.env")).resolves.toBeFalsy();
   });
 
   it("answers no when there is no .gitignore at all", async () => {
-    await expect(
-      isPathIgnored(root, "apps/api/.dev.vars")
-    ).resolves.toBeFalsy();
+    await expect(isPathIgnored(root, "packages/env/.env")).resolves.toBeFalsy();
   });
 });
 
@@ -155,7 +144,7 @@ describe("a project nested inside a repository", () => {
     await mkdir(project, { recursive: true });
 
     await expect(
-      isPathIgnored(project, "apps/api/.dev.vars")
+      isPathIgnored(project, "packages/env/.env")
     ).resolves.toBeTruthy();
   });
 
