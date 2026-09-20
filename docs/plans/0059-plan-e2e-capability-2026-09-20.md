@@ -47,7 +47,7 @@ Success means a developer runs `pnpm test` on a fresh project and sees a green s
 
 Reuses: the `scaffolds` + `aliases` mechanism (`modules/api/registry-item.json`), the `package-json-script` patch kind and the `@root` alias from plan 0057, the fixed dev ports already hardcoded in three vite configs and in the api's CORS allowlist, `db:setup`/`db:drop` from #152, and the `play:init` playground harness.
 
-### Phase 1: a unit runner in the base template
+### Phase 1: a unit runner in the base template (built 2026-09-20)
 
 - Add `vitest` (exact-pinned) to the base template's root `devDependencies` and `"test": "vitest run"` to the root scripts.
 - Add `vitest.config.ts` at the template root with a `projects` glob over `apps/*` and `packages/*`, excluding `packages/e2e`.
@@ -56,7 +56,7 @@ Reuses: the `scaffolds` + `aliases` mechanism (`modules/api/registry-item.json`)
 - Add a `test` task to `packages/cli/templates/base/turbo.json` only if the `projects` glob proves slower than per-workspace runs; the default is no turbo task.
 - Verify: `pnpm play:reset`, then `pnpm -C .dev/playground test` is green.
 
-### Phase 2: the `e2e` module
+### Phase 2: the `e2e` module (built 2026-09-20)
 
 - `modules/e2e/registry-item.json`: `type: "saasaloy:capability"`, `dependsOn: ["api"]`, a `packages/e2e` scaffold with the `@e2e` alias, `devDependencies` pinning `@playwright/test` and `rimraf`.
 - Scaffold `package.json`, `tsconfig.json`, `playwright.config.ts`, `global-setup.ts`, `global-teardown.ts`, `fixtures/user.ts`, `fixtures/api.ts`.
@@ -65,21 +65,21 @@ Reuses: the `scaffolds` + `aliases` mechanism (`modules/api/registry-item.json`)
 - Two `package-json-script` patches on the root `package.json`: `e2e` and `e2e:install`.
 - `modules/e2e/skills/saasaloy-e2e/SKILL.md`: how to add a flow, the tag vocabulary, the port table, the browser-install step, where artifacts land.
 
-### Phase 3: the four flows
+### Phase 3: the four flows (built 2026-09-20)
 
 - `specs/health.spec.ts` — tag `@api`. `GET /health`, asserting the documented body.
 - `specs/waitlist.spec.ts` — tags `@waitlist @web`. Delete the fixture row, fill the form on `web`, submit, assert the success state, assert the row through the api.
 - `specs/admin-login.spec.ts` — tags `@admin @auth`. Drive the login form with the seeded user, assert the redirect to `/`, assert the guarded api call returned `200` and the route rendered rather than `access-denied`.
 - `specs/admin-unauthenticated.spec.ts` — tags `@admin @auth`. Call the guarded api route with no cookie, expect `401`.
 
-### Phase 4: the gates
+### Phase 4: the gates (built 2026-09-20)
 
 - `scripts/verify-e2e.ts`, wired as `pnpm verify:e2e`. It scaffolds the playground, adds `api`, `database-d1`, `auth`, `admin`, `waitlist`, `e2e`, installs, runs `pnpm e2e`, and prints the report path on failure.
 - `scripts/e2e-tags.test.ts`: every tag in `modules/e2e/files/specs/**` names a real directory under `modules/`.
 - Add both to CONTRIBUTING's gate table beside `verify:css` and `verify:preset`.
 - The two-job CI workflow described above.
 
-### Phase 5: documentation and the decision record
+### Phase 5: documentation and the decision record (built 2026-09-20)
 
 - ADR: an e2e capability takes neither providers nor drivers, and a cross-module flow's spec belongs to `e2e` rather than to the feature module it exercises.
 - The template's `README.md` gains a testing section: `pnpm test`, `pnpm e2e:install`, `pnpm e2e`.

@@ -92,6 +92,14 @@ _Avoid: cache, mirror. A cache may be dropped without consequence; a projection 
 The SQL name of a table a module or project ships, always plural snake_case: `users`, `feature_flag_overrides`, `waitlist_entries`. The Drizzle **export key** is the camelCase form of the same plural, a column stays singular (`user_id`), and an index starts with its table name. Better Auth's tables follow the rule because `drizzleAdapter` runs with `usePlural: true`, which looks each model up by `<model>s` export key and appends that `s` to a plugin's custom `modelName` too ([ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md)).
 _Avoid: model name for the SQL name. A model name is Better Auth's key (`user`, `apikey`); the export key and the table name are the project's._
 
+### Flow
+One user-visible path through a running project, driven end to end by the `e2e` capability's browser suite: `health`, `waitlist`, `admin-login`, `admin-unauthenticated`. A flow crosses modules on purpose — the waitlist one touches `waitlist`, `web`, `api`, `database` and a driver — which is why no feature module owns its flow and every spec lives in `modules/e2e/files/specs/` ([ADR 0040](docs/adr/0040-adr-a-cross-module-flow-belongs-to-the-e2e-module-2026-09-20.md)).
+_Avoid: scenario, journey, test case. A flow is a whole path through a running app; a unit test covers one function under vitest and is not a flow._
+
+### Spec tag
+The Playwright tag a flow declares the modules it needs with — `test.describe("admin login", { tag: ["@admin", "@auth"] }, …)`. `playwright.config.ts` reads `installed` from `saasaloy.json` and turns every tag whose module is absent into `grepInvert`, so a flow for a module the project does not have is **never collected**, rather than skipped at runtime on a 404. Every tag is a module name and nothing else; the base app has none, because it is always present. `scripts/e2e-tags.test.ts` asserts each one still names a real directory under `modules/` ([ADR 0040](docs/adr/0040-adr-a-cross-module-flow-belongs-to-the-e2e-module-2026-09-20.md)).
+_Avoid: label, marker. And never "skip" for what a tag does — a skip is a runtime decision that reports green on a broken route, which is the failure the tag exists to prevent._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 
