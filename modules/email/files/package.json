@@ -8,9 +8,12 @@
   },
   "exports": {
     ".": "./src/index.ts",
-    "./templates/*": "./src/templates/*.ts"
+    "./templates/*": "./src/templates/*.ts",
+    "./env-preset": "./src/env-preset.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@repo/env": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260906.1",
     "@repo/tsconfig": "workspace:*",

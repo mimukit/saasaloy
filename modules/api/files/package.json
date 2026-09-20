@@ -19,7 +19,8 @@
     "hono": "4.13.7",
     "zod": "4.5.4",
     "@hono/zod-validator": "0.9.1",
-    "@repo/logger": "workspace:*"
+    "@repo/logger": "workspace:*",
+    "@repo/env": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/vite-plugin": "1.54.4",

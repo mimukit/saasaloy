@@ -1,21 +1,18 @@
 import { createClient } from "@repo/auth/client";
+import { adminEnv } from "@admin/env";
 
 // The one auth client for the SPA. `@repo/auth` owns better-auth's configuration —
 // `basePath: "/auth"`, `credentials: "include"` and the `adminClient()` plugin all come
 // baked in — so this file only supplies the origin and caches the session lookup.
 //
-// `PUBLIC_API_URL` is inlined at build time by Vite (`envPrefix: "PUBLIC_"` in
-// vite.config.ts). It is read through a `typeof` guard rather than `??` because an unset
-// variable and an empty `PUBLIC_API_URL=` in a .env file are different values, and both
-// have to fall back to the dev origin. Vite substitutes the member expression textually,
-// so assigning it to a local first is safe.
-const configuredApiUrl: unknown = import.meta.env.PUBLIC_API_URL;
-
-/** Origin the SPA calls for both api and auth requests. `apps/api` runs on 4000 in dev. */
-export const apiBaseUrl =
-  typeof configuredApiUrl === "string" && configuredApiUrl !== ""
-    ? configuredApiUrl
-    : "http://localhost:4000";
+/**
+ * Origin the SPA calls for both api and auth requests. `apps/api` runs on 4000 in dev.
+ *
+ * `src/env.ts` validates `PUBLIC_API_URL` and inlines it at build time. There is no
+ * fallback: an unset key fails the build naming the key, rather than shipping a bundle
+ * that calls http://localhost:4000 from production.
+ */
+export const apiBaseUrl = adminEnv().PUBLIC_API_URL;
 
 export const auth = createClient(apiBaseUrl);
 

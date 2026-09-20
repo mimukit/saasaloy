@@ -7,20 +7,64 @@
   "envVars": {
     "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to localhost dev origins when unset."
   },
-  "patches": [],
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["CORS_ORIGINS"],
+  "patches": [
+    {
+      "file": "packages/env/src/services.ts",
+      "kind": "const-array",
+      "constName": "SERVICES",
+      "key": "name",
+      "entry": {
+        "name": "api",
+        "file": "apps/api/.env",
+        "environment": "dev",
+        "omit": []
+      }
+    }
+  ],
   "files": [],
   "scaffolds": [
     {
       "workspace": "apps/api",
-      "aliases": { "@api": "apps/api/src" },
+      "aliases": {
+        "@api": "apps/api/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
-        { "path": "files/vite.config.ts", "target": "vite.config.ts" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/worker.ts", "target": "src/worker.ts" },
-        { "path": "files/src/client.ts", "target": "src/client.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/wrangler.jsonc",
+          "target": "wrangler.jsonc"
+        },
+        {
+          "path": "files/vite.config.ts",
+          "target": "vite.config.ts"
+        },
+        {
+          "path": "files/src/env.ts",
+          "target": "src/env.ts"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/worker.ts",
+          "target": "src/worker.ts"
+        },
+        {
+          "path": "files/src/client.ts",
+          "target": "src/client.ts"
+        },
         {
           "path": "files/src/routes/health.ts",
           "target": "src/routes/health.ts"

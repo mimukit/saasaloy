@@ -9,19 +9,60 @@
     "CLOUDFLARE_DEFAULT_ACCOUNT_ID": "Cloudflare account id resources are provisioned into.",
     "PULUMI_CONFIG_PASSPHRASE": "Passphrase for Pulumi's local state encryption; a fixed dev value is fine since no secrets enter state."
   },
-  "patches": [],
+  "envServices": {
+    "default": ["infra"]
+  },
+  "patches": [
+    {
+      "file": "packages/env/src/services.ts",
+      "kind": "const-array",
+      "constName": "SERVICES",
+      "key": "name",
+      "entry": {
+        "name": "infra",
+        "file": "infra/.env",
+        "environment": "prod",
+        "omit": []
+      }
+    }
+  ],
   "files": [],
   "scaffolds": [
     {
       "workspace": "infra",
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/Pulumi.yaml", "target": "Pulumi.yaml" },
-        { "path": "files/index.ts", "target": "index.ts" },
-        { "path": "files/src/discover.ts", "target": "src/discover.ts" },
-        { "path": "files/src/translate.ts", "target": "src/translate.ts" },
-        { "path": "files/src/secrets.ts", "target": "src/secrets.ts" }
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/Pulumi.yaml",
+          "target": "Pulumi.yaml"
+        },
+        {
+          "path": "files/index.ts",
+          "target": "index.ts"
+        },
+        {
+          "path": "files/src/discover.ts",
+          "target": "src/discover.ts"
+        },
+        {
+          "path": "files/src/translate.ts",
+          "target": "src/translate.ts"
+        },
+        {
+          "path": "files/src/secrets.ts",
+          "target": "src/secrets.ts"
+        },
+        {
+          "path": "files/src/env.ts",
+          "target": "src/env.ts"
+        }
       ]
     }
   ],
