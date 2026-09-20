@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-d1
-description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, or applying migrations with db:migrate:local and db:migrate:prod. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, applying migrations with db:migrate:local and db:migrate:prod, or preparing, reporting on and dropping the local database with db:setup, db:status and db:drop. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-d1 — the Cloudflare D1 driver
@@ -9,7 +9,7 @@ description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the
 schema barrel, the repository layer and `db:generate`; this module owns everything that knows the
 database is [Cloudflare D1](https://developers.cloudflare.com/d1/) (SQLite at the edge).
 
-It installs four things:
+It installs six things:
 
 | What                            | Where it lands                             |
 | ------------------------------- | ------------------------------------------ |
@@ -17,11 +17,13 @@ It installs four things:
 | the `sqlite` drizzle-kit config | `packages/db/drizzle.config.ts`             |
 | the `d1_databases` binding      | `apps/api/wrangler.jsonc` (patch)           |
 | `db:migrate:local` / `:prod`    | `packages/db/package.json` scripts (patch)  |
+| the lifecycle wrappers          | `packages/db/scripts/`                      |
+| `db:setup` / `db:status` / `db:drop` | `packages/db/package.json` + root `package.json` |
 
 It also rewrites `packages/db/tsconfig.json` to put `@cloudflare/workers-types` back in
-`compilerOptions.types`, and patches `wrangler` and `@cloudflare/workers-types` into that
-workspace's `devDependencies`. `D1Database` is a Workers global, so the core cannot carry that type
-without forcing Workers types on a project that runs Postgres.
+`compilerOptions.types`, and patches `wrangler`, `@cloudflare/workers-types` and `@types/node` into
+that workspace's `devDependencies`. `D1Database` is a Workers global, so the core cannot carry that
+type without forcing Workers types on a project that runs Postgres.
 
 Read `saasaloy-database` first for how to add a table or write a repository. Nothing below changes
 those steps.
@@ -132,6 +134,33 @@ local database than the one your app reads.
 `db:migrate:prod` needs the real `database_id` and a wrangler login. There is no
 `drizzle-kit push` and no auto-migrate on boot. Applying a migration is always a command you run.
 
+## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
+
+Three commands prepare, report on and throw away the local database. They run from the repo root:
+
+```sh
+pnpm db:setup    # apply every pending migration to the local D1 database
+pnpm db:status   # what wrangler says is applied and what is pending
+pnpm db:drop     # delete apps/api/.wrangler/state/v3/d1
+```
+
+On this driver all three are thin wrappers over wrangler, and that is deliberate. D1's local
+database is a SQLite file under `apps/api/.wrangler/state`, which `.gitignore` covers, so it is
+already one database per worktree. There is nothing to create, no server to reach, no backend to
+choose and no state block to keep — all of which the Postgres driver needs and ships. `db:setup` on
+this driver is `db:migrate:local` under another name, so that a project reads the same three
+commands whichever driver is under it.
+
+`db:status` exits `0` normally and `1` only when wrangler cannot read the database. Pending
+migrations are a report, not a failure.
+
+`db:drop` deletes `apps/api/.wrangler/state/v3/d1` and nothing else. It never touches the remote
+database: `wrangler d1 delete` is a separate command this script does not run. The path is
+wrangler's own layout, so `scripts/drop.ts` checks that the directory exists and resolves under the
+project root before `rimraf` sees it. A wrangler upgrade that moves the path turns `db:drop` into a
+no-op that says so, rather than a delete somewhere else. If that happens, look under
+`apps/api/.wrangler/state` and update the path in `scripts/drop.ts`.
+
 ## Switching drivers
 
 `database-d1` and `database-postgres` declare each other in `conflictsWith`, so `add` refuses the
@@ -165,7 +194,8 @@ put the core's copy back by hand:
 
 `remove` takes the `d1_databases` block back out of `apps/api/wrangler.jsonc`, unless you edited the
 binding, in which case it says so and leaves it. It warns about the leftovers it cannot reverse: the
-two `db:migrate:*` scripts plus the `wrangler` devDependency in `packages/db/package.json`. Delete
+two `db:migrate:*` scripts, the three `db:setup` / `db:status` / `db:drop` scripts in both
+`packages/db/package.json` and the root `package.json`, plus the `wrangler` devDependency. Delete
 those by hand. Your `src/schema/*.ts` files stay put and are still SQLite — port them to `pg-core`
 yourself.
 
