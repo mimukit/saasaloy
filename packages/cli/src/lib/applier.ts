@@ -4,11 +4,14 @@ import { RefusalError } from "./exit.js";
 import {
   detectCollisions,
   detectOwnedCollisions,
+  detectSectionCollisions,
   formatCollisions,
   formatOwnedCollisions,
+  formatSectionCollisions,
   mayShareTarget,
+  sectionClaims,
 } from "./collisions.js";
-import type { OwnedCollision, StaleOwner } from "./collisions.js";
+import type { OwnedCollision, SectionClaim, StaleOwner } from "./collisions.js";
 import {
   assertNoSymlinkPath,
   classifyLink,
@@ -588,6 +591,28 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   });
   if (collisions.length > 0) {
     throw new RefusalError(formatCollisions(collisions, requested));
+  }
+
+  // The same question one level down, for `@repo/config`'s section keys (#154). The keys
+  // compose into one object, so a contested key either loses a module's values or throws
+  // at module load — and `dependsOn` cannot consent to that the way it can to a shared
+  // file. Claims already on disk count: the manifest records each section patch with the
+  // module that applied it, so a module installed last month still holds its key.
+  const keyClaims: SectionClaim[] = [];
+  const inRun = new Set(install);
+  for (const entry of manifest.patches) {
+    if (!inRun.has(entry.module)) {
+      keyClaims.push(...sectionClaims(entry.module, [entry.patch]));
+    }
+  }
+  for (const name of install) {
+    keyClaims.push(...sectionClaims(name, modules.get(name)?.item.patches));
+  }
+  const sectionConflicts = detectSectionCollisions(keyClaims);
+  if (sectionConflicts.length > 0) {
+    throw new RefusalError(
+      formatSectionCollisions(sectionConflicts, requested)
+    );
   }
 
   for (const name of install) {
