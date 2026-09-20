@@ -1,0 +1,35 @@
+{
+  "name": "@repo/env",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "env-exec": "./src/exec.ts"
+  },
+  "exports": {
+    ".": "./src/index.ts",
+    "./error": "./src/error.ts",
+    "./check": "./src/check.ts",
+    "./dotenv": "./src/dotenv.ts",
+    "./env-file": "./src/env-file.ts",
+    "./example": "./src/example.ts",
+    "./services": "./src/services.ts",
+    "./zod": "./src/zod.ts",
+    "./sources": "./src/sources.ts",
+    "./setup": "./src/setup.ts"
+  },
+  "scripts": {
+    "clean": "rimraf -g dist \"*.tsbuildinfo\"",
+    "typecheck": "tsc --noEmit",
+    "test": "node --test \"src/**/*.test.ts\""
+  },
+  "dependencies": {
+    "zod": "4.5.4"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "@types/node": "26.4.1",
+    "rimraf": "6.1.3",
+    "typescript": "7.0.2"
+  }
+}
