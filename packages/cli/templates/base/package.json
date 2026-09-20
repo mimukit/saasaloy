@@ -20,6 +20,7 @@
     "lint:fix": "oxlint -c oxlint.config.mjs --type-aware --fix packages/ui/src && oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "test": "vitest run",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
@@ -39,6 +40,7 @@
     "stylelint-prettier": "5.0.3",
     "turbo": "2.10.12",
     "typescript": "7.0.2",
-    "ultracite": "7.11.0"
+    "ultracite": "7.11.0",
+    "vitest": "5.0.1"
   }
 }
