@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { after, describe, it } from "node:test";
+import { describe, it, onTestFinished } from "vitest";
 import { SERVICES } from "./services.ts";
 import { defineSources, EnvError, local } from "./sources.ts";
 import type { EnvSource } from "./sources.ts";
@@ -18,19 +18,11 @@ if (!SERVICES.some((row) => row.name === "api")) {
   });
 }
 
-const roots: string[] = [];
-
-after(() => {
-  for (const root of roots) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 const EXAMPLE = "# @services api\nA=\nB=\n";
 
 function makeRoot(contents?: string, example = EXAMPLE): string {
   const root = mkdtempSync(path.join(tmpdir(), "env-source-"));
-  roots.push(root);
+  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(path.join(root, "packages/env"), { recursive: true });
   writeFileSync(path.join(root, "packages/env/.env.example"), example);
   if (contents !== undefined) {
@@ -84,7 +76,7 @@ describe("the local source", () => {
   });
 });
 
-describe("defineSources", () => {
+describe(defineSources, () => {
   const other: EnvSource = {
     name: "infisical",
     load: async () => await Promise.resolve(new Map()),
@@ -109,7 +101,7 @@ describe("defineSources", () => {
   });
 });
 
-describe("EnvError", () => {
+describe(EnvError, () => {
   it("calls an unreachable source retryable and a refusal not", () => {
     assert.equal(new EnvError("x", { code: "unreachable" }).retryable, true);
     assert.equal(new EnvError("x", { code: "denied" }).retryable, false);

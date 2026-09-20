@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import {
   findService,
   selectServices,
@@ -45,7 +45,7 @@ describe("the service table", () => {
   });
 });
 
-describe("selectServices", () => {
+describe(selectServices, () => {
   it("writes every dev service when nothing is named", () => {
     assert.deepEqual(
       selectServices("dev")

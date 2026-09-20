@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { createEnv, definePreset, EnvValidationError } from "./define.ts";
 import type { StandardSchema } from "./schema.ts";
 
@@ -42,7 +42,7 @@ function caught(fn: () => unknown): EnvValidationError {
   throw new Error("expected a throw");
 }
 
-describe("createEnv", () => {
+describe(createEnv, () => {
   it("returns the parsed values", () => {
     const env = createEnv({ server: { A: required() } });
     assert.equal(env({ A: "one" }).A, "one");

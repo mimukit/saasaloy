@@ -9,7 +9,7 @@ import {
 } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { after, describe, it } from "node:test";
+import { describe, it, onTestFinished } from "vitest";
 import { readEnvFile } from "./env-file.ts";
 import { SERVICES } from "./services.ts";
 import type { Service } from "./services.ts";
@@ -18,7 +18,7 @@ import { EnvError } from "./sources.ts";
 import type { EnvSource } from "./sources.ts";
 
 // Every write lands in a temp directory, and the value source is a fake. Nothing here
-// opens a connection or touches a file outside `roots`.
+// opens a connection or touches a file outside the temp directory `makeRoot` creates.
 
 /** Idempotent, because `saasaloy add api` appends the same row with a `const-array` patch. */
 function addService(service: Service): Service {
@@ -43,14 +43,6 @@ const infra = addService({
   omit: ["DATABASE_URL"],
 });
 
-const roots: string[] = [];
-
-after(() => {
-  for (const root of roots) {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 const EXAMPLE = [
   "# @services api",
   "",
@@ -67,7 +59,7 @@ const EXAMPLE = [
 
 function makeRoot(example = EXAMPLE): string {
   const root = mkdtempSync(path.join(tmpdir(), "env-setup-"));
-  roots.push(root);
+  onTestFinished(() => rmSync(root, { recursive: true, force: true }));
   mkdirSync(path.join(root, "packages/env"), { recursive: true });
   writeFileSync(path.join(root, "packages/env/.env.example"), example);
   return root;
@@ -94,7 +86,7 @@ function unreachable(): EnvSource {
 
 const processEnv: Record<string, string | undefined> = {};
 
-describe("setupServices", () => {
+describe(setupServices, () => {
   it("writes a service's file from the example and the source", async () => {
     const root = makeRoot();
     const report = await setupServices({

@@ -71,10 +71,11 @@ The watcher also re-scaffolds the base when `packages/cli/templates/base` change
 
 ### Unit tests over module payloads
 
-`pnpm test` is three passes. `turbo run test` runs the CLI's vitest suite, `pnpm test:modules`
+`pnpm test` is four passes. `turbo run test` runs the CLI's vitest suite, `pnpm test:modules`
 runs `node --test` over `modules/*/files/**/*.test.ts` — the security-relevant pure functions a
 module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts` —
-and `pnpm test:scripts` runs the same runner over `scripts/**/*.test.ts`, which today covers the
+`pnpm test:base` runs the base template's own vitest tests through `packages/cli/vitest.base.config.ts`,
+and `pnpm test:scripts` runs `node --test` over `scripts/**/*.test.ts`, which today covers the
 write path of `scripts/update-deps.ts`, the pin rules in `scripts/verify-pins.ts`, and the two
 release scripts' pure decisions — the `workspace:` detector in `scripts/release-smoke.ts` and the
 skip flag in `scripts/release-preflight.ts`.
@@ -87,6 +88,12 @@ Vite loads a tsconfig for every file it transforms; a module payload's `tsconfig
 `@repo/tsconfig/base.json`, which resolves only inside a scaffolded project, so vitest fails those
 files with `TSCONFIG_ERROR` before an assertion runs. Node 24 strips the types with no tsconfig at
 all — the same reason `scripts/*.ts` needs no build step.
+
+The third pass hits the same wall and gets through it a different way. A generated project runs its
+tests on vitest, so the base template's tests import from `vitest` and cannot move to `node --test`.
+`vitest.base.config.ts` turns the transform's tsconfig lookup off instead, with `oxc: { tsconfig: false }`.
+Vite's types omit that option, so the config passes it through a variable. If a Vite upgrade brings
+`TSCONFIG_ERROR` back to `pnpm test:base`, that option is the first thing to check.
 
 Two rules for a test under `modules/`:
 

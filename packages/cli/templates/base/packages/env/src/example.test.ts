@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { exampleKeys, selectExample } from "./example.ts";
 import { SERVICES } from "./services.ts";
 import type { Service } from "./services.ts";
@@ -38,7 +38,7 @@ const EXAMPLE = [
   "SECRET=",
 ];
 
-describe("selectExample", () => {
+describe(selectExample, () => {
   it("gives a service the keys its sections name, comments included", () => {
     assert.deepEqual(selectExample(EXAMPLE, "web"), [
       "# what SHARED is",
@@ -79,7 +79,7 @@ describe("selectExample", () => {
   });
 });
 
-describe("exampleKeys", () => {
+describe(exampleKeys, () => {
   it("lists every key whichever service takes it", () => {
     assert.deepEqual(exampleKeys(EXAMPLE), ["SHARED", "SECRET"]);
   });

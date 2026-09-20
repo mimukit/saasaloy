@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { blankOnPurposeKeys, incompleteKeys } from "./check.ts";
 
-describe("blankOnPurposeKeys", () => {
+describe(blankOnPurposeKeys, () => {
   it("marks a key whose comment block carries the line", () => {
     const keys = blankOnPurposeKeys([
       "# Blank on purpose: unset means no proxy.",
@@ -20,7 +20,7 @@ describe("blankOnPurposeKeys", () => {
   });
 });
 
-describe("incompleteKeys", () => {
+describe(incompleteKeys, () => {
   const example = ["A=", "# Blank on purpose", "B=", "C="];
 
   it("names every key with no value", () => {

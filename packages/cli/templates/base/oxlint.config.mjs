@@ -2,6 +2,7 @@ import { defineConfig } from "oxlint";
 import astro from "ultracite/oxlint/astro";
 import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
+import vitest from "ultracite/oxlint/vitest";
 
 // Run it as `oxlint -c oxlint.config.mjs` — the flag is not optional. oxlint only
 // auto-discovers `.oxlintrc.json`, and a JSON config cannot `extends` Ultracite's
@@ -9,8 +10,7 @@ import react from "ultracite/oxlint/react";
 // modules. The JS config format is experimental and needs Node.js, which this
 // project already requires (>= 24).
 //
-// Add `ultracite/oxlint/tanstack` when an admin SPA lands, and
-// `ultracite/oxlint/vitest` when the first test file does. The full preset list is
+// Add `ultracite/oxlint/tanstack` when an admin SPA lands. The full preset list is
 // angular, astro, core, jest, js-plugins, nestjs, next, qwik, react, remix, solid,
 // svelte, tanstack, vitest, vue.
 
@@ -39,7 +39,19 @@ function mergePresets(...presets) {
   return merged;
 }
 
-const ultracite = mergePresets(core, astro, react);
+const ultracite = mergePresets(core, astro, react, vitest);
+
+// Every rule the vitest preset turns on, mapped to "off". The preset's file glob is
+// `**/*.{test,spec,…}`, which also matches the Playwright specs `saasaloy add e2e` puts
+// in `packages/e2e/specs/`. Those files call a `test` and an `expect` from
+// `@playwright/test`, so a vitest rule reading them reports on an API that is not there.
+// Derived from the preset rather than listed by hand, so a preset bump cannot reopen the
+// gap. The override that uses it is last, and oxlint lets the last override win.
+const vitestRulesOff = Object.fromEntries(
+  (vitest.overrides ?? []).flatMap((override) =>
+    Object.keys(override.rules ?? {}).map((rule) => [rule, "off"])
+  )
+);
 
 // Rules turned off for the whole project, each with its reason. Ultracite enables
 // ~470, including whole families oxlint itself files under `style`, `pedantic` and
@@ -152,25 +164,6 @@ export default defineConfig({
       rules: { "no-console": "off" },
     },
 
-    // `packages/env` runs on `node:test`, not vitest — the base ships no test runner to
-    // install, which is the whole reason its tests are written against Node's own. Three
-    // vitest rules point these files at a runner they cannot use, and
-    // `no-floating-promises` fires on every `describe`, whose promise the runner itself
-    // awaits. Prefixing twenty call sites with `void` would say nothing the runner does
-    // not already guarantee.
-    //
-    // `env:setup` and `env-exec` are node scripts, so `process` and `console` are theirs
-    // to use. Nothing a Worker imports reaches them (ADR 0041).
-    {
-      files: ["packages/env/**/*.test.ts"],
-      plugins: ["vitest"],
-      rules: {
-        "typescript/no-floating-promises": "off",
-        "vitest/no-import-node-test": "off",
-        "vitest/prefer-importing-vitest-globals": "off",
-        "vitest/prefer-each": "off",
-      },
-    },
     // `createEnv` is a generic mapped-type API: it takes `server`, `client` and `shared`
     // as distinct type parameters, erases them to one `SchemaRecord` to iterate the keys,
     // and puts the specific type back on the way out. Every assertion this file makes is
@@ -186,9 +179,22 @@ export default defineConfig({
         "typescript/no-unsafe-return": "off",
       },
     },
+    // `env:setup` and `env-exec` are node scripts, so `process` and `console` are theirs
+    // to use. Nothing a Worker imports reaches them (ADR 0041).
     {
       files: ["packages/env/scripts/**", "packages/env/src/exec.ts"],
       rules: { "no-console": "off", "unicorn/no-process-exit": "off" },
+    },
+    // The Playwright workspace. Keep this override last — see `vitestRulesOff` above.
+    // `no-console` is off here too: the suite's setup and teardown report what they did
+    // to stdout, which is the only place a headless run can say anything.
+    {
+      files: ["packages/e2e/**"],
+      env: { node: true },
+      // `plugins` is not optional here. oxlint only honours a rule turned off in an
+      // override when that override also names the rule's plugin.
+      plugins: ["vitest"],
+      rules: { ...vitestRulesOff, "no-console": "off" },
     },
   ],
 });

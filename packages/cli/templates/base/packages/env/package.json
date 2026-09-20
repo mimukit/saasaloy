@@ -20,8 +20,7 @@
   },
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
-    "typecheck": "tsc --noEmit",
-    "test": "node --test \"src/**/*.test.ts\""
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "zod": "4.5.4"

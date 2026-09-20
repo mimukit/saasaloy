@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import {
   addExampleKeys,
   formatEnv,
@@ -11,7 +11,7 @@ import {
   splitLines,
 } from "./dotenv.ts";
 
-describe("parseValues", () => {
+describe(parseValues, () => {
   it("reads plain, quoted and exported lines", () => {
     const values = parseValues([
       "A=1",
@@ -58,7 +58,7 @@ describe("setKey and removeKey", () => {
   });
 });
 
-describe("addExampleKeys", () => {
+describe(addExampleKeys, () => {
   it("keeps a value the target set", () => {
     assert.deepEqual(addExampleKeys(["A=mine"], ["A=default"]), ["A=mine"]);
   });
@@ -76,7 +76,7 @@ describe("addExampleKeys", () => {
   });
 });
 
-describe("formatLine", () => {
+describe(formatLine, () => {
   it("writes a plain value bare", () => {
     assert.equal(formatLine("A", "one"), "A=one");
   });
@@ -92,7 +92,7 @@ describe("formatLine", () => {
   });
 });
 
-describe("planEnv", () => {
+describe(planEnv, () => {
   const example = ["# what A is", "A=local", "", "# what B is", "B="];
 
   it("keeps the example's comments and fills the values", () => {

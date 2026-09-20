@@ -445,7 +445,16 @@ hook (which is also how you keep hooks out of CI).
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
-- Run the tests: `pnpm test` (`turbo run test` across every workspace). Only `packages/env` ships tests in the base — they run on `node --test` with no runner to install. Pick a runner and add a `test` script per workspace when you have something else to test.
+- Run the unit suite: `pnpm test` — one root **vitest**, configured in `vitest.config.ts`,
+  collecting every `*.test.ts` under `apps/*` and `packages/*`. A workspace declares no
+  `test` script and pins no runner of its own: `vitest` is a root `devDependency` and every
+  workspace resolves it by walking up to the root `node_modules`. Put a test beside the
+  source it covers and name it `<source>.test.ts`;
+  `packages/ui/src/lib/interpolate.test.ts` is the worked example.
+- Run the browser suite: `pnpm e2e`, once `saasaloy add e2e` is installed. It is Playwright
+  against the running app, and it lives in `packages/e2e`. Run `pnpm e2e:install` once per
+  machine first to download Chromium. `pnpm test` never collects a Playwright spec, and
+  `pnpm e2e` never collects a unit test.
 
 ## Boundaries
 

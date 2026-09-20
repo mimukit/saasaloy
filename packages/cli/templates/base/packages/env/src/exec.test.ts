@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { describe, it } from "vitest";
 import { childEnv, parseExecArgs } from "./exec.ts";
 
-describe("parseExecArgs", () => {
+describe(parseExecArgs, () => {
   it("splits the file from the command", () => {
     assert.deepEqual(parseExecArgs(["infra/.env", "--", "pulumi", "up"]), {
       file: "infra/.env",
@@ -17,7 +17,7 @@ describe("parseExecArgs", () => {
   });
 });
 
-describe("childEnv", () => {
+describe(childEnv, () => {
   it("lets an exported variable win over the file", () => {
     const merged = childEnv(new Map([["A", "file"]]), {
       A: "shell",
