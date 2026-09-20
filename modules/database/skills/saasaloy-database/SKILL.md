@@ -274,6 +274,12 @@ first.
 `drizzle-kit push` and no auto-migrate on boot in either. Applying a migration is always an
 explicit command you run.
 
+**Preparing the database** is the driver's job too. Both drivers ship `db:setup`, `db:status` and
+`db:drop`, runnable from the repo root, and the two implement them differently: `database-postgres`
+creates a database per branch over a chosen backend and records it in a state block, while
+`database-d1` wraps wrangler, because its local state is already per worktree. The core adds none of
+those three names. Read the driver skill your project has.
+
 ## Boundaries to honor
 
 - **Drop `src/schema/<name>.ts` to add a table.** Never hand-edit the barrel.
