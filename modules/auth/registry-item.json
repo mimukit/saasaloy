@@ -48,6 +48,17 @@
       "range": "workspace:*"
     },
     {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "authConfig",
+      "import": {
+        "name": "authConfig",
+        "from": "./sections/auth"
+      }
+    },
+    {
       "file": "apps/api/wrangler.jsonc",
       "kind": "wrangler-binding",
       "bindingType": "compatibility_flags",
@@ -73,6 +84,10 @@
     {
       "path": "files/api/routes/auth.vitest.ts",
       "target": "@api/routes/auth.test.ts"
+    },
+    {
+      "path": "files/config/auth.ts",
+      "target": "@config/sections/auth.ts"
     },
     {
       "path": "files/db/schema/auth.sqlite.ts",

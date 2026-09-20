@@ -1,5 +1,6 @@
 import { createAdminClient } from "@repo/auth/client";
 import { adminEnv } from "@admin/env";
+import { config } from "@repo/config";
 
 // The one auth client for the SPA, on the admin session. `@repo/auth` owns better-auth's
 // configuration — `basePath: "/admin/auth"`, `credentials: "include"` and the
@@ -27,10 +28,10 @@ export const auth = createAdminClient(apiBaseUrl);
 export type AdminSession = typeof auth.$Infer.Session;
 
 /** The site-admin role. better-auth's admin plugin writes this string into `user.role`. */
-export const ADMIN_ROLE = "admin";
+export const ADMIN_ROLE = config.auth.adminRole;
 
 /** The role above `admin`. The first account to sign up wins it. */
-export const SUPERADMIN_ROLE = "superadmin";
+export const SUPERADMIN_ROLE = config.auth.superadminRole;
 
 /**
  * The roles that open the shell: every role in the admin group. This is the browser's
