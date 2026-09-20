@@ -140,10 +140,12 @@ to decide.
 at construction. There is no default in either direction: a fallback would let a production deploy
 quietly read an empty in-process map, or a test run quietly write to the real namespace.
 
-```jsonc
-// .dev.vars
-KV_PROVIDER = "memory"   // kv-memory, for local development and tests
+```sh
+# packages/env/.env.example — the project's one key list
+KV_PROVIDER=memory   # kv-memory, for local development and tests
 ```
+
+`pnpm env:setup` writes it into `apps/api/.env`, which is what `wrangler dev` reads.
 
 Swapping providers is the env var plus `saasaloy add kv-<provider>`. No call site changes.
 

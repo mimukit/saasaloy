@@ -71,7 +71,7 @@ export function requireAuthSecret(env: AuthEnv): string | undefined {
   throw new Error(
     "BETTER_AUTH_SECRET is not set. Without it Better Auth signs sessions with its " +
       "published development key, so any session cookie can be forged. Set it with " +
-      "`wrangler secret put BETTER_AUTH_SECRET` (or put it in apps/api/.dev.vars). " +
+      "`wrangler secret put BETTER_AUTH_SECRET` (or put it in packages/env/.env and run pnpm env:setup). " +
       "The development default is allowed only when BETTER_AUTH_URL names a loopback " +
       "host, e.g. BETTER_AUTH_URL=http://localhost:4000."
   );

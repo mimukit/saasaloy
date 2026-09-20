@@ -121,8 +121,9 @@ The one way out is narrow and explicit: `BETTER_AUTH_URL` must name a loopback h
 do not open it. An **unset** `BETTER_AUTH_URL` does not open it either — a production Worker whose
 secrets were never set looks exactly like that, which is the case this rule exists to catch.
 
-So local dev is keyless but not configless: put one line in `apps/api/.dev.vars` —
-`BETTER_AUTH_URL=http://localhost:4000` — and `wrangler dev` runs with no secret. Everywhere else,
+So local dev is keyless but not configless: `BETTER_AUTH_URL=http://localhost:4000` is the
+local default in `packages/env/.env.example`, `pnpm env:setup` writes it into `apps/api/.env`,
+and `wrangler dev` then runs with no secret. Everywhere else,
 set the secret with `wrangler secret put BETTER_AUTH_SECRET`.
 
 Misconfigured prod fails **visibly** rather than silently: an origin missing from

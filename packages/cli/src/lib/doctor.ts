@@ -3,6 +3,7 @@ import { parseModule } from "magicast";
 import { readFile } from "node:fs/promises";
 import { basename, dirname, join, posix, resolve } from "node:path";
 import { BASE_MODULE, baseEntries, isBaseTracked } from "./base.js";
+import { ENV_EXAMPLE } from "./env-example.js";
 import {
   hashContent,
   joinModulePath,
@@ -293,6 +294,34 @@ export async function checkModule(
           module,
           "/requires/saasaloy",
           `"${requires}" isn't a semver range — write one like ">=0.3", ">=0.3 <2", "^1.2.0" or "1.x"`
+        )
+      );
+    }
+  }
+
+  // Every `envServices` key other than `default` names a variable this module declares.
+  // A typo there routes nothing, and the `PUBLIC_` fallback then decides silently.
+  for (const key of Object.keys(asRecord(item.envServices))) {
+    if (key !== "default" && !(key in asRecord(item.envVars))) {
+      findings.push(
+        finding(
+          module,
+          `/envServices/${key}`,
+          "has no matching entry in envVars, so it routes nothing"
+        )
+      );
+    }
+  }
+
+  // Every `envOptional` name is a variable this module declares. A typo there leaves the
+  // key without its `# Blank on purpose` line, and `pnpm env:setup` then fails on it.
+  for (const key of asArray(item.envOptional)) {
+    if (typeof key === "string" && !(key in asRecord(item.envVars))) {
+      findings.push(
+        finding(
+          module,
+          `/envOptional/${key}`,
+          "has no matching entry in envVars, so nothing marks it blank on purpose"
         )
       );
     }
@@ -801,6 +830,72 @@ export function checkPartialInstalls(state: ProjectState): Finding[] {
         `partial install — re-run \`saasaloy add ${name}\``
       )
     );
+}
+
+// ---------------------------------------------------------------------------
+// The environment rules (#153).
+// ---------------------------------------------------------------------------
+
+/** The `.dev.vars` files this capability retired. A leftover one hides `.env` from wrangler. */
+export const LEGACY_ENV_FILES = [".dev.vars", ".dev.vars.example"];
+
+export interface EnvCheckArgs {
+  /** Project-relative paths of every leftover `.dev.vars*` found on disk. */
+  legacy: string[];
+  /** True when the project carries `packages/env/.env.example`. */
+  hasKeyList: boolean;
+}
+
+/**
+ * The environment rule (#153): a leftover `.dev.vars` beside a service's `.env`.
+ *
+ * Wrangler loads `.env` only while no `.dev.vars` sits beside it, so every value
+ * `pnpm env:setup` writes is ignored and nothing says so. That is the exact failure this
+ * capability set out to end, and it is invisible from the outside — hence a check.
+ * `pnpm env:setup` carries the file's values across and deletes it.
+ *
+ * Drift between the key list and the descriptors is not checked here. `doctor` runs
+ * offline and the manifest does not record `envVars`, so answering that would turn it
+ * into a network command; `saasaloy env --check`, which already reads every descriptor,
+ * reports it instead.
+ */
+export function checkEnv(args: EnvCheckArgs): Finding[] {
+  const findings = args.legacy
+    .toSorted()
+    .map((path) =>
+      finding(
+        "env",
+        `/${path}`,
+        `${path} still exists, and nothing reads it. wrangler loads .env only while no .dev.vars sits beside it, so every value pnpm env:setup writes is ignored. Run \`pnpm env:setup\` to carry its values into .env and delete it.`
+      )
+    );
+  if (args.legacy.length > 0 && !args.hasKeyList) {
+    findings.push(
+      finding(
+        "env",
+        `/${ENV_EXAMPLE}`,
+        `${ENV_EXAMPLE} is missing, so there is no key list to migrate those values into. Re-run \`saasaloy add\` for an installed module to regenerate it.`
+      )
+    );
+  }
+  return findings;
+}
+
+/** Read what `checkEnv` needs off a project on disk. */
+export async function readEnvState(root: string): Promise<EnvCheckArgs> {
+  const legacy: string[] = [];
+  for (const workspace of ["apps/api", "apps/web", "apps/admin", "infra"]) {
+    for (const name of LEGACY_ENV_FILES) {
+      const path = posix.join(workspace, name);
+      if (await pathExists(resolveWithinRoot(root, path))) {
+        legacy.push(path);
+      }
+    }
+  }
+  return {
+    legacy,
+    hasKeyList: await pathExists(resolveWithinRoot(root, ENV_EXAMPLE)),
+  };
 }
 
 /** Check every module named by `target`, in name order. */

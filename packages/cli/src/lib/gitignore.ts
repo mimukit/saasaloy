@@ -2,11 +2,11 @@ import { readFile } from "node:fs/promises";
 import { dirname, join, relative, resolve, sep } from "node:path";
 import { pathExists } from "./fs-utils.js";
 
-// Does git ignore this path? `saasaloy env` writes real secrets into `.dev.vars` and
-// `.env`, so it has to prove the file will not be committed before it writes a single
-// byte (#50). The base template's `_gitignore` already carves both out, but a project is
-// a person's to edit, and an `env` that wrote a live API key into a tracked file would be
-// the worst bug this CLI could ship.
+// Does git ignore this path? `saasaloy env` writes real secrets into
+// `packages/env/.env`, so it has to prove the file will not be committed before it writes
+// a single byte (#50). The base template's `_gitignore` already carves `.env` out, but a
+// project is a person's to edit, and an `env` that wrote a live API key into a tracked
+// file would be the worst bug this CLI could ship.
 //
 // The check is done here, in process, rather than by shelling out to `git check-ignore`.
 // `env`'s whole contract is that it prints deployment commands and never runs anything,

@@ -31,7 +31,7 @@ import {
   formatFailure,
 } from "../lib/exit.js";
 import { planWritesUi } from "../lib/design.js";
-import { DEV_VARS_EXAMPLE, writeDevVarsExample } from "../lib/dev-vars.js";
+import { ENV_EXAMPLE, writeEnvExample } from "../lib/env-example.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
 import { persistLedger } from "../lib/ledger.js";
@@ -359,12 +359,11 @@ function wireUpSteps(
 /**
  * The environment half of the next-steps box.
  *
- * The variable names still print — they are what a reader scans for. What changed in #50
- * is the instruction under them. `add` used to say "copy `.dev.vars.example` to
- * `.dev.vars` and fill it in", which was the whole procedure and did nothing for a
- * `PUBLIC_*` value, whose home is a frontend `.env` the example file never described.
- * `saasaloy env` does both, so this points at it and leaves the example file as what it
- * is: the checked-in record of what each variable means.
+ * The variable names still print — they are what a reader scans for. Under them are the
+ * two commands that fill them in: `saasaloy env` prompts into the gitignored
+ * `packages/env/.env`, and `pnpm env:setup` distributes that one file into each service's
+ * own `.env`. The example file stays what it is, the checked-in record of what each
+ * variable means.
  *
  * Exported so the wording is pinned by a test — it is the one line telling a new user
  * the next command exists.
@@ -382,7 +381,8 @@ export function envSteps(
     : "";
   return [
     `Set ${keys.map((key) => pc.cyan(key)).join(", ")}.`,
-    `Run ${pc.cyan("saasaloy env")} — it prompts for each unset one and writes it to the ${pc.cyan(".dev.vars")} or ${pc.cyan(".env")} that reads it.${where}`,
+    `Run ${pc.cyan("saasaloy env")} — it prompts for each unset one and writes it to ${pc.cyan("packages/env/.env")}.${where}`,
+    `Then run ${pc.cyan("pnpm env:setup")} to write each service's own ${pc.cyan(".env")} from it.`,
   ];
 }
 
@@ -966,18 +966,26 @@ export async function runAdd(argv: string[]): Promise<number> {
 
     // The env vars printed at plan time, several boxes and a confirmation ago. Write
     // them where the project can keep them, and say where that is (#98).
+    // A descriptor with no `envServices` routed by the `PUBLIC_` prefix alone. Say which
+    // module, so a third-party descriptor gets fixed rather than quietly guessed at.
+    if (plan.envServicesGuessed.length > 0) {
+      log.warn(
+        `${plan.envServicesGuessed.join(", ")} declare env vars without \`envServices\`, so the PUBLIC_ prefix decided which service reads each one. Check ${ENV_EXAMPLE}.`
+      );
+    }
     let devVarsPath: string | undefined;
     try {
-      devVarsPath = await writeDevVarsExample({
-        aliases: config.aliases,
+      devVarsPath = await writeEnvExample({
         devVars: plan.devVars,
         envVars: plan.envVars,
+        optional: plan.envOptional,
+        services: plan.envServices,
         root,
       });
     } catch (error) {
       // Best-effort, like the dependency merge: an unwritable example file must not
       // undo an apply that already landed.
-      log.warn(`Couldn't write ${DEV_VARS_EXAMPLE} — ${formatFailure(error)}.`);
+      log.warn(`Couldn't write ${ENV_EXAMPLE} — ${formatFailure(error)}.`);
     }
 
     printNextSteps(plan, result, devVarsPath, config.aliases);

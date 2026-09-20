@@ -4,10 +4,12 @@ import pc from "picocolors";
 import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
+  checkEnv,
   checkPartialInstalls,
   checkPolicyBindings,
   checkProject,
   checkTarget,
+  readEnvState,
   readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
@@ -130,11 +132,14 @@ async function reportProject(path: string): Promise<number> {
   // A third question, asked only on a project running `kv-cloudflare`: does every rate
   // limit policy registered in `packages/kv` have the `RL_<NAME>` binding its `consume`
   // resolves to (#129)?
+  // A fourth: is there a leftover `.dev.vars` hiding `.env` from wrangler (#153)?
   const policyState = await readPolicyState(path, config.installed);
+  const envState = await readEnvState(path);
   const findings = [
     ...checkProject({ config, manifest }),
     ...checkPartialInstalls({ installed: config.installed, manifest }),
     ...(policyState ? checkPolicyBindings(policyState) : []),
+    ...checkEnv(envState),
   ];
   if (findings.length === 0) {
     const count = config.installed.length;
