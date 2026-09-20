@@ -37,7 +37,7 @@ import {
 import { workingTreeState } from "../lib/git-state.js";
 import { resolveProjectName } from "../lib/project-name.js";
 import { persistLedger } from "../lib/ledger.js";
-import { LOCK_FILE, loadLock, saveLock } from "../lib/lock.js";
+import { LOCK_FILE, loadLock } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
@@ -735,8 +735,14 @@ export async function runUpdate(argv: string[]): Promise<number> {
       // `--ref` onto a tag that already points at the SHA the lock records moves no
       // files, but it is still the explicit unpin — record it here or the module stays
       // pinned forever. `--dry-run`/`--diff` preview only, so they write nothing.
+      // Only the lock changed here, but the write still goes through the ledger: `update`
+      // writes state through one door, so a second door can't drift from the rule (#150).
       if (!preview && recordRefRewrites(lock, comparisons).length > 0) {
-        await saveLock(root, lock);
+        const failures = await persistLedger({ config, lock, manifest, root });
+        const failedSave = failures[0];
+        if (failedSave) {
+          throw failedSave.error;
+        }
       }
       for (const comparison of skipped) {
         log.info(
