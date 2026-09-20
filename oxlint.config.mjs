@@ -330,6 +330,25 @@ export default defineConfig({
       },
     },
 
+    // --- Base template tests run on node:test too --------------------------
+    // `packages/env` ships its own tests, and a scaffolded project runs them with
+    // `node --test` — the base carries no test runner to install, which is the whole
+    // reason the capability's tests are written against `node:test`. `pnpm test:base`
+    // runs the same files here. Same two rules off as the payload tests above, and for
+    // the same reason: they point the file at a runner it cannot use.
+    //
+    // An override glob rather than an inline directive, because `saasaloy init` copies
+    // these files into a user's project, where the directive would land too.
+    {
+      files: ["packages/cli/templates/base/packages/*/src/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
+        "vitest/prefer-each": "off",
+      },
+    },
+
     // --- Storage provider tests reject with a vendor's error object --------
     // A storage provider's job is to map a vendor failure onto one of six codes, so
     // the test hands its fake binding the exact `Error` R2 throws — carrying `code`
