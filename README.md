@@ -77,7 +77,7 @@ Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make th
 |---|---|---|
 | Validate the idea | a landing page and a waitlist | `init`, then `waitlist` |
 | Build the MVP | sign-in, an admin app, transactional email | `auth`, `admin`, `email` + a provider |
-| Onboard teams | organizations, tenant isolation, roles | `teams`, `multitenant`, `rbac` |
+| Onboard teams | organizations, tenant isolation, roles | `teams`, `multitenant` |
 | Charge money | subscriptions, plan limits, webhooks | `billing`, `billing-stripe`, `entitlements` |
 | Scale the backend | jobs, caching, files, rate limits, API access | `queue`, `kv`, `storage`, `ratelimit`, `api-keys` |
 
@@ -106,7 +106,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 | Tier | Modules |
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `infra` |
-| Feature | `waitlist`, `teams`, `multitenant`, `rbac`, `api-keys`, `entitlements`, `email-react`, `ratelimit`, `feature-flags` |
+| Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `entitlements`, `email-react`, `ratelimit`, `feature-flags` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe` |
 | Driver | `database-d1`, `database-postgres` |
 

@@ -125,8 +125,12 @@ _Avoid: actor, subject, identity._
 A module's answer to "this request carries my kind of credential, and here is the [tenant](#tenant) it resolves to". It is an entry in the `tenantResolvers` [registration table](#registration-table) in `packages/auth/src/tenant.ts`, with a synchronous `claims(headers)` and an async `resolve(c)`. `claims` asks whether the credential is mine, never whether it is valid: once a resolver claims a request, `resolve` either returns a tenant or throws, and the session cookie is never consulted. That is what stops a revoked API key from falling back to a cookie riding along with it. `api-keys` registers the one resolver that ships, for `Authorization: Bearer`.
 _Avoid: auth strategy, credential provider (a [provider module](#provider-module) is a different thing)._
 
+### Permissions
+The role-based access control (RBAC) model this project runs: the resource-and-action vocabulary in `packages/auth/src/access.ts`, the [base roles](#base-role) and [custom roles](#custom-role) built from it, the pure `can(principal, permissions)` rule, and the `requirePermission(c, permissions)` gate a route throws on. `teams` ships the vocabulary, the rule and the lock, because it owns the `organization_roles` table; `multitenant` ships the gate and the `/roles` screen, because it owns the request path. `rbac` named a module until 2026-09-20 and now names only the model.
+_Avoid: authorization (that also covers the site roles under [`superadmin` against `admin`](#superadmin-against-admin)), ACL._
+
 ### Base role
-One of the three organization roles this project declares in `packages/auth/src/access.ts`: `owner`, `admin`, `member`. Their statements are compiled in, so an operator cannot rename, re-scope or delete one. `roleLockGuard` refuses `create-role`, `update-role` and `delete-role` on any of the three names, whatever permission the caller holds.
+One of the three organization roles this project declares in `packages/auth/src/access.ts`: `owner`, `admin`, `member`. Their statements are compiled in, so an operator cannot rename, re-scope or delete one. `roleLockGuard`, which ships with `teams`, refuses `create-role`, `update-role` and `delete-role` on any of the three names, whatever permission the caller holds.
 _Avoid: default role, built-in role._
 
 ### Custom role
