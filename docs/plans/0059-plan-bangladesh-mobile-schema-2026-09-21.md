@@ -36,7 +36,7 @@ One file, one schema, one test file, three edits around them. The schema reuses 
 
 The transform runs in a fixed order: reject on a disallowed character, remove the separators, match one of the five forms, emit `+880` plus the ten national digits.
 
-### Phase 1: the schema
+### Phase 1: the schema (built 2026-09-20)
 
 - Add `modules/validators/files/src/phone.ts`.
 - Export `bangladeshMobile`, following the order above, with the single failure message.
@@ -44,14 +44,14 @@ The transform runs in a fixed order: reject on a disallowed character, remove th
 - Keep the file isomorphic. No Workers types, no Node APIs, no `process.env`.
 - Add the comment pointing at `modules/sms-khudebarta/files/khudebarta.ts` and its `+880` regex.
 
-### Phase 2: registration and dependency
+### Phase 2: registration and dependency (built 2026-09-20)
 
 - Add `{ "path": "files/src/phone.ts", "target": "src/phone.ts" }` to the `scaffolds[0].files` array in `modules/validators/registry-item.json`.
 - Add `zod` at `4.5.4` to the repo root `devDependencies` so `pnpm test:modules` resolves the import.
 - Add the matching comment in `modules/sms-khudebarta/files/khudebarta.ts` pointing back at `phone.ts`.
 - Confirm the root addition does not disturb `pnpm deps:check`, which gates template and module-descriptor pins rather than the repo's own workspace deps.
 
-### Phase 3: tests
+### Phase 3: tests (built 2026-09-20)
 
 - Add `modules/validators/files/src/phone.test.ts` on `node:test`, matching the header comment style of `modules/billing/files/src/config.test.ts`.
 - Cover each of the five accepted forms and assert the normalized output, not just that it parsed.
@@ -60,7 +60,7 @@ The transform runs in a fixed order: reject on a disallowed character, remove th
 - Assert `hello01712345678world` is rejected, since that case is the reason the disallowed-character check exists.
 - Assert the output of every accepted case satisfies `/^\+880\d{10}$/`, the provider's own regex, so the two layers stay in agreement.
 
-### Phase 4: documentation
+### Phase 4: documentation (built 2026-09-20)
 
 - Document `bangladeshMobile` in `modules/validators/skills/saasaloy-validators/SKILL.md`, alongside `email`, `id` and `pagination`, and state that it lives in `phone.ts` rather than `common.ts` and why.
 - List the five accepted input forms, the allowed separators, the ASCII-digits-only rule, and the normalized output.
