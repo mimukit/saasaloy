@@ -3,6 +3,7 @@
 // import of the web theme, so a page is only ever its own content — no page may
 // duplicate the shell or import a stylesheet again. web.css imports the shared
 // globals.css itself.
+import { config } from "@repo/config";
 import "@repo/ui/styles/web.css";
 import { siteName } from "@repo/ui";
 import { ui } from "@repo/ui/content/landing";
@@ -23,7 +24,7 @@ const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={config.app.locale}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
