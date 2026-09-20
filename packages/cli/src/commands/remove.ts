@@ -17,8 +17,10 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
-import { loadLock, saveLock } from "../lib/lock.js";
-import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { persistLedger } from "../lib/ledger.js";
+import type { LedgerFailure } from "../lib/ledger.js";
+import { loadLock } from "../lib/lock.js";
+import { loadManifest } from "../lib/manifest.js";
 import { isReversibleKind } from "../lib/patch/index.js";
 import { findProjectRoot } from "../lib/project.js";
 import { buildRemovePlan, executeRemovePlan } from "../lib/remover.js";
@@ -29,7 +31,7 @@ import type {
   PlannedRemoveFile,
   RemovePlan,
 } from "../lib/remover.js";
-import { loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import { loadConfig } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
@@ -346,6 +348,7 @@ export async function runRemove(argv: string[]): Promise<number> {
     }
 
     let result: Awaited<ReturnType<typeof executeRemovePlan>>;
+    let ledgerFailures: LedgerFailure[] = [];
     try {
       result = await executeRemovePlan(plan, {
         root,
@@ -355,11 +358,20 @@ export async function runRemove(argv: string[]): Promise<number> {
         deleteDrifted,
       });
     } finally {
-      // Record whatever actually happened even if a mid-plan step failed — the
-      // ledger must reflect the real on-disk state (same rationale as `add`).
-      await saveManifest(root, manifest);
-      await saveConfig(root, config);
-      await saveLock(root, lock);
+      // Record whatever actually happened even if a mid-plan step failed — the ledger
+      // must reflect the real on-disk state (same rationale as `add`). These saves used
+      // to be three bare awaits, so the first one to throw skipped the other two and
+      // masked the remove error on its way out. `persistLedger` runs all three and
+      // returns the failures instead (#150).
+      ledgerFailures = await persistLedger({ config, lock, manifest, root });
+    }
+
+    // The remove error wins: a `finally` that throws replaces it, and the user needs to
+    // hear what actually stopped the run. Reaching here means the remove itself passed,
+    // so a failed save is now the only thing wrong.
+    const failedSave = ledgerFailures[0];
+    if (failedSave) {
+      throw failedSave.error;
     }
 
     for (const file of result.deleted) {

@@ -72,6 +72,76 @@ export function samePatchEntry(a: ManifestPatch, b: ManifestPatch): boolean {
   );
 }
 
+/** What `recordManagedFile` needs to write one `managed` entry. */
+export interface ManagedFileRecord {
+  /**
+   * True only for a file the tool adopted off disk rather than wrote. Passing `false` or
+   * leaving it out drops the field, which is the drop rule in `ManagedEntry` made
+   * structural: a real write cannot carry `adopted` forward by accident.
+   */
+  adopted?: boolean;
+  from?: string;
+  hash: string;
+  module: string;
+  /** Project-relative POSIX path of the file on disk. */
+  target: string;
+}
+
+/**
+ * Write one `managed` entry. Every caller that lands a file — `applier`, `updater`,
+ * `base` — records it here, so the entry shape is owned by this file rather than
+ * re-derived at each write site (#150).
+ */
+export function recordManagedFile(
+  manifest: Manifest,
+  record: ManagedFileRecord
+): void {
+  manifest.managed[record.target] = {
+    hash: record.hash,
+    module: record.module,
+    ...(record.adopted ? { adopted: true } : {}),
+    ...(record.from === undefined ? {} : { from: record.from }),
+  };
+}
+
+/** Drop one `managed` entry. The file becomes plain user-owned content. */
+export function untrackManagedFile(manifest: Manifest, target: string): void {
+  delete manifest.managed[target];
+}
+
+/**
+ * Append a patch entry unless an equal one is already tracked. The dedupe is what makes a
+ * `--force` re-apply idempotent: the same op lands again and the manifest still lists it
+ * once, so `remove` reverses it once.
+ */
+export function recordPatch(manifest: Manifest, entry: ManifestPatch): void {
+  if (manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
+    return;
+  }
+  manifest.patches.push(entry);
+}
+
+/** Drop every patch entry structurally equal to `entry`. */
+export function untrackPatch(manifest: Manifest, entry: ManifestPatch): void {
+  manifest.patches = manifest.patches.filter(
+    (patch) => !samePatchEntry(patch, entry)
+  );
+}
+
+/** Record a skill link: `target` is the real folder, `path` is the link that points at it. */
+export function recordLink(
+  manifest: Manifest,
+  target: string,
+  path: string
+): void {
+  manifest.links[target] = path;
+}
+
+/** Drop one link record (ADR 0015 symmetry with `add`). */
+export function untrackLink(manifest: Manifest, target: string): void {
+  delete manifest.links[target];
+}
+
 export function emptyManifest(): Manifest {
   return { links: {}, managed: {}, patches: [], removeWarnings: {} };
 }

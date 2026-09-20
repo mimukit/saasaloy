@@ -17,7 +17,12 @@ import {
 } from "./fs-utils.js";
 import { BASE_MODULE, isBaseTracked } from "./base.js";
 import type { LockBase, Lockfile, LockModule } from "./lock.js";
-import { samePatchEntry } from "./manifest.js";
+import {
+  recordLink,
+  recordManagedFile,
+  recordPatch,
+  untrackManagedFile,
+} from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import { parseDep, readRootPackageJson, writeDeps } from "./pkg-json.js";
@@ -1179,11 +1184,12 @@ export async function executeUpdatePlan(
         await writeFile(file.targetAbs, file.theirs, "utf-8");
         result.written.push(file);
       }
-      manifest.managed[file.target] = {
-        module: file.module,
-        hash: file.newHash ?? hashContent(file.theirs),
+      recordManagedFile(manifest, {
         from: file.from,
-      };
+        hash: file.newHash ?? hashContent(file.theirs),
+        module: file.module,
+        target: file.target,
+      });
     }
 
     for (const file of mod.removals) {
@@ -1205,7 +1211,7 @@ export async function executeUpdatePlan(
       // Untrack in every case: the new version no longer ships this file, so a survivor
       // becomes plain user-owned content rather than something `update` keeps offering
       // to delete on every run.
-      delete manifest.managed[file.target];
+      untrackManagedFile(manifest, file.target);
     }
 
     for (const p of mod.patches) {
@@ -1223,16 +1229,11 @@ export async function executeUpdatePlan(
       }
       await writeFile(p.fileAbs, content, "utf-8");
       result.patched.push(p);
-      const entry: ManifestPatch = {
-        module: p.module,
+      recordPatch(manifest, {
         file: p.file,
+        module: p.module,
         patch: p.patch,
-      };
-      if (
-        !manifest.patches.some((existing) => samePatchEntry(existing, entry))
-      ) {
-        manifest.patches.push(entry);
-      }
+      });
     }
 
     for (const link of mod.links) {
@@ -1243,7 +1244,7 @@ export async function executeUpdatePlan(
       if (link.action === "create") {
         await createDirLink(link.pathAbs, link.targetAbs);
       }
-      manifest.links[link.target] = link.path;
+      recordLink(manifest, link.target, link.path);
       result.links.push(link);
     }
 

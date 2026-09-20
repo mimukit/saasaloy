@@ -6,7 +6,11 @@ import { hashContent, readIfPresent, resolveWithinRoot } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
 import { saveLock } from "./lock.js";
 import type { ManagedEntry, Manifest } from "./manifest.js";
-import { saveManifest } from "./manifest.js";
+import {
+  recordManagedFile,
+  saveManifest,
+  untrackManagedFile,
+} from "./manifest.js";
 import {
   BASE_DECLARATION,
   baseTemplateDir,
@@ -237,16 +241,17 @@ export function recordBaseFiles(
 ): void {
   for (const [target, entry] of Object.entries(manifest.managed)) {
     if (entry.module === BASE_MODULE) {
-      delete manifest.managed[target];
+      untrackManagedFile(manifest, target);
     }
   }
   for (const file of files) {
-    manifest.managed[file.target] = {
-      module: BASE_MODULE,
-      hash: file.hash,
-      ...(file.adopted ? { adopted: true } : {}),
+    recordManagedFile(manifest, {
+      adopted: file.adopted,
       from: file.from,
-    };
+      hash: file.hash,
+      module: BASE_MODULE,
+      target: file.target,
+    });
   }
 }
 

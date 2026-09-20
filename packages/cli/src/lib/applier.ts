@@ -20,8 +20,8 @@ import {
   readIfPresent,
   resolveWithinRoot,
 } from "./fs-utils.js";
-import { samePatchEntry } from "./manifest.js";
-import type { Manifest, ManifestPatch } from "./manifest.js";
+import { recordLink, recordManagedFile, recordPatch } from "./manifest.js";
+import type { Manifest } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { PatchMatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
@@ -835,11 +835,12 @@ export async function executePlan(
       // refreshed — that is how a file installed before `from` existed acquires one.
       refreshed.push(file);
     }
-    manifest.managed[file.target] = {
-      module: file.module,
-      hash: file.newHash,
+    recordManagedFile(manifest, {
       from: file.from,
-    };
+      hash: file.newHash,
+      module: file.module,
+      target: file.target,
+    });
   }
 
   // Apply structural patches after the file writes, so an op targeting a freshly-scaffolded
@@ -859,19 +860,13 @@ export async function executePlan(
     if (changed) {
       await writeFile(p.fileAbs, content, "utf-8");
       patched.push(p);
-      // Record for `remove` (which reverses the four config kinds and warns for the two
-      // `package.json` kinds) — deduped so a `--force` re-apply that lands the same op
-      // again doesn't duplicate the entry.
-      const entry: ManifestPatch = {
-        module: p.module,
+      // Record for `remove`, which reverses the four config kinds and warns for the two
+      // `package.json` kinds. `recordPatch` owns the dedupe.
+      recordPatch(manifest, {
         file: p.file,
+        module: p.module,
         patch: p.patch,
-      };
-      if (
-        !manifest.patches.some((existing) => samePatchEntry(existing, entry))
-      ) {
-        manifest.patches.push(entry);
-      }
+      });
     } else if (reason !== undefined) {
       // The codemod refused rather than no-op'd: nothing is written and nothing is
       // tracked, so the manifest keeps saying `remove` has no business in this file.
@@ -893,7 +888,7 @@ export async function executePlan(
       await assertNoSymlinkPath(root, link.pathAbs);
       await createDirLink(link.pathAbs, link.targetAbs);
     }
-    manifest.links[link.target] = link.path;
+    recordLink(manifest, link.target, link.path);
     links.push(link);
   }
 
