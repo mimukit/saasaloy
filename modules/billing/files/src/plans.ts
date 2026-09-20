@@ -1,6 +1,6 @@
 import { definePlans } from "./define";
 
-// The project's plans, in code. This is the file you edit: add a tier, add a feature flag,
+// The project's plans, in code. This is the file you edit: add a tier, add a plan feature,
 // add a limit. Nothing seeds a table and nothing reads a plan back from a vendor.
 //
 // Exactly one plan carries no `providerIds`, and that one is the default — what a subject
