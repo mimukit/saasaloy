@@ -15,11 +15,11 @@ import { createBillingStore, withBillingStore } from "../billing-store";
 
 // The gate a paid route sits behind, and the per-request memo behind it.
 //
-// The middleware lives here rather than in `packages/billing` for the reason the whole
-// capability is split that way: `packages/billing` has zero npm runtime dependencies, so it
-// cannot name a Hono type, and the entitlement *rule* is a pure function over a plan and a
-// row (`packages/billing/src/entitlements.ts`). This file is the HTTP shape of it — the
-// session, the subject, the request-scoped client and the status code.
+// The middleware lives in `apps/api` rather than in `packages/billing`, because
+// `packages/billing` has zero npm runtime dependencies and so cannot name a Hono type. The
+// entitlement *rule* is a pure function over a plan and a row
+// (`packages/billing/src/entitlements.ts`). This file is the HTTP shape of it — the session,
+// the subject, the request-scoped client and the status code.
 //
 // 402 Payment Required is the answer, and it names the feature. A 403 says "not for you" and
 // leaves a client guessing; 402 with the feature name is the one status a plan picker can
@@ -64,9 +64,8 @@ export function withEntitlementCache(c: {
  * ```
  *
  * A subject with no subscription is not an error: they resolve to the default plan and are
- * refused only if that plan lacks the feature. A project with `billing` and no payment
- * provider installed therefore still runs this middleware, which is the point of
- * `entitlements` being its own module.
+ * refused only if that plan lacks the feature. A project on `billing-console` with no real
+ * payment provider therefore still runs this middleware.
  */
 export function requireFeature(name: string): MiddlewareHandler<{
   Bindings: AuthDbBindings;

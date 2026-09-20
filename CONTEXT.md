@@ -62,7 +62,7 @@ _Avoid: cron job, timer — `cron` is the expression, a schedule is the register
 
 ### Plan
 A named tier of the product, declared in code in `packages/billing/src/plans.ts` with `definePlans`: an `id`, a display `name`, `features` (booleans), `limits` (numbers), an optional `trialDays`, and `providerIds` mapping a provider name to its price ids per interval. The list is the single source for both the [entitlement](#entitlement) answer and the provider's own price mapping — `billing-stripe` reads `providerIds.stripe.monthly` as the price id and `trialDays` as the free-trial length. Exactly one plan is the default: it carries no `providerIds` and it is what a subject with no live [subscription](#subscription) resolves to. There is no plan table and no seed step. The landing page's `pricing-table` [block](#block) keeps its own copy in `content/landing.ts` and is kept in step by hand.
-_Avoid: tier, package, product — a Stripe product is the vendor's object, a plan is the project's._
+_Avoid: tier, package, product — a Stripe product is the vendor's object, a plan is the project's. A boolean in `features` is a **plan feature**, never a feature flag; a [flag](#flag) is an operator's switch and answers a different question._
 
 ### Subscription
 One row of `billing_subscriptions`: a [billable subject](#billable-subject)'s relationship to a [plan](#plan) as the payment provider currently reports it. Vendor-blind by construction — the vendor appears only in provider ids (`providerSubscriptionId`, `providerCustomerId`, `providerScheduleId`) — with a normalized `status` (`trialing`, `active`, `past_due`, `canceled`, `unpaid`, `incomplete`, `paused`) and two core-only columns the vendor knows nothing about, `lockedAt` and `reminderSentAt`. A subject has at most one **live** subscription at a time; older rows stay as history. Every write comes from a webhook the vendor sent, never from a route ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
@@ -73,7 +73,7 @@ Who the bill is addressed to: an opaque `{ referenceId, customerType }` pair tha
 _Avoid: customer, account, owner. The customer is the vendor's object, reached through `providerCustomerId`._
 
 ### Entitlement
-The answer to "may this [billable subject](#billable-subject) do this", derived from its live [subscription](#subscription)'s [plan](#plan) and never stored: `hasFeature(name)` for a boolean, `limit(name)` for a number, `currentPlan()` for the plan itself. The `entitlements` module owns them, reads the [projection table](#projection-table) and the plan file, memoizes the resolved plan per request, and falls back to the default plan for a subject with no live row, a `lockedAt` row, or a project with no billing provider installed at all. `requireFeature(name)` is the route middleware over the same answer and returns HTTP 402 naming the feature.
+The answer to "may this [billable subject](#billable-subject) do this", derived from its live [subscription](#subscription)'s [plan](#plan) and never stored: `hasFeature(name)` for a boolean, `limit(name)` for a number, `currentPlan()` for the plan itself. The `billing` module owns them in `packages/billing/src/entitlements.ts`, reads the [projection table](#projection-table) and the plan file, memoizes the resolved plan per request, and falls back to the default plan for a subject with no live row, a `lockedAt` row, or a project with no billing provider installed at all. `requireFeature(name)` is the route middleware over the same answer and returns HTTP 402 naming the feature.
 _Avoid: permission, role — those are auth's, and they answer "who are you", not "what did you pay for"._
 
 ### Projection table
@@ -229,7 +229,7 @@ _Avoid: rule, tier, quota. A policy is not a counter; the contract has no `incre
 
 ### Flag
 A named switch read through the typed `flag(key, { subjectId, tenantId })` helper, either boolean or a percentage rollout. The database is the source of truth and the KV document is a published copy: an admin toggle writes both, a reader never writes on a hit, and an isolate-local cache in front of KV means a change reaches a warm Worker in about 70 seconds. Resolution runs tenant override, then global row, then the default written in code. A percentage flag buckets a subject with a synchronous FNV-1a hash, so the same subject lands in the same bucket on every request.
-_Avoid: toggle (that is the admin action), experiment, A/B test._
+_Avoid: toggle (that is the admin action), experiment, A/B test, plan feature (that is a [plan](#plan)'s boolean, bought rather than switched)._
 
 ### Kill switch
 A [flag](#flag) under the `kill.` prefix that guards a whole integration rather than one feature's behaviour: `assertEnabled("payments")` throws while `kill.payments` is off, and returns while it is on. It exists so an operator can shut payments, AI or email off without a deploy.
