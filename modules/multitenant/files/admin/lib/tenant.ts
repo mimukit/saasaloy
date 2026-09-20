@@ -10,8 +10,9 @@ import { api } from "@admin/lib/api";
 // separate definitions of it, so a change to the fetcher on one screen silently changes
 // the other. One export, one key, one fetcher.
 //
-// `rbac` ships it because it is the first module to add such a screen. `multitenant` owns
-// the endpoint but does not depend on `admin`, so it cannot ship an `apps/admin` file.
+// `multitenant` ships it because `multitenant` mounts the `GET /tenant` endpoint this
+// query calls. The fetcher and the route it calls stay in one module, so a change to
+// either lands in the same review.
 
 /**
  * The resolved tenant. The fetcher throws on a non-2xx, so a 403 lands in `error` rather

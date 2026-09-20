@@ -6,7 +6,8 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
+    "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "Custom roles stored in the organization_roles table survive this removal, and nothing reads them once packages/auth/src/permission-rules.ts is gone. Members holding a custom role resolve to the statements of a role name that no longer exists, which is no permissions at all. Reassign them to a base role before you remove this module."
   ],
   "patches": [
     {
@@ -29,6 +30,17 @@
       "import": {
         "name": "organizationClientPlugin",
         "from": "./plugins/organization-client"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "roleLockGuard",
+      "import": {
+        "name": "roleLockGuard",
+        "from": "./plugins/role-lock"
       }
     },
     {
@@ -61,6 +73,14 @@
     {
       "path": "files/auth/plugins/organization-client.ts",
       "target": "@auth/plugins/organization-client.ts"
+    },
+    {
+      "path": "files/auth/permission-rules.ts",
+      "target": "@auth/permission-rules.ts"
+    },
+    {
+      "path": "files/auth/plugins/role-lock.ts",
+      "target": "@auth/plugins/role-lock.ts"
     },
     {
       "path": "files/admin/routes/teams.tsx",

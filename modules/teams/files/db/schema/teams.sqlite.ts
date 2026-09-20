@@ -87,8 +87,8 @@ export const invitations = sqliteTable(
 // serializes it, so read it back through the plugin rather than parsing it in a route.
 //
 // `hasPermission` merges a row over the static role of the same name, so a row named
-// `admin` would extend the static `admin`. `rbac`'s `roleLockGuard()` refuses those
-// three names on write; the unique index below only stops one organization from holding
+// `admin` would extend the static `admin`. `roleLockGuard()` in
+// `packages/auth/src/plugins/role-lock.ts` refuses those three names on write; the unique index below only stops one organization from holding
 // two rows for one name.
 export const organizationRoles = sqliteTable(
   "organization_roles",

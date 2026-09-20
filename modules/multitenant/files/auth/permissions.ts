@@ -1,11 +1,11 @@
 import { HTTPException } from "hono/http-exception";
 import type { Permissions } from "./access";
-import { can } from "./rbac-rules";
+import { can } from "./permission-rules";
 import { requireTenant } from "./tenant";
 import type { TenantRequestContext } from "./tenant";
 import type { Tenant } from "./tenant-rules";
 
-// Permission checking, the api-facing half. `./rbac-rules.ts` holds the rule; here the
+// Permission checking, the api-facing half. `./permission-rules.ts` holds the rule; here the
 // tenant is resolved and the refusal is thrown.
 //
 // A throwing helper rather than Hono middleware, for the reason `requireTenant` and
@@ -13,23 +13,23 @@ import type { Tenant } from "./tenant-rules";
 // links (ADR 0028). A throw reuses api's `onError` envelope, so a refusal from here
 // renders as the same `{ error: { code, message } }` body every other refusal does.
 
-export { BASE_ROLE_LOCKED, allows, can } from "./rbac-rules";
+export { BASE_ROLE_LOCKED, allows, can } from "./permission-rules";
 export type {
   PermissionDecision,
   PermissionDemand,
   PrincipalLike,
-} from "./rbac-rules";
+} from "./permission-rules";
 
 /**
  * The tenant, once this caller is proved to hold every listed permission. The first line
  * of a scoped route that writes:
  *
- *   const tenant = await requireCan(c, { project: ["delete"] });
+ *   const tenant = await requirePermission(c, { project: ["delete"] });
  *   await withDb(c, (db) => deleteProject(db, tenant.organizationId, id));
  *
  * It is `requireTenant` plus `can`, and it returns the same `Tenant`, so a route never
  * calls both. Resolution runs once and the one `organization_roles` query with it: three
- * `requireCan` lines in one handler would cost three queries if this asked Better Auth's
+ * `requirePermission` lines in one handler would cost three queries if this asked Better Auth's
  * `hasPermission` instead, which is why `can` reads the statements already on the
  * principal.
  *
@@ -41,7 +41,7 @@ export type {
  * organization, and 403 `permission required: <resource>:<action>` when the caller is in
  * the right organization but may not do this.
  */
-export async function requireCan(
+export async function requirePermission(
   c: TenantRequestContext,
   permissions: Permissions
 ): Promise<Tenant> {

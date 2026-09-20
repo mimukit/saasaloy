@@ -45,7 +45,7 @@ Reused as-is, with no logic rewrite: `can`, `allows`, `findLockedRole`, `roleLoc
 
 Rejected, recorded so it stays rejected: move nothing and turn `projects.ts` into a skill snippet. It removes the duplicate file target and fixes fault 2 alone. Faults 1, 3 and 4 survive it, and a snippet drifts because nothing type-checks it.
 
-### Phase 1: move the rule and the lock into `teams`
+### Phase 1: move the rule and the lock into `teams` (built 2026-09-20)
 
 Move these files from `modules/rbac/files/` to `modules/teams/files/`, targets unchanged:
 
@@ -63,7 +63,7 @@ Verify on a `.dev` project with `teams` alone: it type-checks, `roleLockGuard` i
 
 Also confirm here, as the issue asks: does Better Auth refuse a stored role named `admin` on its own? If it does, `role-lock.ts` is defence in depth rather than the only guard. Record the answer either way; it does not change the move.
 
-### Phase 2: move the request path, the example and the screen into `multitenant`
+### Phase 2: move the request path, the example and the screen into `multitenant` (built 2026-09-20)
 
 Move from `modules/rbac/files/` to `modules/multitenant/files/`:
 
@@ -83,7 +83,7 @@ Rewrite the header comment in `admin/lib/tenant.ts`. It claims `rbac` ships the 
 
 Verify on a `.dev` project with `multitenant`: `POST /projects` is gated by `requireCan(c, { project: ["create"] })`, and `/roles` loads and lists the base roles.
 
-### Phase 3: retire `modules/rbac/`
+### Phase 3: retire `modules/rbac/` (built 2026-09-20)
 
 - Delete `modules/rbac/`.
 - Fold `modules/rbac/skills/saasaloy-rbac/SKILL.md` into two skills. Adding a resource, custom roles, the base-role lock and the dangling-role rule go to `saasaloy-teams`. The route recipe, `requireCan`, the 403 table and the `/roles` screen go to `saasaloy-multitenant`.
@@ -95,7 +95,7 @@ Verify on a `.dev` project with `multitenant`: `POST /projects` is gated by `req
 
 Verify: `pnpm lint` and the descriptor tests pass, and no descriptor names `rbac`.
 
-### Phase 4: rename the files, the subpaths and `requireCan`
+### Phase 4: rename the files, the subpaths and `requireCan` (built 2026-09-20)
 
 One reviewable commit on top of a working tree.
 
@@ -114,7 +114,7 @@ Callers to update: the `exports` map and `//exports` comment in `modules/auth/fi
 
 Verify: a `.dev` project with `api-keys` installed type-checks and no source file contains the string `rbac`.
 
-### Phase 5: vocabulary, removal behaviour and migration
+### Phase 5: vocabulary, removal behaviour and migration (built 2026-09-20)
 
 - `CONTEXT.md` gets one entry, headword `permissions`. The body opens with "the role-based access control (RBAC) model this project runs" and states that `rbac` named a module until this change and now names only the model. Hand this to `domainkit`.
 - Rewrite the live prose: `README.md`, `modules/README.md`, `docs/wiki/modules.md`. Leave `docs/plans/` and `docs/qa/` untouched as written history.

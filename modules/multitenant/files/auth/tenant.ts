@@ -113,9 +113,10 @@ function baseRoleStatements(): Record<string, ResolvedStatements> {
 /**
  * What a member holding `roleName` may do in `organizationId`.
  *
- * One query per request, and it is the only one tenant resolution runs. `rbac`'s
- * `requireCan` reads the answer off the principal rather than asking again, so a route
- * with three permission checks still pays for one round trip.
+ * One query per request, and it is the only one tenant resolution runs.
+ * `requirePermission` in `./permissions.ts` reads the answer off the principal rather
+ * than asking again, so a route with three permission checks still pays for one round
+ * trip.
  *
  * Exported because `api-keys`' `apiKeyScopeGuard()` resolves the caller's statements the
  * same way before it decides whether a requested key scope exceeds them. Two callers, one

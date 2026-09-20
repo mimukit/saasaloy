@@ -2,8 +2,8 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { allows } from "@repo/auth/rbac-rules";
-import type { PrincipalLike } from "@repo/auth/rbac-rules";
+import { allows } from "@repo/auth/permission-rules";
+import type { PrincipalLike } from "@repo/auth/permission-rules";
 import { Button } from "@repo/ui/components/button";
 import {
   Card,
@@ -19,7 +19,7 @@ import { tenantQuery } from "@admin/lib/tenant";
 // `/roles` — the active organization's roles, and who holds them.
 //
 // It reads `GET /tenant` once and runs the SAME `can()` the api runs, from
-// `@repo/auth/rbac-rules`. That file is import-free, so the browser gets the rule without
+// `@repo/auth/permission-rules`. That file is import-free, so the browser gets the rule without
 // the auth instance behind it, and there is no second permission implementation to drift.
 // `checkRolePermission` from the Better Auth client is deliberately not used: it knows the
 // static roles only, so it answers wrongly for every custom role this screen exists to

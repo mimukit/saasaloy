@@ -22,7 +22,7 @@ export function organizationPlugin() {
     // name, so a customer defines a role without a deploy.
     //
     // A stored row named `owner`, `admin` or `member` would therefore extend a base role
-    // silently. `rbac`'s `roleLockGuard()` refuses those three names on create, update
+    // silently. `roleLockGuard()` refuses those three names on create, update
     // and delete, which is what keeps the base locked. The cap on how many roles an
     // organization may store stays at the plugin default, unlimited.
     dynamicAccessControl: { enabled: true },

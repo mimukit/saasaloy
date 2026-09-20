@@ -8,7 +8,7 @@ import {
 import { env } from "cloudflare:workers";
 import { SUPERADMIN_ROLE } from "../authorize";
 import type { AuthDbBindings } from "../db-provider";
-import { can } from "../rbac-rules";
+import { can } from "../permission-rules";
 import { loadStatements } from "../tenant";
 import type { AuthRequestContext } from "../server";
 
@@ -201,7 +201,7 @@ interface MemberRow {
  * use it. The plugin has no option for this, because it does not know that a key's
  * `permissions` and a member's statements are the same vocabulary. In this project they
  * are, both declared in `access.ts`, so the check is `can()` with the requested scope as
- * the demand — the same function `requireCan` runs on a route, over the same statements
+ * the demand — the same function `requirePermission` runs on a route, over the same statements
  * `requireTenant` resolves.
  *
  * The guard runs BEFORE the plugin's own `apiKey: [action]` check, so holding that
