@@ -18,7 +18,8 @@
   "dependencies": {
     "better-auth": "1.7.3",
     "hono": "4.13.7",
-    "@repo/db": "workspace:*"
+    "@repo/db": "workspace:*",
+    "@repo/config": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260906.1",

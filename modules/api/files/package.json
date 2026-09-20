@@ -16,6 +16,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@repo/config": "workspace:*",
     "hono": "4.13.7",
     "zod": "4.5.4",
     "@hono/zod-validator": "0.9.1",

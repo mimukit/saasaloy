@@ -1,4 +1,5 @@
 import { createClient } from "@repo/auth/client";
+import { config } from "@repo/config";
 
 // The one auth client for the SPA. `@repo/auth` owns better-auth's configuration —
 // `basePath: "/auth"`, `credentials: "include"` and the `adminClient()` plugin all come
@@ -23,16 +24,17 @@ export const auth = createClient(apiBaseUrl);
 export type AdminSession = typeof auth.$Infer.Session;
 
 /** The site-admin role. better-auth's admin plugin writes this string into `user.role`. */
-export const ADMIN_ROLE = "admin";
+export const ADMIN_ROLE = config.auth.adminRole;
 
 /** The role above `admin`. The first account to sign up wins it. */
-export const SUPERADMIN_ROLE = "superadmin";
+export const SUPERADMIN_ROLE = config.auth.superadminRole;
 
 /**
- * The roles that open the shell. This is the browser's copy of `ADMIN_ROLES` in
- * `packages/auth/src/authorize.ts`, because a bundle cannot import from
- * `@repo/auth/server`. Change one list and change the other, or the SPA and the api
- * disagree about who gets in.
+ * The roles that open the shell. It is the same pair `packages/auth/src/authorize.ts`
+ * builds, from the same two strings in `packages/config/src/sections/auth.ts` — this file
+ * cannot import from `@repo/auth/server`, because a browser bundle cannot carry it, but
+ * `@repo/config` has no dependencies at all and both sides read it. There is no second
+ * copy left to keep in step.
  */
 export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 
