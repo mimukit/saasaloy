@@ -1,0 +1,31 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "env-infisical",
+  "type": "saasaloy:feature",
+  "dependsOn": [],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/env/src/sources.ts",
+      "kind": "plugin-array",
+      "exportName": "sources",
+      "arrayProp": "sources",
+      "call": "infisical",
+      "import": {
+        "name": "infisical",
+        "from": "./providers/infisical"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/infisical.ts",
+      "target": "@env/providers/infisical.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-env-infisical"]
+  }
+}
