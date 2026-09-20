@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in .dev.vars or as a production Workers secret, applying migrations with db:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -10,14 +10,17 @@ the schema barrel, the repository layer and `db:generate`; this module owns ever
 the database is Postgres, reached over [postgres.js](https://github.com/porsager/postgres) through
 `drizzle-orm/postgres-js`.
 
-It installs four things:
+It installs seven things:
 
-| What                                 | Where it lands                            |
-| ------------------------------------ | ----------------------------------------- |
-| the Postgres client (`getDb`)        | `packages/db/src/client.ts`               |
-| the `postgresql` drizzle-kit config  | `packages/db/drizzle.config.ts`           |
-| the `nodejs_compat` flag             | `apps/api/wrangler.jsonc` (patch)         |
-| `db:migrate`                         | `packages/db/package.json` script (patch) |
+| What                                      | Where it lands                                       |
+| ----------------------------------------- | ---------------------------------------------------- |
+| the Postgres client (`getDb`)             | `packages/db/src/client.ts`                          |
+| the `postgresql` drizzle-kit config       | `packages/db/drizzle.config.ts`                      |
+| the `nodejs_compat` flag                  | `apps/api/wrangler.jsonc` (patch)                    |
+| `db:migrate`                              | `packages/db/package.json` script (patch)            |
+| the lifecycle scripts                     | `packages/db/scripts/`                               |
+| `db:setup` / `db:status` / `db:drop`      | `packages/db/package.json` + root `package.json`     |
+| the development container                 | `compose.yaml` at the repo root                      |
 
 It also rewrites `packages/db/tsconfig.json` to put `node` in `compilerOptions.types`, because
 `drizzle.config.ts` reads `process.env`, and patches `postgres` plus `@types/node` into that
@@ -59,11 +62,8 @@ no value if you want it documented for the next person.
 so `db:migrate` and a `vite dev` Worker agree on one URL with no second place to edit. An explicit
 `DATABASE_URL=… pnpm …` still wins over the file.
 
-Any Postgres works for local dev. A container is the shortest path:
-
-```sh
-docker run -d --name app-pg -e POSTGRES_PASSWORD=postgres -p 5432:5432 postgres:18
-```
+You rarely write that line by hand. `pnpm db:setup` creates the database, writes `DATABASE_URL` and
+records what it did in the state block above it. See "The lifecycle commands" below.
 
 ### Production: a Workers secret
 
@@ -197,6 +197,90 @@ re-running it is a no-op. There is no `drizzle-kit push` script and nothing migr
 Generate, review the SQL, commit it beside the schema change, then apply it as a command you run.
 Automating the production run belongs to the future **`infra`** capability, not here.
 
+## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
+
+Three commands create, report on and drop the development database. They live in
+`packages/db/scripts/` and run from the repo root:
+
+```sh
+pnpm db:setup    # create the database if needed, then apply every pending migration
+pnpm db:status   # backend, database, host, applied and pending migrations
+pnpm db:drop     # drop the database and clear DATABASE_URL
+```
+
+`db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
+the state block in place so the next run continues rather than making a second database.
+
+### One database per branch
+
+On `main` the database is the plain `<project>_dev`. On any other branch it is
+`<project>_dev_<branch>`, and an `issue-<N>-…` branch collapses to `<project>_dev_issue_<N>_<hash>`,
+because the title says nothing the number does not.
+
+The reason is the shared server. A branch that adds a migration must not apply it to a database
+other developers read: they then run schema that is not on `main` and nobody can see why. A database
+per branch keeps the unmerged migration where only its author meets it. Run `pnpm db:drop` when you
+are done with a branch, or the databases pile up.
+
+### Backends: `--docker`, `--server`, `--neon`
+
+A **backend** is where the Postgres runs. It is not a provider: nothing is installed or removed when
+you change it, and nothing at runtime reads it (ADR 0039).
+
+| Flag       | What it uses                                                       |
+| ---------- | ------------------------------------------------------------------ |
+| `--docker` | the container the root `compose.yaml` defines, started for you      |
+| `--server` | the server the `DATABASE_URL` in `apps/api/.dev.vars` already names |
+| `--neon`   | a temporary neon.new database, created over HTTP                    |
+
+`docker` is the default, because a fresh project has no server. The flag is needed on the first run
+only: the state block remembers the choice, and `--reset` is required to change it.
+
+```sh
+pnpm db:setup --server            # first run on a shared server
+pnpm db:setup                     # later runs read the state block
+pnpm db:setup --reset --docker    # replace it with a container database
+```
+
+`--neon` carries two quirks worth knowing. neon.new runs PostgreSQL 17, which has no `uuidv7()`, so
+`db:setup` creates a SQL shim for it before the migrations run; and Node's dual-stack connect times
+out against neon hosts on some networks, so the scripts force IPv4. The project deletes itself a few
+days after it is created, and `db:status` prints how long is left.
+
+### The state block
+
+`db:setup` writes a run of comment lines at the top of `apps/api/.dev.vars`:
+
+```sh
+# db:setup state: written by pnpm db:setup, edit with care
+# backend=docker
+# database=app_dev_issue_152_9f2c1a
+# created=2026-09-20T09:00:00.000Z
+# end db:setup state
+
+DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/app_dev_issue_152_9f2c1a"
+```
+
+Wrangler and `process.loadEnvFile` skip a comment, so the record rides along in the file that
+already holds the URL. A file that carries a `DATABASE_URL` but no block gets one inferred, when the
+URL names a database this project manages or a neon.new host. Any other URL infers nothing and is
+left alone, which is both how `--server` reads the server you already use and how a production
+string in that file never becomes a drop target: `db:drop` drops what the block names and nothing
+else.
+
+### `db:drop` refuses; it does not ask
+
+There is no confirmation prompt and no `--yes`. `db:drop` refuses a `DATABASE_URL` the state block
+does not vouch for, and every `CREATE DATABASE` and `DROP DATABASE` passes a guard that accepts only
+`<project>_dev` and `<project>_dev_<branch>` names.
+
+It drops a **database, never a server**. No container is stopped and no neon.new project is deleted.
+Throwing the container away is a separate, manual step:
+
+```sh
+docker compose down -v   # stops the container and deletes its volume
+```
+
 ## Hyperdrive: the opt-in
 
 [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) is Cloudflare's connection pooler and
@@ -279,9 +363,11 @@ put the core's copy back by hand:
 ```
 
 `remove` takes the `nodejs_compat` flag back out of `apps/api/wrangler.jsonc`. It warns about the
-leftovers it cannot reverse: the `db:migrate` script plus the `postgres` and `@types/node`
-dependencies in `packages/db/package.json`. Delete those by hand. Your `src/schema/*.ts` files stay
-put and are still `pg-core` — port them to `sqlite-core` yourself.
+leftovers it cannot reverse: the `db:migrate` script, the three `db:setup` / `db:status` / `db:drop`
+scripts in both `packages/db/package.json` and the root `package.json`, the root `compose.yaml`, and
+the `postgres` and `@types/node` dependencies. Delete those by hand — and run `pnpm db:drop` before
+`remove`, while the scripts that can still reach the database are there. Your `src/schema/*.ts`
+files stay put and are still `pg-core` — port them to `sqlite-core` yourself.
 
 **A driver switch takes the dependent feature modules with it.** `auth` and `waitlist` pick their
 schema variant at install time, and the unchosen one is filtered before the plan is built, so
