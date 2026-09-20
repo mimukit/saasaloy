@@ -35,7 +35,7 @@ Success: one typed `@repo/config` object, readable from any app and any capabili
 | What it is at runtime | A frozen plain object built at module scope and exported. No factory, no `env` argument, no async, no I/O. A bundler can inline it. |
 | How a value is read | A plain import: `import { config } from "@repo/config"`. Not `createConfig(env)`. `env` takes the environment in whole because a Worker binding only exists per request; a checked-in constant has no such constraint, and forcing symmetry would buy nothing. |
 | Direction of dependency | `packages/config` is the leaf and imports nothing. `packages/ui` depends on it, not the reverse. The corollary is the split rule: numbers and ids live in `packages/config`, sentences live in `packages/ui/src/content/`. |
-| Where a default lives | The capability package that knows what the value means, as `packages/<cap>/src/config.ts` exporting one section. This mirrors the `env` plan's preset rule so a capability author learns one placement rule, not two. |
+| Where a default lives | One section file per capability, shipped by the module. **Built as `packages/config/src/sections/<key>.ts`, not `packages/<cap>/src/config.ts`:** the second inverts the leaf, because `@repo/config` would then import `@repo/auth` while `packages/auth/src/authorize.ts` reads `config.auth`, which is a package cycle. The module still owns the file, and it reaches the helper by subpath (`@repo/config/define`). |
 | Where an override lives | One checked-in `packages/config/src/project.ts`, the only file a project owner is expected to edit. The reason is ADR 0034, not ergonomics: a section file is module-owned and `update` may rewrite it, so an owner's edit there would be lost. |
 | How sections compose | `defineConfig({ sections: [] })` in `packages/config/src/define.ts`, an array literal each capability module appends to with a `plugin-array` patch. Identical to `defineKv`'s registry. |
 | Section keys | Flat, and the section key is the module name by convention. A collision between two installed modules is refused at `add` time, naming both, the same guard `lib/collisions.ts` already applies to files one level up. No runtime namespace, and the base may own a plain `app` section. |
@@ -63,7 +63,7 @@ Success: one typed `@repo/config` object, readable from any app and any capabili
 - **`plugin-array`** exists and has a removal inverse. No new patch kind is needed.
 - **`scripts/table-names.test.ts`** is the shape of any repo-level guard this adds.
 
-### Phase 1: `packages/config` in the base
+### Phase 1: `packages/config` in the base (built 2026-09-20)
 
 Scaffold `packages/cli/templates/base/packages/config/`.
 
@@ -77,7 +77,7 @@ The base `app` section carries `name`, `locale`, `legal.termsPath` and `legal.pr
 
 Verification: `node --test` over the merge, the freeze, the leaf-replace rule and the array-replaced-whole rule. `pnpm lint`. A `.dev` scaffold typechecks.
 
-### Phase 2: the base moves in
+### Phase 2: the base moves in (built 2026-09-20)
 
 - `packages/ui` gains `@repo/config` as a `workspace:*` dependency.
 - `packages/ui/src/index.ts`'s `siteName` re-exports `config.app.name` and keeps its name, so no consumer changes.
@@ -87,7 +87,7 @@ Verification: `node --test` over the merge, the freeze, the leaf-replace rule an
 
 Verification: `pnpm lint`, and a `.dev` scaffold whose landing page, footer and legal pages render unchanged with `{{PROJECT_NAME}}` set.
 
-### Phase 3: the first two module sections
+### Phase 3: the first two module sections (built 2026-09-20)
 
 Each module gains `src/config.ts` and one `plugin-array` patch appending it, beside the provider patch it already ships.
 
@@ -98,7 +98,7 @@ Two sections from two modules prove the patch point and the collision guard agai
 
 Verification: `pnpm lint`, and a `.dev` scaffold with `auth`, `admin` and `billing` added that typechecks and boots. A rename in `project.ts` changes the name in every billing email.
 
-### Phase 4: the guards
+### Phase 4: the guards (built 2026-09-20)
 
 - The `add`-time section collision check in the CLI, refusing the `add` and naming both modules.
 - `saasaloy doctor`: warn when `config.app.name` is still the literal `{{PROJECT_NAME}}`, when `astro.config.mjs`'s `site` is still `example.com`, and when `BILLING_APP_NAME` is set in a `.env`.
@@ -106,13 +106,13 @@ Verification: `pnpm lint`, and a `.dev` scaffold with `auth`, `admin` and `billi
 
 Verification: the CLI suite, including a fixture where two descriptors claim the same section key.
 
-### Phase 5: the record
+### Phase 5: the record (built 2026-09-20)
 
 - ADR: `config` versus `env`, one rule, plus the two-deployments test and the reason `config` takes neither providers nor drivers.
 - The `saasaloy-config` skill: adding a section, what belongs in `config` against `.env`, the merge rule, and the numbers-versus-sentences split against `@repo/ui/content`.
 - `CONTEXT.md` entries for *section*, *project override*, and *config* itself.
 - `AGENTS.md`: the config rule beside the capability rules. `create-module` and `create-provider` gain the section step.
-- File the follow-up issue: move the four env keys and the seven tunables into sections.
+- File the follow-up issue: move the four env keys and the seven tunables into sections. Filed as [#162](https://github.com/mimukit/saasaloy/issues/162).
 
 ## Open questions
 
@@ -123,7 +123,7 @@ None blocking. Two to watch during the build.
 
 ## Non-goals
 
-- Moving the four misplaced env keys (`BILLING_APP_NAME`, `BILLING_LOCKOUT_DAYS`, `FLAGS_ISOLATE_TTL_SECONDS`, `STORAGE_MAX_UPLOAD_BYTES`). A follow-up issue, filed in Phase 5.
+- Moving the four misplaced env keys (`BILLING_APP_NAME`, `BILLING_LOCKOUT_DAYS`, `FLAGS_ISOLATE_TTL_SECONDS`, `STORAGE_MAX_UPLOAD_BYTES`). Filed as [#162](https://github.com/mimukit/saasaloy/issues/162).
 - Moving the seven leaf-file tunables (`storage`, `feature-flags`, `ratelimit`, `api-keys`, `admin` page size, billing lockout and cron). Same follow-up.
 - Moving any `<CAP>_PROVIDER` key out of `env`. ADR 0033 stands.
 - A runtime override channel. A value that needs to change per deployment is an `env` value by definition, and adding an override path would make `config` a second `env`.

@@ -115,6 +115,18 @@ _Avoid: scenario, test case. A flow is a whole path through running apps; a unit
 The Playwright tag a flow declares the modules it needs with: `test.describe("admin login", { tag: ["@admin", "@auth"] }, …)`. `playwright.config.ts` reads `installed` from `saasaloy.json` and turns every tag whose module is absent into `grepInvert`, so a flow for a module the project does not have is **never collected**, rather than skipped at run time on a 404. Every tag is a module name and nothing else; the base app has none, because it is always present. `scripts/e2e-tags.test.ts` asserts each one still names a real directory under `modules/` ([ADR 0051](docs/adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md)).
 _Avoid: label, marker. And never "skip" for what a tag does: a skip is a run-time decision that reports green on a broken route, which is the failure the tag exists to prevent._
 
+### Config
+The channel for a value a project checks into its repo and ships identically to every environment: the product name, the locale, a role string, a tier id. It is `@repo/config` in the base template, a frozen plain object read with a plain import, with zero runtime dependencies and no imports of its own. Its counterpart is `env`, which owns values the platform supplies per deployment, secret or not. The test a value takes is two deployments of the *same* project: if the value can differ between them it is `env` ([ADR 0039](docs/adr/0039-adr-config-owns-checked-in-values-and-env-owns-per-deployment-ones-2026-09-20.md)). `config` takes neither [providers](#provider-module) nor [drivers](#driver-module), because it wraps no external service.
+_Avoid: settings, constants, app config for the object; `config` for a module descriptor (`registry-item.json`) or for `saasaloy.json`._
+
+### Section
+One capability's contribution to [config](#config): a keyed object declared with `defineSection("<key>", { … })` in `packages/config/src/sections/<key>.ts`, registered by a `plugin-array` patch into `defineSections({ sections: [] })`. The key is the module name, flat and unique — `saasaloy add` refuses two modules claiming one, naming both. A section file lives in `packages/config` rather than in the capability, so the config package stays the leaf everything may import, and it reaches its helper by subpath (`@repo/config/define`).
+_Avoid: namespace, group. A section never reads another section._
+
+### Project override
+`packages/config/src/project.ts`, the one file in `packages/config` a project owner is expected to edit, and a declared seed file so `saasaloy update` never rewrites it ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)). It is typed as a partial of the composed shape, so a key no installed [section](#section) defines fails `typecheck`. The merge is one level below the section: a leaf value is replaced, a nested record or an array is replaced whole.
+_Avoid: local config, overrides file, user config._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 

@@ -78,6 +78,14 @@ Five rules hold for every mode:
    project root) and never another workspace. Only the capability's own workspace may import a
    provider SDK (ADR 0020).
 
+A provider that carries a **checked-in constant** — a page size, a default the vendor does not
+supply — puts it in a config section rather than in its one runtime file or in an env var. That is
+a second file (`files/config/<capability>-<provider>.ts` → `@config/sections/…`) and a second
+`plugin-array` patch, on `packages/config/src/sections.ts`. Think twice first: a value that differs
+between two deployments of one project is an `envVars` entry, and a value the capability owns
+belongs in the *capability's* section, not the provider's. See `create-module`'s `config` bullet and
+ADR 0039.
+
 Provider modules ship **no skill folder of their own**. The capability's skill is where a provider
 gets documented; add a row to its provider table and, if the provider needs out-of-band setup, a
 short runbook section there. One skill per capability keeps a consumer from installing five
@@ -702,7 +710,8 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
       `apps/api/src/worker.ts` with a second `plugin-array` patch, and gated on the capability's
       `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
-- [ ] `envVars` declares every secret the provider reads; none baked into files.
+- [ ] `envVars` declares every secret the provider reads; none baked into files. A value that
+      cannot differ between two deployments of one project is a config section (ADR 0039).
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.
 - [ ] No skill folder — the capability's skill gains a row (and a runbook section if it needs one).
 - [ ] Installed twice on a clean playground: second run changes nothing.
