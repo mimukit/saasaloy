@@ -1,0 +1,15 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    "types": ["node"],
+    "allowImportingTsExtensions": true
+  },
+  "include": [
+    "lib",
+    "specs",
+    "auth.setup.ts",
+    "global-teardown.ts",
+    "playwright.config.ts",
+    "prepare-db.ts"
+  ]
+}

@@ -1,0 +1,64 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "e2e",
+  "type": "saasaloy:capability",
+  "dependsOn": ["api"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "e2e",
+      "value": "pnpm --filter @repo/e2e e2e"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "e2e:install",
+      "value": "pnpm --filter @repo/e2e e2e:install"
+    }
+  ],
+  "files": [],
+  "scaffolds": [
+    {
+      "workspace": "packages/e2e",
+      "aliases": { "@e2e": "packages/e2e" },
+      "files": [
+        { "path": "files/package.json", "target": "package.json" },
+        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        {
+          "path": "files/playwright.config.ts",
+          "target": "playwright.config.ts"
+        },
+        { "path": "files/prepare-db.ts", "target": "prepare-db.ts" },
+        {
+          "path": "files/global-teardown.ts",
+          "target": "global-teardown.ts"
+        },
+        { "path": "files/auth.setup.ts", "target": "auth.setup.ts" },
+        { "path": "files/lib/project.ts", "target": "lib/project.ts" },
+        { "path": "files/lib/fixtures.ts", "target": "lib/fixtures.ts" },
+        {
+          "path": "files/specs/health.spec.ts",
+          "target": "specs/health.spec.ts"
+        },
+        {
+          "path": "files/specs/waitlist.spec.ts",
+          "target": "specs/waitlist.spec.ts"
+        },
+        {
+          "path": "files/specs/admin-login.spec.ts",
+          "target": "specs/admin-login.spec.ts"
+        },
+        {
+          "path": "files/specs/admin-unauthenticated.spec.ts",
+          "target": "specs/admin-unauthenticated.spec.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-e2e"]
+  }
+}
