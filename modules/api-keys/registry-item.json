@@ -3,7 +3,7 @@
   "name": "api-keys",
   "type": "saasaloy:feature",
   "requires": { "saasaloy": ">=0.5.1" },
-  "dependsOn": ["rbac"],
+  "dependsOn": ["multitenant"],
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [

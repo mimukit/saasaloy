@@ -97,7 +97,7 @@ check "the member of A sees A's rows" "a-one a-two" \
   "$(as u3 "$API/projects" | jq -r '[.projects[].name] | sort | join(" ")')"
 
 echo
-echo "== P3-2. requireCan gates the writes"
+echo "== P3-2. requirePermission gates the writes"
 PID=$(as u1 "$API/projects" | jq -r '.projects[0].id')
 c=$(code u3 -X DELETE "$API/projects/$PID")
 check "a member may not delete" 403 "$c"

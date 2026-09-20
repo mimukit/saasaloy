@@ -111,7 +111,7 @@ export const adminAuth = betterAuth({
 
 This is deliberately a top-level `export const`, not a per-request `c.env`-scoped factory (every other capability's convention): the plugin arrays must exist at module scope for the codemod to patch. Keep `audience(...)` first in each array, so the session row carries its audience before any other plugin reads it.
 
-**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, billing), so the admin session needs the same feature plugins as the client session. `teams`, `rbac`, `api-keys` and `billing-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
+**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, billing), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `billing-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
 
 ```json
 "patches": [
@@ -457,7 +457,7 @@ A project made before the split has one instance and one `better-auth.session_to
 1. Run `saasaloy update auth admin`.
 2. Resolve the merge plan for `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
 3. Run `pnpm db:generate`. It writes one migration that adds `sessions.audience` with default `'client'`. Read it, then apply it with `pnpm db:migrate:local`, or the production migrate command from the installed driver's skill.
-4. Run `saasaloy update` for each installed module that patches auth: `teams`, `rbac`, `api-keys` and `billing-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
+4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `billing-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
 
 Run step 4 after step 2. Before the merge, `auth.ts` has no `adminAuth` export, and the patch prints a warning that names the missing export. That warning means "merge `auth.ts` first", and the module's lock entry stays where it was, so running `saasaloy update <module>` again after the merge applies the patch.
 

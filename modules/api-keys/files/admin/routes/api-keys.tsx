@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import type { PrincipalLike } from "@repo/auth/rbac-rules";
+import type { PrincipalLike } from "@repo/auth/permission-rules";
 import { ErrorState } from "@repo/ui/blocks/admin/error-state";
 import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
@@ -15,7 +15,7 @@ import { organizationQuery, tenantQuery } from "@admin/lib/tenant";
 // `/api-keys` — the active organization's machine credentials.
 //
 // The same shape as `/roles`, and for the same reasons: it reads `GET /tenant` once and
-// runs the same `can()` the api runs, from `@repo/auth/rbac-rules`. There is no second
+// runs the same `can()` the api runs, from `@repo/auth/permission-rules`. There is no second
 // permission implementation to drift, and `checkRolePermission` is not used because it
 // cannot see a custom role.
 //

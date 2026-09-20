@@ -9,8 +9,8 @@ import { useState } from "react";
 import type { SubmitEvent } from "react";
 
 import { statements } from "@repo/auth/access";
-import { allows } from "@repo/auth/rbac-rules";
-import type { PrincipalLike } from "@repo/auth/rbac-rules";
+import { allows } from "@repo/auth/permission-rules";
+import type { PrincipalLike } from "@repo/auth/permission-rules";
 import { DataTable } from "@repo/ui/blocks/admin/data-table";
 import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
 import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";

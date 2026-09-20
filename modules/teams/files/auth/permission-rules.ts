@@ -3,24 +3,24 @@ import type { Denial } from "./authorize";
 // Permission checking's decision core: what a resolved principal may do, expressed with
 // zero runtime imports.
 //
-// `./rbac.ts` owns the half that resolves the tenant and throws; this file owns the rule
+// `./permissions.ts` owns the half that resolves the tenant and throws; this file owns the rule
 // it throws on. The split is the one `./authorize.ts` and `./tenant-rules.ts` already
 // draw, and for the same reason: anything importing `better-auth`, `hono` or `@repo/db`
 // resolves only inside a scaffolded project, so a rule written there would ship with no
-// test able to execute it. `./rbac-rules.test.ts` runs this file under `node --test`.
+// test able to execute it. `./permission-rules.test.ts` runs this file under `node --test`.
 //
 // The one `import type` above is erased before the file runs, and `./authorize.ts` itself
 // imports nothing. Add a runtime import here and the test stops loading the file — that
 // is the guard, not an accident.
 //
 // This file is also the ONE browser-safe half. `packages/auth/package.json` maps it to
-// `@repo/auth/rbac-rules`, and `apps/admin` imports `can` from there to hide a control
-// the caller may not use. `./rbac.ts` cannot be imported by a bundle (it pulls `hono`
+// `@repo/auth/permission-rules`, and `apps/admin` imports `can` from there to hide a control
+// the caller may not use. `./permissions.ts` cannot be imported by a bundle (it pulls `hono`
 // and the whole auth instance), and neither can `./tenant-rules.ts`, which names
 // `TenantId` from `@repo/db`. So the types below are structural rather than imported:
 // `Principal` from `./tenant-rules.ts` satisfies `PrincipalLike` by shape.
 //
-// THE HIDE IS COSMETIC. `requireCan` on the route is the gate. A screen that hides a
+// THE HIDE IS COSMETIC. `requirePermission` on the route is the gate. A screen that hides a
 // button and skips the server check has no authorization at all.
 
 /**
@@ -52,7 +52,7 @@ export type PrincipalLike =
  * action is required — the check is AND, never OR, so `{ project: ["read", "delete"] }`
  * asks for both.
  *
- * `Permissions` from `./access.ts` is the typed form of this, and `./rbac.ts` takes that
+ * `Permissions` from `./access.ts` is the typed form of this, and `./permissions.ts` takes that
  * one so an undeclared resource is a compile error. Here the values are widened to plain
  * strings, because a role loaded out of the database carries no literal types. The
  * `| undefined` in the value is what makes `Partial<...>` from `access.ts` assignable.
@@ -93,7 +93,7 @@ const ALLOWED: PermissionDecision = { denial: null, allowed: true };
  * May this principal do all of these things?
  *
  * Pure, and deliberately so. `requireTenant` already ran the one `organization_roles` query
- * and merged the statements onto the principal, so a route with three `requireCan` lines
+ * and merged the statements onto the principal, so a route with three `requirePermission` lines
  * still pays for one round trip. Better Auth's own `auth.api.hasPermission` would ask the
  * database again per check and could not be tested here at all.
  *
