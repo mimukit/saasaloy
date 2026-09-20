@@ -90,6 +90,26 @@ A feature module whose real job is to validate that the machinery generalizes: *
 ### Dependency leverage
 The Phase-3 prioritization axis: a capability's rank equals how many downstream features it unblocks; cheapest-to-scaffold breaks ties.
 
+## Environment values
+
+### Service
+A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `infra`. The name is the workspace directory, not the module that installed it. `packages/env/src/services.ts` holds the table; the base seeds the `web` row and `saasaloy add api` appends its own with a `const-array` patch.
+_Avoid: app. `infra` is a service and is not an app, and `packages/*` holds no service at all._
+
+### Key list
+`packages/env/.env.example`, the project's one tracked file naming every environment key. `saasaloy add` generates it from the installed descriptors' `envVars`, grouped under a `# @services` line per distinct set of readers. It replaced `apps/api/.dev.vars.example` and every per-workspace example ([ADR 0040](docs/adr/0040-adr-a-scaffolded-project-writes-env-never-dev-vars-2026-09-20.md)).
+_Avoid: env file for this one. The key list is tracked and holds local defaults; a `.env` is gitignored and holds values._
+
+### Value source
+Where `pnpm env:setup` gets its values, selected by `ENV_SOURCE`. The built-in `local` source reads the gitignored `packages/env/.env` that `saasaloy env` prompts into; `saasaloy add env-infisical` registers a second. A source that does not answer at all is *unreachable*, and `env:setup` may then keep files that are already complete; a refusal the source answered with always fails.
+
+### Checkout-owned key
+A key listed in `CHECKOUT_OWNED_KEYS` whose value on disk survives every `pnpm env:setup`, whoever wrote it. A per-branch `DATABASE_URL` is the case it exists for. `packages/env` never learns what a database is, only that some key is the checkout's to set.
+
+### Preset
+A capability package's `src/env-preset.ts`: the `definePreset` call naming the keys that package reads, with a schema and a description for each. A service's `env.ts` folds the presets it installed into one `createEnv`, and a provider module appends its own preset to the capability's with a `plugin-array` patch. `scripts/env-presets.test.ts` fails when a preset and its descriptor's `envVars` disagree.
+_Avoid: schema for this. The schema is one key's validator; the preset is the set._
+
 ## Object storage
 
 ### Object

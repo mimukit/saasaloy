@@ -25,7 +25,7 @@ drifting port turns into an unexplained CORS rejection.
 | `apps/web` (Astro) | 3000 | `http://localhost:3000` | `apps/web/astro.config.mjs` (`server.port`) |
 | `apps/admin` (TanStack Start) | 3001 | `http://localhost:3001` | `apps/admin/vite.config.ts` (`server.port`, `strictPort`) |
 | `apps/api` (Hono on Workers) | 4000 | `http://localhost:4000` | `apps/api/wrangler.jsonc` (`dev.port`) |
-| Postgres (local, `database-postgres`) | 5432 | `postgres://postgres:postgres@127.0.0.1:5432/app` | `DATABASE_URL` in `.env` |
+| Postgres (local, `database-postgres`) | 5432 | `postgres://postgres:postgres@127.0.0.1:5432/app` | `DATABASE_URL` in `packages/env/.env.example` |
 
 The `apps/admin` and `apps/api` rows apply once you run `saasaloy add admin` or
 `saasaloy add api`.
@@ -36,8 +36,9 @@ Rules for a new app or service:
   from 4000. Add a row to this table in the same change.
 - **Set `strictPort` (or the framework's equivalent).** A busy port must fail loudly. A
   silent `+1` moves the app to an origin nothing allows.
-- **Name the origin, don't infer it.** A browser-side caller reads `PUBLIC_API_URL` and
-  falls back to `http://localhost:4000`; a server-side caller reads its own env var.
+- **Name the origin, don't infer it.** A browser-side caller reads `PUBLIC_API_URL`
+  through `webEnv()` or `adminEnv()`, with no fallback — an unset key fails the build
+  naming the key. A server-side caller reads its own key through `apiEnv(c.env)`.
 - **Update both allow-lists when you add a browser origin**: `DEV_ORIGINS` in
   `apps/api/src/index.ts` and `DEV_ORIGINS` in `packages/auth/src/auth.ts`.
 
@@ -89,6 +90,32 @@ without one is silently skipped by `turbo run clean` and leaves stale build outp
   takes both out again. Do not add a route by dropping a file into `apps/api/src/routes/`
   and expecting it to mount: nothing globs that folder, and the entry file's `AppType` is
   what the typed `hc` client reads.
+
+### The `@repo/env` Environment Layer
+
+`packages/env` owns every environment value this project reads. One tracked key list, one
+command that distributes it, one typed gate in front of the capabilities.
+
+- **`packages/env/.env.example` is the key list**, and it is the only example file. It is
+  tracked, and `saasaloy add` regenerates it from the installed modules' own descriptions.
+  A value you type in it survives that, and nothing is ever removed.
+- **`packages/env/.env` holds the values**, and it is gitignored. `saasaloy env` prompts
+  for each unset key and writes it.
+- **`pnpm env:setup` writes every service's own `.env`** from those two files. A *service*
+  is a workspace that reads a `.env` — `api`, `web`, `admin`, `infra` — and
+  `packages/env/src/services.ts` is the table.
+- **`createEnv` is the gate.** `apiEnv(c.env)` on the server, `webEnv()` in a frontend.
+  It validates on the first call and throws once naming every failing key, its module and
+  what the key is for.
+- **A `client` key must start with `PUBLIC_`**, and the type system enforces it. Client
+  code reading a server key throws by name.
+- **There is no `.dev.vars`.** Every runtime here reads `.env`. A leftover `.dev.vars`
+  hides `.env` from wrangler without warning, so `saasaloy doctor` reports one and
+  `pnpm env:setup` carries its values across and deletes it.
+- **Never read `process.env`** in a file a Worker imports. Node tooling reads it freely.
+
+The `saasaloy-env` skill is the runbook: adding a key, the section rule, the server/client
+split, blank-on-purpose keys, and the offline rule.
 
 ### The `@repo/ui` Design Layer
 
@@ -418,7 +445,7 @@ hook (which is also how you keep hooks out of CI).
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
-- There is no `pnpm test` at the root, and no workspace declares a `test` script. The base ships no test runner: pick one and add it per workspace when you have something to test.
+- Run the tests: `pnpm test` (`turbo run test` across every workspace). Only `packages/env` ships tests in the base — they run on `node --test` with no runner to install. Pick a runner and add a `test` script per workspace when you have something else to test.
 
 ## Boundaries
 
@@ -447,7 +474,8 @@ hook (which is also how you keep hooks out of CI).
 
 - Never use `npm` or `npx`, instead use `pnpm` & `pnpm dlx`
 - Never use `rm -rf` in a package script — it breaks on Windows; use `rimraf`
-- Commit secrets, API keys, or environment variables
+- Commit secrets or API keys. `packages/env/.env` is gitignored; `packages/env/.env.example`
+  is tracked and holds local defaults only
 - Modify `node_modules/` or `pnpm-lock.yaml` manually (use `pnpm install`)
 - Remove or disable TypeScript strict mode
 - Remove or disable the lint-staged or commitlint hooks, or commit with `--no-verify`
