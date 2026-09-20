@@ -4,6 +4,7 @@
 // duplicate the shell or import globals.css again.
 import "@repo/ui/globals.css";
 import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
+import { webEnv } from "@web/env";
 
 interface Props {
   title: string;
@@ -11,6 +12,11 @@ interface Props {
 }
 
 const { title, description } = Astro.props;
+
+// The one place this app reads an environment value. `webEnv()` validates on its first
+// call and throws naming every key that is unset, so a build with a missing key fails
+// here rather than shipping a page with a broken canonical URL.
+const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
 ---
 
 <!doctype html>
@@ -29,6 +35,7 @@ const { title, description } = Astro.props;
     */
     }
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href={canonical} />
     {description && <meta name="description" content={description} />}
     {
       /*

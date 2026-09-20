@@ -7,6 +7,9 @@
   "envVars": {
     "PUBLIC_API_URL": "Base URL of the api Worker the form posts to (defaults to http://localhost:4000 in dev)."
   },
+  "envServices": {
+    "default": ["web"]
+  },
   "patches": [
     {
       "file": "apps/api/src/index.ts",
@@ -60,10 +63,6 @@
     {
       "path": "files/web/components/WaitlistForm.tsx",
       "target": "@web/components/WaitlistForm.tsx"
-    },
-    {
-      "path": "files/web/types/waitlist-env.d.ts",
-      "target": "@web/types/waitlist-env.d.ts"
     }
   ],
   "agent": {
