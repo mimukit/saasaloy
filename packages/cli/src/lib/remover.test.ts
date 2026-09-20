@@ -440,6 +440,27 @@ describe("executeRemovePlan — file deletion", () => {
     ).resolves.toBe("hand\n");
   });
 
+  // A `@root` target resolves to a bare file name, so `remove` deletes at the project
+  // root with no directory above it to walk (#152).
+  it("deletes a repo-root file a module owns", async () => {
+    const manifest = emptyManifest();
+    await writeManaged(manifest, "compose.yaml", "services: {}\n", "auth");
+
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    await expect(pathExists(join(root, "compose.yaml"))).resolves.toBeFalsy();
+    expect(manifest.managed["compose.yaml"]).toBeUndefined();
+    expect(result.deleted.map((f) => f.target)).toStrictEqual(["compose.yaml"]);
+  });
+
   it("leaves a drifted file on disk and untracked when not confirmed for deletion", async () => {
     const manifest = emptyManifest();
     await writeManaged(
