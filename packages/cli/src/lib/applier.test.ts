@@ -112,6 +112,29 @@ async function apiCapability(): Promise<LoadedModule> {
   );
 }
 
+// A module that registers `@root` and writes one file at the project root through it —
+// the shape `database-postgres` uses for `compose.yaml` (#152).
+async function rootWritingModule(): Promise<LoadedModule> {
+  return writeModule(
+    "database-postgres",
+    {
+      type: "saasaloy:feature",
+      files: [{ path: "files/compose.yaml", target: "@root/compose.yaml" }],
+      scaffolds: [
+        {
+          workspace: "packages/db",
+          aliases: { "@root": "." },
+          files: [{ path: "files/tsconfig.json", target: "tsconfig.json" }],
+        },
+      ],
+    },
+    {
+      "files/compose.yaml": "services: {}\n",
+      "files/tsconfig.json": "{}\n",
+    }
+  );
+}
+
 describe("buildPlan — scaffolds", () => {
   it("plans scaffold files at workspace-root-relative targets", async () => {
     const p = await plan({
@@ -258,6 +281,30 @@ describe("executePlan — scaffolds", () => {
     expect(manifest.managed["apps/api/src/index.ts"]?.module).toBe("api");
     expect(result.written).toHaveLength(2);
     expect(result.heldBack).toHaveLength(0);
+  });
+
+  it("writes a file the `@root` alias targets at the project root", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const p = await plan({
+      install: ["database-postgres"],
+      modules: [await rootWritingModule()],
+      config,
+      manifest,
+    });
+
+    expect(p.files.map((f) => f.target).toSorted()).toStrictEqual([
+      "compose.yaml",
+      "packages/db/tsconfig.json",
+    ]);
+
+    await executePlan(p, root, config, manifest);
+
+    await expect(readFile(join(root, "compose.yaml"), "utf-8")).resolves.toBe(
+      "services: {}\n"
+    );
+    expect(config.aliases["@root"]).toBe(".");
+    expect(manifest.managed["compose.yaml"]?.module).toBe("database-postgres");
   });
 
   it("does not clobber a held-back conflict", async () => {
