@@ -57,7 +57,15 @@ export type {
 } from "./notify";
 export { plans } from "./plans";
 export { BillingError, isLiveStatus, LIVE_STATUSES } from "./provider";
+export {
+  normalizeFields,
+  normalizeReference,
+  prefillFrom,
+  referenceField,
+  rememberedChanged,
+} from "./submission";
 export type {
+  ApproveSubmissionInput,
   BillableSubject,
   BillingEnv,
   BillingErrorCode,
@@ -71,6 +79,9 @@ export type {
   CheckoutResult,
   HostContext,
   Invoice,
+  ManualInstructions,
+  ManualInstructionsInput,
+  PaymentSubmission,
   Plan,
   PlanConfig,
   PlanInterval,
@@ -78,7 +89,11 @@ export type {
   PortalInput,
   QuantityInput,
   RenewalMode,
+  SettlementMode,
   SubjectInput,
+  SubmissionField,
+  SubmissionFieldType,
+  SubmissionStatus,
   Subscription,
   SubscriptionInput,
   SubscriptionStatus,
@@ -102,6 +117,9 @@ export type {
   ApplyEventResult,
   BillingEventRecord,
   BillingStore,
+  NewPaymentSubmission,
+  SubmissionFill,
+  SubmissionReview,
   SubscriptionPatch,
 } from "./subscription";
 

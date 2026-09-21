@@ -5,13 +5,19 @@ import {
   currentSubscription,
   defaultPlan,
   findPlan,
+  normalizeFields,
+  normalizeReference,
   plans,
+  prefillFrom,
+  referenceField,
   resolveSubject,
 } from "@repo/billing";
 import type {
   BillableSubject,
   BillingEvent,
   HostContext,
+  PaymentSubmission,
+  Plan,
   PlanInterval,
   SubjectUser,
 } from "@repo/billing";
@@ -66,7 +72,7 @@ type BillingContext = Context<{
 }>;
 
 /** Every status a `BillingError` renders as. Never 200; see `statusFor`. */
-type BillingErrorStatus = 400 | 402 | 404 | 429 | 502;
+type BillingErrorStatus = 400 | 402 | 404 | 409 | 429 | 502;
 
 /** What `guard` hands a handler: everything it would otherwise re-derive. */
 interface Scope {
@@ -97,7 +103,7 @@ export const billingRoute = new Hono<{
 
       // Throws `not_found` naming the registered ids, so a typo in the plan picker is a
       // 404 with the answer in it rather than an empty price id reaching the vendor.
-      findPlan(plans, planId);
+      const plan = findPlan(plans, planId);
 
       const live = await currentSubscription(store, subject);
       if (live) {
@@ -107,12 +113,19 @@ export const billingRoute = new Hono<{
         );
       }
 
+      const submission = await openSubmission(client, store, {
+        interval,
+        plan,
+        subject,
+      });
+
       const result = await client.createCheckout(host, {
         cancelUrl,
         interval,
         planId,
         subject,
         successUrl,
+        ...(submission === undefined ? {} : { submissionId: submission.id }),
       });
 
       await enqueue(c, result.event);
@@ -292,12 +305,24 @@ export const billingRoute = new Hono<{
         );
       }
 
+      const interval: PlanInterval =
+        live.billingInterval === "year" ? "yearly" : "monthly";
+
+      // A manual provider gets the same shell a first checkout opens, so the next period's
+      // payment is quoted, submitted and reviewed through exactly one code path.
+      const submission = await openSubmission(client, store, {
+        interval,
+        plan: findPlan(plans, live.plan),
+        subject,
+      });
+
       const result = await client.createCheckout(host, {
         cancelUrl,
-        interval: live.billingInterval === "year" ? "yearly" : "monthly",
+        interval,
         planId: live.plan,
         subject,
         successUrl,
+        ...(submission === undefined ? {} : { submissionId: submission.id }),
       });
 
       await enqueue(c, result.event);
@@ -321,6 +346,152 @@ export const billingRoute = new Hono<{
     })
   )
 
+  // The subject's half of the manual-settlement queue. Three routes, and none of them names
+  // a payment method: the instruction text, the fields and the validation rules all come off
+  // the selected provider, so a project that swaps bKash for Nagad changes an env var.
+  //
+  // What the subject is looking at while they pay. Carries the live shell, the instructions,
+  // the field spec and the pre-fill, so the pay page needs one request.
+  .get("/submission", (c) =>
+    guard(c, async ({ client, store, subject }) => {
+      requireManual(client);
+
+      const fields = client.submissionFields();
+      const live = await store.pendingSubmission(subject);
+      const previous = await store.latestSubmission(subject);
+
+      return c.json(
+        {
+          fields: fields.map((field) => ({
+            help: field.help ?? null,
+            id: field.id,
+            label: field.label,
+            reference: field.reference ?? false,
+            type: field.type,
+          })),
+          // What the last submission ended in, so a subject whose payment was refused reads
+          // the admin's reason rather than an empty form.
+          last:
+            previous && previous.id !== live?.id
+              ? {
+                  reviewNote: previous.reviewNote ?? null,
+                  status: previous.status,
+                  transactionRef: previous.transactionRef ?? null,
+                }
+              : null,
+          // Only the `remembered` fields carry over. A transaction reference never does.
+          prefill: prefillFrom(fields, previous),
+          submission: live ? publicSubmission(live) : null,
+          ...(live
+            ? {
+                instructions: client.manualInstructions({
+                  currency: live.currency,
+                  expectedAmount: live.expectedAmount,
+                  interval: live.billingInterval,
+                  planId: live.plan,
+                  subject,
+                }),
+              }
+            : { instructions: null }),
+        },
+        200
+      );
+    })
+  )
+
+  // The subject says they have paid, and names the transaction. Two 409s, and they are
+  // different mistakes: no open checkout to attach this to, and a reference somebody has
+  // already claimed. Both are `invalid_request` at the core and both render as 409 here.
+  .post("/submission", (c) =>
+    guard(c, async ({ client, store, subject }) => {
+      requireManual(client);
+
+      const body = await readJson(c);
+      const fields = client.submissionFields();
+      const reference = referenceField(client.provider, fields);
+
+      const live = await store.pendingSubmission(subject);
+      if (!live) {
+        throw new BillingError(
+          "invalid_request",
+          "There is no open payment to submit a reference for. Start one through POST /billing/checkout, pay, then come back.",
+          { providerCode: "no_open_submission" }
+        );
+      }
+      if (live.transactionRef) {
+        throw new BillingError(
+          "conflict",
+          `A payment is already submitted and waiting for review (reference ${live.transactionRef}). Withdraw it through DELETE /billing/submission/${live.id} before submitting another.`,
+          { providerCode: "already_submitted" }
+        );
+      }
+
+      // Every value goes through the provider's own `normalize`, which is where the rule for
+      // a bKash TrxID or a Bangladeshi mobile number lives. A refusal names the field.
+      const values = normalizeFields(fields, body);
+      const ref = values[reference.id] as string;
+
+      // Throws `duplicate_reference` when the partial unique index refuses it. The index is
+      // partial on `status <> 'rejected'`, so a reference that was wrongly rejected can be
+      // submitted again.
+      const filled = await store.fillSubmission(live.id, {
+        fields: values,
+        transactionRef: ref,
+        transactionRefNormalized: normalizeReference(ref),
+      });
+
+      if (!filled) {
+        throw new BillingError(
+          "conflict",
+          "That payment was reviewed or withdrawn while you were filling the form. Reload the billing page to see where it stands.",
+          { providerCode: "not_pending" }
+        );
+      }
+
+      return c.json({ submission: publicSubmission(filled) }, 200);
+    })
+  )
+
+  // Take a submission back before anyone reviews it. It is what lets a subject who typed the
+  // wrong reference fix it: one pending submission per subject is the cap, so the withdraw
+  // and the next checkout are the whole cycle.
+  .delete("/submission/:id", (c) =>
+    guard(c, async ({ client, store, subject }) => {
+      requireManual(client);
+
+      const id = c.req.param("id");
+      const live = await store.pendingSubmission(subject);
+
+      // Compared against the subject's own pending row rather than read by id: an id that
+      // belongs to somebody else must not even be confirmed to exist.
+      if (!live || live.id !== id) {
+        throw new BillingError(
+          "not_found",
+          "No pending payment under that id for this account.",
+          { providerCode: "no_pending_submission" }
+        );
+      }
+
+      const withdrawn = await store.reviewSubmission(id, {
+        reviewNote: null,
+        reviewedAt: new Date(),
+        // Nobody reviewed it. The subject withdrew it, and `reviewed_by` names admins.
+        reviewedBy: null,
+        status: "withdrawn",
+      });
+
+      if (!withdrawn) {
+        throw new BillingError(
+          "conflict",
+          "That payment was reviewed a moment ago, so there is nothing left to withdraw.",
+          { providerCode: "not_pending" }
+        );
+      }
+
+      return c.json({ submission: publicSubmission(withdrawn) }, 200);
+    })
+  )
+
   // The provider callback surface: `POST /billing/callback/:provider/*` for a gateway's
   // server-to-server notification, and `GET` for the browser returns some gateways use.
   //
@@ -335,6 +506,92 @@ export const billingRoute = new Hono<{
   // in the vendor-blind half of the capability.
   .post("/callback/:provider/*", (c) => callback(c))
   .get("/callback/:provider/*", (c) => callback(c));
+
+/**
+ * Open the `billing_payment_submissions` shell a manual checkout runs on, or nothing.
+ *
+ * Nothing on three branches. A vendor-settled provider has no queue. A trial takes no money,
+ * so the provider mints a `trialing` row and no reference is ever owed. And the whole thing
+ * is skipped before the provider is called, so a refusal costs no row.
+ *
+ * The expected amount is copied off the plan **here**, at the moment the subject is quoted
+ * it, and is never recomputed. A price change between a payment and its review must not make
+ * the subject look like they underpaid for a figure they never saw.
+ *
+ * One pending submission per subject is enforced here too, and it is the same rule as one
+ * live subscription per subject: a second open checkout would be a second thing an admin has
+ * to reconcile against one wallet statement.
+ */
+async function openSubmission(
+  client: ReturnType<typeof createBilling>,
+  store: ReturnType<typeof createBillingStore>,
+  input: { plan: Plan; interval: PlanInterval; subject: BillableSubject }
+) {
+  if (client.settlement !== "manual" || input.plan.trialDays) {
+    return;
+  }
+
+  const open = await store.pendingSubmission(input.subject);
+  if (open) {
+    throw new BillingError(
+      "conflict",
+      `A payment for "${open.plan}" is already open and waiting. Submit its transaction reference, or withdraw it through DELETE /billing/submission/${open.id}, before starting another.`,
+      { providerCode: "submission_pending" }
+    );
+  }
+
+  const price = input.plan.price[input.interval];
+  if (!price || price.amount <= 0) {
+    throw new BillingError(
+      "invalid_request",
+      `Plan "${input.plan.id}" carries no ${input.interval} price. ${client.provider} settles manually, so the subject is quoted a figure rather than sent to a hosted page — set price.${input.interval} in packages/billing/src/plans.ts.`,
+      { providerCode: "no_price" }
+    );
+  }
+
+  return await store.openSubmission({
+    billingInterval: input.interval,
+    currency: price.currency,
+    expectedAmount: price.amount,
+    plan: input.plan.id,
+    provider: client.provider,
+    subject: input.subject,
+  });
+}
+
+/** A refusal for the three submission routes when the selected provider settles at a vendor. */
+function requireManual(client: ReturnType<typeof createBilling>): void {
+  if (client.settlement !== "manual") {
+    throw new BillingError(
+      "not_found",
+      `${client.provider} settles at the vendor, so there is no payment to submit by hand. Pay through POST /billing/checkout instead.`,
+      { providerCode: "not_manual" }
+    );
+  }
+}
+
+/**
+ * The half of a submission the subject may see.
+ *
+ * `reviewedBy` never crosses this line: it is an admin's user id, and the subject has no
+ * business learning which member of staff read their payment. The note does cross it, which
+ * is the whole reason a rejection is worth an email.
+ */
+function publicSubmission(submission: PaymentSubmission) {
+  return {
+    billingInterval: submission.billingInterval,
+    createdAt: submission.createdAt,
+    currency: submission.currency,
+    expectedAmount: submission.expectedAmount,
+    fields: submission.fields,
+    id: submission.id,
+    plan: submission.plan,
+    reviewNote: submission.reviewNote ?? null,
+    reviewedAt: submission.reviewedAt ?? null,
+    status: submission.status,
+    transactionRef: submission.transactionRef ?? null,
+  };
+}
 
 /**
  * One provider callback, whichever method it arrived on.
@@ -574,6 +831,12 @@ function statusFor(error: BillingError): BillingErrorStatus {
   switch (error.code) {
     case "not_found": {
       return 404;
+    }
+    // A well-formed request that lost a race, or asked for a state it is already in. The
+    // duplicate transaction reference, the second open submission and the loser of two
+    // concurrent reviews all land here.
+    case "conflict": {
+      return 409;
     }
     case "card_declined": {
       return 402;

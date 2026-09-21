@@ -4,6 +4,8 @@ import { isLiveStatus } from "./provider";
 import type {
   BillableSubject,
   BillingEvent,
+  PaymentSubmission,
+  PlanInterval,
   Subscription,
   SubscriptionInput,
   SubscriptionStatus,
@@ -102,6 +104,80 @@ export interface BillingStore {
    * is; this decides where to write to it, and `teams` replaces both together.
    */
   recipientFor(subject: BillableSubject): Promise<BillingRecipient | undefined>;
+
+  // The manual-settlement queue. Every method below is core-only: no provider is handed the
+  // port, and the admin review route reaches `billing_subscriptions` through the event path
+  // like everything else (ADR 0034, ADR 0040).
+
+  /** Open the shell a manual checkout starts from. Carries no reference yet. */
+  openSubmission(input: NewPaymentSubmission): Promise<PaymentSubmission>;
+  /** The subject's one `pending` submission, or nothing. */
+  pendingSubmission(
+    subject: BillableSubject
+  ): Promise<PaymentSubmission | undefined>;
+  /** The subject's most recent submission of any status. What the pre-fill reads. */
+  latestSubmission(
+    subject: BillableSubject
+  ): Promise<PaymentSubmission | undefined>;
+  /** The most recent submission this subject made *before* `before`. The change flag's other half. */
+  previousSubmission(
+    subject: BillableSubject,
+    before: Date
+  ): Promise<PaymentSubmission | undefined>;
+  submissionById(id: string): Promise<PaymentSubmission | undefined>;
+  /**
+   * Write the subject's reference and field values onto their `pending` shell.
+   *
+   * Throws `BillingError("invalid_request", …, { providerCode: "duplicate_reference" })`
+   * when the partial unique index refuses the reference, so the route answers 409 rather
+   * than surfacing a driver's own constraint name.
+   */
+  fillSubmission(
+    id: string,
+    fill: SubmissionFill
+  ): Promise<PaymentSubmission | undefined>;
+  /** The queue, newest first, optionally narrowed to one status. */
+  listSubmissions(
+    status: PaymentSubmission["status"] | undefined,
+    limit: number
+  ): Promise<PaymentSubmission[]>;
+  /**
+   * Move one submission out of `pending`, **only if it is still `pending`**.
+   *
+   * Returns the updated row, or nothing when no row changed. That is the whole race guard
+   * between two admins reviewing the same submission: the loser reads nothing back and the
+   * route answers 409 naming who got there first.
+   */
+  reviewSubmission(
+    id: string,
+    review: SubmissionReview
+  ): Promise<PaymentSubmission | undefined>;
+}
+
+/** The shell a manual checkout opens. */
+export interface NewPaymentSubmission {
+  provider: string;
+  subject: BillableSubject;
+  plan: string;
+  billingInterval: PlanInterval;
+  /** The figure quoted at checkout, in the currency's minor unit. Never recomputed later. */
+  expectedAmount: number;
+  currency: string;
+}
+
+/** What `POST /billing/submission` writes onto the shell. */
+export interface SubmissionFill {
+  transactionRef: string;
+  transactionRefNormalized: string;
+  fields: Record<string, string>;
+}
+
+/** What an admin's decision writes. `status` is never `pending`. */
+export interface SubmissionReview {
+  status: "approved" | "rejected" | "withdrawn";
+  reviewedBy: string | null;
+  reviewedAt: Date;
+  reviewNote: string | null;
 }
 
 /**

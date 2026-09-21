@@ -2,13 +2,18 @@ import type {
   BillableSubject,
   BillingEventRecord,
   BillingStore,
+  NewPaymentSubmission,
+  PaymentSubmission,
   Subscription,
+  SubmissionFill,
+  SubmissionReview,
   SubscriptionPatch,
   SubscriptionWrite,
   BillingNotification,
 } from "@repo/billing";
 import {
   BILLING_EVENT_JOB,
+  BillingError,
   billingConfig,
   defaultPlan,
   findPlan,
@@ -23,13 +28,18 @@ import {
 import { createEmail } from "@repo/email";
 import { accountLocked } from "@repo/email/templates/account-locked";
 import { paymentFailed } from "@repo/email/templates/payment-failed";
+import { paymentRejected } from "@repo/email/templates/payment-rejected";
 import { renewalDue } from "@repo/email/templates/renewal-due";
 import { trialEnding } from "@repo/email/templates/trial-ending";
 import type { EmailEnv } from "@repo/email";
 import type { Db, DbBindings } from "@repo/db/client";
 import { withDb } from "@repo/db/client";
 import { users } from "@repo/db/schema/auth";
-import { billingEvents, billingSubscriptions } from "@repo/db/schema/billing";
+import {
+  billingEvents,
+  billingPaymentSubmissions,
+  billingSubscriptions,
+} from "@repo/db/schema/billing";
 import { createQueue } from "@repo/queue";
 import type { QueueEnv } from "@repo/queue";
 import { env } from "cloudflare:workers";
@@ -139,8 +149,34 @@ setBillingNotifier(async (notification: BillingNotification) => {
 });
 
 function content(notification: BillingNotification) {
-  const { subscription, to } = notification;
+  const { submission, to } = notification;
   const name = to.name ?? to.email;
+
+  // Handled first and separately, because it is the one notification with no subscription
+  // row behind it. A refused submission granted nothing, so there is nothing to read a plan
+  // or a date off except the submission itself.
+  if (notification.kind === "payment.rejected") {
+    if (!submission) {
+      throw new Error(
+        "A payment.rejected notification carries no submission. The admin review route in apps/api/src/routes/admin-billing.ts sets it; nothing else sends this kind."
+      );
+    }
+    return paymentRejected({
+      appName,
+      billingUrl,
+      name,
+      note: submission.reviewNote ?? "",
+      planName: planLabel(submission.plan),
+      transactionRef: submission.transactionRef ?? "",
+    });
+  }
+
+  const subscription = notification.subscription;
+  if (!subscription) {
+    throw new Error(
+      `A ${notification.kind} notification carries no subscription row. Every kind but payment.rejected is sent from applyEvent or a sweep, which both have one.`
+    );
+  }
   const planName = planLabel(subscription.plan);
 
   switch (notification.kind) {
@@ -234,6 +270,56 @@ export function withBillingStore<T>(
 /** Build the port over `db`. Call it inside `withDb`, and hand it to `withBillingStore`. */
 export function createBillingStore(db: Db): BillingStore {
   return {
+    // The subject's reference and field values, written onto the shell the checkout opened.
+    //
+    // `and(eq(id), eq(status, "pending"))` rather than a bare id: a shell the subject
+    // withdrew, or one an admin has already reviewed, must not take a reference. The empty
+    // answer is what the route turns into a 409.
+    //
+    // The partial unique index is the duplicate check, and it runs here rather than in a
+    // read above: a read-then-write would let two subjects claim one transaction reference
+    // in the gap. The driver's constraint error is mapped once, so no route learns a
+    // dialect's own message.
+    async fillSubmission(id: string, fill: SubmissionFill) {
+      try {
+        return await db
+          .update(billingPaymentSubmissions)
+          .set({
+            fields: fill.fields,
+            transactionRef: fill.transactionRef,
+            transactionRefNormalized: fill.transactionRefNormalized,
+            updatedAt: new Date(),
+          })
+          .where(
+            and(
+              eq(billingPaymentSubmissions.id, id),
+              eq(billingPaymentSubmissions.status, "pending")
+            )
+          )
+          .returning()
+          .then((rows) => rows.at(0) as PaymentSubmission | undefined);
+      } catch (error) {
+        if (isUniqueViolation(error)) {
+          throw new BillingError(
+            "conflict",
+            `Transaction reference "${fill.transactionRef}" has already been submitted. If it was rejected you can submit it again; otherwise check the reference against your own payment record.`,
+            { cause: error, providerCode: "duplicate_reference" }
+          );
+        }
+        throw error;
+      }
+    },
+
+    latestSubmission(subject: BillableSubject) {
+      return db
+        .select()
+        .from(billingPaymentSubmissions)
+        .where(submissionSubjectMatches(subject))
+        .orderBy(desc(billingPaymentSubmissions.createdAt))
+        .limit(1)
+        .then((rows) => rows.at(0) as PaymentSubmission | undefined);
+    },
+
     latestSubscription(subject: BillableSubject) {
       return (
         db
@@ -263,6 +349,44 @@ export function createBillingStore(db: Db): BillingStore {
         );
     },
 
+    // The admin queue's read, oldest first: a queue is worked from the front, and the oldest
+    // pending submission is the subject who has been waiting longest with money already sent.
+    listSubmissions(status: PaymentSubmission["status"] | undefined, limit) {
+      const query = db.select().from(billingPaymentSubmissions);
+      return (
+        status === undefined
+          ? query
+          : query.where(eq(billingPaymentSubmissions.status, status))
+      )
+        .orderBy(billingPaymentSubmissions.createdAt)
+        .limit(limit)
+        .then((rows) => rows as PaymentSubmission[]);
+    },
+
+    openSubmission(input: NewPaymentSubmission) {
+      const now = new Date();
+      return db
+        .insert(billingPaymentSubmissions)
+        .values({
+          billingInterval: input.billingInterval,
+          createdAt: now,
+          currency: input.currency,
+          customerType: input.subject.customerType,
+          expectedAmount: input.expectedAmount,
+          // Empty until `POST /billing/submission` fills it. The shell exists from checkout
+          // so the quoted figure is stored at the moment it was quoted.
+          fields: {},
+          id: crypto.randomUUID(),
+          plan: input.plan,
+          provider: input.provider,
+          referenceId: input.subject.referenceId,
+          status: "pending",
+          updatedAt: now,
+        })
+        .returning()
+        .then((rows) => rows[0] as PaymentSubmission);
+    },
+
     // The daily sweep's whole query. `locked_at is null` keeps it idempotent: a row this
     // job already locked is out of the set, so a second tick on the same day locks nothing
     // and sends no second email.
@@ -278,6 +402,38 @@ export function createBillingStore(db: Db): BillingStore {
           )
         )
         .then((rows) => rows as Subscription[]);
+    },
+
+    pendingSubmission(subject: BillableSubject) {
+      return db
+        .select()
+        .from(billingPaymentSubmissions)
+        .where(
+          and(
+            submissionSubjectMatches(subject),
+            eq(billingPaymentSubmissions.status, "pending")
+          )
+        )
+        .orderBy(desc(billingPaymentSubmissions.createdAt))
+        .limit(1)
+        .then((rows) => rows.at(0) as PaymentSubmission | undefined);
+    },
+
+    // The other half of the sender-number-changed flag: the submission this subject made
+    // before the one the admin is looking at.
+    previousSubmission(subject: BillableSubject, before: Date) {
+      return db
+        .select()
+        .from(billingPaymentSubmissions)
+        .where(
+          and(
+            submissionSubjectMatches(subject),
+            lt(billingPaymentSubmissions.createdAt, before)
+          )
+        )
+        .orderBy(desc(billingPaymentSubmissions.createdAt))
+        .limit(1)
+        .then((rows) => rows.at(0) as PaymentSubmission | undefined);
     },
 
     async patchSubscription(id: string, patch: SubscriptionPatch) {
@@ -314,6 +470,39 @@ export function createBillingStore(db: Db): BillingStore {
         .onConflictDoNothing()
         .returning({ provider: billingEvents.provider })
         .then((rows) => rows.length > 0);
+    },
+
+    // The conditional update two admins race on. `status = 'pending'` in the WHERE is the
+    // whole guard: the database decides which of them wins, the loser gets an empty
+    // `returning()`, and the route answers 409 naming the one who got there first. A read
+    // then a write would let both through and enqueue the grant twice.
+    reviewSubmission(id: string, review: SubmissionReview) {
+      return db
+        .update(billingPaymentSubmissions)
+        .set({
+          reviewNote: review.reviewNote,
+          reviewedAt: review.reviewedAt,
+          reviewedBy: review.reviewedBy,
+          status: review.status,
+          updatedAt: new Date(),
+        })
+        .where(
+          and(
+            eq(billingPaymentSubmissions.id, id),
+            eq(billingPaymentSubmissions.status, "pending")
+          )
+        )
+        .returning()
+        .then((rows) => rows.at(0) as PaymentSubmission | undefined);
+    },
+
+    submissionById(id: string) {
+      return db
+        .select()
+        .from(billingPaymentSubmissions)
+        .where(eq(billingPaymentSubmissions.id, id))
+        .limit(1)
+        .then((rows) => rows.at(0) as PaymentSubmission | undefined);
     },
 
     // The renewal sweep's whole query, and the twin of `pastDueSince` above. A row is its
@@ -376,5 +565,30 @@ function subjectMatches(subject: BillableSubject) {
   return and(
     eq(billingSubscriptions.referenceId, subject.referenceId),
     eq(billingSubscriptions.customerType, subject.customerType)
+  );
+}
+
+function submissionSubjectMatches(subject: BillableSubject) {
+  return and(
+    eq(billingPaymentSubmissions.referenceId, subject.referenceId),
+    eq(billingPaymentSubmissions.customerType, subject.customerType)
+  );
+}
+
+/**
+ * Whether a driver error is the partial unique index refusing a transaction reference.
+ *
+ * Matched on the message rather than on a code, because the two dialects report it
+ * differently and neither exposes a stable one through Drizzle: D1 answers
+ * `UNIQUE constraint failed: …`, and Postgres answers `duplicate key value violates unique
+ * constraint "billing_payment_submissions_transaction_ref_uidx"`. The index name is in both
+ * of the shapes that matter here, so it is what the match is anchored on — a different
+ * constraint failing is a different bug and must not be swallowed as a duplicate.
+ */
+function isUniqueViolation(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error);
+  return (
+    message.includes("billing_payment_submissions_transaction_ref_uidx") ||
+    message.includes("transaction_ref_normalized")
   );
 }

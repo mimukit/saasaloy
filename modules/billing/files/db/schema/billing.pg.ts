@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -13,7 +14,7 @@ import {
 // The Postgres half of the billing projection, selected by
 // `onlyWith: "database-postgres"`. Its SQLite twin sits beside it as `billing.sqlite.ts`,
 // and exactly one of the two lands as `packages/db/src/schema/billing.ts`. Change one and
-// change the other: they are the same two tables, and parity is semantic rather than
+// change the other: they are the same three tables, and parity is semantic rather than
 // textual — each column is the idiomatic form for its dialect, and what has to match is
 // the shape a row comes back in.
 //
@@ -104,6 +105,69 @@ export const billingSubscriptions = pgTable(
     index("billing_subscriptions_reference_id_idx").on(
       table.referenceId,
       table.customerType
+    ),
+  ]
+);
+
+export const billingPaymentSubmissions = pgTable(
+  "billing_payment_submissions",
+  {
+    /** "monthly" or "yearly" — the interval the quoted figure is for. */
+    billingInterval: text("billing_interval").notNull(),
+    createdAt: timestamptz("created_at").notNull().defaultNow(),
+    /** ISO 4217, upper case. BDT for every provider that exists today. */
+    currency: text("currency").notNull(),
+    /** What `reference_id` names — "user" by default, "organization" with `teams`. */
+    customerType: text("customer_type").notNull().default("user"),
+    /**
+     * What the subject was told to pay, in the currency's minor unit, copied from the plan
+     * at checkout. Deliberately stored rather than recomputed at review time: the subject
+     * paid what they were quoted, and a price change afterwards must not make their payment
+     * look short.
+     */
+    expectedAmount: integer("expected_amount").notNull(),
+    /** Every value the provider's `submissionFields` asked for, normalized. JSON. */
+    fields: jsonb("fields").notNull(),
+    id: text("id").primaryKey(),
+    /** The plan id from `packages/billing/src/plans.ts`. */
+    plan: text("plan").notNull(),
+    /** Which provider opened it, matching `BillingProvider.name`. */
+    provider: text("provider").notNull(),
+    /** The billable subject's id. See CONTEXT.md → "Billable subject". */
+    referenceId: text("reference_id").notNull(),
+    /** What the reviewing admin wrote. The subject reads it on a rejection. */
+    reviewNote: text("review_note"),
+    reviewedAt: timestamptz("reviewed_at"),
+    /** The reviewing admin's user id. */
+    reviewedBy: text("reviewed_by"),
+    /** pending | approved | rejected | withdrawn. */
+    status: text("status").notNull().default("pending"),
+    /** The reference as the subject typed it. Null while the shell is still empty. */
+    transactionRef: text("transaction_ref"),
+    /** The same value trimmed and upper-cased. Half of the partial unique index below. */
+    transactionRefNormalized: text("transaction_ref_normalized"),
+    updatedAt: timestamptz("updated_at")
+      .notNull()
+      .defaultNow()
+      .$onUpdate(() => new Date()),
+  },
+  (table) => [
+    // One live claim per transaction reference, per provider. Partial on purpose: a
+    // *rejected* reference frees up again, so an admin who rejects a real payment by
+    // mistake does not burn that transaction id forever. A permanent index would need a
+    // manual DELETE to undo a misclick.
+    uniqueIndex("billing_payment_submissions_transaction_ref_uidx")
+      .on(table.provider, table.transactionRefNormalized)
+      .where(sql`status <> 'rejected'`),
+    // The subject's own reads: the pending check, and the pre-fill.
+    index("billing_payment_submissions_reference_id_idx").on(
+      table.referenceId,
+      table.customerType
+    ),
+    // The admin queue's read, which is always "pending, oldest first".
+    index("billing_payment_submissions_status_idx").on(
+      table.status,
+      table.createdAt
     ),
   ]
 );

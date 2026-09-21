@@ -5,13 +5,13 @@
   "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {
-    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe), `sslcommerz` (add billing-sslcommerz) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
+    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe), `sslcommerz` (add billing-sslcommerz), `bkash-personal` (add billing-bkash-personal) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
     "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
     "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
     "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "removeWarnings": [
-    "The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
+    "The deployed billing_subscriptions, billing_events and billing_payment_submissions tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
   ],
   "patches": [
@@ -52,6 +52,17 @@
       "import": {
         "name": "billingRoute",
         "from": "./routes/billing"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin",
+      "call": "adminBilling",
+      "import": {
+        "name": "adminBilling",
+        "from": "./routes/admin-billing"
       }
     },
     {
@@ -117,6 +128,13 @@
       "entry": { "to": "/billing", "label": "Billing" }
     },
     {
+      "file": "apps/admin/src/components/app-shell.tsx",
+      "kind": "const-array",
+      "constName": "NAV_ITEMS",
+      "key": "to",
+      "entry": { "to": "/payments", "label": "Payments" }
+    },
+    {
       "file": "packages/db/src/schema/auth.ts",
       "kind": "drizzle-column",
       "exportName": "users",
@@ -130,12 +148,20 @@
       "target": "@api/routes/billing.ts"
     },
     {
+      "path": "files/api/routes/admin-billing.ts",
+      "target": "@api/routes/admin-billing.ts"
+    },
+    {
       "path": "files/api/billing-store.ts",
       "target": "@api/billing-store.ts"
     },
     {
       "path": "files/admin/routes/billing.tsx",
       "target": "@admin/routes/billing.tsx"
+    },
+    {
+      "path": "files/admin/routes/payments.tsx",
+      "target": "@admin/routes/payments.tsx"
     },
     {
       "path": "files/email/templates/trial-ending.ts",
@@ -152,6 +178,10 @@
     {
       "path": "files/email/templates/renewal-due.ts",
       "target": "@email/templates/renewal-due.ts"
+    },
+    {
+      "path": "files/email/templates/payment-rejected.ts",
+      "target": "@email/templates/payment-rejected.ts"
     },
     {
       "path": "files/db/schema/billing.sqlite.ts",
@@ -181,6 +211,7 @@
           "target": "src/subscription.ts"
         },
         { "path": "files/src/store.ts", "target": "src/store.ts" },
+        { "path": "files/src/submission.ts", "target": "src/submission.ts" },
         { "path": "files/src/enqueue.ts", "target": "src/enqueue.ts" },
         { "path": "files/src/notify.ts", "target": "src/notify.ts" },
         { "path": "files/src/config.ts", "target": "src/config.ts" },

@@ -271,6 +271,14 @@ export interface CheckoutInput {
   interval: PlanInterval;
   successUrl: string;
   cancelUrl: string;
+  /**
+   * The `billing_payment_submissions` row the core opened for this checkout, on a provider
+   * that settles manually. Undefined for every vendor-settled provider, and for a trial.
+   *
+   * The core opens the row, because the queue is core-owned and vendor-blind; the provider
+   * only decides where to send the subject to read the instructions and type the reference.
+   */
+  submissionId?: string;
 }
 
 export interface PortalInput {
@@ -329,6 +337,128 @@ export type CallbackResult =
   | { kind: "redirect"; url: string; event?: BillingEvent }
   /** Nothing happened that the projection should hear about. Answered 204. */
   | { kind: "ignored" };
+
+/**
+ * Who decides that money arrived. See CONTEXT.md → "Manual settlement".
+ *
+ * `"vendor"` is every gateway: it takes the payment, it says so, and the projection follows
+ * from a callback or a webhook. `"manual"` is a payment method with no API at all — a
+ * personal mobile-money wallet, a bank transfer, cash — where the only witness is a human
+ * reading their own statement. The core answers that with a queue, not with an integration.
+ */
+export type SettlementMode = "vendor" | "manual";
+
+/** What the subject reads before they pay, under manual settlement. */
+export interface ManualInstructions {
+  /** One line naming the method — "Send Money on bKash". */
+  heading: string;
+  /** The steps, in order, each a full sentence the subject can follow on a phone. */
+  steps: string[];
+  /** Where the money goes, verbatim — a wallet number, an account number. */
+  destination: string;
+  /** Anything the subject has to know that is not a step. Optional. */
+  note?: string;
+}
+
+/** What `manualInstructions` is told about the payment it is describing. */
+export interface ManualInstructionsInput {
+  subject: BillableSubject;
+  planId: string;
+  interval: PlanInterval;
+  /** What the subject owes, in the currency's minor unit. The figure quoted at checkout. */
+  expectedAmount: number;
+  /** ISO 4217, upper case. */
+  currency: string;
+}
+
+/** How a submission field is rendered. The core never guesses a widget from a label. */
+export type SubmissionFieldType = "text" | "tel" | "amount";
+
+/**
+ * One value the provider asks the subject for after they pay.
+ *
+ * `normalize` is both the validator and the normalizer, and it is the provider's, because
+ * what a valid transaction reference looks like is the one thing a payment method does not
+ * share with any other. It returns the stored form or throws `BillingError("invalid_request")`
+ * naming the field.
+ */
+export interface SubmissionField {
+  /** Stable key, stored in `billing_payment_submissions.fields`. */
+  id: string;
+  /** What the form labels it. */
+  label: string;
+  type: SubmissionFieldType;
+  /** Shown under the input. Optional. */
+  help?: string;
+  /**
+   * True on exactly one field: the transaction reference the duplicate check runs on. The
+   * core copies its normalized value into `transaction_ref_normalized`.
+   */
+  reference?: boolean;
+  /**
+   * True when the core pre-fills this field from the subject's most recent submission, and
+   * flags a change in the admin queue. The sender's own wallet number is the case this
+   * exists for.
+   */
+  remembered?: boolean;
+  /** Validate and normalize one submitted value, or throw. */
+  normalize(value: string): string;
+}
+
+/** Where a payment submission stands. See CONTEXT.md → "Payment submission". */
+export type SubmissionStatus =
+  /** Opened at checkout, and waiting — for the subject's reference, or for an admin. */
+  | "pending"
+  /** An admin matched it against their own statement and granted the period. */
+  | "approved"
+  /** An admin refused it, with a note. Grants nothing, and the reference frees up again. */
+  | "rejected"
+  /** The subject took it back before anyone reviewed it. */
+  | "withdrawn";
+
+/** One `billing_payment_submissions` row, as the core reads it back. */
+export interface PaymentSubmission {
+  id: string;
+  /** Which provider opened it, matching `BillingProvider.name`. */
+  provider: string;
+  referenceId: string;
+  customerType: string;
+  /** The plan the subject is buying, matching a `Plan.id`. */
+  plan: string;
+  billingInterval: PlanInterval;
+  /**
+   * What the subject was told to pay, in the currency's minor unit, copied from the plan at
+   * checkout and never recomputed. See CONTEXT.md → "Payment submission".
+   */
+  expectedAmount: number;
+  currency: string;
+  /** The reference as the subject typed it, or null while the shell is still empty. */
+  transactionRef?: string | null;
+  /** The same value trimmed and upper-cased. Half of the partial unique index. */
+  transactionRefNormalized?: string | null;
+  /** Every value `submissionFields` asked for, normalized. Empty on a fresh shell. */
+  fields: Record<string, string>;
+  status: SubmissionStatus;
+  /** The reviewing admin's user id. */
+  reviewedBy?: string | null;
+  reviewedAt?: Date | null;
+  /** What the admin wrote. On a rejection the subject reads it. */
+  reviewNote?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/** What `approveSubmission` is handed. */
+export interface ApproveSubmissionInput {
+  /** The row the admin just approved, with its fields and its quoted amount. */
+  submission: PaymentSubmission;
+  /**
+   * The subject's live row, when there is one. Same field and same reason as
+   * `SubjectInput.current`: a provider gets no database, and a renewal has to extend the row
+   * that is already there rather than invent one.
+   */
+  current?: Subscription;
+}
 
 /** How the subject pays for the next period. See CONTEXT.md → "Manual renewal". */
 export type RenewalMode =
@@ -394,6 +524,37 @@ export interface BillingProvider {
    */
   renewal?: RenewalMode;
   /**
+   * Who witnesses the payment. `"vendor"` when unset, which is every gateway.
+   *
+   * A provider that declares `"manual"` must also declare `manualInstructions`,
+   * `submissionFields` and `approveSubmission`; `defineBilling` refuses one that does not,
+   * at module load, rather than letting a subject reach a pay page with no form on it.
+   */
+  settlement?: SettlementMode;
+  /** What the subject reads before they pay. Manual settlement only. */
+  manualInstructions?(
+    env: BillingEnv,
+    input: ManualInstructionsInput
+  ): ManualInstructions;
+  /**
+   * What the subject types in after they pay. Manual settlement only.
+   *
+   * Exactly one field carries `reference: true`; that is the value the duplicate check runs
+   * on. `defineBilling` checks the count at load.
+   */
+  submissionFields?(env: BillingEnv): SubmissionField[];
+  /**
+   * Turn an approved submission into the event that grants the period. Manual settlement
+   * only.
+   *
+   * It writes nothing: the projection has one writer and it is the event path (ADR 0034), so
+   * the admin review route enqueues what this returns and touches no subscription row.
+   */
+  approveSubmission?(
+    env: BillingEnv,
+    input: ApproveSubmissionInput
+  ): BillingEvent;
+  /**
    * Handle one callback the vendor sent — an IPN, or a browser return from a hosted page.
    *
    * Optional: a provider whose vendor posts to an endpoint of its own (`billing-stripe`,
@@ -431,6 +592,13 @@ export type BillingErrorCode =
   | "invalid_request"
   /** No subscription, customer or invoice under that id. */
   | "not_found"
+  /**
+   * Somebody else got there first, or the caller is already in the state they asked for.
+   * A transaction reference already claimed, a second open payment submission, a submission
+   * two admins reviewed at once. Distinct from `invalid_request` because the request was
+   * well-formed and would have worked a moment earlier.
+   */
+  | "conflict"
   /** The payment instrument was refused. Never retryable by the core. */
   | "card_declined"
   | "rate_limited"
