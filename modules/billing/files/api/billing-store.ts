@@ -1,5 +1,6 @@
 import type {
   BillableSubject,
+  BillingEnv,
   BillingEventRecord,
   BillingStore,
   Subscription,
@@ -17,6 +18,7 @@ import {
   setBillingConfig,
   setBillingEnqueuer,
   setBillingNotifier,
+  setBillingProviderEnv,
   setBillingStoreResolver,
   setBillingStoreRunner,
 } from "@repo/billing";
@@ -114,6 +116,13 @@ setBillingConfig({
     (env as unknown as { BILLING_LOCKOUT_DAYS?: string }).BILLING_LOCKOUT_DAYS
   ),
 });
+
+// And the same registration one step out, for the keys the core has no business naming. A
+// provider may own a scheduled job of its own — `billing-bkash-merchant` holds a gateway
+// token on one, because the gateway rate-limits the call that mints it — and that job reaches
+// its credentials through here. The environment goes through whole and opaque, so the core
+// learns no vendor key (ADR 0040, and `packages/billing/src/config.ts`).
+setBillingProviderEnv(env as unknown as BillingEnv);
 
 /** What the billing emails call the project, and where they send the reader. */
 const appName =

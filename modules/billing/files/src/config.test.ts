@@ -5,9 +5,11 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   billingConfig,
+  billingProviderEnv,
   DEFAULT_LOCKOUT_DAYS,
   readLockoutDays,
   setBillingConfig,
+  setBillingProviderEnv,
 } from "./config.ts";
 
 describe("readLockoutDays", () => {
@@ -41,5 +43,27 @@ describe("billingConfig", () => {
     setBillingConfig({});
     assert.equal(billingConfig().lockoutDays, 21);
     setBillingConfig({ lockoutDays: DEFAULT_LOCKOUT_DAYS });
+  });
+});
+
+describe("billingProviderEnv", () => {
+  // Order matters here, and only here: the reader's "nothing registered yet" branch can only
+  // be seen before the first `setBillingProviderEnv` call in this file. Keep this case first.
+  it("throws before anything registers an environment", () => {
+    assert.throws(
+      () => billingProviderEnv(),
+      /No billing provider environment is registered/
+    );
+  });
+
+  it("answers the registered environment, and a second call replaces it", () => {
+    setBillingProviderEnv({ BKASH_MERCHANT_APP_KEY: "key_1" });
+    assert.equal(billingProviderEnv().BKASH_MERCHANT_APP_KEY, "key_1");
+
+    // Replaces rather than merges. A partial second registration that kept the first one's
+    // keys would let a test leak a secret into the run after it.
+    setBillingProviderEnv({ KV_PROVIDER: "memory" });
+    assert.equal(billingProviderEnv().BKASH_MERCHANT_APP_KEY, undefined);
+    assert.equal(billingProviderEnv().KV_PROVIDER, "memory");
   });
 });
