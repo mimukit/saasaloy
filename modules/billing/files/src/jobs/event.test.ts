@@ -8,7 +8,7 @@ import { describe, it } from "node:test";
 import type {
   BillableSubject,
   Subscription,
-  SubscriptionInput,
+  SubscriptionWrite,
 } from "../provider.ts";
 import { setBillingStoreResolver } from "../store.ts";
 import type {
@@ -63,6 +63,9 @@ function fakeStore() {
     pastDueSince() {
       return Promise.resolve([]);
     },
+    renewalDue() {
+      return Promise.resolve([]);
+    },
     recipientFor() {
       return Promise.resolve({ email: "billing@example.com", name: "Ada" });
     },
@@ -82,7 +85,7 @@ function fakeStore() {
       events.add(key);
       return Promise.resolve(true);
     },
-    upsertSubscription(subject: BillableSubject, input: SubscriptionInput) {
+    upsertSubscription(subject: BillableSubject, input: SubscriptionWrite) {
       calls.upsert += 1;
       const existing = rows.find(
         (row) => row.providerSubscriptionId === input.providerSubscriptionId

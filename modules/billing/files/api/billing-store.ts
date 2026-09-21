@@ -3,8 +3,8 @@ import type {
   BillingEventRecord,
   BillingStore,
   Subscription,
-  SubscriptionInput,
   SubscriptionPatch,
+  SubscriptionWrite,
   BillingNotification,
 } from "@repo/billing";
 import {
@@ -23,6 +23,7 @@ import {
 import { createEmail } from "@repo/email";
 import { accountLocked } from "@repo/email/templates/account-locked";
 import { paymentFailed } from "@repo/email/templates/payment-failed";
+import { renewalDue } from "@repo/email/templates/renewal-due";
 import { trialEnding } from "@repo/email/templates/trial-ending";
 import type { EmailEnv } from "@repo/email";
 import type { Db, DbBindings } from "@repo/db/client";
@@ -32,7 +33,7 @@ import { billingEvents, billingSubscriptions } from "@repo/db/schema/billing";
 import { createQueue } from "@repo/queue";
 import type { QueueEnv } from "@repo/queue";
 import { env } from "cloudflare:workers";
-import { and, desc, eq, isNull, lt } from "drizzle-orm";
+import { and, desc, eq, inArray, isNull, lt, or } from "drizzle-orm";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // The `BillingStore` port, built over this request's Drizzle client, and the scope a job
@@ -172,6 +173,23 @@ function content(notification: BillingNotification) {
         planName,
       });
     }
+    case "renewal.due": {
+      return renewalDue({
+        appName,
+        billingUrl,
+        // The same rule the payment-failed notice uses, and it has to be: the sweep that
+        // sent this email wrote `past_due` on the row a moment ago, so `updatedAt` is the
+        // instant the grace window opened and the lockout job counts from exactly there.
+        lockoutOn: day(
+          new Date(
+            subscription.updatedAt.getTime() +
+              billingConfig().lockoutDays * 24 * 60 * 60 * 1000
+          )
+        ),
+        name,
+        planName,
+      });
+    }
     default: {
       return accountLocked({
         appName,
@@ -298,7 +316,37 @@ export function createBillingStore(db: Db): BillingStore {
         .then((rows) => rows.length > 0);
     },
 
-    upsertSubscription(subject: BillableSubject, input: SubscriptionInput) {
+    // The renewal sweep's whole query, and the twin of `pastDueSince` above. A row is its
+    // business when the provider that owns it renews manually, it is still live, nothing has
+    // locked it, and the period it was paid for has already ended — `period_end` for an
+    // `active` row, `trial_end` for a `trialing` one.
+    renewalDue(at: Date, providers: string[]) {
+      if (providers.length === 0) {
+        return Promise.resolve([] as Subscription[]);
+      }
+      return db
+        .select()
+        .from(billingSubscriptions)
+        .where(
+          and(
+            inArray(billingSubscriptions.provider, providers),
+            isNull(billingSubscriptions.lockedAt),
+            or(
+              and(
+                eq(billingSubscriptions.status, "active"),
+                lt(billingSubscriptions.periodEnd, at)
+              ),
+              and(
+                eq(billingSubscriptions.status, "trialing"),
+                lt(billingSubscriptions.trialEnd, at)
+              )
+            )
+          )
+        )
+        .then((rows) => rows as Subscription[]);
+    },
+
+    upsertSubscription(subject: BillableSubject, input: SubscriptionWrite) {
       const now = new Date();
       // `provider_subscription_id` is unique, so a redelivered vendor state converges on
       // the one row instead of inserting a second. `lockedAt` and `reminderSentAt` are

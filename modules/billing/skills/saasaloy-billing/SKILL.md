@@ -49,9 +49,11 @@ The default bills the signed-in user: `customerType` is `"user"`, `referenceId` 
 
 ## The plan file
 
-`packages/billing/src/plans.ts` is the file you edit. A plan carries `id`, `name`, `features` (booleans), `limits` (numbers), `trialDays?` and `providerIds` mapping a provider name to its price ids per interval.
+`packages/billing/src/plans.ts` is the file you edit. A plan carries `id`, `name`, `features` (booleans), `limits` (numbers), `trialDays?`, `providerIds` mapping a provider name to its price ids per interval, and `price` mapping an interval to `{ amount, currency }`.
 
-**Exactly one plan carries no `providerIds`, and that one is the default** — what a subject with no live subscription resolves to, and what a locked subject falls back to. `definePlans` throws at module load when that stops being true, so the failure is a deploy that will not boot rather than a request that resolves to `undefined`.
+The two price fields answer two kinds of vendor. `providerIds` is for a vendor that owns a hosted price object and is handed its id — Stripe. `price` is for a gateway that is handed a figure — SSLCOMMERZ. The amount is in the currency's **minor unit**, so 499 BDT is `49900`; money is never a float here. A plan may carry both.
+
+**Exactly one plan names no price at all — neither field — and that one is the default** — what a subject with no live subscription resolves to, and what a locked subject falls back to. `definePlans` throws at module load when that stops being true, so the failure is a deploy that will not boot rather than a request that resolves to `undefined`.
 
 Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPlugin()` maps this list into the plugin's own shape: `providerIds.stripe.monthly` → `priceId`, `.yearly` → `annualDiscountPriceId`, `trialDays` → `freeTrial.days`.
 
@@ -120,14 +122,35 @@ Locally, forward them with `stripe listen --forward-to localhost:4000/auth/strip
 
 `BILLING_PROVIDER` selects one, always. Unset or unknown throws at construction, in both directions: a deploy that quietly stops taking payments and a test run that quietly charges a real card are both worse than a throw.
 
-| Provider | `BILLING_PROVIDER` | Needs | Auth plugin |
-|---|---|---|---|
-| `billing-stripe` | `stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe` 22.6.1 + `@better-auth/stripe` 1.7.3 | yes — mounts the endpoints and the webhook |
-| `billing-console` | `console` | nothing | no |
+| Provider | `BILLING_PROVIDER` | Needs | Renews | Inbound surface |
+|---|---|---|---|---|
+| `billing-stripe` | `stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `stripe` 22.6.1 + `@better-auth/stripe` 1.7.3 | at the vendor | an auth plugin mounting its own webhook |
+| `billing-sslcommerz` | `sslcommerz` | an SSLCOMMERZ store: `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD`, `SSLCOMMERZ_CALLBACK_URL`, `SSLCOMMERZ_RECEIPT_EMAIL`, optional `SSLCOMMERZ_MODE`. BDT only. See `modules/billing-sslcommerz/skills/saasaloy-billing-sslcommerz/` | **manually** — the subject pays each period | `handleCallback`, on `/billing/callback/sslcommerz/*` |
+| `billing-console` | `console` | nothing | at the vendor (there is none) | no |
 
 **`billing-console` is how you develop.** It completes checkout, portal, change-plan, cancel and restore with no account and no network, by handing the route a `CheckoutResult.event` the route enqueues. With `queue-memory` installed the consumer runs inline, so the row is there by the time the route answers. Its ids are `console_sub_…` and `console_cus_…`, derived from the subject, so a `console_`-prefixed id in a production table is a loud signal that the wrong provider is selected.
 
 `cancel` and `restore` carry no plan of their own, so the route reads the live row and passes it as `SubjectInput.current`. `billing-stripe` ignores that field — its webhook carries the whole record — and `billing-console` throws `not_found` without it rather than inventing a plan and writing the invention over the real row.
+
+## The callback route, and manual renewal
+
+Two things exist for a gateway that ships neither a Better Auth plugin nor a recurring object. Both are core, both are vendor-blind, and `billing-stripe` uses neither (ADR 0039).
+
+**`POST|GET /billing/callback/:provider/*`** is the capability's own inbound surface, and the only billing route outside `guard`. It refuses any `:provider` that is not the active `BILLING_PROVIDER`, answers 404 for a provider with no `handleCallback`, enqueues a returned event onto `billing.event`, answers a returned redirect with a 303, and answers `ignored` with a 204. It parses nothing: the raw `Request` goes to the provider, because a gateway's callback is form-encoded and the core must not guess an encoding.
+
+Unauthenticated is safe here only because **nothing on the request is evidence**. A provider implementing `handleCallback` verifies every fact it acts on against the vendor's own API before it mints an event. A provider that believed a callback body would let anyone on the internet write a paid subscription.
+
+**`BillingProvider.renewal`** is `"vendor"` unless a provider says `"manual"`. Manual means nothing is stored and nothing recurs: each period is a fresh checkout the subject pays. Three things follow, and `billing.renewal-due` at 02:00 UTC is the front of them.
+
+| Step | What happens |
+|---|---|
+| The paid period ends | `billing.renewal-due` sets `past_due` on the row — `periodEnd` for an `active` row, `trialEnd` for a `trialing` one — and sends `renewal-due` once, guarded by `reminderSentAt`. The plan is still entitled. |
+| The subject pays | `POST /billing/renew` opens a fresh checkout for the plan already on the row. It refuses unless the row is live and `past_due`, unless the active provider renews manually, and while the period end is still in the future. |
+| Nobody pays | `billing.past-due-lockout` at 03:00 UTC sets `lockedAt` after `BILLING_LOCKOUT_DAYS`, exactly as it does after a failed card. |
+
+The sweep filters on `billing_subscriptions.provider`, which the core writes from `BillingEvent.provider` and no provider may set. A project on Stripe alone therefore runs the sweep every morning and touches no row.
+
+**A plan change mid-period costs full price**, and the days left on the old period are added to the new one. There is no proration primitive at a gateway like this and no credit concept in the core.
 
 **A provider with its own webhook enqueues through `enqueueBillingEvent`**, not through `@repo/queue`. `packages/queue` imports `packages/billing` to register `billingEventJob()`, so an import back would be a cycle. `apps/api/src/billing-store.ts` calls `setBillingEnqueuer` at module load, the same arrangement `setBillingStoreResolver` uses for the database.
 
@@ -167,7 +190,7 @@ Normalized statuses: `trialing`, `active`, `past_due`, `canceled`, `unpaid`, `in
 
 Clearing the lock does not need a projected row on the event. Stripe's `invoice.paid` carries an invoice and no subscription, so `applyEvent` reads the subject's current row back for `payment.succeeded`, `payment.failed` and `trial.ending` when the event brings none. That is the whole reason the one event that ends a lockout can end one.
 
-## Trials, dunning, and the three emails
+## Trials, dunning, and the four emails
 
 Every billing side effect runs as a queue consumer or a scheduled job. None of them runs in a request handler, and that is a rule rather than a preference: a route that sent the payment-failed email would send it again on each webhook redelivery, and would send nothing at all when the charge fails while nobody is signed in — which is the normal case.
 
@@ -177,8 +200,9 @@ Every billing side effect runs as a queue consumer or a scheduled job. None of t
 | `payment.failed` (`invoice.payment_failed`) | `billing.event` consumer | Sends `payment-failed`, naming the date the lockout would run. Once per distinct failure, because dunning is a sequence. |
 | `billing.past-due-lockout`, daily at 03:00 UTC | `queue.schedules` → `queue.jobs` | Sets `lockedAt` on `past_due` rows last touched more than `BILLING_LOCKOUT_DAYS` ago, and sends `account-locked`. Idempotent: a locked row is out of the next sweep's set. |
 | `payment.succeeded` (`invoice.paid`) | `billing.event` consumer | Clears `lockedAt`. |
+| `billing.renewal-due`, daily at 02:00 UTC | `queue.schedules` → `queue.jobs` | Under a provider that renews manually, sets `past_due` on a row whose paid period has ended and sends `renewal-due`. Once per row, guarded by `reminderSentAt`. |
 
-The three templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/billing-store.ts` chooses which one to render and fills in `BILLING_APP_NAME` and `BILLING_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
+The four templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/billing-store.ts` chooses which one to render and fills in `BILLING_APP_NAME` and `BILLING_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
 
 `packages/billing` sends nothing itself. It decides *when* an email is owed and *to whom* through two ports — `setBillingNotifier` in `src/notify.ts` and `BillingStore.recipientFor` — and `apps/api/src/billing-store.ts` supplies both, next to the store resolver and the enqueuer. That is what keeps `@repo/email` out of the core. A subject with no resolvable address is a skip, not a failure: the state write has already happened, and a job that retried forever over a deleted user's trial reminder would be worse.
 
@@ -203,8 +227,10 @@ One file in `src/providers/`, exporting a factory that returns a `BillingProvide
 2. **Map every failure onto `BillingError`.** Keep the vendor's code in `providerCode` and set `retryable` honestly; a wrong `true` charges someone twice.
 3. **Map the vendor's events onto the five normalized types** and enqueue `billing.event`. Drop anything that maps to none.
 4. **Map the vendor's statuses onto the seven normalized ones**, and keep the raw value in `metadata`.
-5. **Read price ids from `providerIds.<your-name>`** in `plans.ts`. Never hard-code one.
+5. **Read the price from `plans.ts`** — `providerIds.<your-name>` when the vendor owns a price object, `price[interval]` when it is handed a figure. Never hard-code one.
 6. **Register it.** A `plugin-array` patch appends your factory call to the `providers` array in `packages/billing/src/index.ts`, and a `package-json-dependency` patch puts the vendor SDK in `packages/billing/package.json` — never in another workspace (ADR 0020).
+
+A vendor with no Better Auth plugin implements `handleCallback` instead, and the core's `/billing/callback/<name>/*` route carries its IPN and its browser returns. A vendor with no recurring object also declares `renewal: "manual"`; `billing-sslcommerz` is both, and is the worked example.
 
 A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into `auth.plugins` with a second `plugin-array` patch, the way `billing-stripe` does. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong — fix the contract.
 

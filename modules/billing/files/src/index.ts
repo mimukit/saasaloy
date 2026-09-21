@@ -8,7 +8,14 @@ export {
   setBillingConfig,
 } from "./config";
 export type { BillingConfigValues } from "./config";
-export { defaultPlan, defineBilling, definePlans, findPlan } from "./define";
+export {
+  defaultPlan,
+  defineBilling,
+  definePlans,
+  findPlan,
+  manualRenewalProviders,
+  registeredProviders,
+} from "./define";
 export type { BillingClient, BillingConfig, BillingRegistry } from "./define";
 export { enqueueBillingEvent, setBillingEnqueuer } from "./enqueue";
 export type { BillingEnqueuer } from "./enqueue";
@@ -32,6 +39,15 @@ export type {
   LockoutResult,
   RegisteredSchedule,
 } from "./jobs/past-due-lockout";
+export {
+  BILLING_RENEWAL_DUE_CRON,
+  BILLING_RENEWAL_DUE_JOB,
+  BILLING_RENEWAL_DUE_SCHEDULE,
+  renewalDueJob,
+  renewalDueSchedule,
+  runRenewalDue,
+} from "./jobs/renewal-due";
+export type { RenewalDueResult } from "./jobs/renewal-due";
 export { notifyBilling, setBillingNotifier } from "./notify";
 export type {
   BillingNotification,
@@ -49,6 +65,7 @@ export type {
   BillingEvent,
   BillingEventType,
   BillingProvider,
+  CallbackResult,
   ChangePlanInput,
   CheckoutInput,
   CheckoutResult,
@@ -57,12 +74,15 @@ export type {
   Plan,
   PlanConfig,
   PlanInterval,
+  PlanPrice,
   PortalInput,
   QuantityInput,
+  RenewalMode,
   SubjectInput,
   Subscription,
   SubscriptionInput,
   SubscriptionStatus,
+  SubscriptionWrite,
 } from "./provider";
 export {
   inBillingStore,

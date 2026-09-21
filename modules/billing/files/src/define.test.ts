@@ -199,6 +199,123 @@ describe("BillingError wrapping", () => {
   });
 });
 
+describe("the callback surface", () => {
+  const event = {
+    occurredAt: new Date("2026-09-21T00:00:00.000Z"),
+    provider: "gateway",
+    providerEventId: "val_1",
+    subject,
+    type: "payment.succeeded" as const,
+  };
+
+  it("reports no callback surface for a provider that declares none", () => {
+    const client = defineBilling({ providers: [stub("console")] }).create({
+      BILLING_PROVIDER: "console",
+    });
+
+    assert.equal(client.handlesCallbacks, false);
+  });
+
+  it("throws not_found rather than crashing when the provider has no handler", async () => {
+    const client = defineBilling({ providers: [stub("console")] }).create({
+      BILLING_PROVIDER: "console",
+    });
+
+    await assert.rejects(
+      () => client.handleCallback(new Request("https://api.test/ipn"), "ipn"),
+      (error: unknown) =>
+        error instanceof BillingError &&
+        error.code === "not_found" &&
+        /no callback surface/.test(error.message)
+    );
+  });
+
+  it("passes the request and the path through, and answers with the event", async () => {
+    const seen: { path: string; method: string }[] = [];
+    const client = defineBilling({
+      providers: [
+        stub("gateway", {
+          handleCallback: (_env, request, path) => {
+            seen.push({ method: request.method, path });
+            return Promise.resolve({ event, kind: "event" as const });
+          },
+        }),
+      ],
+    }).create({ BILLING_PROVIDER: "gateway" });
+
+    const result = await client.handleCallback(
+      new Request("https://api.test/billing/callback/gateway/ipn", {
+        method: "POST",
+      }),
+      "ipn"
+    );
+
+    assert.deepEqual(seen, [{ method: "POST", path: "ipn" }]);
+    assert.equal(result.kind, "event");
+    assert.equal(client.handlesCallbacks, true);
+  });
+
+  it("passes a redirect result through untouched", async () => {
+    const client = defineBilling({
+      providers: [
+        stub("gateway", {
+          handleCallback: () =>
+            Promise.resolve({
+              event,
+              kind: "redirect" as const,
+              url: "https://example.test/ok",
+            }),
+        }),
+      ],
+    }).create({ BILLING_PROVIDER: "gateway" });
+
+    const result = await client.handleCallback(
+      new Request("https://api.test/x"),
+      "return/success"
+    );
+
+    assert.equal(result.kind, "redirect");
+    assert.equal(
+      result.kind === "redirect" ? result.url : "",
+      "https://example.test/ok"
+    );
+  });
+
+  it("wraps a raw throw from a callback handler as a BillingError", async () => {
+    const client = defineBilling({
+      providers: [
+        stub("gateway", {
+          handleCallback: () => Promise.reject(new TypeError("fetch failed")),
+        }),
+      ],
+    }).create({ BILLING_PROVIDER: "gateway" });
+
+    await assert.rejects(
+      () => client.handleCallback(new Request("https://api.test/x"), "ipn"),
+      (error: unknown) =>
+        error instanceof BillingError && error.code === "provider_error"
+    );
+  });
+});
+
+describe("the renewal mode", () => {
+  it("is `vendor` unless the provider says otherwise", () => {
+    const client = defineBilling({ providers: [stub("stripe")] }).create({
+      BILLING_PROVIDER: "stripe",
+    });
+
+    assert.equal(client.renewal, "vendor");
+  });
+
+  it("is `manual` when the provider declares it", () => {
+    const client = defineBilling({
+      providers: [stub("gateway", { renewal: "manual" })],
+    }).create({ BILLING_PROVIDER: "gateway" });
+
+    assert.equal(client.renewal, "manual");
+  });
+});
+
 describe("definePlans", () => {
   it("fills the maps and marks the plan with no providerIds as the default", () => {
     const plans = definePlans([
@@ -269,6 +386,50 @@ describe("definePlans", () => {
       (error: unknown) =>
         error instanceof BillingError &&
         /share the id "free"/.test(error.message)
+    );
+  });
+
+  it("counts a plan priced with `price` as a paid plan, not as the default", () => {
+    const plans = definePlans([
+      { id: "free", name: "Free" },
+      {
+        id: "pro",
+        name: "Pro",
+        price: {
+          monthly: { amount: 49_900, currency: "BDT" },
+          yearly: { amount: 499_000, currency: "BDT" },
+        },
+      },
+    ]);
+
+    assert.equal(plans[1]?.isDefault, false);
+    assert.equal(defaultPlan(plans).id, "free");
+    assert.deepEqual(plans[1]?.price.monthly, {
+      amount: 49_900,
+      currency: "BDT",
+    });
+    // A plan that names no price at all still carries the empty map, so a provider reading
+    // `plan.price[interval]` gets `undefined` rather than a throw.
+    assert.deepEqual(plans[0]?.price, {});
+  });
+
+  it("refuses a list where every plan is priced, through either field", () => {
+    assert.throws(
+      () =>
+        definePlans([
+          {
+            id: "pro",
+            name: "Pro",
+            price: { monthly: { amount: 49_900, currency: "BDT" } },
+          },
+          {
+            id: "team",
+            name: "Team",
+            providerIds: { stripe: { monthly: "price_1" } },
+          },
+        ]),
+      (error: unknown) =>
+        error instanceof BillingError && /No default plan/.test(error.message)
     );
   });
 

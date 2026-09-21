@@ -1,4 +1,4 @@
-// Tests that the three billing emails render, and that each one carries the fact it exists
+// Tests that the four billing emails render, and that each one carries the fact it exists
 // to deliver. Repo-only, and it runs on `node:test` via `pnpm test:modules`.
 //
 // `./render.ts` and `./provider.ts` beside this file are resolution shims, not shipped
@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { accountLocked } from "./templates/account-locked.ts";
 import { paymentFailed } from "./templates/payment-failed.ts";
+import { renewalDue } from "./templates/renewal-due.ts";
 import { trialEnding } from "./templates/trial-ending.ts";
 
 const BILLING_URL = "https://admin.example.com/billing";
@@ -76,10 +77,30 @@ describe("accountLocked", () => {
   });
 });
 
+describe("renewalDue", () => {
+  it("names the plan and the lockout date, and says no card was charged", () => {
+    const message = renewalDue({
+      appName: "Acme",
+      billingUrl: BILLING_URL,
+      lockoutOn: "2026-10-05",
+      name: "Ada",
+      planName: "Pro",
+    });
+
+    assert.match(message.subject, /Acme/);
+    assert.match(message.html, /Pro/);
+    assert.match(message.html, /2026-10-05/);
+    assert.ok(message.html.includes(BILLING_URL));
+    // The load-bearing sentence. Under manual renewal nothing was charged, so an email that
+    // read like the dunning notice would be untrue for every reader.
+    assert.match(message.html, /nothing has been charged/);
+  });
+});
+
 describe("every billing template", () => {
   it("refuses a link that is not an absolute https URL", () => {
     // `safeUrl` throws rather than render a link an inbox cannot resolve or should not
-    // follow. Checked here because all three templates put a caller's URL in an `href`.
+    // follow. Checked here because all four templates put a caller's URL in an `href`.
     for (const url of ["/billing", "javascript:alert(1)", "http://evil.test"]) {
       assert.throws(() =>
         accountLocked({

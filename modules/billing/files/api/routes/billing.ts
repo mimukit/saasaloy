@@ -154,12 +154,16 @@ export const billingRoute = new Hono<{
           // they are the provider's business and belong nowhere near a client.
           plans: plans.map((candidate) => ({
             id: candidate.id,
+            // Both halves, because a plan priced for a gateway that is handed a figure
+            // carries `price` and no `providerIds`, and the picker would otherwise offer it
+            // no interval at all.
             intervals: [
-              ...new Set(
-                Object.values(candidate.providerIds).flatMap((byInterval) =>
+              ...new Set([
+                ...Object.values(candidate.providerIds).flatMap((byInterval) =>
                   Object.keys(byInterval)
-                )
-              ),
+                ),
+                ...Object.keys(candidate.price),
+              ]),
             ],
             isDefault: candidate.isDefault,
             name: candidate.name,
@@ -242,6 +246,66 @@ export const billingRoute = new Hono<{
     })
   )
 
+  // Pay for the next period, under a provider that renews manually. There is no stored
+  // instrument to charge, so the subject opens a fresh checkout for the plan already on the
+  // row — see CONTEXT.md → "Manual renewal".
+  //
+  // Three refusals, and each one prevents a payment nobody owes. A row that is not
+  // `past_due` has not run out. A provider that renews at the vendor charges the card
+  // itself. And a period that has not ended yet is already paid for, so paying again inside
+  // it would take the subject's money for nothing.
+  .post("/renew", (c) =>
+    guard(c, async ({ client, host, store, subject }) => {
+      const body = await readJson(c);
+      const successUrl = requireUrl(c, body, "successUrl");
+      const cancelUrl = requireUrl(c, body, "cancelUrl");
+
+      if (client.renewal !== "manual") {
+        throw new BillingError(
+          "invalid_request",
+          `${client.provider} renews at the vendor, so there is nothing to renew by hand. Update the payment method through POST /billing/portal instead.`
+        );
+      }
+
+      // A locked or canceled row is not live, so those subjects never reach this route:
+      // they start again through POST /billing/checkout.
+      const live = await currentSubscription(store, subject);
+      if (!live) {
+        throw new BillingError(
+          "not_found",
+          "No live subscription to renew. Start one through POST /billing/checkout."
+        );
+      }
+
+      if (live.status !== "past_due") {
+        throw new BillingError(
+          "invalid_request",
+          `The subscription is "${live.status}", not "past_due", so the period it is on has not run out yet.`
+        );
+      }
+
+      const endsAt = live.periodEnd ?? live.trialEnd;
+      if (endsAt && endsAt.getTime() > Date.now()) {
+        throw new BillingError(
+          "invalid_request",
+          `The current period runs until ${endsAt.toISOString()}. Renewing now would charge for a period that is already paid for.`
+        );
+      }
+
+      const result = await client.createCheckout(host, {
+        cancelUrl,
+        interval: live.billingInterval === "year" ? "yearly" : "monthly",
+        planId: live.plan,
+        subject,
+        successUrl,
+      });
+
+      await enqueue(c, result.event);
+
+      return c.json({ url: result.url }, 200);
+    })
+  )
+
   // Invoices come from the vendor, not from a table here. The projection holds the
   // subscription state and nothing else, so there is no second copy to fall out of step.
   .get("/invoices", (c) =>
@@ -255,7 +319,82 @@ export const billingRoute = new Hono<{
 
       return c.json({ invoices }, 200);
     })
-  );
+  )
+
+  // The provider callback surface: `POST /billing/callback/:provider/*` for a gateway's
+  // server-to-server notification, and `GET` for the browser returns some gateways use.
+  //
+  // Outside `guard` on purpose, and the only billing route that is. A gateway's IPN carries
+  // no session and no bearer token, and it arrives while nobody is signed in. That is safe
+  // because nothing on the request is treated as evidence: the provider verifies every fact
+  // it acts on against the vendor's own API before it mints an event (ADR 0039).
+  //
+  // The core reads exactly two things off the request — the `:provider` segment and the path
+  // after it — and hands the whole `Request` on. It never parses the body: a gateway's
+  // callback is form-encoded, and guessing an encoding here would put a vendor's wire format
+  // in the vendor-blind half of the capability.
+  .post("/callback/:provider/*", (c) => callback(c))
+  .get("/callback/:provider/*", (c) => callback(c));
+
+/**
+ * One provider callback, whichever method it arrived on.
+ *
+ * Two 404s, and they are different mistakes. A `:provider` that is not the active
+ * `BILLING_PROVIDER` is a stale URL still registered in some vendor's dashboard, and
+ * answering it would let a provider the project is no longer running write events. A
+ * provider with no `handleCallback` has no callback surface at all.
+ *
+ * A `redirect` answers 303 because the browser arrives on a POST and has to continue with a
+ * GET. `ignored` answers 204: the gateway has not finished deciding, so there is nothing to
+ * tell the projection and nothing to apologize for.
+ */
+async function callback(c: BillingContext) {
+  const name = c.req.param("provider");
+  const client = createBilling(c.env);
+
+  if (name !== client.provider || !client.handlesCallbacks) {
+    return c.json(
+      {
+        error: {
+          code: "not_found",
+          message: `No callback surface for "${name}".`,
+        },
+      },
+      404
+    );
+  }
+
+  const marker = `/callback/${name}/`;
+  const at = c.req.path.indexOf(marker);
+  const path = at === -1 ? "" : c.req.path.slice(at + marker.length);
+
+  try {
+    const result = await client.handleCallback(c.req.raw, path);
+
+    if (result.kind === "ignored") {
+      return c.body(null, 204);
+    }
+
+    // The event goes on the queue before the answer goes out, on both kinds. On a redirect
+    // that ordering is what makes the browser return close a lost IPN: the subject lands on
+    // the success page with the row already written, or already being written.
+    await enqueue(c, result.event);
+
+    if (result.kind === "redirect") {
+      return c.redirect(result.url, 303);
+    }
+
+    return c.body(null, 204);
+  } catch (error) {
+    if (error instanceof BillingError) {
+      return c.json(
+        { error: { code: error.code, message: error.message } },
+        statusFor(error)
+      );
+    }
+    throw error;
+  }
+}
 
 /**
  * The five lines every handler would otherwise repeat: the session, the subject, the
