@@ -3,9 +3,11 @@ import type { BillingEnv } from "./provider";
 
 export {
   billingConfig,
+  billingProviderEnv,
   DEFAULT_LOCKOUT_DAYS,
   readLockoutDays,
   setBillingConfig,
+  setBillingProviderEnv,
 } from "./config";
 export type { BillingConfigValues } from "./config";
 export {
