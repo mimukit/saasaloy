@@ -1,6 +1,8 @@
 import { BillingError } from "./provider";
 import type {
+  ApproveSubmissionInput,
   BillingEnv,
+  BillingEvent,
   BillingProvider,
   CallbackResult,
   ChangePlanInput,
@@ -8,12 +10,16 @@ import type {
   CheckoutResult,
   HostContext,
   Invoice,
+  ManualInstructions,
+  ManualInstructionsInput,
   Plan,
   PlanConfig,
   PortalInput,
   QuantityInput,
   RenewalMode,
+  SettlementMode,
   SubjectInput,
+  SubmissionField,
 } from "./provider";
 
 // The provider registry, the plan table, and the `createBilling(env)` factory behind them.
@@ -51,6 +57,17 @@ export interface BillingClient {
   provider: string;
   /** How the selected provider renews. `"vendor"` unless it says otherwise. */
   renewal: RenewalMode;
+  /** Who witnesses a payment under the selected provider. `"vendor"` unless it says otherwise. */
+  settlement: SettlementMode;
+  /**
+   * What the subject reads before they pay. Throws `invalid_request` on a vendor-settled
+   * provider, so a route can answer without reaching inside the registry.
+   */
+  manualInstructions(input: ManualInstructionsInput): ManualInstructions;
+  /** What the subject types in after they pay. Same throw on a vendor-settled provider. */
+  submissionFields(): SubmissionField[];
+  /** The event an approved submission is worth. Same throw on a vendor-settled provider. */
+  approveSubmission(input: ApproveSubmissionInput): BillingEvent;
   /**
    * Whether the selected provider owns a callback surface. False means the callback route
    * answers 404 rather than 500 on a POST nobody is there to handle.
@@ -90,6 +107,9 @@ export interface BillingRegistry {
  */
 export function defineBilling(config: BillingConfig): BillingRegistry {
   const { providers } = config;
+  for (const provider of providers) {
+    assertManualComplete(provider);
+  }
   registered = providers;
 
   return {
@@ -110,7 +130,29 @@ export function defineBilling(config: BillingConfig): BillingRegistry {
         }
       };
 
+      // The three manual-settlement members, each behind the same refusal. They are
+      // synchronous on purpose: none of them calls a network, and a route that has already
+      // read the row should not have to await a string.
+      const manualOnly = <T>(method: string, run: () => T): T => {
+        if (provider.settlement !== "manual") {
+          throw new BillingError(
+            "invalid_request",
+            `${provider.name} settles at the vendor, so it has no ${method}. Manual settlement is for a payment method with no API — see CONTEXT.md → "Manual settlement".`
+          );
+        }
+        return run();
+      };
+
       return {
+        approveSubmission: (input) =>
+          manualOnly("approveSubmission", () =>
+            // `assertManualComplete` proved the member is there at registration.
+            (
+              provider.approveSubmission as NonNullable<
+                BillingProvider["approveSubmission"]
+              >
+            )(env, input)
+          ),
         cancel: (ctx, input) =>
           call("cancel", () =>
             Promise.resolve(provider.cancel(env, ctx, input))
@@ -142,6 +184,14 @@ export function defineBilling(config: BillingConfig): BillingRegistry {
           call("listInvoices", () =>
             Promise.resolve(provider.listInvoices(env, ctx, input))
           ),
+        manualInstructions: (input) =>
+          manualOnly("manualInstructions", () =>
+            (
+              provider.manualInstructions as NonNullable<
+                BillingProvider["manualInstructions"]
+              >
+            )(env, input)
+          ),
         provider: provider.name,
         renewal: provider.renewal ?? "vendor",
         restore: (ctx, input) =>
@@ -151,6 +201,15 @@ export function defineBilling(config: BillingConfig): BillingRegistry {
         setQuantity: (ctx, input) =>
           call("setQuantity", () =>
             Promise.resolve(provider.setQuantity(env, ctx, input))
+          ),
+        settlement: provider.settlement ?? "vendor",
+        submissionFields: () =>
+          manualOnly("submissionFields", () =>
+            (
+              provider.submissionFields as NonNullable<
+                BillingProvider["submissionFields"]
+              >
+            )(env)
           ),
       };
     },
@@ -233,6 +292,35 @@ export function findPlan(plans: Plan[], id: string): Plan {
     );
   }
   return plan;
+}
+
+/**
+ * A manual-settlement provider carries all three of its members, or none of it works.
+ *
+ * Checked at registration rather than at the first request, because the failure it prevents
+ * is silent and late: a subject reaches the pay page, reads nothing, and types a transaction
+ * reference into a form the provider never declared. A throw at module load is a failed
+ * deploy instead.
+ *
+ * The reference-field rule is checked here too, and only when `submissionFields` needs no
+ * `env` to answer. A provider that reads a key to build its field list is left to the first
+ * call, because calling it here would need an `env` `defineBilling` does not have.
+ */
+function assertManualComplete(provider: BillingProvider): void {
+  if (provider.settlement !== "manual") {
+    return;
+  }
+
+  const missing = (
+    ["manualInstructions", "submissionFields", "approveSubmission"] as const
+  ).filter((member) => provider[member] === undefined);
+
+  if (missing.length > 0) {
+    throw new BillingError(
+      "invalid_request",
+      `Provider "${provider.name}" declares settlement: "manual" but implements none of ${missing.join(", ")}. A manual provider owes all three: the instructions the subject reads, the fields they type in, and the event an approval is worth.`
+    );
+  }
 }
 
 /**

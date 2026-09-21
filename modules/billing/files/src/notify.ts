@@ -1,4 +1,8 @@
-import type { BillableSubject, Subscription } from "./provider";
+import type {
+  BillableSubject,
+  PaymentSubmission,
+  Subscription,
+} from "./provider";
 
 // How the capability sends the three billing emails, and the indirection that keeps the
 // core free of `@repo/email`. The sibling of `./store.ts` and `./enqueue.ts`.
@@ -30,7 +34,15 @@ export type BillingNotificationKind =
    * Distinct from `payment.failed` on purpose. Under manual renewal nothing was charged and
    * no card was refused, so the dunning notice would tell every subscriber a lie.
    */
-  | "renewal.due";
+  | "renewal.due"
+  /**
+   * An admin refused a payment submission under manual settlement, with a note.
+   *
+   * The one review outcome worth an email. An approval lands on a page the subject is
+   * already watching; a rejection carries a reason they cannot otherwise learn — the wrong
+   * amount, a transaction reference the seller cannot find on their own statement.
+   */
+  | "payment.rejected";
 
 /** Who a billing email goes to. `BillingStore.recipientFor` resolves it from the subject. */
 export interface BillingRecipient {
@@ -44,8 +56,19 @@ export interface BillingNotification {
   kind: BillingNotificationKind;
   to: BillingRecipient;
   subject: BillableSubject;
-  /** The row that occasioned it, so a template can name the plan and the dates. */
-  subscription: Subscription;
+  /**
+   * The row that occasioned it, so a template can name the plan and the dates.
+   *
+   * Absent on `payment.rejected` alone, and necessarily: a refused submission granted
+   * nothing, so there is no subscription row it is about. `submission` carries the plan and
+   * the figure instead.
+   */
+  subscription?: Subscription;
+  /**
+   * The refused submission, on `payment.rejected`. Carries the plan, the quoted amount, the
+   * transaction reference the subject gave, and the admin's note.
+   */
+  submission?: PaymentSubmission;
 }
 
 /** What `apps/api` implements over `createEmail(env)` and the three templates. */
