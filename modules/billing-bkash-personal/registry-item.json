@@ -1,0 +1,38 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing-bkash-personal",
+  "type": "saasaloy:feature",
+  "dependsOn": ["billing"],
+  "dependencies": [],
+  "envVars": {
+    "BKASH_PERSONAL_NUMBER": "The personal bKash number subjects send money to, e.g. +8801712345678 or 01712345678. Required once BILLING_PROVIDER=bkash-personal: it is the destination printed in the instructions, and unset it throws BillingError(\"invalid_request\") naming this key before a subject is sent anywhere. One receiving number per deployment — routing by amount or by tenant is not supported.",
+    "BKASH_PERSONAL_ACCOUNT_LABEL": "Whose wallet the number is, e.g. \"Rahim Traders\". Optional, and shown beside the number in the instructions so a subject can tell they are sending to the right person. A bKash Send Money screen shows the registered name, and a mismatch is the cheapest way for a subject to catch a wrong number before they confirm."
+  },
+  "removeWarnings": [
+    "Removing this module does not refund anything, and there is nothing at bKash to cancel: a personal wallet holds no subscription and stores no instrument. Subjects simply stop being asked to pay.",
+    "Payment submissions already in billing_payment_submissions survive this removal. Review or reject the pending ones before you remove the provider, or nobody will ever decide them."
+  ],
+  "patches": [
+    {
+      "file": "packages/billing/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "billing",
+      "arrayProp": "providers",
+      "call": "bkashPersonalBilling",
+      "import": {
+        "name": "bkashPersonalBilling",
+        "from": "./providers/bkash-personal"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/bkash-personal.ts",
+      "target": "@billing/providers/bkash-personal.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-billing-bkash-personal"]
+  }
+}
