@@ -78,7 +78,7 @@ Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make th
 | Validate the idea | a landing page and a waitlist | `init`, then `waitlist` |
 | Build the MVP | sign-in, an admin app, transactional email | `auth`, `admin`, `email` + a provider |
 | Onboard teams | organizations, tenant isolation, roles | `teams`, `multitenant`, `rbac` |
-| Charge money | subscriptions, plan limits, webhooks | `billing`, `billing-stripe`, `entitlements` |
+| Charge money | subscriptions, plan limits, webhooks | `billing`, `billing-stripe`, `billing-sslcommerz`, `entitlements` |
 | Scale the backend | jobs, caching, files, rate limits, API access | `queue`, `kv`, `storage`, `ratelimit`, `api-keys` |
 
 Each row installs on top of the previous one. Nothing from a later row lands in your repo until you ask for it.
@@ -107,7 +107,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `infra` |
 | Feature | `waitlist`, `teams`, `multitenant`, `rbac`, `api-keys`, `entitlements`, `email-react`, `ratelimit`, `feature-flags` |
-| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe` |
+| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `billing-sslcommerz` |
 | Driver | `database-d1`, `database-postgres` |
 
 What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the free tier, and every local provider runs with no account at all.
