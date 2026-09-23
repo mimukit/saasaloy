@@ -8,8 +8,8 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { statements } from "@repo/auth/access";
-import { allows } from "@repo/auth/rbac-rules";
-import type { PrincipalLike } from "@repo/auth/rbac-rules";
+import { allows } from "@repo/auth/permission-rules";
+import type { PrincipalLike } from "@repo/auth/permission-rules";
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
 import {

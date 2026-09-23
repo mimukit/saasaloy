@@ -58,7 +58,7 @@ describe("teams module descriptor", () => {
     );
   });
 
-  it("patches both Better Auth plugin arrays", async () => {
+  it("patches every Better Auth plugin array it owns", async () => {
     const descriptor = await readDescriptor();
 
     expect(descriptor.patches).toStrictEqual(
@@ -87,6 +87,37 @@ describe("teams module descriptor", () => {
             from: "./plugins/organization-client",
           },
         },
+        {
+          // The base-role lock ships with `dynamicAccessControl`, which this module
+          // turns on. A project that enabled the switch without the guard would let a
+          // stored row named `admin` widen the static `admin`.
+          file: "packages/auth/src/auth.ts",
+          kind: "plugin-array",
+          exportName: "auth",
+          arrayProp: "plugins",
+          call: "roleLockGuard",
+          import: {
+            name: "roleLockGuard",
+            from: "./plugins/role-lock",
+          },
+        },
+      ])
+    );
+  });
+
+  it("ships the permission rule and the base-role lock", async () => {
+    const descriptor = await readDescriptor();
+
+    expect(descriptor.files).toStrictEqual(
+      expect.arrayContaining([
+        {
+          path: "files/auth/permission-rules.ts",
+          target: "@auth/permission-rules.ts",
+        },
+        {
+          path: "files/auth/plugins/role-lock.ts",
+          target: "@auth/plugins/role-lock.ts",
+        },
       ])
     );
   });
@@ -95,7 +126,11 @@ describe("teams module descriptor", () => {
     const descriptor = await readDescriptor();
     const warnings = descriptor.removeWarnings as string[];
 
-    expect(warnings).toHaveLength(1);
+    // Two: the tables, then the custom roles those tables hold. The second one came
+    // over from `rbac` when that module dissolved, because `teams` owns the table.
+    expect(warnings).toHaveLength(2);
+    expect(warnings[1]).toMatch(/Custom roles/);
+    expect(warnings[1]).toMatch(/permission-rules\.ts/);
     expect(warnings[0]).toMatch(/organization/);
     expect(warnings[0]).toMatch(/member/);
     expect(warnings[0]).toMatch(/invitation/);

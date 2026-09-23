@@ -21,7 +21,7 @@ import type { TenantRequestContext } from "../tenant";
 //
 // The whole point of the arrangement is that the two paths end in the same value. A route
 // written with `requireTenant` and `forTenant` does not know whether the caller was a
-// browser or a deploy script, and `requireCan` runs the same `can()` over the key's fixed
+// browser or a deploy script, and `requirePermission` runs the same `can()` over the key's fixed
 // scope that it runs over a member's resolved statements. There is no second permission
 // system on the machine path, and adding one is the mistake this file exists to prevent.
 
