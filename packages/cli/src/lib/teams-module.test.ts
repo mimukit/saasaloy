@@ -125,11 +125,13 @@ describe("teams module descriptor", () => {
     expect(descriptor.patches).toStrictEqual(
       expect.arrayContaining([
         {
-          file: "apps/admin/src/components/app-shell.tsx",
-          kind: "const-array",
-          constName: "NAV_ITEMS",
-          key: "to",
+          file: "apps/admin/src/components/nav.ts",
+          kind: "nav-entry",
+          constName: "NAV_AREAS",
+          area: "/",
+          group: "Manage",
           entry: { to: "/teams", label: "Teams" },
+          icon: { name: "UsersRoundIcon", from: "lucide-react" },
         },
       ])
     );
