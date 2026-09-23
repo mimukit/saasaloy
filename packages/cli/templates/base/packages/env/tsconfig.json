@@ -1,0 +1,13 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    // This package is the one that runs under plain Node as well as inside a bundle:
+    // `pnpm env:setup` and `env-exec` are node scripts, and `node --test` resolves the
+    // real filename rather than a bundler's guess. So every relative import here carries
+    // its `.ts` (`allowImportingTsExtensions` is set in `@repo/tsconfig/base.json`, since
+    // a consumer compiling this source has to accept the syntax too), and no resolve hook
+    // is needed to run the tests.
+    "types": ["node"]
+  },
+  "include": ["src", "scripts"]
+}

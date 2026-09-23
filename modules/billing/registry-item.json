@@ -10,6 +10,14 @@
     "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
     "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": [
+    "BILLING_LOCKOUT_DAYS",
+    "BILLING_APP_NAME",
+    "BILLING_APP_URL"
+  ],
   "removeWarnings": [
     "The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
@@ -92,7 +100,10 @@
       "kind": "const-array",
       "constName": "NAV_ITEMS",
       "key": "to",
-      "entry": { "to": "/billing", "label": "Billing" }
+      "entry": {
+        "to": "/billing",
+        "label": "Billing"
+      }
     },
     {
       "file": "packages/db/src/schema/auth.ts",
@@ -100,6 +111,17 @@
       "exportName": "users",
       "column": "billingCustomerId",
       "value": "text(\"billing_customer_id\")"
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "billingEnv",
+      "import": {
+        "name": "billingEnv",
+        "from": "@repo/billing/env-preset"
+      }
     }
   ],
   "files": [
@@ -141,24 +163,62 @@
   "scaffolds": [
     {
       "workspace": "packages/billing",
-      "aliases": { "@billing": "packages/billing/src" },
+      "aliases": {
+        "@billing": "packages/billing/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/define.ts", "target": "src/define.ts" },
-        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
-        { "path": "files/src/plans.ts", "target": "src/plans.ts" },
-        { "path": "files/src/subject.ts", "target": "src/subject.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/plans.ts",
+          "target": "src/plans.ts"
+        },
+        {
+          "path": "files/src/subject.ts",
+          "target": "src/subject.ts"
+        },
         {
           "path": "files/src/subscription.ts",
           "target": "src/subscription.ts"
         },
-        { "path": "files/src/store.ts", "target": "src/store.ts" },
-        { "path": "files/src/enqueue.ts", "target": "src/enqueue.ts" },
-        { "path": "files/src/notify.ts", "target": "src/notify.ts" },
-        { "path": "files/src/config.ts", "target": "src/config.ts" },
-        { "path": "files/src/jobs/event.ts", "target": "src/jobs/event.ts" },
+        {
+          "path": "files/src/store.ts",
+          "target": "src/store.ts"
+        },
+        {
+          "path": "files/src/enqueue.ts",
+          "target": "src/enqueue.ts"
+        },
+        {
+          "path": "files/src/notify.ts",
+          "target": "src/notify.ts"
+        },
+        {
+          "path": "files/src/config.ts",
+          "target": "src/config.ts"
+        },
+        {
+          "path": "files/src/jobs/event.ts",
+          "target": "src/jobs/event.ts"
+        },
         {
           "path": "files/src/jobs/past-due-lockout.ts",
           "target": "src/jobs/past-due-lockout.ts"
@@ -170,6 +230,10 @@
         {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
         }
       ]
     }

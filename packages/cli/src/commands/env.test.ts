@@ -11,8 +11,11 @@ import { parseArgs, renderPending, runEnv, writeAnswers } from "./env.js";
 // it offline. The prompt loop itself needs a terminal no test process has, so the run
 // under test is the non-interactive one — the same path `--check` takes — and the write
 // half is driven directly through `writeAnswers`. Between them they pin what the command
-// promises: where each variable lands, that a set value is never touched, and that a
-// target git would commit stops the run before a single prompt.
+// promises: one target file, that a set value is never touched, and that a target git
+// would commit stops the run before a single prompt.
+
+/** The one file every answer lands in. */
+const LOCAL = "packages/env/.env";
 
 const ORIGINAL_CWD = process.cwd();
 const USAGE_LINE = "saasaloy env [--check]";
@@ -163,33 +166,11 @@ describe(renderPending, () => {
     name: "PUBLIC_API_URL",
   };
 
-  it("names the variable, the module, and the file it will land in", () => {
-    const out = stripAnsi(
-      renderPending([
-        { declaration, file: "apps/web/.env", workspace: "apps/web" },
-      ]).join("\n")
-    );
+  it("names the variable and the module that declared it", () => {
+    const out = stripAnsi(renderPending([{ declaration }]).join("\n"));
 
     expect(out).toContain("PUBLIC_API_URL");
     expect(out).toContain("declared by waitlist");
-    expect(out).toContain("apps/web/.env");
-  });
-
-  it("says why it could not choose, rather than picking one", () => {
-    const out = stripAnsi(
-      renderPending([
-        { choices: ["apps/admin", "apps/web"], declaration },
-      ]).join("\n")
-    );
-
-    expect(out).toContain("several workspaces fit");
-    expect(out).toContain("apps/admin, apps/web");
-  });
-
-  it("says plainly when no workspace fits at all", () => {
-    const out = stripAnsi(renderPending([{ declaration }]).join("\n"));
-
-    expect(out).toContain("no target workspace found");
   });
 });
 
@@ -200,16 +181,6 @@ describe(runEnv, () => {
     expect(code).toBe(EXIT_REFUSED);
     expect(out).toContain("--nope");
     expect(out).toContain(USAGE_LINE);
-  });
-
-  it("routes each variable to the app whose file reads it", async () => {
-    const { code, out } = await run(["--check"]);
-
-    expect(code).toBe(EXIT_REFUSED);
-    // Public build-time value → the app that got the component, in its `.env`.
-    expect(out).toContain("apps/web/.env");
-    // Secret → the Worker's `.dev.vars`, though `email-plunk` wrote only into a package.
-    expect(out).toContain("apps/api/.dev.vars");
   });
 
   it("reports every missing variable without prompting", async () => {
@@ -231,20 +202,22 @@ describe(runEnv, () => {
   });
 
   it("treats a set value as answered and exits 0 once nothing is left", async () => {
-    await put("apps/web/.env", "PUBLIC_API_URL=https://api.example.com\n");
-    await put("apps/api/.dev.vars", "PLUNK_API_KEY=keep-me\n");
+    await put(
+      LOCAL,
+      "PUBLIC_API_URL=https://api.example.com\nPLUNK_API_KEY=keep-me\n"
+    );
 
     const { code, out } = await run(["--check"]);
 
     expect(code).toBe(EXIT_OK);
     expect(out).toContain("Every declared variable is set");
-    await expect(readProject("apps/api/.dev.vars")).resolves.toBe(
-      "PLUNK_API_KEY=keep-me\n"
+    await expect(readProject(LOCAL)).resolves.toContain(
+      "PLUNK_API_KEY=keep-me"
     );
   });
 
   it("treats a blank value as unset", async () => {
-    await put("apps/api/.dev.vars", "PLUNK_API_KEY=\n");
+    await put(LOCAL, "PLUNK_API_KEY=\n");
 
     const { code, out } = await run(["--check"]);
 
@@ -252,15 +225,15 @@ describe(runEnv, () => {
     expect(out).toContain("PLUNK_API_KEY");
   });
 
-  it("refuses when a target file is not gitignored, and writes nothing", async () => {
-    await put(".gitignore", GITIGNORE.replace(".dev.vars\n", ""));
+  it("refuses when the target file is not gitignored, and writes nothing", async () => {
+    await put(".gitignore", "node_modules\n");
 
     const { code, out } = await run(["--check"]);
 
     expect(code).toBe(EXIT_REFUSED);
-    expect(out).toContain("apps/api/.dev.vars");
+    expect(out).toContain(LOCAL);
     expect(out).toContain("isn't gitignored");
-    await expect(readProject("apps/api/.dev.vars")).rejects.toThrow("ENOENT");
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
   });
 
   it("refuses when the project is not a git repository at all", async () => {
@@ -303,34 +276,33 @@ describe(runEnv, () => {
 });
 
 describe(writeAnswers, () => {
-  it("appends the answers to the files that read them", async () => {
-    await put("apps/api/.dev.vars", "# existing\nKEEP_ME=yes\n");
+  it("appends every answer to the one local value file", async () => {
+    await put(LOCAL, "# existing\nKEEP_ME=yes\n");
 
     const written = await writeAnswers(
       project,
-      new Map([
-        ["apps/api/.dev.vars", [["PLUNK_API_KEY", "live-key"]]],
-        ["apps/web/.env", [["PUBLIC_API_URL", "https://api.example.com"]]],
-      ]),
-      new Map([["apps/api/.dev.vars", "# existing\nKEEP_ME=yes\n"]])
+      [
+        ["PLUNK_API_KEY", "live-key"],
+        ["PUBLIC_API_URL", "https://api.example.com"],
+      ],
+      "# existing\nKEEP_ME=yes\n"
     );
 
-    expect(written).toStrictEqual([
-      ["apps/api/.dev.vars", 1],
-      ["apps/web/.env", 1],
-    ]);
-    await expect(readProject("apps/api/.dev.vars")).resolves.toBe(
-      "# existing\nKEEP_ME=yes\nPLUNK_API_KEY=live-key\n"
-    );
-    await expect(readProject("apps/web/.env")).resolves.toBe(
-      "PUBLIC_API_URL=https://api.example.com\n"
+    expect(written).toBe(2);
+    await expect(readProject(LOCAL)).resolves.toBe(
+      "# existing\nKEEP_ME=yes\nPLUNK_API_KEY=live-key\nPUBLIC_API_URL=https://api.example.com\n"
     );
   });
 
-  it("skips a file with nothing to add", async () => {
-    await expect(
-      writeAnswers(project, new Map([["apps/api/.dev.vars", []]]), new Map())
-    ).resolves.toStrictEqual([]);
-    await expect(readProject("apps/api/.dev.vars")).rejects.toThrow("ENOENT");
+  it("creates the file when there was none", async () => {
+    await expect(writeAnswers(project, [["PLUNK_API_KEY", "k"]])).resolves.toBe(
+      1
+    );
+    await expect(readProject(LOCAL)).resolves.toBe("PLUNK_API_KEY=k\n");
+  });
+
+  it("writes nothing when there is nothing to add", async () => {
+    await expect(writeAnswers(project, [])).resolves.toBe(0);
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
   });
 });

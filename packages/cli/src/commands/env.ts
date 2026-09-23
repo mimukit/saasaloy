@@ -7,22 +7,16 @@ import {
   log,
   note,
   outro,
-  select,
   text,
 } from "@clack/prompts";
 import pc from "picocolors";
-import { parseDevVars } from "../lib/dev-vars.js";
+import { ENV_EXAMPLE, parseEnvExample } from "../lib/env-example.js";
 import {
-  apiWorkspace,
   appendVars,
-  discoverWorkspaces,
-  findWranglerWorkspaces,
   isSet,
+  LOCAL_VALUES,
+  parseEnvValues,
   productionSecretCommands,
-  routeVariable,
-  targetFileName,
-  workspaceForPath,
-  workspacesByModule,
 } from "../lib/env-vars.js";
 import type { Declaration } from "../lib/env-vars.js";
 import {
@@ -39,7 +33,6 @@ import {
 import { isPathIgnored } from "../lib/gitignore.js";
 import { loadLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   LocalRegistrySource,
@@ -56,9 +49,10 @@ import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy env` — fill in the variables the installed modules declare (#50).
 //
-// Before this, `add` rendered `apps/api/.dev.vars.example` and stopped there: the project
-// knew what it needed and no file on disk had it. A `PUBLIC_*` value was worse off still,
-// because it belongs in the frontend's `.env`, which the example file never described.
+// Every answer lands in one gitignored file, `packages/env/.env`, which is the `local`
+// value source `pnpm env:setup` distributes into each service's own `.env` (#153). There
+// is no routing and no "which workspace reads this?" prompt: the descriptor's
+// `envServices` decides that, and `packages/env/.env.example` records it.
 //
 // The command fills blanks and nothing else. A value already typed is never rewritten,
 // whatever the descriptor's `devVars` suggests, because the person who typed it knew
@@ -95,34 +89,21 @@ export function parseArgs(argv: string[]): Options {
   return { check: argv.includes("--check"), unknown };
 }
 
-/** A variable that still needs an answer, and where the answer goes. */
+/** A variable that still needs an answer. Every one goes to the same file. */
 export interface Pending {
   declaration: Declaration;
-  /** Project-relative workspace root, or undefined when routing found no target. */
-  workspace?: string;
-  /** Project-relative target file, or undefined alongside an undefined workspace. */
-  file?: string;
-  /** Set when routing found several plausible workspaces and a person must pick. */
-  choices?: string[];
 }
 
 /**
- * One report line per pending variable: the name, the module that declared it, and
- * either the file it will land in or why no file could be chosen.
+ * One report line per pending variable: the name and the module that declared it.
  *
  * Pure and exported so `--check`'s output is tested without a project on disk.
  */
 export function renderPending(pending: Pending[]): string[] {
-  return pending.map((entry) => {
-    const head = `${pc.cyan(entry.declaration.name)} ${pc.dim(`— declared by ${entry.declaration.module}`)}`;
-    if (entry.file) {
-      return `${head}\n  ${pc.dim(`→ ${entry.file}`)}`;
-    }
-    const why = entry.choices
-      ? `several workspaces fit (${entry.choices.join(", ")}) — run \`saasaloy env\` to pick one`
-      : "no target workspace found — this module wrote no files under a known alias";
-    return `${head}\n  ${pc.yellow(`→ ${why}`)}`;
-  });
+  return pending.map(
+    (entry) =>
+      `${pc.cyan(entry.declaration.name)} ${pc.dim(`— declared by ${entry.declaration.module}`)}`
+  );
 }
 
 /**
@@ -219,49 +200,27 @@ async function loadDeclarations(
   });
 }
 
-/** The workspace an alias sits in, used to find the base app for a `PUBLIC_*` fallback. */
-function workspaceForAlias(
-  aliases: Record<string, string>,
-  alias: string,
-  workspaces: string[]
-): string | undefined {
-  const value = aliases[alias];
-  if (!value) {
-    return undefined;
-  }
-  return workspaceForPath(
-    value.endsWith("/") ? value : `${value}/`,
-    workspaces
-  );
-}
-
 /**
- * Write the answers, one file at a time, and report `[file, count]` per file touched.
+ * Write the answers into `packages/env/.env` and report how many landed.
  *
- * `contents` carries what each file held when the run read it, so the append is built
- * from the same bytes the "already set" decision was made against. Exported because it
- * is the half of `env` that touches disk: the tests drive it directly, since the prompt
- * loop above it needs a terminal that no test process has.
+ * `before` is what the file held when the run read it, so the append is built from the
+ * same bytes the "already set" decision was made against. Exported because it is the half
+ * of `env` that touches disk: the tests drive it directly, since the prompt loop above it
+ * needs a terminal that no test process has.
  */
 export async function writeAnswers(
   root: string,
-  answers: Map<string, [string, string][]>,
-  contents: Map<string, string | undefined>
-): Promise<[string, number][]> {
-  const written: [string, number][] = [];
-  for (const [file, additions] of [...answers].toSorted(([a], [b]) =>
-    a.localeCompare(b)
-  )) {
-    if (additions.length === 0) {
-      continue;
-    }
-    const abs = resolveWithinRoot(root, file);
-    await assertNoSymlinkPath(root, abs);
-    await mkdir(dirname(abs), { recursive: true });
-    await writeFile(abs, appendVars(contents.get(file), additions), "utf-8");
-    written.push([file, additions.length]);
+  additions: [string, string][],
+  before?: string
+): Promise<number> {
+  if (additions.length === 0) {
+    return 0;
   }
-  return written;
+  const abs = resolveWithinRoot(root, LOCAL_VALUES);
+  await assertNoSymlinkPath(root, abs);
+  await mkdir(dirname(abs), { recursive: true });
+  await writeFile(abs, appendVars(before, additions), "utf-8");
+  return additions.length;
 }
 
 async function readTarget(
@@ -296,7 +255,6 @@ export async function runEnv(argv: string[]): Promise<number> {
   try {
     const root = await findProjectRoot();
     const config = await loadConfig(root);
-    const manifest = await loadManifest(root);
     const lock = await loadLock(root);
 
     const declarations = await loadDeclarations(
@@ -312,55 +270,35 @@ export async function runEnv(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
-    const workspaces = await discoverWorkspaces(root, config.aliases);
-    const wranglerWorkspaces = await findWranglerWorkspaces(root, workspaces);
-    const byModule = workspacesByModule(manifest, workspaces);
-    const api = apiWorkspace(config.aliases);
-    const base = workspaceForAlias(
-      config.aliases,
-      `@${config.base ?? "web"}`,
-      workspaces
+    // The key list is `saasaloy add`'s output and every `.env` is written from it, so a
+    // key a module declares and the list omits reaches no service at all. `doctor` runs
+    // offline and cannot see the descriptors; this command already has them.
+    const listed = new Set(
+      Object.keys(parseEnvExample((await readTarget(root, ENV_EXAMPLE)) ?? ""))
     );
-
-    // One read per target file, reused for every variable that routes to it, so two
-    // variables landing in the same `.dev.vars` see the same "already set" answer.
-    const contents = new Map<string, string | undefined>();
-    const readOnce = async (file: string): Promise<string | undefined> => {
-      if (!contents.has(file)) {
-        contents.set(file, await readTarget(root, file));
-      }
-      return contents.get(file);
-    };
-
-    const pending: Pending[] = [];
-    const routed: { name: string; workspace: string }[] = [];
-    for (const declaration of declarations) {
-      const route = routeVariable({
-        candidates: byModule.get(declaration.module) ?? [],
-        name: declaration.name,
-        wranglerWorkspaces,
-        ...(api ? { apiWorkspace: api } : {}),
-        ...(base ? { baseWorkspace: base } : {}),
-      });
-      if (route.kind === "resolved") {
-        const file = `${route.workspace}/${targetFileName(declaration.name)}`;
-        routed.push({ name: declaration.name, workspace: route.workspace });
-        const values = parseDevVars((await readOnce(file)) ?? "");
-        if (isSet(values, declaration.name)) {
-          continue;
-        }
-        pending.push({ declaration, file, workspace: route.workspace });
-        continue;
-      }
-      pending.push({
-        declaration,
-        ...(route.kind === "ambiguous" ? { choices: route.choices } : {}),
-      });
+    const undeclared = declarations
+      .filter((declaration) => !listed.has(declaration.name))
+      .map((declaration) => declaration.name);
+    if (undeclared.length > 0) {
+      log.warn(
+        `${ENV_EXAMPLE} does not list ${undeclared.join(", ")}, so no service reads ${undeclared.length === 1 ? "it" : "them"}. Re-run \`saasaloy add\` for the declaring module to regenerate the key list.`
+      );
     }
+
+    // One read of the one file, reused for every variable, so two variables see the same
+    // "already set" answer.
+    const before = await readTarget(root, LOCAL_VALUES);
+    const values = parseEnvValues(before ?? "");
+
+    const pending: Pending[] = declarations
+      .filter((declaration) => !isSet(values, declaration.name))
+      .map((declaration) => ({ declaration }));
 
     // The production block is a report, so it prints on every run — a `--check` in CI is
     // exactly where someone wants the deploy commands to hand to an operator.
-    const secretCommands = productionSecretCommands(routed);
+    const secretCommands = productionSecretCommands(
+      declarations.map((declaration) => declaration.name)
+    );
     const printSecrets = (): void => {
       if (secretCommands.length > 0) {
         note(
@@ -378,21 +316,16 @@ export async function runEnv(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
-    // Prove every file is ignored before asking for a single secret. Typing an API key
-    // into a prompt that then refuses to write it wastes the key as much as the typing —
-    // and the same refusal is the right answer under `--check`, where it says the deploy
-    // gate would have written a secret into a tracked file.
-    const files = [
-      ...new Set(pending.flatMap((entry) => (entry.file ? [entry.file] : []))),
-    ].toSorted();
-    for (const file of files) {
-      if (!(await isPathIgnored(root, file))) {
-        cancel(
-          `${pc.cyan(file)} isn't gitignored — refusing to write a secret into a tracked file. ` +
-            `Add it to .gitignore (the base template already does) and run again.`
-        );
-        return EXIT_REFUSED;
-      }
+    // Prove the file is ignored before asking for a single secret. Typing an API key into
+    // a prompt that then refuses to write it wastes the key as much as the typing — and
+    // the same refusal is the right answer under `--check`, where it says the deploy gate
+    // would have written a secret into a tracked file.
+    if (!(await isPathIgnored(root, LOCAL_VALUES))) {
+      cancel(
+        `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
+          "Add it to .gitignore (the base template already does) and run again."
+      );
+      return EXIT_REFUSED;
     }
 
     // `--check` and a session with no terminal take the same path. A prompt nobody can
@@ -407,46 +340,14 @@ export async function runEnv(argv: string[]): Promise<number> {
       return EXIT_REFUSED;
     }
 
-    const answers = new Map<string, [string, string][]>();
+    const answers: [string, string][] = [];
     for (const entry of pending) {
-      let file = entry.file;
-      if (!file) {
-        if (!entry.choices) {
-          log.warn(
-            `${pc.cyan(entry.declaration.name)} — no target workspace found; set it by hand.`
-          );
-          continue;
-        }
-        const picked = await select({
-          message: `Which workspace reads ${entry.declaration.name}?`,
-          options: entry.choices.map((workspace) => ({
-            label: workspace,
-            value: workspace,
-          })),
-        });
-        if (isCancel(picked)) {
-          cancel("Cancelled — nothing written.");
-          return EXIT_REFUSED;
-        }
-        file = `${picked}/${targetFileName(entry.declaration.name)}`;
-        if (!(await isPathIgnored(root, file))) {
-          cancel(
-            `${pc.cyan(file)} isn't gitignored — refusing to write a secret into a tracked file.`
-          );
-          return EXIT_REFUSED;
-        }
-        const values = parseDevVars((await readOnce(file)) ?? "");
-        if (isSet(values, entry.declaration.name)) {
-          continue;
-        }
-      }
-
       // The message is the descriptor's own wording. `env` does not paraphrase it: the
       // module author wrote the sentence that explains what the value is for, and a
-      // second wording here would drift from the one in `.dev.vars.example`.
+      // second wording here would drift from the one in the key list.
       const answer = await text({
         defaultValue: entry.declaration.devValue ?? "",
-        message: `${pc.cyan(entry.declaration.name)} ${pc.dim(`→ ${file}`)}\n${entry.declaration.description}`,
+        message: `${pc.cyan(entry.declaration.name)} ${pc.dim(`→ ${LOCAL_VALUES}`)}\n${entry.declaration.description}`,
         ...(entry.declaration.devValue === undefined
           ? {}
           : { initialValue: entry.declaration.devValue }),
@@ -455,22 +356,14 @@ export async function runEnv(argv: string[]): Promise<number> {
         cancel("Cancelled — nothing written.");
         return EXIT_REFUSED;
       }
-      answers.set(file, [
-        ...(answers.get(file) ?? []),
-        [entry.declaration.name, answer],
-      ]);
+      answers.push([entry.declaration.name, answer]);
     }
 
-    const written = await writeAnswers(root, answers, contents);
-    if (written.length > 0) {
+    const written = await writeAnswers(root, answers, before);
+    if (written > 0) {
       note(
         wrapForNote(
-          written
-            .map(
-              ([file, count]) =>
-                `${pc.cyan(file)} ${pc.dim(`— ${count} added`)}`
-            )
-            .join("\n")
+          `${pc.cyan(LOCAL_VALUES)} ${pc.dim(`— ${written} added`)}\n\n${pc.dim("Run `pnpm env:setup` to write each service's own .env from it.")}`
         ),
         "Written"
       );

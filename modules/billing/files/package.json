@@ -11,9 +11,12 @@
     "./entitlements": "./src/entitlements.ts",
     "./plans": "./src/plans.ts",
     "./subject": "./src/subject.ts",
-    "./providers/*": "./src/providers/*.ts"
+    "./providers/*": "./src/providers/*.ts",
+    "./env-preset": "./src/env-preset.ts"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@repo/env": "workspace:*"
+  },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260903.1",
     "@repo/tsconfig": "workspace:*",

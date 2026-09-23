@@ -7,6 +7,10 @@
   "envVars": {
     "FLAGS_ISOLATE_TTL_SECONDS": "Seconds a Worker isolate serves its cached copy of the flag document before re-reading it from kv. Default 10, which puts a toggle in front of every location in about 70 seconds once Workers KV's own propagation window is added. Raise it to spend fewer KV reads and wait longer for a toggle; set it to 0 to skip the isolate cache and pay a KV read per request. A value that is not a whole number throws while the Worker initializes."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["FLAGS_ISOLATE_TTL_SECONDS"],
   "removeWarnings": [
     "The deployed feature_flags and feature_flag_overrides tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "The published flag documents survive it too. They have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the KV namespace until you delete them with `wrangler kv key delete`."
@@ -42,7 +46,21 @@
       "kind": "const-array",
       "constName": "NAV_ITEMS",
       "key": "to",
-      "entry": { "to": "/flags", "label": "Flags" }
+      "entry": {
+        "to": "/flags",
+        "label": "Flags"
+      }
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "featureFlagsEnv",
+      "import": {
+        "name": "featureFlagsEnv",
+        "from": "@repo/feature-flags/env-preset"
+      }
     }
   ],
   "files": [
@@ -88,19 +106,49 @@
   "scaffolds": [
     {
       "workspace": "packages/feature-flags",
-      "aliases": { "@flags": "packages/feature-flags/src" },
+      "aliases": {
+        "@flags": "packages/feature-flags/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/define.ts", "target": "src/define.ts" },
-        { "path": "files/src/document.ts", "target": "src/document.ts" },
-        { "path": "files/src/cache.ts", "target": "src/cache.ts" },
-        { "path": "files/src/hash.ts", "target": "src/hash.ts" },
-        { "path": "files/src/source.ts", "target": "src/source.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/document.ts",
+          "target": "src/document.ts"
+        },
+        {
+          "path": "files/src/cache.ts",
+          "target": "src/cache.ts"
+        },
+        {
+          "path": "files/src/hash.ts",
+          "target": "src/hash.ts"
+        },
+        {
+          "path": "files/src/source.ts",
+          "target": "src/source.ts"
+        },
         {
           "path": "files/src/flags/system.ts",
           "target": "src/flags/system.ts"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
         }
       ]
     }

@@ -16,7 +16,7 @@ Callers import `@repo/storage`, call `createStorage(env)`, and never learn which
 
 ```sh
 openssl rand -base64 32          # copy the value
-echo 'STORAGE_URL_SECRET=<value>' >> apps/api/.dev.vars
+echo 'STORAGE_URL_SECRET=<value>' >> packages/env/.env && pnpm env:setup
 pnpm wrangler secret put STORAGE_URL_SECRET   # for production
 ```
 
@@ -64,7 +64,7 @@ With all four set, `createUploadUrl` returns a presigned R2 URL and the browser 
 
 ```sh
 ./saasaloy add storage storage-memory
-echo 'STORAGE_PROVIDER=memory' >> apps/api/.dev.vars
+echo 'STORAGE_PROVIDER=memory' >> packages/env/.env && pnpm env:setup
 ```
 
 Uploads, downloads, listing and multipart all work with no account. Every link is a proxy link, so `STORAGE_URL_SECRET` still has to be set — the first upload is where a missing one throws.

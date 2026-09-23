@@ -222,7 +222,7 @@ Setup:
 1. Open a Khudebarta account and get the API key and the secret key from the portal.
 2. Register a sender id (masking or non-masking) with Khudebarta. The gateway rejects a sender it has not approved.
 3. Run `saasaloy add sms-khudebarta`.
-4. Put `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` in `apps/api/.dev.vars` for local work, and set them with `wrangler secret put` for a deployed Worker.
+4. Put `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` in `packages/env/.env` for local work (`saasaloy env` prompts for both, `pnpm env:setup` distributes them), and set them with `wrangler secret put` for a deployed Worker.
 5. Set `SMS_PROVIDER=khudebarta` and `SMS_FROM` to the registered sender id.
 
 Leave `KHUDEBARTA_API_URL` unset unless Khudebarta gave your account a different host. It defaults to `https://portal.khudebarta.com:3770`. An override must use HTTPS: Workers strip a custom port from a plain `http://` subrequest, so the vendor's documented HTTP endpoint on `:3775` lands on port 80 and every send fails. The provider does not check the scheme.

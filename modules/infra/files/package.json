@@ -3,15 +3,16 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "preview": "pulumi preview",
-    "deploy": "pulumi up",
-    "destroy": "pulumi destroy",
+    "preview": "env-exec .env -- pulumi preview",
+    "deploy": "env-exec .env -- pulumi up",
+    "destroy": "env-exec .env -- pulumi destroy",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@pulumi/cloudflare": "6.20.0",
     "@pulumi/pulumi": "3.261.0",
-    "jsonc-parser": "3.3.1"
+    "jsonc-parser": "3.3.1",
+    "@repo/env": "workspace:*"
   },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",

@@ -1,42 +1,19 @@
-import { posix } from "node:path";
-import { pathExists, resolveWithinRoot } from "./fs-utils.js";
-import type { Manifest } from "./manifest.js";
+import { isPublicVar } from "./env-example.js";
 
-// The routing half of `saasaloy env` (#50): which file does a declared variable belong
-// in, and is it already set?
+// The value half of `saasaloy env` (#50): what a declared variable is, whether it is
+// already answered, and how an answer reaches the file that holds it.
 //
-// Two facts settle every case. A `PUBLIC_*` variable is a build-time value the frontend
-// bundles, so it belongs in that app's `.env`, which Astro and Vite read. Everything else
-// is a secret the Worker reads at runtime, so it belongs in `.dev.vars`, which is
-// wrangler's file and nothing else's. There is no `secret: true` flag on the descriptor
-// and there is not going to be one: the prefix already says it, and a second way to say
-// the same thing is a second way to disagree with it.
-//
-// *Which* app is the part that has to be inferred, because `envVars` is a flat
-// `NAME → description` map with no app scope. The manifest knows: it records every file
-// a module wrote, keyed by project-relative path, so the workspaces a module touched are
-// recoverable from it. This file turns that into a target and says plainly when it
-// cannot.
+// There is no routing left here, and that is the point of #153. Every declared value goes
+// to one gitignored file, `packages/env/.env`, which is what `@repo/env`'s `local` value
+// source reads and what `pnpm env:setup` distributes into each service's own `.env`.
+// Which service reads a key is the descriptor's own `envServices` declaration, applied by
+// `env-example.ts` when it writes the key list — never inferred from a manifest, a
+// wrangler config or an alias, and never an `ambiguous` prompt.
 
-export const ENV_FILE = ".env";
-export const DEV_VARS_FILE = ".dev.vars";
+/** The one file `saasaloy env` writes: the gitignored local value source. */
+export const LOCAL_VALUES = "packages/env/.env";
 
-/** The literal, case-sensitive prefix that marks a build-time public value. */
-export const PUBLIC_PREFIX = "PUBLIC_";
-
-/** Where an app workspace lives by convention — the half of the repo that is not a lib. */
-const APPS_DIR = "apps/";
-
-const WRANGLER_CONFIGS = ["wrangler.jsonc", "wrangler.json", "wrangler.toml"];
-
-export function isPublicVar(name: string): boolean {
-  return name.startsWith(PUBLIC_PREFIX);
-}
-
-/** `.env` for a public build-time value, `.dev.vars` for a secret. */
-export function targetFileName(name: string): string {
-  return isPublicVar(name) ? ENV_FILE : DEV_VARS_FILE;
-}
+export { ENV_EXAMPLE, isPublicVar, PUBLIC_PREFIX } from "./env-example.js";
 
 /** One variable a module declares, carrying the description the prompt will read out. */
 export interface Declaration {
@@ -49,185 +26,25 @@ export interface Declaration {
   devValue?: string;
 }
 
-export type Route =
-  | { kind: "resolved"; workspace: string }
-  | { kind: "ambiguous"; choices: string[] }
-  | { kind: "unknown" };
-
-export interface RouteArgs {
-  name: string;
-  /** Workspaces the declaring module wrote files into, project-relative. */
-  candidates: string[];
-  /** Of those, the ones holding a wrangler config. */
-  wranglerWorkspaces: string[];
-  /** The project's Worker workspace, from the `@api` alias. */
-  apiWorkspace?: string;
-  /** The base app's workspace — where a `PUBLIC_*` value lands when nothing else fits. */
-  baseWorkspace?: string;
-}
-
-/** A route to a workspace, or nothing when the caller had no workspace to offer. */
-function resolved(workspace: string | undefined): Route | undefined {
-  return workspace ? { kind: "resolved", workspace } : undefined;
-}
-
 /**
- * The workspace whose `.env` or `.dev.vars` a variable belongs in.
- *
- * A `PUBLIC_*` value is bundled by exactly one frontend, so it looks for an app the
- * declaring module wrote into, falling back to the project's base app — `waitlist` ships
- * a component into `apps/web` and its `PUBLIC_API_URL` is what that component reads.
- *
- * A secret is read by whatever runs it, which for `.dev.vars` means a wrangler process.
- * So it prefers a candidate holding a wrangler config, breaks a tie towards the api
- * workspace, and falls back to the api workspace outright: `packages/email` declares
- * `PLUNK_API_KEY` and writes no app file at all, but the Worker importing that package
- * is what needs the key on disk.
- *
- * Pure, and it says `ambiguous` rather than guessing — the caller prompts.
+ * The `KEY=value` pairs a `.env` sets. Comments and blank lines are dropped; this answers
+ * one question only, which is whether a key already has a value.
  */
-export function routeVariable(args: RouteArgs): Route {
-  const { candidates, wranglerWorkspaces } = args;
-
-  if (isPublicVar(args.name)) {
-    const apps = candidates.filter(
-      (w) => w.startsWith(APPS_DIR) && w !== args.apiWorkspace
-    );
-    if (apps.length === 1) {
-      return { kind: "resolved", workspace: apps[0]! };
-    }
-    if (apps.length > 1) {
-      return { choices: apps.toSorted(), kind: "ambiguous" };
-    }
-    return resolved(args.baseWorkspace) ?? fromCandidatesAlone(candidates);
-  }
-
-  const wrangler = candidates.filter((w) => wranglerWorkspaces.includes(w));
-  if (wrangler.length === 1) {
-    return { kind: "resolved", workspace: wrangler[0]! };
-  }
-  if (wrangler.length > 1) {
-    return (
-      (args.apiWorkspace && wrangler.includes(args.apiWorkspace)
-        ? resolved(args.apiWorkspace)
-        : undefined) ?? { choices: wrangler.toSorted(), kind: "ambiguous" }
-    );
-  }
-  return resolved(args.apiWorkspace) ?? fromCandidatesAlone(candidates);
-}
-
-function fromCandidatesAlone(candidates: string[]): Route {
-  if (candidates.length === 1) {
-    return { kind: "resolved", workspace: candidates[0]! };
-  }
-  return candidates.length === 0
-    ? { kind: "unknown" }
-    : { choices: candidates.toSorted(), kind: "ambiguous" };
-}
-
-/**
- * The workspace roots this project has, derived from the alias map: an alias points at a
- * source directory (`packages/db/src`), and the workspace is the nearest ancestor that
- * carries a `package.json`. Walking up rather than assuming `dirname` keeps a nested
- * alias (`@ui` → `packages/ui/src/components`) pointing at the right workspace.
- *
- * The project root is deliberately excluded. It has a `package.json` too, and a variable
- * routed there would write `.dev.vars` beside `pnpm-workspace.yaml`, where no wrangler
- * process ever looks.
- */
-export async function discoverWorkspaces(
-  root: string,
-  aliases: Record<string, string>
-): Promise<string[]> {
-  const found = new Set<string>();
-  for (const value of Object.values(aliases)) {
-    const workspace = await walkUpToWorkspace(root, value);
-    if (workspace) {
-      found.add(workspace);
-    }
-  }
-  return [...found].toSorted();
-}
-
-async function walkUpToWorkspace(
-  root: string,
-  relPosixPath: string
-): Promise<string | undefined> {
-  let current = relPosixPath.replace(/\/+$/, "");
-  while (current && current !== "." && current !== "/") {
-    if (await pathExists(resolveWithinRoot(root, `${current}/package.json`))) {
-      return current;
-    }
-    const parent = posix.dirname(current);
-    if (parent === current) {
-      return undefined;
-    }
-    current = parent;
-  }
-  return undefined;
-}
-
-/** Of `workspaces`, those holding a wrangler config — the ones that read `.dev.vars`. */
-export async function findWranglerWorkspaces(
-  root: string,
-  workspaces: string[]
-): Promise<string[]> {
-  const found: string[] = [];
-  for (const workspace of workspaces) {
-    for (const config of WRANGLER_CONFIGS) {
-      if (await pathExists(resolveWithinRoot(root, `${workspace}/${config}`))) {
-        found.push(workspace);
-        break;
-      }
-    }
-  }
-  return found;
-}
-
-/**
- * Which workspaces each module wrote into, read back from the manifest's `managed` map.
- * The key is the project-relative path the file landed on, so the longest workspace that
- * prefixes it is the workspace that owns it. A file under no known workspace (a root
- * `README`, an `infra/` scaffold with no alias) contributes nothing rather than a guess.
- */
-export function workspacesByModule(
-  manifest: Manifest,
-  workspaces: string[]
-): Map<string, string[]> {
-  const byModule = new Map<string, Set<string>>();
-  for (const [path, entry] of Object.entries(manifest.managed)) {
-    const workspace = workspaceForPath(path, workspaces);
-    if (!workspace) {
+export function parseEnvValues(text: string): Record<string, string> {
+  const values: Record<string, string> = {};
+  for (const line of text.split("\n")) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith("#")) {
       continue;
     }
-    const set = byModule.get(entry.module) ?? new Set<string>();
-    set.add(workspace);
-    byModule.set(entry.module, set);
-  }
-  return new Map(
-    [...byModule].map(([module, set]) => [module, [...set].toSorted()])
-  );
-}
-
-/** The longest workspace that contains `path`, or undefined when none does. */
-export function workspaceForPath(
-  path: string,
-  workspaces: string[]
-): string | undefined {
-  let best: string | undefined;
-  for (const workspace of workspaces) {
-    if (
-      path.startsWith(`${workspace}/`) &&
-      (best === undefined || workspace.length > best.length)
-    ) {
-      best = workspace;
+    const eq = trimmed.indexOf("=");
+    if (eq <= 0) {
+      continue;
     }
+    values[trimmed.slice(0, eq).trim()] = trimmed.slice(eq + 1);
   }
-  return best;
+  return values;
 }
-
-/** The api workspace, re-exported so `env` reads one name for the Worker's root. */
-export { apiWorkspace } from "./dev-vars.js";
 
 /**
  * Is this variable already answered? A key present with an empty value is a placeholder
@@ -255,15 +72,15 @@ function isPlaceholderFor(line: string, name: string): boolean {
  * The file's new content, with `additions` written in.
  *
  * Every existing line survives byte for byte, comments and ordering included. This is a
- * file a person edits by hand, unlike `.dev.vars.example`, which is regenerated from the
- * descriptors — re-rendering it here would throw away their formatting to say the same
- * thing.
+ * file a person edits by hand, unlike `packages/env/.env.example`, which is regenerated
+ * from the descriptors — re-rendering it here would throw away their formatting to say
+ * the same thing.
  *
- * One exception, and it is the reason this is not a plain append: a `.dev.vars` copied
- * from `.dev.vars.example` holds `KEY=` for every variable, and `isSet` calls those
- * unset. Appending would leave the file carrying two lines for one key, the first of them
- * a lie. So a placeholder is filled where it stands, and only a key the file has never
- * heard of goes on the end.
+ * One exception, and it is the reason this is not a plain append: a `.env` copied from
+ * the example holds `KEY=` for every variable, and `isSet` calls those unset. Appending
+ * would leave the file carrying two lines for one key, the first of them a lie. So a
+ * placeholder is filled where it stands, and only a key the file has never heard of goes
+ * on the end.
  */
 export function appendVars(
   existing: string | undefined,
@@ -296,29 +113,23 @@ export function appendVars(
 }
 
 /**
- * The production block: one `wrangler secret put` per secret, grouped by the workspace
- * you have to run it from.
+ * The production block: one `wrangler secret put` per secret.
  *
  * Printed, never run. Putting a secret into a live Cloudflare account is a deploy, and a
  * scaffolding tool that deploys on your behalf is a scaffolding tool you cannot trust
  * with a token. The lines are here to be copied.
+ *
+ * A `PUBLIC_` value is left out: it is inlined into a bundle at build time, so it is set
+ * in the deploying service's `.env`, not in a secret store. The key list says which
+ * service reads it.
  */
-export function productionSecretCommands(
-  targets: { name: string; workspace: string }[]
-): string[] {
-  const byWorkspace = new Map<string, string[]>();
-  for (const { name, workspace } of targets) {
-    if (isPublicVar(name)) {
-      continue;
-    }
-    byWorkspace.set(workspace, [...(byWorkspace.get(workspace) ?? []), name]);
+export function productionSecretCommands(names: string[]): string[] {
+  const secrets = names.filter((name) => !isPublicVar(name)).toSorted();
+  if (secrets.length === 0) {
+    return [];
   }
-  const lines: string[] = [];
-  for (const workspace of [...byWorkspace.keys()].toSorted()) {
-    lines.push(`# from ${workspace}`);
-    for (const name of (byWorkspace.get(workspace) ?? []).toSorted()) {
-      lines.push(`wrangler secret put ${name}`);
-    }
-  }
-  return lines;
+  return [
+    "# from the Worker's workspace, e.g. apps/api",
+    ...secrets.map((name) => `wrangler secret put ${name}`),
+  ];
 }

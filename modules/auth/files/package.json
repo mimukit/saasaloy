@@ -13,12 +13,14 @@
     "./access": "./src/access.ts",
     "./tenant": "./src/tenant.ts",
     "./rbac": "./src/rbac.ts",
-    "./rbac-rules": "./src/rbac-rules.ts"
+    "./rbac-rules": "./src/rbac-rules.ts",
+    "./env-preset": "./src/env-preset.ts"
   },
   "dependencies": {
     "better-auth": "1.7.3",
     "hono": "4.13.7",
-    "@repo/db": "workspace:*"
+    "@repo/db": "workspace:*",
+    "@repo/env": "workspace:*"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "5.20260906.1",

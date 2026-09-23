@@ -8,6 +8,10 @@
     "SMS_PROVIDER": "Which installed provider sends: `console` (add sms-console) or `khudebarta` (add sms-khudebarta). Always required — there is no default, so nothing sends by accident and nothing stops sending silently.",
     "SMS_FROM": "Default sender for messages that don't carry their own `from` — an E.164 number, a short code, or an alphanumeric sender id, whichever the selected provider is allowed to send from. Optional: a provider routing through a pool or a messaging service assigns the sender itself. When it is unset and the message carries no `from`, a provider that requires a sender rejects the send with `invalid_message`."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["SMS_FROM"],
   "patches": [
     {
       "file": "apps/api/package.json",
@@ -15,20 +19,51 @@
       "section": "dependencies",
       "name": "@repo/sms",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "smsEnv",
+      "import": {
+        "name": "smsEnv",
+        "from": "@repo/sms/env-preset"
+      }
     }
   ],
   "files": [],
   "scaffolds": [
     {
       "workspace": "packages/sms",
-      "aliases": { "@sms": "packages/sms/src" },
+      "aliases": {
+        "@sms": "packages/sms/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/define.ts", "target": "src/define.ts" },
-        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
-        { "path": "files/src/segments.ts", "target": "src/segments.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/segments.ts",
+          "target": "src/segments.ts"
+        },
         {
           "path": "files/src/templates/verification-code.ts",
           "target": "src/templates/verification-code.ts"
@@ -36,6 +71,10 @@
         {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
         }
       ]
     }

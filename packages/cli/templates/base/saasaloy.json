@@ -1,6 +1,7 @@
 {
   "base": "web",
   "aliases": {
+    "@env": "packages/env/src",
     "@web": "apps/web/src",
     "@ui": "packages/ui/src"
   },

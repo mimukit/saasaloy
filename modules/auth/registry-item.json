@@ -9,6 +9,10 @@
     "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it.\nFIRST USER WINS: the first account to sign up on an empty users table gets role 'superadmin', the role above 'admin'. Sign-up is open, so once this origin is public anyone who reaches /signup before you becomes the superadmin. Sign up yourself as soon as the API answers. Run /saasaloy-auth for the recovery SQL if somebody else got there first.",
     "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["BETTER_AUTH_SECRET", "COOKIE_DOMAIN"],
   "devVars": {
     "BETTER_AUTH_URL": "http://localhost:4000"
   },
@@ -19,7 +23,10 @@
       "exportName": "base",
       "path": "/auth",
       "call": "authRoute",
-      "import": { "name": "authRoute", "from": "./routes/auth" }
+      "import": {
+        "name": "authRoute",
+        "from": "./routes/auth"
+      }
     },
     {
       "file": "apps/api/package.json",
@@ -33,10 +40,24 @@
       "kind": "wrangler-binding",
       "bindingType": "compatibility_flags",
       "entry": "nodejs_compat"
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "authEnv",
+      "import": {
+        "name": "authEnv",
+        "from": "@repo/auth/env-preset"
+      }
     }
   ],
   "files": [
-    { "path": "files/api/routes/auth.ts", "target": "@api/routes/auth.ts" },
+    {
+      "path": "files/api/routes/auth.ts",
+      "target": "@api/routes/auth.ts"
+    },
     {
       "path": "files/db/schema/auth.sqlite.ts",
       "target": "@db/schema/auth.ts",
@@ -51,13 +72,30 @@
   "scaffolds": [
     {
       "workspace": "packages/auth",
-      "aliases": { "@auth": "packages/auth/src" },
+      "aliases": {
+        "@auth": "packages/auth/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/auth.ts", "target": "src/auth.ts" },
-        { "path": "files/src/authorize.ts", "target": "src/authorize.ts" },
-        { "path": "files/src/db-scope.ts", "target": "src/db-scope.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/auth.ts",
+          "target": "src/auth.ts"
+        },
+        {
+          "path": "files/src/authorize.ts",
+          "target": "src/authorize.ts"
+        },
+        {
+          "path": "files/src/db-scope.ts",
+          "target": "src/db-scope.ts"
+        },
         {
           "path": "files/src/db-provider.d1.ts",
           "target": "src/db-provider.ts",
@@ -68,9 +106,22 @@
           "target": "src/db-provider.ts",
           "onlyWith": "database-postgres"
         },
-        { "path": "files/src/env.ts", "target": "src/env.ts" },
-        { "path": "files/src/server.ts", "target": "src/server.ts" },
-        { "path": "files/src/client.ts", "target": "src/client.ts" }
+        {
+          "path": "files/src/env.ts",
+          "target": "src/env.ts"
+        },
+        {
+          "path": "files/src/server.ts",
+          "target": "src/server.ts"
+        },
+        {
+          "path": "files/src/client.ts",
+          "target": "src/client.ts"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
+        }
       ]
     }
   ],

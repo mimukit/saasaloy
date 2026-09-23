@@ -7,6 +7,10 @@
     "packages/ui/src/content/landing.ts"
   ],
   "ownedFiles": [
+    "packages/env/.env.example",
+    "packages/env/src/services.ts",
+    "packages/env/src/sources.ts",
+    "apps/web/src/env.ts",
     "packages/ui/src/styles/globals.css",
     "packages/ui/src/blocks/**",
     "packages/ui/src/components/**",

@@ -180,7 +180,11 @@ export interface RegistryItem {
   devDependencies?: string[];
   files?: RegistryFile[];
   envVars?: Record<string, string>;
-  /** Local-dev values for a subset of `envVars`, pre-filled into `.dev.vars.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
+  /** Which services read each `envVars` key: a `default` list plus per-key overrides. Omitted, the `PUBLIC_` prefix rule decides and `add` warns. */
+  envServices?: Record<string, string[]>;
+  /** Keys from `envVars` that may stay empty; each gets a `# Blank on purpose` line in the key list. */
+  envOptional?: string[];
+  /** Local-dev values for a subset of `envVars`, pre-filled into `packages/env/.env.example`. Never a secret: a loopback URL or a fixed port, the same on every machine. */
   devVars?: Record<string, string>;
   /** Warnings persisted at add time and printed before this module is removed. */
   removeWarnings?: string[];
