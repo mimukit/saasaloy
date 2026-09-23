@@ -57,7 +57,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - **Depending on `multitenant` for `tenantColumn()` and `forTenant()`.** Stronger scoping, and it makes organizations a precondition for uploading a file. `feature-flags` set the precedent of a plain `tenant_id` column with no such dependency.
 - **A capability-owned object table.** Settled in plan 0051: it would force a database driver onto every storage install, and `file-uploads` is the only consumer.
 
-### Phase 1: the record and the repository
+### Phase 1: the record and the repository (built 2026-09-23)
 
 - [ ] `modules/file-uploads/registry-item.json`: `saasaloy:feature`, the six `dependsOn`, and `envVars` for `STORAGE_PURGE_AFTER_DAYS`, `STORAGE_PUBLIC_URL` and `STORAGE_IMAGE_TRANSFORMS`
 - [ ] `storage_objects` in two dialect variants under one target with `onlyWith`, export key `storageObjects`: `id`, `key`, `provider`, `tenantId`, `ownerId`, `contentType`, `size`, `visibility` (`private`, `public`), `status` (`pending`, `ready`, `rejected`, `deleting`, `deleted`), `createdAt`, `completedAt`, `deletedAt`, `metadata`
@@ -68,7 +68,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - [ ] `@db/repositories/objects.ts` is the only read path. Every function takes a tenant id and filters on it, and every function filters `deletedAt IS NULL`. No route issues a raw query against the table
 - [ ] `@validators/file-uploads.ts` covers the upload request: filename, content type, declared size, visibility
 
-### Phase 2: the routes
+### Phase 2: the routes (built 2026-09-23)
 
 - [ ] `POST /files/uploads`: enforce the per-file cap, refuse `visibility: "public"` when `STORAGE_PUBLIC_URL` is unset, insert a `pending` row, build the key with scope `uploads` or `public-uploads`, return the upload target
 - [ ] `POST /files/uploads/:id/complete`: head the real object, verify size and content type against the row, delete the object and mark `rejected` on a mismatch, else mark `ready`
@@ -77,7 +77,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - [ ] `DELETE /files/:id`: mark `deleting`, delete the object, then mark `deleted` with `deletedAt`
 - [ ] Every row carries owner, tenant, size and content type, and every query scopes by tenant
 
-### Phase 3: the public path
+### Phase 3: the public path (built 2026-09-23)
 
 - [ ] `GET /files/public/*`: no token, no session. It rejects any key whose scope segment is not `public-uploads`, and it rejects a key that fails `assertValidKey` before it reads the row
 - [ ] The wildcard receives the full five-segment key and serves it unchanged, so the same record resolves identically in dev and in production
@@ -85,7 +85,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - [ ] The skill documents the production setup: the R2 custom domain, the Cache Rule on `/t/*/public-*/*`, and that Cloudflare image transformations must be enabled on the zone. **Confirm the current plan-tier requirement for transformations against Cloudflare's own docs before writing this step** — it was not verified during the grill
 - [ ] The skill states the failure mode in plain words: a public object is world-readable by anyone who learns its key, the choice is made once at upload, and there is no un-publish short of deleting the object and uploading it again
 
-### Phase 4: the UI and the sweep
+### Phase 4: the UI and the sweep (built 2026-09-23)
 
 - [ ] `@ui/blocks/file-uploads.tsx`: pick a file, request a target, PUT it, call `complete`, show the list
 - [ ] The `apps/admin` `/files` page, wired into `NAV_ITEMS` by `const-array`
