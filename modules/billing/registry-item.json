@@ -88,11 +88,13 @@
       }
     },
     {
-      "file": "apps/admin/src/components/app-shell.tsx",
-      "kind": "const-array",
-      "constName": "NAV_ITEMS",
-      "key": "to",
-      "entry": { "to": "/billing", "label": "Billing" }
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": { "to": "/billing", "label": "Billing" },
+      "icon": { "name": "CreditCardIcon", "from": "lucide-react" }
     },
     {
       "file": "packages/db/src/schema/auth.ts",

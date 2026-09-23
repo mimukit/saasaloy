@@ -38,11 +38,13 @@
       "range": "workspace:*"
     },
     {
-      "file": "apps/admin/src/components/app-shell.tsx",
-      "kind": "const-array",
-      "constName": "NAV_ITEMS",
-      "key": "to",
-      "entry": { "to": "/flags", "label": "Flags" }
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": { "to": "/flags", "label": "Flags" },
+      "icon": { "name": "FlagIcon", "from": "lucide-react" }
     }
   ],
   "files": [

@@ -96,8 +96,8 @@ export type PatchAction = "apply" | "unchanged" | "missing";
 // PlannedFile it is never manifest-tracked as a managed file — a patch mutates a
 // file another module owns, so it isn't a clean managed copy. `executePlan` records
 // each applied patch in `manifest.patches`, which is what `remove` reads back: it
-// reverses the five kinds that edit a source or config file (`chained-route`,
-// `wrangler-binding`, `plugin-array`, `const-array`, `drizzle-column`) and warns about the
+// reverses the six kinds that edit a source or config file (`chained-route`,
+// `wrangler-binding`, `plugin-array`, `const-array`, `drizzle-column`, `nav-entry`) and warns about the
 // two `package.json` kinds, which stay the user's to undo (#36).
 export interface PlannedPatch {
   module: string;

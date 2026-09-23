@@ -41,7 +41,7 @@ The file imports `better-auth/plugins/access` and `better-auth/plugins/organizat
 
 The descriptor applies two `plugin-array` patches. One adds `organizationPlugin()` to `packages/auth/src/auth.ts`. The other adds `organizationClientPlugin()` to `authClientPlugins` in `packages/auth/src/client.ts`. Keep both calls at zero arguments because the patch engine records and reverses that exact shape. That is why the options live in the two wrapper files and not in the patch.
 
-The descriptor also applies a `const-array` patch to `NAV_ITEMS`. Its stable identity is the `to` value `/teams`. Editing the label in a generated project does not create a duplicate on update.
+The descriptor also applies a `nav-entry` patch, which adds `{ to: "/teams", label: "Teams", icon: UsersRoundIcon }` to the `Manage` group of the `/` area in `apps/admin/src/components/nav.ts`, and adds the `UsersRoundIcon` import that row needs. Its stable identity is the `to` value `/teams`. Editing the label in a generated project does not create a duplicate on update, and `saasaloy remove` takes the row out along with its icon import, unless another row still uses that icon.
 
 ## Schema and migrations
 
