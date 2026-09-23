@@ -69,6 +69,13 @@ export const billingSubscriptions = pgTable(
     periodStart: timestamptz("period_start"),
     /** The plan id from `packages/billing/src/plans.ts`, not a vendor price id. */
     plan: text("plan").notNull(),
+    /**
+     * Which provider owns this row, matching `BillingProvider.name`. Written by the core
+     * from the event, never by a provider, so no provider can name another on a row. The
+     * renewal sweep filters on it. Nullable: rows written before this column existed carry
+     * no provider, and the sweep leaves them alone.
+     */
+    provider: text("provider"),
     providerCustomerId: text("provider_customer_id").notNull(),
     /** The vendor's id for a pending plan change, when it schedules one. */
     providerScheduleId: text("provider_schedule_id"),

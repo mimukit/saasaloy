@@ -5,7 +5,7 @@
   "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {
-    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
+    "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe), `sslcommerz` (add billing-sslcommerz) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
     "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
     "BILLING_APP_NAME": "What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it. Optional; \"your app\" when unset.",
     "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
@@ -88,6 +88,28 @@
       }
     },
     {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "renewalDueJob",
+      "import": {
+        "name": "renewalDueJob",
+        "from": "@repo/billing"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "renewalDueSchedule",
+      "import": {
+        "name": "renewalDueSchedule",
+        "from": "@repo/billing"
+      }
+    },
+    {
       "file": "apps/admin/src/components/app-shell.tsx",
       "kind": "const-array",
       "constName": "NAV_ITEMS",
@@ -128,6 +150,10 @@
       "target": "@email/templates/account-locked.ts"
     },
     {
+      "path": "files/email/templates/renewal-due.ts",
+      "target": "@email/templates/renewal-due.ts"
+    },
+    {
       "path": "files/db/schema/billing.sqlite.ts",
       "target": "@db/schema/billing.ts",
       "onlyWith": "database-d1"
@@ -166,6 +192,10 @@
         {
           "path": "files/src/jobs/event-handler.ts",
           "target": "src/jobs/event-handler.ts"
+        },
+        {
+          "path": "files/src/jobs/renewal-due.ts",
+          "target": "src/jobs/renewal-due.ts"
         },
         {
           "path": "files/src/providers/.gitkeep",

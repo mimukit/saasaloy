@@ -15,14 +15,22 @@ import type { BillableSubject, Subscription } from "./provider";
 // webhook redelivery, and would send nothing at all when the failure arrives while nobody
 // is signed in — which is the normal case for a dunning email.
 
-/** Which of the three billing emails is owed. */
+/** Which of the four billing emails is owed. */
 export type BillingNotificationKind =
   /** Three days before a trial converts, once per subscription. */
   | "trial.ending"
   /** A charge was refused. Sent on every distinct failure event, not once per row. */
   | "payment.failed"
   /** The lockout job just set `lockedAt`, so the subject is back on the default plan. */
-  | "account.locked";
+  | "account.locked"
+  /**
+   * A manually renewed period ended with no new payment, so the subject owes one. Sent once
+   * per row by the renewal job, at the moment it writes `past_due`.
+   *
+   * Distinct from `payment.failed` on purpose. Under manual renewal nothing was charged and
+   * no card was refused, so the dunning notice would tell every subscriber a lie.
+   */
+  | "renewal.due";
 
 /** Who a billing email goes to. `BillingStore.recipientFor` resolves it from the subject. */
 export interface BillingRecipient {

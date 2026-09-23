@@ -77,6 +77,9 @@ function fakeStore(seed: Subscription[] = []) {
         )
       );
     },
+    renewalDue() {
+      return Promise.resolve([]);
+    },
     patchSubscription(id: string, patch: SubscriptionPatch) {
       const at = rows.findIndex((candidate) => candidate.id === id);
       if (at !== -1) {

@@ -17,6 +17,7 @@ import type {
   BillingEventType,
   Subscription,
   SubscriptionInput,
+  SubscriptionWrite,
 } from "./provider.ts";
 import { applyEvent, currentSubscription } from "./subscription.ts";
 import type {
@@ -97,7 +98,7 @@ function fakeStore(seed: Subscription[] = []) {
       events.set(key, record);
       return Promise.resolve(true);
     },
-    upsertSubscription(subject, input: SubscriptionInput) {
+    upsertSubscription(subject, input: SubscriptionWrite) {
       calls.upsert += 1;
       const at = rows.findIndex(
         (row) => row.providerSubscriptionId === input.providerSubscriptionId
@@ -238,6 +239,40 @@ describe("currentSubscription", () => {
       }),
       undefined
     );
+  });
+});
+
+describe("applyEvent — the provider column", () => {
+  it("writes the event's own provider onto the row", async () => {
+    const { rows, store } = fakeStore();
+
+    await applyEvent(
+      store,
+      makeEvent("subscription.changed", { provider: "sslcommerz" }),
+      NOW
+    );
+
+    assert.equal(rows[0]?.provider, "sslcommerz");
+  });
+
+  it("ignores a provider the projection carried on the input", async () => {
+    const { rows, store } = fakeStore();
+
+    await applyEvent(
+      store,
+      makeEvent("subscription.changed", {
+        provider: "sslcommerz",
+        // A provider that set this would be naming another provider on the row, and taking
+        // that provider's renewals with it. The event's own name wins.
+        subscription: {
+          ...subscriptionInput(),
+          provider: "stripe",
+        } as SubscriptionInput,
+      }),
+      NOW
+    );
+
+    assert.equal(rows[0]?.provider, "sslcommerz");
   });
 });
 

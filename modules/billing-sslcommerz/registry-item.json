@@ -1,0 +1,41 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "billing-sslcommerz",
+  "type": "saasaloy:feature",
+  "dependsOn": ["billing"],
+  "dependencies": [],
+  "envVars": {
+    "SSLCOMMERZ_STORE_ID": "Your SSLCOMMERZ store id, from the merchant panel at https://sandbox.sslcommerz.com (sandbox) or https://merchant.sslcommerz.com (live). Required once BILLING_PROVIDER=sslcommerz. Unset, every checkout throws BillingError(\"invalid_request\") naming this key before anything is sent; set but wrong, the gateway refuses the session and it surfaces as provider_error with the gateway's own failedreason.",
+    "SSLCOMMERZ_STORE_PASSWORD": "The store password issued with the store id, sometimes called the API password. Required once BILLING_PROVIDER=sslcommerz. It is sent on the session-open POST and on every validation call, so a deployed Worker must hold it as a secret (`wrangler secret put SSLCOMMERZ_STORE_PASSWORD`), never in wrangler.jsonc.",
+    "SSLCOMMERZ_MODE": "Which gateway host to use: `live` for https://securepay.sslcommerz.com, anything else for the sandbox at https://sandbox.sslcommerz.com. Optional, and it fails safe — only the exact string `live` selects the live gateway, so a typo sends a test payment to the sandbox rather than a real one to production.",
+    "SSLCOMMERZ_CALLBACK_URL": "Absolute https origin of your deployed api Worker, with no trailing path — the same origin PUBLIC_API_URL names for the admin app. The provider builds the four callback URLs under it: /billing/callback/sslcommerz/ipn, /return/success, /return/fail and /return/cancel. Required, because a Worker cannot know its own public origin and a wrong one means payments the gateway takes and never reports.",
+    "SSLCOMMERZ_RECEIPT_EMAIL": "A real mailbox you own, e.g. billing@yourdomain.com. SSLCOMMERZ requires cus_email on every session and mails its own receipt to it. A provider is handed an opaque billable subject and never learns the subject's address (CONTEXT.md → \"Billable subject\"), so this is the one address it can name. Required."
+  },
+  "removeWarnings": [
+    "Removing this module does not cancel anything at SSLCOMMERZ, and there is nothing to cancel: this provider stores no card and nothing recurs at the gateway. Subjects simply stop being asked to pay.",
+    "The four callback URLs stay registered in the SSLCOMMERZ merchant panel. Remove the IPN URL there, or the gateway keeps posting to an endpoint that now answers 404."
+  ],
+  "patches": [
+    {
+      "file": "packages/billing/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "billing",
+      "arrayProp": "providers",
+      "call": "sslcommerzBilling",
+      "import": {
+        "name": "sslcommerzBilling",
+        "from": "./providers/sslcommerz"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/sslcommerz.ts",
+      "target": "@billing/providers/sslcommerz.ts"
+    }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-billing-sslcommerz"]
+  }
+}

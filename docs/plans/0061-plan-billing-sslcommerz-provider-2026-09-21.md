@@ -51,7 +51,7 @@ A worked reference exists. `unishopr-reborn` integrates the same gateway for one
 - `resolveSubject` and `authorizeSubject` in `@billing/subject.ts`, so `teams` still switches the bill to an organization with no change here.
 - The repo-only `provider.ts` re-export shim that `kv-memory` and `storage-memory` carry, so the provider file's tests run in place without shipping the shim.
 
-### Phase 1: the callback contract in `billing` core
+### Phase 1: the callback contract in `billing` core (built 2026-09-21)
 
 1. **`BillingProvider.handleCallback?`.** Signature `handleCallback(env, request, path)` returning a discriminated result: `{ kind: "event", event }`, `{ kind: "redirect", url }`, or `{ kind: "ignored" }`. It receives the raw `Request` because a gateway's callback is form-encoded, not JSON, and the core must not guess an encoding. It receives no database and no `HostContext`: there is no session on an IPN.
 2. **The callback route.** `apps/api/src/routes/billing.ts` grows `POST` and `GET` on `/billing/callback/:provider/*`, outside `guard`. It refuses any `:provider` that is not the active `BILLING_PROVIDER`, answers 404 for a provider with no `handleCallback`, enqueues a returned event onto `billing.event`, and answers a returned redirect with a 303. The core reads nothing else out of the request.
@@ -64,7 +64,7 @@ A worked reference exists. `unishopr-reborn` integrates the same gateway for one
 9. **One ADR** recording the three claims as one decision: the core owns an unauthenticated provider-callback surface, a provider may mint events for operations the vendor has no counterpart for, and manual renewal is a first-class renewal mode. Plus a `CONTEXT.md` glossary entry for **manual renewal**, beside "Billable subject", "Plan" and "Provider module". `domainkit` writes both.
 10. **Tests.** The callback route's provider mismatch, its missing-handler case, and both result kinds. The renewal job's provider filter, its `periodEnd` and `trialEnd` branches, and its one-email guard. `/billing/renew`'s three refusals. `definePlans` with a `price`. `applyEvent` writing `provider` from the event and ignoring a `provider` on the input.
 
-### Phase 2: `modules/billing-sslcommerz`
+### Phase 2: `modules/billing-sslcommerz` (built 2026-09-21)
 
 1. **The descriptor.** `type: saasaloy:feature`, `dependsOn: ["billing"]`, `scaffolds: []`. One `plugin-array` patch onto `packages/billing/src/index.ts`. No npm dependency — the whole integration is `fetch` and `URLSearchParams`. `envVars` declares `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD` and `SSLCOMMERZ_MODE`, each with a description naming where to get it and what breaks without it. `agent.skills` names the module's own skill folder.
 2. **The one runtime file, `files/sslcommerz.ts`.** Exports `sslcommerzBilling(): BillingProvider` with `name: "sslcommerz"` and `renewal: "manual"`.

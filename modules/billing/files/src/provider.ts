@@ -49,6 +49,24 @@ export interface BillableSubject {
 /** The billing intervals a plan can carry a price for. */
 export type PlanInterval = "monthly" | "yearly";
 
+/**
+ * What a plan costs for one interval, for a provider that is handed a figure rather than a
+ * hosted price object.
+ *
+ * `amount` is in the currency's **minor unit** — 499 BDT is `49_900`, not `499`. Money is
+ * never a float here: a gateway that echoes `499.00`, `499.0` and `499` for the same figure
+ * has to be compared against an integer, and `0.1 + 0.2` is what the alternative makes of it.
+ *
+ * A vendor that owns its own price object (Stripe) carries a `providerIds` entry instead and
+ * leaves this unset. A plan may carry both: they answer different providers.
+ */
+export interface PlanPrice {
+  /** The figure in the currency's minor unit. */
+  amount: number;
+  /** ISO 4217, upper case — "BDT", "USD". A provider that accepts one currency checks it. */
+  currency: string;
+}
+
 /** What a caller passes `definePlans`. See CONTEXT.md → "Plan". */
 export interface PlanConfig {
   /** Stable identifier, stored in `billing_subscriptions.plan` and read by entitlements. */
@@ -67,6 +85,12 @@ export interface PlanConfig {
    * none, which is how `definePlans` finds it.
    */
   providerIds?: Record<string, Partial<Record<PlanInterval, string>>>;
+  /**
+   * What the plan costs per interval, for a provider that is handed a figure instead of a
+   * price id — SSLCOMMERZ is the first. Optional, and orthogonal to `providerIds`: a plan
+   * carrying only a price is still a paid plan, and `definePlans` counts it as one.
+   */
+  price?: Partial<Record<PlanInterval, PlanPrice>>;
 }
 
 /** A registered plan. Same shape as its config, with the maps and the default resolved. */
@@ -79,7 +103,11 @@ export interface Plan {
   readonly providerIds: Readonly<
     Record<string, Partial<Record<PlanInterval, string>>>
   >;
-  /** True for the one plan with no `providerIds` — what an unsubscribed subject resolves to. */
+  readonly price: Readonly<Partial<Record<PlanInterval, PlanPrice>>>;
+  /**
+   * True for the one plan that names no price of any kind — neither a `providerIds` entry
+   * nor a `price`. That plan is what an unsubscribed subject resolves to.
+   */
   readonly isDefault: boolean;
 }
 
@@ -148,11 +176,30 @@ export interface SubscriptionInput {
   metadata?: Record<string, unknown> | null;
 }
 
+/**
+ * What the core writes to `billing_subscriptions`: the provider's projection plus the one
+ * column only the core fills in.
+ *
+ * `provider` is deliberately *not* on `SubscriptionInput`. A provider that could set it
+ * could name another provider on a row and take that row's renewals; `applyEvent` copies it
+ * off `BillingEvent.provider` instead, which is already half the `billing_events` key.
+ */
+export interface SubscriptionWrite extends SubscriptionInput {
+  /** Which provider owns this row — the same string as `BillingProvider.name`. */
+  provider: string;
+}
+
 /** A `billing_subscriptions` row as the core reads it back. See CONTEXT.md → "Subscription". */
 export interface Subscription extends SubscriptionInput {
   id: string;
   referenceId: string;
   customerType: string;
+  /**
+   * Which provider owns this row. Written by `applyEvent` from the event, never by a
+   * provider. The renewal job filters on it, so a project that switched providers leaves
+   * the old rows to the old provider's rules.
+   */
+  provider?: string | null;
   /** Set by the lockout job once a `past_due` row has run past `BILLING_LOCKOUT_DAYS`. */
   lockedAt?: Date | null;
   /** Set when the trial-ending reminder went out, so a redelivery sends no second one. */
@@ -268,6 +315,29 @@ export interface QuantityInput extends SubjectInput {
 }
 
 /**
+ * What a provider answers a callback with.
+ *
+ * Three kinds, because a gateway's callbacks are two different things arriving at the same
+ * handler: a server-to-server notification, which owes an event and no redirect, and a
+ * browser return, which owes a place to send the reader. `ignored` is the honest answer to a
+ * payment the gateway has not finished deciding on.
+ */
+export type CallbackResult =
+  /** Enqueue this event. Answered to a notification the provider has verified. */
+  | { kind: "event"; event: BillingEvent }
+  /** Send the browser here, with a 303. Answered to a return the reader is sitting in front of. */
+  | { kind: "redirect"; url: string; event?: BillingEvent }
+  /** Nothing happened that the projection should hear about. Answered 204. */
+  | { kind: "ignored" };
+
+/** How the subject pays for the next period. See CONTEXT.md → "Manual renewal". */
+export type RenewalMode =
+  /** The vendor charges a stored instrument on its own schedule. Every card vendor. */
+  | "vendor"
+  /** Nothing is stored and nothing recurs. The subject pays each period through a fresh checkout. */
+  | "manual";
+
+/**
  * What one `billing-<provider>` module implements, in one runtime file. Every method takes
  * the whole `env`, the route's `HostContext`, and its own input; none of them touches the
  * database, because the projection is written from the webhook path only (ADR 0034).
@@ -316,6 +386,33 @@ export interface BillingProvider {
     ctx: HostContext,
     input: SubjectInput
   ): Promise<Invoice[]>;
+  /**
+   * How the subject pays for the next period. `"vendor"` when unset, which is every
+   * card-on-file vendor: it charges the stored instrument and the row never leaves
+   * `active`. A provider that stores nothing declares `"manual"`, and the renewal job then
+   * marks its rows `past_due` the moment a paid period ends.
+   */
+  renewal?: RenewalMode;
+  /**
+   * Handle one callback the vendor sent — an IPN, or a browser return from a hosted page.
+   *
+   * Optional: a provider whose vendor posts to an endpoint of its own (`billing-stripe`,
+   * through its auth plugin) implements none of this, and the callback route answers 404.
+   *
+   * It is handed the raw `Request`, because a gateway's callback is form-encoded rather
+   * than JSON and the core must not guess an encoding. It is handed no database and no
+   * `HostContext`: there is no session behind an IPN, and the projection has one writer
+   * (ADR 0034), so the provider answers with an event and the route enqueues it.
+   *
+   * `path` is what follows `/billing/callback/<provider>/` — `"ipn"`, `"return/success"`.
+   * Nothing on the request is evidence. A provider verifies every fact it acts on against
+   * the vendor, over a connection the caller cannot forge.
+   */
+  handleCallback?(
+    env: BillingEnv,
+    request: Request,
+    path: string
+  ): Promise<CallbackResult>;
   /**
    * The auth plugin this provider needs mounted, when it has one. Opaque here for the same
    * reason `HostContext.auth` is: the core names no Better Auth type. `billing-console`

@@ -6,6 +6,8 @@ import type {
   BillingEvent,
   Subscription,
   SubscriptionInput,
+  SubscriptionStatus,
+  SubscriptionWrite,
 } from "./provider";
 
 // Reading the projection, and writing it from a normalized event. Everything that touches
@@ -31,6 +33,14 @@ export interface BillingEventRecord {
 export interface SubscriptionPatch {
   lockedAt?: Date | null;
   reminderSentAt?: Date | null;
+  /**
+   * Written by the renewal job and by nothing else in the core.
+   *
+   * A status is a provider's word everywhere except here: under manual renewal there is no
+   * vendor to say that a period ran out with no new payment, so the core says it. The write
+   * also refreshes `updatedAt`, which is what opens the lockout window on the row.
+   */
+  status?: SubscriptionStatus;
 }
 
 /**
@@ -60,7 +70,7 @@ export interface BillingStore {
    */
   upsertSubscription(
     subject: BillableSubject,
-    input: SubscriptionInput
+    input: SubscriptionWrite
   ): Promise<Subscription>;
   /** Write the core-only columns on one row. */
   patchSubscription(id: string, patch: SubscriptionPatch): Promise<void>;
@@ -74,6 +84,15 @@ export interface BillingStore {
    * step for no extra truth.
    */
   pastDueSince(before: Date): Promise<Subscription[]>;
+  /**
+   * Every live row owned by one of `providers` whose paid period has already ended at
+   * `at` — `periodEnd` for an `active` row, `trialEnd` for a `trialing` one — and which is
+   * not locked. The renewal job's whole query.
+   *
+   * `providers` is the set that declares `renewal: "manual"`. An empty set selects nothing,
+   * so a project on Stripe alone runs the sweep and touches no row.
+   */
+  renewalDue(at: Date, providers: string[]): Promise<Subscription[]>;
   /**
    * Where a billing email for this subject goes, or nothing when the project can no longer
    * resolve one — a deleted user, an organization with no billing contact.
@@ -162,7 +181,7 @@ export async function applyEvent(
   if (event.subscription) {
     subscription = await db.upsertSubscription(
       event.subject,
-      project(event.type, event.subscription, now)
+      project(event.type, event.subscription, now, event.provider)
     );
   } else if (NEEDS_CURRENT_ROW.has(event.type)) {
     // No projected row on the event, but the side effect below needs one. See
@@ -249,20 +268,27 @@ async function notify(
 }
 
 /**
- * Fill in what the event type implies but the vendor did not spell out. A deletion is the
- * only one: providers report it with their own terminal status, and the projection stores
- * `canceled` with an `endedAt` so a later read needs no per-vendor knowledge.
+ * Fill in what the event type implies but the provider did not spell out.
+ *
+ * Two things. `provider` is copied off the event and overwrites anything of that name on
+ * the input, which is what stops a provider from writing another provider's name onto a row
+ * and taking its renewals. And a deletion gets the terminal shape: providers report it with
+ * their own status, and the projection stores `canceled` with an `endedAt` so a later read
+ * needs no per-vendor knowledge.
  */
 function project(
   type: BillingEvent["type"],
   input: SubscriptionInput,
-  now: Date
-): SubscriptionInput {
+  now: Date,
+  provider: string
+): SubscriptionWrite {
+  const write: SubscriptionWrite = { ...input, provider };
+
   if (type !== "subscription.deleted") {
-    return input;
+    return write;
   }
   return {
-    ...input,
+    ...write,
     canceledAt: input.canceledAt ?? now,
     endedAt: input.endedAt ?? now,
     status: "canceled",
