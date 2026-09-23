@@ -116,7 +116,7 @@ through AST-aware codemods rather than string replacement
 recorded flat in the manifest
 ([ADR 0019](../adr/0019-adr-module-patches-applied-flat-array-2026-07-24.md)).
 
-The asymmetry to know about: the engine applies seven kinds forward, and five of them have an inverse `remove` can run (`chained-route`, `const-array`, `drizzle-column`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
+The asymmetry to know about: the engine applies eight kinds forward, and six of them have an inverse `remove` can run (`chained-route`, `const-array`, `drizzle-column`, `nav-entry`, `plugin-array`, `wrangler-binding`). The two `package.json` kinds have none, and are dropped from the manifest with a warning. See [Known limitations](reference.md#known-limitations).
 
 ## The base is nearly empty
 
