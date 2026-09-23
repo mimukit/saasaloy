@@ -48,6 +48,18 @@ export const THEME_LABELS: Record<Theme, string> = {
 
 const OS_DARK_QUERY = "(prefers-color-scheme: dark)";
 
+/**
+ * Whether a raw string is one of the three themes.
+ *
+ * `data-theme` is author-writable and `localStorage` holds whatever was last put there, so
+ * every value this module reads back out of the page arrives as `string | null`. Narrowing
+ * it here rather than asserting `as Theme` at each site is what keeps an unrecognised value
+ * on the fallback path instead of into `THEME_LABELS[...]`, where it reads `undefined`.
+ */
+export function isTheme(value: string | null): value is Theme {
+  return value === "light" || value === "dark" || value === "system";
+}
+
 /** The stored choice, or `system` when unset, unreadable or not a valid theme. */
 export function getStoredTheme(): Theme {
   try {
@@ -105,10 +117,7 @@ export function setTheme(theme: Theme): void {
 export function relabelThemeToggles(theme?: Theme): void {
   const root = document.documentElement;
   const painted = theme ?? root.getAttribute(THEME_ATTRIBUTE);
-  const named =
-    painted !== null && THEME_ORDER.includes(painted as Theme)
-      ? (painted as Theme)
-      : getStoredTheme();
+  const named = isTheme(painted) ? painted : getStoredTheme();
 
   for (const trigger of root.querySelectorAll(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
     trigger.setAttribute("aria-label", THEME_LABELS[named]);
@@ -142,7 +151,7 @@ export function installThemeToggle(): () => void {
     const painted = document.documentElement.getAttribute(THEME_ATTRIBUTE);
     // An unrecognised `data-theme` gives index -1 and starts the cycle at the head of
     // THEME_ORDER.
-    const index = painted === null ? -1 : THEME_ORDER.indexOf(painted as Theme);
+    const index = isTheme(painted) ? THEME_ORDER.indexOf(painted) : -1;
     const next = THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? "light";
 
     setTheme(next);
