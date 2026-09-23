@@ -27,6 +27,13 @@ import {
 } from "./jsonc.js";
 import type { WranglerBinding } from "./jsonc.js";
 import {
+  insertNavEntry,
+  navEntryInsertRefusal,
+  navEntryRemoveRefusal,
+  removeNavEntry,
+} from "./nav-entry.js";
+import type { NavEntry } from "./nav-entry.js";
+import {
   matchPackageJsonDependency,
   upsertPackageJsonDependency,
 } from "./pkg-json.js";
@@ -80,6 +87,13 @@ export {
   wranglerBindingRemoveRefusal,
 } from "./jsonc.js";
 export {
+  insertNavEntry,
+  type NavEntry,
+  navEntryInsertRefusal,
+  navEntryRemoveRefusal,
+  removeNavEntry,
+} from "./nav-entry.js";
+export {
   matchPackageJsonDependency,
   upsertPackageJsonDependency,
   type PackageJsonDependency,
@@ -99,6 +113,7 @@ export {
 /** A single structural patch, tagged by the codemod that applies it. */
 export type Patch =
   | ({ kind: "const-array" } & ConstArrayInsert)
+  | ({ kind: "nav-entry" } & NavEntry)
   | ({ kind: "drizzle-column" } & DrizzleColumn)
   | ({ kind: "wrangler-binding" } & WranglerBinding)
   | ({ kind: "package-json-dependency" } & PackageJsonDependency)
@@ -116,6 +131,7 @@ const PATCH_KIND_KEYS: Record<PatchKind, true> = {
   "chained-route": true,
   "const-array": true,
   "drizzle-column": true,
+  "nav-entry": true,
   "package-json-dependency": true,
   "package-json-script": true,
   "plugin-array": true,
@@ -207,6 +223,9 @@ function applyCodemod(source: string, patch: Patch): string {
     case "const-array": {
       return insertIntoConstArray(source, patch);
     }
+    case "nav-entry": {
+      return insertNavEntry(source, patch);
+    }
     case "drizzle-column": {
       return insertDrizzleColumn(source, patch);
     }
@@ -232,9 +251,9 @@ function applyCodemod(source: string, patch: Patch): string {
   }
 }
 
-// The one table of kind → inverse codemod. The five kinds that edit a *source or config*
+// The one table of kind → inverse codemod. The six kinds that edit a *source or config*
 // file reverse: `chained-route` (#83), then `wrangler-binding`, `plugin-array` and
-// `const-array` (#36), then `drizzle-column` (#126). The two `package.json` kinds deliberately do not — uninstalling an
+// `const-array` (#36), then `drizzle-column` (#126), then `nav-entry`. The two `package.json` kinds deliberately do not — uninstalling an
 // npm dependency isn't derivable offline and other code may already use it, and nothing
 // asks for a script back (0011-plan-remove-command-2026-07-25.md, non-goals). `remove`
 // drops-and-warns for every kind absent from this table, and both `isReversibleKind` and
@@ -248,6 +267,7 @@ const INVERSES: { [K in PatchKind]?: Inverse<K> } = {
   "chained-route": removeChainedRoute,
   "const-array": removeFromConstArray,
   "drizzle-column": removeDrizzleColumn,
+  "nav-entry": removeNavEntry,
   "plugin-array": removeFromPluginArray,
   "wrangler-binding": removeWranglerBinding,
 };
@@ -304,12 +324,14 @@ const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteInsertRefusal,
   "const-array": constArrayInsertRefusal,
   "drizzle-column": drizzleColumnInsertRefusal,
+  "nav-entry": navEntryInsertRefusal,
   "package-json-script": packageJsonScriptRefusal,
 };
 
 const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "chained-route": chainedRouteRemoveRefusal,
   "drizzle-column": drizzleColumnRemoveRefusal,
+  "nav-entry": navEntryRemoveRefusal,
   "plugin-array": pluginArrayRemoveRefusal,
   "wrangler-binding": wranglerBindingRemoveRefusal,
 };

@@ -159,9 +159,10 @@
               "plugin-array",
               "const-array",
               "chained-route",
-              "drizzle-column"
+              "drizzle-column",
+              "nav-entry"
             ],
-            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, `chained-route`, `wrangler-binding` and `drizzle-column` have removal inverses."
+            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, `chained-route`, `wrangler-binding`, `drizzle-column` and `nav-entry` have removal inverses."
           }
         },
         "allOf": [
@@ -187,6 +188,66 @@
                   "type": "object",
                   "minProperties": 1,
                   "description": "JSON object literal appended to the named array."
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "kind": { "const": "nav-entry" } },
+              "required": ["kind"]
+            },
+            "then": {
+              "required": ["constName", "area", "group", "entry", "icon"],
+              "properties": {
+                "constName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Name of the module-scope const holding the nav areas (NAV_AREAS)."
+                },
+                "area": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Which area to add to, named by its `to` value."
+                },
+                "group": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Which of that area's groups to add to, named by its `label`."
+                },
+                "entry": {
+                  "type": "object",
+                  "required": ["to", "label"],
+                  "properties": {
+                    "to": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Route the row links to. Identifies the row for add and remove."
+                    },
+                    "label": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Text the row shows."
+                    }
+                  },
+                  "description": "The nav row, minus its icon. Written as a JSON object literal."
+                },
+                "icon": {
+                  "type": "object",
+                  "required": ["name", "from"],
+                  "properties": {
+                    "name": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Component rendered as the row's `icon`, e.g. UsersRoundIcon."
+                    },
+                    "from": {
+                      "type": "string",
+                      "minLength": 1,
+                      "description": "Module the icon is imported from, e.g. lucide-react."
+                    }
+                  },
+                  "description": "The icon component. Rendered as an identifier, not a string, and its named import is added on apply and dropped on remove."
                 }
               }
             }

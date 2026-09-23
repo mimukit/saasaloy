@@ -145,6 +145,13 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
     column: "billingCustomerId",
     value: 'text("billing_customer_id")',
   },
+  "nav-entry": {
+    constName: "NAV_AREAS",
+    area: "/",
+    group: "Manage",
+    entry: { to: "/teams", label: "Teams" },
+    icon: { name: "UsersRoundIcon", from: "lucide-react" },
+  },
   "package-json-dependency": { name: "zod", version: "4.4.3" },
   "package-json-script": { name: "db:generate", value: "drizzle-kit generate" },
   "plugin-array": {
