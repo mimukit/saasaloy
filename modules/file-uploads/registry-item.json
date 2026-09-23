@@ -1,0 +1,146 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "file-uploads",
+  "type": "saasaloy:feature",
+  "requires": {
+    "saasaloy": ">=0.5"
+  },
+  "dependsOn": ["api", "auth", "admin", "database", "storage", "validators"],
+  "dependencies": [],
+  "envVars": {
+    "STORAGE_PUBLIC_URL": "Origin a public object is served from \u2014 an R2 custom domain in production (https://files.example.com), or this api's own origin in dev. The object key is appended to it verbatim, so it holds an origin and never a path. Leave it unset and `POST /files/uploads` refuses `visibility: \"public\"` with a message naming this variable; nothing falls back to private.",
+    "STORAGE_IMAGE_TRANSFORMS": "Set to `true` when Cloudflare image transformations are enabled on the zone serving STORAGE_PUBLIC_URL. Default off, because the `/cdn-cgi/image/` prefix 404s on a zone that has not turned them on. With it off `publicImageUrl` returns the plain public URL and ignores its options, so every image still renders.",
+    "STORAGE_PURGE_AFTER_DAYS": "Days a soft-deleted row is kept before the sweep drops it. Defaults to 30. Read only by the sweep job, so it does nothing in a project without the `queue` capability. A value that is not a positive whole number throws on the first tick."
+  },
+  "removeWarnings": [
+    "The deployed storage_objects table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "The objects themselves survive it too. They have no lifecycle rule, so every key under t/<tenantId>/uploads/ and t/<tenantId>/public-uploads/ stays in the bucket until you delete it with `wrangler r2 object delete`.",
+    "A public object's URL keeps working for as long as the bytes are there. Removing this module removes the record, not the access."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/files",
+      "call": "files",
+      "import": {
+        "name": "files",
+        "from": "./routes/files"
+      }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/file-uploads",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/queue/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/file-uploads",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "storageSweepJob",
+      "import": {
+        "name": "storageSweepJob",
+        "from": "@repo/file-uploads"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "storageSweepSchedule",
+      "import": {
+        "name": "storageSweepSchedule",
+        "from": "@repo/file-uploads"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/files.ts",
+      "target": "@api/routes/files.ts"
+    },
+    {
+      "path": "files/api/lib/file-uploads.ts",
+      "target": "@api/lib/file-uploads.ts"
+    },
+    {
+      "path": "files/api/lib/storage-sweep.ts",
+      "target": "@api/lib/storage-sweep.ts"
+    },
+    {
+      "path": "files/db/schema/file-uploads.sqlite.ts",
+      "target": "@db/schema/file-uploads.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/file-uploads.pg.ts",
+      "target": "@db/schema/file-uploads.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/objects.ts",
+      "target": "@db/repositories/objects.ts"
+    },
+    {
+      "path": "files/validators/file-uploads.ts",
+      "target": "@validators/file-uploads.ts"
+    },
+    {
+      "path": "files/ui/blocks/file-uploads.tsx",
+      "target": "@ui/blocks/file-uploads.tsx"
+    },
+    {
+      "path": "files/ui/lib/public-image.ts",
+      "target": "@ui/lib/public-image.ts"
+    },
+    {
+      "path": "files/admin/routes/files.tsx",
+      "target": "@admin/routes/files.tsx"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/file-uploads",
+      "aliases": {
+        "@file-uploads": "packages/file-uploads/src"
+      },
+      "files": [
+        {
+          "path": "files/pkg/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/pkg/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/pkg/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/pkg/src/sweep.ts",
+          "target": "src/sweep.ts"
+        },
+        {
+          "path": "files/pkg/src/job.ts",
+          "target": "src/job.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-file-uploads"]
+  }
+}
