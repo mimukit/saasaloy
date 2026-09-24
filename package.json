@@ -44,7 +44,8 @@
     "release:smoke": "node scripts/release-smoke.ts",
     "verify:pins": "node scripts/verify-pins.ts",
     "verify:preset": "node scripts/verify-preset.ts",
-    "verify:content": "node scripts/verify-content.ts"
+    "verify:content": "node scripts/verify-content.ts",
+    "verify:e2e": "node scripts/verify-e2e.ts"
   },
   "devDependencies": {
     "@clack/prompts": "1.7.0",

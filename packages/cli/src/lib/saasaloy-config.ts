@@ -89,5 +89,11 @@ export function resolveTarget(
   // `base` is already POSIX + no leading slash (enforced by the schema); join by hand
   // to avoid the platform separator that node:path would introduce on Windows.
   const trimmed = base.endsWith("/") ? base.slice(0, -1) : base;
+  // `@root` is the project root itself, recorded as "." because the schema gives an alias
+  // prefix a `minLength` of 1. A plain join would return "./compose.yaml", and
+  // `resolveWithinRoot` refuses a "." segment, so the prefix drops out here instead (#152).
+  if (trimmed === "." || trimmed === "") {
+    return rest;
+  }
   return `${trimmed}/${rest}`;
 }
