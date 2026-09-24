@@ -7,33 +7,12 @@
 // `applyEvent` writes the projection, and only then does `currentPlan` read it back. Nothing
 // here writes a row by hand, so a change that broke the event path would fail these tests
 // rather than passing against a fixture.
-//
-// `./index.ts` beside this file is a resolution shim, not a shipped file — see its header.
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { consoleBilling } from "../../billing-console/files/console.ts";
-import { billingEventJob, plans } from "../../billing/files/src/index.ts";
-import { applyEvent } from "../../billing/files/src/subscription.ts";
-import {
-  requireBillingStore,
-  setBillingStoreResolver,
-  setBillingStoreRunner,
-} from "../../billing/files/src/store.ts";
-import type {
-  BillableSubject,
-  BillingEnv,
-  BillingEvent,
-  HostContext,
-  Subscription,
-  SubscriptionInput,
-} from "../../billing/files/src/provider.ts";
-import type {
-  BillingStore,
-  SubscriptionPatch,
-} from "../../billing/files/src/subscription.ts";
-import { defineQueue } from "../../queue/files/src/define.ts";
-import { memory } from "../../queue-memory/files/memory.ts";
+import { consoleBilling } from "../../../billing-console/files/console.ts";
+import { memory } from "../../../queue-memory/files/memory.ts";
+import { defineQueue } from "../../../queue/files/src/define.ts";
 import {
   createEntitlementCache,
   currentPlan,
@@ -41,6 +20,22 @@ import {
   limit,
   withinLimit,
 } from "./entitlements.ts";
+import { billingEventJob, plans } from "./index.ts";
+import type {
+  BillableSubject,
+  BillingEnv,
+  BillingEvent,
+  HostContext,
+  Subscription,
+  SubscriptionInput,
+} from "./provider.ts";
+import {
+  requireBillingStore,
+  setBillingStoreResolver,
+  setBillingStoreRunner,
+} from "./store.ts";
+import { applyEvent } from "./subscription.ts";
+import type { BillingStore, SubscriptionPatch } from "./subscription.ts";
 
 const SUBJECT: BillableSubject = {
   customerType: "user",

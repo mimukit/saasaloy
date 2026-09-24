@@ -572,7 +572,7 @@ also the one where copying `email` goes wrong fastest. Five rules, in the order 
 - **`plans.ts` is the source of truth, and the plan id is what lands in the `plan` column.** Map
   `providerIds.<yourName>.monthly` and `.yearly` onto the vendor's price fields and `trialDays`
   onto its trial field. Leave the default plan out: it has no price and nobody buys it. Name the
-  vendor's plan after the plan **id**, because that is the string `entitlements` looks up.
+  vendor's plan after the plan **id**, because that is the string the entitlement resolver looks up.
 - **Wire `authorizeSubject` into the vendor's own authorization hook.** The plugin's endpoints are
   reachable directly, so the rule in `@billing/subject.ts` has to guard them as well as the
   capability's routes. That single file is what `teams` replaces to bill organizations.

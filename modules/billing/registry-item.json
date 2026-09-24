@@ -12,7 +12,8 @@
   },
   "removeWarnings": [
     "The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
-    "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."
+    "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first.",
+    "Any route still wrapped in requireFeature() or requireWithinLimit() loses its import when this module goes. Search apps/api for both names before you remove it."
   ],
   "patches": [
     {
@@ -114,6 +115,10 @@
       "target": "@api/billing-store.ts"
     },
     {
+      "path": "files/api/require-feature.ts",
+      "target": "@api/middleware/require-feature.ts"
+    },
+    {
       "path": "files/admin/routes/billing.tsx",
       "target": "@admin/routes/billing.tsx"
     },
@@ -151,6 +156,10 @@
         { "path": "files/src/define.ts", "target": "src/define.ts" },
         { "path": "files/src/provider.ts", "target": "src/provider.ts" },
         { "path": "files/src/plans.ts", "target": "src/plans.ts" },
+        {
+          "path": "files/src/entitlements.ts",
+          "target": "src/entitlements.ts"
+        },
         { "path": "files/src/subject.ts", "target": "src/subject.ts" },
         {
           "path": "files/src/subscription.ts",

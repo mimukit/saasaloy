@@ -1,19 +1,18 @@
-import { currentSubscription, defaultPlan, findPlan, plans } from "./index";
-import type { BillableSubject, BillingStore, Plan } from "./index";
+import { defaultPlan, findPlan } from "./define";
+import { plans } from "./plans";
+import type { BillableSubject, Plan } from "./provider";
+import { currentSubscription } from "./subscription";
+import type { BillingStore } from "./subscription";
 
 // What a subject is allowed to do, answered from the project's own two sources: the plan
 // table in `plans.ts` and the live row in `billing_subscriptions`. Nothing here calls a
 // payment provider, and nothing here needs one installed — a project with `billing` and
-// `entitlements` and no provider at all still resolves every subject to the default plan and
-// gates features on it. That is the whole reason `entitlements` is its own module.
+// `billing-console` and no real provider still resolves every subject to the default plan
+// and gates plan features on it.
 //
 // Everything reaches the database through the same `BillingStore` port the rest of the core
 // uses (packages/billing/src/subscription.ts), so this file has zero imports outside the
 // package and the rules below are unit-testable against a fake.
-//
-// Imports come from `./index` rather than from `./plans`, `./define` and `./subscription`
-// one at a time. `entitlements.ts` ships from a *different* module than the barrel it reads,
-// and one import line is one thing for that module's test shim to stand in for.
 
 /**
  * Where a request keeps the plan it already resolved.
@@ -78,7 +77,7 @@ async function resolvePlan(
 /**
  * Whether the subject's plan carries this boolean feature.
  *
- * A name no plan declares is `false`, not a throw. A feature flag is read from a route and a
+ * A name no plan declares is `false`, not a throw. A plan feature is read from a route and a
  * template, and the safe answer to "is this unknown thing allowed" is no.
  */
 export async function hasFeature(
@@ -124,5 +123,5 @@ export async function withinLimit(
 
 // Re-exported so a caller has one import for the whole surface. It is still a no-op in the
 // core; the `kv` cache that will make it do something is a follow-up after #129, and this
-// module is where the invalidation would then land.
-export { invalidateEntitlements } from "./index";
+// file is where the invalidation would then land.
+export { invalidateEntitlements } from "./subscription";
