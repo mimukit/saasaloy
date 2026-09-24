@@ -4,10 +4,12 @@ import pc from "picocolors";
 import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
+  checkConfigValues,
   checkPartialInstalls,
   checkPolicyBindings,
   checkProject,
   checkTarget,
+  readConfigState,
   readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
@@ -130,11 +132,14 @@ async function reportProject(path: string): Promise<number> {
   // A third question, asked only on a project running `kv-cloudflare`: does every rate
   // limit policy registered in `packages/kv` have the `RL_<NAME>` binding its `consume`
   // resolves to (#129)?
+  // A fourth question, asked of every project: are the three values a scaffolded project
+  // is expected to edit still the template's, and is a superseded env var still set (#154)?
   const policyState = await readPolicyState(path, config.installed);
   const findings = [
     ...checkProject({ config, manifest }),
     ...checkPartialInstalls({ installed: config.installed, manifest }),
     ...(policyState ? checkPolicyBindings(policyState) : []),
+    ...checkConfigValues(await readConfigState(path)),
   ];
   if (findings.length === 0) {
     const count = config.installed.length;

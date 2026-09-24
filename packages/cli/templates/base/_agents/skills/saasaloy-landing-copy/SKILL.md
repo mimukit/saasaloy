@@ -24,9 +24,10 @@ reviewed.
 | `apps/web/src/pages/index.astro` | Only to drop a block, and only behind its own confirmation. |
 | `docs/product-brief.md` | Only to append what you learned filling a gap the brief left, and only its **Known gaps** section otherwise. |
 
-Nothing else — in particular not `siteName` and not the page's `lang` attribute. Those are
-project identity, `saasaloy-setup` owns them, and [Step 0](#step-0--before-you-write-anything)
-says what to do when they disagree with the brief.
+Nothing else — in particular not `packages/config/src/project.ts`, which holds the product
+name and the locale. Those are project identity, `saasaloy-setup` owns them, and
+[Step 0](#step-0--before-you-write-anything) says what to do when they disagree with the
+brief.
 
 ## Step 0 — before you write anything
 
@@ -45,9 +46,9 @@ says what to do when they disagree with the brief.
    Reading a block is fine; editing one is not. Its keys are the whole vocabulary available
    to `landing.features.items[].icon`, and they are the actual list rather than one copied
    into this file that went stale.
-4. **Check the two facts you do not own.** If `siteName` in `packages/ui/src/index.ts` is
-   still the scaffold's directory slug, or `lang` in `apps/web/src/layouts/Layout.astro` is
-   `en` while the brief names another language, say so now and carry both into the draft's
+4. **Check the two facts you do not own**, both in `packages/config/src/project.ts`. If
+   `app.name` is still the scaffold's directory slug, or `app.locale` is `en` while the
+   brief names another language, say so now and carry both into the draft's
    **Not mine to fix** list. Writing Bangla copy into a page that declares itself English is
    a real defect, and one attribute long. Do not fix it yourself.
 5. **Look at git, and treat it as advice.** `git status --short` if there is a repo. A dirty
@@ -181,8 +182,9 @@ than doubling it.
 | `features.title` `.description` | The section's heading and one supporting line. |
 | `features.items[]` | Six by default: `{ id, icon, title, description }`. Title 2–4 words; description one sentence about what the owner can *do*, not about the technology. See [Icons](#icons). |
 | `pricing.title` `.description` | Heading plus one line. |
-| `pricing.annualNote` `.currencySymbol` | See [Pricing](#pricing). |
-| `pricing.tiers[]` | `{ id, name, description, monthlyPrice, annualPrice, features, ctaLabel, ctaHref }`. Prices are whole units; `null` renders "Custom". Set `featured` on at most one. A tier's `ctaHref` stays `#cta` unless the brief gives that tier its own destination. |
+| `pricing.annualNote` | See [Pricing](#pricing). |
+| `pricing.currencySymbol` | Read from `config.app.currencySymbol`, not written here. Change it in `packages/config/src/project.ts` and say you did. |
+| `pricing.tiers[]` | `{ id, name, description, monthlyPrice, annualPrice, features, ctaLabel, ctaHref }`. Prices are whole units; `null` renders "Custom". Set `featured` on at most one. A tier's `ctaHref` stays `#cta` unless the brief gives that tier its own destination. **`id` and `name` read `config.plans.tiers.*`** — `packages/billing` charges against the same ids, so rename a tier in `packages/config/src/project.ts` and leave those two lines alone. |
 | `faq.items[]` | Five by default: `{ id, question, answer }`. Write the questions a buyer asks before paying — pricing, migration, lock-in, data, what happens when they outgrow it. One to three sentences, and answer the question. |
 | `cta.title` `.description` | The closing ask, plus one line removing a reason to hesitate. |
 | `cta.primaryActionHref` `.secondaryActionHref` | See [Destinations](#destinations). |
@@ -238,7 +240,9 @@ The brief's **Pricing** section decides this, and it has already been through
 `saasaloy-setup`'s "extracted, never invented" rule. Your job is to carry it across without
 softening it.
 
-- **Real prices** — write them, and set `currencySymbol` if it is not USD.
+- **Real prices** — write them. If the currency is not USD, the symbol is
+  `config.app.currencySymbol` in `packages/config/src/project.ts`; change it there and say
+  so.
 - **Placeholder** — leave the shipped tiers exactly as they are and say so in the draft.
 - **None yet** — offer to drop the pricing block. That is a
   [block removal](#dropping-a-block-is-its-own-confirmation), with its own confirmation.
@@ -365,9 +369,9 @@ Copy on disk plus a brief means this has run before.
   `docs/landing-copy-draft.md`, which you write on every run and delete at the end. The
   other two are a consented block removal in `apps/web/src/pages/index.astro` and appended
   gaps in `docs/product-brief.md`.
-- **`siteName` and `lang` are not yours.** `packages/ui/src/index.ts` and
-  `apps/web/src/layouts/Layout.astro` belong to `saasaloy-setup`. Report a mismatch; do not
-  fix it.
+- **The product name and the locale are not yours.** `packages/config/src/project.ts`
+  belongs to `saasaloy-setup`, and so does everything else in `packages/config`. Report a
+  mismatch; do not fix it.
 - **Never edit a block.** `packages/ui/src/blocks/*.tsx` is off limits: no markup, no
   classes, no structure, no widening the icon registry. Read them freely. If copy will not
   fit a block, say so and let the owner decide.

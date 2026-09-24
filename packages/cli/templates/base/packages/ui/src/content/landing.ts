@@ -56,9 +56,15 @@
 //      A translation layer reads `id`, `icon` and every `*Href` as non-message data, the
 //      same way it already has to for a tier's `id`.
 //
+// NUMBERS AND IDS ARE NOT WORDS. The currency symbol and the tier ids and names below are
+// read from `@repo/config`, because `packages/billing` needs the same ids and a second copy
+// drifts. Sentences live here; ids, numbers and paths live in `packages/config/src/`.
+//
 // One chrome string set deliberately lives elsewhere: the theme toggle's labels, in
 // ../lib/theme.ts. That file is inlined verbatim into a pre-paint <script> and is
 // declared import-free on purpose, so it keeps its own constants.
+
+import { config } from "@repo/config";
 
 /** Marketing copy. The whole of what a landing-copy pass may rewrite. */
 export const landing = {
@@ -154,7 +160,10 @@ export const landing = {
       "Start free, upgrade when the product earns it. Every plan includes the full framework.",
     /** Shown beside the annual option. Empty string hides it. */
     annualNote: "Save 20%",
-    currencySymbol: "$",
+    // The symbol and the tier ids/names below come from `@repo/config` — they are numbers
+    // and ids, not sentences, and billing needs the same ids. Edit them in
+    // `packages/config/src/project.ts`; edit the words around them here.
+    currencySymbol: config.app.currencySymbol,
     // The exception to rule 5: the whole tier list lives here, prices and ctaHrefs
     // included, so pricing is rewritten in one place. `monthlyPrice`/`annualPrice` are
     // whole currency units; `null` renders ui.pricing.customPrice. Set `featured` on at
@@ -162,8 +171,8 @@ export const landing = {
     // (rule 2's stated exemption) — they are rewritten with the tier, never alone.
     tiers: [
       {
-        id: "free",
-        name: "Free",
+        id: config.plans.tiers.free.id,
+        name: config.plans.tiers.free.name,
         description: "For side projects and the first hundred users.",
         monthlyPrice: 0,
         annualPrice: 0,
@@ -172,8 +181,8 @@ export const landing = {
         ctaHref: "#cta",
       },
       {
-        id: "pro",
-        name: "Pro",
+        id: config.plans.tiers.pro.id,
+        name: config.plans.tiers.pro.name,
         description: "For teams shipping to paying customers.",
         monthlyPrice: 29,
         annualPrice: 23,
@@ -189,8 +198,8 @@ export const landing = {
         featured: true,
       },
       {
-        id: "enterprise",
-        name: "Enterprise",
+        id: config.plans.tiers.enterprise.id,
+        name: config.plans.tiers.enterprise.name,
         description:
           "For organisations with procurement and a security review.",
         monthlyPrice: null,

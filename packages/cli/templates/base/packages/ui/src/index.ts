@@ -5,4 +5,11 @@
 //
 // It also proves the monorepo's JIT internal-package wiring — apps/web imports
 // `siteName` from here with no build step (workspace:* + Vite transpiles the TS directly).
-export const siteName = "{{PROJECT_NAME}}";
+import { config } from "@repo/config";
+
+/**
+ * The product name. One home, `packages/config/src/project.ts`, and this is the alias every
+ * existing consumer already imports — a page, a layout, the footer. Emails and the api read
+ * `config.app.name` directly; nothing keeps a second copy of the string.
+ */
+export const siteName = config.app.name;

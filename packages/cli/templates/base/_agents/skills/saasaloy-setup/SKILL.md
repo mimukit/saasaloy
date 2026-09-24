@@ -1,6 +1,6 @@
 ---
 name: saasaloy-setup
-description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when siteName is still the scaffold's directory name, when another skill needs product context and no brief exists yet, and when re-running to update the brief after something changed.
+description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when config.app.name is still the scaffold's directory name, when another skill needs product context and no brief exists yet, and when re-running to update the brief after something changed.
 ---
 
 # saasaloy-setup — find out what this project is, once
@@ -10,8 +10,8 @@ directory name, its language is English because nobody asked, and every skill th
 has to either interview the owner again or guess.
 
 So this skill asks once and writes the answers down. The deliverable is
-**`docs/product-brief.md`**, plus the two facts that are code rather than prose: `siteName`
-and the page's `lang` attribute.
+**`docs/product-brief.md`**, plus the two facts that are code rather than prose: the
+product's name and its locale. Both live in one file, `packages/config/src/project.ts`.
 
 It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves behind.
 
@@ -20,8 +20,7 @@ It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves
 | Path | What you change |
 |------|-----------------|
 | `docs/product-brief.md` | The whole file. Create `docs/` if it does not exist. |
-| `packages/ui/src/index.ts` | `siteName` — the brand constant, and nothing else in the file. |
-| `apps/web/src/layouts/Layout.astro` | The `lang` attribute only, and only when it differs from the brief's language code. |
+| `packages/config/src/project.ts` | `app.name` and `app.locale`, and nothing else in the file. |
 
 Nothing else. You are not here to write the landing page, add a dependency, or touch a
 block.
@@ -30,9 +29,10 @@ block.
 
 1. **Read `docs/product-brief.md`.** If it exists, someone has already been through this.
    Read it fully and jump to [Re-running](#re-running).
-2. **Read `packages/ui/src/index.ts`** for the current `siteName`. `saasaloy init` sets it
-   to the directory name, so it is usually a slug like `my-saas` rather than a brand. It is
-   still the best opening guess you have, and it belongs in question 1's samples.
+2. **Read `packages/config/src/project.ts`** for the current `app.name`. `saasaloy init`
+   sets it to the directory name, so it is usually a slug like `my-saas` rather than a
+   brand. It is still the best opening guess you have, and it belongs in question 1's
+   samples.
 3. **Look at git, and treat it as advice.** `git status --short` if there is a repo. A dirty
    tree or no repo at all is worth one sentence — "your changes aren't committed, so you
    can't undo this with git; every write here is previewed and confirmed anyway" — and then
@@ -218,20 +218,27 @@ Two rules about this file:
 
 ## Step 3 — set the two facts that are code
 
-Show the change and confirm it, one file at a time.
+Both are leaves of the `app` section in `packages/config/src/project.ts`, the one file in
+`packages/config` a project owner edits. Show the change and confirm it.
 
-1. **`siteName`** in `packages/ui/src/index.ts`. This is the brand as it appears in the
-   header, the footer and the browser tab. It is not translated, and it is the only thing
-   in that file you may edit.
-2. **`lang`** in `apps/web/src/layouts/Layout.astro`. Set it to the brief's language code
-   whenever the attribute differs from it, including back to `en` on a re-run that returns
-   to English. It ships hardcoded as `en`. Getting this wrong tells screen readers to
-   pronounce Bangla with English phonetics.
+1. **`app.name`** — the brand as it appears in the header, the footer, the browser tab and
+   every email. `siteName` in `@repo/ui` re-exports it, so nothing else needs editing. It
+   is not translated.
+2. **`app.locale`** — the brief's language code. `apps/web`'s shared layout reads it as
+   `<html lang>`. Set it whenever it differs from the brief, including back to `en` on a
+   re-run that returns to English. Getting this wrong tells screen readers to pronounce
+   Bangla with English phonetics.
 
-Then check it still builds, because both files are imported by the page:
+```ts
+export const project: ProjectOverride = {
+  app: { name: "Ledgerly", locale: "en-GB" },
+};
+```
+
+Then check it still builds, because every page reads that object:
 
 ```sh
-pnpm --filter @repo/ui typecheck
+pnpm typecheck
 pnpm build
 ```
 
@@ -252,7 +259,8 @@ A brief on disk means the interview already happened.
 Say so explicitly when you finish, because the brief on its own changes nothing the owner
 can see:
 
-> The brief is at `docs/product-brief.md` and `siteName` is set. Run
+> The brief is at `docs/product-brief.md` and the product's name is set in
+> `packages/config/src/project.ts`. Run
 > `/saasaloy-landing-copy` and it will write the landing page from this, as a markdown
 > draft you review before anything touches the site.
 
