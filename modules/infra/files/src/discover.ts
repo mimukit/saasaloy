@@ -64,9 +64,11 @@ export async function discoverServices(): Promise<DiscoveredService[]> {
       // best-effort partial object rather than `undefined`, so checking the return value
       // alone would silently ship a truncated config. Pass an `errors` array to catch
       // that: a non-empty array means the input didn't fully parse, even though `parse`
-      // still returned something.
+      // still returned something. Trailing commas are allowed, as wrangler allows them:
+      // the shipped `apps/web` and `admin` configs both end their `assets` block with one.
       const errors: ParseError[] = [];
-      const config = parse(source, errors) as WranglerConfig | undefined;
+      const config = parse(source, errors, { allowTrailingComma: true }) as
+        WranglerConfig | undefined;
       const [first] = errors;
       if (first) {
         throw new Error(
