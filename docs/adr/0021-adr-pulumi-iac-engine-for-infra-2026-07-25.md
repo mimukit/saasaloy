@@ -44,3 +44,5 @@ accepted
 Issue #29. Plan: `docs/plans/0012-plan-infra-capability-module-2026-07-25.md`. Prior:
 [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md),
 [ADR 0020](0020-adr-capability-owns-its-vendor-packages-2026-07-24.md).
+
+Assets-only Workers: #180, plan 0067.
