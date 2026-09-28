@@ -52,6 +52,7 @@
     "@commitlint/config-conventional": "21.2.2",
     "@types/node": "26.4.1",
     "husky": "9.1.7",
+    "ignore": "7.0.10",
     "jsonc-parser": "3.3.1",
     "lint-staged": "17.5.0",
     "oxlint": "1.81.0",

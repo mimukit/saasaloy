@@ -9,9 +9,21 @@ import type { ParseError } from "jsonc-parser";
 const REPO_ROOT = join(import.meta.dirname, "..", "..");
 const SERVICE_ROOTS = ["apps", "packages"];
 
+/** The `assets` block of an assets-only Worker (the base's `apps/web`, the `admin` app). */
+export interface WranglerAssets {
+  directory?: string;
+  not_found_handling?: "none" | "404-page" | "single-page-application";
+  html_handling?:
+    | "auto-trailing-slash"
+    | "force-trailing-slash"
+    | "drop-trailing-slash"
+    | "none";
+}
+
 export interface WranglerConfig {
   name?: string;
   main?: string;
+  assets?: WranglerAssets;
   compatibility_date?: string;
   compatibility_flags?: string[];
   vars?: Record<string, string>;
@@ -42,6 +54,9 @@ export interface DiscoveredService {
  */
 export async function discoverServices(): Promise<DiscoveredService[]> {
   const services: DiscoveredService[] = [];
+  // Resolved name -> the wrangler.jsonc that claimed it. Two services with one name would
+  // deploy to one Cloudflare script and overwrite each other, so refuse before any build.
+  const claimed = new Map<string, string>();
 
   for (const root of SERVICE_ROOTS) {
     const rootDir = join(REPO_ROOT, root);
@@ -81,7 +96,16 @@ export async function discoverServices(): Promise<DiscoveredService[]> {
         );
       }
 
-      services.push({ name: config.name ?? entry, dir, config });
+      const name = config.name ?? entry;
+      const previous = claimed.get(name);
+      if (previous) {
+        throw new Error(
+          `infra: ${previous} and ${configPath} both resolve to the service name '${name}' — give each a unique "name".`
+        );
+      }
+      claimed.set(name, configPath);
+
+      services.push({ name, dir, config });
     }
   }
 

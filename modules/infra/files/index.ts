@@ -28,7 +28,15 @@ if (services.length === 0) {
 const deployed = await Promise.all(
   services.map(async (service) => {
     const { script } = await toResources(service, accountId);
-    await pushSecrets(service);
+    // An assets-only Worker has no script to read a secret, and `wrangler secret put`
+    // on it would upload a placeholder script to attach one.
+    if (service.config.assets && !service.config.main) {
+      console.log(
+        `infra: ${service.name} has no Worker script — skipping secrets.`
+      );
+    } else {
+      await pushSecrets(service);
+    }
     return [service.name, script.scriptName] as const;
   })
 );
