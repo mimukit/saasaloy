@@ -37,7 +37,7 @@ Two mechanisms make this work:
 
 ```sh
 pnpm cli:dev            # terminal 1: rebuild the CLI on change — leave running
-pnpm play:init          # scaffold .dev/playground + drop the ./saasaloy shim (no install)
+pnpm play:init          # scaffold .dev/playground, drop the ./saasaloy shim, install, commit a baseline
 cd .dev/playground
 pnpm install            # run this yourself when a module adds dependencies
 ```
@@ -54,6 +54,20 @@ pnpm run dev            # run the scaffolded app
 
 Edit a module under `modules/` (or a CLI command under `packages/cli/src`), then re-run the
 shim — `cli:dev` has already rebuilt, so you're always testing the latest.
+
+### Live module sync
+
+`pnpm play:watch` removes the re-run. Leave it running in its own terminal, next to `pnpm run dev` in the playground:
+
+```sh
+pnpm play:watch         # terminal 2: sync module edits into the playground
+```
+
+When a file under `modules/<module>/files/` or `modules/<module>/registry-item.json` changes, the watcher runs `./saasaloy add <module> --force --yes` for that module, about 0.7s, and prints the files it wrote. A module the playground has not installed is skipped. The dev server then picks the file up the way it picks up any edit.
+
+`add --force` never overwrites a playground file you edited by hand. The watcher prints each one as `kept`: make the edit in `modules/` instead, or run `pnpm play:restore`. A `registry-item.json` change re-applies the patches, but a patch or file you removed from the descriptor stays in the playground until `pnpm play:restore`.
+
+The watcher also re-scaffolds the base when `packages/cli/templates/base` changes, but only while no module is installed. `init --force` resets `saasaloy.json` to a base-only project, so with modules installed it prints a warning instead, and `pnpm play:reset` picks the template edit up.
 
 ### Unit tests over module payloads
 
@@ -173,9 +187,16 @@ Every file under `packages/cli/templates/base/` is a managed file in a scaffolde
 ### Resetting
 
 ```sh
-pnpm play:reset         # destroy + re-scaffold a clean playground (you re-run pnpm install)
+pnpm play:restore       # back to the baseline commit in about a second, node_modules kept
+pnpm play:restore --db  # also stop the api, wipe the database, migrate, start the api again
+pnpm play:snap          # commit the current playground as the new baseline
+pnpm play:reset         # destroy + re-scaffold a clean playground
 pnpm play:destroy       # remove .dev/playground entirely
 ```
+
+The playground is a git repository, and `play:init` commits a baseline after the install. `play:restore` runs `git reset --hard` and `git clean -fd` against it, then `pnpm install`. Ignored files stay, so `node_modules`, `apps/api/.dev.vars` and the local D1 state survive a restore. Add the modules you test most, run `pnpm play:snap`, and every later restore returns to that state. `git diff` in the playground shows exactly what an `add` wrote.
+
+`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and starts `pnpm dev` in `apps/api` in the background, logging to `.dev/api-dev.log`. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment or from `apps/api/.dev.vars`.
 
 ### Global linking (`main` checkout only)
 
@@ -205,7 +226,10 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm cli` | run the built CLI directly (`node packages/cli/dist/index.js`) |
 | `pnpm cli:link` | build the CLI and put a global `saasaloy` bin on your `PATH` (link from `main` only) |
 | `pnpm cli:unlink` | remove the global `saasaloy` bin |
-| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim |
+| `pnpm play:init` | build the CLI, scaffold `.dev/playground` (`--no-install`), copy in the `saasaloy` shim, `pnpm install`, commit a git baseline |
+| `pnpm play:watch` | re-run `add <module> --force` when an installed module's files or descriptor change |
+| `pnpm play:snap` | commit the current playground as the new baseline |
+| `pnpm play:restore` | reset the playground to its baseline and `pnpm install`; `--db` also resets the database |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
 | `pnpm --filter saasaloy test:e2e` | spawn the built binary against a temp project |
@@ -232,6 +256,8 @@ tools in a generated project read git, and all three degrade without it:
 
 (The Tailwind half is also covered independently by an explicit `@source not` rule in the
 template's `globals.css`, so a build before the first commit is still fine.)
+
+`play:snap` and `play:restore` need the repository too. The playground sits inside this repository's work tree, so `init` runs `git init` there only because `.dev/` is ignored: `git check-ignore` is the second half of the nesting guard. Until #178 the CLI asked only the first half, and the playground got no repository at all.
 
 ## Linting and formatting
 
@@ -377,7 +403,7 @@ are informational: neither writes a change and neither affects the `deps:check` 
 
 **`wrangler` and `@cloudflare/vite-plugin` move together.** Each plugin release refuses to start a dev server against a wrangler older than the one it was released with. `@astrojs/cloudflare` takes the plugin through a caret range, so the web template pins the plugin as a direct devDependency, which makes pnpm install that version for the adapter too (issue #186). Take both bumps in one `deps:update` run. `verify-pins` fails when the plugin pin differs between `apps/web` and `apps/api`, or when any Cloudflare workspace pins a different `wrangler`. The pin in `database-d1`'s patch range is not a `package.json`, so `verify-pins` does not read it; keep it on the same version by hand.
 
-**`deps:verify` runs `git init` in the playground.** `saasaloy init` skips `git init` inside an existing repository, and `.dev/` sits inside this one. With no `.git` of its own, the playground inherits this repo's `.gitignore`, which ignores `/.dev/`, so oxlint finds no files and the lint step fails with "No files found to lint".
+**The `deps:verify` playground has its own git repository.** `saasaloy init` runs `git init` in `.dev/playground` because this repo ignores `/.dev/`. Without a `.git` of its own, the playground would inherit this repo's `.gitignore`, so oxlint would find no files and the lint step would fail with "No files found to lint".
 
 **Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
 repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
@@ -386,7 +412,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | --- | --- |
 | `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--dry-run`) |
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
-| `pnpm deps:verify` | `verify-pins` → `play:init` → `git init` → install → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
+| `pnpm deps:verify` | `verify-pins` → `play:init` (which runs `git init` and installs) → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
