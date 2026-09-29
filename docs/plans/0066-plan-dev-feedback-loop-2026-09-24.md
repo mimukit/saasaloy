@@ -105,7 +105,7 @@ What the numbers say:
 
 Web finding (#186): `astro dev` exits before it is ready on a base-only project too. `@astrojs/cloudflare` 14.3.0 resolves `@cloudflare/vite-plugin` 1.61.0, which requires `wrangler` `^4.142.0`, and the web template pins `wrangler` 4.129.0. The error shows only in `apps/web/.astro/dev.log`, because Astro 7 starts the dev server as a background process. With `wrangler` 4.142.0 the server starts in 36.6s, and then the first render logs `Cannot read properties of null (reading 'useContext')` from `lucide-react` inside workerd, which points to two React copies. HMR was not measured: the dev box has no browser.
 
-### Phase 1: live module file sync (#178)
+### Phase 1: live module file sync (#178) (built 2026-09-29)
 
 - Extend `scripts/watch-template.ts` to watch `modules/*/files/**` and `modules/*/registry-item.json` as well as the base template.
 - On a change, find the module from the path, and skip it when `saasaloy.json` in the playground does not list it as installed.
@@ -114,7 +114,7 @@ Web finding (#186): `astro dev` exits before it is ready on a base-only project 
 - On a `registry-item.json` change, also print that a removed patch is not reversed and that `play:restore` clears it.
 - Verify: edit a component under `modules/admin/files/src/`, and see the running admin app update with no manual re-add. Run `saasaloy doctor` in the playground and see no drift for that file.
 
-### Phase 2: git baseline reset (#178)
+### Phase 2: git baseline reset (#178) (built 2026-09-29)
 
 - After `play:init` and install, run `git init` in the playground and commit a baseline.
 - Add `pnpm play:snap` to commit the current state as the new baseline.
