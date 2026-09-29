@@ -9,7 +9,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // form for its dialect, and what has to match is the shape a row comes back in.
 //
 // Hand-authored Drizzle snapshot of Better Auth's core schema (users/sessions/accounts/
-// verifications) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.3
+// verifications) plus the fields its `admin` plugin adds, pinned to better-auth@1.7.6
 // (packages/auth/package.json) — NOT
 // generated at `add` time (no exec, deterministic, `--diff`-able; see the auth plan's
 // "Auth schema" decision). Column-for-column against that version's
@@ -34,6 +34,9 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // 1.7.2 migration has the column and the index in its database; `db:generate` on this
 // snapshot emits the drop, and the auth skill carries it. Nothing else moved: the
 // other three tables and every admin-plugin field match 1.7.3 column for column.
+//
+// Re-verified against 1.7.6: `getAuthTables()` with the admin plugin returns the same
+// four tables, field for field, as 1.7.3 did, so nothing below moved.
 //
 // Auth deliberately owns no `db:generate`/migration step of its own: dropping this
 // file into `packages/db/src/schema/` means database's existing barrel + migration

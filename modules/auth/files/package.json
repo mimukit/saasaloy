@@ -16,16 +16,16 @@
     "./rbac-rules": "./src/rbac-rules.ts"
   },
   "dependencies": {
-    "better-auth": "1.7.3",
-    "hono": "4.13.7",
+    "better-auth": "1.7.6",
+    "hono": "4.13.9",
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260906.1",
+    "@cloudflare/workers-types": "5.20260926.1",
     "@repo/tsconfig": "workspace:*",
-    "@types/node": "26.4.1",
+    "@types/node": "26.6.3",
     "rimraf": "6.1.3",
     "typescript": "7.0.2",
-    "vite": "8.2.2"
+    "vite": "8.3.1"
   }
 }

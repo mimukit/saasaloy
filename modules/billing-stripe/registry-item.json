@@ -40,21 +40,21 @@
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "stripe",
-      "range": "22.6.1"
+      "range": "22.6.2"
     },
     {
       "file": "packages/billing/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "@better-auth/stripe",
-      "range": "1.7.3"
+      "range": "1.7.6"
     },
     {
       "file": "packages/billing/package.json",
       "kind": "package-json-dependency",
       "section": "peerDependencies",
       "name": "better-auth",
-      "range": "1.7.3"
+      "range": "1.7.6"
     }
   ],
   "files": [

@@ -35,14 +35,14 @@
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
-      "range": "5.20260906.1"
+      "range": "5.20260926.1"
     },
     {
       "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "wrangler",
-      "range": "4.129.0"
+      "range": "4.141.0"
     }
   ],
   "files": [

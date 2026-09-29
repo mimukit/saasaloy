@@ -34,7 +34,7 @@
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "drizzle-orm",
-      "range": "0.45.2"
+      "range": "0.45.3"
     },
     {
       "file": "packages/queue/package.json",

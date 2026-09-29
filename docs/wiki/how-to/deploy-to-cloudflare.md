@@ -9,7 +9,7 @@ There is no root `deploy` script and no command that ships the whole project at 
 - **A Cloudflare account.** Nothing up to this point needed one — `saasaloy init` and
   `saasaloy add` touch no cloud service.
 - **No global install.** `wrangler` is a devDependency of every deployable workspace
-  (pinned at `4.129.0`), so `pnpm install` already put it there.
+  (pinned at `4.141.0`), so `pnpm install` already put it there.
 - **An authenticated wrangler.** `pnpm --filter @repo/web exec wrangler login` opens a
   browser once and stores the credential for every workspace in the repo.
 
