@@ -1,3 +1,4 @@
+import { config } from "@repo/config";
 import { Separator } from "@repo/ui/components/separator";
 import { landing, ui } from "@repo/ui/content/landing";
 import { interpolate } from "@repo/ui/lib/interpolate";
@@ -7,9 +8,12 @@ import { interpolate } from "@repo/ui/lib/interpolate";
 // the navbar keeps only same-page anchors.
 //
 // The words come from ../content/landing.ts; the hrefs stay here, because a URL is
-// structure rather than copy. Blanking a label in the content file drops that link, and a
-// group whose links are all blank disappears — that is how a removed section loses its
-// footer entry without editing this file.
+// structure rather than copy — except the two legal paths, which `apps/web` also has to
+// agree with page for page, so they come from `config.app.legal`.
+//
+// Blanking a label in the content file drops that link, and a group whose links are all
+// blank disappears — that is how a removed section loses its footer entry without editing
+// this file.
 
 export interface FooterLink {
   label: string;
@@ -33,8 +37,8 @@ const defaultGroups: FooterGroup[] = [
   {
     heading: landing.footer.groupLegal,
     links: [
-      { label: landing.footer.linkTerms, href: "/terms" },
-      { label: landing.footer.linkPrivacy, href: "/privacy" },
+      { label: landing.footer.linkTerms, href: config.app.legal.termsPath },
+      { label: landing.footer.linkPrivacy, href: config.app.legal.privacyPath },
     ],
   },
 ]

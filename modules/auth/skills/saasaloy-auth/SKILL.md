@@ -212,6 +212,8 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 Better Auth's `admin` plugin is on from the start (`plugins: [admin()]`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), and treats the roles in `adminRoles` as privileged.
 
+**Both role strings live in `packages/config/src/sections/auth.ts`, which this module installs, and they have exactly one home.** `packages/auth/src/authorize.ts` reads `config.auth.adminRole` and `config.auth.superadminRole`, and `apps/admin/src/lib/auth.ts` reads the same two — a browser bundle cannot import `@repo/auth/server`, but `@repo/config` has no dependencies at all, so both sides read one copy. Rename either role in `packages/config/src/project.ts`; rows already written keep the old string, so an existing project needs the `update users set role = ...` to match.
+
 There are two site roles, and they are not interchangeable. `admin` runs `apps/admin`. `superadmin` does everything `admin` does and is the only role that may act inside an organization it does not belong to, through the `x-organization-id` header the `multitenant` module reads. Inside an organization an `admin` is an ordinary member: the site role grants nothing on a tenant route, which asks `requireTenant` and reads the caller's membership instead.
 
 `adminRoles` names both, so the plugin's own endpoints admit a `superadmin` as well as an `admin`. Leaving it at the default `["admin"]` would let `requireAdmin` pass a caller the plugin then refused. `apps/admin`'s guard reads the same pair:

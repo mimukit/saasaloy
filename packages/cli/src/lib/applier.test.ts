@@ -13,6 +13,7 @@ import {
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { CONFIG_SECTIONS_FILE } from "./collisions.js";
 import {
   buildPlan,
   executePlan,
@@ -2777,5 +2778,95 @@ describe("buildPlan — onlyWith (#99)", () => {
     ).rejects.toThrow(/no file variant matches/);
 
     await expect(pathExists(join(root, "packages", "db"))).resolves.toBeFalsy();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The config section guard (#154): two modules cannot compose one section key.
+// ---------------------------------------------------------------------------
+
+function sectionModule(name: string, key: string): Promise<LoadedModule> {
+  return writeModule(name, {
+    type: "saasaloy:feature",
+    patches: [
+      {
+        file: CONFIG_SECTIONS_FILE,
+        kind: "plugin-array",
+        exportName: "sections",
+        arrayProp: "sections",
+        call: `${name}Config`,
+        import: { name: `${name}Config`, from: `./sections/${key}` },
+      },
+    ],
+  });
+}
+
+describe("buildPlan — config section keys", () => {
+  it("plans two modules contributing different sections", async () => {
+    const built = await plan({
+      install: ["auth", "billing"],
+      modules: [
+        await sectionModule("auth", "auth"),
+        await sectionModule("billing", "billing"),
+      ],
+    });
+    expect(built.patches).toHaveLength(2);
+  });
+
+  it("refuses two modules claiming one key, naming both", async () => {
+    await expect(
+      plan({
+        install: ["auth", "shop"],
+        modules: [
+          await sectionModule("auth", "auth"),
+          await sectionModule("shop", "auth"),
+        ],
+      })
+    ).rejects.toThrow(/auth and shop both contribute config\.auth/);
+  });
+
+  it("refuses a new module claiming a key an installed module already holds", async () => {
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "auth",
+      file: CONFIG_SECTIONS_FILE,
+      patch: {
+        file: CONFIG_SECTIONS_FILE,
+        kind: "plugin-array",
+        exportName: "sections",
+        arrayProp: "sections",
+        call: "authConfig",
+        import: { name: "authConfig", from: "./sections/auth" },
+      },
+    });
+    await expect(
+      plan({
+        install: ["shop"],
+        modules: [await sectionModule("shop", "auth")],
+        manifest,
+      })
+    ).rejects.toThrow(/auth and shop both contribute config\.auth/);
+  });
+
+  it("lets a --force re-apply keep its own key", async () => {
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      module: "auth",
+      file: CONFIG_SECTIONS_FILE,
+      patch: {
+        file: CONFIG_SECTIONS_FILE,
+        kind: "plugin-array",
+        exportName: "sections",
+        arrayProp: "sections",
+        call: "authConfig",
+        import: { name: "authConfig", from: "./sections/auth" },
+      },
+    });
+    const built = await plan({
+      install: ["auth"],
+      modules: [await sectionModule("auth", "auth")],
+      manifest,
+    });
+    expect(built.patches).toHaveLength(1);
   });
 });

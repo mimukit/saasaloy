@@ -889,3 +889,126 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
     seed: seed.toSorted(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// The `config` rules (#154).
+// ---------------------------------------------------------------------------
+
+/** The one file a project owner edits in `@repo/config`. */
+export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
+/** The base app's Astro config, which carries the canonical site origin. */
+export const ASTRO_CONFIG_FILE = "apps/web/astro.config.mjs";
+/** The placeholder `saasaloy init` substitutes. Left in place, it means nothing ran. */
+const PROJECT_NAME_PLACEHOLDER = "{{PROJECT_NAME}}";
+/** The origin the template ships. A deploy on it is somebody else's domain. */
+const PLACEHOLDER_SITE = "example.com";
+/** The env var `config.app.name` superseded. Read by nothing; still warned about. */
+const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
+
+export interface ConfigCheckArgs {
+  /** Source of `packages/config/src/project.ts`, or undefined when the project has none. */
+  project?: string;
+  /** Source of `apps/web/astro.config.mjs`, or undefined. */
+  astroConfig?: string;
+  /** Project-relative path → contents, for every `.env`/`.dev.vars` on disk. */
+  envFiles?: Record<string, string>;
+}
+
+/**
+ * Three things a scaffolded project is expected to change and nothing else checks (#154):
+ * the product name, the site origin, and one env var `config` replaced.
+ *
+ * All three read a file rather than the composed object, because `doctor` never executes
+ * project code. A regex over the one line each value is written on is enough, and it stays
+ * true whatever the rest of the file grows into.
+ */
+export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
+  const findings: Finding[] = [];
+
+  if (args.project?.includes(PROJECT_NAME_PLACEHOLDER)) {
+    findings.push(
+      finding(
+        BASE_MODULE,
+        "/config/app/name",
+        `${CONFIG_PROJECT_FILE} still holds the ${PROJECT_NAME_PLACEHOLDER} placeholder — every page, email and title reads it. Set config.app.name to the product's real name.`
+      )
+    );
+  }
+
+  if (args.astroConfig !== undefined && siteIsPlaceholder(args.astroConfig)) {
+    findings.push(
+      finding(
+        BASE_MODULE,
+        "/astro/site",
+        `${ASTRO_CONFIG_FILE} still declares site: "https://${PLACEHOLDER_SITE}" — canonical URLs and the sitemap point at a domain you do not own. Set it to the project's own origin.`
+      )
+    );
+  }
+
+  for (const [file, contents] of Object.entries(args.envFiles ?? {}).toSorted(
+    ([a], [b]) => (a < b ? -1 : 1)
+  )) {
+    if (assignsVar(contents, DEPRECATED_APP_NAME)) {
+      findings.push(
+        finding(
+          "billing",
+          `/env/${DEPRECATED_APP_NAME}`,
+          `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
+        )
+      );
+    }
+  }
+
+  return findings;
+}
+
+/** Whether the Astro config's `site` is still the template's placeholder origin. */
+function siteIsPlaceholder(source: string): boolean {
+  const match = /^\s*site:\s*["'`]([^"'`]*)["'`]/m.exec(source);
+  return match?.[1]?.includes(PLACEHOLDER_SITE) ?? false;
+}
+
+/** Whether a dotenv-style file assigns `name` on an uncommented line with a value. */
+function assignsVar(contents: string, name: string): boolean {
+  for (const line of contents.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
+    }
+    const [key, ...rest] = trimmed.replace(/^export\s+/, "").split("=");
+    if (key?.trim() === name && rest.join("=").trim() !== "") {
+      return true;
+    }
+  }
+  return false;
+}
+
+/** Every `.env` and `.dev.vars` a project may carry, read off disk. */
+async function readEnvFiles(root: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const dirs = ["."];
+  for (const app of await readDirNames(join(root, "apps"))) {
+    dirs.push(posix.join("apps", app));
+  }
+  for (const dir of dirs) {
+    for (const name of [".env", ".dev.vars"]) {
+      const target = posix.join(dir, name).replace(/^\.\//, "");
+      const contents = await readIfPresent(resolveWithinRoot(root, target));
+      if (contents !== undefined) {
+        out[target] = contents;
+      }
+    }
+  }
+  return out;
+}
+
+/** Read what `checkConfigValues` needs off a project on disk. */
+export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
+  return {
+    project: await readIfPresent(resolveWithinRoot(root, CONFIG_PROJECT_FILE)),
+    astroConfig: await readIfPresent(
+      resolveWithinRoot(root, ASTRO_CONFIG_FILE)
+    ),
+    envFiles: await readEnvFiles(root),
+  };
+}

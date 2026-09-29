@@ -84,6 +84,18 @@ _Avoid: cache, mirror. A cache may be dropped without consequence; a projection 
 The SQL name of a table a module or project ships, always plural snake_case: `users`, `feature_flag_overrides`, `waitlist_entries`. The Drizzle **export key** is the camelCase form of the same plural, a column stays singular (`user_id`), and an index starts with its table name. Better Auth's tables follow the rule because `drizzleAdapter` runs with `usePlural: true`, which looks each model up by `<model>s` export key and appends that `s` to a plugin's custom `modelName` too ([ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md)).
 _Avoid: model name for the SQL name. A model name is Better Auth's key (`user`, `apikey`); the export key and the table name are the project's._
 
+### Config
+The channel for a value a project checks into its repo and ships identically to every environment: the product name, the locale, a role string, a tier id. It is `@repo/config` in the base template, a frozen plain object read with a plain import, with zero runtime dependencies and no imports of its own. Its counterpart is `env`, which owns values the platform supplies per deployment, secret or not. The test a value takes is two deployments of the *same* project: if the value can differ between them it is `env` ([ADR 0039](docs/adr/0039-adr-config-owns-checked-in-values-and-env-owns-per-deployment-ones-2026-09-20.md)). `config` takes neither [providers](#provider-module) nor [drivers](#driver-module), because it wraps no external service.
+_Avoid: settings, constants, app config for the object; `config` for a module descriptor (`registry-item.json`) or for `saasaloy.json`._
+
+### Section
+One capability's contribution to [config](#config): a keyed object declared with `defineSection("<key>", { … })` in `packages/config/src/sections/<key>.ts`, registered by a `plugin-array` patch into `defineSections({ sections: [] })`. The key is the module name, flat and unique — `saasaloy add` refuses two modules claiming one, naming both. A section file lives in `packages/config` rather than in the capability, so the config package stays the leaf everything may import, and it reaches its helper by subpath (`@repo/config/define`).
+_Avoid: namespace, group. A section never reads another section._
+
+### Project override
+`packages/config/src/project.ts`, the one file in `packages/config` a project owner is expected to edit, and a declared seed file so `saasaloy update` never rewrites it ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)). It is typed as a partial of the composed shape, so a key no installed [section](#section) defines fails `typecheck`. The merge is one level below the section: a leaf value is replaced, a nested record or an array is replaced whole.
+_Avoid: local config, overrides file, user config._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 

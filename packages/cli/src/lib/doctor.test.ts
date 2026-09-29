@@ -5,13 +5,17 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { baseRecord } from "./base.js";
 import {
+  ASTRO_CONFIG_FILE,
   checkBase,
+  checkConfigValues,
+  CONFIG_PROJECT_FILE,
   checkModule,
   checkPartialInstalls,
   checkPolicyBindings,
   checkProject,
   checkTarget,
   KV_INDEX_FILE,
+  readConfigState,
   readPolicyState,
   registryModuleNames,
   resolveDoctorTarget,
@@ -697,5 +701,110 @@ describe(readPolicyState, () => {
     await expect(
       readPolicyState(root, ["kv-cloudflare"])
     ).resolves.toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The `config` rules (#154): the name placeholder, the placeholder site origin,
+// and the env var `config.app.name` superseded.
+// ---------------------------------------------------------------------------
+
+describe(checkConfigValues, () => {
+  it("passes a project that edited all three", () => {
+    expect(
+      checkConfigValues({
+        project: 'export const project = { app: { name: "Ledgerly" } };',
+        astroConfig:
+          'export default defineConfig({ site: "https://ledger.ly" });',
+        envFiles: { "apps/api/.dev.vars": "BILLING_APP_URL=https://ledger.ly" },
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("reports the unsubstituted project name", () => {
+    const [found] = checkConfigValues({
+      project: 'export const project = { app: { name: "{{PROJECT_NAME}}" } };',
+    });
+    expect(found?.where).toBe("/config/app/name");
+    expect(found?.message).toContain(CONFIG_PROJECT_FILE);
+  });
+
+  it("says nothing when the project has no override file", () => {
+    expect(checkConfigValues({})).toStrictEqual([]);
+  });
+
+  it("reports the placeholder site origin", () => {
+    const [found] = checkConfigValues({
+      astroConfig: '  site: "https://example.com",',
+    });
+    expect(found?.where).toBe("/astro/site");
+    expect(found?.message).toContain(ASTRO_CONFIG_FILE);
+  });
+
+  it("accepts a real origin that merely mentions the placeholder in a comment", () => {
+    expect(
+      checkConfigValues({
+        astroConfig: '// was https://example.com\n  site: "https://ledger.ly",',
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("reports a set BILLING_APP_NAME, naming the file", () => {
+    const [found] = checkConfigValues({
+      envFiles: { "apps/api/.dev.vars": 'BILLING_APP_NAME="Acme"' },
+    });
+    expect(found?.module).toBe("billing");
+    expect(found?.where).toBe("/env/BILLING_APP_NAME");
+    expect(found?.message).toContain("apps/api/.dev.vars");
+  });
+
+  it("ignores a commented or empty assignment", () => {
+    expect(
+      checkConfigValues({
+        envFiles: {
+          "apps/api/.dev.vars": "# BILLING_APP_NAME=Acme\nBILLING_APP_NAME=\n",
+        },
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("reports one finding per file that sets it, in path order", () => {
+    const found = checkConfigValues({
+      envFiles: {
+        "apps/web/.env": "BILLING_APP_NAME=Acme",
+        ".env": "BILLING_APP_NAME=Acme",
+      },
+    });
+    expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
+      ".env",
+      "apps/web/.env",
+    ]);
+  });
+});
+
+describe(readConfigState, () => {
+  it("reads the two files and every env file a project carries", async () => {
+    const root = await mkdtemp(join(tmpdir(), "saasaloy-config-state-"));
+    try {
+      await mkdir(join(root, "packages/config/src"), { recursive: true });
+      await mkdir(join(root, "apps/api"), { recursive: true });
+      await writeFile(
+        join(root, CONFIG_PROJECT_FILE),
+        'export const project = { app: { name: "{{PROJECT_NAME}}" } };'
+      );
+      await writeFile(
+        join(root, "apps/api/.dev.vars"),
+        "BILLING_APP_NAME=Acme"
+      );
+      const state = await readConfigState(root);
+      expect(state.project).toContain("{{PROJECT_NAME}}");
+      expect(state.astroConfig).toBeUndefined();
+      expect(Object.keys(state.envFiles ?? {})).toStrictEqual([
+        "apps/api/.dev.vars",
+      ]);
+      expect(checkConfigValues(state)).toHaveLength(2);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

@@ -2,6 +2,7 @@
 // The one document shell for every page. It owns <html>/<head>/<body> and the single
 // import of the shared theme, so a page is only ever its own content — no page may
 // duplicate the shell or import globals.css again.
+import { config } from "@repo/config";
 import "@repo/ui/globals.css";
 import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
 
@@ -14,7 +15,7 @@ const { title, description } = Astro.props;
 ---
 
 <!doctype html>
-<html lang="en">
+<html lang={config.app.locale}>
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />

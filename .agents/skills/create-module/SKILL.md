@@ -277,6 +277,29 @@ file where a capability already auto-discovers it.
 - **`api`** scaffolds `apps/api` with a **statically chained route table** in `src/index.ts`. Add a
   route in two parts: drop `files/api/routes/<feature>.ts` → `@api/routes/<feature>.ts`, then
   register it with a `chained-route` patch (below). The drop alone mounts nothing.
+- **`config`** ships in the base and holds a **section registry**, a plain array literal in
+  `packages/config/src/sections.ts`. A capability that owns a checked-in constant contributes one
+  section, the same two-part shape as a job. Drop `files/config/<key>.ts` →
+  `@config/sections/<key>.ts`, exporting a factory that returns `defineSection("<key>", { … })`,
+  then register the call with a `plugin-array` patch on `exportName: "sections"`,
+  `arrayProp: "sections"`. The key is the module name, it must be unique, and `saasaloy add`
+  refuses two modules claiming one. Read the value anywhere with `import { config } from
+  "@repo/config"`.
+
+  ```jsonc
+  { "path": "files/config/shop.ts", "target": "@config/sections/shop.ts" },
+  { "file": "packages/config/src/sections.ts", "kind": "plugin-array",
+    "exportName": "sections", "arrayProp": "sections", "call": "shopConfig",
+    "import": { "name": "shopConfig", "from": "./sections/shop" } }
+  ```
+
+  Three rules the file itself has to follow. It imports its helper by subpath,
+  `@repo/config/define`, never by relative path. It lives in `packages/config` rather than in
+  your own package, because `@repo/config` imports nothing and that is what lets every app and
+  every capability — yours included — import it. And it never reads another section: sections
+  compose side by side, so a value derived from two of them is derived where it is used. A value
+  that can differ between two deployments of one project is an `envVars` entry instead (ADR 0039).
+
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
 - **`queue`** scaffolds `packages/queue` with a **job table** and a **schedule table**, both plain
@@ -449,7 +472,8 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] `conflictsWith` names any module this one is mutually exclusive with, on one side only.
 - [ ] `requiresOneOf` names the modules that complete this one, if it ships an extension point some
       other module has to fill (two names minimum).
-- [ ] `envVars` lists any required keys; no secrets baked into files.
+- [ ] `envVars` lists any required keys; no secrets baked into files. A key that cannot differ
+      between two deployments of one project is a config section, not an env var (ADR 0039).
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
 - [ ] Any UI ships as a `@ui/blocks/<name>.tsx` block that imports React and ui primitives only;

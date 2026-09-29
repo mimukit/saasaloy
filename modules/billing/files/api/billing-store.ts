@@ -20,6 +20,7 @@ import {
   setBillingStoreResolver,
   setBillingStoreRunner,
 } from "@repo/billing";
+import { config } from "@repo/config";
 import { createEmail } from "@repo/email";
 import { accountLocked } from "@repo/email/templates/account-locked";
 import { paymentFailed } from "@repo/email/templates/payment-failed";
@@ -114,10 +115,16 @@ setBillingConfig({
   ),
 });
 
-/** What the billing emails call the project, and where they send the reader. */
-const appName =
-  (env as unknown as { BILLING_APP_NAME?: string }).BILLING_APP_NAME ??
-  "your app";
+// What the billing emails call the project, and where they send the reader.
+//
+// The name is a `config` value: two deployments of this project call it the same thing, so
+// it is checked into the repo rather than set per environment. `config.billing.appName` is
+// empty unless a project wants billing mail signed differently, and the fallback to
+// `config.app.name` is applied here because a section never reads another section.
+//
+// `BILLING_APP_NAME` is deprecated and no longer read. `saasaloy doctor` says so when it is
+// still set in a `.env`. The url stays an env var: it names a deployed origin.
+const appName = config.billing.appName || config.app.name;
 const billingUrl =
   (env as unknown as { BILLING_APP_URL?: string }).BILLING_APP_URL ??
   "http://localhost:3001/billing";

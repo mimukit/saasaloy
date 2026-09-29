@@ -15,13 +15,39 @@
 // through to Node's own answer, so a bare package name or an explicit extension behaves
 // exactly as before.
 
+// It also resolves the one workspace package a payload file may import that is not payload
+// itself: `@repo/config` ships in the base template, so a tested module file reading
+// `config.auth.adminRole` would otherwise fail on a bare specifier no node_modules holds.
+// `./config-shim.ts` composes that object the way an installed project does; the `/define`
+// subpath goes straight to the template source, since a section file only needs the helper.
+// The map is deliberately closed — two entries — rather than a general workspace resolver,
+// because every other `@repo/*` package is scaffolded by a module and is not on disk in this
+// repo at all.
+
 import { registerHooks } from "node:module";
+import { join } from "node:path";
+import { pathToFileURL } from "node:url";
 
 const RELATIVE = /^\.\.?\//;
 const HAS_EXTENSION = /\.[cm]?[jt]sx?$/;
 
+const here = import.meta.dirname;
+const WORKSPACES = new Map([
+  ["@repo/config", pathToFileURL(join(here, "config-shim.ts")).href],
+  [
+    "@repo/config/define",
+    pathToFileURL(
+      join(here, "../packages/cli/templates/base/packages/config/src/define.ts")
+    ).href,
+  ],
+]);
+
 registerHooks({
   resolve(specifier, context, nextResolve) {
+    const workspace = WORKSPACES.get(specifier);
+    if (workspace) {
+      return { shortCircuit: true, url: workspace };
+    }
     if (!RELATIVE.test(specifier) || HAS_EXTENSION.test(specifier)) {
       return nextResolve(specifier, context);
     }

@@ -1,11 +1,16 @@
 import { describe, expect, it } from "vitest";
 import {
+  CONFIG_SECTIONS_FILE,
   describeStaleOwner,
   detectCollisions,
   detectOwnedCollisions,
+  detectSectionCollisions,
   formatCollisions,
   formatOwnedCollisions,
+  formatSectionCollisions,
   mayShareTarget,
+  sectionClaims,
+  sectionKeyOf,
 } from "./collisions.js";
 import type {
   FileCollision,
@@ -14,6 +19,7 @@ import type {
   StaleOwner,
 } from "./collisions.js";
 import type { LoadedModule } from "./registry.js";
+import type { RegistryPatch } from "./schema.js";
 
 // The rule under test: two modules in one run may share a file target only when one of
 // them reaches the other through `dependsOn`. Core-plus-driver stays legal, an unrelated
@@ -410,5 +416,128 @@ describe(describeStaleOwner, () => {
     expect(message).toContain("database-d1");
     expect(message).toContain("packages/db/src/client.ts");
     expect(message).toContain("leave it installed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Config section keys (#154). Unlike a file target, a section key has no legal
+// overlap — `dependsOn` cannot express consent to losing your values.
+// ---------------------------------------------------------------------------
+
+function sectionPatch(
+  from: string,
+  file = CONFIG_SECTIONS_FILE
+): RegistryPatch {
+  return {
+    file,
+    kind: "plugin-array",
+    exportName: "sections",
+    arrayProp: "sections",
+    call: "someConfig",
+    import: { name: "someConfig", from },
+  };
+}
+
+describe(sectionKeyOf, () => {
+  it("reads the key off the import specifier", () => {
+    expect(sectionKeyOf(sectionPatch("./sections/auth"))).toBe("auth");
+  });
+
+  it("tolerates an explicit extension", () => {
+    expect(sectionKeyOf(sectionPatch("./sections/billing.ts"))).toBe("billing");
+  });
+
+  it("ignores a plugin-array patch on any other file", () => {
+    expect(
+      sectionKeyOf(
+        sectionPatch("./providers/memory", "packages/kv/src/index.ts")
+      )
+    ).toBeUndefined();
+  });
+
+  it("ignores a patch of another kind on the sections file", () => {
+    expect(
+      sectionKeyOf({
+        file: CONFIG_SECTIONS_FILE,
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/config",
+        range: "workspace:*",
+      })
+    ).toBeUndefined();
+  });
+});
+
+describe(detectSectionCollisions, () => {
+  it("passes two modules claiming different keys", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "billing", key: "billing" },
+      ])
+    ).toStrictEqual([]);
+  });
+
+  it("reports the pair claiming one key, first claimant first", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "shop", key: "auth" },
+      ])
+    ).toStrictEqual([{ key: "auth", module: "auth", other: "shop" }]);
+  });
+
+  it("reports one pair per earlier claimant", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "a", key: "app" },
+        { module: "b", key: "app" },
+        { module: "c", key: "app" },
+      ])
+    ).toHaveLength(3);
+  });
+
+  it("is not a collision when one module claims its own key twice", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "auth", key: "auth" },
+      ])
+    ).toStrictEqual([]);
+  });
+});
+
+describe(sectionClaims, () => {
+  it("picks the section patches out of a descriptor's patches", () => {
+    expect(
+      sectionClaims("auth", [
+        sectionPatch("./providers/memory", "packages/kv/src/index.ts"),
+        sectionPatch("./sections/auth"),
+      ])
+    ).toStrictEqual([{ module: "auth", key: "auth" }]);
+  });
+
+  it("reads a module with no patches as claiming nothing", () => {
+    expect(sectionClaims("waitlist")).toStrictEqual([]);
+  });
+});
+
+describe(formatSectionCollisions, () => {
+  it("names both modules, the key, and the two ways out", () => {
+    const message = formatSectionCollisions(
+      [{ key: "auth", module: "auth", other: "shop" }],
+      "shop"
+    );
+    expect(message).toContain("Cannot add shop");
+    expect(message).toContain("config.auth");
+    expect(message).toContain("auth and shop");
+  });
+
+  it("pluralises the heading on more than one key", () => {
+    const message = formatSectionCollisions([
+      { key: "auth", module: "auth", other: "shop" },
+      { key: "app", module: "a", other: "b" },
+    ]);
+    expect(message).toContain("section keys claimed twice");
   });
 });

@@ -4,7 +4,8 @@
     "README.md",
     "saasaloy.json",
     "apps/web/src/pages/index.astro",
-    "packages/ui/src/content/landing.ts"
+    "packages/ui/src/content/landing.ts",
+    "packages/config/src/project.ts"
   ],
   "ownedFiles": [
     "packages/ui/src/styles/globals.css",

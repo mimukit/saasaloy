@@ -1,3 +1,4 @@
+import type { RegistryPatch } from "./schema.js";
 import type { LoadedModule } from "./registry.js";
 
 // Cross-module file collisions for `saasaloy add` — the deterministic core, kept beside
@@ -222,4 +223,106 @@ export function formatOwnedCollisions(
   return [heading, ...collisions.map((c) => `  ${describeOwned(c)}`)].join(
     "\n"
   );
+}
+
+// ---------------------------------------------------------------------------
+// Config section keys (#154).
+// ---------------------------------------------------------------------------
+
+/** The registry `@repo/config` keeps its sections in — the file a section patch writes. */
+export const CONFIG_SECTIONS_FILE = "packages/config/src/sections.ts";
+
+/** One module's claim on a section key of `@repo/config`. */
+export interface SectionClaim {
+  module: string;
+  /** The key the section is composed under, e.g. `auth` for `./sections/auth`. */
+  key: string;
+}
+
+export interface SectionCollision {
+  key: string;
+  /** The module that claimed the key first — installed, or earlier in this run. */
+  module: string;
+  /** The later module claiming the same key. */
+  other: string;
+}
+
+/**
+ * The section key a patch claims, or `undefined` when the patch is not a section
+ * registration.
+ *
+ * The key is the basename of the import specifier, because the file the module ships and
+ * the key it composes under are one decision: `./sections/auth` is `config.auth`. No new
+ * descriptor field says it twice, which is what keeps this readable off a published
+ * descriptor with no code loaded.
+ */
+export function sectionKeyOf(patch: RegistryPatch): string | undefined {
+  if (patch.kind !== "plugin-array" || patch.file !== CONFIG_SECTIONS_FILE) {
+    return undefined;
+  }
+  const specifier = patch.import.from;
+  const base = specifier.slice(specifier.lastIndexOf("/") + 1);
+  const key = base.replace(/\.[cm]?tsx?$/, "");
+  return key === "" ? undefined : key;
+}
+
+/** Every section key a module's descriptor claims, in descriptor order. */
+export function sectionClaims(
+  module: string,
+  patches: readonly RegistryPatch[] = []
+): SectionClaim[] {
+  const claims: SectionClaim[] = [];
+  for (const patch of patches) {
+    const key = sectionKeyOf(patch);
+    if (key !== undefined) {
+      claims.push({ module, key });
+    }
+  }
+  return claims;
+}
+
+/**
+ * Every pair of modules claiming one section key, in claim order.
+ *
+ * Unlike a file target, a section key has no legal overlap at all — not even between a
+ * capability and a module that declares it in `dependsOn`. The keys compose into one
+ * object, so the second one either loses its values or throws at module load, and neither
+ * is something `dependsOn` can express consent to. One module claiming its own key twice
+ * (a `--force` re-apply reading the manifest back) is not a collision.
+ */
+export function detectSectionCollisions(
+  claims: readonly SectionClaim[]
+): SectionCollision[] {
+  const byKey = new Map<string, string[]>();
+  const collisions: SectionCollision[] = [];
+  for (const { module, key } of claims) {
+    const prior = byKey.get(key);
+    if (!prior) {
+      byKey.set(key, [module]);
+      continue;
+    }
+    for (const other of prior) {
+      if (other !== module) {
+        collisions.push({ key, module: other, other: module });
+      }
+    }
+    prior.push(module);
+  }
+  return collisions;
+}
+
+/** The refusal `add` prints for a contested section key. One line per key. */
+export function formatSectionCollisions(
+  collisions: SectionCollision[],
+  /** What the user asked for; a caller planning a set with no single request omits it. */
+  requested = "these modules"
+): string {
+  const heading = `Cannot add ${requested} — config section key${collisions.length > 1 ? "s" : ""} claimed twice:`;
+  return [
+    heading,
+    ...collisions.map(
+      ({ key, module, other }) =>
+        `  ${module} and ${other} both contribute config.${key}. A section key is the module name and has to be unique — rename one module's section file and its patch, or drop one of the two.`
+    ),
+  ].join("\n");
 }

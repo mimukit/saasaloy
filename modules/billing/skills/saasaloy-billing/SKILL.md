@@ -55,7 +55,7 @@ The default bills the signed-in user: `customerType` is `"user"`, `referenceId` 
 
 Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPlugin()` maps this list into the plugin's own shape: `providerIds.stripe.monthly` → `priceId`, `.yearly` → `annualDiscountPriceId`, `trialDays` → `freeTrial.days`.
 
-**The landing page keeps its own copy.** The base's `pricing-table` block reads `content/landing.ts`, and nothing patches one file from the other. Change a price and change both.
+**Tier ids and names are shared; prices are not.** Both `src/plans.ts` and the base's `pricing-table` block read `config.plans.tiers.*` for a tier's `id` and `name`, so rename a tier in `packages/config/src/project.ts` and both follow. A price is still written twice — marketing copy in `content/landing.ts`, a Stripe price id here — and nothing reconciles them, so change both.
 
 ## The routes
 
@@ -178,7 +178,7 @@ Every billing side effect runs as a queue consumer or a scheduled job. None of t
 | `billing.past-due-lockout`, daily at 03:00 UTC | `queue.schedules` → `queue.jobs` | Sets `lockedAt` on `past_due` rows last touched more than `BILLING_LOCKOUT_DAYS` ago, and sends `account-locked`. Idempotent: a locked row is out of the next sweep's set. |
 | `payment.succeeded` (`invoice.paid`) | `billing.event` consumer | Clears `lockedAt`. |
 
-The three templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/billing-store.ts` chooses which one to render and fills in `BILLING_APP_NAME` and `BILLING_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
+The three templates ship into `@email/templates/` and are ordinary email templates — edit them there. `apps/api/src/billing-store.ts` chooses which one to render and fills in the app name — `config.billing.appName`, falling back to `config.app.name`, both in `packages/config/src/project.ts` — and `BILLING_APP_URL` (an absolute `https:` URL, or `http://localhost:*`; the renderer refuses anything else).
 
 `packages/billing` sends nothing itself. It decides *when* an email is owed and *to whom* through two ports — `setBillingNotifier` in `src/notify.ts` and `BillingStore.recipientFor` — and `apps/api/src/billing-store.ts` supplies both, next to the store resolver and the enqueuer. That is what keeps `@repo/email` out of the core. A subject with no resolvable address is a skip, not a failure: the state write has already happened, and a job that retried forever over a deleted user's trial reminder would be worse.
 

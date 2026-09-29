@@ -2,7 +2,8 @@
   "base": "web",
   "aliases": {
     "@web": "apps/web/src",
-    "@ui": "packages/ui/src"
+    "@ui": "packages/ui/src",
+    "@config": "packages/config/src"
   },
   "installed": []
 }
