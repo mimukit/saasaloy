@@ -379,6 +379,10 @@ are informational: neither writes a change and neither affects the `deps:check` 
 - `--dry-run` — **print-only preview**: prints the report and the "would update" list a
   default apply would make, then stops. It never opens the picker and never writes.
 
+**`wrangler` and `@cloudflare/vite-plugin` move together.** Each plugin release refuses to start a dev server against a wrangler older than the one it was released with. `@astrojs/cloudflare` takes the plugin through a caret range, so the web template pins the plugin as a direct devDependency, which makes pnpm install that version for the adapter too (issue #186). Take both bumps in one `deps:update` run. `verify-pins` fails when the plugin pin differs between `apps/web` and `apps/api`, or when any Cloudflare workspace pins a different `wrangler`. The pin in `database-d1`'s patch range is not a `package.json`, so `verify-pins` does not read it; keep it on the same version by hand.
+
+**`deps:verify` runs `git init` in the playground.** `saasaloy init` skips `git init` inside an existing repository, and `.dev/` sits inside this one. With no `.git` of its own, the playground inherits this repo's `.gitignore`, which ignores `/.dev/`, so oxlint finds no files and the lint step fails with "No files found to lint".
+
 **Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
 repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
 
@@ -386,7 +390,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | --- | --- |
 | `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--allow-fresh`, `--dry-run`) |
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
-| `pnpm deps:verify` | `play:init` → install → build → `verify-css` → typecheck the generated project (post-update gate) |
+| `pnpm deps:verify` | `verify-pins` → `play:init` → `git init` → install → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
