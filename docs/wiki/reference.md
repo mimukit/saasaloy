@@ -64,8 +64,8 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 
 `init` runs `git init` in the scaffolded project before the install, because husky's
 `prepare` script installs its hooks during `pnpm install` and needs a repository to install
-them into. It is skipped when the target already sits inside a working tree, so
-`saasaloy init .` in an existing repo does not nest a second one, and a failure warns rather
+them into. It is skipped when the target already sits inside a working tree that tracks it, so
+`saasaloy init .` in an existing repo does not nest a second one. A target the outer repository ignores gets its own repository. A failure warns rather
 than aborting the scaffold.
 
 Like every other command, `init` rejects a flag it does not know with exit 2.

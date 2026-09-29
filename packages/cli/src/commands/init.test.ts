@@ -6,6 +6,7 @@ import {
   rm,
   writeFile,
 } from "node:fs/promises";
+import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
@@ -16,7 +17,7 @@ import { loadManifest } from "../lib/manifest.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { readVersion } from "../version.js";
 import { stripAnsi } from "../lib/tui.js";
-import { parseArgs, runInit } from "./init.js";
+import { initGitRepo, parseArgs, runInit } from "./init.js";
 
 // `init` is the one command that copies the bundled template rather than fetching
 // anything, so it is testable offline end to end. The scaffold cases below run it with
@@ -299,6 +300,40 @@ describe("runInit — base state persistence", () => {
     } finally {
       await rm(target, { recursive: true, force: true });
     }
+  });
+});
+
+describe("initGitRepo — the nesting guard (ADR 0024)", () => {
+  let outer: string;
+
+  beforeAll(async () => {
+    outer = join(dir, "outer");
+    await mkdir(join(outer, "ignored", "app"), { recursive: true });
+    await mkdir(join(outer, "tracked", "app"), { recursive: true });
+    await writeFile(join(outer, ".gitignore"), "/ignored/\n");
+    execFileSync("git", ["init", "--quiet"], { cwd: outer });
+  });
+
+  it("initialises a directory outside any repository", async () => {
+    const target = join(dir, "standalone");
+    await mkdir(target, { recursive: true });
+    await expect(initGitRepo(target)).resolves.toStrictEqual({ created: true });
+    await expect(pathExists(join(target, ".git"))).resolves.toBeTruthy();
+  });
+
+  it("does not nest a repository where the outer one tracks the target", async () => {
+    const target = join(outer, "tracked", "app");
+    await expect(initGitRepo(target)).resolves.toStrictEqual({
+      created: false,
+    });
+    await expect(pathExists(join(target, ".git"))).resolves.toBeFalsy();
+  });
+
+  // `.dev/playground` inside this repository is the case this guard exists for.
+  it("initialises a directory the outer repository ignores", async () => {
+    const target = join(outer, "ignored", "app");
+    await expect(initGitRepo(target)).resolves.toStrictEqual({ created: true });
+    await expect(pathExists(join(target, ".git"))).resolves.toBeTruthy();
   });
 });
 
