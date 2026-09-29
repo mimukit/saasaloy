@@ -1,0 +1,43 @@
+# The tarball smoke on a timer. `pnpm release:smoke` packs the CLI, scaffolds a project
+# from the tarball, installs it from the network, and starts the web app's `astro dev`.
+#
+# It runs on a schedule because the break it looks for arrives with no commit of ours.
+# The web template reaches `@cloudflare/vite-plugin` through a range in
+# `@astrojs/cloudflare`, and on 2026-09-27 plugin 1.61.0 stopped every fresh project's
+# dev server while `main` did not change (issue #186). A push-triggered job would have
+# stayed green. The same reason keeps it out of ci.yml: a network install
+# on every push turns a registry outage into a red build on an unrelated change.
+#
+# The release preflight runs the same script before every release, so this is the early
+# warning, not the only check.
+name: smoke
+
+on:
+  schedule:
+    # 06:17 UTC daily. Off the hour, because GitHub delays jobs queued on the hour.
+    - cron: "17 6 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  release-smoke:
+    name: release-smoke
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version` key: the action reads `packageManager` from package.json, the same
+      # as ci.yml.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm release:smoke

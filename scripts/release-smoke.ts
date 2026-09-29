@@ -7,9 +7,16 @@
 // closes that gap: it packs, installs the tarball into a directory that is not a workspace
 // member, and drives `init` and `add` through the installed bin.
 //
-// It runs OFFLINE. `add` points at the repo's own `modules/` through SAASALOY_REGISTRY_DIR,
-// so what is under test is the packed artifact and not GitHub's uptime. The remote fetch
-// path is a separate, deliberate manual check before the first publish.
+// The CLI steps run OFFLINE. `add` points at the repo's own `modules/` through
+// SAASALOY_REGISTRY_DIR, so what is under test is the packed artifact and not GitHub's
+// uptime. The remote fetch path is a separate, deliberate manual check before the first
+// publish.
+//
+// The last step is the one exception, and it needs the npm registry. It installs the
+// scaffolded project and starts the web app's `astro dev` (issue #186). A dependency the
+// template reaches through a range can move under our exact pins with no change on our
+// side, and then a fresh project's dev server fails for everyone. Only a real install
+// finds that, so `.github/workflows/smoke.yml` runs this script on a schedule as well.
 //
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
@@ -17,7 +24,7 @@
 // Imports nothing but node: builtins. Node 24 strips the types, so there is no build step;
 // `pnpm typecheck` checks it via tsconfig.scripts.json.
 
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
@@ -48,6 +55,25 @@ const ADD_FILES = [
   "apps/api/package.json",
   "apps/api/src/index.ts",
   "saasaloy-lock.json",
+];
+
+/** The web app's pinned dev origin, from `apps/web/astro.config.mjs` (`strictPort`). */
+const WEB_DEV_URL = "http://localhost:3000/";
+
+/**
+ * How long the web dev server gets to answer. A cold start measured 36.6s on a dev box
+ * (plan 0066, Phase 0), and a CI runner is slower, so this leaves room for both.
+ */
+const WEB_DEV_TIMEOUT_MS = 180_000;
+
+/**
+ * Log lines that mean a React component threw during the server render. React writes
+ * these to the log and Astro still answers 200 with the HTML around the failed block, so
+ * the status code alone does not show the fault.
+ */
+const RENDER_ERROR_PATTERNS = [
+  /Invalid hook call/,
+  /Cannot read properties of null \(reading 'use[A-Z]\w*'\)/,
 ];
 
 export interface SmokeOptions {
@@ -90,6 +116,20 @@ export function findWorkspaceDeps(manifest: Record<string, unknown>): string[] {
     }
   }
   return offenders;
+}
+
+/**
+ * Every log line that reports a React render fault. Exported for its own test.
+ *
+ * Two copies of React in the server bundle (issue #186) show up as "Invalid hook call"
+ * and as a hook read off a null dispatcher, so the check matches both and nothing wider.
+ */
+export function findRenderErrors(log: string): string[] {
+  return log
+    .split("\n")
+    .filter((line) =>
+      RENDER_ERROR_PATTERNS.some((pattern) => pattern.test(line))
+    );
 }
 
 function fail(message: string, ...detail: string[]): never {
@@ -149,6 +189,84 @@ async function assertExists(
       `${label} did not write ${String(missing.length)} expected file(s)`,
       ...missing.map((file) => join(relative(root, dir), file))
     );
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((done) => {
+    setTimeout(done, ms);
+  });
+}
+
+/**
+ * Start `astro dev` in the scaffolded web app, request the home page, and stop the
+ * server. Returns `null` when the page answers 200 with a clean log, or the reason it
+ * failed with the log tail.
+ *
+ * `ASTRO_DEV_BACKGROUND=1` keeps the server in this child. Astro 7 detaches the server
+ * when it detects a coding agent and returns at once, which would leave the log in
+ * `.astro/dev.log` and a child here that is not the server. Astro sets this variable on
+ * the process it detaches, and the process that sees it skips the agent check and serves
+ * in place. `--ignore-lock` looks like the public switch for this, but Astro 7.3.1 refuses
+ * it outright when it detects an agent. `detached` gives the server its own process
+ * group, so the stop reaches workerd as well.
+ */
+async function checkWebDev(webDir: string): Promise<string | null> {
+  const server = spawn("pnpm", ["exec", "astro", "dev"], {
+    cwd: webDir,
+    detached: true,
+    env: { ...process.env, ASTRO_DEV_BACKGROUND: "1" },
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let log = "";
+  server.stdout.on("data", (chunk: Buffer) => {
+    log += chunk.toString();
+  });
+  server.stderr.on("data", (chunk: Buffer) => {
+    log += chunk.toString();
+  });
+  let exitCode: number | null | undefined;
+  server.on("exit", (code) => {
+    exitCode = code;
+  });
+
+  const tail = (): string => log.trim().split("\n").slice(-20).join("\n");
+
+  try {
+    const deadline = Date.now() + WEB_DEV_TIMEOUT_MS;
+    while (Date.now() < deadline) {
+      if (exitCode !== undefined) {
+        return `astro dev exited with code ${String(exitCode)} before it answered.\n${tail()}`;
+      }
+      let status: number | undefined;
+      try {
+        const response = await fetch(WEB_DEV_URL);
+        await response.arrayBuffer();
+        ({ status } = response);
+      } catch {
+        // Not listening yet.
+      }
+      if (status !== undefined) {
+        if (status !== 200) {
+          return `${WEB_DEV_URL} answered ${String(status)}, not 200.\n${tail()}`;
+        }
+        const errors = findRenderErrors(log);
+        if (errors.length > 0) {
+          return `${WEB_DEV_URL} answered 200, but the server render logged ${String(errors.length)} React error(s):\n${errors.slice(0, 5).join("\n")}`;
+        }
+        return null;
+      }
+      await sleep(1000);
+    }
+    return `${WEB_DEV_URL} did not answer within ${String(WEB_DEV_TIMEOUT_MS / 1000)}s.\n${tail()}`;
+  } finally {
+    if (server.pid !== undefined && exitCode === undefined) {
+      try {
+        process.kill(-server.pid, "SIGTERM");
+      } catch {
+        // Already gone.
+      }
+    }
   }
 }
 
@@ -263,13 +381,24 @@ async function main(): Promise<void> {
   });
   await assertExists(projectDir, ADD_FILES, "add api");
 
+  // --- Start the web app's dev server (needs the network) ---------------------------
+
+  step("installing the scaffolded project with pnpm");
+  run("pnpm", ["install"], "pnpm install", { cwd: projectDir });
+
+  step(`starting \`astro dev\` in apps/web and requesting ${WEB_DEV_URL}`);
+  const devFailure = await checkWebDev(join(projectDir, "apps/web"));
+  if (devFailure !== null) {
+    fail("the web app's dev server failed", ...devFailure.split("\n"));
+  }
+
   if (!options.keep) {
     await rm(scratch, { force: true, recursive: true });
   }
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, and scaffolds a project that takes the api module.${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, and scaffolds a project that takes the api module and serves its web app in dev.${kept}`
   );
 }
 
