@@ -5,6 +5,7 @@
 [![npm version](https://img.shields.io/npm/v/saasaloy)](https://www.npmjs.com/package/saasaloy)
 [![CI](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml/badge.svg)](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE.md)
+[![CodeRabbit Pull Request Reviews](https://img.shields.io/coderabbit/prs/github/mimukit/saasaloy?utm_source=oss&utm_medium=github&utm_campaign=mimukit%2Fsaasaloy&color=FF570A&link=https%3A%2F%2Fcoderabbit.ai&label=CodeRabbit+Reviews)](https://coderabbit.ai)
 
 > [!WARNING]
 > **Saasaloy is at a very early stage.** It is a working proof of concept, not a finished product. Use it at your own risk, and do not build a production project on it yet. The CLI, the module contracts, the generated code and the conventions can all change or break between releases until a stable `1.x.x` version ships. Pin the version you install, read the changelog before you update, and expect to do some manual merging along the way.
