@@ -1,0 +1,20 @@
+{
+  "name": "@repo/e2e",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "e2e": "node prepare-db.ts && playwright test",
+    "e2e:ui": "node prepare-db.ts && playwright test --ui",
+    "e2e:install": "playwright install chromium",
+    "clean": "rimraf -g playwright-report test-results .auth \"*.tsbuildinfo\"",
+    "typecheck": "tsc --noEmit -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@repo/tsconfig": "workspace:*",
+    "@types/node": "26.4.1",
+    "rimraf": "6.1.3",
+    "typescript": "7.0.2"
+  }
+}

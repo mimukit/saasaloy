@@ -420,5 +420,33 @@ export default defineConfig({
       files: ["modules/infra/files/**"],
       rules: { "no-console": "off" },
     },
+    // The `e2e` module's payload is a Playwright workspace, and the vitest preset's file
+    // glob (`**/*.{test,spec,…}`) claims its specs. Those files call a `test` and an
+    // `expect` from `@playwright/test`, so every vitest rule reading them reports on an API
+    // that is not there: `prefer-importing-vitest-globals` wants an import from a package
+    // this workspace does not have, and `consistent-test-filename` wants `.test.ts` for a
+    // file Playwright's own convention names `.spec.ts`.
+    //
+    // Derived from the preset rather than listed by hand, so a preset bump cannot reopen
+    // the gap. The scaffolded project's own config carries the same override for
+    // `packages/e2e/**`; see `packages/cli/templates/base/oxlint.config.mjs`.
+    //
+    // `no-console` is off for the same reason it is off for `scripts/**`: `prepare-db.ts`
+    // and `global-teardown.ts` report what they did to stdout, which is the only place a
+    // headless run can say anything.
+    //
+    // KEEP THIS LAST. oxlint lets the last matching override win.
+    {
+      files: ["modules/e2e/files/**"],
+      plugins: ["vitest"],
+      rules: {
+        ...Object.fromEntries(
+          (vitest.overrides ?? []).flatMap((override) =>
+            Object.keys(override.rules ?? {}).map((rule) => [rule, "off"])
+          )
+        ),
+        "no-console": "off",
+      },
+    },
   ],
 });

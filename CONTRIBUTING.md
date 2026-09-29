@@ -429,6 +429,14 @@ it by hand after touching a block or the content module; it is **not** in `deps:
 which builds a playground to answer a different question.
 
 
+`verify-e2e` (`scripts/verify-e2e.ts`, run with `pnpm verify:e2e`) is the gate for the **`e2e` module**. Every other script here checks a file; this one checks that what we ship actually works. It scaffolds a playground, adds the driver plus `auth`, `admin`, `waitlist` and `e2e` through the local-registry shim, places the waitlist block the way a project owner would, installs, downloads Chromium, and runs `pnpm e2e` — so the apps start, a browser signs in, a form submits and a guarded route refuses an anonymous caller, or the gate is red.
+
+`--driver=d1` is the default and `--driver=postgres` is the other half. Run both when the module or the base template moves: the driver split is this repo's load-bearing claim, and a suite verified under one driver proves the opposite of what it exists to prove.
+
+It is **deliberately not part of `deps:verify`** — it downloads a browser and takes minutes, so the standing green gate cannot carry it. CI runs it as a two-job matrix on a `modules/**` and `packages/cli/templates/**` path filter.
+
+`scripts/e2e-tags.test.ts` is the cheap half of the same guard and does run in `pnpm test`. It asserts every tag in the suite's `SPEC_TAGS` names a real directory under `modules/`, and that every tag a spec writes is declared. A tag naming no module is never in any project's `installed`, so its spec is uncollected everywhere and the suite still reports green — which is exactly what a module rename would cause.
+
 ## Releasing
 
 Only the maintainer releases. There is no automated publish: CI is a gate and never touches npm, and every release is cut by hand from a `main` checkout.

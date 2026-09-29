@@ -1,0 +1,98 @@
+# The browser gate for the `e2e` module. It scaffolds a project, installs it, starts the
+# apps and drives them with headless Chromium — the one check in this repo that proves what
+# we ship works rather than that a file looks right.
+#
+# It is a separate workflow from `ci.yml` on purpose. `ci.yml` is four fast scripts that run
+# on every push, and this is minutes of install plus a browser download. A path filter keeps
+# it off a change that cannot affect it.
+#
+# Two jobs, one per database driver. `db:setup` hides the difference, so the two differ by a
+# flag and nothing else. Postgres comes from a service container reached through
+# `db:setup --server`, which is also the one backend nothing else in the repo covers.
+name: e2e
+
+on:
+  pull_request:
+    paths:
+      - "modules/**"
+      - "packages/cli/templates/**"
+      - "scripts/verify-e2e.ts"
+      - ".github/workflows/e2e.yml"
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  suite:
+    name: suite (${{ matrix.driver }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Both drivers report. One red and one green is the interesting result, and
+      # fail-fast would throw it away.
+      fail-fast: false
+      matrix:
+        driver: [d1, postgres]
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Keyed by the Playwright pin, so a bump downloads a fresh browser and an unchanged
+      # pin never does.
+      - name: Cache the Chromium download
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('modules/e2e/files/package.json') }}
+
+      # The playground downloads its own browser through `pnpm e2e:install`, which fetches
+      # the binary and nothing else. The system libraries it needs are not on a bare runner,
+      # and installing them needs root — so do that here, once, for the whole job.
+      - name: Install the browser's system libraries
+        run: pnpm dlx playwright@1.63.0 install-deps chromium
+
+      # `--server` tells the postgres driver to create the project's own database on the
+      # server `DATABASE_URL` names — the service container above — rather than starting a
+      # container of its own. The d1 job needs neither and passes neither.
+      - name: Run the suite
+        run: pnpm verify:e2e --driver=${{ matrix.driver }}
+        env:
+          DATABASE_URL: ${{ matrix.driver == 'postgres' && 'postgres://postgres:postgres@127.0.0.1:5432/postgres' || '' }}
+          E2E_DB_SETUP_ARGS: ${{ matrix.driver == 'postgres' && '--server' || '' }}
+
+      # The report is what makes a red run readable. Only on failure: a green run's
+      # artifact is noise nobody opens.
+      - name: Upload the report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.driver }}
+          path: |
+            .dev/playground/packages/e2e/playwright-report
+            .dev/playground/packages/e2e/test-results
+          retention-days: 7

@@ -10,6 +10,23 @@ pnpm install
 pnpm dev        # astro dev on apps/web
 ```
 
+## Test
+
+```sh
+pnpm test       # vitest, every *.test.ts under apps/* and packages/*
+```
+
+One vitest is pinned at the root and configured in `vitest.config.ts`; a workspace needs no config and no dependency of its own. `packages/ui/src/lib/interpolate.test.ts` is the worked example — put a test beside the source it covers and name it `<source>.test.ts`.
+
+`saasaloy add e2e` adds the browser suite on top of this. It brings Playwright, four flows against the running app, and its own commands:
+
+```sh
+pnpm e2e:install    # download the Chromium binary, once per machine
+pnpm e2e            # start the apps, run the flows, stop what it started
+```
+
+`pnpm test` stays unit-only; the two runners never read each other's files.
+
 ## Deploy
 
 ```sh

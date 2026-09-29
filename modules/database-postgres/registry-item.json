@@ -23,6 +23,42 @@
     },
     {
       "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:setup",
+      "value": "node scripts/setup.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:status",
+      "value": "node scripts/status.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:drop",
+      "value": "node scripts/drop.ts"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:setup",
+      "value": "pnpm --filter @repo/db db:setup"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:status",
+      "value": "pnpm --filter @repo/db db:status"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:drop",
+      "value": "pnpm --filter @repo/db db:drop"
+    },
+    {
+      "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
       "name": "postgres",
@@ -40,11 +76,16 @@
     {
       "path": "files/src/client.ts",
       "target": "@db/client.ts"
+    },
+    {
+      "path": "files/compose.yaml",
+      "target": "@root/compose.yaml"
     }
   ],
   "scaffolds": [
     {
       "workspace": "packages/db",
+      "aliases": { "@root": "." },
       "files": [
         {
           "path": "files/drizzle.config.ts",
@@ -53,6 +94,50 @@
         {
           "path": "files/tsconfig.json",
           "target": "tsconfig.json"
+        },
+        {
+          "path": "files/scripts/setup.ts",
+          "target": "scripts/setup.ts"
+        },
+        {
+          "path": "files/scripts/status.ts",
+          "target": "scripts/status.ts"
+        },
+        {
+          "path": "files/scripts/drop.ts",
+          "target": "scripts/drop.ts"
+        },
+        {
+          "path": "files/scripts/lib/branch-name.ts",
+          "target": "scripts/lib/branch-name.ts"
+        },
+        {
+          "path": "files/scripts/lib/context.ts",
+          "target": "scripts/lib/context.ts"
+        },
+        {
+          "path": "files/scripts/lib/env-file.ts",
+          "target": "scripts/lib/env-file.ts"
+        },
+        {
+          "path": "files/scripts/lib/state.ts",
+          "target": "scripts/lib/state.ts"
+        },
+        {
+          "path": "files/scripts/lib/url.ts",
+          "target": "scripts/lib/url.ts"
+        },
+        {
+          "path": "files/scripts/backends/docker.ts",
+          "target": "scripts/backends/docker.ts"
+        },
+        {
+          "path": "files/scripts/backends/neon.ts",
+          "target": "scripts/backends/neon.ts"
+        },
+        {
+          "path": "files/scripts/backends/server.ts",
+          "target": "scripts/backends/server.ts"
         }
       ]
     }

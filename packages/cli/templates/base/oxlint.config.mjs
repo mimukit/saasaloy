@@ -2,6 +2,7 @@ import { defineConfig } from "oxlint";
 import astro from "ultracite/oxlint/astro";
 import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
+import vitest from "ultracite/oxlint/vitest";
 
 // Run it as `oxlint -c oxlint.config.mjs` — the flag is not optional. oxlint only
 // auto-discovers `.oxlintrc.json`, and a JSON config cannot `extends` Ultracite's
@@ -9,8 +10,7 @@ import react from "ultracite/oxlint/react";
 // modules. The JS config format is experimental and needs Node.js, which this
 // project already requires (>= 24).
 //
-// Add `ultracite/oxlint/tanstack` when an admin SPA lands, and
-// `ultracite/oxlint/vitest` when the first test file does. The full preset list is
+// Add `ultracite/oxlint/tanstack` when an admin SPA lands. The full preset list is
 // angular, astro, core, jest, js-plugins, nestjs, next, qwik, react, remix, solid,
 // svelte, tanstack, vitest, vue.
 
@@ -39,7 +39,19 @@ function mergePresets(...presets) {
   return merged;
 }
 
-const ultracite = mergePresets(core, astro, react);
+const ultracite = mergePresets(core, astro, react, vitest);
+
+// Every rule the vitest preset turns on, mapped to "off". The preset's file glob is
+// `**/*.{test,spec,…}`, which also matches the Playwright specs `saasaloy add e2e` puts
+// in `packages/e2e/specs/`. Those files call a `test` and an `expect` from
+// `@playwright/test`, so a vitest rule reading them reports on an API that is not there.
+// Derived from the preset rather than listed by hand, so a preset bump cannot reopen the
+// gap. The override that uses it is last, and oxlint lets the last override win.
+const vitestRulesOff = Object.fromEntries(
+  (vitest.overrides ?? []).flatMap((override) =>
+    Object.keys(override.rules ?? {}).map((rule) => [rule, "off"])
+  )
+);
 
 // Rules turned off for the whole project, each with its reason. Ultracite enables
 // ~470, including whole families oxlint itself files under `style`, `pedantic` and
@@ -150,6 +162,18 @@ export default defineConfig({
     {
       files: ["packages/*/src/providers/console.ts", "packages/logger*/**"],
       rules: { "no-console": "off" },
+    },
+
+    // The Playwright workspace. Keep this override last — see `vitestRulesOff` above.
+    // `no-console` is off here too: the suite's setup and teardown report what they did
+    // to stdout, which is the only place a headless run can say anything.
+    {
+      files: ["packages/e2e/**"],
+      env: { node: true },
+      // `plugins` is not optional here. oxlint only honours a rule turned off in an
+      // override when that override also names the rule's plugin.
+      plugins: ["vitest"],
+      rules: { ...vitestRulesOff, "no-console": "off" },
     },
   ],
 });

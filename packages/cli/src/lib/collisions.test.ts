@@ -121,6 +121,25 @@ describe("detectCollisions — an illegal overlap", () => {
     ] satisfies FileCollision[]);
   });
 
+  // The `@root` alias gives the project root more than one possible writer, and a root
+  // file carries no workspace prefix to keep two modules apart (#152).
+  it("refuses two unrelated modules that write the same repo-root file", () => {
+    const found = detectCollisions({
+      planned: [
+        targets("database-postgres", "compose.yaml"),
+        targets("search-meili", "compose.yaml"),
+      ],
+      modules: modules(mod("database-postgres"), mod("search-meili")),
+    });
+    expect(found).toStrictEqual([
+      {
+        target: "compose.yaml",
+        module: "database-postgres",
+        other: "search-meili",
+      },
+    ] satisfies FileCollision[]);
+  });
+
   it("refuses a sibling pair under one capability, which depends on neither way", () => {
     const found = detectCollisions({
       planned: [
