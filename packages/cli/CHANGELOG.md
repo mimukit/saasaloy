@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.5.1](https://github.com/mimukit/saasaloy/compare/v0.5.0...v0.5.1) (2026-09-29)
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** remove no longer lets a failed state-file save mask
+  the error that stopped the run, and all three saves now run on every
+  exit rather than stopping at the first throw.
+
+### Features
+
+* **cli:** add the nav-entry patch kind ([4e3b3fd](https://github.com/mimukit/saasaloy/commit/4e3b3fdb2bd513725640b443a2eafcbf61852d25))
+* **infra:** deploy assets-only workers ([1c369cf](https://github.com/mimukit/saasaloy/commit/1c369cfae40425754c527bfc17e4ff1ac740d1d2)), references [#180](https://github.com/mimukit/saasaloy/issues/180)
+
+### Bug Fixes
+
+* **infra:** accept trailing commas in wrangler.jsonc ([d1d96a0](https://github.com/mimukit/saasaloy/commit/d1d96a0b4e5abb5e6907e35fff23af58fa697d71)), references [#180](https://github.com/mimukit/saasaloy/issues/180)
+* **modules:** move admin nav rows onto nav-entry ([53f0dda](https://github.com/mimukit/saasaloy/commit/53f0ddafca0ef3a14c4116f146c83b6c607f699b))
+* **ui:** narrow the theme value with a type guard ([9d7266f](https://github.com/mimukit/saasaloy/commit/9d7266fde4edb7e269f4dcc1ce34db862f284610))
+
+### Code Refactoring
+
+* **cli:** route every state-file write through one ledger ([6073eae](https://github.com/mimukit/saasaloy/commit/6073eae7840005361fa4b4d269516ea7e2e9ded9)), closes [#150](https://github.com/mimukit/saasaloy/issues/150)
+
 ## [0.5.0](https://github.com/mimukit/saasaloy/compare/v0.4.0...v0.5.0) (2026-09-12)
 
 ### ⚠ BREAKING CHANGES
