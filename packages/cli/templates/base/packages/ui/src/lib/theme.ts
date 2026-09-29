@@ -124,6 +124,48 @@ export function relabelThemeToggles(theme?: Theme): void {
   }
 }
 
+// The toggle's click handler, installed by `installThemeToggle` below. It lives at module
+// scope because it reads nothing from that function, and one identity per page means a
+// second install adds no second listener.
+function onClick(event: MouseEvent): void {
+  const { target } = event;
+  if (!(target instanceof Element)) {
+    return;
+  }
+  if (!target.closest(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
+    return;
+  }
+
+  const painted = document.documentElement.getAttribute(THEME_ATTRIBUTE);
+  // An unrecognised `data-theme` gives index -1 and starts the cycle at the head of
+  // THEME_ORDER.
+  const index = isTheme(painted) ? THEME_ORDER.indexOf(painted) : -1;
+  const next = THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? "light";
+
+  setTheme(next);
+
+  // After `setTheme`, and unconditionally: a `system` press CLEARS THEME_STORAGE_KEY, so
+  // this key is the only record that the visitor pressed anything at all.
+  try {
+    localStorage.setItem(THEME_CHOICE_KEY, "1");
+  } catch {
+    // Unwritable storage costs persistence, not the current page.
+  }
+}
+
+// The OS half of the same job, and the reason this is not click-only. THEME_INIT_SCRIPT
+// registers its own matchMedia listener; a host that calls `installThemeToggle` instead
+// does not have that script, so without this listener a visitor on `system` keeps the
+// palette resolved at load until the next reload.
+//
+// It repaints only while the state is `system`. A visitor who picked light or dark said
+// so deliberately, and the OS must not overrule that.
+function onOsChange(): void {
+  if (getStoredTheme() === "system") {
+    setTheme("system");
+  }
+}
+
 /**
  * Install the toggle's click behaviour on `document`, and answer with a function that
  * removes it again.
@@ -139,46 +181,7 @@ export function relabelThemeToggles(theme?: Theme): void {
  * the same value forever and every press would land on the same theme.
  */
 export function installThemeToggle(): () => void {
-  function onClick(event: MouseEvent): void {
-    const { target } = event;
-    if (!(target instanceof Element)) {
-      return;
-    }
-    if (!target.closest(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
-      return;
-    }
-
-    const painted = document.documentElement.getAttribute(THEME_ATTRIBUTE);
-    // An unrecognised `data-theme` gives index -1 and starts the cycle at the head of
-    // THEME_ORDER.
-    const index = isTheme(painted) ? THEME_ORDER.indexOf(painted) : -1;
-    const next = THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? "light";
-
-    setTheme(next);
-
-    // After `setTheme`, and unconditionally: a `system` press CLEARS THEME_STORAGE_KEY, so
-    // this key is the only record that the visitor pressed anything at all.
-    try {
-      localStorage.setItem(THEME_CHOICE_KEY, "1");
-    } catch {
-      // Unwritable storage costs persistence, not the current page.
-    }
-  }
-
-  // The OS half of the same job, and the reason this is not click-only. THEME_INIT_SCRIPT
-  // registers its own matchMedia listener; a host that calls this function instead does
-  // not have that script, so without this listener a visitor on `system` keeps the palette
-  // resolved at load until the next reload.
-  //
-  // It repaints only while the state is `system`. A visitor who picked light or dark said
-  // so deliberately, and the OS must not overrule that.
   const media = window.matchMedia(OS_DARK_QUERY);
-
-  function onOsChange(): void {
-    if (getStoredTheme() === "system") {
-      setTheme("system");
-    }
-  }
 
   document.addEventListener("click", onClick);
   media.addEventListener("change", onOsChange);
