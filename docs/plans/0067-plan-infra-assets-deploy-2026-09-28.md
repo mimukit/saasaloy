@@ -67,7 +67,7 @@ Rejected, a line each:
 - Point `assets.directory` at `dist/client` and accept the leak: it publishes `.dev.vars` and `wrangler.json`.
 - Read the adapter's generated `wrangler.json`: it adds nothing today and ties `infra` to one framework's output path.
 
-### Phase 1: translate an assets-only service (#180)
+### Phase 1: translate an assets-only service (#180) (built 2026-09-28)
 
 - [ ] `WranglerConfig` in `src/discover.ts` types the `assets` block (`directory`, `not_found_handling`, `html_handling`)
 - [ ] discovery throws when two services resolve to one name, naming both paths
@@ -81,7 +81,7 @@ Rejected, a line each:
 - [ ] `pulumi preview` against a base (with the build fix applied) lists one `WorkersScript` and one `WorkersScriptSubdomain` for `web` and throws nothing
 - [ ] the same holds with `admin` added
 
-### Phase 2: workspace scripts and ignore (#180)
+### Phase 2: workspace scripts and ignore (#180) (built 2026-09-28)
 
 - [ ] `infra/package.json` has `stack:init`, `clean` and `test`, with `rimraf`, `ignore` and `vitest` exact-pinned
 - [ ] `registry-item.json` scaffolds `files/_gitignore` to `infra/.gitignore`, listing `.stage/`

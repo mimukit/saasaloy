@@ -1,13 +1,22 @@
 import { createHash } from "node:crypto";
 import { execFile } from "node:child_process";
 import { readFile } from "node:fs/promises";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { promisify } from "node:util";
 import * as cloudflare from "@pulumi/cloudflare";
 import type * as pulumi from "@pulumi/pulumi";
-import type { DiscoveredService, WranglerConfig } from "./discover.js";
+import type {
+  DiscoveredService,
+  WranglerAssets,
+  WranglerConfig,
+} from "./discover.js";
+import { stageAssets } from "./stage.js";
 
 const execFileAsync = promisify(execFile);
+
+// Where each assets-only service's filtered copy is staged: `infra/.stage/<service>/`,
+// listed in infra's .gitignore. See src/stage.ts for why the copy exists.
+const STAGE_ROOT = join(import.meta.dirname, "..", ".stage");
 
 // wrangler.jsonc keys every shipped service carries that describe the Worker itself,
 // never a binding to translate — anything else falls through to the loud-fail default.
@@ -15,6 +24,7 @@ const NON_BINDING_KEYS = new Set([
   "$schema",
   "name",
   "main",
+  "assets",
   "compatibility_date",
   "compatibility_flags",
 ]);
@@ -36,9 +46,10 @@ export interface ServiceResources {
  * Translate one discovered service's wrangler.jsonc into Cloudflare Pulumi resources
  * (ADR 0021's translation layer — the maintained core of `infra`). Builds the service,
  * provisions a D1Database per `d1_databases` entry, maps `vars` to plain-text bindings,
- * and deploys the built bundle as a WorkersScript. Any binding kind beyond that throws
- * loudly rather than silently shipping without its resource — the v1 contract is "ship
- * what's declared", never "best-effort".
+ * and deploys the built bundle as a WorkersScript. An assets-only service (`assets`,
+ * no `main`) deploys a staged copy of its assets instead. Any binding kind beyond that
+ * throws loudly rather than silently shipping without its resource — the v1 contract is
+ * "ship what's declared", never "best-effort".
  */
 export async function toResources(
   service: DiscoveredService,
@@ -56,9 +67,17 @@ export async function toResources(
       throw new Error(`infra doesn't support '${key}' yet`);
     }
   }
+  if (config.assets && config.main) {
+    throw new Error(
+      "infra doesn't support 'assets' on a Worker with 'main' yet"
+    );
+  }
 
   await buildService(dir);
-  const { content, contentSha256 } = await readBundle(dir, config);
+  // An assets-only Worker sends no script part: no content, hash or main module.
+  const worker = config.assets
+    ? { assets: await readAssets(name, dir, config.assets) }
+    : { ...(await readBundle(dir, config)), mainModule: "index.js" };
 
   const databases: cloudflare.D1Database[] = [];
   const bindings: cloudflare.types.input.WorkersScriptBinding[] = [];
@@ -96,9 +115,7 @@ export async function toResources(
   const script = new cloudflare.WorkersScript(name, {
     accountId,
     scriptName: name,
-    content,
-    contentSha256,
-    mainModule: "index.js",
+    ...worker,
     compatibilityDate: config.compatibility_date,
     compatibilityFlags: config.compatibility_flags,
     bindings,
@@ -118,6 +135,22 @@ export async function toResources(
 // freshly built output, never a stale dist/.
 async function buildService(dir: string): Promise<void> {
   await execFileAsync("pnpm", ["run", "build"], { cwd: dir });
+}
+
+// Stage an assets-only service's build output (src/stage.ts) and return the provider's
+// `assets` input. The directory is relative to infra/, where every documented run starts
+// (see Pulumi.yaml), so the input reads the same on every machine and never shows a
+// diff on its own. The provider computes `assetManifestSha256` itself; never set it.
+async function readAssets(
+  name: string,
+  dir: string,
+  assets: WranglerAssets
+): Promise<cloudflare.types.input.WorkersScriptAssets> {
+  const staged = await stageAssets(dir, assets, join(STAGE_ROOT, name));
+  return {
+    directory: relative(process.cwd(), staged.directory),
+    config: staged.config,
+  };
 }
 
 // @cloudflare/vite-plugin writes its deploy-ready output to dist/<worker-name>/,

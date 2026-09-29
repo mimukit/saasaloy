@@ -135,9 +135,12 @@ The manual per-workspace flow above is the default, but a centralized alternativ
 deployable service in the repo and ships it through Pulumi:
 
 ```bash
-pnpm --filter @repo/infra run preview   # pulumi preview
-pnpm --filter @repo/infra run deploy    # pulumi up
+pnpm --filter @repo/infra run stack:init   # once per clone: pulumi stack init prod
+pnpm --filter @repo/infra run preview      # pulumi preview
+pnpm --filter @repo/infra run deploy       # pulumi up
 ```
+
+That covers the assets-only Workers too: the base's `apps/web` and the `admin` app deploy as static assets with no script. A Worker that has both `main` and `assets` is refused.
 
 It needs `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_DEFAULT_ACCOUNT_ID` and
 `PULUMI_CONFIG_PASSPHRASE` set. Full detail — credentials, state, adding a service so infra

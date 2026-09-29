@@ -1,0 +1,3 @@
+# infra's staged copy of each assets-only service (src/stage.ts). Rebuilt on every
+# preview and deploy from the service's own build output.
+.stage/
