@@ -32,6 +32,42 @@
     },
     {
       "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:setup",
+      "value": "node scripts/setup.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:status",
+      "value": "node scripts/status.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:drop",
+      "value": "node scripts/drop.ts"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:setup",
+      "value": "pnpm --filter @repo/db db:setup"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:status",
+      "value": "pnpm --filter @repo/db db:status"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:drop",
+      "value": "pnpm --filter @repo/db db:drop"
+    },
+    {
+      "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
       "name": "@cloudflare/workers-types",
@@ -43,6 +79,13 @@
       "section": "devDependencies",
       "name": "wrangler",
       "range": "4.129.0"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@types/node",
+      "range": "26.4.1"
     }
   ],
   "files": [
@@ -62,6 +105,18 @@
         {
           "path": "files/tsconfig.json",
           "target": "tsconfig.json"
+        },
+        {
+          "path": "files/scripts/setup.ts",
+          "target": "scripts/setup.ts"
+        },
+        {
+          "path": "files/scripts/status.ts",
+          "target": "scripts/status.ts"
+        },
+        {
+          "path": "files/scripts/drop.ts",
+          "target": "scripts/drop.ts"
         }
       ]
     }

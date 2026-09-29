@@ -51,7 +51,7 @@ What does not port: every script imports `@repo/env`, and Saasaloy ships no `env
 
 ## Approach
 
-### Phase 1: the `@root` alias
+### Phase 1: the `@root` alias (built 2026-09-20)
 
 - Add `"aliases": {"@root": "."}` to `modules/database-postgres`'s `packages/db` scaffold entry.
 - Confirm `resolveTarget` normalizes `@root/compose.yaml` to `compose.yaml` rather than `./compose.yaml` (`packages/cli/src/lib/saasaloy-config.ts:89-92` joins a trimmed base to the rest, so `"."` yields `./compose.yaml` today). Fix the join or record the alias as `""` if the schema's `minLength: 1` allows it; otherwise normalize in `resolveTarget`.
@@ -59,7 +59,7 @@ What does not port: every script imports `@repo/env`, and Saasaloy ships no `env
 - Add the AGENTS.md rule for `@root`.
 - Add a CLI test for a root-targeted file and for `remove` deleting it.
 
-### Phase 2: the Postgres lifecycle scripts
+### Phase 2: the Postgres lifecycle scripts (built 2026-09-20)
 
 - Ship `scripts/setup.ts`, `scripts/status.ts`, `scripts/drop.ts`, `scripts/lib/{context,state,url,branch-name,env-file}.ts` and `scripts/backends/{docker,server,neon}.ts` under `modules/database-postgres/files/`.
 - Port `branch-name.ts` and `state.ts` from the precedent, renaming `provider` to `backend` and adding the `docker` member.
@@ -70,12 +70,12 @@ What does not port: every script imports `@repo/env`, and Saasaloy ships no `env
 - Add three `package-json-script` patches on `packages/db/package.json` and three on the root `package.json`.
 - Add `"scripts"` to the driver's `tsconfig.json` `include`.
 
-### Phase 3: the D1 wrappers
+### Phase 3: the D1 wrappers (built 2026-09-20)
 
 - Ship `scripts/setup.ts`, `scripts/status.ts`, `scripts/drop.ts` under `modules/database-d1/files/`, at the same targets as the Postgres set. Only one driver is ever installed, so this is the arrangement `client.ts` already uses.
 - Add the same six script patches and the `tsconfig.json` `include` entry.
 
-### Phase 4: documentation and the decision record
+### Phase 4: documentation and the decision record (built 2026-09-20)
 
 - Write the ADR: the commands belong to the drivers, `db` is not a capability, and a dev-database backend is not a registry provider.
 - Add the `CONTEXT.md` glossary entries for "Backend" and "State block".
