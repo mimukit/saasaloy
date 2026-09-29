@@ -44,7 +44,7 @@ A module descriptor may carry a `removeWarnings` array, and `add` copies it into
 The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
 ```
 
-`entitlements` declares one, about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
+`billing` declares one about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
 
 ## Hand-edited files
 
