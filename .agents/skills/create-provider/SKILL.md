@@ -184,7 +184,7 @@ Pin it by hand the first time, and check the version against npm rather than typ
 memory. After that the tooling keeps it current. `pnpm deps:update` and `pnpm deps:check` read the
 `range` of every `package-json-dependency` patch as a third dependency site alongside a
 descriptor's `dependencies[]` and `devDependencies[]`, so a provider's SDK pin gets the same
-cooldown and within-major gate as everything else (ADR 0016, amended for #85). This used to be the
+within-major gate as everything else (ADR 0016, amended for #85). This used to be the
 one place drift went unnoticed. It no longer is, which also means a patch missing `name`, `range`
 or a `section` naming a real dependency map now fails the run outright.
 

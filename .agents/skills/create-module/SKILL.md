@@ -176,7 +176,7 @@ Field notes:
   *inter-module*), merged into the consumer's `dependencies` / `devDependencies` respectively —
   put `@types/*` and build tooling in `devDependencies[]`. **Both are exact-pinned `name@version`**
   (`zod@4.0.5`); the schema rejects bare names and ranges. Author a version by hand or leave the
-  entry out and run `pnpm deps:update` to fill/refresh it (it also enforces the 3-day cooldown). A
+  entry out and run `pnpm deps:update` to fill/refresh it. A
   name declared in both buckets lands in `dependencies` only. **One source of truth per workspace:**
   a **capability** owns the `package.json` it scaffolds, so it declares its deps *there* and leaves
   the descriptor buckets **empty**; a **feature** owns no `package.json`, so it lists npm deps here

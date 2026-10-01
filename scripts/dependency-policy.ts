@@ -1,22 +1,19 @@
 // The version-selection policy behind `pnpm deps:update` / `deps:check` (ADR 0016),
 // separated from the command so the rules can be tested with fixed inputs. Everything
-// here is pure: no network, no clock, no flags. `update-deps.ts` fetches the packument,
-// reads the cooldown from pnpm-workspace.yaml, supplies `Date.now()` and the parsed CLI
-// flags, and renders whatever this module decides.
+// here is pure: no network, no flags. `update-deps.ts` fetches the packument and renders
+// whatever this module decides.
 //
 // Policy, per package: enumerate the npm `versions` map, DROP prereleases, IGNORE
-// dist-tags (never trust `latest`), cap at the highest eligible version WITHIN the
-// current major, and require the publish time to clear the cooldown. A newer major is
-// surfaced as `major-available` and offered as its own candidate; the command decides
-// whether that candidate is applied (--allow-major / the picker). The cooldown is lifted
-// only by `allowFresh`.
+// dist-tags (never trust `latest`), and cap at the highest version WITHIN the current
+// major. There is no release-age cooldown: a maintainer runs this by hand and picks every
+// bump (ADR 0016, amended 2026-10-01). A newer major is surfaced as `major-available` and
+// offered as its own candidate; the command decides whether that candidate is applied
+// (--allow-major / the picker).
 
 // --- Input types -------------------------------------------------------------
 
 /** The slice of an npm packument the resolver uses, normalized at the fetch boundary. */
 export interface Packument {
-  /** version → ISO publish time. Empty when the registry omits it. */
-  time: Record<string, string>;
   /** The published `versions` map; only its keys are read. */
   versions: Record<string, unknown>;
 }
@@ -30,26 +27,14 @@ export interface VersionSpec {
   kind: SpecKind;
 }
 
-/** Everything the policy needs beyond the dep and its packument. */
-export interface PolicyOptions {
-  /** The evaluation instant, in ms since the epoch. The command passes `Date.now()`. */
-  nowMs: number;
-  /** `minimumReleaseAge` from pnpm-workspace.yaml, in minutes. 0 disables the cooldown. */
-  minimumReleaseAgeMinutes: number;
-  /** `--allow-fresh`: treat every stable version as clear of the cooldown. */
-  allowFresh: boolean;
-}
-
 // --- Result types ------------------------------------------------------------
 
 /** What deps:update could pin for one dep, plus the context the report needs. */
 export interface Resolved {
-  /** Highest cooldown-eligible version within the current major: the safe default. */
+  /** Highest stable version within the current major: the safe default. */
   target: string | null;
-  /** Highest cooldown-eligible version across ALL majors: what a major bump writes. */
+  /** Highest stable version across ALL majors: what a major bump writes. */
   targetOverall: string | null;
-  highestWithinMajor: string | null;
-  highestOverall: string | null;
   newerMajor: boolean;
 }
 
@@ -59,7 +44,6 @@ export type Status =
   | "range→exact"
   | "bare→pinned"
   | "major-available"
-  | "within-cooldown"
   | "unresolved";
 
 /** The statuses a default `deps:update` writes and `deps:check` exits 1 on. */
@@ -84,14 +68,14 @@ export interface Evaluation {
   /**
    * At most one `primary` and one `major` candidate. `primary` is present only when the
    * status is actionable and the target differs from the current spec; `major` only when a
-   * cooldown-eligible version exists in a newer major.
+   * stable version exists in a newer major.
    */
   candidates: PolicyCandidate[];
 }
 
 // --- Version-spec classification ---------------------------------------------
 // A spec's "kind" drives its status and what deps:update writes:
-//   exact  — "5.14.1"        → already pinned; bump only if a newer eligible exists
+//   exact  — "5.14.1"        → already pinned; bump only if a newer stable exists
 //   range  — "^5", "~4.1"    → migrate to exact (range→exact)
 //   bare   — "" (no version) → pin it (bare→pinned); only descriptor arrays can be bare
 const EXACT_RE = /^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?(?:\+[0-9A-Za-z.-]+)?$/;
@@ -155,35 +139,16 @@ export function isUnorderableExact(dep: VersionSpec): boolean {
 /**
  * Pick the versions the policy could write for one packument. `target` is the
  * within-major pin (the safe default, independent of any flag); `targetOverall` is the
- * highest cooldown-eligible version across ALL majors — what a deliberate major bump
- * would write.
+ * highest stable version across ALL majors — what a deliberate major bump would write.
  */
 export function resolveVersions(
   curMajor: number | null,
-  doc: Packument,
-  options: PolicyOptions
+  doc: Packument
 ): Resolved {
-  const times = doc.time;
-  const cooldownMs = options.minimumReleaseAgeMinutes * 60 * 1000;
-
   const stable = Object.keys(doc.versions).filter(
     (v) => parseSemver(v) !== null
   );
   stable.sort(cmp);
-
-  // A version with no publish time, or an unparseable one, never clears the cooldown:
-  // the registry gave nothing to measure against, and "unknown" must not read as "old".
-  const clearsCooldown = (v: string): boolean => {
-    if (options.allowFresh) {
-      return true;
-    }
-    const t = times[v];
-    if (!t) {
-      return false;
-    }
-    const published = Date.parse(t);
-    return !Number.isNaN(published) && options.nowMs - published >= cooldownMs;
-  };
 
   // The within-major cap is a property of the dep, not a flag: majors are opted into
   // per-dep in the picker (or with --allow-major for non-interactive runs), never by
@@ -198,34 +163,26 @@ export function resolveVersions(
 
   // Every `[length - 1]` below is guarded by the `.length` check in front of it.
   const capped = stable.filter(withinMajor);
-  const highestWithinMajor = capped.length ? capped.at(-1)! : null;
-  const highestOverall = stable.length ? stable.at(-1)! : null;
-  const eligibleWithin = capped.filter(clearsCooldown);
-  const target = eligibleWithin.length ? eligibleWithin.at(-1)! : null;
-  const eligibleAll = stable.filter(clearsCooldown);
-  const targetOverall = eligibleAll.length ? eligibleAll.at(-1)! : null;
-  const highestOverallSemver =
-    highestOverall === null ? null : parseSemver(highestOverall);
+  const target = capped.length ? capped.at(-1)! : null;
+  const targetOverall = stable.length ? stable.at(-1)! : null;
+  const targetOverallSemver =
+    targetOverall === null ? null : parseSemver(targetOverall);
   const newerMajor =
     curMajor !== null &&
-    highestOverallSemver !== null &&
-    highestOverallSemver[0] > curMajor;
+    targetOverallSemver !== null &&
+    targetOverallSemver[0] > curMajor;
 
-  return {
-    highestOverall,
-    highestWithinMajor,
-    newerMajor,
-    target,
-    targetOverall,
-  };
+  return { newerMajor, target, targetOverall };
 }
 
 // --- Status decision ---------------------------------------------------------
 
 export function decideStatus(dep: VersionSpec, r: Resolved): Status {
+  // No stable release in reach: the registry lists only prereleases, or none in the
+  // current major. Nothing can be pinned, so it reports as unresolved.
   if (r.target === null) {
-    return "within-cooldown";
-  } // every eligible version is too fresh
+    return "unresolved";
+  }
   if (dep.kind === "bare") {
     return "bare→pinned";
   }
@@ -241,11 +198,7 @@ export function decideStatus(dep: VersionSpec, r: Resolved): Status {
   if (cmp(r.target, dep.spec) > 0) {
     return "outdated";
   }
-  // target === current within major. A fresher within-major stable held back by the
-  // cooldown is transient; a newer major is the deliberate --allow-major path.
-  if (r.highestWithinMajor && cmp(r.highestWithinMajor, dep.spec) > 0) {
-    return "within-cooldown";
-  }
+  // target === current within major; a newer major is the deliberate --allow-major path.
   if (r.newerMajor) {
     return "major-available";
   }
@@ -284,14 +237,13 @@ export function buildCandidates(
 /**
  * The complete policy decision for one dependency: which versions resolve, what status
  * the report shows, and which writes are on offer. Pure — the caller supplies the
- * packument, the clock, and the flags.
+ * packument.
  */
 export function evaluateDependency(
   dep: VersionSpec,
-  packument: Packument,
-  options: PolicyOptions
+  packument: Packument
 ): Evaluation {
-  const resolved = resolveVersions(specMajor(dep.spec), packument, options);
+  const resolved = resolveVersions(specMajor(dep.spec), packument);
   const status = decideStatus(dep, resolved);
   return {
     candidates: buildCandidates(dep, resolved, status),
