@@ -16,7 +16,7 @@ import { tenantColumn, tenantIndex } from "../tenant-column";
 // idiomatic form for its dialect, and what has to match is the shape a row comes back in.
 //
 // Hand-authored Drizzle snapshot of the API-key plugin's `apikey` model, stored as the
-// `api_keys` table, pinned to @better-auth/api-key@1.7.6 (the range this module's
+// `api_keys` table, pinned to @better-auth/api-key@1.7.7 (the range this module's
 // descriptor patches into packages/auth/package.json). Column for column against that
 // version's `apiKeySchema()` plus the Drizzle adapter's Postgres type mapping:
 // string→text, boolean→boolean, number→integer, date→timestamp. A version bump implies

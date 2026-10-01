@@ -94,7 +94,7 @@ It meets the tenant column convention like every other scoped table, and it gets
 
 `apiKeyPlugin()` also sets `schema.apikey.modelName: "apiKey"`. `packages/auth/src/auth.ts` passes `usePlural: true` to the Drizzle adapter, so the adapter appends `s` to the model name and looks that key up in the schema object. With `modelName: "apiKey"` it asks for `apiKeys`, which is the export in `packages/db/src/schema/api-keys.ts`, stored as the `api_keys` table. Without it the adapter asks for `apikeys`, finds no such export, and every key call throws. Change the `modelName` and the export key together.
 
-The snapshot is hand-authored against `@better-auth/api-key@1.7.6` and ships in two dialects, selected by `onlyWith`. A version bump means re-verifying every column against that version's `apiKeySchema()`; the repo's `schema-version.test.ts` fails the build until the header and the pinned range agree again.
+The snapshot is hand-authored against `@better-auth/api-key@1.7.7` and ships in two dialects, selected by `onlyWith`. A version bump means re-verifying every column against that version's `apiKeySchema()`; the repo's `schema-version.test.ts` fails the build until the header and the pinned range agree again.
 
 ## Boundaries to honor
 
