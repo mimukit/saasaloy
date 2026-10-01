@@ -24,7 +24,7 @@ ssh -N -L 3000:localhost:3000 -L 3001:localhost:3001 -L 4000:localhost:4000 deva
 
 Run every command below in a terminal on the dev box, not through a coding agent. Astro 7 starts a background server when it detects an agent, and this plan tests the foreground path a person gets.
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -47,7 +47,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 pnpm play:reset && pnpm -C .dev/playground install
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: `pnpm dev` starts and the terminal shows no React error  ·  🔴 Critical
 
