@@ -38,10 +38,12 @@ export const dbScope = new AsyncLocalStorage<object>();
 /**
  * Properties that answer `undefined` outside a scope instead of throwing.
  *
- * `_` is the load-bearing one. `drizzleAdapter(db, config)` reads `db._?.schema` in its
- * own body (`@better-auth/drizzle-adapter@1.7.3`, `dist/index.mjs`), which runs
- * while `./auth.ts` is still being imported — before any request exists. Throwing there
- * would take the Worker down on load rather than on a misuse. The adapter reads it to
+ * `_` is the load-bearing one. `drizzleAdapter(db, config)` reads `db._?.schema`
+ * (`@better-auth/drizzle-adapter`, `dist/index.mjs`). Up to 1.7.3 it read it in its own
+ * body, which runs while `./auth.ts` is still being imported — before any request
+ * exists. 1.7.6 defers the read to the first query, which runs inside a scope, but a
+ * patch release has already moved this read once, so the key stays passive: a throw at
+ * import would take the Worker down on load rather than on a misuse. The adapter reads it to
  * build a relation-key map for `findOne`/`findMany` calls that pass `join`, and it
  * already handles an absent registry: `getOneToOneRelationKey` returns the plain model
  * name when the key set is empty. `@db/schema/auth.ts` declares no Drizzle `relations()`

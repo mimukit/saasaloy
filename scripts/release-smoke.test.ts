@@ -13,7 +13,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { findWorkspaceDeps, parseArgs } from "./release-smoke.ts";
+import {
+  findRenderErrors,
+  findWorkspaceDeps,
+  parseArgs,
+} from "./release-smoke.ts";
 
 describe("parseArgs", () => {
   it("defaults to wiping the scratch directory", () => {
@@ -96,5 +100,59 @@ describe("findWorkspaceDeps", () => {
 
   it("tolerates a manifest with no dependency blocks", () => {
     assert.deepEqual(findWorkspaceDeps({ name: "saasaloy" }), []);
+  });
+});
+
+// Issue #186. The web dev server answered 200 while every React block on the page threw,
+// because React reports the fault in the log and Astro still serves the HTML around it. So
+// the dev check reads the log as well as the status code, and this pins what it looks for.
+describe("findRenderErrors", () => {
+  it("passes a clean log", () => {
+    assert.deepEqual(
+      findRenderErrors(
+        [
+          " astro  v7.3.5 ready in 8392 ms",
+          '{"message":"[200] / 270ms","label":null,"level":"info"}',
+        ].join("\n")
+      ),
+      []
+    );
+  });
+
+  it("catches React's invalid hook call warning", () => {
+    assert.deepEqual(
+      findRenderErrors(
+        '{"message":"Invalid hook call. Hooks can only be called inside of the body of a function component.","label":"vite","level":"error"}'
+      ),
+      [
+        '{"message":"Invalid hook call. Hooks can only be called inside of the body of a function component.","label":"vite","level":"error"}',
+      ]
+    );
+  });
+
+  // The two-copies fault surfaces as a null dispatcher, whichever hook runs first.
+  it("catches a hook read off a null dispatcher", () => {
+    assert.deepEqual(
+      findRenderErrors(
+        [
+          "watching for file changes...",
+          "TypeError: Cannot read properties of null (reading 'useContext')",
+          "TypeError: Cannot read properties of null (reading 'useState')",
+        ].join("\n")
+      ),
+      [
+        "TypeError: Cannot read properties of null (reading 'useContext')",
+        "TypeError: Cannot read properties of null (reading 'useState')",
+      ]
+    );
+  });
+
+  it("ignores a null read that is not a hook", () => {
+    assert.deepEqual(
+      findRenderErrors(
+        "TypeError: Cannot read properties of null (reading 'length')"
+      ),
+      []
+    );
   });
 });

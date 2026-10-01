@@ -323,9 +323,7 @@ about either.
 Saasaloy ships dependency versions to downstream projects from two sets of files that
 **pnpm's own tooling can't see** — the base template (`packages/cli/templates/base/**/package.json`)
 and the module descriptors (`modules/*/registry-item.json`). They aren't pnpm workspace members, so
-`pnpm outdated` / `pnpm update` never touch them, and because we pin **exact** versions there's
-nothing for pnpm's install-time `minimumReleaseAge` cooldown to resolve either. A dedicated
-maintainer command owns these files:
+`pnpm outdated` / `pnpm update` never touch them. A dedicated maintainer command owns these files:
 
 ```sh
 pnpm deps:update    # interactive: grouped report → pick which bumps → confirm → write exact versions
@@ -345,8 +343,8 @@ and all three are scanned: `dependencies[]`, `devDependencies[]`, and the `range
 `package-json-dependency` entry in `patches[]`. That third site is how a module pins a dep into a
 `package.json` a *different* module scaffolded — `database-d1` putting `wrangler` into
 `packages/db`, `database-postgres` putting `postgres` there. A pin parked in a patch reaches a
-downstream project exactly like a `dependencies[]` entry, so it goes through the same cooldown and
-within-major gate. A patch missing `name`, `range`, or a `section` naming a real dependency map
+downstream project exactly like a `dependencies[]` entry, so it goes through the same within-major
+gate. A patch missing `name`, `range`, or a `section` naming a real dependency map
 fails the run rather than slipping past the gate.
 
 **Writes are text edits, not reserializations.** `deps:update` changes a version with
@@ -362,9 +360,9 @@ imports have to resolve in the root `node_modules`, and pnpm's isolated layout w
 
 **Resolution policy** (see [ADR 0016](docs/adr/0016-adr-in-script-cooldown-gate-for-invisible-manifests-2026-07-24.md)):
 per package the resolver enumerates the npm `versions` map, **drops prereleases**, **ignores
-`dist-tags`** (never trusts `latest`), caps the pre-checked default at the **highest eligible version
-within the current major**, and requires the publish time to clear `minimumReleaseAge` (read from
-`pnpm-workspace.yaml`). Everything is pinned **exact**. Each manifest resolves independently; a shared
+`dist-tags`** (never trusts `latest`), and caps the pre-checked default at the **highest stable version
+within the current major**. There is no release-age cooldown: you run `deps:update` by hand and pick
+each bump, and `deps:verify` installs and builds the result. Everything is pinned **exact**. Each manifest resolves independently; a shared
 dep whose major diverges from the repo's own pin is printed as an informational note, and so is a dep
 name that resolves to two different exact versions across the scanned manifests in one run. Both notes
 are informational: neither writes a change and neither affects the `deps:check` exit code.
@@ -372,21 +370,23 @@ are informational: neither writes a change and neither affects the `deps:check` 
 - **Majors** — never applied by default. Cross one **deliberately**: tick it in the picker's **Major**
   group, or pass `--allow-major` for a non-interactive run. Majors are where the template breaks
   (`astro 5→6`, `wrangler 4→5`), so each is blessed by hand.
-- `--allow-fresh` — override the cooldown for a knowing security-fix bump (the audited path;
-  replaces `minimumReleaseAgeExclude`). Held-back deps then arrive pre-checked.
 - `--yes` / `-y` — skip the picker and confirm; apply all eligible bumps (majors only with
   `--allow-major`). A non-TTY pipe behaves the same. For CI writes / automation.
 - `--dry-run` — **print-only preview**: prints the report and the "would update" list a
   default apply would make, then stops. It never opens the picker and never writes.
+
+**`wrangler` and `@cloudflare/vite-plugin` move together.** Each plugin release refuses to start a dev server against a wrangler older than the one it was released with. `@astrojs/cloudflare` takes the plugin through a caret range, so the web template pins the plugin as a direct devDependency, which makes pnpm install that version for the adapter too (issue #186). Take both bumps in one `deps:update` run. `verify-pins` fails when the plugin pin differs between `apps/web` and `apps/api`, or when any Cloudflare workspace pins a different `wrangler`. The pin in `database-d1`'s patch range is not a `package.json`, so `verify-pins` does not read it; keep it on the same version by hand.
+
+**`deps:verify` runs `git init` in the playground.** `saasaloy init` skips `git init` inside an existing repository, and `.dev/` sits inside this one. With no `.git` of its own, the playground inherits this repo's `.gitignore`, which ignores `/.dev/`, so oxlint finds no files and the lint step fails with "No files found to lint".
 
 **Scope boundary:** these commands own only the invisible files (template + descriptors). The tool
 repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm update`.
 
 | Script | What it does |
 | --- | --- |
-| `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--allow-fresh`, `--dry-run`) |
+| `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--dry-run`) |
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
-| `pnpm deps:verify` | `play:init` → install → build → `verify-css` → typecheck the generated project (post-update gate) |
+| `pnpm deps:verify` | `verify-pins` → `play:init` → `git init` → install → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in

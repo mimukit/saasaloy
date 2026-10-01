@@ -15,9 +15,10 @@ import { users } from "./auth";
 // is generating SQL for. Parity is semantic, not textual — each column is the idiomatic
 // form for its dialect, and what has to match is the shape a row comes back in.
 //
-// Hand-authored Drizzle snapshot of Better Auth 1.7.2's organization plugin schema
+// Hand-authored Drizzle snapshot of Better Auth 1.7.6's organization plugin schema
 // with its nested teams feature disabled. Keep property names aligned with the plugin
-// adapter. A Better Auth version change requires a new column-for-column check.
+// adapter. A Better Auth version change requires a new column-for-column check. The
+// 1.7.6 check found the plugin's tables unchanged from 1.7.2, where this was written.
 //
 // `organizationRoles` is here because `organizationPlugin()` sets
 // `dynamicAccessControl: { enabled: true }`. Turning that option off does not remove the

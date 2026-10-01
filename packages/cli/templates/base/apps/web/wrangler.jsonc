@@ -2,6 +2,13 @@
   "$schema": "node_modules/wrangler/config-schema.json",
   "name": "{{PROJECT_NAME}}-web",
   "compatibility_date": "2026-07-22",
+  // `astro dev` renders inside workerd, and @astrojs/react's server renderer keeps a
+  // dynamic `import("node:stream")` for the Node streaming path. That path never runs
+  // here (workerd resolves react-dom/server to the edge build), but without this flag
+  // @cloudflare/vite-plugin warns "Unexpected Node.js imports" on every dev start. The
+  // adapter only adds `nodejs_als` on its own. It costs nothing while the site is
+  // assets-only, and the first `prerender = false` page gets Node APIs with no edit.
+  "compatibility_flags": ["nodejs_compat"],
   // Static assets, and still no Worker code — but the layout moved. Registering
   // @astrojs/cloudflare in astro.config.mjs (for src/pages/500.astro) makes Astro build
   // to dist/client + dist/server instead of a flat dist/. While every page is

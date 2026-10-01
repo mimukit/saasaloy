@@ -45,7 +45,7 @@ The descriptor also applies a `nav-entry` patch, which adds `{ to: "/teams", lab
 
 ## Schema and migrations
 
-`packages/db/src/schema/teams.ts` is a hand-written Better Auth 1.7.2 snapshot for the `organizations`, `members`, `invitations`, and `organization_roles` tables. `packages/db/src/schema/auth.ts` pre-declares the nullable `sessions.activeOrganizationId` field. Keep the Better Auth property names because its adapter matches those names.
+`packages/db/src/schema/teams.ts` is a hand-written Better Auth 1.7.6 snapshot for the `organizations`, `members`, `invitations`, and `organization_roles` tables. `packages/db/src/schema/auth.ts` pre-declares the nullable `sessions.activeOrganizationId` field. Keep the Better Auth property names because its adapter matches those names.
 
 The module ships the snapshot in two dialects, `teams.sqlite.ts` and `teams.pg.ts`, and `onlyWith` installs the one matching the project's driver. Edit one table and edit its twin. A mismatch only shows up on the other driver's first install, long after the edit.
 

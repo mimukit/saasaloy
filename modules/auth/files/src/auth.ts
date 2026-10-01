@@ -124,7 +124,7 @@ export const auth = betterAuth({
     },
   },
   advanced: {
-    // The adapter's schema check is off, and it has to be. Better Auth 1.7.3 registers
+    // The adapter's schema check is off, and it has to be. Better Auth 1.7.6 registers
     // `findDrizzleSchemaProblems(config.schema ?? db._?.fullSchema ?? {})` on every
     // adapter (`@better-auth/drizzle-adapter/dist/index.mjs`, and `checksSchema` in
     // `@better-auth/core/dist/db/schema-check.mjs` is the switch). Neither source can

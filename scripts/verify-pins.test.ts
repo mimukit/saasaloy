@@ -173,6 +173,34 @@ describe("PIN_RULES", () => {
     );
   });
 
+  // Issue #186. `@astrojs/cloudflare` takes the vite plugin through a range, and the
+  // plugin refuses to start against a wrangler older than its own release. The web
+  // template pins the plugin to hold that range, and the pin is only right while it
+  // matches the plugin and the wrangler that the api module ships.
+  it("holds wrangler to one version in every Cloudflare workspace", () => {
+    const wrangler = PIN_RULES.find((rule) => rule.dep === "wrangler");
+    assert.ok(wrangler !== undefined);
+    for (const file of [
+      "packages/cli/templates/base/apps/web/package.json",
+      "modules/api/files/package.json",
+      "modules/admin/files/package.json",
+      "modules/infra/files/package.json",
+    ]) {
+      assert.ok(wrangler.files.includes(file), `wrangler rule misses ${file}`);
+    }
+  });
+
+  it("holds @cloudflare/vite-plugin to one version across web and api", () => {
+    const plugin = PIN_RULES.find(
+      (rule) => rule.dep === "@cloudflare/vite-plugin"
+    );
+    assert.ok(plugin !== undefined);
+    assert.ok(
+      plugin.files.includes("packages/cli/templates/base/apps/web/package.json")
+    );
+    assert.ok(plugin.files.includes("modules/api/files/package.json"));
+  });
+
   it("names at least two manifests per rule", () => {
     for (const rule of PIN_RULES) {
       assert.ok(rule.files.length >= 2, `${rule.dep} needs two manifests`);

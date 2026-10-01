@@ -61,6 +61,28 @@ export const PIN_RULES: readonly PinRule[] = [
       "packages/cli/templates/base/packages/ui/package.json",
     ],
   },
+  // Issue #186. Each `@cloudflare/vite-plugin` release demands a wrangler at least as new
+  // as itself, checked when the dev server starts. `@astrojs/cloudflare` takes the plugin
+  // through a range, so the web template pins it directly to hold the range down, and
+  // the api module pins it for its own dev server. Both pins must name the same plugin,
+  // and every workspace must name the same wrangler, or one dev server exits before it
+  // is ready. `deps:update` moves the two packages together, since they release together.
+  {
+    dep: "@cloudflare/vite-plugin",
+    files: [
+      "packages/cli/templates/base/apps/web/package.json",
+      "modules/api/files/package.json",
+    ],
+  },
+  {
+    dep: "wrangler",
+    files: [
+      "packages/cli/templates/base/apps/web/package.json",
+      "modules/api/files/package.json",
+      "modules/admin/files/package.json",
+      "modules/infra/files/package.json",
+    ],
+  },
 ];
 
 const SECTIONS = [

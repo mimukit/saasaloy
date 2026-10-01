@@ -4,10 +4,9 @@
 // `package-json-dependency` patch, which is how a module pins a dep into a workspace
 // another module scaffolded. These ship dependency
 // versions to downstream projects but aren't pnpm workspace members, so `pnpm outdated`
-// / `pnpm update` never touch them — and because we pin EXACT versions, pnpm's
-// install-time `minimumReleaseAge` cooldown has nothing to resolve and never applies
-// either. This script is therefore the ONLY place a supply-chain cooldown can gate
-// these files, enforced here at version-SELECTION time (ADR 0016).
+// / `pnpm update` never touch them. This script is the one place their versions are
+// selected (ADR 0016). It applies no release-age cooldown: a maintainer runs it by hand
+// and picks each bump, and `pnpm deps:verify` installs and builds the result.
 //
 //   pnpm deps:update  → grouped report → interactive select + confirm → rewrite to
 //                       the resolved exact versions. This is the human workflow: in a
@@ -29,8 +28,7 @@
 //
 // Resolver policy (ADR 0016) lives in `dependency-policy.ts` as pure functions over a
 // packument, a clock value, and the flags. This file owns everything around it: the
-// npm fetch, the cooldown read from pnpm-workspace.yaml, the report, the picker, and
-// the writes. Each manifest resolves independently from npm.
+// npm fetch, the report, the picker, and the writes. Each manifest resolves independently from npm.
 //
 // TypeScript, run directly by Node 24's type stripping — there is no build step. The
 // types are checked by `pnpm typecheck` through tsconfig.scripts.json (#54).
@@ -182,7 +180,6 @@ type GroupKey =
   | "patch"
   | "migration"
   | "major-available"
-  | "cooldown"
   | "unresolved"
   | "up-to-date";
 
@@ -192,25 +189,17 @@ type Colorize = (text: string) => string;
 // --- CLI flags ---------------------------------------------------------------
 const argv = process.argv.slice(2);
 const flags = {
-  allowFresh: argv.includes("--allow-fresh"),
   allowMajor: argv.includes("--allow-major"),
   check: argv.includes("--check"),
   dryRun: argv.includes("--dry-run"),
   yes: argv.includes("--yes") || argv.includes("-y"),
 };
-const KNOWN = new Set([
-  "--check",
-  "--allow-major",
-  "--allow-fresh",
-  "--dry-run",
-  "--yes",
-  "-y",
-]);
+const KNOWN = new Set(["--check", "--allow-major", "--dry-run", "--yes", "-y"]);
 const unknown = argv.filter((a) => a.startsWith("-") && !KNOWN.has(a));
 if (unknown.length > 0) {
   console.error(`Unknown flag(s): ${unknown.join(", ")}`);
   console.error(
-    "usage: update-deps.ts [--check] [--allow-major] [--allow-fresh] [--dry-run] [--yes|-y]"
+    "usage: update-deps.ts [--check] [--allow-major] [--dry-run] [--yes|-y]"
   );
   process.exit(2);
 }
@@ -231,40 +220,18 @@ function isSkippedSpec(spec: string): boolean {
   );
 }
 
-// --- pnpm-workspace.yaml: minimumReleaseAge (single source of truth) ---------
-async function readMinReleaseMinutes(): Promise<number> {
-  const text = await readFile(join(root, "pnpm-workspace.yaml"), "utf-8");
-  // Match the active (non-commented) `minimumReleaseAge: <n>` line.
-  for (const line of text.split("\n")) {
-    const m = line.match(/^\s*minimumReleaseAge:\s*(\d+)\s*$/);
-    if (m) {
-      return Number(m[1]);
-    }
-  }
-  return 0; // no cooldown configured → nothing is quarantined
-}
-
 // --- npm registry resolution -------------------------------------------------
 // Cache the in-flight PROMISE (not just the resolved value): with parallel resolution the
 // same package can be requested by several manifests at once, and caching the promise means
 // they share a single fetch instead of racing duplicates.
 const registryCache = new Map<string, Promise<Packument>>();
 
-// Narrow the packument once, at the boundary: a missing or malformed `time` / `versions`
-// becomes an empty map, which is exactly what the resolver's `?? {}` produced before.
+// Narrow the packument once, at the boundary: a missing or malformed `versions` becomes
+// an empty map, which is exactly what the resolver's `?? {}` produced before.
 function toPackument(doc: unknown): Packument {
-  if (!isRecord(doc)) {
-    return { time: {}, versions: {} };
-  }
-  const time: Record<string, string> = {};
-  if (isRecord(doc.time)) {
-    for (const [version, published] of Object.entries(doc.time)) {
-      if (typeof published === "string") {
-        time[version] = published;
-      }
-    }
-  }
-  return { time, versions: isRecord(doc.versions) ? doc.versions : {} };
+  return {
+    versions: isRecord(doc) && isRecord(doc.versions) ? doc.versions : {},
+  };
 }
 
 function fetchPackument(name: string): Promise<Packument> {
@@ -385,7 +352,7 @@ export async function readManifestDeps(
 
   // A missing bucket is normal — a manifest need not declare both. A bucket that IS
   // present but has the wrong shape is a malformed manifest, and skipping it would silently
-  // drop every dep it holds out of the cooldown gate, so it fails the run loudly (exit 2).
+  // drop every dep it holds out of the update sweep, so it fails the run loudly (exit 2).
   const pushObject = (bucket: DepBucket) => {
     const map = json[bucket];
     if (map === undefined || map === null) {
@@ -431,7 +398,7 @@ export async function readManifestDeps(
   // module can pin a dep into a workspace it does not own (`database-d1` putting `wrangler`
   // into packages/db, `database-postgres` putting `postgres` there), so a version parked
   // here is shipped to downstream projects exactly like a `dependencies[]` entry — and
-  // would otherwise never reach the cooldown gate this script exists to be (ADR 0016).
+  // would otherwise never reach the update sweep this script exists to run (ADR 0016).
   const pushPatches = () => {
     const patches = json.patches;
     if (patches === undefined || patches === null) {
@@ -560,9 +527,8 @@ const STATUS_LABEL: Record<Status, string> = {
   "major-available": "major-available",
   outdated: "outdated",
   "range→exact": "range→exact",
-  unresolved: "unresolved (registry error)",
+  unresolved: "unresolved",
   "up-to-date": "up-to-date",
-  "within-cooldown": "within-cooldown (skipped)",
 };
 
 // --- Terminal presentation (clack + picocolors) ------------------------------
@@ -657,7 +623,7 @@ function colorTarget(cur: string, target: string): string {
 }
 
 // Which report group a row renders under. Actionable `outdated` rows split by bump
-// level; migrations, held-back, and errors get their own groups; up-to-date is hidden.
+// level; migrations and errors get their own groups; up-to-date is hidden.
 function groupKey(row: Row): GroupKey {
   switch (row.status) {
     case "outdated": {
@@ -673,9 +639,6 @@ function groupKey(row: Row): GroupKey {
     }
     case "major-available": {
       return "major-available";
-    }
-    case "within-cooldown": {
-      return "cooldown";
     }
     case "unresolved": {
       return "unresolved";
@@ -709,15 +672,14 @@ function renderRow(row: Row): string {
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
   if (row.status === "unresolved") {
-    return `${name}${dev}  ${pc.red("registry error")}${row.error ? pc.dim(` — ${row.error}`) : ""}  ${file}`;
+    // A row with no error resolved fine but has no stable release to pin.
+    const reason = row.error
+      ? `${pc.red("registry error")}${pc.dim(` — ${row.error}`)}`
+      : pc.red("no stable release");
+    return `${name}${dev}  ${reason}  ${file}`;
   }
   const cur = row.dep.spec === "" ? pc.dim("(bare)") : row.dep.spec;
-  // within-cooldown points the arrow at the held-back within-major version so the row
-  // reads as "waiting on this", not a phantom downgrade.
-  const colored =
-    row.status === "within-cooldown"
-      ? pc.yellow(row.resolved?.highestWithinMajor ?? "—")
-      : colorTarget(row.dep.spec, row.resolved?.target ?? "—");
+  const colored = colorTarget(row.dep.spec, row.resolved?.target ?? "—");
   return `${name}${dev}  ${cur} ${pc.dim("→")} ${colored}  ${file}`;
 }
 
@@ -729,7 +691,7 @@ function renderMajorRow(row: Row): string {
   const file = pc.dim(relative(root, row.manifest.file));
   const name = pc.cyan(row.dep.name);
   const cur = row.dep.spec === "" ? pc.dim("(bare)") : row.dep.spec;
-  return `${name}${dev}  ${cur} ${pc.dim("→")} ${pc.red(row.resolved?.highestOverall ?? "—")}  ${file}`;
+  return `${name}${dev}  ${cur} ${pc.dim("→")} ${pc.red(row.resolved?.targetOverall ?? "—")}  ${file}`;
 }
 
 // --- Update candidates -------------------------------------------------------
@@ -870,16 +832,13 @@ async function pickInteractive(
 }
 
 async function main(): Promise<void> {
-  const minMinutes = await readMinReleaseMinutes();
   const discovered = await discoverManifests();
   const repoPins = await readRepoPins();
 
   intro(pc.bgCyan(pc.black(flags.check ? " deps:check " : " deps:update ")));
-  const days = (minMinutes / 60 / 24).toFixed(0);
   log.info(
     pc.dim(
-      `exact pins · within-major · ${minMinutes}min (${days}d) cooldown` +
-        `${flags.allowMajor ? " · --allow-major" : ""}${flags.allowFresh ? " · --allow-fresh" : ""}`
+      `exact pins · within-major${flags.allowMajor ? " · --allow-major" : ""}`
     )
   );
 
@@ -905,13 +864,7 @@ async function main(): Promise<void> {
     let row: Row;
     try {
       const packument = await fetchPackument(dep.name);
-      // `Date.now()` per evaluation, as before; one clock value for the whole run is a
-      // separate decision.
-      const decision = evaluateDependency(dep, packument, {
-        allowFresh: flags.allowFresh,
-        minimumReleaseAgeMinutes: minMinutes,
-        nowMs: Date.now(),
-      });
+      const decision = evaluateDependency(dep, packument);
       row = { dep, manifest, ...decision };
     } catch (error) {
       row = {
@@ -1035,8 +988,7 @@ function printReport(rows: Row[], notes: string[]): void {
   };
 
   // Within-major actions first, split by bump level, then a dedicated section for every
-  // dep with a newer major (shown regardless of its within-major status), then held-back
-  // and errors. Majors get their own box so a bump like `astro 5 → 7` never hides inside
+  // dep with a newer major (shown regardless of its within-major status), then errors. Majors get their own box so a bump like `astro 5 → 7` never hides inside
   // a migration row.
   section(buckets.get("minor"), pc.cyan, "Minor");
   section(buckets.get("patch"), pc.green, "Patch");
@@ -1047,8 +999,7 @@ function printReport(rows: Row[], notes: string[]): void {
     "Major available — crosses a major",
     renderMajorRow
   );
-  section(buckets.get("cooldown"), pc.yellow, "Within cooldown — held back");
-  section(buckets.get("unresolved"), pc.red, "Unresolved — registry error");
+  section(buckets.get("unresolved"), pc.red, "Unresolved");
 
   if (notes.length) {
     note(
