@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "vite dev",
+    "dev": "vite dev --host",
     "build": "vite build",
     "clean": "rimraf -g dist .wrangler \"*.tsbuildinfo\"",
     "preview": "vite preview",
