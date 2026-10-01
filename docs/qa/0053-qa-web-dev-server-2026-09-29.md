@@ -61,20 +61,20 @@ pnpm play:reset && pnpm -C .dev/playground install
    pnpm -C .dev/playground/apps/web dev
    ```
 
-   - [ ] The terminal prints `astro v7.3.5 ready` and `Local http://localhost:3000/`
+   - [x] The terminal prints `astro v7.3.5 ready` and `Local http://localhost:3000/`
      - no `Dev server process exited before becoming ready`
      - no `does not satisfy the peer dependency required by @cloudflare/vite-plugin`
 2. Open `http://localhost:3000/` in the browser. Wait for the page to load.
-   - [ ] The terminal shows no `Invalid hook call` and no `Cannot read properties of null (reading 'use…')`
-   - [ ] The terminal shows no `optimized dependencies changed. reloading` line after the first request
+   - [x] The terminal shows no `Invalid hook call` and no `Cannot read properties of null (reading 'use…')`
+   - [x] The terminal shows no `optimized dependencies changed. reloading` line after the first request
 3. Reload the page twice.
-   - [ ] The terminal still shows no React error
+   - [x] The terminal still shows no React error
 
 Leave the server running for TC-1.2 and TC-1.3.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -87,21 +87,21 @@ Leave the server running for TC-1.2 and TC-1.3.
 **Steps**
 
 1. Look at `http://localhost:3000/` at 1280px or wider. Scroll from top to bottom.
-   - [ ] Every block shows its content, with icons in place
+   - [x] Every block shows its content, with icons in place
      - navbar: logo, links, call-to-action button
      - hero, feature grid with an icon on each card, pricing table, FAQ, call-to-action, footer
 2. Open the browser console.
-   - [ ] The console shows no hydration error and no `Invalid hook call`
+   - [x] The console shows no hydration error and no `Invalid hook call`
 3. Click the pricing table's billing toggle. Open one FAQ item.
-   - [ ] The prices change, and the FAQ item opens and closes
+   - [x] The prices change, and the FAQ item opens and closes
 4. Narrow the window below 768px. Open the navbar menu.
-   - [ ] The mobile menu opens and closes
+   - [x] The mobile menu opens and closes
 5. Click the theme toggle beside the navbar three times.
-   - [ ] The palette cycles light, dark, system, and the icon changes each time
+   - [x] The palette cycles light, dark, system, and the icon changes each time
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -114,15 +114,15 @@ Leave the server running for TC-1.2 and TC-1.3.
 **Steps**
 
 1. Open `.dev/playground/packages/ui/src/content/landing.ts`. Change the text of `landing.hero.title`. Save the file.
-   - [ ] The browser shows the new title without a manual reload
-   - [ ] The terminal shows no React error
+   - [x] The browser shows the new title without a manual reload
+   - [x] The terminal shows no React error
 2. Undo the edit. Save the file.
-   - [ ] The old title comes back, and the terminal shows no React error
+   - [x] The old title comes back, and the terminal shows no React error
 3. Stop the server with `Ctrl+C`.
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -172,7 +172,7 @@ curl -s -i -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: ap
 
 7. Open `http://localhost:3001` in the browser. Sign in as `admin@example.test` with `qa-password-123`.
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: The admin theme toggle cycles and follows the OS  ·  🟡 Normal
 
@@ -181,18 +181,18 @@ curl -s -i -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: ap
 **Steps**
 
 1. Click the theme toggle in the admin rail three times.
-   - [ ] Each click moves one step, light to dark to system, and never skips a step
-   - [ ] The toggle's label changes with each step
+   - [x] Each click moves one step, light to dark to system, and never skips a step
+   - [x] The toggle's label changes with each step
 2. Leave the toggle on system. Switch your OS between light and dark mode.
-   - [ ] The admin palette follows the OS without a reload
+   - [x] The admin palette follows the OS without a reload
 3. Set the toggle to dark. Switch the OS again.
-   - [ ] The admin palette stays dark
+   - [x] The admin palette stays dark
 4. Reload the page.
-   - [ ] The admin app keeps the choice from step 3
+   - [x] The admin app keeps the choice from step 3
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -249,6 +249,6 @@ node --test scripts/verify-pins.test.ts scripts/release-smoke.test.ts
 
 _Tick one when you finish the run._
 
-- [ ] Pass: every case passed
+- [x] Pass: every case passed
 - [ ] Fail: at least one case failed
 - [ ] Partial: cases were skipped or not reached
