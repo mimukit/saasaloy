@@ -16,12 +16,12 @@
     "./rbac-rules": "./src/rbac-rules.ts"
   },
   "dependencies": {
-    "better-auth": "1.7.6",
-    "hono": "4.13.9",
+    "better-auth": "1.7.7",
+    "hono": "4.13.12",
     "@repo/db": "workspace:*"
   },
   "devDependencies": {
-    "@cloudflare/workers-types": "5.20260926.1",
+    "@cloudflare/workers-types": "5.20261001.1",
     "@repo/tsconfig": "workspace:*",
     "@types/node": "26.6.3",
     "rimraf": "6.1.3",
