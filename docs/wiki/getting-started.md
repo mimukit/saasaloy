@@ -63,7 +63,7 @@ scaffold into the current directory, or a path like `./apps/my-app` — the last
 segment becomes the project name. Omit the name entirely and the CLI asks for it.
 
 `init` copies the base template, then offers to run `pnpm install` for you. Say yes and it
-installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree.
+installs; say no and it prints the command in the next steps. It also runs `git init` in the new project, unless the target already sits inside a working tree that tracks it. An ignored directory inside a repository still gets its own.
 
 `init` takes three flags: `--force` scaffolds into a directory that is not empty, `--no-install` never runs `pnpm install` and never asks, and `--no-git` skips `git init`. Any other flag stops the command with an error instead of being ignored.
 
