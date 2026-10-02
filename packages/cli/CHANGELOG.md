@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.5.2](https://github.com/mimukit/saasaloy/compare/v0.5.1...v0.5.2) (2026-10-02)
+
+### Features
+
+* **repo:** expose dev servers on all interfaces ([d1659de](https://github.com/mimukit/saasaloy/commit/d1659dece00c6d09b80d1b14b882cc00303987f3))
+
+### Bug Fixes
+
+* **auth:** re-verify schema snapshots against better-auth 1.7.7 ([58906a4](https://github.com/mimukit/saasaloy/commit/58906a49f0a24411f11dfb53f95b279631255e7b))
+* **web:** enable nodejs_compat for the web worker ([c22b703](https://github.com/mimukit/saasaloy/commit/c22b703af0c7ad81888aa1aa4955b777eab42203))
+* **web:** start astro dev on the base template ([71d891e](https://github.com/mimukit/saasaloy/commit/71d891ed5b5cdcef926797274ef27a891e62974a)), closes [#186](https://github.com/mimukit/saasaloy/issues/186)
+
 ## [0.5.1](https://github.com/mimukit/saasaloy/compare/v0.5.0...v0.5.1) (2026-09-29)
 
 ### ⚠ BREAKING CHANGES
