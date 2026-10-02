@@ -36,7 +36,8 @@
       "files": [
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/common.ts", "target": "src/common.ts" }
+        { "path": "files/src/common.ts", "target": "src/common.ts" },
+        { "path": "files/src/phone.ts", "target": "src/phone.ts" }
       ]
     }
   ],
