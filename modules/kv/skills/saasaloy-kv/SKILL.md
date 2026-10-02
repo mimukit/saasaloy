@@ -1,6 +1,6 @@
 ---
 name: saasaloy-kv
-description: Runbook for the kv capability — a provider-agnostic key-value store in packages/kv with per-provider modules (kv-cloudflare, kv-memory). Use when caching a value from a route, building a namespaced key, choosing or switching KV_PROVIDER, hitting a TTL floor or a key-size error, registering a rate limit policy, or writing a custom kv provider.
+description: Runbook for the kv capability — a provider-agnostic key-value store in packages/kv with per-provider modules (kv-cloudflare, kv-upstash, kv-memory). Use when caching a value from a route, building a namespaced key, choosing or switching KV_PROVIDER, hitting a TTL floor or a key-size error, registering a rate limit policy, or writing a custom kv provider.
 ---
 
 # kv — provider-agnostic key-value storage from `packages/kv`
@@ -8,8 +8,8 @@ description: Runbook for the kv capability — a provider-agnostic key-value sto
 `packages/kv` (`@repo/kv`) is the capability core: a provider registry, a rate limit policy table,
 namespaced key building, JSON serialization, and one normalized error type. It has **zero runtime
 dependencies** and imports no vendor SDK and no Workers binding. Each provider ships as its own
-module — `kv-cloudflare` (Workers KV plus the Rate Limiting binding) and `kv-memory` (an in-process
-map for dev and tests) — dropping one file into `src/providers/` and registering itself in the
+module — `kv-cloudflare` (Workers KV plus the Rate Limiting binding), `kv-upstash` (Upstash Redis over
+HTTPS, with a globally exact limiter) and `kv-memory` (an in-process map for dev and tests) — dropping one file into `src/providers/` and registering itself in the
 `providers` array in `src/index.ts`.
 
 Callers import `@repo/kv`, call `createKv(env)`, and never learn which provider is active.
@@ -19,15 +19,17 @@ Callers import `@repo/kv`, call `createKv(env)`, and never learn which provider 
 | Module | `KV_PROVIDER` | `minTtlSeconds` | `consume` | Needs |
 |---|---|---|---|---|
 | `kv-cloudflare` | `cloudflare` | 60 | yes, through the Rate Limiting binding | a KV namespace, plus the `kv_namespaces` and `ratelimits` entries its patches add to `apps/api/wrangler.jsonc` |
+| `kv-upstash` | `upstash` | 1 | yes, one global fixed-window count with `remaining` and `resetAt` | an Upstash Redis database, `UPSTASH_REDIS_REST_URL`, `UPSTASH_REDIS_REST_TOKEN` and a non-empty `KV_KEY_PREFIX` |
 | `kv-memory` | `memory` | 0 | yes, a real fixed-window count | nothing — no account, no binding, no network |
 
 `kv-memory` is per-isolate. Two `wrangler dev` processes, or two isolates of one deployed Worker, hold two unrelated maps. Use it for development and tests, never for anything shared.
 
-The two differ in three ways a test can see, and each one is a way to pass locally and fail in production:
+They differ in four ways a test can see, and each one is a way to pass locally and fail in production:
 
-- **Consistency.** `kv-memory` reads back a write on the next line. Workers KV takes up to 60 seconds to reach another location.
-- **The TTL floor.** `set(key, value, { ttlSeconds: 5 })` works in memory and throws `invalid_ttl` on `kv-cloudflare`. Nothing rounds.
-- **How much `consume` reports.** `kv-memory` fills in `remaining` and `resetAt`. Cloudflare's binding returns `{ success }` alone, so a test asserting on `remaining` is asserting about the memory provider, not about the contract.
+- **Consistency.** `kv-memory` reads back a write on the next line, and so does `kv-upstash`. Workers KV takes up to 60 seconds to reach another location.
+- **The TTL floor.** `set(key, value, { ttlSeconds: 5 })` works on `kv-memory` and `kv-upstash`, and throws `invalid_ttl` on `kv-cloudflare`. Nothing rounds.
+- **How much `consume` reports.** `kv-memory` and `kv-upstash` fill in `remaining` and `resetAt`. Cloudflare's binding returns `{ success }` alone, so a test asserting on `remaining` is asserting about those two providers, not about the contract.
+- **What `list` pages over.** `kv-cloudflare` and `kv-memory` return a full page until the last one. `kv-upstash` passes Redis `SCAN` through, where `limit` is a hint and an empty page can carry a live cursor. Page until `complete` is true on every provider, never until a page comes back empty.
 
 ## Read and write from a route
 
@@ -72,14 +74,14 @@ production Worker share one namespace.
 
 ## The TTL floor, and why nothing rounds
 
-Every provider declares `minTtlSeconds` — **60 on `kv-cloudflare`**, 0 on `kv-memory`. A `set` with
+Every provider declares `minTtlSeconds` — **60 on `kv-cloudflare`**, 1 on `kv-upstash` (Redis `EX` takes whole seconds), 0 on `kv-memory`. A `set` with
 a shorter TTL throws `KvError("invalid_ttl")` naming the floor and the provider. It is never
 rounded up, because the same call would then expire at a different time on a different provider
 with nothing in the logs to say so.
 
 ```ts
 await store.set(key, value, { ttlSeconds: 60 }); // fine everywhere
-await store.set(key, value, { ttlSeconds: 5 }); // throws on kv-cloudflare, works in memory
+await store.set(key, value, { ttlSeconds: 5 }); // throws on kv-cloudflare, works on upstash and memory
 ```
 
 Omit `ttlSeconds` for an entry that never expires.
@@ -113,7 +115,10 @@ const { success, remaining } = await store.consume({ policy: "strict", key: ip }
 - A refusal is `{ success: false }`, not a throw.
 - `remaining` and `resetAt` are **optional**. Cloudflare's Rate Limiting binding returns
   `{ success }` and nothing else, so a caller must send `RateLimit-Remaining` only when the field
-  is present rather than invent a number.
+  is present rather than invent a number. `kv-upstash` and `kv-memory` both report them.
+- **Only `kv-upstash` counts globally.** Cloudflare counts per colo, and `kv-memory` counts per
+  isolate. A budget that has to be exact across every request — an API key quota, a paid tier's
+  ceiling — needs `KV_PROVIDER=upstash`.
 
 `saasaloy add ratelimit` registers `strict`, `default` and `loose` and ships the Hono middleware.
 `kv-cloudflare` ships the matching `RL_STRICT`, `RL_DEFAULT` and `RL_LOOSE` bindings. Adding a fourth policy takes an edit in two places — see "Setting up `kv-cloudflare`" below.
@@ -144,6 +149,8 @@ quietly read an empty in-process map, or a test run quietly write to the real na
 // .dev.vars
 KV_PROVIDER = "memory"   // kv-memory, for local development and tests
 ```
+
+`upstash` selects `kv-upstash`, which also needs its two secrets and a non-empty `KV_KEY_PREFIX`.
 
 Swapping providers is the env var plus `saasaloy add kv-<provider>`. No call site changes.
 
@@ -189,6 +196,34 @@ Each `namespace_id` must be a unique positive integer **per Cloudflare account**
 **5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter billing with it.
 
 **6. The `infra` module does not translate these yet.** `modules/infra`'s `translate.ts` handles `d1_databases` and `vars` only, so `kv_namespaces` and `ratelimits` in `wrangler.jsonc` do not become Pulumi resources. Create the namespace with `wrangler` as above and keep the ids in `wrangler.jsonc` until that gap closes.
+
+## Setting up `kv-upstash`
+
+`saasaloy add kv-upstash` adds `@upstash/redis` to `packages/kv/package.json` and registers the provider. It writes nothing into `apps/api/wrangler.jsonc`, because an HTTP provider has no binding. Three things need a human.
+
+**1. Create the database and copy its REST credentials.** Create a Redis database at <https://console.upstash.com>, open the REST API panel, and copy the URL and the **read-write** token. The read-only token cannot `SET`, `DEL`, or run the limiter's `EVAL`.
+
+```sh
+echo 'UPSTASH_REDIS_REST_URL=https://<name>-<id>.upstash.io' >> apps/api/.dev.vars
+echo 'UPSTASH_REDIS_REST_TOKEN=<token>' >> apps/api/.dev.vars
+wrangler secret put UPSTASH_REDIS_REST_URL
+wrangler secret put UPSTASH_REDIS_REST_TOKEN
+```
+
+The token is a secret. Never put it in `apps/api/wrangler.jsonc`; that file is committed.
+
+**2. Set `KV_KEY_PREFIX`, which this provider requires.** One Redis database is one flat keyspace. Without a prefix, `list({})` scans every key in the database and hands back keys the project does not own, so an empty or unset value throws `provider_error` before any request leaves.
+
+```jsonc
+// apps/api/wrangler.jsonc
+"vars": { "KV_PROVIDER": "upstash", "KV_KEY_PREFIX": "app:" }
+```
+
+The provider prepends the prefix to the `SCAN` glob and to every limiter bucket, and escapes the glob characters in both halves, so a key holding a `*` or a `[` matches itself and nothing else.
+
+**3. Know the two size numbers disagree.** The core refuses a value over 25 MiB. Upstash caps one record at 1 MB on the free plan and 100 MB on paid, so a value can pass the core and still be refused. The provider maps that refusal to `too_large`, so a caller sees one code either way.
+
+The limiter needs no setup. `consume` runs one Lua script holding `INCR`, `EXPIRE NX` and `PTTL`, atomically, against a bucket named `<KV_KEY_PREFIX>rl:<policy>:<key>`. It is a fixed window, the same shape `kv-memory` uses, and there is no 10-or-60 restriction on `periodSeconds` here — that rule is Cloudflare's binding alone.
 
 ## Limits worth knowing before you design around KV
 

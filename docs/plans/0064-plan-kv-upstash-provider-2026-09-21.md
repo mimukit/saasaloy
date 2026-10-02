@@ -35,7 +35,7 @@ Success means three things. `saasaloy add kv-upstash` then `KV_PROVIDER=upstash`
 
 One module, `modules/kv-upstash/`, built to `.agents/skills/create-provider/` mode `kv`. It reuses the whole core — key building, JSON encoding, the 25 MiB cap, the TTL floor check, policy resolution and the `KvError` re-throw in `run()` — and adds one runtime file plus its registration. `billing-stripe` is the descriptor model (a dependency patch plus `removeWarnings`); `kv-cloudflare` is the provider-file model (binding lookup replaced by client construction, status mapping replaced by Upstash error mapping); `kv-memory` is the test model (a stub, a shim, a 2,500-key paging test).
 
-### Phase 1: the descriptor
+### Phase 1: the descriptor (built 2026-09-21)
 
 - Write `modules/kv-upstash/registry-item.json`: `dependsOn: ["kv"]`, the two `envVars`, one `plugin-array` patch appending `upstash()` to `providers` in `packages/kv/src/index.ts`, and the file entry `files/upstash.ts` → `@kv/providers/upstash.ts`.
 - Add one `package-json-dependency` patch on `packages/kv/package.json`, section `dependencies`: `@upstash/redis` `1.38.4`.
@@ -43,7 +43,7 @@ One module, `modules/kv-upstash/`, built to `.agents/skills/create-provider/` mo
 - No `wrangler-binding` patch and no handler registration. An HTTP provider has no binding, so `infra` and `apps/api/src/worker.ts` are untouched.
 - Update `KV_PROVIDER`'s description in `modules/kv/registry-item.json` to name `upstash`.
 
-### Phase 2: get, set, delete, list
+### Phase 2: get, set, delete, list (built 2026-09-21)
 
 - `modules/kv-upstash/files/upstash.ts` exports `upstash(options?: UpstashKvOptions): KvProvider`, with `name: "upstash"` and `minTtlSeconds: 1`.
 - Build the client lazily through `await import("@upstash/redis/cloudflare")`, on the first call that needs one, and cache it in a `WeakMap` keyed by the `env` object so one request builds one client and the token never becomes a `Map` key. `UpstashKvOptions.client` short-circuits the import, which is how the test reaches the file without the package.
@@ -52,21 +52,21 @@ One module, `modules/kv-upstash/`, built to `.agents/skills/create-provider/` mo
 - `list` → `redis.scan(cursor ?? "0", { match: glob(env, prefix), count: limit })`. The glob is `KV_KEY_PREFIX` plus the caller's prefix plus `*`, with `*`, `?`, `[`, `]`, `^` and `\` escaped in both parts first, or a key holding a glob character silently matches the wrong set. Return `{ keys, cursor, complete }`, `complete` true only when the returned cursor is `"0"`.
 - Document in the file header that `limit` is a **hint** here: SCAN's `COUNT` is work per iteration, not a page size, so a page may hold more or fewer keys than asked.
 
-### Phase 3: consume
+### Phase 3: consume (built 2026-09-21)
 
 - One Lua script, sent with `redis.eval` on every call, holding `INCR`, `EXPIRE <period> NX` and `PTTL` and returning `[count, pttl]`. Atomic, so a crash can never leave a bucket without an expiry.
 - The bucket key is `${KV_KEY_PREFIX}rl:${policy.name}:${key}`, so two policies never share a bucket and two projects on one Redis never collide. The core applies `KV_KEY_PREFIX` inside `client.key()` only, and `consume` takes a raw key, so the provider applies it here itself.
 - Return `{ success: count <= policy.limit, remaining: Math.max(0, policy.limit - count), resetAt: Date.now() + pttl }`. A refusal is a value; never throw for a spent budget.
 - No `periodSeconds` guard. The 10-or-60 restriction is Cloudflare's alone and has no counterpart here.
 
-### Phase 4: error mapping
+### Phase 4: error mapping (built 2026-09-21)
 
 - One `normalize(cause)` function, the same shape as `kv-cloudflare`'s. Re-throw a `KvError` untouched, wrap everything else.
 - Map the HTTP status the SDK puts in an `UpstashError` message: `429` → `rate_limited` / retryable (the daily and per-second request caps), `401` and `403` → `provider_error` / not retryable (a wrong token is a deploy fault, and retrying makes it worse), `413` and a `max request size` message → `too_large`, the `5xx` family → `provider_error` / retryable. Everything else falls through to `provider_error` / not retryable.
 - Keep the raw status or the leading `ERR` token in `providerCode`.
 - Note the size asymmetry in the file header: Upstash caps one record at 1 MB on the free plan, far under the core's 25 MiB `too_large` check, so a value can pass the core and still be refused. The provider maps that refusal to `too_large` so the caller sees one code either way.
 
-### Phase 5: tests
+### Phase 5: tests (built 2026-09-21)
 
 - Add `modules/kv-upstash/provider.ts`, the one-line re-export shim, and leave it out of the descriptor's `files`.
 - `modules/kv-upstash/files/upstash.test.ts`, on `node:test`, with a fake client passed through `UpstashKvOptions`. Cover: a `get` miss returns `null`; `set` passes `ex` only when a TTL is given; `set` with no TTL passes no options; a value round trips unparsed, proving `automaticDeserialization: false`; `delete` on an absent key succeeds.
@@ -75,12 +75,12 @@ One module, `modules/kv-upstash/`, built to `.agents/skills/create-provider/` mo
 - An error-mapping table test, one row per status.
 - A precondition test: no URL, no token, empty `KV_KEY_PREFIX` — each throws `provider_error` naming the variable, and no request leaves.
 
-### Phase 6: docs, the report, and the swap proof
+### Phase 6: docs, the report, and the swap proof (built 2026-09-21)
 
 - Update `modules/kv/skills/saasaloy-kv/SKILL.md`: the provider table gains a row, and the sections on the TTL floor, `list` paging and `consume` gain the Upstash column. Say plainly that `remaining` is present on `upstash` and absent on `cloudflare`, and that `KV_KEY_PREFIX` is required on `upstash` and scopes its `list`.
 - Update `modules/ratelimit/skills/saasaloy-ratelimit/SKILL.md`. Its per-colo paragraph already says a global count "is a different store … and a different provider"; point that sentence at this module.
 - Add `kv-upstash` to the README provider row.
-- File one follow-up issue carrying all three contract findings plus the conformance suite: `KvProvider` wants a `maxValueBytes` beside `minTtlSeconds`; `KvListOptions.limit` is under-specified for a cursor store; `KvListOptions.prefix` is under-specified about `KV_KEY_PREFIX` on every provider; and three hand-written provider test files want one shared conformance suite, a pattern `queue`, `storage` and `email` share.
+- File one follow-up issue carrying all three contract findings plus the conformance suite (filed as #172): `KvProvider` wants a `maxValueBytes` beside `minTtlSeconds`; `KvListOptions.limit` is under-specified for a cursor store; `KvListOptions.prefix` is under-specified about `KV_KEY_PREFIX` on every provider; and three hand-written provider test files want one shared conformance suite, a pattern `queue`, `storage` and `email` share.
 - Write the swap proof as a QA document: install `kv`, `ratelimit` and `kv-upstash` into `.dev`, set `KV_PROVIDER=upstash` with real credentials, confirm a limited route returns `RateLimit-Remaining`, and confirm `git diff` touches no file in `packages/kv/src`, `ratelimit` or `feature-flags`.
 - Run `pnpm lint`, `pnpm test`, `pnpm deps:verify`.
 

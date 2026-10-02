@@ -57,9 +57,9 @@ The Rate Limiting binding reads its `limit` and `period` from there and nothing 
 
 ### Cloudflare counts per location, so the real limit is a multiple
 
-The Rate Limiting binding counts inside one Cloudflare colo, not globally. A caller spread across `n` colos gets roughly `n × limit` per period, and a distributed attacker gets one budget per location it reaches. Set the number for what one location should tolerate, and treat the limiter as protection against a hot caller rather than as a global quota. When you need an exact global count, that is a different store (a Durable Object, or Upstash's `@upstash/ratelimit`) and a different provider.
+The Rate Limiting binding counts inside one Cloudflare colo, not globally. A caller spread across `n` colos gets roughly `n × limit` per period, and a distributed attacker gets one budget per location it reaches. Set the number for what one location should tolerate, and treat the limiter as protection against a hot caller rather than as a global quota. When you need an exact global count, that is a different store and a different provider: `saasaloy add kv-upstash`, then `KV_PROVIDER=upstash`. It counts once in one Redis database, whichever colo the request landed in.
 
-The binding also returns `{ success }` and nothing else — no count, no reset time. So on `kv-cloudflare` a 429 carries `Retry-After` set to the policy's whole period, and `RateLimit-Limit` and `RateLimit-Remaining` are **not sent**. Sending them would mean inventing a number. `kv-memory` does report a count, so both headers appear in local dev and vanish on deploy; that difference is the platform's, not a bug.
+The binding also returns `{ success }` and nothing else — no count, no reset time. So on `kv-cloudflare` a 429 carries `Retry-After` set to the policy's whole period, and `RateLimit-Limit` and `RateLimit-Remaining` are **not sent**. Sending them would mean inventing a number. `kv-memory` and `kv-upstash` both report a count, so on `kv-cloudflare` the two headers appear in local dev and vanish on deploy; that difference is the platform's, not a bug. On `kv-upstash` they are sent in production too.
 
 ### The limiter fails open
 

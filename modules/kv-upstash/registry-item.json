@@ -1,0 +1,39 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "kv-upstash",
+  "type": "saasaloy:feature",
+  "dependsOn": ["kv"],
+  "dependencies": [],
+  "envVars": {
+    "UPSTASH_REDIS_REST_URL": "REST endpoint of your Upstash Redis database, the `https://<name>-<id>.upstash.io` one from the database page under REST API. Required once KV_PROVIDER=upstash. Read from apps/api/.dev.vars in local dev and from a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_URL`) in production. There is no default: unset, every call through this provider throws KvError(\"provider_error\") before a request leaves the Worker.",
+    "UPSTASH_REDIS_REST_TOKEN": "REST token for the same database, from the same panel. Use the read-write token — the read-only one cannot `SET`, `DEL` or run the limiter's `EVAL`. Store it as a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_TOKEN`), never in wrangler.jsonc, and rotate it in the Upstash console if it leaks. A wrong token surfaces as KvError(\"provider_error\") with providerCode `401` and retryable false, because retrying a bad credential only burns request budget."
+  },
+  "removeWarnings": [
+    "Removing this module does not delete the Upstash database or the keys in it. Delete the database in the Upstash console when nothing else reads it, and revoke UPSTASH_REDIS_REST_TOKEN.",
+    "`@upstash/redis` stays in packages/kv/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs it."
+  ],
+  "patches": [
+    {
+      "file": "packages/kv/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@upstash/redis",
+      "range": "1.38.4"
+    },
+    {
+      "file": "packages/kv/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "kv",
+      "arrayProp": "providers",
+      "call": "upstash",
+      "import": {
+        "name": "upstash",
+        "from": "./providers/upstash"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/upstash.ts", "target": "@kv/providers/upstash.ts" }
+  ],
+  "scaffolds": []
+}
