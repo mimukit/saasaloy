@@ -208,7 +208,11 @@ async function stopApi(): Promise<void> {
     await sleep(250);
   }
   for (const pid of pids.filter(alive)) {
-    process.kill(pid, "SIGKILL");
+    try {
+      process.kill(pid, "SIGKILL");
+    } catch {
+      // Exited between the check and the kill.
+    }
   }
   console.log(`[play] stopped the api (${pids.length} process(es))`);
 }
@@ -301,14 +305,27 @@ async function restore(db: boolean): Promise<void> {
   if (withApi) {
     await stopApi();
   }
-  git(["reset", "--hard", "--quiet", "HEAD"]);
-  git(["clean", "-d", "--force", "--quiet"]);
-  console.log(
-    `[play] files back at ${git(["rev-parse", "--short", "HEAD"]).trim()}`
-  );
-  pnpm(["install"]);
-  if (db && driver) {
-    resetDatabase(driver);
+  try {
+    git(["reset", "--hard", "--quiet", "HEAD"]);
+    git(["clean", "-d", "--force", "--quiet"]);
+    console.log(
+      `[play] files back at ${git(["rev-parse", "--short", "HEAD"]).trim()}`
+    );
+    pnpm(["install"]);
+    if (db && driver) {
+      resetDatabase(driver);
+    }
+  } catch (error) {
+    // Say the api is down rather than restart it over a half-reset playground, where a
+    // second failure from startApi would hide this one.
+    if (withApi) {
+      const reason = error instanceof Error ? error.message : String(error);
+      throw new Error(
+        `${reason}\n[play] the api was stopped and is still down; start it with pnpm -C .dev/playground/apps/api dev`,
+        { cause: error }
+      );
+    }
+    throw error;
   }
   if (withApi) {
     await startApi();
