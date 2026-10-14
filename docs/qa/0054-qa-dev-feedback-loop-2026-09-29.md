@@ -1,6 +1,6 @@
 # QA Plan: live module sync and playground baseline reset
 
-_Generated 2026-09-29 · against `6702a53` plus the uncommitted #178 change · covers `play:watch` module sync, `play:snap`, `play:restore`, `play:restore --db`, and the `saasaloy init` nesting guard_
+_Generated 2026-09-29 · against `6702a53` plus the uncommitted #178 change, rebased onto `main` at `9f78cd8` on 2026-10-01 · covers `play:watch` module sync, `play:snap`, `play:restore`, `play:restore --db`, and the `saasaloy init` nesting guard_
 
 ## Summary
 - `pnpm play:watch` re-applies an installed module when you save one of its files, and `pnpm play:restore` returns the playground to a git baseline.
@@ -321,12 +321,14 @@ curl -s http://localhost:3001/src/components/access-denied.tsx | grep -c LIVE_SY
 - ✅ `pnpm play:restore` after five `add` runs and an install → restored in 0.9s, `git status` clean, `node_modules` kept.
 - ✅ `pnpm play:restore --db` on D1 with a running api → sign-up returns 422 before and 200 after, total 14.2s. Only the api process tree stopped; a workerd from another worktree kept running.
 - ✅ `pnpm play:restore --db` on Postgres 17 in a local container at `127.0.0.1:55432` → the `public` and `drizzle` schemas are dropped, the migration applies, sign-up returns 422 before and 200 after, total 12.3s.
+- ✅ After the rebase onto `main` at `9f78cd8`: `pnpm lint`, `pnpm test` and `pnpm build` → all exit 0. The `deps:verify` script keeps this branch's steps, because `saasaloy init` now runs `git init` in the playground and `play:init` installs.
+- ❌ After the rebase: `pnpm deps:verify` → fails at the playground lint step. `react(purity)` rejects the `Date` call in `packages/ui/src/blocks/footer.tsx:63`. This branch changes no template file, so the error comes from `main`. It does not block this plan.
 
 ## Not covered / needs human judgment
 - Postgres in this plan. The agent tested it once with a throwaway container. #187 adds the Compose container that a tester would use.
 - Seeds. `play:restore --db` leaves an empty database until #187 adds `seed.ts` files.
 - macOS and Windows. The api stop uses `ss`, with `lsof` as the fallback. `pgrep` finds the child processes. No test ran off Linux.
-- The web app. `astro dev` does not start on the base template yet (#186), so no case uses it.
+- The web app. `main` fixed `astro dev` on the base template (#186), but no case runs it. The admin app covers the module sync path.
 - A module file that `add` does not copy. The watcher re-runs `add`, and `add` reports every file as unchanged. No case checks this.
 - Database rows. The change adds no table and no migration, so there is no schema check.
 - Accessibility, compatibility and UX of the apps. The change adds no UI.
