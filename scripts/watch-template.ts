@@ -166,18 +166,27 @@ function main(): void {
     child.stderr.on("data", (chunk: Buffer) => {
       output += chunk.toString();
     });
+    // Node can emit `exit` after `error`. A second `done` would start the next job while
+    // this one still runs, and two `add` runs would race on the manifest.
+    let finished = false;
+    const finish = (): void => {
+      if (!finished) {
+        finished = true;
+        done();
+      }
+    };
     child.on("error", (error) => {
       console.error(
         `[sync] ${module}: could not run the shim: ${error.message}`
       );
-      done();
+      finish();
     });
     child.on("exit", (code) => {
       const seconds = ((performance.now() - started) / 1000).toFixed(1);
       if (code !== 0) {
         process.stdout.write(output);
         console.error(`[sync] ${module}: add --force failed (exit ${code})`);
-        done();
+        finish();
         return;
       }
       const { heldBack, written } = parseAddOutput(output);
@@ -200,7 +209,7 @@ function main(): void {
           `[sync] ${module}: registry-item.json changed. A removed patch or file is not reversed; pnpm play:restore clears it.`
         );
       }
-      done();
+      finish();
     });
   }
 
