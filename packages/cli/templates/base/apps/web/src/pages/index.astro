@@ -23,8 +23,7 @@ import Layout from "../layouts/Layout.astro";
 // suggests the component goes, then decide the position yourself.
 ---
 
-{
-  /*
+{/*
   The page is composed from @repo/ui/blocks/*, each reached by its own subpath export.
   Blocks render to static HTML by default; only the three that need browser state carry
   a client directive, and each one is deliberate:
@@ -40,16 +39,13 @@ import Layout from "../layouts/Layout.astro";
   landing blocks' file alone, and it carries its own positioning: fixed to the corner,
   clear of the sticky header's own controls at every width.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
-*/
-}
+*/}
 <Layout
   title={interpolate(landing.meta.title, { siteName })}
   description={interpolate(landing.meta.description, { siteName })}
 >
   <Navbar client:idle siteName={siteName} />
-  <ThemeToggle
-    className="border-border/60 bg-background/80 fixed right-4 bottom-4 z-50 shadow-sm backdrop-blur"
-  />
+  <ThemeToggle className="border-border/60 bg-background/80 fixed right-4 bottom-4 z-50 shadow-sm backdrop-blur" />
   <main>
     <Hero siteName={siteName} />
     <FeatureGrid />
