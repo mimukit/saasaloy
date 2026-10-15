@@ -37,7 +37,15 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 const BANGLADESH_PREFIX = "+880";
 
-/** `+880` and the ten national digits of a Bangladeshi mobile number. */
+/**
+ * `+880` and the ten national digits of a Bangladeshi mobile number.
+ *
+ * This guards an already-E.164 recipient at the gateway edge. The api request boundary has its
+ * own half, `bangladeshMobile` in `modules/validators/files/src/phone.ts`, which normalizes
+ * whatever a person typed into exactly this shape. The two cannot share a constant, because
+ * `packages/sms` takes no runtime dependency (ADR 0020) and that schema needs `zod`. Change one
+ * and read the other.
+ */
 const BANGLADESH_NUMBER = /^\+880\d{10}$/;
 
 interface KhudebartaPayload {
