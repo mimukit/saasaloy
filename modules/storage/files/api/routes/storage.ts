@@ -66,7 +66,7 @@ export const storage = new Hono<{ Bindings: StorageEnv }>()
         );
       }
 
-      const body = c.req.raw.body;
+      const { body } = c.req.raw;
       if (!body) {
         return c.json(errorBody("invalid_input", "empty request body"), 400);
       }

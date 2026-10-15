@@ -43,7 +43,7 @@ const E164 = /^\+[1-9]\d{1,14}$/;
  * `sms-<provider>` module appends to — see `src/index.ts`.
  */
 export function defineSms(config: SmsConfig): SmsRegistry {
-  const providers = config.providers;
+  const { providers } = config;
 
   return {
     providers,

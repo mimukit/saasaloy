@@ -126,7 +126,7 @@ export function defineKv(config: KvConfig): KvRegistry {
           assertKey(request.key);
 
           // Read off the provider once, so the narrowing survives into the closure below.
-          const consume = provider.consume;
+          const { consume } = provider;
           if (!consume) {
             throw new KvError(
               "not_supported",

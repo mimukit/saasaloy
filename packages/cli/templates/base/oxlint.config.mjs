@@ -69,7 +69,14 @@ const suppressed = {
   // Sequential awaits are deliberate where ordering matters, and `async` is kept on
   // some functions (e.g. an email provider's `send`) to satisfy an interface even
   // when that implementation has nothing to await.
+  //
+  // The two `prefer-await-to-*` rules fire on APIs that are callbacks by contract:
+  // Hono's `.onError((err, c) => …)` in `apps/api`, and the `.catch()` that
+  // `database-postgres`'s `withDb` hangs on a promise it hands to `waitUntil` rather
+  // than awaiting. Neither has an `await` form.
   "no-await-in-loop": "off",
+  "promise/prefer-await-to-callbacks": "off",
+  "promise/prefer-await-to-then": "off",
   "require-await": "off",
 
   // --- Regular expressions -------------------------------------------------
@@ -82,10 +89,25 @@ const suppressed = {
   // --- Key ordering and small style ----------------------------------------
   // Props and config objects are grouped by meaning (`id`, then `title`, then the
   // data). Alphabetising them loses that ordering for no benefit. `no-plusplus` and
-  // `method-signature-style` are pure preference.
+  // `method-signature-style` are pure preference. `unicorn/import-style` wants a
+  // default import for `node:path` and friends, against the named imports
+  // (`import { resolve } from "node:path"`) every module file uses.
   "no-plusplus": "off",
   "sort-keys": "off",
   "typescript/method-signature-style": "off",
+  "unicorn/import-style": "off",
+
+  // --- Thresholds and placement --------------------------------------------
+  // Numeric limits and shape preferences with no defect behind them. `complexity`
+  // fires on a provider's error mapper, which is one flat branch per vendor code.
+  // `no-nested-ternary` fires on a three-way sort icon in JSX. `no-dynamic-delete`
+  // fires on dropping one key from a record keyed by a runtime id, which is what a
+  // permission draft is. `consistent-function-scoping` wants a helper hoisted out of
+  // the factory it serves, away from the one caller that reads it.
+  complexity: "off",
+  "no-nested-ternary": "off",
+  "typescript/no-dynamic-delete": "off",
+  "unicorn/consistent-function-scoping": "off",
 
   // --- Accessibility shape, not accessibility ------------------------------
   // Fires on `<div role="group">` and friends: the roles are correct, and swapping
@@ -104,6 +126,9 @@ export default defineConfig({
     // deployed Worker or a client bundle is a leak, not a log line. Add an override
     // below for any file where console output is genuinely the feature.
     "no-console": "error",
+    // A type-only import is erased before the code runs, so a cycle that closes only
+    // through one cannot leave a module half-initialised. The runtime cycles stay errors.
+    "import/no-cycle": ["error", { ignoreTypes: true }],
   },
 
   overrides: [
@@ -150,6 +175,31 @@ export default defineConfig({
     {
       files: ["packages/*/src/providers/console.ts", "packages/logger*/**"],
       rules: { "no-console": "off" },
+    },
+
+    // Three more places where `console` is the right call, all from modules.
+    // A queue provider's batch consumer and cron tick run outside a request, so there is
+    // no `c.get("log")` to reach for, and `@repo/queue` has no runtime dependencies to
+    // import `@repo/logger` with. Workers Logs indexes `console` directly. The example
+    // job's whole body is one log line, which is what makes it a readable example.
+    // `infra` is a Pulumi program on the deploying machine, which reports its progress
+    // on stdout and has no Workers logger to route through.
+    {
+      files: [
+        "packages/queue/src/providers/**",
+        "packages/queue/src/jobs/example.ts",
+        "infra/**",
+      ],
+      rules: { "no-console": "off" },
+    },
+
+    // The queue barrel registers its providers, and each provider calls back into the
+    // barrel for `createQueue`, `dispatch` and `dueSchedules`. The cycle is deliberate:
+    // a provider reads those hoisted functions inside a function body, never while the
+    // module loads. `packages/queue/src/providers/memory.ts` explains it in full.
+    {
+      files: ["packages/queue/src/index.ts", "packages/queue/src/providers/**"],
+      rules: { "import/no-cycle": "off" },
     },
 
     // `packages/env` runs on `node:test`, not vitest — the base ships no test runner to
