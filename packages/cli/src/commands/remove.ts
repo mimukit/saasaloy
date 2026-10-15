@@ -20,6 +20,7 @@ import {
 import { persistLedger } from "../lib/ledger.js";
 import type { LedgerFailure } from "../lib/ledger.js";
 import { loadLock } from "../lib/lock.js";
+import { formatPatchedFiles } from "../lib/format.js";
 import { loadManifest } from "../lib/manifest.js";
 import { isReversibleKind } from "../lib/patch/index.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -393,6 +394,10 @@ export async function runRemove(argv: string[]): Promise<number> {
     for (const p of result.patchesReversed) {
       log.step(`${pc.red("revert")}  ${p.file} ${pc.dim(`(${p.patch.kind})`)}`);
     }
+    await formatPatchedFiles(
+      root,
+      result.patchesReversed.map((p) => p.file)
+    );
     // A reversible entry that landed in `patchesDropped` either had nothing left to undo —
     // the link was hand-removed, or the file is gone — or the inverse refused it, which is
     // a different thing to say. Never claim a revert; the non-reversible kinds were already

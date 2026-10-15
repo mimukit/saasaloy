@@ -26,6 +26,7 @@ import {
 import { restoreLatestBackup, writeBackup } from "../lib/backup.js";
 import { detectConflicts, formatConflicts } from "../lib/conflicts.js";
 import { lineDiff } from "../lib/diff.js";
+import { formatPatchedFiles } from "../lib/format.js";
 import {
   EXIT_FAILURE,
   EXIT_MERGE_PENDING,
@@ -1044,6 +1045,11 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const result: UpdateResult = outcome.value;
 
     reportResult(result);
+    await formatPatchedFiles(
+      root,
+      result.patched.map((p) => p.file),
+      TUI_ON_STDERR
+    );
 
     // Phase 4: the merge plan is emitted only after the clean path has run, so it
     // describes what is actually left to do rather than what might have been.
