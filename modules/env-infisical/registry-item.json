@@ -14,7 +14,7 @@
       "call": "infisical",
       "import": {
         "name": "infisical",
-        "from": "./providers/infisical"
+        "from": "./providers/infisical.ts"
       }
     }
   ],
