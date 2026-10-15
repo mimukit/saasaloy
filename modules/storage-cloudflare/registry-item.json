@@ -6,10 +6,19 @@
   "dependencies": [],
   "envVars": {
     "R2_ACCOUNT_ID": "Cloudflare account id, from the dashboard URL or `wrangler whoami`. One of four optional values that together let this provider hand a browser a presigned URL. Leave them unset and reads and writes still work through the R2 binding — every upload and download just streams through the Worker's proxy route instead.",
-    "R2_ACCESS_KEY_ID": "Access key id of an R2 API token with Object Read & Write on the bucket, from R2 → Manage API tokens. The Worker binding is a different credential and cannot sign a URL, which is why this exists. Set it in `.dev.vars` locally and with `wrangler secret put R2_ACCESS_KEY_ID` in production.",
+    "R2_ACCESS_KEY_ID": "Access key id of an R2 API token with Object Read & Write on the bucket, from R2 → Manage API tokens. The Worker binding is a different credential and cannot sign a URL, which is why this exists. Set it in `packages/env/.env` locally, run `pnpm env:setup`, and use `wrangler secret put R2_ACCESS_KEY_ID` in production.",
     "R2_SECRET_ACCESS_KEY": "Secret access key shown once when the R2 API token is created. A secret: never in wrangler.jsonc, never in a repo. `wrangler secret put R2_SECRET_ACCESS_KEY` in production.",
     "R2_BUCKET_NAME": "Name of the bucket the S3-compatible URL addresses, e.g. `app-storage`. It must be the bucket the `BUCKET` binding points at, or a presigned link will read and write a different bucket than the binding does."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": [
+    "R2_ACCOUNT_ID",
+    "R2_ACCESS_KEY_ID",
+    "R2_SECRET_ACCESS_KEY",
+    "R2_BUCKET_NAME"
+  ],
   "patches": [
     {
       "file": "apps/api/wrangler.jsonc",
@@ -38,12 +47,27 @@
         "name": "cloudflare",
         "from": "./providers/cloudflare"
       }
+    },
+    {
+      "file": "packages/storage/src/env-preset.ts",
+      "kind": "plugin-array",
+      "exportName": "storagePreset",
+      "arrayProp": "extends",
+      "call": "r2Env",
+      "import": {
+        "name": "r2Env",
+        "from": "./env/r2"
+      }
     }
   ],
   "files": [
     {
       "path": "files/cloudflare.ts",
       "target": "@storage/providers/cloudflare.ts"
+    },
+    {
+      "path": "files/env.ts",
+      "target": "@storage/env/r2.ts"
     }
   ],
   "scaffolds": []

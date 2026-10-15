@@ -1,0 +1,36 @@
+# The one key list for this repository. Every `.env` that `pnpm env:setup` writes is
+# written from this file. There is no second example file, and no `.dev.vars.example`.
+#
+# `.env` is gitignored; this file is tracked. Keep real secrets out of it. Every value
+# below is the local development default.
+#
+# ADDING A KEY
+#
+# 1. Add its line here, under the `# @services` section that names the services that read
+#    it, with a comment saying where the value comes from and what unset looks like. Add a
+#    `# Blank on purpose` line when the key is meant to stay empty.
+# 2. Declare it in the capability package's `src/env.ts` preset, so `createEnv` validates
+#    it and the type reaches the code that reads it.
+#
+# `saasaloy add` regenerates the key blocks below from the installed modules' `envVars`.
+# A value you type here survives that, and nothing is ever removed.
+#
+# SECTIONS
+#
+# A `# @services <names>` line sets which services take every key below it, until the next
+# such line. The names are the `name` fields of `SERVICES` in
+# `packages/env/src/services.ts`. A key with no section above it fails the run.
+
+# =============================================================================
+# The web app
+# =============================================================================
+# @services web
+
+# The public origin this site is served from (e.g. https://example.com). Astro reads it
+# at build time for canonical URLs and the sitemap. Unset, the build fails rather than
+# writing localhost links into a production bundle.
+PUBLIC_SITE_URL=http://localhost:3000
+
+# Origin this site calls for api and auth requests (e.g. https://api.x.com). The api
+# Worker's pinned dev port is 4000. Unset, the build fails naming this key.
+PUBLIC_API_URL=http://localhost:4000

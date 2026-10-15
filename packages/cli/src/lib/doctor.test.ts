@@ -8,6 +8,7 @@ import {
   checkBase,
   checkModule,
   checkPartialInstalls,
+  checkEnv,
   checkPolicyBindings,
   checkProject,
   checkTarget,
@@ -16,6 +17,7 @@ import {
   registryModuleNames,
   resolveDoctorTarget,
   WRANGLER_FILE,
+  readEnvState,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
 import { hashContent } from "./fs-utils.js";
@@ -697,5 +699,76 @@ describe(readPolicyState, () => {
     await expect(
       readPolicyState(root, ["kv-cloudflare"])
     ).resolves.toBeUndefined();
+  });
+});
+
+describe(checkEnv, () => {
+  it("is quiet when no leftover .dev.vars exists", () => {
+    expect(checkEnv({ legacy: [], hasKeyList: true })).toStrictEqual([]);
+  });
+
+  it("names every leftover file and the command that migrates it", () => {
+    const findings = checkEnv({
+      legacy: ["apps/web/.dev.vars", "apps/api/.dev.vars"],
+      hasKeyList: true,
+    });
+
+    expect(findings).toHaveLength(2);
+    expect(findings[0]?.where).toBe("/apps/api/.dev.vars");
+    expect(findings[0]?.message).toContain("apps/api/.dev.vars still exists");
+    expect(findings[0]?.message).toContain("pnpm env:setup");
+    expect(findings[1]?.where).toBe("/apps/web/.dev.vars");
+  });
+
+  it("adds a second finding when there is no key list to migrate into", () => {
+    const findings = checkEnv({
+      legacy: ["apps/api/.dev.vars"],
+      hasKeyList: false,
+    });
+
+    expect(findings).toHaveLength(2);
+    expect(findings[1]?.message).toContain(
+      "packages/env/.env.example is missing"
+    );
+  });
+
+  it("says nothing about a missing key list on its own", () => {
+    expect(checkEnv({ legacy: [], hasKeyList: false })).toStrictEqual([]);
+  });
+});
+
+describe(readEnvState, () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-env-state-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { force: true, recursive: true });
+  });
+
+  it("finds a leftover file under any service workspace", async () => {
+    await mkdir(join(root, "apps", "api"), { recursive: true });
+    await writeFile(join(root, "apps", "api", ".dev.vars"), "A=1\n", "utf-8");
+
+    await expect(readEnvState(root)).resolves.toStrictEqual({
+      legacy: ["apps/api/.dev.vars"],
+      hasKeyList: false,
+    });
+  });
+
+  it("sees the key list when the project has one", async () => {
+    await mkdir(join(root, "packages", "env"), { recursive: true });
+    await writeFile(
+      join(root, "packages", "env", ".env.example"),
+      "# @services api\nA=1\n",
+      "utf-8"
+    );
+
+    await expect(readEnvState(root)).resolves.toStrictEqual({
+      legacy: [],
+      hasKeyList: true,
+    });
   });
 });

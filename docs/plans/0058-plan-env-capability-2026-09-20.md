@@ -63,7 +63,7 @@ Success: a scaffolded project has one tracked key list, one command that writes 
 - **`scripts/table-names.test.ts`** is the shape of the drift test.
 - **`modules/api/files/src/index.ts`**'s open `Bindings` interface stays assignable to the env types `createEnv` infers.
 
-### Phase 1: `packages/env` in the base
+### Phase 1: `packages/env` in the base (built 2026-09-20)
 
 Scaffold `packages/cli/templates/base/packages/env/`.
 
@@ -82,7 +82,7 @@ Scaffold `packages/cli/templates/base/packages/env/`.
 
 Verification: `node --test` over the parse, the merge, the section rules, the completeness check, `CHECKOUT_OWNED_KEYS` and the `--env prod` guards, with no network and no write outside a temp directory.
 
-### Phase 2: typed access
+### Phase 2: typed access (built 2026-09-20)
 
 - `src/schema.ts` — the Standard Schema surface `packages/env` types against, and the re-exports a preset author uses. zod is the default and is declared in the base.
 - `src/define.ts` — `createEnv({ extends, server, client, shared, clientPrefix, runtimeEnv | runtimeEnvStrict, isServer, emptyStringAsUndefined, skipValidation, onValidationError, onInvalidAccess })`.
@@ -93,7 +93,7 @@ Verification: `node --test` over the parse, the merge, the section rules, the co
 
 Verification: unit tests for each option, the aggregate message, the memoization, the prefix type error (a `tsd`-style negative test or an `@ts-expect-error` line), the Proxy throw, and a test proving the package declares no runtime dependency beyond the validator.
 
-### Phase 3: presets and composition
+### Phase 3: presets and composition (built 2026-09-20)
 
 - Each capability package gains `src/env.ts` exporting its preset. `packages/kv` declares `KV_PROVIDER` and `KV_KEY_PREFIX`; `packages/email` declares `EMAIL_PROVIDER` and `EMAIL_FROM`; and so on across nine capabilities.
 - `apps/api/src/env.ts` and `apps/web/src/env.ts` each hold an `extends: []` literal. The `api` and `admin` modules ship theirs; the base ships `apps/web`'s.
@@ -104,7 +104,7 @@ Verification: unit tests for each option, the aggregate message, the memoization
 
 Verification: `pnpm lint`, the new drift test, and a `.dev` scaffold whose `apps/web` fails to build when `PUBLIC_API_URL` is unset.
 
-### Phase 4: the descriptor declares services
+### Phase 4: the descriptor declares services (built 2026-09-20)
 
 - Add `envServices` to `packages/cli/schemas/registry-item.schema.json`: an optional object with a `default` array and per-key overrides, values drawn from the known service names.
 - Migrate all 18 in-repo descriptors. About 40 keys.
@@ -115,7 +115,7 @@ Verification: `pnpm lint`, the new drift test, and a `.dev` scaffold whose `apps
 
 Verification: `pnpm lint`, the CLI suite, and a `.dev` scaffold producing a correct example file with correct section lines.
 
-### Phase 5: retire `.dev.vars`
+### Phase 5: retire `.dev.vars` (built 2026-09-20)
 
 - `saasaloy env` writes `packages/env/.env`, never `.dev.vars`. `--check` checks the distributed files.
 - `saasaloy add` stops writing `apps/api/.dev.vars.example`.
@@ -128,7 +128,7 @@ This is the breaking commit. It needs a `feat!` subject and a release note.
 
 Verification: a scaffolded `.dev` project runs `pnpm dev` with values only in `.env`, and `saasaloy doctor` is clean. A project scaffolded before this plan migrates with one `pnpm env:setup`.
 
-### Phase 6: `env-infisical`
+### Phase 6: `env-infisical` (built 2026-09-20)
 
 - `modules/env-infisical/` following `.agents/skills/create-provider/`: one runtime file plus its registration patch into `packages/env`'s `sources` array.
 - Machine identity through `INFISICAL_CLIENT_ID` and `INFISICAL_CLIENT_SECRET`, falling back to the host `infisical login`. Credentials travel in the child environment, never in argv, and no value is printed.
@@ -137,7 +137,7 @@ Verification: a scaffolded `.dev` project runs `pnpm dev` with values only in `.
 
 Verification: a fake CLI on `PATH` answers for Infisical, so nothing opens a connection.
 
-### Phase 7: the record
+### Phase 7: the record (built 2026-09-20)
 
 - ADR: `env` versus `config`, one rule.
 - ADR: `.env` and not `.dev.vars`, naming the wrangler and vite loader versions.

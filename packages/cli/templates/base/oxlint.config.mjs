@@ -151,5 +151,44 @@ export default defineConfig({
       files: ["packages/*/src/providers/console.ts", "packages/logger*/**"],
       rules: { "no-console": "off" },
     },
+
+    // `packages/env` runs on `node:test`, not vitest — the base ships no test runner to
+    // install, which is the whole reason its tests are written against Node's own. Three
+    // vitest rules point these files at a runner they cannot use, and
+    // `no-floating-promises` fires on every `describe`, whose promise the runner itself
+    // awaits. Prefixing twenty call sites with `void` would say nothing the runner does
+    // not already guarantee.
+    //
+    // `env:setup` and `env-exec` are node scripts, so `process` and `console` are theirs
+    // to use. Nothing a Worker imports reaches them (ADR 0041).
+    {
+      files: ["packages/env/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "typescript/no-floating-promises": "off",
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
+        "vitest/prefer-each": "off",
+      },
+    },
+    // `createEnv` is a generic mapped-type API: it takes `server`, `client` and `shared`
+    // as distinct type parameters, erases them to one `SchemaRecord` to iterate the keys,
+    // and puts the specific type back on the way out. Every assertion this file makes is
+    // that erase-and-restore, which the type system cannot express and the rules below
+    // cannot see through. The Proxy adds two more — `Reflect.get` on a mapped type is
+    // `any` by definition. Scoped to this one file; every rule stays on everywhere else.
+    {
+      files: ["packages/env/src/define.ts", "packages/env/src/define.test.ts"],
+      rules: {
+        "typescript/no-unsafe-type-assertion": "off",
+        "typescript/no-unnecessary-type-assertion": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-return": "off",
+      },
+    },
+    {
+      files: ["packages/env/scripts/**", "packages/env/src/exec.ts"],
+      rules: { "no-console": "off", "unicorn/no-process-exit": "off" },
+    },
   ],
 });

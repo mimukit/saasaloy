@@ -126,7 +126,7 @@ async function importSecret(env: StorageEnv): Promise<CryptoKey> {
   if (typeof secret !== "string" || secret.length === 0) {
     throw new Error(
       "STORAGE_URL_SECRET is not set, so storage cannot sign or verify an upload link. " +
-        "Generate one with `openssl rand -base64 32`, put it in `.dev.vars` for local dev, " +
+        "Generate one with `openssl rand -base64 32`, put it in `packages/env/.env` and run pnpm env:setup for local dev, " +
         "and set it in production with `wrangler secret put STORAGE_URL_SECRET`."
     );
   }

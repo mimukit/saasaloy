@@ -16,7 +16,7 @@ import { schema } from "./schema";
 //   new Hono<{ Bindings: DbBindings }>()
 //
 // Both fields are optional because a project supplies exactly one of them:
-// `DATABASE_URL` is the default (a Workers secret in production, `.dev.vars` locally) and
+// `DATABASE_URL` is the default (a Workers secret in production, `apps/api/.env` locally) and
 // `HYPERDRIVE` only exists once you opt into a Hyperdrive binding. See the
 // `saasaloy-database-postgres` skill.
 export interface DbBindings {
@@ -41,7 +41,7 @@ export function resolveConnectionString(env: DbBindings): string {
   const url = env.HYPERDRIVE?.connectionString ?? env.DATABASE_URL;
   if (!url) {
     throw new Error(
-      "No Postgres connection. Set DATABASE_URL (apps/api/.dev.vars locally, " +
+      "No Postgres connection. Set DATABASE_URL (apps/api/.env locally, " +
         "`wrangler secret put DATABASE_URL` in production) or bind HYPERDRIVE."
     );
   }

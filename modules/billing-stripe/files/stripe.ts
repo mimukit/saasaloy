@@ -73,7 +73,7 @@ function stripeClient(): Stripe {
   if (!key) {
     throw new BillingError(
       "provider_error",
-      "STRIPE_SECRET_KEY is not set. Put it in .dev.vars for local development and in `wrangler secret put STRIPE_SECRET_KEY` for a deployment."
+      "STRIPE_SECRET_KEY is not set. Put it in packages/env/.env and run pnpm env:setup for local development, and use `wrangler secret put STRIPE_SECRET_KEY` for a deployment."
     );
   }
   client ??= new Stripe(key, { httpClient: Stripe.createFetchHttpClient() });

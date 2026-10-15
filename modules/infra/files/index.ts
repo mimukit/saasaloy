@@ -1,3 +1,4 @@
+import { infraEnv } from "./src/env.js";
 import { discoverServices } from "./src/discover.js";
 import { pushSecrets } from "./src/secrets.js";
 import { toResources } from "./src/translate.js";
@@ -9,13 +10,10 @@ import { toResources } from "./src/translate.js";
 // file. Secrets are pushed separately, straight to the Cloudflare API — never through
 // Pulumi state (see src/secrets.ts).
 
-const accountId = process.env.CLOUDFLARE_DEFAULT_ACCOUNT_ID;
-if (!accountId) {
-  throw new Error(
-    "infra: CLOUDFLARE_DEFAULT_ACCOUNT_ID is not set — see the saasaloy-infra skill's " +
-      "credentials setup before running preview/deploy."
-  );
-}
+// One gate in front of the whole program. `env-exec infra/.env -- pulumi up` loads the
+// file into this process first, so an unset credential is named here rather than failing
+// somewhere inside the provider.
+const { CLOUDFLARE_DEFAULT_ACCOUNT_ID: accountId } = infraEnv(process.env);
 
 const services = await discoverServices();
 

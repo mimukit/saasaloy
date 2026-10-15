@@ -204,7 +204,7 @@ no SDK, no binding and no Cloudflare plan involved, so the provider behaves iden
 1. **Verify a sending domain in Plunk** (dashboard → Project → Domain) and set `EMAIL_FROM` to an
    address on it. An unverified sender is rejected by Plunk, not by this code.
 2. **Copy the secret key.** Plunk issues two, and only the `sk_...` one may send — a `pk_...` key
-   returns 401. Put it in `apps/api/.dev.vars` as `PLUNK_API_KEY=sk_...` for dev, and run
+   returns 401. Put it in `packages/env/.env` as `PLUNK_API_KEY=sk_...` for dev (`saasaloy env` prompts for it), run `pnpm env:setup`, and run
    `wrangler secret put PLUNK_API_KEY` for production.
 3. **Self-hosting only:** set `PLUNK_API_URL` to your instance's base URL. It defaults to the hosted
    API, so leave it unset otherwise. The URL must use HTTPS — the request carries your secret key,

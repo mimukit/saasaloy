@@ -117,9 +117,39 @@
         "type": "string"
       }
     },
+    "envServices": {
+      "type": "object",
+      "description": "Which services read each of this module's `envVars` — a service being a workspace that reads a `.env` (`api`, `web`, `admin`, `infra`). `default` covers every key the module declares; a key named alongside it overrides that list for itself. `saasaloy add` groups the key list in `packages/env/.env.example` under a `# @services` line per distinct set. Omit it and the `PUBLIC_` prefix rule decides instead, with a warning naming the module: a prefixed key goes to every client service, everything else to the api.",
+      "properties": {
+        "default": {
+          "type": "array",
+          "uniqueItems": true,
+          "minItems": 1,
+          "items": {
+            "type": "string",
+            "enum": ["api", "web", "admin", "infra"]
+          }
+        }
+      },
+      "propertyNames": {
+        "pattern": "^(default|[A-Z][A-Z0-9_]*)$"
+      },
+      "additionalProperties": {
+        "type": "array",
+        "uniqueItems": true,
+        "minItems": 1,
+        "items": { "type": "string", "enum": ["api", "web", "admin", "infra"] }
+      }
+    },
+    "envOptional": {
+      "type": "array",
+      "description": "Keys from `envVars` that may stay empty. `saasaloy add` writes a `# Blank on purpose` line above each one in `packages/env/.env.example`, which is what stops `pnpm env:setup` failing on a key the capability's schema gives a default or marks optional. Every name here must also appear in `envVars`.",
+      "uniqueItems": true,
+      "items": { "type": "string", "pattern": "^[A-Z][A-Z0-9_]*$" }
+    },
     "devVars": {
       "type": "object",
-      "description": "Local-development values for a subset of `envVars`: NAME → the value `saasaloy add` pre-fills into the generated `apps/api/.dev.vars.example`. Only for a value that is the same on every machine and is not a secret (a loopback URL, a fixed port). Every key here must also appear in `envVars`; a key absent here is written with an empty value for the owner to fill in.",
+      "description": "Local-development values for a subset of `envVars`: NAME → the value `saasaloy add` pre-fills into the generated `packages/env/.env.example`. Only for a value that is the same on every machine and is not a secret (a loopback URL, a fixed port). Every key here must also appear in `envVars`; a key absent here is written with an empty value for the owner to fill in.",
       "propertyNames": {
         "pattern": "^[A-Z][A-Z0-9_]*$"
       },

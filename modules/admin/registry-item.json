@@ -7,6 +7,9 @@
   "envVars": {
     "PUBLIC_API_URL": "Origin the admin SPA calls for api and auth requests (e.g. https://api.x.com). Falls back to http://localhost:4000 in dev. The `PUBLIC_` prefix is what vite.config.ts exposes to the browser bundle."
   },
+  "envServices": {
+    "default": ["admin"]
+  },
   "patches": [
     {
       "file": "apps/api/src/index.ts",
@@ -17,6 +20,18 @@
       "import": {
         "name": "adminUsers",
         "from": "./routes/admin-users"
+      }
+    },
+    {
+      "file": "packages/env/src/services.ts",
+      "kind": "const-array",
+      "constName": "SERVICES",
+      "key": "name",
+      "entry": {
+        "name": "admin",
+        "file": "apps/admin/.env",
+        "environment": "dev",
+        "omit": []
       }
     }
   ],
@@ -29,14 +44,38 @@
   "scaffolds": [
     {
       "workspace": "apps/admin",
-      "aliases": { "@admin": "apps/admin/src" },
+      "aliases": {
+        "@admin": "apps/admin/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/wrangler.jsonc", "target": "wrangler.jsonc" },
-        { "path": "files/vite.config.ts", "target": "vite.config.ts" },
-        { "path": "files/index.html", "target": "index.html" },
-        { "path": "files/src/main.tsx", "target": "src/main.tsx" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/wrangler.jsonc",
+          "target": "wrangler.jsonc"
+        },
+        {
+          "path": "files/vite.config.ts",
+          "target": "vite.config.ts"
+        },
+        {
+          "path": "files/src/env.ts",
+          "target": "src/env.ts"
+        },
+        {
+          "path": "files/index.html",
+          "target": "index.html"
+        },
+        {
+          "path": "files/src/main.tsx",
+          "target": "src/main.tsx"
+        },
         {
           "path": "files/src/styles/admin.css",
           "target": "src/styles/admin.css"
@@ -45,8 +84,14 @@
           "path": "files/src/routeTree.gen.ts",
           "target": "src/routeTree.gen.ts"
         },
-        { "path": "files/src/lib/auth.ts", "target": "src/lib/auth.ts" },
-        { "path": "files/src/lib/api.ts", "target": "src/lib/api.ts" },
+        {
+          "path": "files/src/lib/auth.ts",
+          "target": "src/lib/auth.ts"
+        },
+        {
+          "path": "files/src/lib/api.ts",
+          "target": "src/lib/api.ts"
+        },
         {
           "path": "files/src/lib/redirect.ts",
           "target": "src/lib/redirect.ts"

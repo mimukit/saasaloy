@@ -1,6 +1,7 @@
 import { hc } from "hono/client";
 
 import type { AppType } from "@repo/api/client";
+import { webEnv } from "@web/env";
 import { Waitlist } from "@repo/ui/blocks/waitlist";
 import type { WaitlistResult } from "@repo/ui/blocks/waitlist";
 
@@ -14,10 +15,10 @@ import type { WaitlistResult } from "@repo/ui/blocks/waitlist";
 // This file is yours. Point it at a different endpoint, swap the client, add analytics on
 // success — the block does not care.
 
-// Falls back to the api Worker's pinned local dev port (:4000, fixed in both
-// vite.config.ts and wrangler.jsonc) when PUBLIC_API_URL isn't set — see the
-// saasaloy-waitlist skill for the production value.
-const API_BASE = import.meta.env.PUBLIC_API_URL ?? "http://localhost:4000";
+// `PUBLIC_API_URL` comes from `apps/web/src/env.ts`, which validates it at build time.
+// There is no fallback: an unset key fails the build naming the key, rather than shipping
+// a bundle that calls http://localhost:4000 from production.
+const API_BASE = webEnv().PUBLIC_API_URL;
 
 // The consumer's own three-line client. `AppType` is api's route chain, so `api.waitlist`
 // and the body it takes come from the route file itself — rename the path or change the

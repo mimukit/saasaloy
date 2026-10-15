@@ -71,7 +71,7 @@ export function khudebarta(): SmsProvider {
         throw new SmsError(
           "provider_error",
           "khudebarta: `KHUDEBARTA_API_KEY` and `KHUDEBARTA_SECRET_KEY` must both be set on " +
-            "this Worker's env. Set them in apps/api/.dev.vars for local development and with " +
+            "this Worker's env. Set them in packages/env/.env and run pnpm env:setup for local development, and with " +
             "`wrangler secret put` for a deployed Worker."
         );
       }

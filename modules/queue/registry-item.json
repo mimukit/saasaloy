@@ -7,6 +7,9 @@
   "envVars": {
     "QUEUE_PROVIDER": "Which installed provider runs background work: `cloudflare` (add queue-cloudflare) or `memory` (add queue-memory). Always required — there is no default, so nothing runs by accident and nothing stops running silently."
   },
+  "envServices": {
+    "default": ["api"]
+  },
   "patches": [
     {
       "file": "apps/api/package.json",
@@ -14,20 +17,51 @@
       "section": "dependencies",
       "name": "@repo/queue",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "queueEnv",
+      "import": {
+        "name": "queueEnv",
+        "from": "@repo/queue/env-preset"
+      }
     }
   ],
   "files": [],
   "scaffolds": [
     {
       "workspace": "packages/queue",
-      "aliases": { "@queue": "packages/queue/src" },
+      "aliases": {
+        "@queue": "packages/queue/src"
+      },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/define.ts", "target": "src/define.ts" },
-        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
-        { "path": "files/src/cron.ts", "target": "src/cron.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/cron.ts",
+          "target": "src/cron.ts"
+        },
         {
           "path": "files/src/jobs/example.ts",
           "target": "src/jobs/example.ts"
@@ -35,6 +69,10 @@
         {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
         }
       ]
     }

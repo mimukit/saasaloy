@@ -13,14 +13,15 @@ import { defineConfig } from "drizzle-kit";
 // include the barrel (src/schema.ts sits outside src/schema/), because the barrel uses
 // Vite's `import.meta.glob`, which esbuild can't execute.
 
-// drizzle-kit runs under plain Node, where Workers bindings and `.dev.vars` mean nothing,
-// so the connection has to come from `process.env`. An explicit `DATABASE_URL` in the
-// environment always wins; otherwise fall back to the same `apps/api/.dev.vars` the local
-// Worker reads, so one file holds the local URL for both. Paths resolve from `process.cwd()`
+// drizzle-kit runs under plain Node, where a Workers binding means nothing, so the
+// connection has to come from `process.env`. That is node tooling reading the global, which
+// ADR 0041 allows; nothing a Worker imports does it. An explicit `DATABASE_URL` in the
+// environment always wins; otherwise fall back to the same `apps/api/.env` the local Worker
+// reads, so one file holds the local URL for both. Paths resolve from `process.cwd()`
 // (packages/db, where the script runs), matching `out` below.
-const devVars = resolve(process.cwd(), "../../apps/api/.dev.vars");
-if (!process.env.DATABASE_URL && existsSync(devVars)) {
-  process.loadEnvFile(devVars);
+const apiEnvFile = resolve(process.cwd(), "../../apps/api/.env");
+if (!process.env.DATABASE_URL && existsSync(apiEnvFile)) {
+  process.loadEnvFile(apiEnvFile);
 }
 
 export default defineConfig({
@@ -28,7 +29,7 @@ export default defineConfig({
   schema: "./src/schema/*.ts",
   out: "./migrations",
   // `db:generate` never opens a connection and ignores this; `db:migrate` needs it. An
-  // empty string here means neither the environment nor `.dev.vars` supplied a URL, and
+  // empty string here means neither the environment nor `apps/api/.env` supplied a URL, and
   // drizzle-kit reports that when it tries to connect.
   dbCredentials: { url: process.env.DATABASE_URL ?? "" },
 });
