@@ -1,6 +1,8 @@
-// The state block `db:setup` writes at the top of `apps/api/.dev.vars`. It is a run of
-// comment lines, so wrangler and `process.loadEnvFile` skip it, and it is the only record
-// of which backend made the database this worktree uses.
+// The state block `db:setup` writes to `apps/api/.env.db`. It is a run of comment lines in
+// a file of its own, and it is the only record of which backend made the database this
+// worktree uses. It sits beside `apps/api/.env` rather than inside it, because
+// `pnpm env:setup` rebuilds that file from the key list and keeps no comment it did not
+// write. `.env.*` is gitignored, and no tool loads `.env.db`.
 //
 // A backend is not a provider. A provider is a registry module selected by a `<CAP>_PROVIDER`
 // env var inside the Worker; a backend is where a developer's own database runs and nothing

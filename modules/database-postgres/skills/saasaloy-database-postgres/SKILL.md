@@ -66,7 +66,7 @@ so `db:migrate` and a `vite dev` Worker agree on one URL with no second place to
 `DATABASE_URL=… pnpm …` still wins over the file.
 
 You rarely write that line by hand. `pnpm db:setup` creates the database, writes `DATABASE_URL` and
-records what it did in the state block above it. See "The lifecycle commands" below.
+records what it did in the state block in `apps/api/.env.db`. See "The lifecycle commands" below.
 
 ### Production: a Workers secret
 
@@ -208,7 +208,7 @@ Three commands create, report on and drop the development database. They live in
 ```sh
 pnpm db:setup    # create the database if needed, then apply every pending migration
 pnpm db:status   # backend, database, host, applied and pending migrations
-pnpm db:drop     # drop the database and clear DATABASE_URL
+pnpm db:drop     # drop the database, clear DATABASE_URL, delete the state block
 ```
 
 `db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
@@ -228,13 +228,13 @@ are done with a branch, or the databases pile up.
 ### Backends: `--docker`, `--server`, `--neon`
 
 A **backend** is where the Postgres runs. It is not a provider: nothing is installed or removed when
-you change it, and nothing at runtime reads it (ADR 0039).
+you change it, and nothing at runtime reads it (ADR 0042).
 
-| Flag       | What it uses                                                       |
-| ---------- | ------------------------------------------------------------------ |
-| `--docker` | the container the root `compose.yaml` defines, started for you      |
-| `--server` | the server the `DATABASE_URL` in `apps/api/.dev.vars` already names |
-| `--neon`   | a temporary neon.new database, created over HTTP                    |
+| Flag       | What it uses                                                   |
+| ---------- | -------------------------------------------------------------- |
+| `--docker` | the container the root `compose.yaml` defines, started for you |
+| `--server` | the server the `DATABASE_URL` in `apps/api/.env` already names |
+| `--neon`   | a temporary neon.new database, created over HTTP               |
 
 `docker` is the default, because a fresh project has no server. The flag is needed on the first run
 only: the state block remembers the choice, and `--reset` is required to change it.
@@ -252,24 +252,33 @@ days after it is created, and `db:status` prints how long is left.
 
 ### The state block
 
-`db:setup` writes a run of comment lines at the top of `apps/api/.dev.vars`:
+`db:setup` writes a run of comment lines to `apps/api/.env.db`, and `DATABASE_URL` to
+`apps/api/.env`:
 
 ```sh
+# apps/api/.env.db
 # db:setup state: written by pnpm db:setup, edit with care
 # backend=docker
 # database=app_dev_issue_152_9f2c1a
 # created=2026-09-20T09:00:00.000Z
 # end db:setup state
 
-DATABASE_URL="postgres://postgres:postgres@127.0.0.1:5432/app_dev_issue_152_9f2c1a"
+# apps/api/.env
+DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5432/app_dev_issue_152_9f2c1a
 ```
 
-Wrangler and `process.loadEnvFile` skip a comment, so the record rides along in the file that
-already holds the URL. A file that carries a `DATABASE_URL` but no block gets one inferred, when the
-URL names a database this project manages or a neon.new host. Any other URL infers nothing and is
-left alone, which is both how `--server` reads the server you already use and how a production
-string in that file never becomes a drop target: `db:drop` drops what the block names and nothing
-else.
+The block has a file of its own because `pnpm env:setup` rebuilds `apps/api/.env` from the key list
+and drops every comment it did not write. `DATABASE_URL` survives that rebuild as a checkout-owned
+key; the block would not. `.env.*` is gitignored, and no tool loads `.env.db`.
+
+A checkout whose `DATABASE_URL` has no state file gets one inferred, when the URL names a database
+this project manages or a neon.new host. Any other URL infers nothing and is left alone, which is
+both how `--server` reads the server you already use and how a production string never becomes a
+drop target: `db:drop` drops what the block names and nothing else.
+
+The two files can drift apart under a hand edit. When `DATABASE_URL` names another database than
+the block records, `db:setup` and `db:drop` refuse and `db:status` prints a `Mismatch` line.
+`db:setup --reset` replaces the recorded database and writes both files again.
 
 ### `db:drop` refuses; it does not ask
 

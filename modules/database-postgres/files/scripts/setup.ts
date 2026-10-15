@@ -3,6 +3,7 @@ import * as neon from "./backends/neon.ts";
 import * as server from "./backends/server.ts";
 import {
   API_ENV,
+  STATE_FILE,
   journalEntries,
   loadContext,
   readFlags,
@@ -10,17 +11,19 @@ import {
   run,
   runPnpm,
   say,
+  stateMismatch,
   withSql,
+  writeState,
 } from "./lib/context.ts";
 import type { Context } from "./lib/context.ts";
 import { setKey, writeEnvFile } from "./lib/env-file.ts";
-import { BACKEND_LABEL, chooseBackend, formatState } from "./lib/state.ts";
+import { BACKEND_LABEL, chooseBackend } from "./lib/state.ts";
 import type { Backend, State } from "./lib/state.ts";
 import { hostOf, swapDatabase } from "./lib/url.ts";
 
 // `pnpm db:setup [--docker | --server | --neon] [--reset]`: give this checkout a migrated
-// development database, record it in the state block at the top of `apps/api/.dev.vars`, and
-// point `DATABASE_URL` at it.
+// development database, record it in the state block in `apps/api/.env.db`, and point
+// `DATABASE_URL` in `apps/api/.env` at it.
 //
 // On `main` the database is the plain `<project>_dev`. On any other branch it is
 // `<project>_dev_<branch>`, so a migration that is not merged never lands in a database
@@ -122,7 +125,9 @@ function printSummary(context: Context, state: State, url: string): void {
       ? "This is the default branch, so it uses the plain database name."
       : `Branch ${context.branch ?? "?"} has its own database; run pnpm db:drop when you are done with it.`
   );
-  say(`DATABASE_URL is set in ${API_ENV}.`);
+  say(
+    `DATABASE_URL is set in ${API_ENV}, and the state block in ${STATE_FILE}.`
+  );
 }
 
 await run(async () => {
@@ -159,14 +164,23 @@ await run(async () => {
   const now = new Date();
   let state = flags.reset ? undefined : reusable;
   let url = flags.reset ? undefined : context.env.values.get("DATABASE_URL");
+  const mismatch = state && url ? stateMismatch(state, url) : undefined;
+  if (mismatch) {
+    throw new Error(
+      `${mismatch} Point DATABASE_URL back at ${state?.database}, or run pnpm db:setup --reset to replace it.`
+    );
+  }
   if (!(state && url && (await isLive(context, state, now)))) {
     ({ state, url } = await create(context, backend, now));
   }
 
   // Written before the migrations run, so a failed migrate leaves a file that says where
   // the database is and a re-run picks it up rather than creating a second one.
-  const lines = setKey(context.env.lines, "DATABASE_URL", url);
-  writeEnvFile(context.env.path, formatState(state), lines);
+  writeEnvFile(
+    context.env.path,
+    setKey(context.env.lines, "DATABASE_URL", url)
+  );
+  writeState(context, state);
 
   const env: Record<string, string> = { DATABASE_URL: url };
   if (state.backend === "neon") {

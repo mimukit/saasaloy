@@ -3,7 +3,7 @@ import { API_ENV, withSql } from "../lib/context.ts";
 import { swapDatabase } from "../lib/url.ts";
 
 // The `server` backend, `pnpm db:setup --server`: a database on the Postgres server the
-// `DATABASE_URL` in `apps/api/.dev.vars` already names. A shared development box, a VPS on
+// `DATABASE_URL` in `apps/api/.env` already names. A shared development box, a VPS on
 // a tailnet and a managed instance are all one case, because all three give a host, a role
 // and a password, and nothing else here differs.
 //

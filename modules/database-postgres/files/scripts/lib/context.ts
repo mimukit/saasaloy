@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { readFileSync } from "node:fs";
+import { readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 import type postgres from "postgres";
 import {
@@ -11,17 +11,23 @@ import { readEnvFile, writeEnvFile } from "./env-file.ts";
 import type { EnvFile } from "./env-file.ts";
 import { formatState, inferState, parseState } from "./state.ts";
 import type { State } from "./state.ts";
-import { hostOf } from "./url.ts";
+import { databaseOf, hostOf } from "./url.ts";
 
-// What `db:setup`, `db:status` and `db:drop` share: where the repo root and the api env
-// file are, which database this checkout should use, the state block inside that file, one
-// short-lived SQL connection, and the pnpm child process that runs the migrations.
+// What `db:setup`, `db:status` and `db:drop` share: where the repo root, the api env file
+// and the state file are, which database this checkout should use, one short-lived SQL
+// connection, and the pnpm child process that runs the migrations.
 //
 // Every script runs from `packages/db` (`pnpm --filter @repo/db db:setup`), so the repo root
 // is two levels up.
 
-/** The env file wrangler reads in local development, and the only file these scripts write. */
-export const API_ENV = "apps/api/.dev.vars";
+/**
+ * The env file wrangler reads in local development. `pnpm env:setup` writes it too, and
+ * keeps `DATABASE_URL` across a rewrite because the key is checkout-owned.
+ */
+export const API_ENV = "apps/api/.env";
+
+/** The file that holds the state block. `pnpm env:setup` never touches it. */
+export const STATE_FILE = "apps/api/.env.db";
 
 type Sql = ReturnType<typeof postgres>;
 
@@ -36,8 +42,10 @@ export interface Context {
   prefix: string;
   /** The database this checkout should use, branch-named off the default branch. */
   database: string;
-  /** `apps/api/.dev.vars`, read once at start-up. */
+  /** `apps/api/.env`, read once at start-up. */
   env: EnvFile;
+  /** Absolute path of `apps/api/.env.db`. */
+  statePath: string;
 }
 
 /** Branches that keep the plain `<prefix>` database rather than one of their own. */
@@ -128,6 +136,7 @@ export function loadContext(): Context {
     prefix,
     database,
     env: readEnvFile(resolve(root, API_ENV)),
+    statePath: resolve(root, STATE_FILE),
   };
 }
 
@@ -144,7 +153,7 @@ export function isManagedDatabase(context: Context, database: string): boolean {
 /**
  * This checkout's state block, or `undefined` when there is none.
  *
- * A file that sets `DATABASE_URL` but carries no block gets one inferred, when the URL names
+ * A checkout whose `DATABASE_URL` has no state file gets one inferred, when the URL names
  * a neon.new host or a database this project manages. Any other URL infers nothing and is
  * left alone: it is a server connection a developer put there, and `--server` is built to
  * create a database on exactly that server.
@@ -153,7 +162,7 @@ export function isManagedDatabase(context: Context, database: string): boolean {
  * nothing else, so a URL no block vouches for is never a drop target.
  */
 export function resolveState(context: Context): State | undefined {
-  const existing = parseState(context.env.blockLines);
+  const existing = parseState(readEnvFile(context.statePath).lines);
   if (existing) {
     return existing;
   }
@@ -168,9 +177,37 @@ export function resolveState(context: Context): State | undefined {
   if (!inferred) {
     return undefined;
   }
-  context.env.blockLines = formatState(inferred);
-  writeEnvFile(context.env.path, context.env.blockLines, context.env.lines);
+  writeState(context, inferred);
   return inferred;
+}
+
+/** Write the state block, replacing whatever the state file held. */
+export function writeState(context: Context, state: State): void {
+  writeEnvFile(context.statePath, formatState(state));
+}
+
+/** Delete the state file. A file that is not there is already removed. */
+export function removeState(context: Context): void {
+  rmSync(context.statePath, { force: true });
+}
+
+/**
+ * Why `url` and `state` disagree, or `undefined` when they name one database.
+ *
+ * The block and `DATABASE_URL` live in two files, so a hand edit can move one and not the
+ * other. A script that acts on the block refuses when they disagree, because the database
+ * the block names is then not the one this checkout uses.
+ */
+export function stateMismatch(state: State, url: string): string | undefined {
+  let named: string;
+  try {
+    named = databaseOf(url);
+  } catch {
+    return `DATABASE_URL in ${API_ENV} is not a URL, but ${STATE_FILE} records ${state.database}.`;
+  }
+  return named === state.database
+    ? undefined
+    : `DATABASE_URL in ${API_ENV} names ${named}, but ${STATE_FILE} records ${state.database}.`;
 }
 
 /**

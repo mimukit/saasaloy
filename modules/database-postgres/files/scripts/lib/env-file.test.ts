@@ -24,30 +24,22 @@ describe("readEnvFile", () => {
   it("reads a file that is not there as an empty one", () => {
     const file = readEnvFile(join(root, "absent"));
     assert.equal(file.exists, false);
-    assert.deepEqual(file.blockLines, []);
+    assert.deepEqual(file.lines, []);
     assert.equal(file.values.size, 0);
   });
 
-  it("splits the leading comment block from the body", () => {
+  it("reads the values and keeps every line", () => {
     const file = readEnvFile(
-      write("with-block", "# a\n# b\n\nDATABASE_URL=postgres://x/y\nOTHER=1\n")
+      write("values", "# a\n\nDATABASE_URL=postgres://x/y\nOTHER=1\n")
     );
-    assert.deepEqual(file.blockLines, ["# a", "# b"]);
+    assert.deepEqual(file.lines, [
+      "# a",
+      "",
+      "DATABASE_URL=postgres://x/y",
+      "OTHER=1",
+    ]);
     assert.equal(file.values.get("DATABASE_URL"), "postgres://x/y");
     assert.equal(file.values.get("OTHER"), "1");
-  });
-
-  it("reads a file with no block at all", () => {
-    const file = readEnvFile(write("no-block", "KEY=value\n"));
-    assert.deepEqual(file.blockLines, []);
-    assert.equal(file.values.get("KEY"), "value");
-  });
-
-  // A comment below the first key is body, not block: only the top run is the state block.
-  it("leaves a comment after the first key in the body", () => {
-    const file = readEnvFile(write("mid-comment", "KEY=1\n# note\nOTHER=2\n"));
-    assert.deepEqual(file.blockLines, []);
-    assert.ok(file.lines.includes("# note"));
   });
 });
 
@@ -69,24 +61,17 @@ describe("setKey / removeKey", () => {
 });
 
 describe("writeEnvFile", () => {
-  it("writes the block, a blank line, then the body", () => {
+  it("writes the lines with one final newline", () => {
     const path = join(root, "written");
-    writeEnvFile(path, ["# one", "# two"], ["KEY=value"]);
-    assert.equal(readFileSync(path, "utf-8"), "# one\n# two\n\nKEY=value\n");
-  });
-
-  it("writes only the body when the block is empty", () => {
-    const path = join(root, "no-block-out");
-    writeEnvFile(path, [], ["KEY=value"]);
-    assert.equal(readFileSync(path, "utf-8"), "KEY=value\n");
+    writeEnvFile(path, ["# one", "KEY=value", "", ""]);
+    assert.equal(readFileSync(path, "utf-8"), "# one\nKEY=value\n");
   });
 
   // A read-then-write must not grow one blank line per run.
   it("round-trips a file without adding blank lines", () => {
     const path = write("round-trip", "# one\n\nKEY=value\nOTHER=2\n");
     for (let pass = 0; pass < 3; pass += 1) {
-      const file = readEnvFile(path);
-      writeEnvFile(path, file.blockLines, file.lines);
+      writeEnvFile(path, readEnvFile(path).lines);
     }
     assert.equal(readFileSync(path, "utf-8"), "# one\n\nKEY=value\nOTHER=2\n");
   });
@@ -94,7 +79,7 @@ describe("writeEnvFile", () => {
   it("keeps a value it does not understand byte for byte", () => {
     const path = write("odd", '# b\n\nODD="a b # c"\nKEY=1\n');
     const file = readEnvFile(path);
-    writeEnvFile(path, file.blockLines, setKey(file.lines, "KEY", "2"));
+    writeEnvFile(path, setKey(file.lines, "KEY", "2"));
     assert.equal(readFileSync(path, "utf-8"), '# b\n\nODD="a b # c"\nKEY=2\n');
   });
 });

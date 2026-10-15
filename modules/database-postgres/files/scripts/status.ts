@@ -8,6 +8,7 @@ import {
   resolveState,
   run,
   say,
+  stateMismatch,
   withSql,
 } from "./lib/context.ts";
 import { BACKEND_LABEL, liveness, timeLeft } from "./lib/state.ts";
@@ -46,6 +47,10 @@ await run(async () => {
   say(`Branch    ${context.branch ?? "detached HEAD"}`);
   if (state.backend === "neon") {
     say(`Expires   ${timeLeft(state, now)}`);
+  }
+  const mismatch = stateMismatch(state, url);
+  if (mismatch) {
+    say(`Mismatch  ${mismatch}`);
   }
   if (state.database !== context.database) {
     say(
