@@ -1,4 +1,4 @@
-# 0039 — The db lifecycle commands belong to the drivers
+# 0042 — The db lifecycle commands belong to the drivers
 
 A generated project could create a migration and apply one. It could not create the database, report what was applied, or throw one away. `db:setup`, `db:status` and `db:drop` fill that gap. They ship in `database-d1` and `database-postgres`, not in a new `db` capability and not in the `database` core, and the thing each Postgres command runs against is called a **backend**, not a provider. Settled while planning issue [#152](https://github.com/mimukit/saasaloy/issues/152) (`docs/plans/0057-plan-db-lifecycle-scripts-2026-09-20.md`).
 
@@ -19,7 +19,7 @@ A third rejected shape is worth recording because it sounds cheaper than it is. 
 
 ## A backend is not a provider
 
-On Postgres the developer picks where the database runs: a local Docker container, a Postgres server the existing `DATABASE_URL` names, or a temporary neon.new database. Those are **backends**. A flag picks one on first run, the state block at the top of `apps/api/.dev.vars` remembers it, and `--reset` switches.
+On Postgres the developer picks where the database runs: a local Docker container, a Postgres server the existing `DATABASE_URL` names, or a temporary neon.new database. Those are **backends**. A flag picks one on first run, the state block in `apps/api/.env.db` remembers it, and `--reset` switches.
 
 "Provider" already means something exact in this repo: a module in the registry, registered through a `plugin-array` patch, selected inside the Worker by a `<CAP>_PROVIDER` env var, normalizing its vendor's errors onto the capability's codes. A backend has none of those properties.
 
@@ -52,4 +52,5 @@ A prompt would be worse on both counts. It stops an unattended run, and it train
 - `@root` is now a real alias. `database-postgres` registers it and writes `compose.yaml` at the repo root, because `docker compose up -d` with no `-f` is the command people type. AGENTS.md carries the rule for using it, and two modules writing one root file is a plan-time collision.
 - Both drivers patch six script keys, three in `packages/db/package.json` and three in the root `package.json`, so `pnpm db:setup` works from the repo root.
 - `saasaloy remove <driver>` still leaves patched script keys behind, and now also the root `compose.yaml`. Both driver skills say so until the remover handles it.
-- `db:prune`, `db:seed` and an `env` capability are deferred. The env-file reader is inlined per driver until the third caller for it exists.
+- The state block has a file of its own, `apps/api/.env.db`, and `DATABASE_URL` stays in `apps/api/.env`. `pnpm env:setup` rebuilds `apps/api/.env` from the key list ([ADR 0040](0040-adr-a-scaffolded-project-writes-env-never-dev-vars-2026-09-20.md)) and keeps `DATABASE_URL` as a checkout-owned key, but it drops every comment it did not write, so a block inside that file would vanish on the next run. Two files can disagree after a hand edit, so `db:setup` and `db:drop` refuse when `DATABASE_URL` names another database than the block records.
+- `db:prune` and `db:seed` are deferred. The scripts keep their own small env-file reader rather than importing `@repo/env`, because `packages/db` does not depend on it.

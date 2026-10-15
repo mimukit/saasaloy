@@ -35,7 +35,7 @@ Set the database client. Every query below runs through it.
 export DB_CMD='docker exec playground-postgres-1 psql -U postgres -tAc'
 ```
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -71,7 +71,7 @@ pnpm play:reset && cd .dev/playground && ./saasaloy add database-postgres --yes 
 git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -qm "playground" && git branch -M main
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: First `db:setup` on the default branch · 🔴 Critical
 
@@ -102,16 +102,16 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
      - `Database  playground_dev`
      - the last lines say this is the default branch and where `DATABASE_URL` went
 
-3. Read the file the command wrote.
+3. Read the two files the command wrote.
 
    ```sh
-   cat apps/api/.dev.vars
+   cat apps/api/.env.db && grep DATABASE_URL apps/api/.env
    ```
 
-   - [ ] A state block sits above `DATABASE_URL`, and every line of it is a comment
+   - [ ] `apps/api/.env.db` holds the state block, and every line of it is a comment
      - the block begins with `# db:setup state:` and ends with `# end db:setup state`
      - it records `backend=docker`, `database=playground_dev` and a `created` time
-     - `DATABASE_URL` points at `playground_dev` on `127.0.0.1:5432`
+   - [ ] `DATABASE_URL` in `apps/api/.env` points at `playground_dev` on `127.0.0.1:5432`
 
 4. Ask the container which databases exist.
 
@@ -120,6 +120,16 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    ```
 
    - [ ] Exactly one row, `playground_dev`
+
+5. Rebuild the api env file, then read the state again.
+
+   ```sh
+   pnpm env:setup && pnpm db:status
+   ```
+
+   - [ ] `env:setup` rewrites `apps/api/.env` and keeps `DATABASE_URL` on `playground_dev`
+   - [ ] `db:status` still reports `Backend   a local Docker container` and `Database  playground_dev`
+     - if `env:setup` names another unset key, write that key down in Notes and skip this step
 
 **Result**
 
@@ -188,7 +198,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    pnpm db:drop
    ```
 
-   - [ ] The message names the database that went, and says the state block and `DATABASE_URL` are gone
+   - [ ] The message names the database that went, says `DATABASE_URL` is gone from `apps/api/.env`, and says `apps/api/.env.db` is deleted
    - [ ] A second line says the container is still running, and names `docker compose down -v`
 
 2. Ask the container what is left.
@@ -210,10 +220,10 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
 4. Read the env file and the status report.
 
    ```sh
-   cat apps/api/.dev.vars && pnpm db:status
+   grep -c DATABASE_URL apps/api/.env; ls apps/api/.env.db; pnpm db:status
    ```
 
-   - [ ] The env file holds no `DATABASE_URL` and no state block
+   - [ ] `grep` prints `0`, and `ls` says `apps/api/.env.db` does not exist
    - [ ] `db:status` says there is no database yet, and names the one `db:setup` would create
 
 **Result**
@@ -385,7 +395,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
 3. Read the state block.
 
    ```sh
-   head -5 apps/api/.dev.vars
+   cat apps/api/.env.db
    ```
 
    - [ ] The block now records `backend=server`
@@ -420,22 +430,39 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
 
    - [ ] One line, naming the unknown flag and listing the flags it does take
 
-3. Point `DATABASE_URL` at a database these scripts did not make, then try to drop it.
+3. Save both files, then point `DATABASE_URL` at a database these scripts did not make.
 
    ```sh
-   cp ../../apps/api/.dev.vars /tmp/qa-devvars.bak && printf 'DATABASE_URL=postgres://user:secret@prod.example.com:5432/production\n' > ../../apps/api/.dev.vars && node scripts/drop.ts
+   cp ../../apps/api/.env /tmp/qa-env.bak && cp ../../apps/api/.env.db /tmp/qa-env-db.bak && printf 'DATABASE_URL=postgres://user:secret@prod.example.com:5432/production\n' > ../../apps/api/.env
+   ```
+
+   - [ ] Both copies exist under `/tmp`
+
+4. Try to drop it while the state file still names the real database.
+
+   ```sh
+   node scripts/drop.ts
+   ```
+
+   - [ ] The command drops nothing and says `DATABASE_URL` names `production` but `apps/api/.env.db` records the real database
+   - [ ] No output anywhere carries the password `secret`
+
+5. Delete the state file, then try again.
+
+   ```sh
+   rm ../../apps/api/.env.db && node scripts/drop.ts
    ```
 
    - [ ] The command drops nothing and says there is no development database
    - [ ] No output anywhere carries the password `secret`
 
-4. Put the real file back.
+6. Put the real files back.
 
    ```sh
-   cp /tmp/qa-devvars.bak ../../apps/api/.dev.vars && cd ../..
+   cp /tmp/qa-env.bak ../../apps/api/.env && cp /tmp/qa-env-db.bak ../../apps/api/.env.db && cd ../..
    ```
 
-   - [ ] The env file is back
+   - [ ] Both files are back
 
 **Result**
 
@@ -682,7 +709,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop
 3. Read the decision record.
 
    ```sh
-   cat docs/adr/0039-adr-the-db-lifecycle-commands-belong-to-the-drivers-2026-09-20.md
+   cat docs/adr/0042-adr-the-db-lifecycle-commands-belong-to-the-drivers-2026-09-20.md
    ```
 
    - [ ] The record answers the two questions a reader will have
