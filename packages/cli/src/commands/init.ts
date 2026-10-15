@@ -482,7 +482,7 @@ export async function runInit(argv: string[]): Promise<number> {
     // owner who never opens AGENTS.md would otherwise not know they exist.
     // Pad to the same column the commands above comment at (`pnpm dev` + 21 spaces).
     ...skills.linked.map(
-      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in Claude Code")}`
+      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in your AI coding tool")}`
     ),
   ]
     .filter((line): line is string => line !== null)

@@ -350,7 +350,7 @@ function wireUpSteps(
     }
     lines.push(
       `Manual wire-up needed — ${targets} ${verb} on disk but on no page yet. ` +
-        `In Claude Code, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
+        `In your AI coding tool, run ${pc.cyan(`/${skill}`)} and follow its Wire-up section.`
     );
   }
   return lines;
@@ -555,7 +555,7 @@ function printNextSteps(
     .toSorted();
   if (skills.length > 0) {
     lines.push(
-      `Read the module's own procedure — in Claude Code, run ${skills
+      `Read the module's own procedure — in your AI coding tool, run ${skills
         .map((name) => pc.cyan(`/${name}`))
         .join(" or ")}.`
     );
