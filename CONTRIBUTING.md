@@ -188,7 +188,7 @@ Every file under `packages/cli/templates/base/` is a managed file in a scaffolde
 
 ```sh
 pnpm play:restore       # back to the baseline commit in about a second, node_modules kept
-pnpm play:restore --db  # also stop the api, wipe the database, migrate, start the api again
+pnpm play:restore --db  # also stop the api, wipe the database, migrate
 pnpm play:snap          # commit the current playground as the new baseline
 pnpm play:reset         # destroy + re-scaffold a clean playground
 pnpm play:destroy       # remove .dev/playground entirely
@@ -196,7 +196,7 @@ pnpm play:destroy       # remove .dev/playground entirely
 
 The playground is a git repository, and `play:init` commits a baseline after the install. `play:restore` runs `git reset --hard` and `git clean -fd` against it, then `pnpm install`. Ignored files stay, so `node_modules`, `apps/api/.dev.vars` and the local D1 state survive a restore. Add the modules you test most, run `pnpm play:snap`, and every later restore returns to that state. `git diff` in the playground shows exactly what an `add` wrote.
 
-`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and starts `pnpm dev` in `apps/api` in the background, logging to `.dev/api-dev.log`. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment or from `apps/api/.dev.vars`.
+`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and prints the command that starts the api again. It does not start the api itself, so the api runs in your own terminal with its output in view. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment or from `apps/api/.dev.vars`.
 
 ### Global linking (`main` checkout only)
 

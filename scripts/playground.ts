@@ -5,7 +5,7 @@
 //   node scripts/playground.ts restore       reset tracked files, remove untracked ones,
 //                                            then `pnpm install`
 //   node scripts/playground.ts restore --db  also stop the api, wipe the database,
-//                                            migrate, and start the api again
+//                                            and migrate; you start the api again
 //
 // Ignored files survive a restore, so node_modules, the env files and the D1 state stay.
 // Every git call pins GIT_DIR to the playground's own `.git`: the playground sits inside
@@ -14,13 +14,15 @@
 // playground is ignored here, so init treats it as a project of its own (ADR 0024).
 //
 // Seeds (#187) are not run yet; `restore --db` leaves an empty, migrated database.
-import { spawn, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import type { SpawnSyncOptions } from "node:child_process";
-import { existsSync, openSync, readFileSync, rmSync } from "node:fs";
+import { existsSync, readFileSync, rmSync } from "node:fs";
 import { resolve } from "node:path";
 
 const USAGE = "usage: node scripts/playground.ts snap | restore [--db]";
 const API_PORT = 4000;
+const START_API =
+  "the api is stopped; start it with: pnpm -C .dev/playground/apps/api dev";
 
 export interface Args {
   command: "snap" | "restore";
@@ -82,7 +84,6 @@ export function readDevVar(contents: string, key: string): string | undefined {
 const root = resolve(import.meta.dirname, "..");
 const playground = resolve(root, ".dev/playground");
 const gitDir = resolve(playground, ".git");
-const apiLog = resolve(root, ".dev/api-dev.log");
 
 function run(
   cmd: string,
@@ -264,31 +265,6 @@ function resetDatabase(driver: Driver): void {
   console.log(`[play] wiped and migrated the ${driver} database`);
 }
 
-async function startApi(): Promise<void> {
-  const log = openSync(apiLog, "w");
-  const child = spawn("pnpm", ["dev"], {
-    cwd: resolve(playground, "apps/api"),
-    detached: true,
-    stdio: ["ignore", log, log],
-  });
-  child.unref();
-  for (let waited = 0; waited < 90_000; waited += 1000) {
-    await sleep(1000);
-    try {
-      const response = await fetch(`http://localhost:${API_PORT}/health`);
-      if (response.ok) {
-        console.log(
-          `[play] api up on :${API_PORT} (pid ${child.pid}, log ${apiLog})`
-        );
-        return;
-      }
-    } catch {
-      // Not listening yet.
-    }
-  }
-  throw new Error(`the api did not answer on :${API_PORT}; see ${apiLog}`);
-}
-
 async function restore(db: boolean): Promise<void> {
   if (!existsSync(gitDir)) {
     throw new Error("the playground has no baseline; run pnpm play:snap first");
@@ -316,22 +292,17 @@ async function restore(db: boolean): Promise<void> {
       resetDatabase(driver);
     }
   } catch (error) {
-    // Say the api is down rather than restart it over a half-reset playground, where a
-    // second failure from startApi would hide this one.
     if (withApi) {
       const reason = error instanceof Error ? error.message : String(error);
-      throw new Error(
-        `${reason}\n[play] the api was stopped and is still down; start it with pnpm -C .dev/playground/apps/api dev`,
-        { cause: error }
-      );
+      throw new Error(`${reason}\n[play] ${START_API}`, { cause: error });
     }
     throw error;
   }
-  if (withApi) {
-    await startApi();
-  }
   const seconds = ((performance.now() - started) / 1000).toFixed(1);
   console.log(`[play] restored in ${seconds}s`);
+  if (withApi) {
+    console.log(`[play] ${START_API}`);
+  }
 }
 
 async function main(): Promise<void> {
