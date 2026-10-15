@@ -157,13 +157,18 @@ function runPnpmInstall(cwd: string): Promise<RunResult> {
 // `init` does this, and until #98 none of them was true: husky's `prepare` hook has no
 // repository to install into, and turbo falls back to a global cache key that can serve
 // a stale build of a previous template. Skipped when the target already sits inside a
-// working tree — `saasaloy init .` inside an existing repo must not nest a second one.
-async function initGitRepo(
+// working tree that tracks it — `saasaloy init .` inside an existing repo must not nest a
+// second one. An ignored target is not the outer repository's business, so it gets its
+// own: that is what gives `.dev/playground` inside this repo a repository (ADR 0024).
+export async function initGitRepo(
   cwd: string
 ): Promise<{ created: boolean; message?: string }> {
   const inside = await run("git", ["rev-parse", "--is-inside-work-tree"], cwd);
   if (inside.ok) {
-    return { created: false };
+    const ignored = await run("git", ["check-ignore", "--quiet", "."], cwd);
+    if (!ignored.ok) {
+      return { created: false };
+    }
   }
   const result = await run("git", ["init"], cwd);
   if (!result.ok) {
@@ -477,7 +482,7 @@ export async function runInit(argv: string[]): Promise<number> {
     // owner who never opens AGENTS.md would otherwise not know they exist.
     // Pad to the same column the commands above comment at (`pnpm dev` + 21 spaces).
     ...skills.linked.map(
-      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in Claude Code")}`
+      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in your AI coding tool")}`
     ),
   ]
     .filter((line): line is string => line !== null)

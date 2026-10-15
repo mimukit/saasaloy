@@ -85,7 +85,7 @@ The repo has a purpose-built version of this loop — a scaffolded playground pl
 that wires `SAASALOY_REGISTRY_DIR` to your checkout automatically, so you can edit a module
 and re-run without a rebuild dance. It is documented in
 [`CONTRIBUTING.md`](../../../CONTRIBUTING.md#manual-qa-the-devplayground), and it is the
-path to use while you are iterating. `pnpm play:init` builds the CLI, scaffolds `.dev/playground` and drops the shim in; `pnpm play:reset` gives you a clean one.
+path to use while you are iterating. `pnpm play:init` builds the CLI, scaffolds `.dev/playground`, drops the shim in and commits a git baseline. `pnpm play:watch` re-applies an installed module each time you save one of its files, `pnpm play:restore` returns the playground to the baseline in about a second, and `pnpm play:reset` gives you a fresh one.
 
 If your module ships TypeScript payload files with tests beside them, `pnpm test:modules` runs them under `node --test` over `modules/*/files/**/*.test.ts`. `pnpm test` runs it as one of its three passes. When your change touches a pinned dependency in a descriptor or the base template, `pnpm deps:verify` re-scaffolds the playground and installs, builds, lints and typechecks the generated project; CI does not run it, because it needs the network.
 
