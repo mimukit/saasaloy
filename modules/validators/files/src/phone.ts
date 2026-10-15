@@ -13,13 +13,14 @@ const MESSAGE =
   "must be a Bangladeshi mobile number, for example +8801712345678";
 
 /**
- * Digits, a space, `-`, `(`, `)`, `.` and a leading `+`. This is a rejection boundary, not a
- * strip list: an unlisted character fails the input instead of being discarded, which is what
- * stops `hello01712345678world` from reducing to a valid number.
+ * ASCII digits, a space, `-`, `(`, `)`, `.` and a leading `+`. This is a rejection boundary, not
+ * a strip list: an unlisted character fails the input before anything is removed. `SEPARATORS`
+ * removes only the listed separators and `FORMS` is anchored, so a letter that got past this
+ * check would still fail the match. The two guards back each other up on purpose.
  */
-const ALLOWED = /^\+?[\d\s().-]+$/;
+const ALLOWED = /^\+?[\d ().-]+$/;
 
-const SEPARATORS = /[\s().-]/g;
+const SEPARATORS = /[ ().-]/g;
 
 /**
  * The five accepted forms, once the separators are gone: `01XXXXXXXXX`, `+8801XXXXXXXXX`,

@@ -2,11 +2,17 @@
 // `pnpm test:modules`. A scaffolded project receives `phone.ts` alone.
 
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { describe, it } from "node:test";
 import { bangladeshMobile } from "./phone.ts";
 
 /** The regex `modules/sms-khudebarta/files/khudebarta.ts` enforces on a recipient. */
 const PROVIDER_NUMBER = /^\+880\d{10}$/;
+
+const PROVIDER_SOURCE = readFileSync(
+  new URL("../../../sms-khudebarta/files/khudebarta.ts", import.meta.url),
+  "utf-8"
+);
 
 const CANONICAL = "+8801712345678";
 
@@ -34,12 +40,6 @@ describe("bangladeshMobile accepted forms", () => {
       assert.equal(parse(`01${digit}12345678`), `+8801${digit}12345678`);
     }
   });
-
-  it("returns a value the sms provider accepts", () => {
-    for (const [, raw] of forms) {
-      assert.match(parse(raw), PROVIDER_NUMBER);
-    }
-  });
 });
 
 describe("bangladeshMobile separators", () => {
@@ -57,6 +57,23 @@ describe("bangladeshMobile separators", () => {
       assert.equal(parse(raw), CANONICAL);
     });
   }
+});
+
+describe("bangladeshMobile and the sms provider", () => {
+  it("checks the same regex this test copies", () => {
+    assert.ok(
+      PROVIDER_SOURCE.includes(
+        `BANGLADESH_NUMBER = /${PROVIDER_NUMBER.source}/`
+      ),
+      "khudebarta.ts changed its BANGLADESH_NUMBER regex; update PROVIDER_NUMBER and phone.ts"
+    );
+  });
+
+  it("returns a value the provider accepts for every operator digit", () => {
+    for (const digit of ["3", "4", "5", "6", "7", "8", "9"]) {
+      assert.match(parse(`+880 1${digit}12-345678`), PROVIDER_NUMBER);
+    }
+  });
 });
 
 describe("bangladeshMobile rejections", () => {
@@ -78,6 +95,10 @@ describe("bangladeshMobile rejections", () => {
     ["a disallowed punctuation mark", "01712345678!!!"],
     ["a plus that is not leading", "880+1712345678"],
     ["a plus with no digits", "+"],
+    ["a space before the plus", " +8801712345678"],
+    ["a tab", "\t01712345678"],
+    ["a newline", "01712345678\n"],
+    ["a non-breaking space", "017\u00A012345678"],
   ];
 
   for (const [label, raw] of rejected) {

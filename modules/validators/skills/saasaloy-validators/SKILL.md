@@ -74,7 +74,7 @@ It normalizes. The output is canonical E.164, `+8801XXXXXXXXX`, so a handler nev
 
 Four rules decide the rest:
 
-- **Allowed separators are digits, a space, `-`, `(`, `)`, `.` and a leading `+`.** Any other character rejects the input. The set is a rejection boundary, not a strip list, so `hello01712345678world` fails instead of reducing to a valid number.
+- **Allowed characters are ASCII digits, a space, `-`, `(`, `)`, `.` and a leading `+`.** Any other character rejects the input, a tab or a non-breaking space included. The set is a rejection boundary, not a strip list, so `hello01712345678world` fails instead of reducing to a valid number.
 - **ASCII digits only.** Bengali numerals (`০`–`৯`) are rejected. A Bengali-keyboard user retypes in ASCII digits.
 - **The operator check is structural.** The digit after the leading `1` must be `3`–`9`, which rejects the `10`, `11` and `12` blocks with no operator table to maintain.
 - **One failure message for every rejection class:** `must be a Bangladeshi mobile number, for example +8801712345678`.
