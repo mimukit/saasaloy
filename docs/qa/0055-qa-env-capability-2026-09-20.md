@@ -1,6 +1,6 @@
 # QA Plan: the `env` capability
 
-_Generated 2026-09-20 · against `28417e9` plus the uncommitted working tree · covers `packages/env` in the base template, the `envServices`/`envOptional` descriptor fields, the retirement of `.dev.vars`, and the `env-infisical` provider._
+_Generated 2026-09-20 · against `28417e9` plus the uncommitted working tree · re-checked 2026-10-15 after the rebase onto `origin/main` at `73dc023` · covers `packages/env` in the base template, the `envServices`/`envOptional` descriptor fields, the retirement of `.dev.vars`, and the `env-infisical` provider._
 
 ## Summary
 
@@ -23,9 +23,9 @@ Build the CLI first. Every scenario runs the binary this command writes.
 pnpm --filter saasaloy build
 ```
 
-One note on `pnpm lint` inside the playground: the repository root ignores `.dev/`, so oxlint finds no file there until the playground is its own repository. Each scenario's setup runs `git init` for that reason.
+One note on the playground: `pnpm run play:reset` now runs `git init` and `pnpm install` in `.dev/playground` itself, so no setup below repeats them. The repository root ignores `.dev/`, and oxlint finds a file there only because the playground is its own repository.
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -51,16 +51,10 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 1. Recreate the playground from the template.
 
 ```sh
-pnpm run play:reset && git -C .dev/playground init -q && pnpm -C .dev/playground install
+pnpm run play:reset
 ```
 
-2. Install a wrangler the Cloudflare vite plugin accepts. The template pins an older one, which is unrelated to this change and blocks the build.
-
-```sh
-pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0
-```
-
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: The base ships a readable key list · 🔴 Critical
 
@@ -69,8 +63,8 @@ pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0
 **Steps**
 
 1. Open `.dev/playground/packages/env/.env.example`.
-   - [ ] The header explains the file, the `# @services` rule and the gitignore split
-   - [ ] Each key sits under a `# @services` line and carries a comment saying what it is for
+   - [x] The header explains the file, the `# @services` rule and the gitignore split
+   - [x] Each key sits under a `# @services` line and carries a comment saying what it is for
      - `# @services web` names the only service the base ships
      - `PUBLIC_SITE_URL` and `PUBLIC_API_URL` both appear, each with a local default
 2. List the environment files the scaffold wrote.
@@ -79,11 +73,11 @@ pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0
    find .dev/playground -name '.dev.vars*' -not -path '*/node_modules/*'
    ```
 
-   - [ ] The command prints nothing
+   - [x] The command prints nothing
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -101,21 +95,21 @@ pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0
    ls .dev/playground/apps/web/.env
    ```
 
-   - [ ] The command reports the file does not exist
+   - [x] The command reports the file does not exist
 2. Build the web app.
 
    ```sh
    pnpm -C .dev/playground build
    ```
 
-   - [ ] The build fails, and the message names both `PUBLIC_SITE_URL` and `PUBLIC_API_URL`
+   - [x] The build fails, and the message names both `PUBLIC_SITE_URL` and `PUBLIC_API_URL`
      - each key carries `unset` and the description the key list also shows
      - the count at the front of the message reads `2 environment keys`
-   - [ ] The message is plain ASCII, with no encoding warning printed over it
+   - [x] The message is plain ASCII, with no encoding warning printed over it
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -133,26 +127,26 @@ pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0
    cd .dev/playground && SAASALOY_REGISTRY_DIR=../../modules node ../../packages/cli/dist/index.js env
    ```
 
-   - [ ] The command never asks which workspace reads a variable
-   - [ ] Each prompt names `packages/env/.env` as the target
+   - [x] The command never asks which workspace reads a variable
+   - [x] Each prompt names `packages/env/.env` as the target
 2. Answer every prompt, then read the file it wrote.
 
    ```sh
    cat .dev/playground/packages/env/.env
    ```
 
-   - [ ] The file holds one line per answer
+   - [x] The file holds one line per answer
 3. Confirm git ignores it.
 
    ```sh
    git -C .dev/playground check-ignore -v packages/env/.env
    ```
 
-   - [ ] Git reports the `.env` rule matches
+   - [x] Git reports the `.env` rule matches
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -171,7 +165,7 @@ pnpm run play:destroy
 1. Recreate the playground and install three modules.
 
 ```sh
-pnpm run play:reset && git -C .dev/playground init -q
+pnpm run play:reset
 ```
 
 ```sh
@@ -190,7 +184,7 @@ pnpm -C .dev/playground install
 printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4000\nEMAIL_FROM=dev@localhost\nEMAIL_PROVIDER=console\nLOGGER_PROVIDER=console\n' > .dev/playground/packages/env/.env
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: `add` groups the key list by reader set · 🔴 Critical
 
@@ -199,20 +193,20 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
 **Steps**
 
 1. Open `.dev/playground/packages/env/.env.example`.
-   - [ ] Two section lines appear, `# @services api` and `# @services web`
-   - [ ] The api section holds the keys the installed modules declare
+   - [x] Two section lines appear, `# @services api` and `# @services web`
+   - [x] The api section holds the keys the installed modules declare
      - `CORS_ORIGINS` from `api`
      - `EMAIL_FROM` and `EMAIL_PROVIDER` from `email`
      - `LOGGER_PROVIDER` and `LOG_LEVEL` from `logger`
-   - [ ] The web section still holds `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, with the base's own wording
+   - [x] The web section still holds `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, with the base's own wording
 2. Open `.dev/playground/apps/api/src/env.ts`.
-   - [ ] The `extends` array holds `loggerEnv()` and `emailEnv()`, each with an import above
+   - [x] The `extends` array holds `loggerEnv()` and `emailEnv()`, each with an import above
 3. Open `.dev/playground/packages/env/src/services.ts`.
-   - [ ] `SERVICES` holds a `web` row and an `api` row
+   - [x] `SERVICES` holds a `web` row and an `api` row
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -230,40 +224,40 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
    pnpm -C .dev/playground env:setup
    ```
 
-   - [ ] The command reports it created `apps/web/.env` and `apps/api/.env`
-   - [ ] The command prints no warning about extra keys
+   - [x] The command reports it created `apps/web/.env` and `apps/api/.env`
+   - [x] The command prints no warning about extra keys
 2. Read the api's file.
 
    ```sh
    grep -v '^#' .dev/playground/apps/api/.env | grep .
    ```
 
-   - [ ] The api's keys are present and no `PUBLIC_` key appears
+   - [x] The api's keys are present and no `PUBLIC_` key appears
 3. Read the web app's file.
 
    ```sh
    grep -v '^#' .dev/playground/apps/web/.env | grep .
    ```
 
-   - [ ] Only `PUBLIC_SITE_URL` and `PUBLIC_API_URL` appear, and no secret does
+   - [x] Only `PUBLIC_SITE_URL` and `PUBLIC_API_URL` appear, and no secret does
 4. Build the project now that both files exist.
 
    ```sh
-   pnpm -C .dev/playground/apps/web add -D wrangler@4.135.0 && pnpm -C .dev/playground build
+   pnpm -C .dev/playground build
    ```
 
-   - [ ] The build succeeds
+   - [x] The build succeeds
 5. Read the canonical link the layout wrote.
 
    ```sh
    grep -o '<link rel="canonical"[^>]*>' .dev/playground/apps/web/dist/client/index.html
    ```
 
-   - [ ] The link carries the `PUBLIC_SITE_URL` value, not a hard-coded origin
+   - [x] The link carries the `PUBLIC_SITE_URL` value, not a hard-coded origin
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -281,18 +275,18 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
    grep -B1 'CORS_ORIGINS=\|LOG_LEVEL=' .dev/playground/packages/env/.env.example
    ```
 
-   - [ ] Both keys carry a `# Blank on purpose` line above them
+   - [x] Both keys carry a `# Blank on purpose` line above them
 2. Confirm the written file left them empty.
 
    ```sh
    grep 'CORS_ORIGINS=\|LOG_LEVEL=' .dev/playground/apps/api/.env
    ```
 
-   - [ ] Both lines are present with no value, and the setup run in TC-2.2 did not fail
+   - [x] Both lines are present with no value, and the setup run in TC-2.2 did not fail
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -310,20 +304,20 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
    cd .dev/playground && node ../../packages/cli/dist/index.js doctor .
    ```
 
-   - [ ] The command reports no problems
+   - [x] The command reports no problems
 2. Plant a leftover file and run it again.
 
    ```sh
    touch .dev/playground/apps/api/.dev.vars && cd .dev/playground && node ../../packages/cli/dist/index.js doctor .
    ```
 
-   - [ ] The finding names `apps/api/.dev.vars`
-   - [ ] The finding explains that wrangler loads `.env` only while no `.dev.vars` sits beside it
-   - [ ] The finding names `pnpm env:setup` as the fix
+   - [x] The finding names `apps/api/.dev.vars`
+   - [x] The finding explains that wrangler loads `.env` only while no `.dev.vars` sits beside it
+   - [x] The finding names `pnpm env:setup` as the fix
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -347,25 +341,25 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
    pnpm -C .dev/playground env:setup
    ```
 
-   - [ ] The command says it carried the values across and deleted the file
+   - [x] The command says it carried the values across and deleted the file
 3. Read the result.
 
    ```sh
    grep 'EMAIL_FROM' .dev/playground/apps/api/.env
    ```
 
-   - [ ] The hand-typed value survived, and it beat the value source's own
+   - [x] The hand-typed value survived, and it beat the value source's own
 4. Confirm the old file is gone.
 
    ```sh
    ls .dev/playground/apps/api/.dev.vars
    ```
 
-   - [ ] The command reports the file does not exist
+   - [x] The command reports the file does not exist
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -399,11 +393,11 @@ printf 'PUBLIC_SITE_URL=http://localhost:3000\nPUBLIC_API_URL=http://localhost:4
    grep 'DATABASE_URL' .dev/playground/apps/api/.env
    ```
 
-   - [ ] The value is `postgres://branch`, the one this checkout set
+   - [x] The value is `postgres://branch`, the one this checkout set
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -422,14 +416,14 @@ pnpm run play:destroy
 1. Recreate the playground and install the provider.
 
 ```sh
-pnpm run play:reset && git -C .dev/playground init -q
+pnpm run play:reset
 ```
 
 ```sh
 cd .dev/playground && SAASALOY_REGISTRY_DIR=../../modules node ../../packages/cli/dist/index.js add env-infisical --yes
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-3.1: The provider registers and fails closed with no CLI · 🟢 Low
 
@@ -438,31 +432,31 @@ cd .dev/playground && SAASALOY_REGISTRY_DIR=../../modules node ../../packages/cl
 **Steps**
 
 1. Open `.dev/playground/packages/env/src/sources.ts`.
-   - [ ] The `sources` array holds `infisical()`, with an import above it
+   - [x] The `sources` array holds `infisical()`, with an import above it
 2. Confirm the runtime file landed.
 
    ```sh
    ls .dev/playground/packages/env/src/providers/infisical.ts
    ```
 
-   - [ ] The file exists
+   - [x] The file exists
 3. Select the source with no CLI installed and no project file.
 
    ```sh
    cd .dev/playground && ENV_SOURCE=infisical pnpm env:setup
    ```
 
-   - [ ] The command fails and writes no `.env`
-   - [ ] The message names what is missing, either `.infisical.json` or the CLI itself
-   - [ ] No value and no credential appears anywhere in the output
+   - [x] The command fails and writes no `.env`
+   - [x] The message names what is missing, either `.infisical.json` or the CLI itself
+   - [x] No value and no credential appears anywhere in the output
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
-**Notes.** _what actually happened on a fail; why it was skipped_
+**Notes.** The first run failed. The `plugin-array` patch wrote `import { infisical } from "./providers/infisical"` with no extension, and raw `node` could not resolve it, so every `pnpm env:setup` crashed with `ERR_MODULE_NOT_FOUND`, the `local` source too. Fixed in `modules/env-infisical/registry-item.json` (`from` now ends in `.ts`). After the fix, with `infisical` removed from `PATH`, the command exits 1 with ".infisical.json is missing, so there is no Infisical project to read. Run infisical init in the repository root." and writes no `.env`. With a stub `.infisical.json` it names the CLI instead: "Could not run the infisical CLI (spawnSync infisical ENOENT)".
 
 **Reset.**
 
@@ -492,7 +486,7 @@ pnpm test
 node --test scripts/env-presets.test.ts
 ```
 
-Commands run against a scaffolded project, after `pnpm run play:reset`, `git init`, `saasaloy add api email email-console database database-d1` and `pnpm install`:
+Commands run against a scaffolded project, after `pnpm run play:reset`, `saasaloy add api email email-console database-d1 database` and `pnpm install`. The `database` capability now refuses to install before its driver, so `database-d1` comes first:
 
 ```sh
 pnpm -C .dev/playground typecheck
@@ -510,11 +504,12 @@ cd .dev/playground && node ../../packages/cli/dist/index.js doctor .
 pnpm -C .dev/playground build
 ```
 
-Results:
+Results, re-run 2026-10-15 on the rebased branch:
 
+- ✅ `pnpm run build` → every workspace builds.
 - ✅ `pnpm run lint` → four passes green: oxlint type-aware over `packages/cli/src scripts`, oxlint over the whole tree, Stylelint, `prettier --check .`.
 - ✅ `pnpm run typecheck` → `tsc` clean over the scripts project and the CLI package.
-- ✅ `pnpm test` → 1281 CLI tests, 556 module payload tests, 70 base-template tests, 271 maintainer-script tests. No failures.
+- ✅ `pnpm test` → 1323 CLI tests, 563 module payload tests, 70 base-template tests, 294 maintainer-script tests. No failures.
 - ✅ `node --test scripts/env-presets.test.ts` → 111 assertions. Every module's `envVars`, its env preset, its `envServices` and its `envOptional` agree.
 - ✅ `pnpm -C .dev/playground typecheck` → six workspaces clean, including `@repo/env` and the patched `apps/api/src/env.ts`.
 - ✅ `pnpm -C .dev/playground test` → `packages/env`'s own 70 tests pass under `node --test` inside the scaffolded project, with no resolve hook.
@@ -523,12 +518,12 @@ Results:
 
 One known failure, unrelated to this change:
 
-- ❌ `pnpm -C .dev/playground lint` → three `no-unsafe-type-assertion` errors in `packages/ui/src/lib/theme.ts`, and a wrangler peer-range mismatch (`wrangler@4.129.0` against `@cloudflare/vite-plugin`'s `^4.135.0`) that blocks `pnpm build` until wrangler is bumped. Both reproduce on the base commit with this branch's changes reverted; both belong to template dependency drift and `pnpm deps:update`.
+- ❌ `pnpm -C .dev/playground lint` → Stylelint passes. oxlint reports `react(purity)` in `packages/ui/src/blocks/footer.tsx`, `prefer-await-to-callbacks` in `apps/api/src/index.ts` and `prefer-destructuring` in `packages/logger/src/define.ts`. `prettier --check` flags seven files for their `{/* */}` comment blocks. No flagged line is in this branch's diff; all of them follow main's template dependency bump. The `theme.ts` errors and the wrangler peer-range mismatch from the first run are gone: main fixed `theme.ts` and now pins `wrangler@4.145.0`.
 
 ## Not covered / needs human judgment
 
 - **A real Infisical account.** TC-3.1 exercises the failure path only. The success path needs a project, a machine identity and a network, and the plan deliberately opens no connection.
-- **`apps/admin` and `infra`.** Both ship an `env.ts` and a service row, and neither is installed in this plan's scenarios. The `admin` SPA's Proxy behaviour and `infra`'s `env-exec` path are untested by hand here.
+- **`apps/admin` and `infra`.** Both ship an `env.ts` and a service row, and neither is installed in this plan's scenarios. The `admin` SPA's Proxy behaviour and `infra`'s `env-exec` path are untested by hand here. After the rebase, `infra`'s new `stack:init` script also runs through `env-exec .env`, because `pulumi stack init` reads `PULUMI_CONFIG_PASSPHRASE` from `infra/.env`.
 - **The client-side Proxy throw.** `packages/env`'s own tests prove that client code reading a server key throws. Reproducing it in a browser needs a server key deliberately inlined into a bundle, which the type system and the strict map both refuse to write.
 - **Concurrency and timing.** `pnpm env:setup` is a single-process file write with no lock. Two simultaneous runs are out of scope.
 - **Accessibility and compatibility.** This change ships no UI. The one rendered change is a `<link rel="canonical">` tag, which has no visual or keyboard surface.
@@ -538,6 +533,6 @@ One known failure, unrelated to this change:
 
 _Tick one when you finish the run._
 
-- [ ] Pass: every case passed
+- [x] Pass: every case passed
 - [ ] Fail: at least one case failed
 - [ ] Partial: cases were skipped or not reached
