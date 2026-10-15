@@ -521,8 +521,8 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
-3. Runs `lint`, `typecheck`, `test`, and `verify:content` — the same four scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-4. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime.
+3. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
+4. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime. It then installs the project from the network and starts the web app's `astro dev`. Last, it scaffolds one project per database driver with every module and runs the project's own `pnpm lint`, because only a real project resolves the imports between workspaces and runs the type-aware pass over the installed blocks.
 
 On a rerun after a transient failure you can skip step 3:
 
