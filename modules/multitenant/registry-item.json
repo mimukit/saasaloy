@@ -67,6 +67,7 @@
     },
     { "path": "files/auth/tenant-rules.ts", "target": "@auth/tenant-rules.ts" },
     { "path": "files/auth/tenant.ts", "target": "@auth/tenant.ts" },
+    { "path": "files/auth/statements.ts", "target": "@auth/statements.ts" },
     { "path": "files/api/routes/tenant.ts", "target": "@api/routes/tenant.ts" },
     {
       "path": "files/api/routes/projects.ts",
