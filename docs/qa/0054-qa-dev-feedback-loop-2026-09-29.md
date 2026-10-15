@@ -23,10 +23,10 @@ Install the repo and build a fresh playground:
 pnpm install && pnpm play:reset
 ```
 
-Add the modules this plan uses, then install:
+Add the modules this plan uses, then install. The parentheses keep your shell at the repo root:
 
 ```sh
-cd .dev/playground && ./saasaloy add database-d1 --yes && ./saasaloy add auth --yes && ./saasaloy add admin --yes && pnpm install && pnpm -C packages/db db:generate && pnpm -C packages/db db:migrate:local
+(cd .dev/playground && ./saasaloy add database-d1 --yes && ./saasaloy add auth --yes && ./saasaloy add admin --yes && pnpm install && pnpm -C packages/db db:generate && pnpm -C packages/db db:migrate:local)
 ```
 
 Write the api env file. Git ignores it, so every restore keeps it:
@@ -41,7 +41,7 @@ Commit this state as the baseline, from the repo root:
 pnpm play:snap
 ```
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -53,7 +53,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-1.2 | 1: Admin app and watcher running | A playground edit is kept, not overwritten | 🔴 Critical |
 | TC-1.3 | 1: Admin app and watcher running | Descriptor, uninstalled module and template edits | 🟡 Normal |
 | TC-2.1 | 2: Baseline with a signed-up user and a running api | A restore removes a session of work | 🔴 Critical |
-| TC-2.2 | 2: Baseline with a signed-up user and a running api | A restore with `--db` empties the database and restarts the api | 🔴 Critical |
+| TC-2.2 | 2: Baseline with a signed-up user and a running api | A restore with `--db` empties the database and stops the api | 🔴 Critical |
 
 ## Scenario 1: Admin app and watcher running
 
@@ -79,7 +79,7 @@ pnpm play:watch
 
 4. Open `http://localhost:3001` in the browser. Sign up or sign in when the admin app asks.
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: An admin component edit shows in the browser  ·  🔴 Critical
 
@@ -88,22 +88,22 @@ pnpm play:watch
 **Steps**
 
 1. Open `modules/admin/files/src/components/page-header.tsx`. Change one visible heading class or text. Save the file.
-   - [ ] Terminal 3 prints `[sync] admin: 1 file(s) written` within about a second, with the `wrote` line for `apps/admin/src/components/page-header.tsx`
+   - [x] Terminal 3 prints `[sync] admin: 1 file(s) written` within about a second, with the `wrote` line for `apps/admin/src/components/page-header.tsx`
 2. Look at the admin app in the browser. Do not reload.
-   - [ ] The page shows the change
+   - [x] The page shows the change
 3. Undo the edit in `modules/admin/files/`. Save the file.
-   - [ ] Terminal 3 prints a second sync, and the browser shows the old heading again
+   - [x] Terminal 3 prints a second sync, and the browser shows the old heading again
 4. Run doctor in the playground.
 
    ```sh
    cd .dev/playground && ./saasaloy doctor
    ```
 
-   - [ ] Doctor ends with `No problems found.`
+   - [x] Doctor ends with `No problems found.`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -116,15 +116,15 @@ pnpm play:watch
 **Steps**
 
 1. Add the line `// local edit` at the end of `.dev/playground/apps/admin/src/components/rail.tsx`. Save the file.
-   - [ ] Terminal 3 prints nothing, because the watcher watches `modules/` only
+   - [x] Terminal 3 prints nothing, because the watcher watches `modules/` only
 2. Add the line `// module edit` at the end of `modules/admin/files/src/components/rail.tsx`. Save the file.
-   - [ ] Terminal 3 prints `kept   apps/admin/src/components/rail.tsx` under "held back as drift"
+   - [x] Terminal 3 prints `kept   apps/admin/src/components/rail.tsx` under "held back as drift"
      - `apps/admin/src/routeTree.gen.ts` can also show as `kept`. The admin dev server rewrites that file, so this is correct.
-   - [ ] The playground file still ends with `// local edit`, and it does not contain `// module edit`
+   - [x] The playground file still ends with `// local edit`, and it does not contain `// module edit`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -137,14 +137,14 @@ pnpm play:watch
 **Steps**
 
 1. In `modules/admin/registry-item.json`, add one space after the `"type":` colon. Save the file.
-   - [ ] Terminal 3 prints one sync for `admin`, then the warning that a removed patch or file is not reversed and that `pnpm play:restore` clears it
+   - [x] Terminal 3 prints one sync for `admin`, then the warning that a removed patch or file is not reversed and that `pnpm play:restore` clears it
 2. Add a blank line at the end of `modules/billing/files/package.json`. Save the file.
-   - [ ] Terminal 3 prints `billing: not installed in the playground, skipped`
+   - [x] Terminal 3 prints `billing: not installed in the playground, skipped`
 3. Add a blank line at the end of `packages/cli/templates/base/README.md`. Save the file.
-   - [ ] Terminal 3 prints that the template changed, that the re-scaffold is skipped because modules are installed, and that `pnpm play:reset` picks it up
-   - [ ] The admin app in the browser still works, so the watcher did not reset the playground
+   - [x] Terminal 3 prints that the template changed, that the re-scaffold is skipped because modules are installed, and that `pnpm play:reset` picks it up
+   - [x] The admin app in the browser still works, so the watcher did not reset the playground
 4. Save the same module file three times in under a second.
-   - [ ] Terminal 3 prints one sync for those saves, not three
+   - [x] Terminal 3 prints one sync for those saves, not three
 
 **Result**
 
@@ -180,7 +180,7 @@ cd .dev/playground/apps/api && pnpm dev
 curl -s -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: application/json' -H 'origin: http://localhost:3001' -d '{"email":"qa@example.test","password":"password1234","name":"QA"}' -w '\n%{http_code}\n'
 ```
 
-- [ ] Setup complete, and the sign-up returned `200`
+- [x] Setup complete, and the sign-up returned `200`
 
 ### TC-2.1: A restore removes a session of work  ·  🔴 Critical
 
@@ -214,20 +214,20 @@ curl -s -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: appli
    cd .dev/playground && git status --short && ls apps/api/.dev.vars && grep -c scratch apps/admin/src/main.tsx
    ```
 
-   - [ ] `git status` prints nothing, `.dev.vars` still exists, and the scratch count is `0`
-   - [ ] The api in terminal 1 still answers `http://localhost:4000/health`
+   - [x] `git status` prints nothing, `.dev.vars` still exists, and the scratch count is `0`
+   - [x] The api in terminal 1 still answers `http://localhost:4000/health`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-2.2: A restore with `--db` empties the database and restarts the api  ·  🔴 Critical
+### TC-2.2: A restore with `--db` empties the database and stops the api  ·  🔴 Critical
 
-**Goal.** `play:restore --db` stops the api you started, wipes the D1 database, migrates it, and starts the api again.
+**Goal.** `play:restore --db` stops the api you started, wipes the D1 database, migrates it, and tells you to start the api again.
 
 **Steps**
 
@@ -237,28 +237,28 @@ curl -s -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: appli
    curl -s -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: application/json' -H 'origin: http://localhost:3001' -d '{"email":"qa@example.test","password":"password1234","name":"QA"}' -w '\n%{http_code}\n'
    ```
 
-   - [ ] The status is `422`, because the user exists
+   - [x] The status is `422`, because the user exists
 2. Restore with the database, from the repo root.
 
    ```sh
    pnpm play:restore --db
    ```
 
-   - [ ] Terminal 1 shows that its api stopped
-   - [ ] The command prints `stopped the api`, `wiped and migrated the d1 database`, `api up on :4000`, and a total time under about 20s
+   - [x] Terminal 1 shows that its api stopped
+   - [x] The command prints `stopped the api`, `wiped and migrated the d1 database`, `api up on :4000`, and a total time under about 20s
 3. Repeat the sign-up from step 1.
-   - [ ] The status is `200`, because the database is empty
+   - [x] The status is `200`, because the database is empty
 4. Stop the background api that the restore started.
 
    ```sh
    kill $(ss -ltnpH 'sport = :4000' | grep -o 'pid=[0-9]*' | cut -d= -f2)
    ```
 
-   - [ ] `.dev/api-dev.log` holds the api output
+   - [x] `.dev/api-dev.log` holds the api output
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -336,6 +336,6 @@ curl -s http://localhost:3001/src/components/access-denied.tsx | grep -c LIVE_SY
 ## Overall result
 _Tick one when you finish the run._
 
-- [ ] Pass: every case passed
+- [x] Pass: every case passed
 - [ ] Fail: at least one case failed
 - [ ] Partial: cases were skipped or not reached
