@@ -1,8 +1,8 @@
 import { spawnSync } from "node:child_process";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import { EnvError } from "../sources.ts";
-import type { EnvSource, LoadRequest } from "../sources.ts";
+import { EnvError } from "../error.ts";
+import type { EnvSource, LoadRequest } from "../source.ts";
 
 // Infisical as a value source for `pnpm env:setup`.
 //
@@ -61,9 +61,8 @@ export function readProjectId(root: string): string {
       { code: "not_configured" }
     );
   }
-  const id: unknown = (
-    JSON.parse(readFileSync(file, "utf-8")) as { workspaceId?: unknown }
-  ).workspaceId;
+  const config: unknown = JSON.parse(readFileSync(file, "utf-8"));
+  const id = fieldOf(config, "workspaceId");
   if (typeof id !== "string" || id === "") {
     throw new EnvError(`${PROJECT_FILE} has no workspaceId.`, {
       code: "not_configured",
@@ -101,7 +100,7 @@ export function failure(result: CliResult, what: string): EnvError {
   }
   const message = `${what} failed: ${reason(result)}`;
   const providerCode = String(result.status ?? "none");
-  return /Response Code:/.test(result.stderr)
+  return result.stderr.includes("Response Code:")
     ? new EnvError(
         `${message}. Run infisical login, or check the identity's access.`,
         { code: "denied", providerCode }
@@ -119,7 +118,7 @@ export function authEnv(
   env: Record<string, string | undefined>
 ): Record<string, string | undefined> {
   const { INFISICAL_CLIENT_ID: id, INFISICAL_CLIENT_SECRET: secret } = env;
-  if (!(id && secret)) {
+  if (id === undefined || id === "" || secret === undefined || secret === "") {
     return env;
   }
   const result = cli(
@@ -145,13 +144,25 @@ export function parseExport(stdout: string): Map<string, string> {
       code: "invalid_response",
     });
   }
+  const items: unknown[] = parsed;
   const values = new Map<string, string>();
-  for (const item of parsed as { key?: unknown; value?: unknown }[]) {
-    if (typeof item.key === "string") {
-      values.set(item.key, typeof item.value === "string" ? item.value : "");
+  for (const item of items) {
+    const key = fieldOf(item, "key");
+    if (typeof key === "string") {
+      const value = fieldOf(item, "value");
+      values.set(key, typeof value === "string" ? value : "");
     }
   }
   return values;
+}
+
+/** One field of a parsed JSON value, or `undefined` when the value is not an object. */
+function fieldOf(value: unknown, key: string): unknown {
+  if (typeof value !== "object" || value === null || !(key in value)) {
+    return undefined;
+  }
+  const field: unknown = Reflect.get(value, key);
+  return field;
 }
 
 /**
@@ -166,7 +177,7 @@ export function foldersFor(request: LoadRequest): string[] {
     request.processEnv[
       `INFISICAL_FOLDERS_${request.service.name.toUpperCase()}`
     ];
-  return named
+  return named !== undefined && named !== ""
     ? named
         .split(",")
         .map((folder) => folder.trim())
@@ -215,14 +226,14 @@ export function infisical(cli?: (root: string) => Cli): EnvSource {
   const make = cli ?? runInfisical;
   return {
     name: "infisical",
-    load: (request) =>
-      Promise.resolve(
-        pullFolders(foldersFor(request), {
-          cli: make(request.root),
-          env: authEnv(make(request.root), request.processEnv),
-          projectId: readProjectId(request.root),
-          environment: request.environment,
-        })
-      ),
+    // `async` so a throw from the synchronous CLI calls rejects the promise rather
+    // than escaping `load` before it returns one.
+    load: async (request) =>
+      pullFolders(foldersFor(request), {
+        cli: make(request.root),
+        env: authEnv(make(request.root), request.processEnv),
+        projectId: readProjectId(request.root),
+        environment: request.environment,
+      }),
   };
 }

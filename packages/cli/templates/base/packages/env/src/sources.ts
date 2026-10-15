@@ -4,7 +4,7 @@ import { readEnvFile } from "./env-file.ts";
 import { parseValues } from "./dotenv.ts";
 import { readExample } from "./example.ts";
 import { LOCAL_VALUES } from "./services.ts";
-import type { Environment, Service } from "./services.ts";
+import type { EnvSource } from "./source.ts";
 
 // Where `pnpm env:setup` gets its values. A source is vendor-blind from here: it takes a
 // service and an environment, and it answers with a key-value map or it throws one of the
@@ -17,20 +17,7 @@ import type { Environment, Service } from "./services.ts";
 export { EnvError } from "./error.ts";
 export type { EnvErrorCode, EnvErrorOptions } from "./error.ts";
 
-export interface LoadRequest {
-  /** The repository root, so a source finds its own config file. */
-  root: string;
-  service: Service;
-  environment: Environment;
-  /** The process environment, passed in so no source reads `process.env` itself. */
-  processEnv: Record<string, string | undefined>;
-}
-
-export interface EnvSource {
-  /** The value `ENV_SOURCE` selects. */
-  name: string;
-  load(request: LoadRequest): Promise<Map<string, string>>;
-}
+export type { EnvSource, LoadRequest } from "./source.ts";
 
 export interface SourceRegistry {
   sources: EnvSource[];
