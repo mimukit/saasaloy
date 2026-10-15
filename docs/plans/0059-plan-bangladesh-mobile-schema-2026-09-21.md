@@ -26,7 +26,7 @@ Success means a route author writes `bangladeshMobile` instead of a regex, and t
 | No general `phone({ country })` | A country option with one supported value invents an abstraction for a caller that does not exist. Adding a second country later is a rename, not a redesign. |
 | No optional variant | Callers write `bangladeshMobile.optional()`. `email` ships no optional variant either. |
 | Drift guard against the sms provider | A test assertion plus a comment in each file naming the other. The test asserts every accepted output matches `/^\+880\d{10}$/`; the comments tell whoever breaks it where the other half lives. A shared constant is closed off by ADR 0020, since `packages/sms` takes no dependency. |
-| Test runner and dependency | The test lands at `modules/validators/files/src/phone.test.ts` and runs on `node:test` through `pnpm test:modules`. No module test imports `zod` today and the repo root has none, so `zod` joins the root `devDependencies` exact-pinned at `4.5.4`, matching the version the scaffold and the module patch already pin. |
+| Test runner and dependency | The test lands at `modules/validators/files/src/phone.test.ts` and runs on `node:test` through `pnpm test:modules`. No module test imports `zod` today and the repo root has none, so `zod` joins the root `devDependencies` exact-pinned at `4.6.5`, matching the version the scaffold and the module patch already pin. |
 | Test file is repo-only | `phone.test.ts` gets no entry in `registry-item.json` `scaffolds`, matching `sms-khudebarta`, whose `khudebarta.test.ts` is also unscaffolded. A scaffolded project receives `phone.ts` alone. |
 | No existing caller to migrate | `waitlist.ts` has one `email` field and `feature-flags.ts` has `enabled` and `percentage`. Neither module has a phone field, so nothing adopts this on landing. |
 
@@ -47,7 +47,7 @@ The transform runs in a fixed order: reject on a disallowed character, remove th
 ### Phase 2: registration and dependency (built 2026-09-20)
 
 - Add `{ "path": "files/src/phone.ts", "target": "src/phone.ts" }` to the `scaffolds[0].files` array in `modules/validators/registry-item.json`.
-- Add `zod` at `4.5.4` to the repo root `devDependencies` so `pnpm test:modules` resolves the import.
+- Add `zod` at `4.6.5` to the repo root `devDependencies` so `pnpm test:modules` resolves the import.
 - Add the matching comment in `modules/sms-khudebarta/files/khudebarta.ts` pointing back at `phone.ts`.
 - Confirm the root addition does not disturb `pnpm deps:check`, which gates template and module-descriptor pins rather than the repo's own workspace deps.
 
