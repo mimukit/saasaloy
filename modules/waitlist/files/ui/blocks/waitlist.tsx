@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 
 import { Button } from "@repo/ui/components/button";
 import { Input } from "@repo/ui/components/input";
@@ -52,8 +52,14 @@ export function Waitlist({
   const [status, setStatus] = useState<Status>("idle");
   const [message, setMessage] = useState(GENERIC_ERROR);
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  // React ignores a handler's return value, so the submit runs as its own promise. It
+  // catches every failure itself, which is why nothing awaits it.
+  function handleSubmit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
+    void submit();
+  }
+
+  async function submit() {
     setStatus("submitting");
     // A thrown error is a caller that broke its own contract, and the person at the form
     // can do nothing with the detail — show the generic line rather than a stack.
@@ -112,7 +118,9 @@ export function Waitlist({
                 placeholder="you@example.com"
                 value={email}
                 disabled={status === "submitting"}
-                onChange={(event) => setEmail(event.target.value)}
+                onChange={(event) => {
+                  setEmail(event.target.value);
+                }}
                 className="h-9 flex-1"
               />
               <Button
