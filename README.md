@@ -58,13 +58,13 @@ pnpm dev
 Then add modules as the product grows:
 
 ```bash
-saasaloy list                
+saasaloy list
 # what the registry offers, and what you already have
 
-saasaloy add waitlist        
+saasaloy add waitlist
 # pulls api, validators and database, then asks for a database driver
 
-saasaloy add admin           
+saasaloy add admin
 # pulls auth, then an auth-gated admin SPA
 ```
 
