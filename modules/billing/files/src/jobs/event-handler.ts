@@ -87,7 +87,7 @@ export async function handleBillingEvent(
 
 /** Turn a JSON-round-tripped payload back into a `BillingEvent`. */
 export function reviveEvent(payload: BillingEventPayload): BillingEvent {
-  const subscription = payload.subscription;
+  const { subscription } = payload;
 
   return {
     occurredAt: date(payload.occurredAt) ?? new Date(),
