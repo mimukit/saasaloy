@@ -32,6 +32,7 @@ import {
 } from "../lib/exit.js";
 import { planWritesUi } from "../lib/design.js";
 import { ENV_EXAMPLE, writeEnvExample } from "../lib/env-example.js";
+import { formatPatchedFiles } from "../lib/format.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
 import { persistLedger } from "../lib/ledger.js";
@@ -913,6 +914,10 @@ export async function runAdd(argv: string[]): Promise<number> {
         `${pc.green("patch")}  ${p.file} ${pc.dim(`— ${p.patch.kind}`)}`
       );
     }
+    await formatPatchedFiles(
+      root,
+      result.patched.map((p) => p.file)
+    );
     for (const p of result.patchConflicts) {
       log.warn(
         `Config patch target ${pc.cyan(p.file)} missing — ${p.patch.kind} skipped.`
