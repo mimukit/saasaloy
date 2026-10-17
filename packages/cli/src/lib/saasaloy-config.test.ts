@@ -3,7 +3,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { RefusalError } from "./exit.js";
-import { loadConfig, migrateBase, saveConfig } from "./saasaloy-config.js";
+import {
+  loadConfig,
+  migrateBase,
+  resolveTarget,
+  saveConfig,
+} from "./saasaloy-config.js";
 
 let root: string;
 
@@ -78,5 +83,43 @@ describe(loadConfig, () => {
     const config = await loadConfig(root);
     await saveConfig(root, config);
     await expect(loadConfig(root)).resolves.toStrictEqual(config);
+  });
+});
+
+describe(resolveTarget, () => {
+  it("joins an alias prefix to the rest of the target", () => {
+    expect(resolveTarget({ "@api": "apps/api/src" }, "@api/routes/x.ts")).toBe(
+      "apps/api/src/routes/x.ts"
+    );
+  });
+
+  it("drops a trailing slash on the prefix", () => {
+    expect(resolveTarget({ "@api": "apps/api/src/" }, "@api/index.ts")).toBe(
+      "apps/api/src/index.ts"
+    );
+  });
+
+  // `@root` is the repo root, recorded as ".". A naive join yields "./compose.yaml",
+  // which `resolveWithinRoot` refuses for its "." segment (#152).
+  it("resolves the repo-root alias to a bare file name", () => {
+    expect(resolveTarget({ "@root": "." }, "@root/compose.yaml")).toBe(
+      "compose.yaml"
+    );
+  });
+
+  it("resolves a nested target under the repo-root alias", () => {
+    expect(resolveTarget({ "@root": "." }, "@root/docker/compose.yaml")).toBe(
+      "docker/compose.yaml"
+    );
+  });
+
+  it("refuses a target with no alias separator", () => {
+    expect(() => resolveTarget({ "@api": "apps/api" }, "compose.yaml")).toThrow(
+      RefusalError
+    );
+  });
+
+  it("refuses an alias the map does not carry", () => {
+    expect(() => resolveTarget({}, "@root/compose.yaml")).toThrow(RefusalError);
   });
 });

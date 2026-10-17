@@ -1,0 +1,29 @@
+# Development only. This file runs the Postgres `pnpm db:setup --docker` creates databases
+# in, and nothing here is meant for production: the password is a literal, the port is
+# published on localhost, and the data lives in a named volume you can throw away.
+#
+# `pnpm db:setup` starts this on its own. `docker compose down -v` stops it and deletes the
+# volume; `pnpm db:drop` only drops a database and leaves the container running.
+#
+# The credentials match `packages/db/scripts/backends/docker.ts`. Change both or neither.
+
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  postgres-data:
