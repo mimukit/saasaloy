@@ -4,13 +4,13 @@
 //
 // It re-runs the gate rather than asking GitHub whether CI was green. A release that trusts
 // a status API publishes whatever is on disk while claiming whatever the API remembers, and
-// those are not the same tree. Running the four scripts here costs minutes and removes the
+// those are not the same tree. Running the gate scripts here costs minutes and removes the
 // gap entirely.
 //
 // Staleness is checked first and separately. A `main` behind origin cuts a tag over code
 // that is missing merged work, and no amount of green gate catches it.
 //
-// SAASALOY_RELEASE_SKIP_GATE=1 skips the four gate scripts on a rerun after a transient
+// SAASALOY_RELEASE_SKIP_GATE=1 skips the gate scripts on a rerun after a transient
 // failure. It is an environment variable because release-it hooks are fixed strings, so
 // there is nowhere to pass a flag. The staleness check and the smoke always run.
 //
@@ -31,12 +31,13 @@ export const GATE_SCRIPTS = [
   "typecheck",
   "test",
   "verify:content",
+  "verify:pins",
 ] as const;
 
 const SKIP_GATE_ENV = "SAASALOY_RELEASE_SKIP_GATE";
 
 /**
- * Whether to skip the four gate scripts. Exactly `"1"` turns it on.
+ * Whether to skip the gate scripts. Exactly `"1"` turns it on.
  *
  * A truthiness check would read `SAASALOY_RELEASE_SKIP_GATE=0` as "skip", which is the
  * opposite of what anyone typing it means, and it would skip the gate silently.

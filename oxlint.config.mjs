@@ -5,6 +5,8 @@ import react from "ultracite/oxlint/react";
 import tanstack from "ultracite/oxlint/tanstack";
 import vitest from "ultracite/oxlint/vitest";
 
+import template from "./packages/cli/templates/base/oxlint.config.mjs";
+
 // oxlint config for the tool repo. Run it as `oxlint -c oxlint.config.mjs` — the
 // flag is not optional. oxlint only auto-discovers `.oxlintrc.json`, and a JSON
 // config cannot `extends` Ultracite's presets: `extends` takes file paths, JSON
@@ -172,39 +174,84 @@ const suppressed = {
   "typescript/method-signature-style": "off",
   "typescript/parameter-properties": "off",
   "unicorn/no-nested-ternary": "off",
+  // New in ultracite 7.12. It wants a helper hoisted out of the scope it sits in, away
+  // from its one caller: a `describe` block's fixture builder, a factory's closure.
+  // The template config turns it off for the same reason.
+  "unicorn/consistent-function-scoping": "off",
 };
+
+// The repo's rule map, named so the module-test override below can put it back.
+const rules = {
+  ...ultracite.rules,
+  ...suppressed,
+  // Ultracite enables `default-case`, `consistent-return` AND the strict form of
+  // `switch-exhaustiveness-check`, which cannot all be satisfied at once: dropping
+  // the `default` clause to satisfy the third trips the first two. Treating a
+  // `default` as exhaustive reconciles them without turning any of the three off.
+  "typescript/switch-exhaustiveness-check": [
+    "error",
+    { considerDefaultExhaustiveForUnions: true },
+  ],
+  // Ultracite's core preset ships `no-console: "off"`. Console output is a
+  // deliberate feature in exactly three places (exempted in `overrides`) and a
+  // defect everywhere else — above all in the assets we ship to users. #66's
+  // logger guard was dropped and pointed at this line.
+  "no-console": "error",
+  // Ultracite ships this as `["error", "always"]`, a stack-trace style preference
+  // that fired 11 times. The rule's `in-try-catch` mode is the correctness half —
+  // it catches a returned, un-awaited promise escaping the enclosing `catch`, where
+  // the handler never runs. That mode reports zero findings here, so the bug class
+  // stays guarded for free instead of being switched off with the style tier.
+  "typescript/return-await": ["error", "in-try-catch"],
+};
+
+// The template config's own path overrides, re-rooted at the template directory. Its
+// globs are relative to a scaffolded project (`packages/ui/src/components/**`), and the
+// same files sit under packages/cli/templates/base/ here.
+const TEMPLATE_DIR = "packages/cli/templates/base";
+const templateOverrides = template.overrides.map((override) => ({
+  ...override,
+  files: override.files.map((glob) => `${TEMPLATE_DIR}/${glob}`),
+}));
 
 export default defineConfig({
   ...ultracite,
 
-  rules: {
-    ...ultracite.rules,
-    ...suppressed,
-    // Ultracite enables `default-case`, `consistent-return` AND the strict form of
-    // `switch-exhaustiveness-check`, which cannot all be satisfied at once: dropping
-    // the `default` clause to satisfy the third trips the first two. Treating a
-    // `default` as exhaustive reconciles them without turning any of the three off.
-    "typescript/switch-exhaustiveness-check": [
-      "error",
-      { considerDefaultExhaustiveForUnions: true },
-    ],
-    // Ultracite's core preset ships `no-console: "off"`. Console output is a
-    // deliberate feature in exactly three places (exempted in `overrides`) and a
-    // defect everywhere else — above all in the assets we ship to users. #66's
-    // logger guard was dropped and pointed at this line.
-    "no-console": "error",
-    // Ultracite ships this as `["error", "always"]`, a stack-trace style preference
-    // that fired 11 times. The rule's `in-try-catch` mode is the correctness half —
-    // it catches a returned, un-awaited promise escaping the enclosing `catch`, where
-    // the handler never runs. That mode reports zero findings here, so the bug class
-    // stays guarded for free instead of being switched off with the style tier.
-    "typescript/return-await": ["error", "in-try-catch"],
-  },
+  rules,
 
   overrides: [
     // Ultracite's own override blocks first, so ours can correct them. `core`
     // relaxes two rules for test files; `vitest` adds the vitest plugin over the
     // same globs; `tanstack` relaxes filename-case under `routes/`.
+    ...ultracite.overrides,
+
+    // --- Shipped files take the template's rules ---------------------------
+    // Module payloads and the base template land in a scaffolded project, and that
+    // project lints them with packages/cli/templates/base/oxlint.config.mjs, not with
+    // this file. The `suppressed` block above is wider than the template's, so a payload
+    // that passed here used to fail a user's first commit (issue #152). This override
+    // puts the template's rule map back on those files. It sits first, so the per-path
+    // overrides below can still exempt one file. An exemption for a payload path must
+    // have a matching override in the template config, or the scaffold still fails.
+    //
+    // The template config resolves `ultracite` from this repo's node_modules, so the
+    // repo pins the template's `oxlint` and `ultracite` versions. The PIN_RULES table in
+    // scripts/verify-pins.ts holds them together.
+    {
+      files: ["modules/*/files/**", `${TEMPLATE_DIR}/**`],
+      rules: template.rules,
+    },
+    // The template's own exemptions, so a base file sees exactly what it sees after
+    // `saasaloy init`.
+    ...templateOverrides,
+    // A module's tests never ship: no descriptor lists a `.test.ts` file. They stay
+    // repo code and take the repo's rules back. oxlint has no negated glob to skip
+    // them above, and this block resets every rule, so Ultracite's test-file blocks
+    // run again after it.
+    {
+      files: ["modules/*/files/**/*.test.ts"],
+      rules,
+    },
     ...ultracite.overrides,
 
     // --- Node surfaces -----------------------------------------------------

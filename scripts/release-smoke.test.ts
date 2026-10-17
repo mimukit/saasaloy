@@ -16,6 +16,7 @@ import { describe, it } from "node:test";
 import {
   findRenderErrors,
   findWorkspaceDeps,
+  fullScaffolds,
   parseArgs,
 } from "./release-smoke.ts";
 
@@ -154,5 +155,47 @@ describe("findRenderErrors", () => {
       ),
       []
     );
+  });
+});
+
+// Issue #152. The lint step must put every module through a real project, and two
+// conflicting modules can never share one. Getting this wrong skips a module silently,
+// which is the failure the step exists to catch.
+describe("fullScaffolds", () => {
+  const free = (name: string) => ({ conflictsWith: [], name });
+
+  it("builds one project per conflicting module, each with every free module", () => {
+    const scaffolds = fullScaffolds([
+      free("auth"),
+      { conflictsWith: ["database-postgres"], name: "database-d1" },
+      free("api"),
+      { conflictsWith: ["database-d1"], name: "database-postgres" },
+    ]);
+    assert.deepEqual(scaffolds, [
+      { modules: ["database-d1", "api", "auth"], name: "full-database-d1" },
+      {
+        modules: ["database-postgres", "api", "auth"],
+        name: "full-database-postgres",
+      },
+    ]);
+  });
+
+  it("puts every module in at least one project", () => {
+    const modules = [
+      free("api"),
+      { conflictsWith: ["b"], name: "a" },
+      { conflictsWith: ["a"], name: "b" },
+      free("kv"),
+    ];
+    const covered = new Set(fullScaffolds(modules).flatMap((s) => s.modules));
+    for (const entry of modules) {
+      assert.ok(covered.has(entry.name), `${entry.name} is in no project`);
+    }
+  });
+
+  it("builds one project when nothing conflicts", () => {
+    assert.deepEqual(fullScaffolds([free("kv"), free("api")]), [
+      { modules: ["api", "kv"], name: "full" },
+    ]);
   });
 });

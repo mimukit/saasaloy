@@ -112,7 +112,7 @@ function subscribed(
   // project does not have. The route checks this too; a provider that trusted its caller
   // would be the one place the check is missing when a job enqueues a checkout later.
   const plan = findPlan(plans, input.planId);
-  const trialDays = plan.trialDays;
+  const { trialDays } = plan;
 
   // A trial already running on the subject's row, if the caller carried one and it has not
   // expired. `cancel`/`restore` reach this through `carried()` instead; only a plan change
@@ -126,7 +126,7 @@ function subscribed(
   if (running) {
     status = "trialing";
     trialStart = running.trialStart ?? now;
-    trialEnd = running.trialEnd;
+    trialEnd = running.trialEnd ?? null;
   } else if (trialDays) {
     status = "trialing";
     trialStart = now;
@@ -277,7 +277,7 @@ export function consoleBilling(): BillingProvider {
  * one. A vendor-backed provider ignores the field: its webhook carries the whole record.
  */
 function carried(input: SubjectInput): SubscriptionInput {
-  const current = input.current;
+  const { current } = input;
   if (!current) {
     throw new BillingError(
       "not_found",

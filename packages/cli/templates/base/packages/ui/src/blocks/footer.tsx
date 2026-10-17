@@ -52,15 +52,18 @@ export interface FooterProps {
   year?: number;
 }
 
+// Read the clock once, when the module loads, not in the component. A render must be
+// pure (`react/purity`), and the React Compiler cannot safely reorder a call expression in
+// a parameter default either. The footer renders at build time, so this is the build year.
+const CURRENT_YEAR = new Date().getFullYear();
+
 export function Footer({
   siteName = "Acme",
   tagline = landing.footer.tagline,
   groups = defaultGroups,
   year: yearProp,
 }: FooterProps) {
-  // Read the clock in the body, not as a destructuring default. The React Compiler cannot
-  // safely reorder a call expression in a parameter default and bails out of the component.
-  const year = yearProp ?? new Date().getFullYear();
+  const year = yearProp ?? CURRENT_YEAR;
 
   return (
     <footer className="border-border/60 mt-8 border-t">

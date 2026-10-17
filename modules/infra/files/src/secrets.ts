@@ -86,6 +86,8 @@ function parseEnv(source: string): [string, string][] {
 // `wrangler secret put <key>` reads the value from stdin — never a CLI argument, so a
 // secret never lands in shell history or a process list.
 function putSecret(dir: string, key: string, value: string): Promise<void> {
+  // `spawn` reports through events, not a promise, so this wraps it in one.
+  // oxlint-disable-next-line promise/avoid-new
   return new Promise((resolve, reject) => {
     const child = spawn("wrangler", ["secret", "put", key], {
       cwd: dir,

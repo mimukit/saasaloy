@@ -56,7 +56,7 @@ type Bindings = AuthDbBindings & FlagsBindings;
  */
 const validateValue = zValidator("json", flagValueInput, (result, c) => {
   if (!result.success) {
-    const issue = result.error.issues[0];
+    const [issue] = result.error.issues;
     const message = issue
       ? `${issue.path.join(".")}: ${issue.message}`
       : "invalid request body";
