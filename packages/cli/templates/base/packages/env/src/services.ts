@@ -1,18 +1,23 @@
 // The service table: which file each service's values land in, which environment fills
 // it, and which keys never reach it.
 //
-// A *service* is a workspace that reads a `.env` at runtime or at build time. The name is
-// the workspace directory, not the module that installed it. The base seeds the `web` row
-// because the base template ships `apps/web`; `saasaloy add api`, `admin` and `infra` each
-// append their own row with a `const-array` patch.
+// A *service* is a workspace that reads a `.env` at runtime or at build time, or a set of
+// values a tool reads with no file at all. The name is the workspace directory, not the
+// module that installed it. The base seeds the `web` row because the base template ships
+// `apps/web`, and the `deploy` row because `pnpm deploy:production` needs Cloudflare
+// credentials; `saasaloy add api` and `admin` each append their own row with a
+// `const-array` patch.
 
 export type Environment = "dev" | "prod";
 
 export interface Service {
   /** The service name, which is also the name a `# @services` line uses. */
   name: string;
-  /** The `.env` this service reads, relative to the repository root. */
-  file: string;
+  /**
+   * The `.env` this service reads, relative to the repository root. A row with no file
+   * holds values a tool loads in memory, and `env:setup` writes nothing for it.
+   */
+  file?: string;
   /** The one environment this service's file is written from. */
   environment: Environment;
   /** Keys a value source holds that must never reach this file. */
@@ -32,12 +37,19 @@ export const ENV_EXAMPLE = "packages/env/.env.example";
 export const LOCAL_VALUES = "packages/env/.env";
 
 /**
+ * The gitignored file the `local` source reads for production. `env-deploy` loads it in
+ * memory and nothing copies it anywhere, so the dev values in `LOCAL_VALUES` never ship.
+ */
+export const LOCAL_PROD_VALUES = "packages/env/.env.prod";
+
+/**
  * Keep this line in exactly this shape: `export const SERVICES = [...]` with a real array
  * literal. The codemod behind the `const-array` patch kind has nothing to push into
  * otherwise, and `saasaloy add api` fails silently.
  */
 export const SERVICES: Service[] = [
   { name: "web", file: "apps/web/.env", environment: "dev", omit: [] },
+  { name: "deploy", environment: "prod", omit: [] },
 ];
 
 export function serviceNames(): string[] {
@@ -58,7 +70,8 @@ export function findService(name: string): Service | undefined {
 export const CHECKOUT_OWNED_KEYS: string[] = ["DATABASE_URL"];
 
 /**
- * The services `env:setup` writes for `environment`, or the one `only` names.
+ * The services `env:setup` writes for `environment`, or the one `only` names. A row with
+ * no file is never selected, because there is nothing to write for it.
  *
  * `--env prod` refuses to act without `--only`. Two independent guards sit on the one
  * command that can put a live credential on disk: this one, and the refusal in `setup.ts`
@@ -69,15 +82,21 @@ export function selectServices(
   only?: string
 ): Service[] {
   const forEnvironment = SERVICES.filter(
-    (service) => service.environment === environment
+    (service) =>
+      service.environment === environment && service.file !== undefined
   );
   if (only === undefined) {
     if (environment === "prod") {
       throw new Error(
-        "--env prod writes one file only. Name it: pnpm env:setup --env prod --only infra."
+        "--env prod writes one file only. Name it: pnpm env:setup --env prod --only <service>. A deploy needs no file: pnpm deploy:production loads the production values in memory."
       );
     }
     return forEnvironment;
+  }
+  if (findService(only)?.file === undefined && findService(only)) {
+    throw new Error(
+      `--only ${only} names a service with no .env file, so there is nothing to write. Its values load in memory when a tool needs them.`
+    );
   }
   const service = forEnvironment.find((candidate) => candidate.name === only);
   if (!service) {

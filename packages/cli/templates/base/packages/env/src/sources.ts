@@ -3,7 +3,7 @@ import { EnvError } from "./error.ts";
 import { readEnvFile } from "./env-file.ts";
 import { parseValues } from "./dotenv.ts";
 import { readExample } from "./example.ts";
-import { LOCAL_VALUES } from "./services.ts";
+import { LOCAL_PROD_VALUES, LOCAL_VALUES } from "./services.ts";
 import type { EnvSource } from "./source.ts";
 
 // Where `pnpm env:setup` gets its values. A source is vendor-blind from here: it takes a
@@ -12,7 +12,8 @@ import type { EnvSource } from "./source.ts";
 //
 // The built-in `local` source reads the gitignored `packages/env/.env`, the file
 // `saasaloy env` prompts into, so a project distributes values with no vendor account and
-// no network. `saasaloy add env-infisical` registers a second source.
+// no network. For production it reads `packages/env/.env.prod` instead, which you fill in
+// by hand. `saasaloy add env-infisical` registers a second source.
 
 export { EnvError } from "./error.ts";
 export type { EnvErrorCode, EnvErrorOptions } from "./error.ts";
@@ -27,7 +28,8 @@ export interface SourceRegistry {
 
 /**
  * The built-in source. It reads one gitignored file for every service, so a key two
- * services share is typed once.
+ * services share is typed once: `packages/env/.env` for `dev` and `packages/env/.env.prod`
+ * for `prod`. Two files, so a deploy never ships a `localhost` URL by accident.
  *
  * It answers with the keys `packages/env/.env.example` lists for *this* service, and no
  * others. The one file holds every project value, and the example's `# @services` lines
@@ -37,11 +39,14 @@ export interface SourceRegistry {
 export const local: EnvSource = {
   name: "local",
   async load(request) {
-    const file = path.join(request.root, LOCAL_VALUES);
-    const held = readEnvFile(file);
+    const relative =
+      request.environment === "prod" ? LOCAL_PROD_VALUES : LOCAL_VALUES;
+    const held = readEnvFile(path.join(request.root, relative));
     if (!held.exists) {
       throw new EnvError(
-        `${LOCAL_VALUES} does not exist, so the local source has no values. Run saasaloy env to fill it in.`,
+        request.environment === "prod"
+          ? `${LOCAL_PROD_VALUES} does not exist, so the local source has no production values. Copy the keys from packages/env/.env.example into it and set the production value of each.`
+          : `${LOCAL_VALUES} does not exist, so the local source has no values. Run saasaloy env to fill it in.`,
         { code: "not_configured" }
       );
     }

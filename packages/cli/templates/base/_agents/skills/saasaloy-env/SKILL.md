@@ -1,6 +1,6 @@
 ---
 name: saasaloy-env
-description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, and the typed createEnv gate each service reads its values through. Use when adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a key is checkout-owned, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
+description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, the pnpm deploy:production deploy with env-deploy, and the typed createEnv gate each service reads its values through. Use when deploying to Cloudflare, when a deploy stops naming a blank production key, adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a key is checkout-owned, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
 ---
 
 # env — one key list, one command, one typed gate
@@ -9,7 +9,7 @@ description: Runbook for the env capability in packages/env — the one tracked 
 
 The **node half** is a tracked key list (`packages/env/.env.example`), a gitignored value file (`packages/env/.env`), and `pnpm env:setup`, which writes every service's own `.env` from the two. The **runtime half** is `createEnv`, which validates the values a service actually got and hands back typed ones.
 
-A *service* is a workspace that reads a `.env`: `api`, `web`, `admin`, `infra`. The name is the workspace directory. `packages/env/src/services.ts` holds the table, and `saasaloy add api` appends a row to it.
+A *service* is a workspace that reads a `.env`: `api`, `web`, `admin`. The name is the workspace directory. `packages/env/src/services.ts` holds the table, and `saasaloy add api` appends a row to it. One row has no workspace and no file: `deploy` holds `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which a deploy loads in memory.
 
 ## Adding a key, in two steps
 
@@ -98,11 +98,28 @@ A source that does not answer at all — no CLI, no network — is treated as of
 
 Each service row declares `dev` or `prod`. `pnpm env:setup --env prod` refuses to act without `--only <service>`, and refuses outright to write production values into a workspace under `apps/`. Two independent guards on the one command that can put a live credential on disk.
 
-`saasaloy env` prints the `wrangler secret put` lines for a deploy. It never runs them.
+`saasaloy env` prints the `wrangler secret put` lines for a deploy. It never runs them, and `pnpm deploy:production` makes them unnecessary.
 
-## `env-exec`
+## Deploying: `pnpm deploy:production` and `env-deploy`
 
-`env-exec <file> -- <command>` runs a command with a `.env` loaded into its environment, so `infra`'s scripts need no `source infra/.env` first. A variable the shell already exports wins over the file.
+`pnpm deploy:production` deploys every Worker in the project with wrangler. It runs in two steps:
+
+1. `node packages/env/src/deploy.ts --check` loads every service's `prod` values from the selected source and exits non-zero, naming each blank key, when one is missing. It also stops when `CLOUDFLARE_API_TOKEN` is blank and wrangler holds no `wrangler login` session. Nothing builds before this passes.
+2. `turbo run deploy` runs each workspace's `deploy` script, which is `env-deploy <service>`. A workspace whose package depends on `@repo/db` waits for `db:migrate:prod` first.
+
+`env-deploy <service>` loads that service's `prod` values and the `deploy` credentials, runs `pnpm run build` with them in the environment, and runs `wrangler deploy --secrets-file <file>`. Code and secrets land in one Worker version, so a Worker that throws at module scope on a missing secret deploys cleanly the first time. The secrets file is JSON, mode `0600`, under the OS temp directory, and deleted when the deploy ends, passed or failed. It holds the service's values minus every `CLOUDFLARE_*` key, minus each key the Worker's `wrangler.jsonc` already sets in `vars`, minus empty values. An assets-only Worker, one with no `main`, gets no secrets file.
+
+**Where the production values come from.** The `local` source reads the gitignored `packages/env/.env.prod`, never `packages/env/.env`, so a deploy cannot ship a `localhost` URL by accident. Copy the keys from `packages/env/.env.example` into it and set each one. `env-infisical` reads its `prod` environment. A variable the shell already exports wins over both, which is how CI passes values. The base `turbo.json` sets `passThroughEnv` on `deploy`, because turbo's strict env mode would drop the exported variables otherwise.
+
+**Why the dev `.env` stays out of the build.** Vite gives the environment priority over a `.env` file, but the Cloudflare adapters prerender inside workerd, and wrangler hands workerd the `.env` beside the workspace as its vars. So `env-deploy` builds with `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false`, and it sets a key the source leaves out to an empty string rather than leaving it unset. `apps/web/.env` keeps its dev values, and nothing writes a production value under `apps/`.
+
+Three more forms:
+
+- `pnpm --filter @repo/api run deploy` deploys one Worker. Pass wrangler flags after `--`: `pnpm --filter @repo/web run deploy -- --dry-run` builds with the production values and uploads nothing.
+- `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. `database-d1`'s `db:migrate:prod` uses it.
+- `env-deploy --check` is step 1 on its own.
+
+Two things the flow does not do. `--secrets-file` only adds: a secret you removed from the value source stays on the Worker until you run `wrangler secret delete <KEY>` in its workspace. And a key marked `# Blank on purpose` passes the check even where production needs it, such as `BETTER_AUTH_SECRET`; the Worker's own `createEnv` gate is what refuses it.
 
 ## `.dev.vars` is gone
 
@@ -110,4 +127,4 @@ This project writes `.env` and nothing else. A leftover `.dev.vars` **hides** `.
 
 ## `process.env`
 
-No file a Worker imports reads it. The Worker's `env` is the only source, and it arrives through `createEnv`. Node tooling — `scripts/`, `infra`, `env-exec`, a value source — reads it freely.
+No file a Worker imports reads it. The Worker's `env` is the only source, and it arrives through `createEnv`. Node tooling — `scripts/`, `env-deploy`, a value source — reads it freely.

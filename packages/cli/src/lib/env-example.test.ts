@@ -55,7 +55,7 @@ describe(parseEnvExample, () => {
     "# what A is",
     "A=one",
     "",
-    "# @services infra",
+    "# @services deploy",
     "B=",
   ].join("\n");
 
@@ -70,7 +70,7 @@ describe(parseEnvExample, () => {
     expect(parsed.B).toStrictEqual({
       value: "",
       comment: [],
-      services: ["infra"],
+      services: ["deploy"],
     });
   });
 

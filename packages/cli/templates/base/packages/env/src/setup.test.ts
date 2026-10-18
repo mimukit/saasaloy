@@ -36,9 +36,9 @@ const api = addService({
   environment: "dev",
   omit: [],
 });
-const infra = addService({
-  name: "infra",
-  file: "infra/.env",
+const ops = addService({
+  name: "ops",
+  file: "ops/.env",
   environment: "prod",
   omit: ["DATABASE_URL"],
 });
@@ -192,16 +192,28 @@ describe("setupServices", () => {
     );
   });
 
+  it("writes nothing for a service with no file", async () => {
+    const root = makeRoot();
+    const report = await setupServices({
+      root,
+      environment: "prod",
+      services: [{ name: "deploy", environment: "prod", omit: [] }],
+      source: fakeSource({ A: "x" }),
+      processEnv,
+    });
+    assert.deepEqual(report, { kind: "written", services: [] });
+  });
+
   it("omits a key the service must never carry", async () => {
-    const root = makeRoot("# @services infra\nA=local\nDATABASE_URL=\n");
+    const root = makeRoot("# @services ops\nA=local\nDATABASE_URL=\n");
     await setupServices({
       root,
       environment: "prod",
-      services: [infra],
+      services: [ops],
       source: fakeSource({ A: "x", DATABASE_URL: "secret" }),
       processEnv,
     });
-    const { values } = readEnvFile(path.join(root, "infra/.env"));
+    const { values } = readEnvFile(path.join(root, "ops/.env"));
     assert.equal(values.get("DATABASE_URL"), "");
   });
 

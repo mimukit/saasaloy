@@ -10,9 +10,6 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 - **Root**: Configuration files, shared tooling
 - **`apps/*`**: Applications (Next.js, Astro apps - currently empty, will be added)
 - **`packages/*`**: Shared packages
-- **`infra`**: Centralized Cloudflare deployment (Pulumi), if the `infra` capability is installed —
-  a root-level workspace, not nested under `apps/*` or `packages/*` (it's neither an app nor a
-  shared package)
 
 ### Dev Port Map
 
@@ -102,8 +99,14 @@ command that distributes it, one typed gate in front of the capabilities.
 - **`packages/env/.env` holds the values**, and it is gitignored. `saasaloy env` prompts
   for each unset key and writes it.
 - **`pnpm env:setup` writes every service's own `.env`** from those two files. A *service*
-  is a workspace that reads a `.env` — `api`, `web`, `admin`, `infra` — and
-  `packages/env/src/services.ts` is the table.
+  is a workspace that reads a `.env` — `api`, `web`, `admin` — and
+  `packages/env/src/services.ts` is the table. The `deploy` row has no file: it holds the
+  Cloudflare credentials a deploy loads in memory.
+- **`pnpm deploy:production` deploys every Worker.** It checks every service's production
+  values first, then runs `turbo run deploy`, where each deployable workspace runs
+  `env-deploy <service>`: build with the production values in the environment, then
+  `wrangler deploy --secrets-file`. The `local` source reads production values from the
+  gitignored `packages/env/.env.prod`. Nothing writes a production value under `apps/`.
 - **`createEnv` is the gate.** `apiEnv(c.env)` on the server, `webEnv()` in a frontend.
   It validates on the first call and throws once naming every failing key, its module and
   what the key is for.
@@ -577,5 +580,5 @@ hook (which is also how you keep hooks out of CI).
 - Remove or disable the lint-staged or commitlint hooks, or commit with `--no-verify`
   as a habit rather than an emergency
 - Use `any` type without explicit `@ts-expect-error` or `@ts-ignore` with justification
-- Break the workspace structure (don't move packages outside `apps/*`, `packages/*`, or `infra`)
+- Break the workspace structure (don't move packages outside `apps/*` or `packages/*`)
 - Commit without running type checks and linting

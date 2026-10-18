@@ -19,6 +19,15 @@
     "test": {
       "dependsOn": ["^build"],
       "outputs": ["coverage/**"]
+    },
+    "deploy": {
+      "dependsOn": ["^build", "^db:migrate:prod"],
+      "cache": false,
+      "passThroughEnv": ["*"]
+    },
+    "db:migrate:prod": {
+      "cache": false,
+      "passThroughEnv": ["*"]
     }
   }
 }

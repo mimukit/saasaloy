@@ -5,8 +5,8 @@ import { SERVICES } from "./services.ts";
 import type { Service } from "./services.ts";
 
 // `selectExample` reads the service names out of the live `SERVICES` array, which the base
-// seeds with `web` alone. These tests add the rows `saasaloy add api` and `add infra`
-// append, so the section rules are exercised against more than one service.
+// seeds with `web` and `deploy`. These tests add the `api` row `saasaloy add api` appends
+// and an `ops` row with a production file, so the section rules see more than one service.
 function addService(service: Service): void {
   if (!SERVICES.some((row) => row.name === service.name)) {
     SERVICES.push(service);
@@ -20,8 +20,8 @@ addService({
   omit: [],
 });
 addService({
-  name: "infra",
-  file: "infra/.env",
+  name: "ops",
+  file: "ops/.env",
   environment: "prod",
   omit: [],
 });
@@ -57,7 +57,7 @@ describe("selectExample", () => {
   });
 
   it("gives a service named by no section nothing", () => {
-    assert.deepEqual(selectExample(EXAMPLE, "infra"), []);
+    assert.deepEqual(selectExample(EXAMPLE, "deploy"), []);
   });
 
   it("refuses a key with no section above it", () => {
