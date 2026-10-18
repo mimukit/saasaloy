@@ -104,7 +104,9 @@ The mockup is not committed. Its source is `~/scratch/landing-mockup/page.html` 
 
 Done when: `pnpm verify:a11y` runs on a fresh playground build on devaloy and prints the baseline violations, a `workflow_dispatch` run of `smoke.yml` runs the new job, and `pnpm deps:verify` stays green.
 
-### Phase 3: rhythm, type ramp and motion tokens
+**Baseline (2026-10-18), against the page before Phase 4:** 41 findings across 32 page loads. `skip` 32 (no skip link on any route), `axe:color-contrast` 4 (the CTA's muted line on `bg-muted`, `/` in the light theme at every width), `meta` 4 (no `og:title`, `og:description`, `og:url` or `twitter:card`), `islands` 1 (`Faq` hydrated). No overflow and no running animation. After Phases 4 to 6 the same gate reports no findings.
+
+### Phase 3: rhythm, type ramp and motion tokens (built 2026-10-18)
 
 1. Add section-rhythm tokens to `packages/ui/src/styles/web.css`, the web theme file that plan 0069 Phase 1 splits out of `globals.css`: one container width, one section padding, and a narrow-measure variant that `faq` uses on purpose.
 2. Set a deliberate type ramp on the system stack: display, section title, lead and body sizes, weights and tracking. Update `apps/web/DESIGN.md`'s typography and components to match.
@@ -113,7 +115,7 @@ Done when: `pnpm verify:a11y` runs on a fresh playground build on devaloy and pr
 
 Done when: `pnpm deps:verify`, `pnpm verify:preset` and `pnpm lint` pass, and the contrast rows of `verify:a11y` pass in both themes.
 
-### Phase 4: rework the seven blocks
+### Phase 4: rework the seven blocks (built 2026-10-18)
 
 1. `navbar`: lock scroll while the mobile panel is open, contain focus, close on an outside click, and keep `client:idle`.
 2. `hero`: rebuild it as the Phase 1 Tailark hero, anchored by a token-drawn product visual in a frame that fades out, with the load-time blur-in cascade. Keep one `h1`.
@@ -126,7 +128,7 @@ Done when: `pnpm deps:verify`, `pnpm verify:preset` and `pnpm lint` pass, and th
 
 Done when: `verify:a11y` reports no violation on the seven blocks, `pnpm verify:content` passes, the built page hydrates only `navbar` and `pricing-table`, and a page built with a faked earlier year shows the current year in the browser.
 
-### Phase 5: the six new blocks
+### Phase 5: the six new blocks (built 2026-10-18)
 
 1. `logo-cloud`: `landing.logos.items[]` as `{ id, name, mark }`, a registry of token-drawn placeholder marks in the block, a fallback mark for an unknown name, and a CSS marquee paused under reduced motion. The block's header comment shows how to add a real logo to the registry.
 2. `testimonials`: a masonry grid of placeholder quote cards, each with an initials circle, a name and a role. No avatar image.
@@ -138,7 +140,7 @@ Done when: `verify:a11y` reports no violation on the seven blocks, `pnpm verify:
 
 Done when: all thirteen blocks pass `verify:a11y` and `verify:content`, and none of the six new blocks ships JavaScript.
 
-### Phase 6: compose the page and the shell
+### Phase 6: compose the page and the shell (built 2026-10-18)
 
 1. Compose all thirteen sections in `index.astro` in the Phase 1 order, and keep the hydration comment true for the two remaining islands.
 2. Add a skip link, Open Graph and Twitter metadata to `Layout.astro`, built from `PUBLIC_SITE_URL` and `landing.meta.*`.
@@ -147,7 +149,7 @@ Done when: all thirteen blocks pass `verify:a11y` and `verify:content`, and none
 
 Done when: the playground's `/` renders all thirteen sections, `pnpm verify:a11y` passes on `/`, and the built HTML carries a skip link, `og:title`, `og:description`, `og:url` and `twitter:card`.
 
-### Phase 7: docs and skills
+### Phase 7: docs and skills (built 2026-10-18)
 
 1. Document the section recipe (add, remove, reorder, delete the block file) and the logo recipe in the base `README.md` and `AGENTS.md`, and restate the rubric contract there. Name the six new blocks in `AGENTS.md`, so an existing project that runs `saasaloy update` learns they exist.
 2. Update `saasaloy-landing-copy` so its draft covers the six new blocks' copy.
@@ -155,6 +157,24 @@ Done when: the playground's `/` renders all thirteen sections, `pnpm verify:a11y
 4. Add the `Superseded by` line to plan 0025 and the `NOTICE` entry for Tailark.
 
 Done when: a fresh `pnpm play:init` project's `README.md` shows the section recipe, and the landing-copy skill writes a draft that covers all thirteen sections.
+
+## Build notes (2026-10-18)
+
+Decisions taken during the build, where the plan left room:
+
+- **Playwright 1.63.0 and @axe-core/playwright 4.13.0**, not the newest releases. The repo's three-day `minimumReleaseAge` blocks 1.64.x, and 1.63.0 drives the Chromium build (1243) already cached on devaloy.
+- **The CI job seeds `packages/env/.env` from its example.** A playground build fails without `PUBLIC_SITE_URL` and `PUBLIC_API_URL`, and the example's local defaults are enough for an a11y run.
+- **The JS-budget gate checks islands, not inline scripts.** Astro inlines its own island loaders, so a count of inline scripts cannot tell them from ours. The rubric's inline-script row is QA.
+- **One icon registry, in `packages/ui/src/lib/icons.ts`.** The feature grid, the pain points and the audience list share it, so content has one icon vocabulary. It is an owned base file.
+- **Backticks in a content message render as `<code>`**, through `lib/inline-code.ts`, so copy that quotes a command stays one translatable string.
+- **The logo registry's fallback is a text wordmark**, not a placeholder glyph. The default row names the real stack as text, and two token-drawn placeholder marks stay in the registry as a worked example.
+- **The theme toggle moved inside the navbar**, as the approved mockup shows. It still needs no island of its own.
+- **The pricing toggle hides when no tier has an annual price**, and a tier may carry `priceSuffix` and `badge`. The default Saasaloy tiers are what running a project costs: Saasaloy, the Cloudflare free tier, and Workers Paid.
+- **The footer's social marks are GitHub and X**, drawn from Simple Icons (CC0). Simple Icons no longer ships a LinkedIn mark, so LinkedIn is not offered. `NOTICE` names both sources.
+- **The footer reads the build year at render time.** At module scope, workerd's prerender froze `Date` and the page said 1970.
+- **`verify-content` gained one escape hatch**, `// verify-content-disable-next-line <reason>`, for SVG paths, CSS selectors and the inline year script. A marker without a reason does nothing, and the script self-tests that.
+- **A `grid-pattern` utility** joins the motion utilities in `globals.css`, because three blocks draw the same hairline grid.
+- **The fresh-year check used the built HTML with its year rewritten to 2019**, served to Chromium, which showed the current year. `faketime` is not on devaloy.
 
 ## Open questions
 
