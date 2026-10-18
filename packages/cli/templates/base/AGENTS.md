@@ -132,7 +132,8 @@ The theme is one shared file plus one theme file per app:
   and `.dark` token values, its `@theme inline` colour mapping and its radius scale. It
   imports `globals.css`, and `apps/web` pulls it in once, through the shared layout that
   imports `@repo/ui/styles/web.css`. `components.json` points here, so a shadcn preset
-  lands here.
+  lands here. The landing page's layout, type and motion utilities sit at the end of the
+  file, after the colour tokens, and a preset leaves them alone.
 - **`src/styles/admin.css`** is the admin app's theme, in the same shape, written by
   `saasaloy add admin`.
 
@@ -272,9 +273,35 @@ fails until step 2 adds the `./styles/*` export. Update the base and finish step
 you build admin, and before you run `saasaloy add admin` on a project made before the
 split.
 
-**Blocks — the page-level compositions.** `src/blocks/` holds the marketing blocks the
-landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`,
-`cta`, `footer`. The rules are not stylistic — each one prevents a real failure:
+**Blocks — the page-level compositions.** `src/blocks/` holds the thirteen marketing
+blocks the landing page is built from: `navbar`, `hero`, `logo-cloud`, `pain-points`,
+`how-it-works`, `feature-grid`, `showcase`, `audience`, `testimonials`, `pricing-table`,
+`faq`, `cta` and `footer`. `logo-cloud`, `pain-points`, `how-it-works`, `showcase`,
+`audience` and `testimonials` are new; a project scaffolded before them gets the files
+through `saasaloy update`, and adds each to its own `index.astro` by hand, since the page
+is the owner's.
+
+**The section recipe.** `index.astro` composes the page from explicit imports, one line
+per section. To remove a section, delete its line and its import, delete its file in
+`src/blocks/`, and blank its navbar and footer labels in `landing.ts`. To reorder, move
+the lines. Every block uses the same container (`section-container`, `-narrow`, `-wide`)
+and spacing (`section-y`) utilities from `src/styles/web.css`, so any order keeps one
+rhythm. A block sets no width, no section padding and no keyframes of its own; motion
+comes from the named utilities there (`blur-in`, `reveal`, `marquee`, `shine-text`,
+`nav-float`, `hover-lift`), and every one stops under reduced motion.
+
+**The logo recipe.** `landing.logos.items[]` is `{ id, name, mark }`. `mark` is a key in
+`LOGO_MARKS` at the top of `blocks/logo-cloud.tsx`. Paste a customer's SVG there under a
+kebab-case key with `fill="currentColor"`, then name the key in content. An unknown key
+renders `name` as a text wordmark.
+
+**The production bar.** The page holds to a rubric: no axe violation at WCAG 2.1 AA in
+either theme, no sideways scroll from 360px up, nothing animating under reduced motion, a
+skip link to `<main>` on every page, link-preview metadata on `/`, and exactly two islands
+(`Navbar`, `PricingTable`). Keep each true when you change a block: a new section with
+state is a third island and needs a reason.
+
+The rules below are not stylistic — each one prevents a real failure:
 
 - **One block, one file, one component export (plus its prop types).**
   `pricing-table.tsx` exports `PricingTable` alongside `PricingTier` and
@@ -299,13 +326,13 @@ landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `
   `client:load` on the page hydrates everything and throws away the reason this is a
   static site — see `apps/web/src/pages/index.astro` for the worked example.
 - **`theme-toggle` is the exception that proves the rule.** It sits in `src/blocks/`
-  beside the marketing blocks but is chrome, not copy: `index.astro` places it as a
-  sibling of `<Navbar />` and it takes **no** client directive despite being
-  interactive. It has no `onClick` and no state — the pre-paint inline script the shared
-  layout emits (`THEME_INIT_SCRIPT`, from `packages/ui/src/lib/theme.ts`) drives every
+  beside the marketing blocks but is chrome, not copy: `navbar.tsx` renders it inside the
+  bar, and it needs **no** client directive of its own despite being interactive. It has
+  no `onClick` and no state — the pre-paint inline script the shared layout emits
+  (`THEME_INIT_SCRIPT`, from `packages/ui/src/lib/theme.ts`) drives every
   `[data-theme-toggle]` on the page through one delegated listener, and CSS picks the
   icon off `<html data-theme>`. Move it, restyle it via its `className`, or delete the
-  one line in `index.astro` to drop it. Do **not** "fix" it by adding `client:*` or an
+  one line in `navbar.tsx` to drop it. Do **not** "fix" it by adding `client:*` or an
   `onClick`, and do not paste a second copy of the boot script into a page: any document
   that renders the block must inline that one constant in its `<head>`, or the control
   stays hidden.
@@ -405,19 +432,24 @@ record and nothing else. Follow them when you add a block or a key:
    messages (`ui.pricing.perMonth`, `ui.pricing.perMonthAnnual`) — word order does not
    survive the seam in every language.
 5. **Only user-visible strings move.** Section `id`s and the same-page anchors pointing at
-   them are structure and stay in the block. Three things break the rule, all because a
+   them are structure and stay in the block. A few things break the rule, all because a
    thing rewritten *with* the copy belongs *near* the copy: the whole `tiers` array (prices
-   and `ctaHref`s included); each feature's `icon`, held as a registry *name* like `"zap"`
-   and resolved to a component by the map at the top of `blocks/feature-grid.tsx`; and the
-   two outbound calls to action, `landing.navbar.ctaHref` and
-   `landing.cta.primaryActionHref`/`.secondaryActionHref`, which leave the page and so
-   cannot break a section link. A translation layer reads `id`, `icon` and every `*Href` as
-   non-message data.
+   and `ctaHref`s included); every `icon`, held as a registry *name* like `"zap"` and
+   resolved to a component by `packages/ui/src/lib/icons.ts`, and every logo `mark`,
+   resolved by `blocks/logo-cloud.tsx`; every outbound link (`*Href`), which leaves the
+   page and so cannot break a section link; and the code the page quotes (terminal
+   commands, module names, file paths). A translation layer reads `id`, `icon`, `mark`,
+   every `*Href` and the quoted code as non-message data. A pair of backticks inside a
+   message renders as `<code>` through `inlineCode()` from `@repo/ui/lib/inline-code`.
 
 Two consequences worth knowing. Blanking a navbar or footer link's label in content drops
 that link, which is how a removed section loses its nav entry without editing a block. And
 the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: that file is
 inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
+
+**The default copy is Saasaloy's own.** A fresh project's page describes Saasaloy, and
+`siteName` in `packages/ui/src/index.ts` defaults to `"Saasaloy"`, so the brand and the
+words agree until you replace both. The two skills below replace them in one pass.
 
 **Making this project yours.** Three skills ship with the base (linked at
 `.claude/skills/`, real files in `.agents/skills/`). The first two run in order:
@@ -438,7 +470,7 @@ The third has no place in that order, because it runs whenever the UI moves:
    add components; `audit` reports where the code and the contract disagree. It reads the
    product brief when one exists and never writes it.
 
-Invoke them rather than editing eight blocks by hand — and if you do edit by hand, keep the
+Invoke them rather than editing thirteen blocks by hand — and if you do edit by hand, keep the
 strings in the content module so the next pass finds them.
 
 ### Naming Conventions

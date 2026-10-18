@@ -1,6 +1,6 @@
 ---
 name: saasaloy-landing-copy
-description: Write the scaffolded landing page's copy from docs/product-brief.md — as a markdown draft the owner reviews first, then into the content module. Use when the landing page still says "Acme" or "The SaaS you meant to build", when the owner asks to write, rewrite, improve or update the landing copy, headline, features, pricing or FAQ, and when re-running after the brief changed. Needs docs/product-brief.md; run saasaloy-setup first if there isn't one.
+description: Write the scaffolded landing page's copy from docs/product-brief.md — as a markdown draft the owner reviews first, then into the content module. Use when the landing page still describes Saasaloy ("Ship the SaaS, not the scaffolding"), when the owner asks to write, rewrite, improve or update the landing copy, headline, features, pricing or FAQ, and when re-running after the brief changed. Needs docs/product-brief.md; run saasaloy-setup first if there isn't one.
 ---
 
 # saasaloy-landing-copy — draft it in markdown, then write the page
@@ -41,12 +41,12 @@ says what to do when they disagree with the brief.
    an owner ends up answering the same thing twice and getting two different pages.
 2. **Read `packages/ui/src/content/landing.ts`.** You need the current copy to diff against,
    and its comments carry the shape rules you have to keep.
-3. **Read the icon registry** at the top of `packages/ui/src/blocks/feature-grid.tsx`.
+3. **Read the icon registry** in `packages/ui/src/lib/icons.ts`.
    Reading a block is fine; editing one is not. Its keys are the whole vocabulary available
    to `landing.features.items[].icon`, and they are the actual list rather than one copied
    into this file that went stale.
 4. **Check the two facts you do not own.** If `siteName` in `packages/ui/src/index.ts` is
-   still the scaffold's directory slug, or `lang` in `apps/web/src/layouts/Layout.astro` is
+   still the shipped `"Saasaloy"` or a directory slug, or `lang` in `apps/web/src/layouts/Layout.astro` is
    `en` while the brief names another language, say so now and carry both into the draft's
    **Not mine to fix** list. Writing Bangla copy into a page that declares itself English is
    a real defect, and one attribute long. Do not fix it yourself.
@@ -113,29 +113,29 @@ This file is deleted once the copy lands in `packages/ui/src/content/landing.ts`
 ## Hero
 | Key | Now | Proposed |
 |-----|-----|----------|
-| `hero.eyebrow` | Now in early access | In beta with two firms |
+| `hero.announcement` | v0.5 early preview | In beta with two firms |
 | `hero.primaryActionLabel` | Get started | Join the beta |
 
 `hero.title`:
-> ~~The SaaS you meant to build, already scaffolded.~~
+> ~~Ship the SaaS, not the scaffolding.~~
 > **Close the month without four spreadsheets per client.**
 
 *From the brief: the problem line, and "Excel plus a shared Dropbox folder" as the
-alternative. The eyebrow uses the two named beta firms rather than a stage name.*
+alternative. The announcement uses the two named beta firms rather than a stage name.*
 
 ## Features
 | # | Icon | Title | About |
 |---|------|-------|-------|
-| 1 | `list-checks` (was `zap`) | One close, one checklist | … |
+| 1 | `list-checks` (was `terminal`) | One close, one checklist | … |
 
 ## Where the buttons go
 | Key | Now | Proposed |
 |-----|-----|----------|
-| `navbar.ctaHref` | `#cta` | https://ledgerly.com.bd/waitlist |
-| `cta.primaryActionHref` | `/` | https://ledgerly.com.bd/waitlist |
+| `navbar.ctaHref` | Saasaloy's getting started guide | https://ledgerly.com.bd/waitlist |
+| `cta.primaryActionHref` | Saasaloy's getting started guide | https://ledgerly.com.bd/waitlist |
 
 ## Least sure about
-- The eyebrow names your two beta firms. Fine to say publicly?
+- The announcement names your two beta firms. Fine to say publicly?
 - FAQ 4 says data exports as CSV. The brief doesn't mention exports; I inferred it.
 
 ## Not mine to fix
@@ -170,57 +170,70 @@ than doubling it.
 
 | Key | What goes there |
 |-----|-----------------|
-| `meta.title` | Browser tab. `{siteName} — <what it does>`, under 60 characters. |
+| `meta.title` | Browser tab and link preview. `{siteName}: <what it does>`, under 60 characters. |
 | `meta.description` | Search result and link preview. One sentence, under 155 characters. |
-| `navbar.linkFeatures` `.linkPricing` `.linkFaq` | Nav labels. One or two words. They point at the sections of the same name — keep the meaning, or the anchor lies. |
+| `navbar.linkFeatures` `.linkHowItWorks` `.linkShowcase` `.linkPricing` `.linkFaq` | Nav labels. One or two words. They point at the sections of the same name — keep the meaning, or the anchor lies. An empty label hides the link. |
+| `navbar.secondaryLabel` `.secondaryHref` | The outline button beside the main one, usually docs, source or sign-in. Empty `secondaryHref` hides it. See [Destinations](#destinations). |
 | `navbar.ctaLabel` `.ctaHref` | Two or three words, a verb first, and where it goes. See [Destinations](#destinations). |
-| `hero.eyebrow` | The one-line status above the headline ("Now in early access"). Empty string hides it. |
+| `hero.announcement` `.announcementHref` | The pill above the headline ("Now in early access") and where it links, usually a changelog or launch post. Empty `announcement` hides it. |
 | `hero.title` | The headline. Under ten words, one idea, concrete. This is the sentence the whole page is judged on. |
 | `hero.description` | One or two sentences saying what it does for whom. |
-| `hero.primaryActionLabel` `.secondaryActionLabel` | Button labels, a verb first. Both scroll down the page; their hrefs are anchors and stay in the block. |
+| `hero.primaryActionLabel` `.primaryActionHref` `.secondaryActionLabel` `.secondaryActionHref` | Button labels, a verb first, and where each goes. See [Destinations](#destinations). |
+| `hero.terminalLabel` `.terminalTitle` `.terminalLines[]` `.treeTitle` `.tree[]` | The hero's product visual: a terminal and a file tree. For a product that is not a developer tool, keep the shipped lines and tell the owner in the draft to replace the visual with a screenshot (the block's header comment shows how). Command lines and paths are code, not prose. |
+| `logos.label` `.items[]` | One line beside the logo row, and `{ id, name, mark }` per logo. `name` is the accessible label; `mark` names an SVG the owner adds to `logo-cloud.tsx`, and an empty `mark` renders `name` as text. Never invent a customer: no logos in the brief means offer to drop the block. |
+| `painPoints.title` `.description` `.intro` `.items[]` | The problem the product solves. Four items by default: `{ id, icon, title, description }`, each a pain the brief's customer actually has. See [Icons](#icons). |
+| `howItWorks.title` `.description` `.steps[]` | Three ordered steps: `{ id, title, description }`. Only for a real sequence a customer follows. |
 | `features.title` `.description` | The section's heading and one supporting line. |
 | `features.items[]` | Six by default: `{ id, icon, title, description }`. Title 2–4 words; description one sentence about what the owner can *do*, not about the technology. See [Icons](#icons). |
+| `showcase.title` `.description` `.rows[]` | Alternating rows: `{ id, title, description, points[], visual, imageSrc, imageAlt }`. With real screenshots in `apps/web/public`, set `imageSrc` and a real `imageAlt`; otherwise keep `visual` and its lists, or offer to drop the block. |
+| `audience.title` `.description` `.items[]` | Who it is for. Four items: `{ id, icon, title, description }`, from the brief's customer section. |
+| `testimonials.title` `.description` `.items[]` | `{ id, quote, name, role }`. **Real quotes only**, with the person's permission. With none in the brief, keep the shipped placeholders and offer to drop the block. Never write a quote. |
 | `pricing.title` `.description` | Heading plus one line. |
 | `pricing.annualNote` `.currencySymbol` | See [Pricing](#pricing). |
-| `pricing.tiers[]` | `{ id, name, description, monthlyPrice, annualPrice, features, ctaLabel, ctaHref }`. Prices are whole units; `null` renders "Custom". Set `featured` on at most one. A tier's `ctaHref` stays `#cta` unless the brief gives that tier its own destination. |
+| `pricing.tiers[]` | `{ id, name, description, monthlyPrice, annualPrice, priceSuffix, features, ctaLabel, ctaHref }`, plus `featured` and `badge` on at most one. Prices are whole units; `null` renders "Custom". An empty `priceSuffix` shows "/month". |
 | `faq.items[]` | Five by default: `{ id, question, answer }`. Write the questions a buyer asks before paying — pricing, migration, lock-in, data, what happens when they outgrow it. One to three sentences, and answer the question. |
+| `faq.moreLabel` `.moreLinkLabel` `.moreLinkHref` | The line under the list. Empty `moreLinkHref` hides it. |
 | `cta.title` `.description` | The closing ask, plus one line removing a reason to hesitate. |
-| `cta.primaryActionHref` `.secondaryActionHref` | See [Destinations](#destinations). |
+| `cta.command` | A command shown as a code chip. Empty for a product that is not installed from a terminal. |
+| `cta.primaryActionLabel` `.primaryActionHref` `.secondaryActionLabel` `.secondaryActionHref` | See [Destinations](#destinations). |
 | `footer.tagline` | One line under the brand. |
-| `footer.groupProduct` `.groupLegal` `.link*` | Footer labels. One or two words each. |
+| `footer.links[]` `.linkTerms` `.linkPrivacy` | `{ id, label, href }` per outbound link, then the two legal labels. Empty drops a link. |
+| `footer.githubHref` `.xHref` | Social profiles. Empty hides the icon. |
+| `footer.copyright` | Keep `{year}` and `{siteName}` in it. |
 
 Three mechanical rules the code depends on:
 
-- **`{siteName}` is the only placeholder, and it works in exactly four strings**:
-  `meta.title`, `meta.description`, `hero.description`, `cta.description`. Anywhere else it
-  renders as the literal text `{siteName}`. Never a template literal — copy is data.
-- **Feature and FAQ `id`s are stable keys**, not positions. Rewriting a `title` under an
+- **`{siteName}` is the placeholder**, and the blocks fill it in titles, descriptions,
+  answers and tier names. Never a template literal — copy is data. `{year}` works only in
+  `footer.copyright`. A pair of backticks in a description or answer renders as `<code>`.
+- **Every list item's `id` is a stable key**, not a position. Rewriting a `title` under an
   existing id is free. Renaming an id is allowed but it is a new string to a translation
   layer, so do it only when the item genuinely became a different item.
-- **Deleting an item is fine**, in any of the three lists. Fewer than six features and fewer
-  than five questions both lay out correctly.
+- **Deleting an item is fine**, in any list. Fewer features, questions, steps or quotes all
+  lay out correctly.
 
 ### Icons
 
-Each feature carries an `icon` naming a glyph from the registry at the top of
-`packages/ui/src/blocks/feature-grid.tsx`. Rewrite what a feature is about and move its
-icon in the same edit — that is the whole reason the name lives in content. A page whose
-"practice all four modules" card renders a terminal prompt reads as machine-assembled,
-because it was.
+Feature, pain point and audience items carry an `icon` naming a glyph from the registry in
+`packages/ui/src/lib/icons.ts`. Rewrite what an item is about and move its icon in the same
+edit — that is the whole reason the name lives in content. A page whose "practice all four
+modules" card renders a terminal prompt reads as machine-assembled, because it was.
 
 - Use a key the registry actually has. Read the map; do not guess from memory. An unknown
   name silently renders the fallback sparkle, which looks like a choice and is not.
 - If nothing in the registry fits, say so in the draft and name the lucide icon you would
-  want. Widening the map is a two-line edit **the owner makes**, in a block, which is not
-  yours.
+  want. Widening the map is a two-line edit **the owner makes**, in a library file, which is
+  not yours.
 
 ### Destinations
 
-Three of the page's hrefs are content, and they are the ones that leave the page:
-`navbar.ctaHref`, `cta.primaryActionHref`, `cta.secondaryActionHref`. The brief's
-**Where "sign up" goes** section is where the answer lives.
+Every href that leaves the page is content: the navbar's two buttons, the hero's two
+actions and its announcement, the CTA's two actions, each tier's `ctaHref`, the FAQ's
+contact link and the footer's links and social profiles. The brief's **Where "sign up"
+goes** section is where the main answer lives.
 
-- **A URL in the brief.** Write it into `navbar.ctaHref` and `cta.primaryActionHref`.
+- **A URL in the brief.** Write it into `navbar.ctaHref`, `hero.primaryActionHref` and
+  `cta.primaryActionHref`.
 - **Nothing yet.** Leave them as shipped (`#cta` and `/`) and write labels the page can
   honestly satisfy — "See how it works" rather than "Start your free trial". Note it in the
   draft and in the brief's **Known gaps**. A primary button that reloads the page is the
@@ -229,8 +242,12 @@ Three of the page's hrefs are content, and they are the ones that leave the page
 - **`cta.secondaryActionHref`** is usually docs or an about page. `/` is honest for a
   one-page site; a label promising docs that do not exist is not.
 
-Everything else stays put. `#features`, `#pricing`, `#faq` and `#cta` are anchors matching
-section ids, they live in the blocks, and changing one breaks a link.
+- **The shipped values point at Saasaloy's own repo and docs.** Replace every one. An href
+  you cannot fill gets an empty string where the key allows it, which hides the link.
+
+Everything else stays put. `#features`, `#how-it-works`, `#showcase`, `#pricing` and
+`#faq` are anchors matching section ids, they live in the blocks, and changing one breaks a
+link.
 
 ### Pricing
 
@@ -324,22 +341,22 @@ sure about, and anything still on the **Not mine to fix** list.
 
 ### Dropping a block is its own confirmation
 
-When the brief yields nothing a block can honestly carry — no pricing, no proof for the FAQ
-— you may propose removing that block. **Separately.** Never bundled into the copy write,
+When the brief yields nothing a block can honestly carry — no pricing, no customer quotes,
+no customer logos, no screenshots for the showcase, no real sequence for how it works — you
+may propose removing that block. **Separately.** Never bundled into the copy write,
 never silent.
 
 It is three edits, and all three are allowed:
 
-1. Delete that block's line from `apps/web/src/pages/index.astro`.
+1. Delete that block's line and its import from `apps/web/src/pages/index.astro`. Tell
+   the owner they can delete the block file in `packages/ui/src/blocks/` too; that file is
+   not yours to delete.
 2. Blank the matching label in content (`landing.navbar.linkPricing = ""`,
    `landing.footer.linkPricing = ""`). A blank label drops the link, so the page keeps no
    nav entry pointing at a section that is gone.
-3. **Retarget or drop any hero action pointing at the removed section.** A blank label
-   does not save you here: the hero's `href` lives in the block, so it survives an empty
-   label and the button still points at nothing. The hero's secondary action ships as
-   `href: "#pricing"`, so when you remove the pricing block, pass `secondaryAction={null}`
-   to `<Hero>` in `index.astro` to drop the button, or pass a whole action pointing at a
-   section that still exists. Confirm which one with the owner along with the removal.
+3. **Retarget any action pointing at the removed section.** The hero's and the CTA's
+   hrefs are content, so check each one in `landing.ts` and point it somewhere that still
+   exists. Confirm the new target with the owner along with the removal.
 
 Removing a block is not redesigning one. You are editing lines in a page, not editing
 `packages/ui/src/blocks/`.
