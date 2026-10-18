@@ -32,10 +32,16 @@ colors:
 typography:
   headline-display:
     fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: 3.75rem
+    fontSize: 4.5rem
+    fontWeight: 500
+    lineHeight: 1.05
+    letterSpacing: -0.035em
+  headline-section:
+    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontSize: 3rem
     fontWeight: 600
-    lineHeight: 1
-    letterSpacing: -0.025em
+    lineHeight: 1.1
+    letterSpacing: -0.03em
   headline-lg:
     fontFamily: "ui-sans-serif, system-ui, sans-serif"
     fontSize: 2.25rem
@@ -49,6 +55,11 @@ typography:
     lineHeight: 2.25rem
     letterSpacing: -0.025em
   body-lg:
+    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontSize: 1.125rem
+    fontWeight: 400
+    lineHeight: 1.75rem
+  lead:
     fontFamily: "ui-sans-serif, system-ui, sans-serif"
     fontSize: 1.125rem
     fontWeight: 400
@@ -93,7 +104,10 @@ components:
     typography: "{typography.headline-display}"
   section-title:
     textColor: "{colors.foreground}"
-    typography: "{typography.headline-lg}"
+    typography: "{typography.headline-section}"
+  section-lead:
+    textColor: "{colors.muted-foreground}"
+    typography: "{typography.lead}"
   legal-title:
     textColor: "{colors.foreground}"
     typography: "{typography.headline-md}"
@@ -172,21 +186,23 @@ Use the semantic custom properties in `packages/ui/src/styles/web.css`. Do not c
 
 ## Typography
 
-The template uses Tailwind's system sans stack. Marketing headings use semibold weight, tight tracking, and the `text-3xl` through `text-6xl` scale. Body copy uses the `text-sm` through `text-lg` scale. Controls use medium weight at `text-xs` or `text-sm`.
+The template uses Tailwind's system sans stack, with no web font. Three named sizes in `web.css` carry the landing page's ramp. `text-display` is the hero's one `h1`: medium weight, very tight tracking, and fluid from `2.5rem` to `4.5rem`. `text-section-title` is every section's `h2`: semibold, tight, fluid from `2rem` to `3rem`. `text-lead` is the paragraph under either. The token map records the largest size of each fluid step. Body copy uses the `text-sm` through `text-lg` scale. Controls use medium weight at `text-xs` or `text-sm`. Code the page quotes (commands, module names, paths) uses the mono face at `text-xs` or the surrounding size.
 
 ## Layout
 
-Pages use centered maximum-width containers. Sections use responsive horizontal padding and large vertical gaps. Components use Tailwind's default spacing scale, which stays omitted from the token map because the project does not define a custom scale.
+Three container widths live in `web.css`. `section-container` is every section's frame at `64rem`. `section-container-narrow` is a deliberate `48rem` reading measure for the FAQ and the closing CTA. `section-container-wide` is `80rem`, for the navbar and the hero's product frame. All three share a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own, so sections can be added, removed and reordered without the spacing drifting. Components use Tailwind's default spacing scale, which stays omitted from the token map because the project does not define a custom scale.
 
 ## Elevation & Depth
 
-Surfaces use borders, rings, and tonal contrast instead of a shadow scale. The small shadow on the input is a component detail. Do not infer a project shadow scale from it.
+Surfaces use borders, rings, and tonal contrast instead of a shadow scale. Landing cards add a hairline `shadow-xs`. Two elements carry a soft drop shadow tinted from `foreground`: the hero's product frame and the featured pricing tier. Those are the page's only raised surfaces. The small shadow on the input is a component detail. Do not infer a project shadow scale from any of them.
 
 ## Shapes
 
 The base radius is `0.625rem`. Controls use the `lg` radius. Cards use `xl`. Large callouts use `2xl`. Badges use `4xl` for a pill shape.
 
 ## Components
+
+The landing page is thirteen blocks in `packages/ui/src/blocks/`, composed by explicit imports in `apps/web/src/pages/index.astro`: navbar, hero, logo-cloud, pain-points, how-it-works, feature-grid, showcase, audience, testimonials, pricing-table, faq, cta and footer. They share one vocabulary. A section opens with a centred `section-title` and `lead`. Cards are bordered at the `xl` radius. A product visual sits in a double frame: an outer bordered shell at `1.25rem` and an inner surface at `0.875rem`. Primary calls to action sit in a thin ringed wrapper beside a ghost button. Decoration is drawn from tokens: the `grid-pattern` utility under a radial mask, and a dashed rule for dividers inside a card and above the footer.
 
 Primary buttons use the primary pair. Secondary buttons use the secondary pair. Destructive actions use the destructive token with restrained tint states. Inputs and buttons share a `2rem` default height and the `lg` radius. Cards use the card pair and a border-strength ring.
 
@@ -204,10 +220,10 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 
 ## Motion
 
-The template uses short Tailwind transitions for color and state changes. Accordion motion uses the animation supplied by the vendored primitive. Motion stays in prose because the DESIGN.md alpha schema has no motion token group.
+Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group.
 
 ## Dark Mode
 
 The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:2de2d8960077 of packages/ui/src/styles/web.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:0f7e0e023faa of packages/ui/src/styles/web.css_
