@@ -14,7 +14,7 @@ import { cn } from "@repo/ui/lib/utils";
 // Fully static — no state, no effects, so index.astro renders it with no `client:*`
 // directive and it ships zero JavaScript. Keep it that way: adding a hook here forces
 // the whole above-the-fold block into a hydrated island. The motion is CSS: `blur-in`
-// from ../styles/globals.css, staggered with `--blur-in-delay`, and still under reduced
+// from ../styles/web.css, staggered with `--blur-in-delay`, and still under reduced
 // motion.
 //
 // Every word comes from ../content/landing.ts. Edit the copy there, not here.

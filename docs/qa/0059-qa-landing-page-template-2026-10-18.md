@@ -491,7 +491,7 @@ pnpm -C .dev/playground lint && pnpm -C .dev/playground typecheck && pnpm -C .de
 - ✅ `scripts/verify-a11y.test.ts` → 9 of 9 pass, and each one fails under a deliberate break of the helper it covers.
 - ✅ `pnpm verify:content` → 15 blocks and `index.astro` are clean, and the self-test proves the new disable marker needs a reason.
 - ✅ `pnpm verify:a11y` → 0 findings across 32 page loads, on a fresh `play:init` build. The baseline before the rework was 41 findings: 32 skip, 4 contrast, 4 meta and 1 island.
-- ✅ `pnpm verify:preset` → the tweakcn preset merges cleanly, the base rules survive, and the `DESIGN.md` fingerprint matches `globals.css`.
+- ✅ `pnpm verify:preset` → the tweakcn preset merges cleanly, the base rules survive, and the `apps/web/DESIGN.md` fingerprint matches `web.css`.
 - ✅ `pnpm deps:verify` → pins agree, and the fresh playground builds, lints, passes verify-css and typechecks.
 - ✅ The generated project's lint, typecheck and build pass.
 - ✅ `pnpm dlx @google/design.md lint` on the template's `DESIGN.md` → 0 errors and 0 warnings.

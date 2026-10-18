@@ -17,7 +17,7 @@ import { cn } from "@repo/ui/lib/utils";
 // This is the only block above the fold that needs JS (the mobile menu), which is why
 // index.astro hydrates it with `client:idle` while the static blocks ship none. The bar
 // narrows and frosts once the page scrolls through the `nav-float` utility in
-// ../styles/globals.css — a CSS scroll timeline, not a scroll listener.
+// ../styles/web.css — a CSS scroll timeline, not a scroll listener.
 //
 // The theme toggle renders inside the bar. It needs no React state: the pre-paint script
 // Layout.astro emits drives every `[data-theme-toggle]` through one delegated listener,

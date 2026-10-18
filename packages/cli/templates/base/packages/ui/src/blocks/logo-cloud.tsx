@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { landing, ui } from "@repo/ui/content/landing";
 
-// Fully static: an endless slider in CSS (the `marquee` utility in ../styles/globals.css),
+// Fully static: an endless slider in CSS (the `marquee` utility in ../styles/web.css),
 // so the block ships no JavaScript. Under reduced motion the row stops, wraps and drops
 // its duplicate copy.
 //
