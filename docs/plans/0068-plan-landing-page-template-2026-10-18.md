@@ -2,7 +2,7 @@
 
 Tracked: [#191](https://github.com/mimukit/saasaloy/issues/191), a sub-issue of [#183](https://github.com/mimukit/saasaloy/issues/183)
 
-Depends on: Phase 1 of [`0069-plan-admin-shell-polish-2026-10-18.md`](0069-plan-admin-shell-polish-2026-10-18.md) (#193), which splits the web tokens into `web.css` and moves `DESIGN.md` to `apps/web/`. Phase 3 below lands after it.
+Depends on: Phase 1 of [`0069-plan-admin-shell-polish-2026-10-18.md`](0069-plan-admin-shell-polish-2026-10-18.md) (#193), which splits the web tokens into `web.css` and moves `DESIGN.md` to `apps/web/`. Phase 3 below landed first, on 2026-10-18, in `packages/ui/src/styles/globals.css` and the root `DESIGN.md`, because #191 was built before plan 0069 started. Plan 0069 Phase 1 must carry the landing block (the `@theme` widths, type ramp and keyframes, and every `@utility`) into `web.css`, and the matching `DESIGN.md` prose into `apps/web/DESIGN.md`, when it splits the files.
 
 Supersedes: [`0025-plan-landing-blocks-production-2026-08-08.md`](0025-plan-landing-blocks-production-2026-08-08.md) (grilled for #60, never built)
 
@@ -175,6 +175,7 @@ Decisions taken during the build, where the plan left room:
 - **The footer's social marks are GitHub and X**, drawn from Simple Icons (CC0). Simple Icons no longer ships a LinkedIn mark, so LinkedIn is not offered. `NOTICE` names both sources.
 - **The footer reads the build year at render time.** At module scope, workerd's prerender froze `Date` and the page said 1970.
 - **`verify-content` gained one escape hatch**, `// verify-content-disable-next-line <reason>`, for SVG paths, CSS selectors and the inline year script. A marker without a reason does nothing, and the script self-tests that.
+- **Phase 3 landed before plan 0069 Phase 1**, not after it as the dependency line first said. Holding #191 for an unbuilt plan would have stalled the whole page; the split moves one contiguous block either way. The dependency line at the top names what 0069 must carry over.
 - **A `grid-pattern` utility** joins the motion utilities in `globals.css`, because three blocks draw the same hairline grid.
 - **The fresh-year check used the built HTML with its year rewritten to 2019**, served to Chromium, which showed the current year. `faketime` is not on devaloy.
 
