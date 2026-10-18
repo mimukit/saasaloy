@@ -43,3 +43,39 @@ jobs:
       - run: pnpm install --frozen-lockfile
 
       - run: pnpm release:smoke
+
+  # The landing page's production bar (plan 0068). It builds the playground and runs
+  # `pnpm verify:a11y`: axe, overflow, reduced motion, the skip link, the island budget and
+  # the page metadata, at four widths in both themes. It lives here rather than in ci.yml
+  # for the reason the job above does: a playground build installs from the network, and
+  # ci.yml stays free of playground builds.
+  a11y:
+    name: a11y
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm play:init
+
+      # The local defaults in the example file are what a build needs; the site URL only
+      # feeds the canonical and Open Graph links.
+      - run: cp .dev/playground/packages/env/.env.example .dev/playground/packages/env/.env
+
+      - run: pnpm -C .dev/playground env:setup
+
+      - run: pnpm -C .dev/playground build
+
+      # Chromium only. The script drives no other browser.
+      - run: pnpm exec playwright install --with-deps chromium
+
+      - run: pnpm verify:a11y
