@@ -1,16 +1,16 @@
-import { ArrowRightIcon } from "lucide-react";
-
+import { siteName as defaultSiteName } from "@repo/ui";
 import { buttonVariants } from "@repo/ui/components/button";
 import { landing } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
-// Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
-// It is also the anchor (`#cta`) every other block's call to action points at.
+// Fully static. The closing ask: a centred title and line, an optional command shown as a
+// code chip, and the same ringed button pair the hero uses. No form: the base template
+// has no backend to post to. A module that ships one (waitlist) brings its own block.
 //
-// Every word comes from ../content/landing.ts, and so do both destinations: these two
-// buttons leave the page, and where they go is a fact about the product rather than about
-// the layout (content shape rule 5c). Edit them there, not here.
+// Every word comes from ../content/landing.ts. The two hrefs leave the page, so they live
+// there too (content shape rule 5c).
 
 export interface CtaAction {
   label: string;
@@ -22,14 +22,13 @@ export interface CtaProps {
   siteName?: string;
   title?: string;
   description?: string;
+  /** Shown as a code chip. An empty string hides it. */
+  command?: string;
   primaryAction?: CtaAction;
   /** Pass `null` to render a single call to action. */
   secondaryAction?: CtaAction | null;
 }
 
-// Hoisted out of the parameter list: an object literal written as a default prop is a
-// fresh object on every render, which defeats memoization downstream. Both labels and
-// both destinations still come from the content module — only the wrapper is stable.
 const DEFAULT_PRIMARY_ACTION: CtaAction = {
   label: landing.cta.primaryActionLabel,
   href: landing.cta.primaryActionHref,
@@ -41,38 +40,50 @@ const DEFAULT_SECONDARY_ACTION: CtaAction = {
 
 export function Cta({
   id = "cta",
-  siteName = "Acme",
-  title = landing.cta.title,
+  siteName = defaultSiteName,
+  title = interpolate(landing.cta.title, { siteName }),
   description = interpolate(landing.cta.description, { siteName }),
+  command = landing.cta.command,
   primaryAction = DEFAULT_PRIMARY_ACTION,
   secondaryAction = DEFAULT_SECONDARY_ACTION,
 }: CtaProps) {
   return (
-    <section
-      id={id}
-      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
-    >
-      <div className="bg-muted ring-foreground/10 flex flex-col items-center gap-6 rounded-2xl px-6 py-16 text-center ring-1">
-        <h2 className="max-w-2xl text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-          {title}
-        </h2>
-        <p className="text-muted-foreground max-w-xl text-base text-pretty">
+    <section id={id} className="section-y">
+      <div className="section-container-narrow reveal flex flex-col items-center gap-4 text-center">
+        <h2 className="text-section-title text-balance">{title}</h2>
+        <p className="text-lead text-muted-foreground text-balance">
           {description}
         </p>
-        <div className="mt-2 flex flex-col items-center gap-3 sm:flex-row">
-          <a
-            href={primaryAction.href}
-            className={cn(buttonVariants({ size: "lg" }))}
-          >
-            {primaryAction.label}
-            <ArrowRightIcon data-icon="inline-end" />
-          </a>
+        {command && (
+          <code className="bg-muted mt-2 rounded-lg border px-4 py-2 font-mono text-sm">
+            <span aria-hidden="true" className="text-muted-foreground">
+              ${" "}
+            </span>
+            {command}
+          </code>
+        )}
+        <div className="mt-2 flex flex-wrap items-center justify-center gap-2">
+          <span className="bg-foreground/5 rounded-[calc(var(--radius)+4px)] border p-0.5">
+            <a
+              href={primaryAction.href}
+              {...externalLinkProps(primaryAction.href)}
+              className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}
+            >
+              {primaryAction.label}
+              {newTabHint(primaryAction.href)}
+            </a>
+          </span>
           {secondaryAction && (
             <a
               href={secondaryAction.href}
-              className={cn(buttonVariants({ variant: "outline", size: "lg" }))}
+              {...externalLinkProps(secondaryAction.href)}
+              className={cn(
+                buttonVariants({ variant: "ghost", size: "lg" }),
+                "h-10 px-4"
+              )}
             >
               {secondaryAction.label}
+              {newTabHint(secondaryAction.href)}
             </a>
           )}
         </div>

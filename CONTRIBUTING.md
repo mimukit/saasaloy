@@ -413,6 +413,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | `pnpm deps:update` | interactive select-and-confirm; writes exact pins (`--yes`, `--allow-major`, `--dry-run`) |
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
 | `pnpm deps:verify` | `verify-pins` → `play:init` (which runs `git init` and installs) → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
+| `pnpm verify:a11y` | axe, overflow, reduced-motion, skip-link, island and metadata checks over the built playground at four widths in both themes (by hand, and nightly in `smoke.yml`) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
@@ -455,6 +456,21 @@ catches drift rather than proving absence — and it self-tests its own rules on
 first, so a scanner that stopped matching fails loudly instead of passing everything. Run
 it by hand after touching a block or the content module; it is **not** in `deps:verify`,
 which builds a playground to answer a different question.
+
+`verify-a11y` (`scripts/verify-a11y.ts`, run with `pnpm verify:a11y`) is the landing page's production bar from plan 0068. It serves the built playground from `node:http`, drives Playwright's Chromium over `/`, `/terms`, `/privacy` and `/404` at 360, 768, 1280 and 1536 px in the light and the dark theme, and fails on any axe violation at `wcag2a`, `wcag2aa` and `wcag21aa`, a document wider than its viewport, an animation that runs under reduced motion, or a first Tab stop that is not a skip link to `<main>`. On `/` it also checks that only `Navbar` and `PricingTable` hydrate and that the Open Graph, Twitter and canonical tags are present. The rubric it enforces is `docs/qa/0058-qa-landing-page-rubric-2026-10-18.md`.
+
+It needs a built playground and a browser, so it is **not** in `deps:verify` or `ci.yml`. Run it by hand after touching a block, the layout or the theme:
+
+```sh
+pnpm play:init
+cp .dev/playground/packages/env/.env.example .dev/playground/packages/env/.env
+pnpm -C .dev/playground env:setup
+pnpm -C .dev/playground build
+pnpm exec playwright install chromium   # once per machine
+pnpm verify:a11y
+```
+
+The `a11y` job in `.github/workflows/smoke.yml` runs the same steps every night.
 
 
 ## Releasing

@@ -4,6 +4,8 @@ Grilled: 2026-08-08
 
 Tracked: [#60](https://github.com/mimukit/saasaloy/issues/60)
 
+Superseded by: [`0068-plan-landing-page-template-2026-10-18.md`](0068-plan-landing-page-template-2026-10-18.md) (#191). No phase of this plan was built.
+
 ## Context
 
 Epic [#40](https://github.com/mimukit/saasaloy/issues/40) gave the base template seven marketing blocks — `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`, `cta`, `footer` — and proved the design layer works. PR [#68](https://github.com/mimukit/saasaloy/pull/68) adds an eighth, `theme-toggle`, so **eight** is the number this work inherits. They are demonstration-grade: enough to show that a styled landing page composes, not enough that a founder could put the output in front of a visitor.

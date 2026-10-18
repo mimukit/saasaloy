@@ -89,6 +89,8 @@ export function ErrorState({
 
   return (
     <main
+      id="main"
+      tabIndex={-1}
       className={cn(
         "mx-auto flex min-h-dvh max-w-lg items-center px-6",
         className

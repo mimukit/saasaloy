@@ -1,6 +1,6 @@
 # Make the project yours
 
-A freshly scaffolded project runs, but it knows nothing about your product: the site name is your directory name, the landing page sells a placeholder, and the theme is shadcn's `neutral`. Three agent skills ship with the base to fix that, as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
+A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme is shadcn's `neutral`. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three agent skills ship with the base to fix that, as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
 
 Run the first two in order. The third runs whenever you want the look changed.
 

@@ -52,6 +52,15 @@ Write elevation as prose under `## Elevation & Depth`. Never add `elevation` to 
 
 Write motion as prose under `## Motion`. The alpha schema has no motion token group and no component transition token.
 
+The landing page's layout, type and motion vocabulary lives at the end of `web.css`, after the colour tokens, and `DESIGN.md` must name all of it:
+
+- The type ramp in `@theme`: `--text-display`, `--text-section-title` and `--text-lead`. Record the largest size of each fluid `clamp()` step as the token's `fontSize`, and describe the fluid range in the Typography prose.
+- The container widths in `@theme` (`--container-page`, `--container-narrow`, `--container-wide`) and the `section-container*` and `section-y` utilities. Describe them under `## Layout`. Spacing stays omitted, because these are named widths and one section rhythm, not a spacing scale.
+- The motion utilities: `blur-in`, `beam-in`, `reveal`, `marquee`, `shine-text`, `nav-float` and `hover-lift`. Describe each under `## Motion`, and say that each one stops under reduced motion.
+- The decoration utility `grid-pattern`. Describe it under `## Components` with the landing blocks it decorates.
+
+A theme preset replaces the colour tokens and leaves this vocabulary alone. After a `theme` run, check that the vocabulary survived and that `DESIGN.md` still describes it.
+
 Use only these component token keys: `backgroundColor`, `textColor`, `typography`, `rounded`, `padding`, `size`, `height`, and `width`.
 
 Keep the sections in this order: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts, Motion, Dark Mode.

@@ -1,10 +1,10 @@
-import { MonitorIcon, MoonIcon, SunIcon } from "lucide-react";
+import { MoonIcon, SunIcon } from "lucide-react";
 
 import { Button } from "@repo/ui/components/button";
-import { THEME_LABELS } from "@repo/ui/lib/theme";
+import { THEME_TOGGLE_LABEL } from "@repo/ui/lib/theme";
 import { cn } from "@repo/ui/lib/utils";
 
-// The light/dark/system control — and the one block that is deliberately INERT. There is
+// The light/dark control — and the one block that is deliberately INERT. There is
 // no onClick here and no state: the button is chrome, and every behaviour it appears to
 // have comes from THEME_INIT_SCRIPT (packages/ui/src/lib/theme.ts), which the host
 // document inlines in its <head>:
@@ -23,9 +23,14 @@ import { cn } from "@repo/ui/lib/utils";
 // index.astro renders this with no `client:*` directive. Adding one would ship React for
 // a button that does not use it.
 //
-// The `in-data-[theme=…]` variants compile to `:where([data-theme=…]) &` — an ancestor
-// match, so the icon swap is pure CSS off <html>. They live here rather than in an
-// app's theme file so the block travels to another app self-contained.
+// TWO STATES. A press flips light and dark. `system` is where a first-time visitor starts,
+// and the button shows the palette `system` resolved to, so it has no third icon. The
+// icons key off the `.dark` class through the `dark:` variant every theme file declares,
+// so the swap is pure CSS off <html> and stays right when the OS flips under `system`.
+//
+// A press animates: the new theme grows as a circle from this button. The script starts
+// a view transition, and globals.css holds the animation. Without view transitions, or
+// with reduced motion requested, the theme changes at once.
 
 export interface ThemeToggleProps {
   /** Positioning and chrome for the host page — the block itself is position-neutral. */
@@ -38,14 +43,13 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
       variant="ghost"
       size="icon-sm"
       data-theme-toggle=""
-      // The script rewrites this the moment the DOM is ready; the value here is the
-      // truthful one for a first-time visitor, whose stored theme is unset.
-      aria-label={THEME_LABELS.system}
+      // The script names the painted palette the moment the DOM is ready. Until then the
+      // palette is unknown, so this names the action only.
+      aria-label={THEME_TOGGLE_LABEL}
       className={cn("hidden in-data-theme:inline-flex", className)}
     >
-      <SunIcon className="hidden in-data-[theme=light]:block" />
-      <MoonIcon className="hidden in-data-[theme=dark]:block" />
-      <MonitorIcon className="hidden in-data-[theme=system]:block" />
+      <SunIcon className="dark:hidden" />
+      <MoonIcon className="hidden dark:block" />
     </Button>
   );
 }

@@ -1,0 +1,15 @@
+Saasaloy
+Copyright (c) Mukitul Islam Mukit and contributors. Licensed under the MIT License; see LICENSE.md.
+
+Design references
+
+The base template's landing page (packages/cli/templates/base/packages/ui/src/blocks/)
+takes its layout and visual language from Tailark (https://tailark.com), as seen on the
+Tailark-built sites karigorai.com and bornoai.com. Tailark was a reference only: every
+block is written from scratch, and no Tailark code, package or asset is included.
+
+Third-party marks
+
+The GitHub and X marks in packages/cli/templates/base/packages/ui/src/blocks/footer.tsx
+come from Simple Icons (https://simpleicons.org), released under CC0 1.0. The marks
+remain trademarks of their owners and are used only to link to the project's profiles.

@@ -66,6 +66,42 @@
    and without this line each one lands in that app's stylesheet. */
 @source not "../../../../apps/*/DESIGN.md";
 
+/* The theme toggle's circular reveal. A press runs inside a view transition (revealTheme()
+   in lib/theme.ts, and the same code in THEME_INIT_SCRIPT), and these rules animate it: the
+   new theme grows as a circle from the button over a still snapshot of the old one. The
+   script sets the circle's centre and final radius as custom properties on <html>, and
+   the `data-theme-reveal` attribute scopes the rules to a toggle press, so any other view
+   transition keeps the browser's default cross-fade. It lives here, not in a theme file,
+   because every app shares the toggle. With reduced motion requested, the script skips
+   the transition, and the rule below stops any that still starts. */
+[data-theme-reveal]::view-transition-old(root),
+[data-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+[data-theme-reveal]::view-transition-new(root) {
+  animation: theme-reveal 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-reveal-x) var(--theme-reveal-y));
+  }
+
+  to {
+    clip-path: circle(
+      var(--theme-reveal-r) at var(--theme-reveal-x) var(--theme-reveal-y)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme-reveal]::view-transition-new(root) {
+    animation: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;

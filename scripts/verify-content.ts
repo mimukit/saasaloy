@@ -293,12 +293,32 @@ function scanAll(source: string): Finding[] {
   ];
 }
 
+// The one escape hatch, for code that happens to read like prose: an SVG path, a CSS
+// selector, an inline script. Put `// verify-content-disable-next-line <reason>` on the line
+// above the literal, the same shape as an oxlint suppression. The reason is required, so
+// the exception explains itself; a marker without one does nothing.
+const DISABLE_NEXT_LINE = /verify-content-disable-next-line\s+\S/;
+
+function disabledLines(source: string): Set<number> {
+  const lines = new Set<number>();
+  for (const [index, line] of source.split("\n").entries()) {
+    if (DISABLE_NEXT_LINE.test(line)) {
+      lines.add(index + 2);
+    }
+  }
+  return lines;
+}
+
 function scan(source: string): Finding[] {
   // One string can trip two rules (`title = "…"` reads as prose and as a spoken label).
   // Report the defect once, by where it is rather than by how it was caught.
   const seen = new Set<string>();
+  const disabled = disabledLines(source);
   return scanAll(source)
     .filter((finding) => {
+      if (disabled.has(finding.line)) {
+        return false;
+      }
       const key = `${finding.line}:${finding.text}`;
       if (seen.has(key)) {
         return false;
@@ -347,7 +367,20 @@ const MUST_PASS = [
   "const price = `${currencySymbol}${amount}`;",
   "// A comment with real sentences in it. It should never be flagged.",
   "<p>{interpolate(ui.footer.copyright, { year, siteName })}</p>",
+  '// verify-content-disable-next-line an SVG path, not copy\nconst d = "M12 0c-6.6 0-12 5.4-12 12";',
 ];
+
+// A marker with no reason is not an exception: the literal under it must still be flagged.
+if (
+  scan(
+    '// verify-content-disable-next-line\nconst title = "Start building today";'
+  ).length === 0
+) {
+  fail(
+    "self-test: a disable marker without a reason silenced a finding",
+    "The reason is what makes an exception reviewable. Fix scripts/verify-content.ts."
+  );
+}
 
 for (const [rule, sample] of MUST_FLAG) {
   if (!scanAll(sample).some((finding) => finding.rule.startsWith(rule))) {

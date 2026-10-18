@@ -1,132 +1,28 @@
-import type { ComponentType } from "react";
-import {
-  ActivityIcon,
-  AwardIcon,
-  BellIcon,
-  BookOpenIcon,
-  BoxIcon,
-  CalendarIcon,
-  ClockIcon,
-  CloudIcon,
-  CodeIcon,
-  CreditCardIcon,
-  DatabaseIcon,
-  FileTextIcon,
-  GaugeIcon,
-  GlobeIcon,
-  GraduationCapIcon,
-  HandshakeIcon,
-  HeadphonesIcon,
-  KeyIcon,
-  LayersIcon,
-  LayoutGridIcon,
-  ListChecksIcon,
-  LockIcon,
-  MapPinIcon,
-  MessageCircleIcon,
-  PenLineIcon,
-  PlugIcon,
-  ReceiptIcon,
-  RefreshCwIcon,
-  RocketIcon,
-  SearchIcon,
-  ServerIcon,
-  ShieldCheckIcon,
-  SmartphoneIcon,
-  SparklesIcon,
-  TargetIcon,
-  TerminalIcon,
-  TrendingUpIcon,
-  UsersIcon,
-  WalletIcon,
-  WorkflowIcon,
-  ZapIcon,
-} from "lucide-react";
-
-import {
-  Card,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
+import { siteName as defaultSiteName } from "@repo/ui";
 import { landing } from "@repo/ui/content/landing";
+import { iconFor } from "@repo/ui/lib/icons";
+import type { IconComponent } from "@repo/ui/lib/icons";
+import { inlineCode } from "@repo/ui/lib/inline-code";
+import { interpolate } from "@repo/ui/lib/interpolate";
 
 // Fully static — rendered without a `client:*` directive, so it ships zero JavaScript.
-// That is also why the registry below can be long without costing anything: it is read at
-// build time and nothing in it reaches the browser.
 //
 // The words come from ../content/landing.ts, and so does each feature's icon — but as a
 // *name*, not a component. Astro serializes island props, so a component cannot cross the
-// .astro boundary; the registry that turns `"zap"` into `ZapIcon` therefore lives here,
-// beside the render. What that buys is the thing a copy rewrite actually needs: change
-// what a feature is about, change its glyph, one file, no block edit.
+// .astro boundary; the registry that turns `"zap"` into `ZapIcon` lives in ../lib/icons.ts,
+// shared with the pain points and the audience list. What that buys is the thing a copy
+// rewrite actually needs: change what a feature is about, change its glyph, one file, no
+// block edit.
+//
+// Each icon sits on a small fading grid (the `grid-pattern` utility) that brightens under
+// the pointer. Backticks in a description render as <code>.
 
 export interface Feature {
   /** Stable key — the translation key, never the array position (see the content file). */
   id: string;
-  icon: ComponentType<{ className?: string }>;
+  icon: IconComponent;
   title: string;
   description: string;
-}
-
-// The names `landing.features.items[].icon` may use. Add a lucide import and a line here to
-// widen it — these are ordinary source files you own, and the set below is a starting
-// vocabulary, not a limit. Keep the keys kebab-case, matching lucide's own icon names, so
-// picking one is a lookup rather than a guess.
-const FEATURE_ICONS: Record<string, ComponentType<{ className?: string }>> = {
-  activity: ActivityIcon,
-  award: AwardIcon,
-  bell: BellIcon,
-  "book-open": BookOpenIcon,
-  box: BoxIcon,
-  calendar: CalendarIcon,
-  clock: ClockIcon,
-  cloud: CloudIcon,
-  code: CodeIcon,
-  "credit-card": CreditCardIcon,
-  database: DatabaseIcon,
-  "file-text": FileTextIcon,
-  gauge: GaugeIcon,
-  globe: GlobeIcon,
-  "graduation-cap": GraduationCapIcon,
-  handshake: HandshakeIcon,
-  headphones: HeadphonesIcon,
-  key: KeyIcon,
-  layers: LayersIcon,
-  "layout-grid": LayoutGridIcon,
-  "list-checks": ListChecksIcon,
-  lock: LockIcon,
-  "map-pin": MapPinIcon,
-  "message-circle": MessageCircleIcon,
-  "pen-line": PenLineIcon,
-  plug: PlugIcon,
-  receipt: ReceiptIcon,
-  "refresh-cw": RefreshCwIcon,
-  rocket: RocketIcon,
-  search: SearchIcon,
-  server: ServerIcon,
-  "shield-check": ShieldCheckIcon,
-  smartphone: SmartphoneIcon,
-  sparkles: SparklesIcon,
-  target: TargetIcon,
-  terminal: TerminalIcon,
-  "trending-up": TrendingUpIcon,
-  users: UsersIcon,
-  wallet: WalletIcon,
-  workflow: WorkflowIcon,
-  zap: ZapIcon,
-};
-
-// `Object.hasOwn` first, not a bare index: `FEATURE_ICONS[name]` walks the prototype chain,
-// so a name of `constructor` or `toString` resolves to an inherited function — not nullish,
-// so a `?? SparklesIcon` fallback never fires and React is handed something that isn't a
-// component. Icon names are author-controlled and the saasaloy-landing-copy skill writes
-// them, so this is reachable. Same reasoning as interpolate() in ../lib/interpolate.ts.
-function iconFor(name: string): ComponentType<{ className?: string }> {
-  return (
-    (Object.hasOwn(FEATURE_ICONS, name) ? FEATURE_ICONS[name] : undefined) ??
-    SparklesIcon
-  );
 }
 
 const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
@@ -136,6 +32,7 @@ const defaultFeatures: Feature[] = landing.features.items.map((item) => ({
 
 export interface FeatureGridProps {
   id?: string;
+  siteName?: string;
   title?: string;
   description?: string;
   features?: Feature[];
@@ -143,42 +40,47 @@ export interface FeatureGridProps {
 
 export function FeatureGrid({
   id = "features",
+  siteName = defaultSiteName,
   title = landing.features.title,
-  description = landing.features.description,
+  description = interpolate(landing.features.description, { siteName }),
   features = defaultFeatures,
 }: FeatureGridProps) {
   return (
-    <section
-      id={id}
-      className="mx-auto w-full max-w-6xl scroll-mt-20 px-6 py-20"
-    >
-      <div className="mx-auto max-w-2xl text-center">
-        <h2 className="text-3xl font-semibold tracking-tight text-balance sm:text-4xl">
-          {title}
-        </h2>
-        <p className="text-muted-foreground mt-4 text-base text-pretty">
-          {description}
-        </p>
-      </div>
+    <section id={id} className="section-y">
+      <div className="section-container">
+        <div className="mx-auto max-w-2xl text-center">
+          <h2 className="text-section-title text-balance">{title}</h2>
+          <p className="text-lead text-muted-foreground mt-4 text-balance">
+            {description}
+          </p>
+        </div>
 
-      <div className="mt-14 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        {features.map((feature) => {
-          const Icon = feature.icon;
-          return (
-            <Card key={feature.id} className="h-full">
-              <CardHeader>
-                <span
+        <ul className="mx-auto mt-12 grid max-w-sm gap-6 md:mt-16 md:max-w-none md:grid-cols-2 lg:grid-cols-3">
+          {features.map((feature) => {
+            const Icon = feature.icon;
+            return (
+              <li
+                key={feature.id}
+                className="group reveal hover-lift flex flex-col items-center gap-3 rounded-xl border p-6 text-center shadow-xs"
+              >
+                <div
                   aria-hidden="true"
-                  className="bg-muted text-foreground mb-3 flex size-9 items-center justify-center rounded-lg"
+                  className="relative mb-2 size-36 [--grid-line:color-mix(in_oklch,var(--foreground)_10%,transparent)] group-hover:[--grid-line:color-mix(in_oklch,var(--foreground)_20%,transparent)]"
                 >
-                  <Icon className="size-4" />
-                </span>
-                <CardTitle>{feature.title}</CardTitle>
-                <CardDescription>{feature.description}</CardDescription>
-              </CardHeader>
-            </Card>
-          );
-        })}
+                  <div className="grid-pattern absolute inset-0" />
+                  <div className="to-background absolute inset-0 bg-radial from-transparent to-75%" />
+                  <span className="bg-background absolute inset-0 m-auto grid size-12 place-items-center border-t border-l border-(--grid-line)">
+                    <Icon className="size-5" />
+                  </span>
+                </div>
+                <h3 className="font-semibold">{feature.title}</h3>
+                <p className="text-muted-foreground text-sm text-pretty">
+                  {inlineCode(interpolate(feature.description, { siteName }))}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </section>
   );

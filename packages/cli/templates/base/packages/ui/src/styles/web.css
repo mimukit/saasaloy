@@ -1,4 +1,5 @@
-/* The web app's theme: its token values, its colour mapping and its radius scale. It
+/* The web app's theme: its token values, its colour mapping, its radius scale and, at
+   the end, the landing page's layout, type and motion vocabulary. It
    imports the shared layer first, and apps/web/src/layouts/Layout.astro imports this file
    once. apps/web/DESIGN.md records these values and fingerprints this file.
 
@@ -135,3 +136,224 @@
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
 }
+
+/* The landing page's layout, type and motion vocabulary. Blocks use these names and write
+   no widths, no section padding, no keyframes of their own, so the page keeps one rhythm
+   and a preset or a redesign changes it in one place. None of this is a colour: a theme
+   preset replaces the colour tokens above and leaves these alone.
+
+   Widths. `page` is every section's container. `narrow` is a deliberate reading measure
+   for the FAQ and the closing CTA. `wide` is for the chrome around the page: the navbar
+   and the hero's product frame.
+
+   Type ramp, on the system font stack. `display` is the hero's one h1, `section-title`
+   every h2, `lead` the paragraph under either. Body text stays on Tailwind's scale. */
+@theme {
+  --container-page: 64rem;
+  --container-narrow: 48rem;
+  --container-wide: 80rem;
+  --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 500;
+  --text-section-title: clamp(2rem, 1.6rem + 1.6vw, 3rem);
+  --text-section-title--line-height: 1.1;
+  --text-section-title--letter-spacing: -0.03em;
+  --text-section-title--font-weight: 600;
+  --text-lead: 1.125rem;
+  --text-lead--line-height: 1.75rem;
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  @keyframes blur-in {
+    from {
+      filter: blur(12px);
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  @keyframes beam-in {
+    from {
+      --beam-reach: 0%;
+
+      opacity: 0;
+      scale: 0.3 1;
+    }
+  }
+
+  @keyframes marquee {
+    to {
+      transform: translateX(calc(-50% - var(--marquee-gap, 3rem) / 2));
+    }
+  }
+
+  @keyframes shine {
+    from {
+      background-position: 100% 0;
+    }
+
+    to {
+      background-position: -100% 0;
+    }
+  }
+
+  @keyframes nav-float {
+    to {
+      max-width: var(--container-page);
+      border-color: var(--border);
+      backdrop-filter: blur(12px);
+      background-color: color-mix(in oklch, var(--background) 75%, transparent);
+    }
+  }
+}
+
+/* stylelint-disable no-invalid-position-declaration -- a Tailwind `@utility` body may nest
+   `@media` and `@supports` with bare declarations inside, and Tailwind applies them to the
+   utility's own selector. Stylelint reads `@utility` as an unknown at-rule and cannot see
+   that. Re-enabled after the last utility. */
+
+/* A section's container: the page width, centred, with the gutter every block shares. */
+@utility section-container {
+  width: 100%;
+  max-width: var(--container-page);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+@utility section-container-narrow {
+  width: 100%;
+  max-width: var(--container-narrow);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+@utility section-container-wide {
+  width: 100%;
+  max-width: var(--container-wide);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+/* A square grid of hairlines, for decoration behind the hero, the feature icons and the
+   audience list. Size it with `[--grid-size:64px]` and fade it with a mask. */
+@utility grid-pattern {
+  background-image:
+    linear-gradient(
+      to right,
+      var(--grid-line, color-mix(in oklch, var(--foreground) 8%, transparent))
+        1px,
+      transparent 1px
+    ),
+    linear-gradient(
+      to bottom,
+      var(--grid-line, color-mix(in oklch, var(--foreground) 8%, transparent))
+        1px,
+      transparent 1px
+    );
+  background-size: var(--grid-size, 24px) var(--grid-size, 24px);
+}
+
+/* The vertical rhythm between sections. One value per breakpoint, used by every section,
+   so no two neighbours drift apart. `scroll-margin-top` keeps an anchored heading clear of
+   the sticky navbar. */
+@utility section-y {
+  padding-block: 5rem;
+  scroll-margin-top: 5rem;
+
+  @media (width >= 48rem) {
+    padding-block: 8rem;
+  }
+}
+
+/* Motion. Every utility is additive: with reduced motion requested, or in a browser that
+   lacks the feature, the element simply sits in its final state.
+
+   `blur-in` is the hero's load-time cascade. Stagger it with `[--blur-in-delay:100ms]`. */
+@utility blur-in {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: blur-in 1s var(--ease-out-soft) var(--blur-in-delay, 0s) both;
+  }
+}
+
+/* The hero's light beams. Each one shows from its top-left end along its own axis, through a
+   mask whose edge travels with `--beam-reach`, and widens as it lands. A mask rather than a
+   scale from one end, so the beam's rotation keeps its centre pivot and its final place.
+   It starts as the hero cascade settles; stagger with `[--beam-in-delay:700ms]`. */
+@property --beam-reach {
+  inherits: false;
+  initial-value: 100%;
+  syntax: "<percentage>";
+}
+
+@utility beam-in {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 var(--beam-reach),
+    transparent calc(var(--beam-reach) + 25%)
+  );
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: beam-in 2.4s var(--ease-out-soft) var(--beam-in-delay, 0.5s) both;
+  }
+}
+
+/* Below-the-fold entrance, tied to scroll position. No JavaScript and no
+   IntersectionObserver: a browser without scroll timelines shows the element as is. */
+@utility reveal {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: blur-in linear both;
+      animation-range: entry 0% entry 35%;
+      animation-timeline: view();
+    }
+  }
+}
+
+/* An endless horizontal slider. The track holds the items twice; the second copy is
+   aria-hidden. Under reduced motion the block wraps the first copy as a static row. */
+@utility marquee {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: marquee var(--marquee-duration, 40s) linear infinite;
+  }
+}
+
+/* A highlight that sweeps across a line of text, for the hero's announcement pill. */
+@utility shine-text {
+  background-clip: text;
+  background-image: linear-gradient(
+    120deg,
+    var(--muted-foreground) 40%,
+    var(--foreground) 50%,
+    var(--muted-foreground) 60%
+  );
+  background-size: 200% 100%;
+  color: transparent;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: shine 3s linear infinite;
+  }
+}
+
+/* The navbar's bar narrows and frosts once the page scrolls past the top. */
+@utility nav-float {
+  @supports (animation-timeline: scroll()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: nav-float linear both;
+      animation-range: 0 120px;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+/* A card that rises a little under the pointer. */
+@utility hover-lift {
+  transition:
+    translate 0.2s var(--ease-out-soft),
+    box-shadow 0.2s var(--ease-out-soft);
+
+  &:hover {
+    translate: 0 -2px;
+  }
+}
+
+/* stylelint-enable no-invalid-position-declaration */

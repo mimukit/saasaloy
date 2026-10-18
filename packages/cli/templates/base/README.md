@@ -54,14 +54,26 @@ Components land in `packages/ui/src/components/` as source you own and can edit.
 
 ## Landing page
 
-`apps/web/src/pages/index.astro` composes the blocks in `packages/ui/src/blocks/` —
-`navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`, `cta`, `footer`. Each is one
-self-contained `.tsx` with its copy as in-file defaults, so editing the file is how you
-change the page.
+`apps/web/src/pages/index.astro` composes thirteen blocks from `packages/ui/src/blocks/`: `navbar`, `hero`, `logo-cloud`, `pain-points`, `how-it-works`, `feature-grid`, `showcase`, `audience`, `testimonials`, `pricing-table`, `faq`, `cta` and `footer`. The page ships describing Saasaloy itself, so it reads as a finished product on day one. You make it yours with two edits and no others:
 
-Blocks render to static HTML by default. Only the three that need browser state carry a
-client directive (`Navbar` is `client:idle`; `PricingTable` and `Faq` are
-`client:visible`) — the rest ship no JavaScript at all. Don't reach for `client:load`.
+1. **Rewrite the words** in `packages/ui/src/content/landing.ts`: every heading, link, price and icon name. The `saasaloy-landing-copy` skill drafts it from your product brief. The brand is `siteName` in `packages/ui/src/index.ts`, which `saasaloy-setup` sets.
+2. **Choose the sections** in `index.astro`. Each section is one import and one line.
+
+### The section recipe
+
+- **Remove a section:** delete its line and its import in `index.astro`, then delete its file in `packages/ui/src/blocks/`. Blank its navbar and footer labels in `landing.ts` so no link points at a section that is gone.
+- **Reorder:** move the lines. Every block uses the same container and spacing utilities, so any order keeps one rhythm.
+- **Bring one back:** copy the block file in from a fresh `saasaloy init`, then add the import and the line.
+
+### The logo recipe
+
+The logo row names each logo in `landing.logos.items` as `{ id, name, mark }`. `mark` is a key in the `LOGO_MARKS` registry at the top of `packages/ui/src/blocks/logo-cloud.tsx`. To add a customer's logo, paste its SVG into that registry under a kebab-case key with `fill="currentColor"`, then put the key in the item's `mark`. A key the registry doesn't know renders the item's `name` as a text wordmark, which is what the default row does.
+
+### What the page promises
+
+Blocks render to static HTML by default. Only two carry a client directive: `Navbar` (`client:idle`) and `PricingTable` (`client:visible`). The FAQ and the pain points open with native `<details>`, all motion is CSS and stops under reduced motion, and the footer adds one inline script that writes the current year. Don't reach for `client:load`.
+
+The page is checked against a written rubric: no axe violation at WCAG 2.1 AA in either theme, no sideways scroll from 360px up, a skip link on every page, and link-preview metadata on `/`. Keep those true when you change a block.
 
 The page composes itself from explicit imports, and nothing discovers a file behind your
 back. A module that ships UI writes its block into `packages/ui/src/blocks/` like every
