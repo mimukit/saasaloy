@@ -64,7 +64,7 @@ Rejected alternatives, one line each:
 - `wrangler secret bulk` after the deploy. The first deploy fails on the `auth` module-scope check, and each push adds a second Worker version.
 - A `build:production` turbo task. Two build tasks per workspace, and a cached dev build could still ship.
 
-### Phase 1: confirm the wrangler behaviour on the pinned version (#198)
+### Phase 1: confirm the wrangler behaviour on the pinned version (#198) (built 2026-10-18)
 
 Run each check against the pinned wrangler (`4.145.0` today) on a throwaway Cloudflare account, from a project under `.dev/`. Record the answers in this plan's open questions and adjust Phases 3 and 4.
 
@@ -84,7 +84,7 @@ Done when: each question has a recorded yes or no with the wrangler output that 
 
 Done when: in `.dev/`, two projects named `alpha` and `beta` with `api` and `database-d1` installed show `alpha-api`, `alpha-db`, `beta-api` and `beta-db` in their `apps/api/wrangler.jsonc`, and `saasaloy update` in each reports no module change.
 
-### Phase 3: deploy from the base template (#198)
+### Phase 3: deploy from the base template (#198) (built 2026-10-18)
 
 - Make `Service.file` optional. `env:setup` skips a row without a file. Add `{ name: "deploy", environment: "prod", omit: [] }` to the base `SERVICES`. Rename `infra` to `deploy` in the `envServices` enum of `packages/cli/schemas/registry-item.schema.json` and in `SERVICE_NAMES` in `packages/cli/src/lib/env-example.ts`.
 - Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the base `.env.example` under `# @services deploy`.
@@ -100,7 +100,7 @@ Done when: in `.dev/`, two projects named `alpha` and `beta` with `api` and `dat
 
 Done when: in `.dev/`, `saasaloy init` then `pnpm deploy:production` prints a `workers.dev` URL; the served page carries the prod `PUBLIC_SITE_URL`; no file under `apps/` holds a prod value; and a blank `CLOUDFLARE_API_TOKEN` with no `wrangler login` stops the run before any build.
 
-### Phase 4: module deploy steps (#198)
+### Phase 4: module deploy steps (#198) (built 2026-10-18)
 
 - `api` and `admin`: change `deploy` to `env-deploy api` and `env-deploy admin`.
 - `database-d1`, `kv-cloudflare`, `storage-cloudflare`: drop the placeholder ids (`"local"`, `<replace-me>`) if Phase 1 shows provisioning and local dev both work without them. Otherwise keep the placeholder and document the first-deploy step.
@@ -119,7 +119,7 @@ Done when: in `.dev/`, a project with `api`, `auth`, `database-d1`, `kv-cloudfla
 
 Done when: `grep -rniE 'pulumi|\binfra\b' --exclude-dir=node_modules .` matches only `docs/adr/`, `docs/plans/`, `docs/qa/`, `CHANGELOG.md`, the doctor warning and the `infra-ci-deploy` module, and `pnpm test`, `pnpm lint` and `pnpm deps:check` pass.
 
-### Phase 6: docs and the upgrade path (#198)
+### Phase 6: docs and the upgrade path (#198) (built 2026-10-18)
 
 - Rewrite `docs/wiki/how-to/deploy-to-cloudflare.md` around `pnpm deploy:production`. Keep `env-deploy <service>` as the per-workspace route. Cover partial failure and `wrangler rollback`, removed secrets and `wrangler secret delete`, and teardown with `wrangler delete` plus the D1, KV, R2 and queue delete commands.
 - Add a runbook for a project that already runs `infra`: never run `pulumi destroy`, because it deletes live resources; copy the D1 `database_id` and other ids out of `infra/state/` into `wrangler.jsonc`; keep the old resource and Worker names, since the prefix applies only to new installs; delete `infra/` and its `SERVICES` row; rename the credentials; run `pnpm deploy:production`. Say that `infra-ci-deploy` is unrelated to the old module.
@@ -143,7 +143,19 @@ The name prefix from Phase 2 applies only to new installs. An existing project k
 
 ## Open questions
 
-- Phase 1 results, one per check: provisioning and reuse, id write-back, local dev without ids, and `--secrets-file` through the Astro redirect on a new Worker.
+Phase 1 results, recorded 2026-10-18 against wrangler 4.145.0. The live deploy to a throwaway account was blocked on this machine, so the remote answers come from the pinned wrangler's own source (`wrangler-dist/cli.js`) and `--dry-run`, and the local answers from runs in `.dev/probe-198`. A live deploy is still owed; the QA plan carries it.
+
+- **Provisioning and reuse: yes, from source.** `--experimental-provision` and `--experimental-auto-create` both default to `true`. `provisionBindings` checks each binding: D1 connects to an existing database by `database_name` (`getDatabaseInfoFromIdOrName`) or creates one under that name; R2 connects to `bucket_name` or creates it; a producer queue connects to `queue` by name or creates it; KV has no name field, so it inherits the binding the deployed Worker already holds, and otherwise creates `<worker name>-<binding>` (`autoProvisionedResourceName`). A second deploy reuses each one. One gap: `wrangler d1 migrations apply --remote` runs before the deploy and fails with "Couldn't find a D1 DB named ..." on an empty account, so `db:migrate:prod` now creates a missing database first (`modules/database-d1/files/scripts/migrate-prod.ts`).
+- **Id write-back: only in an interactive, non-CI shell, and optional.** `provisionBindings` calls `experimental_patchConfig` when `!isNonInteractiveOrCI()`, then prints "future deploys will continue to work even without IDs". Through a redirected config it patches the user's source file, and only for bindings that file declares. No commit is needed.
+- **Local dev without ids: yes, run.** `vite dev` with `@cloudflare/vite-plugin` 1.62.3 served D1, KV, R2 and a queue producer with no `database_id` and no KV `id`. `wrangler d1 execute DB --local` and `vite dev` read the same local database (`previewDatabaseUuid ?? uuid ?? binding`). `--dry-run` lists the bindings without ids. So Phase 4 drops `"database_id": "local"` and `"id": "<replace-me>"`, and the placeholder had to go: wrangler sends `"local"` as a real id to every remote command.
+- **`--secrets-file` through the redirect, on a new Worker: yes, from source and dry run.** `deploy` sets `useConfigRedirectIfAvailable: true`, and the secrets file becomes `secret_text` bindings in the same upload, whether or not the Worker exists. `env-deploy web -- --dry-run` printed "Using redirected Wrangler configuration" with `dist/client/wrangler.json`, and `env-deploy api -- --dry-run` listed each secret in the upload.
+
+Found while building, and built into Phases 3 and 4:
+
+- Vite gives the environment priority over `.env`, but the Astro adapter prerenders in workerd, and wrangler hands workerd the dev `apps/web/.env` as vars. An exported `PUBLIC_SITE_URL` lost to the dev file until the build ran with `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false`. `env-deploy` sets it, and sets a listed key the source leaves out to an empty string.
+- The `local` source had one file for every environment, so a deploy would have shipped the dev `localhost` URLs. It now reads `packages/env/.env.prod` for `prod`.
+- Turbo's strict env mode dropped a shell-exported `CLOUDFLARE_API_TOKEN` from the `deploy` task. The base `turbo.json` sets `passThroughEnv: ["*"]` on `deploy` and `db:migrate:prod`, and `db:migrate:prod` is `cache: false`.
+- The root has no `@repo/env` bin, so `deploy:production` calls `node packages/env/src/deploy.ts --check`. `db:migrate:prod` gets the credentials through a third form, `env-deploy --run deploy -- <command>`.
 
 ## Non-goals
 
