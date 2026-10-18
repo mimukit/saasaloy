@@ -4,6 +4,8 @@ Grilled: 2026-10-18
 
 Tracked: [#191](https://github.com/mimukit/saasaloy/issues/191), a sub-issue of [#183](https://github.com/mimukit/saasaloy/issues/183)
 
+Depends on: Phase 1 of [`0069-plan-admin-shell-polish-2026-10-18.md`](0069-plan-admin-shell-polish-2026-10-18.md) (#193), which splits the web tokens into `web.css` and moves `DESIGN.md` to `apps/web/`. Phase 3 below lands after it.
+
 Supersedes: [`0025-plan-landing-blocks-production-2026-08-08.md`](0025-plan-landing-blocks-production-2026-08-08.md) (grilled for #60, never built)
 
 ## Context
@@ -63,7 +65,7 @@ Plan 0025 covered the same goal and was grilled on 2026-08-08. Issue #60 was clo
 
 Rebuild the landing blocks in place against a rubric, add three blocks, and fix the page shell, with no change to how a page is composed. The two edit points a founder already has, `landing.ts` and `index.astro`, stay the only two they need.
 
-**Reuses:** the `./blocks/*` wildcard subpath export in `@repo/ui` (new blocks need no packaging work), `copyTemplate` and the base tracking from ADR 0032 (new files need no CLI change), the `landing`/`ui` content split and `verify:content`, the `@theme inline` token contract in `globals.css`, `tw-animate-css`, `scripts/verify-css.ts` as the shape for `verify-a11y.ts`, and `.dev/playground` with `pnpm deps:verify` as the build gate.
+**Reuses:** the `./blocks/*` wildcard subpath export in `@repo/ui` (new blocks need no packaging work), `copyTemplate` and the base tracking from ADR 0032 (new files need no CLI change), the `landing`/`ui` content split and `verify:content`, the `@theme inline` token contract in `web.css` (split from `globals.css` by plan 0069), `tw-animate-css`, `scripts/verify-css.ts` as the shape for `verify-a11y.ts`, and `.dev/playground` with `pnpm deps:verify` as the build gate.
 
 **Rejected:** a `sections` array in `landing.ts` rendered by a generic loop. Each block needs its own `client:*` decision, and a loop hides that decision in a lookup table. It also moves structure into the seed copy file, which the landing-copy skill rewrites.
 
@@ -86,8 +88,8 @@ Done when: `pnpm verify:a11y` runs on a fresh playground build on devaloy and pr
 
 ### Phase 3: rhythm, type ramp and motion tokens
 
-1. Add section-rhythm tokens to `globals.css`: one container width, one section padding, and a narrow-measure variant that `faq` uses on purpose.
-2. Set a deliberate type ramp on the system stack: display, section title, lead and body sizes, weights and tracking. Update `DESIGN.md`'s typography and components to match.
+1. Add section-rhythm tokens to `packages/ui/src/styles/web.css`, the web theme file that plan 0069 Phase 1 splits out of `globals.css`: one container width, one section padding, and a narrow-measure variant that `faq` uses on purpose.
+2. Set a deliberate type ramp on the system stack: display, section title, lead and body sizes, weights and tracking. Update `apps/web/DESIGN.md`'s typography and components to match.
 3. Add the motion layer as named utilities: hero cascade, gated scroll entrance, marquee, hover lift. Blocks use the class names and write no keyframes.
 4. Run `pnpm verify:preset` to confirm a preset still overrides the tokens.
 
@@ -127,7 +129,7 @@ Done when: the playground's `/` renders all ten sections, `pnpm verify:a11y` pas
 
 1. Document the section recipe (add, remove, reorder, delete the block file) and the logo recipe in the base `README.md` and `AGENTS.md`, and restate the rubric contract there. Name the three new blocks in `AGENTS.md`, so an existing project that runs `saasaloy update` learns they exist.
 2. Update `saasaloy-landing-copy` so its draft covers the three new blocks' copy.
-3. Update `saasaloy-design` and `DESIGN.md` for the new layout vocabulary and tokens.
+3. Update `saasaloy-design` and `apps/web/DESIGN.md` for the new layout vocabulary and tokens.
 4. Add the `Superseded by` line to plan 0025 and the `NOTICE` entry for Tailark.
 
 Done when: a fresh `pnpm play:init` project's `README.md` shows the section recipe, and the landing-copy skill writes a draft that covers all ten sections.
