@@ -5,6 +5,27 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
+// `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
+// node_modules/.vite, each stamped with a hash of the config that made them. The two
+// hashes always differ, and Vite deletes a cache whose hash does not match. So a build
+// run beside a live `astro dev` deletes the dev server's deps_ssr folder, and the next
+// module the dev server loads from it fails with "The file does not exist at
+// .../deps_ssr/<dep>.js which is in the optimize deps directory". A separate folder for
+// the build keeps the two apart; dev keeps the default.
+/** @returns {import("astro").AstroIntegration} the integration that moves the build cache */
+function separateBuildCache() {
+  return {
+    name: "separate-build-cache",
+    hooks: {
+      "astro:config:setup": ({ command, updateConfig }) => {
+        if (command === "build") {
+          updateConfig({ vite: { cacheDir: "node_modules/.vite-build" } });
+        }
+      },
+    },
+  };
+}
+
 // Static output — the marketing site is content-first, and every page here is
 // prerendered at build time. `output: "static"` is written out rather than left to the
 // default so the next person changing this file has to mean it.
@@ -44,7 +65,7 @@ export default defineConfig({
   // makes pnpm install the same plugin for the adapter. Move it and `wrangler` together:
   // they release as a pair, and apps/api (once added) pins the same two versions.
   adapter: cloudflare({ imageService: "compile" }),
-  integrations: [react()],
+  integrations: [react(), separateBuildCache()],
   // Fixed dev port. Every cross-origin consumer in this repo — the api Worker's CORS
   // allowlist, auth's `trustedOrigins`, the waitlist form's `PUBLIC_API_URL` fallback —
   // hardcodes the localhost dev origins, so the port cannot be allowed to drift.
