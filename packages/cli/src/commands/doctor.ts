@@ -8,7 +8,9 @@ import {
   checkPartialInstalls,
   checkPolicyBindings,
   checkProject,
+  checkRetiredInfra,
   checkTarget,
+  hasRetiredInfra,
   readEnvState,
   readPolicyState,
   resolveDoctorTarget,
@@ -133,6 +135,7 @@ async function reportProject(path: string): Promise<number> {
   // limit policy registered in `packages/kv` have the `RL_<NAME>` binding its `consume`
   // resolves to (#129)?
   // A fourth: is there a leftover `.dev.vars` hiding `.env` from wrangler (#153)?
+  // A fifth: is the retired Pulumi `infra/` workspace still there (ADR 0043)?
   const policyState = await readPolicyState(path, config.installed);
   const envState = await readEnvState(path);
   const findings = [
@@ -140,6 +143,7 @@ async function reportProject(path: string): Promise<number> {
     ...checkPartialInstalls({ installed: config.installed, manifest }),
     ...(policyState ? checkPolicyBindings(policyState) : []),
     ...checkEnv(envState),
+    ...checkRetiredInfra(await hasRetiredInfra(path)),
   ];
   if (findings.length === 0) {
     const count = config.installed.length;
