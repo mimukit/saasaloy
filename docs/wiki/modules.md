@@ -41,7 +41,6 @@ Every installable module in the default registry, in one place. This table is th
 | `billing-stripe` | feature (provider) | a `billing` provider on Stripe through `stripe` and `@better-auth/stripe`, registered into both the `providers` array and Better Auth's `plugins` array. Needs `STRIPE_SECRET_KEY` and `STRIPE_WEBHOOK_SECRET` |
 | `entitlements` | feature | resolves what a subject's plan allows from `plans.ts` and the `billing_subscriptions` projection, and gates a route with `requireFeature` or `requireWithinLimit`, which answer 402, on `billing` |
 | `feature-flags` | feature | a `packages/feature-flags` workspace with typed flags, per-tenant overrides and percentage rollouts, resolved through an isolate cache over a published `kv` document with the database as the source of truth, plus maintenance mode, kill switches and a `/flags` admin screen, on `api` + `database` + `validators` + `auth` + `admin` + `kv` |
-| `infra` | capability | an `infra` workspace holding the Pulumi program that deploys every Worker in the project. Depends on nothing |
 
 Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one and a `--yes` run stops and names the options:
 

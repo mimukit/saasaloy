@@ -12,7 +12,7 @@ translates them into Pulumi resources. Settled while grilling issue #29, backed 
 primary-source comparison of the field (2026-07-25).
 
 ## Status
-accepted
+superseded by [ADR 0043](0043-adr-wrangler-native-deploy-in-the-base-2026-10-18.md) on 2026-10-18. The `infra` module is deleted, and the base template deploys with `wrangler` through `pnpm deploy:production`.
 
 ## Considered Options
 - **Wrangler-native** (thin orchestrator over `wrangler deploy` + auto-provisioning) — the
