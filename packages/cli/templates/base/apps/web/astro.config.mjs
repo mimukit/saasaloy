@@ -26,6 +26,10 @@ function separateBuildCache() {
   };
 }
 
+// Every React component the dev server can render, for Vite's dependency scan. See the
+// `optimizeDeps` notes in `vite` below.
+const COMPONENT_ENTRIES = ["src/**/*.tsx", "../../packages/ui/src/**/*.tsx"];
+
 // Static output — the marketing site is content-first, and every page here is
 // prerendered at build time. `output: "static"` is written out rather than left to the
 // default so the next person changing this file has to mean it.
@@ -89,10 +93,14 @@ export default defineConfig({
     // A glob, not an include list, so a component a module adds is covered with no edit
     // here.
     ssr: {
-      optimizeDeps: {
-        entries: ["src/**/*.tsx", "../../packages/ui/src/**/*.tsx"],
-      },
+      optimizeDeps: { entries: COMPONENT_ENTRIES },
     },
+    // The browser needs the same entries. Its scan reads an .astro page's <script> tags but
+    // not the frontmatter that imports an island, so the islands' own dependencies arrive
+    // mid-request. Vite re-bundles, renames the shared chunks, and deletes the ones the
+    // page already asked for: "The file does not exist at .../deps/react-dom-<hash>.js
+    // which is in the optimize deps directory", then a full reload.
+    optimizeDeps: { entries: COMPONENT_ENTRIES },
     resolve: {
       // `@web` mirrors saasaloy.json's alias of the same name (apps/web/src) — that
       // alias only drives the CLI's file-placement when a module's files[] target
