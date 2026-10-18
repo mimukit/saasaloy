@@ -172,6 +172,15 @@
     }
   }
 
+  @keyframes beam-in {
+    from {
+      --beam-reach: 0%;
+
+      opacity: 0;
+      scale: 0.3 1;
+    }
+  }
+
   @keyframes marquee {
     to {
       transform: translateX(calc(-50% - var(--marquee-gap, 3rem) / 2));
@@ -263,6 +272,28 @@
 @utility blur-in {
   @media (prefers-reduced-motion: no-preference) {
     animation: blur-in 1s var(--ease-out-soft) var(--blur-in-delay, 0s) both;
+  }
+}
+
+/* The hero's light beams. Each one shows from its top-left end along its own axis, through a
+   mask whose edge travels with `--beam-reach`, and widens as it lands. A mask rather than a
+   scale from one end, so the beam's rotation keeps its centre pivot and its final place.
+   It starts as the hero cascade settles; stagger with `[--beam-in-delay:700ms]`. */
+@property --beam-reach {
+  inherits: false;
+  initial-value: 100%;
+  syntax: "<percentage>";
+}
+
+@utility beam-in {
+  mask-image: linear-gradient(
+    to bottom,
+    #000 var(--beam-reach),
+    transparent calc(var(--beam-reach) + 25%)
+  );
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: beam-in 2.4s var(--ease-out-soft) var(--beam-in-delay, 0.5s) both;
   }
 }
 

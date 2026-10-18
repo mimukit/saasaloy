@@ -220,10 +220,10 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 
 ## Motion
 
-Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group. A theme toggle press reveals the new theme as a circle that grows from the button, through a view transition whose animation lives in `globals.css`. The script only starts it, and reduced motion skips it.
+Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `beam-in` (the hero's two light beams, which show from their top-left end and widen just after the cascade starts, staggered with `--beam-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group. A theme toggle press reveals the new theme as a circle that grows from the button, through a view transition whose animation lives in `globals.css`. The script only starts it, and reduced motion skips it.
 
 ## Dark Mode
 
 The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:c608f76223c0 of packages/ui/src/styles/web.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:e25d78b57596 of packages/ui/src/styles/web.css_

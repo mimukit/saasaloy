@@ -291,8 +291,8 @@ per section. To remove a section, delete its line and its import, delete its fil
 the lines. Every block uses the same container (`section-container`, `-narrow`, `-wide`)
 and spacing (`section-y`) utilities from `src/styles/web.css`, so any order keeps one
 rhythm. A block sets no width, no section padding and no keyframes of its own; motion
-comes from the named utilities there (`blur-in`, `reveal`, `marquee`, `shine-text`,
-`nav-float`, `hover-lift`), and every one stops under reduced motion.
+comes from the named utilities there (`blur-in`, `beam-in`, `reveal`, `marquee`,
+`shine-text`, `nav-float`, `hover-lift`), and every one stops under reduced motion.
 
 **The logo recipe.** `landing.logos.items[]` is `{ id, name, mark }`. `mark` is a key in
 `LOGO_MARKS` at the top of `blocks/logo-cloud.tsx`. Paste a customer's SVG there under a

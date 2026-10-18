@@ -165,8 +165,8 @@ export function Hero({
         aria-hidden="true"
         className="pointer-events-none absolute inset-0 -z-10 overflow-hidden opacity-50 dark:opacity-100"
       >
-        <span className="absolute -top-120 -left-24 h-280 w-md -rotate-45 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--foreground)_6%,transparent),transparent)]" />
-        <span className="absolute -top-120 left-24 h-280 w-56 -rotate-45 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--foreground)_5%,transparent),transparent)]" />
+        <span className="beam-in absolute -top-120 -left-24 h-280 w-md -rotate-45 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--foreground)_6%,transparent),transparent)]" />
+        <span className="beam-in absolute -top-120 left-24 h-280 w-56 -rotate-45 rounded-full bg-[radial-gradient(closest-side,color-mix(in_oklch,var(--foreground)_5%,transparent),transparent)] [--beam-in-delay:700ms]" />
       </div>
 
       <div className="section-container-wide flex flex-col items-center gap-6 text-center">
