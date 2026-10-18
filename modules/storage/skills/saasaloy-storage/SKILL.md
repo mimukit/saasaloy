@@ -42,11 +42,9 @@ Nothing generates this for you. A signing key with a known default is a signing 
 
 ### Set up `storage-cloudflare`
 
-```sh
-pnpm wrangler r2 bucket create app-storage
-```
+`saasaloy add storage-cloudflare` writes the `r2_buckets` binding into `apps/api/wrangler.jsonc` as `{ "binding": "BUCKET", "bucket_name": "app-storage" }`. Keep `binding` as `BUCKET`; that is the name the provider reads.
 
-`saasaloy add storage-cloudflare` writes the `r2_buckets` binding into `apps/api/wrangler.jsonc` as `{ "binding": "BUCKET", "bucket_name": "app-storage" }`. Change `bucket_name` if you named the bucket something else, and keep `binding` as `BUCKET` — that is the name the provider reads.
+You create no bucket by hand. On the first `pnpm deploy:production`, wrangler creates `app-storage` when the account has no bucket by that name, and every later deploy connects to the existing one. To use a bucket you already have, change `bucket_name` to its name before the first deploy.
 
 The binding does every read and write and it needs no secret. It **cannot sign a URL**, which is what the four optional values buy:
 
@@ -126,5 +124,4 @@ If a new provider would need more than one file and a registration patch, the co
 
 ## Known gaps
 
-- The `infra` translator handles `d1_databases` and `vars` only; a bucket binding is not translated yet.
 - There is no `saasaloy migrate storage`. Swapping providers copies bytes by hand, and no migration is promised (ADR 0035).

@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-d1
-description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, applying migrations with db:migrate:local and db:migrate:prod, preparing, reporting on and dropping the local database with db:setup, db:status and db:drop, seeding it with db:seed, or writing route tests against a local test database with testDatabase(). The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, removing the old "local" placeholder database_id, applying migrations with db:migrate:local and db:migrate:prod, preparing, reporting on and dropping the local database with db:setup, db:status and db:drop, seeding it with db:seed, or writing route tests against a local test database with testDatabase(). The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-d1 — the Cloudflare D1 driver
@@ -94,7 +94,6 @@ itself.
   {
     "binding": "DB",
     "database_name": "app-db",
-    "database_id": "local",
     "migrations_dir": "../../packages/db/migrations"
   }
 ]
@@ -103,18 +102,15 @@ itself.
 `binding: "DB"` is the name that shows up as `c.env.DB`. `migrations_dir` points wrangler at the
 SQL the core's `db:generate` emits.
 
-**`database_id` ships as the placeholder string `"local"`.** Local dev ignores it: `vite dev` and
-`wrangler dev` both serve from a miniflare SQLite file under `apps/api/.wrangler/state`, so a
-fresh clone runs with no Cloudflare account at all. The placeholder only has to be replaced before
-you touch **remote** — that is, before `db:migrate:prod` or a deploy:
+**There is no `database_id`, and you do not need one.** Local dev serves from a miniflare SQLite
+file under `apps/api/.wrangler/state`, keyed by the binding, so a fresh clone runs with no
+Cloudflare account at all. In production the database is found by its `database_name`:
+`db:migrate:prod` creates it on the first deploy when the account has none by that name, and
+`wrangler deploy` then connects the binding to it. A later deploy reuses the same database.
 
-```sh
-wrangler d1 create app-db        # prints the real database_id
-# → replace "local" in apps/api/wrangler.jsonc with the printed id
-```
-
-The id is not a secret; commit it. `wrangler d1 create` is a one-time step per environment, and
-running it again on an existing name fails rather than clobbering anything.
+A project made before this change carries `"database_id": "local"`. Delete that line, or replace
+it with the real id from `wrangler d1 info app-db`. Wrangler sends any id it finds, so `"local"`
+breaks every remote command. A real id is not a secret; commit it if you add one.
 
 ## Applying migrations
 
@@ -131,8 +127,12 @@ pnpm --filter @repo/db db:migrate:prod   # apply pending migrations to REMOTE (p
 SQLite is the same file `vite dev` serves from. Without it wrangler would migrate a different
 local database than the one your app reads.
 
-`db:migrate:prod` needs the real `database_id` and a wrangler login. There is no
-`drizzle-kit push` and no auto-migrate on boot. Applying a migration is always a command you run.
+`db:migrate:prod` runs `node scripts/migrate-prod.ts` through `env-deploy --run deploy`, so it
+gets the Cloudflare credentials from the value source, the same ones `pnpm deploy:production`
+uses. The script creates the database when the account has none by that name, then applies the
+pending migrations. `pnpm deploy:production` runs it for you before the api Worker uploads,
+because the base `turbo.json` makes `deploy` depend on `^db:migrate:prod`. There is no
+`drizzle-kit push` and no auto-migrate on boot.
 
 ## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 
@@ -267,11 +267,12 @@ There is no data migration in either direction; see ADR 0026.
   both drivers share, and keep bare `getDb(env)` for code holding no request context.
 - **Tables import `drizzle-orm/sqlite-core`**, matching `dialect: "sqlite"` in `drizzle.config.ts`.
   Never hand-edit that config.
-- **Replace `database_id` before going remote**, and only then. Local dev needs no Cloudflare
-  account.
+- **Leave `database_id` out.** The database is found by `database_name`, locally and remotely.
+  Local dev needs no Cloudflare account.
 - **Migrations are manual** — generate, review, then apply local or prod explicitly.
 - **`db:seed` is local only.** It refuses `--remote` and `NODE_ENV=production`.
 - **Route tests use `testDatabase()`**, which works on a copy. Never point a test at `apps/api/.wrangler/state`.
-- **Remote application is not this module's job to automate.** `db:migrate:prod` exists for manual
-  use; centralized production deploy belongs to the future **`infra`** capability.
+- **Keep migrations backward compatible.** `pnpm deploy:production` applies them before the new
+  api Worker uploads, and the old Worker serves requests in between. A migration the old code
+  cannot read is an outage until the upload finishes, and a failed upload leaves it that way.
 - **One driver per project.** Adding `database-postgres` beside this one is refused, by design.

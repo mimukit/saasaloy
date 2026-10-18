@@ -14,7 +14,6 @@
       "entry": {
         "binding": "DB",
         "database_name": "app-db",
-        "database_id": "local",
         "migrations_dir": "../../packages/db/migrations"
       }
     },
@@ -28,7 +27,7 @@
       "file": "packages/db/package.json",
       "kind": "package-json-script",
       "name": "db:migrate:prod",
-      "value": "wrangler d1 migrations apply DB --remote --config ../../apps/api/wrangler.jsonc"
+      "value": "env-deploy --run deploy -- node scripts/migrate-prod.ts"
     },
     {
       "file": "packages/db/package.json",
@@ -96,6 +95,13 @@
       "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "devDependencies",
+      "name": "@repo/env",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
       "name": "@types/node",
       "range": "26.6.3"
     }
@@ -145,6 +151,10 @@
         {
           "path": "files/scripts/lib/seed.ts",
           "target": "scripts/lib/seed.ts"
+        },
+        {
+          "path": "files/scripts/migrate-prod.ts",
+          "target": "scripts/migrate-prod.ts"
         }
       ]
     },

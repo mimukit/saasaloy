@@ -11,8 +11,7 @@
       "kind": "wrangler-binding",
       "bindingType": "kv_namespaces",
       "entry": {
-        "binding": "KV",
-        "id": "<replace-me>"
+        "binding": "KV"
       },
       "matchOn": "binding"
     },
