@@ -4,6 +4,8 @@
 // duplicate the shell or import a stylesheet again. web.css imports the shared
 // globals.css itself.
 import "@repo/ui/styles/web.css";
+import { siteName } from "@repo/ui";
+import { ui } from "@repo/ui/content/landing";
 import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
 import { webEnv } from "@web/env";
 
@@ -37,6 +39,17 @@ const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
     <link rel="canonical" href={canonical} />
     {description && <meta name="description" content={description} />}
     {/*
+      The link preview. Every page gets the title, the URL and the card type; a page that
+      passes a description gets it here too. To add a preview image, put a 1200×630 file
+      in public/ and add `og:image` and `twitter:image` tags beside these.
+    */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
       paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
       from bundling it into a deferred module, which would defeat the whole point —
@@ -51,6 +64,17 @@ const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
     <script is:inline set:html={THEME_INIT_SCRIPT} />
   </head>
   <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
+    {/*
+      The first Tab stop on every page. It stays off screen until focused, then jumps past
+      the navbar to the page's <main>. Every page and the error block give their <main>
+      `id="main"` and `tabindex="-1"`, so focus lands there too.
+    */}
+    <a
+      href="#main"
+      class="bg-background focus-visible:ring-ring/50 sr-only z-100 rounded-lg border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus-visible:ring-3"
+    >
+      {ui.layout.skipToContent}
+    </a>
     <slot />
   </body>
 </html>

@@ -1,13 +1,18 @@
 ---
 import { siteName } from "@repo/ui";
+import { Audience } from "@repo/ui/blocks/audience";
 import { Cta } from "@repo/ui/blocks/cta";
 import { Faq } from "@repo/ui/blocks/faq";
 import { FeatureGrid } from "@repo/ui/blocks/feature-grid";
 import { Footer } from "@repo/ui/blocks/footer";
 import { Hero } from "@repo/ui/blocks/hero";
+import { HowItWorks } from "@repo/ui/blocks/how-it-works";
+import { LogoCloud } from "@repo/ui/blocks/logo-cloud";
 import { Navbar } from "@repo/ui/blocks/navbar";
+import { PainPoints } from "@repo/ui/blocks/pain-points";
 import { PricingTable } from "@repo/ui/blocks/pricing-table";
-import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
+import { Showcase } from "@repo/ui/blocks/showcase";
+import { Testimonials } from "@repo/ui/blocks/testimonials";
 import { landing } from "@repo/ui/content/landing";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import Layout from "../layouts/Layout.astro";
@@ -24,20 +29,23 @@ import Layout from "../layouts/Layout.astro";
 ---
 
 {/*
+  THE SECTION RECIPE. Each section is one import above and one line below.
+    - Remove a section: delete its line here, its import above, and its file in
+      packages/ui/src/blocks/. Blank its navbar and footer labels in landing.ts so no link
+      points at a section that is gone.
+    - Reorder: move the lines. The blocks share one spacing rhythm, so any order works.
+    - Add one back: copy the block file in, then add the import and the line.
+
   The page is composed from @repo/ui/blocks/*, each reached by its own subpath export.
-  Blocks render to static HTML by default; only the three that need browser state carry
-  a client directive, and each one is deliberate:
-    - Navbar       client:idle    — mobile menu toggle, above the fold, so hydrate when
-                                    the browser goes idle rather than waiting for scroll.
+  Blocks render to static HTML by default; only the two that need browser state carry a
+  client directive, and each one is deliberate:
+    - Navbar       client:idle    — mobile menu, above the fold, so hydrate when the
+                                    browser goes idle rather than waiting for scroll.
     - PricingTable client:visible — monthly/annual toggle, below the fold.
-    - Faq          client:visible — accordion, below the fold.
-  Hero, FeatureGrid, Cta and Footer take no directive and ship no JavaScript at all.
-  ThemeToggle is the interesting case: it is interactive yet takes no directive either,
-  because its behaviour comes from the pre-paint inline script Layout.astro emits, not
-  from React. Giving it a `client:*` would ship a hydration runtime for a button that
-  has no onClick. It sits here rather than inside Navbar so that navbar.tsx stays the
-  landing blocks' file alone, and it carries its own positioning: fixed to the corner,
-  clear of the sticky header's own controls at every width.
+  Every other block ships no JavaScript at all. The FAQ and the pain points open and close
+  with native <details>, and all motion is CSS. The footer adds one inline script that
+  writes the current year. The theme toggle sits inside the navbar and needs no island of
+  its own: the pre-paint script Layout.astro emits drives it.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 */}
 <Layout
@@ -45,12 +53,17 @@ import Layout from "../layouts/Layout.astro";
   description={interpolate(landing.meta.description, { siteName })}
 >
   <Navbar client:idle siteName={siteName} />
-  <ThemeToggle className="border-border/60 bg-background/80 fixed right-4 bottom-4 z-50 shadow-sm backdrop-blur" />
-  <main>
+  <main id="main" tabindex="-1">
     <Hero siteName={siteName} />
-    <FeatureGrid />
-    <PricingTable client:visible />
-    <Faq client:visible />
+    <LogoCloud />
+    <PainPoints siteName={siteName} />
+    <HowItWorks siteName={siteName} />
+    <FeatureGrid siteName={siteName} />
+    <Showcase siteName={siteName} />
+    <Audience siteName={siteName} />
+    <Testimonials siteName={siteName} />
+    <PricingTable client:visible siteName={siteName} />
+    <Faq siteName={siteName} />
     <Cta siteName={siteName} />
   </main>
   <Footer siteName={siteName} />

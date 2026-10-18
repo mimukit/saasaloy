@@ -369,6 +369,7 @@ describe("the shipped declaration", () => {
       "packages/ui/src/blocks/hero.tsx",
       "packages/ui/src/components/badge.tsx",
       "packages/ui/src/index.ts",
+      "packages/ui/src/lib/icons.ts",
       "apps/web/src/layouts/Layout.astro",
       "apps/web/public/favicon.svg",
     ]) {
