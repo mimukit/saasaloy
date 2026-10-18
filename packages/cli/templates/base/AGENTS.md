@@ -279,7 +279,11 @@ blocks the landing page is built from: `navbar`, `hero`, `logo-cloud`, `pain-poi
 `faq`, `cta` and `footer`. `logo-cloud`, `pain-points`, `how-it-works`, `showcase`,
 `audience` and `testimonials` are new; a project scaffolded before them gets the files
 through `saasaloy update`, and adds each to its own `index.astro` by hand, since the page
-is the owner's.
+is the owner's. The blocks need the landing utilities at the end of `web.css`. `web.css`
+is an owned file, so `update` lists it in the merge plan and never adds them for you.
+Copy the template's block, from the comment that opens "The landing page's layout" to
+the `stylelint-enable` line, to the end of your `web.css`. A project made before the
+theme split skips this: `update` creates its `web.css` from the template, block included.
 
 **The section recipe.** `index.astro` composes the page from explicit imports, one line
 per section. To remove a section, delete its line and its import, delete its file in
