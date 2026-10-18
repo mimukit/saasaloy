@@ -4,6 +4,7 @@ import { CheckIcon } from "lucide-react";
 import { siteName as defaultSiteName } from "@repo/ui";
 import { buttonVariants } from "@repo/ui/components/button";
 import { landing, ui } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -156,6 +157,7 @@ export function PricingTable({
                 </p>
                 <a
                   href={tier.ctaHref}
+                  {...externalLinkProps(tier.ctaHref)}
                   className={cn(
                     buttonVariants({
                       variant: featured ? "default" : "outline",
@@ -165,6 +167,7 @@ export function PricingTable({
                   )}
                 >
                   {tier.ctaLabel}
+                  {newTabHint(tier.ctaHref)}
                 </a>
                 <ul className="mt-3 flex flex-col gap-2.5 border-t border-dashed pt-5">
                   {tier.features.map((feature) => (

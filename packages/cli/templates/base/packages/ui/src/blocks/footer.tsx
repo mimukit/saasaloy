@@ -2,6 +2,7 @@ import type { ReactNode } from "react";
 
 import { siteName as defaultSiteName } from "@repo/ui";
 import { landing, ui } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 
 // Fully static, with one small inline script. A centred brand, one row of links, the
@@ -109,9 +110,11 @@ export function Footer({
                 <li key={link.href}>
                   <a
                     href={link.href}
+                    {...externalLinkProps(link.href)}
                     className="text-muted-foreground hover:text-foreground transition-colors"
                   >
                     {link.label}
+                    {newTabHint(link.href)}
                   </a>
                 </li>
               ))}
@@ -125,7 +128,7 @@ export function Footer({
               <li key={social.key}>
                 <a
                   href={social.href}
-                  aria-label={social.label}
+                  {...externalLinkProps(social.href)}
                   className="text-muted-foreground hover:text-foreground grid size-10 place-items-center transition-colors"
                 >
                   <svg
@@ -136,6 +139,8 @@ export function Footer({
                   >
                     {social.mark}
                   </svg>
+                  <span className="sr-only">{social.label}</span>
+                  {newTabHint(social.href)}
                 </a>
               </li>
             ))}

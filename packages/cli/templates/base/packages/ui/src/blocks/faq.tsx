@@ -2,6 +2,7 @@ import { ChevronDownIcon } from "lucide-react";
 
 import { siteName as defaultSiteName } from "@repo/ui";
 import { landing } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { inlineCode } from "@repo/ui/lib/inline-code";
 import { interpolate } from "@repo/ui/lib/interpolate";
 
@@ -77,9 +78,11 @@ export function Faq({
             {moreLabel}{" "}
             <a
               href={moreLinkHref}
+              {...externalLinkProps(moreLinkHref)}
               className="text-foreground font-medium underline-offset-4 hover:underline"
             >
               {moreLinkLabel}
+              {newTabHint(moreLinkHref)}
             </a>
           </p>
         )}

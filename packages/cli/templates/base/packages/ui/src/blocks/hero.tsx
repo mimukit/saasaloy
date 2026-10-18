@@ -8,6 +8,7 @@ import {
 import { siteName as defaultSiteName } from "@repo/ui";
 import { buttonVariants } from "@repo/ui/components/button";
 import { landing } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -172,9 +173,11 @@ export function Hero({
         {announcement && (
           <a
             href={announcementHref}
+            {...externalLinkProps(announcementHref)}
             className="group bg-background hover:bg-muted blur-in flex items-center gap-4 rounded-full border py-1 pr-1 pl-4 text-sm shadow-md shadow-black/5 transition-colors"
           >
             <span className="shine-text">{announcement}</span>
+            {newTabHint(announcementHref)}
             <span aria-hidden="true" className="bg-border h-4 w-px" />
             <span
               aria-hidden="true"
@@ -199,20 +202,24 @@ export function Hero({
           <span className="bg-foreground/5 rounded-[calc(var(--radius)+4px)] border p-0.5">
             <a
               href={primaryAction.href}
+              {...externalLinkProps(primaryAction.href)}
               className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}
             >
               {primaryAction.label}
+              {newTabHint(primaryAction.href)}
             </a>
           </span>
           {secondaryAction && (
             <a
               href={secondaryAction.href}
+              {...externalLinkProps(secondaryAction.href)}
               className={cn(
                 buttonVariants({ variant: "ghost", size: "lg" }),
                 "h-10 px-4"
               )}
             >
               {secondaryAction.label}
+              {newTabHint(secondaryAction.href)}
             </a>
           )}
         </div>

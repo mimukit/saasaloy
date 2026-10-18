@@ -715,6 +715,11 @@ export const ui = {
     skipToContent: "Skip to content",
   },
 
+  link: {
+    /** Screen-reader text after every link that opens another site in a new tab. */
+    newTab: "(opens in a new tab)",
+  },
+
   navbar: {
     /** Accessible name for the desktop nav landmark. */
     mainNavLabel: "Main",

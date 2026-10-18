@@ -1,6 +1,7 @@
 import { siteName as defaultSiteName } from "@repo/ui";
 import { buttonVariants } from "@repo/ui/components/button";
 import { landing } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -65,20 +66,24 @@ export function Cta({
           <span className="bg-foreground/5 rounded-[calc(var(--radius)+4px)] border p-0.5">
             <a
               href={primaryAction.href}
+              {...externalLinkProps(primaryAction.href)}
               className={cn(buttonVariants({ size: "lg" }), "h-10 px-4")}
             >
               {primaryAction.label}
+              {newTabHint(primaryAction.href)}
             </a>
           </span>
           {secondaryAction && (
             <a
               href={secondaryAction.href}
+              {...externalLinkProps(secondaryAction.href)}
               className={cn(
                 buttonVariants({ variant: "ghost", size: "lg" }),
                 "h-10 px-4"
               )}
             >
               {secondaryAction.label}
+              {newTabHint(secondaryAction.href)}
             </a>
           )}
         </div>

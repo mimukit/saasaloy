@@ -5,6 +5,7 @@ import { siteName as defaultSiteName } from "@repo/ui";
 import { ThemeToggle } from "@repo/ui/blocks/theme-toggle";
 import { Button, buttonVariants } from "@repo/ui/components/button";
 import { landing, ui } from "@repo/ui/content/landing";
+import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -186,19 +187,23 @@ export function Navbar({
               {secondaryHref && (
                 <a
                   href={secondaryHref}
+                  {...externalLinkProps(secondaryHref)}
                   className={cn(
                     buttonVariants({ variant: "outline" }),
                     "hidden lg:inline-flex"
                   )}
                 >
                   {secondaryLabel}
+                  {newTabHint(secondaryHref)}
                 </a>
               )}
               <a
                 href={ctaHref}
+                {...externalLinkProps(ctaHref)}
                 className={cn(buttonVariants(), "hidden lg:inline-flex")}
               >
                 {ctaLabel}
+                {newTabHint(ctaHref)}
               </a>
               {/* The panel below is rendered conditionally, so `aria-controls` is set only
                 while it exists — an idref pointing at nothing is invalid ARIA. */}
@@ -241,16 +246,23 @@ export function Navbar({
                   {secondaryHref && (
                     <a
                       href={secondaryHref}
+                      {...externalLinkProps(secondaryHref)}
                       className={buttonVariants({
                         variant: "outline",
                         size: "lg",
                       })}
                     >
                       {secondaryLabel}
+                      {newTabHint(secondaryHref)}
                     </a>
                   )}
-                  <a href={ctaHref} className={buttonVariants({ size: "lg" })}>
+                  <a
+                    href={ctaHref}
+                    {...externalLinkProps(ctaHref)}
+                    className={buttonVariants({ size: "lg" })}
+                  >
                     {ctaLabel}
+                    {newTabHint(ctaHref)}
                   </a>
                 </div>
               </nav>
