@@ -112,7 +112,7 @@ export function PricingTable({
           </fieldset>
         )}
 
-        <ul className="mt-12 grid w-full items-start gap-6 lg:grid-cols-3">
+        <ul className="mt-12 grid w-full gap-6 lg:grid-cols-3">
           {tiers.map((tier) => {
             const price = showAnnual ? tier.annualPrice : tier.monthlyPrice;
             const featured = tier.featured ?? false;
