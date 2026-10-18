@@ -226,4 +226,4 @@ Motion is CSS only and additive. With reduced motion requested, or in a browser 
 
 The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:0f7e0e023faa of packages/ui/src/styles/web.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:c608f76223c0 of packages/ui/src/styles/web.css_

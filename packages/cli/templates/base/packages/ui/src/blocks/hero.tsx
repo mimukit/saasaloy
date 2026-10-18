@@ -153,7 +153,7 @@ export function Hero({
   tree = landing.hero.tree,
 }: HeroProps) {
   return (
-    <section className="relative isolate overflow-hidden pt-24 md:pt-36">
+    <section className="relative isolate overflow-hidden pt-40 md:pt-52">
       {/* A masked grid and two soft light beams. Decoration only, drawn from tokens, so a
           theme preset recolours them with everything else. */}
       <div

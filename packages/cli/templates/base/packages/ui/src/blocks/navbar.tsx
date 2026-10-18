@@ -19,6 +19,13 @@ import { cn } from "@repo/ui/lib/utils";
 // narrows and frosts once the page scrolls through the `nav-float` utility in
 // ../styles/web.css — a CSS scroll timeline, not a scroll listener.
 //
+// THE HEADER TAKES NO SPACE. `<header>` is sticky with zero height, and the bar overflows
+// it, so the first section starts at the top of the page and its background runs up
+// behind the bar. The hero's top padding clears the bar; a page that puts another
+// section first gives that section the same top padding. The wrapper ignores the pointer
+// so the gutters around the bar stay clickable. The gap above the bar is the wrapper's
+// padding, never the bar's margin, because a margin would collapse out of the header.
+//
 // The theme toggle renders inside the bar. It needs no React state: the pre-paint script
 // Layout.astro emits drives every `[data-theme-toggle]` through one delegated listener,
 // so hydrating this island neither helps nor hurts it.
@@ -138,116 +145,118 @@ export function Navbar({
   }, [open]);
 
   return (
-    <header ref={headerRef} className="sticky top-0 z-50 px-2">
-      <div
-        className={cn(
-          "nav-float max-w-wide mx-auto mt-2 rounded-2xl border border-transparent",
-          open && "border-border bg-background"
-        )}
-      >
-        <div className="flex h-14 items-center gap-4 px-4">
-          <a
-            href="/"
-            aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
-            className="flex items-center gap-2 font-semibold tracking-tight"
-          >
-            <span
-              aria-hidden="true"
-              className="bg-foreground size-6 rounded-md shadow-[inset_0_-6px_0_color-mix(in_oklch,var(--background)_30%,transparent)]"
-            />
-            <span aria-hidden="true">{siteName}</span>
-          </a>
-
-          <nav
-            aria-label={ui.navbar.mainNavLabel}
-            className="mx-auto hidden items-center gap-8 lg:flex"
-          >
-            {links.map((link) => (
-              <a
-                key={link.href}
-                href={link.href}
-                className="text-muted-foreground hover:text-foreground text-sm transition-colors"
-              >
-                {link.label}
-              </a>
-            ))}
-          </nav>
-
-          <div className="ml-auto flex items-center gap-2 lg:ml-0">
-            <ThemeToggle />
-            {secondaryHref && (
-              <a
-                href={secondaryHref}
-                className={cn(
-                  buttonVariants({ variant: "outline" }),
-                  "hidden lg:inline-flex"
-                )}
-              >
-                {secondaryLabel}
-              </a>
-            )}
+    <header ref={headerRef} className="sticky top-0 z-50 h-0">
+      <div className="pointer-events-none px-2 pt-3 lg:px-4 lg:pt-4">
+        <div
+          className={cn(
+            "nav-float max-w-wide pointer-events-auto mx-auto rounded-2xl border border-transparent",
+            open && "border-border bg-background"
+          )}
+        >
+          <div className="flex h-14 items-center gap-4 px-4">
             <a
-              href={ctaHref}
-              className={cn(buttonVariants(), "hidden lg:inline-flex")}
+              href="/"
+              aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
+              className="flex items-center gap-2 font-semibold tracking-tight"
             >
-              {ctaLabel}
+              <span
+                aria-hidden="true"
+                className="bg-foreground size-6 rounded-md shadow-[inset_0_-6px_0_color-mix(in_oklch,var(--background)_30%,transparent)]"
+              />
+              <span aria-hidden="true">{siteName}</span>
             </a>
-            {/* The panel below is rendered conditionally, so `aria-controls` is set only
-                while it exists — an idref pointing at nothing is invalid ARIA. */}
-            <Button
-              ref={toggleRef}
-              variant="ghost"
-              size="icon"
-              className="size-10 lg:hidden"
-              aria-controls={open ? "navbar-mobile-menu" : undefined}
-              aria-expanded={open}
-              aria-label={open ? ui.navbar.closeMenu : ui.navbar.openMenu}
-              onClick={() => {
-                setOpen((previous) => !previous);
-              }}
-            >
-              {open ? <XIcon /> : <MenuIcon />}
-            </Button>
-          </div>
-        </div>
 
-        {open && (
-          <div id="navbar-mobile-menu" className="border-t lg:hidden">
             <nav
-              aria-label={ui.navbar.mobileNavLabel}
-              className="flex flex-col gap-1 p-4"
+              aria-label={ui.navbar.mainNavLabel}
+              className="mx-auto hidden items-center gap-8 lg:flex"
             >
               {links.map((link) => (
                 <a
                   key={link.href}
                   href={link.href}
-                  onClick={() => {
-                    setOpen(false);
-                  }}
-                  className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-2 py-2.5 text-sm transition-colors"
+                  className="text-muted-foreground hover:text-foreground text-sm transition-colors"
                 >
                   {link.label}
                 </a>
               ))}
-              <div className="mt-3 flex flex-col gap-2">
-                {secondaryHref && (
-                  <a
-                    href={secondaryHref}
-                    className={buttonVariants({
-                      variant: "outline",
-                      size: "lg",
-                    })}
-                  >
-                    {secondaryLabel}
-                  </a>
-                )}
-                <a href={ctaHref} className={buttonVariants({ size: "lg" })}>
-                  {ctaLabel}
-                </a>
-              </div>
             </nav>
+
+            <div className="ml-auto flex items-center gap-2 lg:ml-0">
+              <ThemeToggle />
+              {secondaryHref && (
+                <a
+                  href={secondaryHref}
+                  className={cn(
+                    buttonVariants({ variant: "outline" }),
+                    "hidden lg:inline-flex"
+                  )}
+                >
+                  {secondaryLabel}
+                </a>
+              )}
+              <a
+                href={ctaHref}
+                className={cn(buttonVariants(), "hidden lg:inline-flex")}
+              >
+                {ctaLabel}
+              </a>
+              {/* The panel below is rendered conditionally, so `aria-controls` is set only
+                while it exists — an idref pointing at nothing is invalid ARIA. */}
+              <Button
+                ref={toggleRef}
+                variant="ghost"
+                size="icon"
+                className="size-10 lg:hidden"
+                aria-controls={open ? "navbar-mobile-menu" : undefined}
+                aria-expanded={open}
+                aria-label={open ? ui.navbar.closeMenu : ui.navbar.openMenu}
+                onClick={() => {
+                  setOpen((previous) => !previous);
+                }}
+              >
+                {open ? <XIcon /> : <MenuIcon />}
+              </Button>
+            </div>
           </div>
-        )}
+
+          {open && (
+            <div id="navbar-mobile-menu" className="border-t lg:hidden">
+              <nav
+                aria-label={ui.navbar.mobileNavLabel}
+                className="flex flex-col gap-1 p-4"
+              >
+                {links.map((link) => (
+                  <a
+                    key={link.href}
+                    href={link.href}
+                    onClick={() => {
+                      setOpen(false);
+                    }}
+                    className="text-muted-foreground hover:bg-muted hover:text-foreground rounded-lg px-2 py-2.5 text-sm transition-colors"
+                  >
+                    {link.label}
+                  </a>
+                ))}
+                <div className="mt-3 flex flex-col gap-2">
+                  {secondaryHref && (
+                    <a
+                      href={secondaryHref}
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "lg",
+                      })}
+                    >
+                      {secondaryLabel}
+                    </a>
+                  )}
+                  <a href={ctaHref} className={buttonVariants({ size: "lg" })}>
+                    {ctaLabel}
+                  </a>
+                </div>
+              </nav>
+            </div>
+          )}
+        </div>
       </div>
     </header>
   );
