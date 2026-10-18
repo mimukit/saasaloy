@@ -503,7 +503,7 @@ pnpm -C .dev/playground lint && pnpm -C .dev/playground typecheck && pnpm -C .de
   - the mobile menu locks scroll, keeps focus in the header, closes on an outside press, and closes on Escape with focus back on the toggle
   - the first Tab stop is "Skip to content", and Enter moves focus to `<main>`
   - `/` carries `og:title`, `og:description`, `og:url`, `og:type`, `og:site_name` and `twitter:card`
-- ⏳ `smoke.yml` `a11y` job by `workflow_dispatch` → not run yet. It needs the branch on GitHub. The pull request reports the run.
+- ✅ `smoke.yml` `a11y` job by `workflow_dispatch` → run 39132580896 passed. The same run's `release-smoke` job failed at `pnpm install in full-database-d1`, and the scheduled run on `main` failed the same way the same day, so that failure is not from this change.
 
 ## Not covered / needs human judgment
 

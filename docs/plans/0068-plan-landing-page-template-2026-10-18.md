@@ -95,7 +95,7 @@ Done when: the owner has picked a layout for each of the thirteen sections, the 
 
 The mockup is not committed. Its source is `~/scratch/landing-mockup/page.html` on devaloy.
 
-### Phase 2: the a11y gate
+### Phase 2: the a11y gate (built 2026-10-18)
 
 1. Add `scripts/verify-a11y.ts`. It serves `.dev/playground/apps/web/dist` from `node:http`, drives Playwright Chromium over `/`, `/terms`, `/privacy` and `/404` at four widths in both themes, and runs axe at `wcag2a`, `wcag2aa` and `wcag21aa`, plus an overflow assertion and a JS-budget assertion. It exits non-zero on any violation and fails loudly when `dist` is absent.
 2. Add `pnpm verify:a11y` and list it in the CONTRIBUTING gate table.
@@ -105,6 +105,8 @@ The mockup is not committed. Its source is `~/scratch/landing-mockup/page.html` 
 Done when: `pnpm verify:a11y` runs on a fresh playground build on devaloy and prints the baseline violations, a `workflow_dispatch` run of `smoke.yml` runs the new job, and `pnpm deps:verify` stays green.
 
 **Baseline (2026-10-18), against the page before Phase 4:** 41 findings across 32 page loads. `skip` 32 (no skip link on any route), `axe:color-contrast` 4 (the CTA's muted line on `bg-muted`, `/` in the light theme at every width), `meta` 4 (no `og:title`, `og:description`, `og:url` or `twitter:card`), `islands` 1 (`Faq` hydrated). No overflow and no running animation. After Phases 4 to 6 the same gate reports no findings.
+
+The `workflow_dispatch` run [39132580896](https://github.com/mimukit/saasaloy/actions/runs/39132580896) ran the new `a11y` job, and it passed. The same run's `release-smoke` job failed at `pnpm install in full-database-d1` (`ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`), as did the scheduled run on `main` the same day, so that failure predates this work.
 
 ### Phase 3: rhythm, type ramp and motion tokens (built 2026-10-18)
 
