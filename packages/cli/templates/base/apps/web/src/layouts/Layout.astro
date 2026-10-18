@@ -1,8 +1,9 @@
 ---
 // The one document shell for every page. It owns <html>/<head>/<body> and the single
-// import of the shared theme, so a page is only ever its own content — no page may
-// duplicate the shell or import globals.css again.
-import "@repo/ui/globals.css";
+// import of the web theme, so a page is only ever its own content — no page may
+// duplicate the shell or import a stylesheet again. web.css imports the shared
+// globals.css itself.
+import "@repo/ui/styles/web.css";
 import { THEME_INIT_SCRIPT } from "@repo/ui/lib/theme";
 import { webEnv } from "@web/env";
 

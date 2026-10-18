@@ -57,8 +57,18 @@ export const BASE_INTENT =
   "the base template changed; keep local edits, take the upstream change";
 
 export interface BaseDeclaration {
-  /** Project-relative POSIX paths the owner is meant to rewrite; recorded, never updated. */
+  /**
+   * Project-relative POSIX paths the owner is meant to rewrite; recorded, never updated.
+   * Includes `retiredSeedFiles`, so every caller that skips a seed skips those too.
+   */
   seedFiles: string[];
+  /**
+   * Seed paths the template no longer ships, because the seed moved. A project made
+   * before the move still records the old path, and without this entry `update` would
+   * plan it as a removal and delete a file the owner may never have touched — the root
+   * `DESIGN.md` that moved to `apps/web/DESIGN.md` is the case. Folded into `seedFiles`.
+   */
+  retiredSeedFiles: string[];
   /**
    * Globs for files the template ships once and the project owns afterwards — the blocks,
    * the components, `globals.css`, the favicon. The template's own `AGENTS.md` has always
@@ -117,10 +127,11 @@ export async function readBaseDeclaration(
 ): Promise<BaseDeclaration> {
   const raw = await readIfPresent(join(templateDir, BASE_DECLARATION));
   if (raw === undefined) {
-    return { seedFiles: [], ownedFiles: [] };
+    return { seedFiles: [], retiredSeedFiles: [], ownedFiles: [] };
   }
   const parsed = JSON.parse(raw) as {
     seedFiles?: unknown;
+    retiredSeedFiles?: unknown;
     ownedFiles?: unknown;
   };
   const seedFiles = parsed.seedFiles;
@@ -130,6 +141,17 @@ export async function readBaseDeclaration(
   ) {
     throw new Error(
       `${BASE_DECLARATION} must declare "seedFiles" as a list of project-relative paths.`
+    );
+  }
+  const retiredSeedFiles = parsed.retiredSeedFiles ?? [];
+  if (
+    !Array.isArray(retiredSeedFiles) ||
+    !retiredSeedFiles.every(
+      (entry) => typeof entry === "string" && entry !== ""
+    )
+  ) {
+    throw new Error(
+      `${BASE_DECLARATION} must declare "retiredSeedFiles" as a list of project-relative paths.`
     );
   }
   const ownedFiles = parsed.ownedFiles ?? [];
@@ -142,7 +164,8 @@ export async function readBaseDeclaration(
     );
   }
   return {
-    seedFiles: seedFiles as string[],
+    seedFiles: [...(seedFiles as string[]), ...(retiredSeedFiles as string[])],
+    retiredSeedFiles: retiredSeedFiles as string[],
     ownedFiles: ownedFiles as string[],
   };
 }

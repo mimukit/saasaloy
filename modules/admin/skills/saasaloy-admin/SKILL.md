@@ -322,11 +322,11 @@ error boundary catches both the loader's throw and the query's.
 
 ## Theme and font
 
-**The admin app carries its own token set.** `src/styles/admin.css` imports `@repo/ui/globals.css` and then redeclares the shadcn variables for `:root` and `.dark`. `packages/ui/src/styles/globals.css` still owns Tailwind's entrypoint, the `dark` custom variant and the base layer; `admin.css` reassigns values and adds one `@source` line.
+**The admin app carries its own theme file.** This module writes `packages/ui/src/styles/admin.css`, beside the web app's `web.css`. It imports the shared `globals.css`, which owns Tailwind's entrypoint, the `@source` globs and the base layer and holds no token values. `admin.css` then declares the `dark` custom variant, this app's `:root` and `.dark` values, its own `@theme inline` colour mapping and radius scale, the two extra accents, and one `@source` line. The variant and the mapping repeat `web.css`'s on purpose: each theme file holds its own, so a shadcn preset aimed at `web.css` never reaches this app.
 
 That `@source` line is load-bearing. Tailwind scans content rather than imports, so `globals.css` names the primitives the landing page renders one file at a time — a blanket components glob would push this app's tooltip, menu, sheet, tabs, table, avatar and scroll-area utilities into the landing page stylesheet as well. This app renders all of them, so it scans the whole directory itself. Vendor a primitive only this app uses and it is already covered; drop the line and every shell primitive renders unstyled with no error.
 
-`src/main.tsx` imports `./styles/admin.css` and nothing else. **No route imports a stylesheet.** Two Tailwind entrypoints in one bundle means two copies of the base layer and a token set whose winner depends on import order.
+`src/main.tsx` imports `@repo/ui/styles/admin.css` and the Inter font package, and nothing else. That import needs the `"./styles/*": "./src/styles/*"` export in `packages/ui/package.json`, which the base template ships from the theme split onward. A project made before the split lacks it, and the admin build then fails to resolve `@repo/ui/styles/admin.css`. Run `saasaloy update` for the base and follow the steps under "A project made before the theme split" in the root `AGENTS.md` first. **No route imports a stylesheet.** Two Tailwind entrypoints in one bundle means two copies of the base layer and a token set whose winner depends on import order.
 
 The dark palette is a three-step neutral ramp measured off the reference screenshots — canvas darkest, panel one step lighter, hover and selected one step lighter again — with an opaque hairline rather than the base template's low-alpha white, which is invisible on a near-black canvas. The measured values are written into the header comment of `admin.css` beside the roles they fill; change a value there and update the comment with it. Light is a mapped cream variant and is first-class, not a fallback.
 
@@ -345,7 +345,7 @@ The rail calls `relabelThemeToggles()` in a `useEffect`. `setTheme` renames ever
 
 ### The two dependencies the theme and the table add
 
-- **`@fontsource-variable/inter`** is a runtime `dependency`, imported from `admin.css` and set as `--font-sans` in a `@theme` block. It is the app's only face; no mono font is loaded. The body enables Inter's `cv11` and `ss01` sets and `tabular-nums`, because counts sit in right-aligned columns in the nav and the table.
+- **`@fontsource-variable/inter`** is a runtime `dependency` of this app, imported from `src/main.tsx` beside `admin.css`, and set as `--font-sans` in a `@theme` block in `admin.css`. The import stays in the app because Tailwind resolves a CSS `@import` from the stylesheet's own folder, and `packages/ui` does not depend on the font. It is the app's only face; no mono font is loaded. The body enables Inter's `cv11` and `ss01` sets and `tabular-nums`, because counts sit in right-aligned columns in the nav and the table.
 - **`@tanstack/react-table`** is a runtime `dependency`, imported by `src/components/data-table.tsx` and nowhere else. Features are registered once at module scope through `tableFeatures({ rowSortingFeature, ... })`; v9 has no global feature set, and naming them there is also what keeps the unused ones out of the bundle.
 
 Both are exact-pinned. Template and module-descriptor dependencies are invisible to pnpm, so move them with `pnpm deps:update` and never by hand-typing a version.
@@ -428,7 +428,7 @@ files.
   imports a `ColumnDef` has skipped the wrapper the next screen depends on.
 - **`NAV_AREAS` stays `as const`.** That literal type is what turns a nav entry for a missing route
   into a typecheck failure instead of a 404.
-- **One stylesheet, `src/styles/admin.css`, imported once from `src/main.tsx`.** A second Tailwind
+- **One theme file, `@repo/ui/styles/admin.css`, imported once from `src/main.tsx`.** A second Tailwind
   entrypoint duplicates the base layer and makes the token set order-dependent.
 - **Dark is the default, and a stored choice wins.** Gate it on `hasChosenTheme()`. `getStoredTheme()`
   alone cannot tell an unset key from a deliberate `system`, because `system` is spelled as no key.

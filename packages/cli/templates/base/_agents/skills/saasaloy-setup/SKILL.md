@@ -262,7 +262,7 @@ can see:
 - **Never write landing copy.** Not into `packages/ui/src/content/landing.ts`, not into a
   block, not "just the headline while we're here". The brief is your output.
 - **Never edit a block or the design layer** — `packages/ui/src/blocks/*`,
-  `packages/ui/src/styles/globals.css`, `packages/ui/src/components/*`, `components.json`, or a Tailwind class
+  `packages/ui/src/styles/*`, `packages/ui/src/components/*`, `components.json`, or a Tailwind class
   anywhere.
 - **Never invent pricing, proof, a customer name, or a URL.** Not in the brief, and not in
   a sample answer.

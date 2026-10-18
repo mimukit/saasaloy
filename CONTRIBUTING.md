@@ -425,11 +425,13 @@ built CSS. If it fails, suspect those globs before anything else.
 `verify-preset` (`scripts/verify-preset.ts`, run with `pnpm verify:preset`) is the drill
 for **`shadcn` bumps specifically**. The template's `AGENTS.md` documents swapping a
 project's whole token set with `shadcn add <registry:style url>`, which works only
-because shadcn merges into the base's `globals.css` instead of overwriting it. The script
-runs that recipe for real against a fresh playground and asserts the base's own rules —
-the `@source` rules, `@custom-variant dark`, `@layer base`, one each of `:root` /
-`.dark` / `@theme inline` — survived, `components.json` was untouched, and the swapped
-`--primary` reached the built CSS.
+because shadcn merges into the base's `web.css` instead of overwriting it, and leaves the
+shared `globals.css` alone. The script runs that recipe for real against a fresh
+playground and asserts that `globals.css` was untouched and still holds the `@source`
+rules and `@layer base`; that the two files hold one each of `:root`, `.dark`,
+`@theme inline` and `@custom-variant dark` between them; that `components.json` was
+untouched; that `apps/web/DESIGN.md`'s fingerprint of `web.css` went stale; and that the
+swapped `--primary` reached the built CSS.
 
 It is **deliberately not part of `deps:verify`**: it fetches a preset from a third party,
 and the standing green gate must not depend on someone else's uptime. Run it by hand

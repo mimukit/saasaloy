@@ -58,9 +58,9 @@ Restructure first with no visual change, then apply the design on the new struct
 
 **Rejected:** a separate `packages/admin-ui` workspace (the owner wants one UI package for both apps); `admin/` and `web/` folders at the root of `packages/ui/src` (the owner wants the seven layers at the root); migrating each module page onto `PageLayout` by hand with no shared frame (the next layout change would need five module edits again); the colour mapping kept in `globals.css` (a preset then duplicates blocks or silently keeps the old theme); migration code in `saasaloy update` for one release.
 
-### Phase 1: split the styles and the design documents (#193)
+### Phase 1: split the styles and the design documents (#193) (built 2026-10-18)
 
-1. Reduce `packages/ui/src/styles/globals.css` to the shared layer: the Tailwind imports, `tw-animate-css`, `shadcn/tailwind.css`, the `dark` custom variant, the base layer and the `@source` lines. Add a header comment that names `web.css` and `admin.css`.
+1. Reduce `packages/ui/src/styles/globals.css` to the shared layer: the Tailwind imports, `tw-animate-css`, `shadcn/tailwind.css`, the `dark` custom variant, the base layer and the `@source` lines. Add a header comment that names `web.css` and `admin.css`. As built, the `dark` custom variant sits in each theme file instead of `globals.css`: shadcn 4.21.0 does not read through `@import`, so `pnpm verify:preset` found a second `@custom-variant dark` appended to `web.css` with the variant in `globals.css`.
 2. Move the web `:root`, `.dark`, `@theme inline` mapping and radius scale into `packages/ui/src/styles/web.css`, which imports `globals.css`. Add a `./styles/*` export to `packages/ui/package.json`. Point `apps/web` at `web.css`.
 3. Point `components.json`'s `tailwind.css` at `src/styles/web.css`. Move the fingerprint in `verify-preset.ts` and in the `saasaloy-design` skill to `web.css`. Check `MUST_SURVIVE` against `globals.css` and the token blocks against `web.css`.
 4. Move the admin module's `apps/admin/src/styles/admin.css` to `packages/ui/src/styles/admin.css`. Give it its own `@theme inline` mapping, fix its `@source` paths, and point `apps/admin/src/main.tsx` at it.

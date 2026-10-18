@@ -24,8 +24,8 @@ import { cn } from "@repo/ui/lib/utils";
 // a button that does not use it.
 //
 // The `in-data-[theme=…]` variants compile to `:where([data-theme=…]) &` — an ancestor
-// match, so the icon swap is pure CSS off <html>. They live here rather than in
-// globals.css so the block travels to another app self-contained.
+// match, so the icon swap is pure CSS off <html>. They live here rather than in an
+// app's theme file so the block travels to another app self-contained.
 
 export interface ThemeToggleProps {
   /** Positioning and chrome for the host page — the block itself is position-neutral. */

@@ -162,13 +162,13 @@ The base uses a neutral, content-first system. It gives a new product a clear st
 
 ## Apps
 
-An app may carry its own token set in its own stylesheet on top of these tokens, importing `packages/ui/src/styles/globals.css` first and reassigning the semantic custom properties after it. The admin app does that, and its skill documents the values.
+This file covers the web app. Each app has its own theme file in `packages/ui/src/styles/` and its own `DESIGN.md` in its own folder. `web.css` holds the tokens recorded here, and `globals.css` holds the shared Tailwind setup with no token values. Another app's theme file imports `globals.css` and declares its own tokens, mapping and radius scale, so a change here never reaches it.
 
 ## Colors
 
 The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive color is the only chromatic semantic token in the seed.
 
-Use the semantic custom properties in `packages/ui/src/styles/globals.css`. Do not copy their current `oklch()` values into components.
+Use the semantic custom properties in `packages/ui/src/styles/web.css`. Do not copy their current `oklch()` values into components.
 
 ## Typography
 
@@ -194,7 +194,7 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 
 ## Do's and Don'ts
 
-- Read this file and `packages/ui/src/styles/globals.css` before you write UI.
+- Read this file and `packages/ui/src/styles/web.css` before you write UI.
 - Use semantic token utilities such as `bg-primary` and `text-muted-foreground`.
 - Keep light and dark token pairs together when you change a semantic role.
 - Keep new pages within the established type scale and radius vocabulary.
@@ -210,4 +210,4 @@ The template uses short Tailwind transitions for color and state changes. Accord
 
 The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:101fd7fd684f of packages/ui/src/styles/globals.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:2de2d8960077 of packages/ui/src/styles/web.css_

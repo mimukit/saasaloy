@@ -88,10 +88,10 @@ pnpm dev
 ```text
 my-app/
   apps/web/            Astro landing page (port 3000)
+  apps/web/DESIGN.md   the web design contract, derived from what packages/ui ships
   packages/ui/         shared React + Tailwind components
   packages/tsconfig/   shared TypeScript configs
   .agents/skills/      three bundled agent skills (symlinked from .claude/skills/)
-  DESIGN.md            the design contract, derived from what packages/ui ships
   saasaloy.json        alias map + the list of installed modules
   saasaloy-lock.json   the template and module versions this project was built at
   .saasaloy/manifest.json  one entry per file the CLI wrote, at its hash
@@ -99,7 +99,7 @@ my-app/
 ```
 
 That is the whole base: a landing page, the two packages it leans on, and a design
-contract (`DESIGN.md`, kept current by the bundled `saasaloy-design` skill). There is no API,
+contract (`apps/web/DESIGN.md`, kept current by the bundled `saasaloy-design` skill). There is no API,
 no database and no auth yet, on purpose. Those are modules, and you install the ones you
 need.
 

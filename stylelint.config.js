@@ -3,10 +3,10 @@ import ultracite from "ultracite/stylelint";
 // Ultracite's Stylelint config, with the `at-rule-no-unknown` allow-list widened
 // for Tailwind v4. Its list stops at tailwind/apply/layer/variants/responsive/
 // screen/source/reference, and the design layer we ship
-// (`packages/cli/templates/base/packages/ui/src/styles/globals.css`) also uses
-// `@theme` and `@custom-variant` — so without these entries the config fails on
-// the repo's only CSS file. `@plugin`, `@utility` and `@variant` are added for the
-// same reason before someone reaches for them.
+// (`packages/cli/templates/base/packages/ui/src/styles/*.css` and the admin
+// module's `admin.css`) also uses `@theme` and `@custom-variant` — so without
+// these entries the config fails on every theme file. `@plugin`, `@utility` and
+// `@variant` are added for the same reason before someone reaches for them.
 export default {
   ...ultracite,
 
@@ -39,7 +39,7 @@ export default {
     // pointed at the convention we actually ship rather than turned off.
     "import-notation": "string",
 
-    // The colour tokens in `globals.css` come from shadcn verbatim, in oklch's
+    // The colour tokens in `web.css` come from shadcn verbatim, in oklch's
     // decimal form (`oklch(0.985 0 0)`). Rewriting 62 of them to `oklch(98.5% 0deg)`
     // is equivalent CSS that would then have to be re-applied by hand after every
     // upstream sync, and `scripts/verify-preset.ts` asserts on that block. Match
@@ -48,7 +48,7 @@ export default {
     "lightness-notation": "number",
     // Stylelint 17.15.0 added `at-rule-prelude-no-invalid`, which checks an at-rule's
     // prelude against the CSS grammar. Tailwind's `@apply` takes a list of utility
-    // class names, which no grammar describes, so every use in `globals.css` is
+    // class names, which no grammar describes, so every use in a theme file is
     // reported. Ignore that one at-rule rather than turning the rule off — it still
     // validates `@media`, `@supports` and the rest.
     "at-rule-prelude-no-invalid": [true, { ignoreAtRules: ["apply"] }],

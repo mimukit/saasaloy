@@ -371,7 +371,7 @@ Copy on disk plus a brief means this has run before.
 - **Never edit a block.** `packages/ui/src/blocks/*.tsx` is off limits: no markup, no
   classes, no structure, no widening the icon registry. Read them freely. If copy will not
   fit a block, say so and let the owner decide.
-- **Never touch the design layer** — `packages/ui/src/styles/globals.css`,
+- **Never touch the design layer** — `packages/ui/src/styles/*`,
   `components.json`, `packages/ui/src/components/*`, or any Tailwind class anywhere.
 - **Never rewrite `ui.*`**, in any language. Translate it or leave it.
 - **Leave anchors alone.** `#features`, `#pricing`, `#faq`, `#cta` and a tier's default

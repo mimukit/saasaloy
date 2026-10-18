@@ -215,11 +215,11 @@ A `.saasaloy/manifest.json` entry whose hash the CLI took off disk rather than f
 _Avoid: pristine entry, baseline hash._
 
 ### Owned file
-A base-template file the template ships once and the project owns afterwards — `globals.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
+A base-template file the template ships once and the project owns afterwards — `globals.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
 _Avoid: user file, editable file._
 
 ### Seed file
-A base-template file the owner is meant to rewrite — `DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts.
+A base-template file the owner is meant to rewrite — `apps/web/DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts. A seed the template moved stays in `retiredSeedFiles`, so a project made before the move keeps its copy at the old path instead of losing it to a removal.
 
 ### AI-assisted merge
 The structured, agent-consumable merge plan `--diff` emits for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
@@ -233,13 +233,13 @@ A generated project that ships its agent context committed, so any agent tool op
 Committed **static** base files carrying the fixed common project rules; `CLAUDE.md` is a one-line `@AGENTS.md` import. Neither is generated.
 
 ### `DESIGN.md`
-The committed design contract at a generated project's root. It pairs machine-readable tokens with the rationale and rules that agents use when they change UI.
+The committed design contract for one app, in that app's folder: `apps/web/DESIGN.md` for the web app. It pairs machine-readable tokens with the rationale and rules that agents use when they change UI. Each app with its own theme file in `packages/ui/src/styles/` has its own `DESIGN.md`.
 
 ### Base-shipped skill
 Agent guidance copied by `init` because every generated project needs it. It differs from a module skill, which arrives only when `saasaloy add` installs its module.
 
 ### Token fingerprint
-The first 12 hexadecimal characters of the SHA-256 hash for `packages/ui/src/styles/globals.css`, recorded in `DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
+The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/web.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
 
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.

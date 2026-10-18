@@ -10,11 +10,12 @@ import {
 } from "@repo/ui/lib/theme";
 
 import { routeTree } from "./routeTree.gen";
-// The one stylesheet import for the whole SPA. admin.css imports @repo/ui/globals.css
-// first — packages/ui still owns Tailwind's entrypoint, its @source globs and the base
-// layer — and then redeclares the token values for this app. No route imports a
-// stylesheet again.
-import "./styles/admin.css";
+// The one theme import for the whole SPA. admin.css lives in packages/ui beside web.css:
+// it imports the shared globals.css first — Tailwind's entrypoint, the @source globs and
+// the base layer — and then declares this app's tokens. The font comes in beside it,
+// because this app, not @repo/ui, depends on it. No route imports a stylesheet again.
+import "@fontsource-variable/inter";
+import "@repo/ui/styles/admin.css";
 
 // One QueryClient for the app, created at module scope so a React re-render never swaps
 // the cache out from under an in-flight query.

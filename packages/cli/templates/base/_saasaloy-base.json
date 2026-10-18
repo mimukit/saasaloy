@@ -1,17 +1,19 @@
 {
   "seedFiles": [
-    "DESIGN.md",
+    "apps/web/DESIGN.md",
     "README.md",
     "saasaloy.json",
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts"
   ],
+  "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [
     "packages/env/.env.example",
     "packages/env/src/services.ts",
     "packages/env/src/sources.ts",
     "apps/web/src/env.ts",
     "packages/ui/src/styles/globals.css",
+    "packages/ui/src/styles/web.css",
     "packages/ui/src/blocks/**",
     "packages/ui/src/components/**",
     "packages/ui/src/containers/**",
