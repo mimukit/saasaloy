@@ -2,14 +2,16 @@
 // project can swap its whole token set with `shadcn add <registry:style url>` and keep
 // everything the base hand-wrote around those tokens.
 //
-// The template's globals.css is not stock shadcn output. It carries a block of `@source`
-// rules (without which every utility in packages/ui is silently dropped — see
-// verify-css), a `@custom-variant dark`, and a `@layer base`. The preset recipe
-// documented in the template's AGENTS.md points shadcn at that same file and asks it to
-// merge. Today shadcn merges `:root` / `.dark` / `@theme inline` in place and leaves the
-// rest alone. Nothing guarantees the next shadcn keeps doing that, and the failure is
-// quiet: the project still builds, it is just unstyled or mis-scoped. So run the recipe
-// for real and assert the surrounding file survived it.
+// The template's theme is two files, and neither is stock shadcn output. globals.css
+// carries a block of `@source` rules (without which every utility in packages/ui is
+// silently dropped — see verify-css) and a `@layer base`. web.css imports it and holds
+// the web theme: `@custom-variant dark`, `:root`, `.dark` and `@theme inline`.
+// components.json points shadcn at web.css, and the preset recipe documented in the
+// template's AGENTS.md asks it to merge there. Today shadcn merges those blocks in
+// place and leaves the rest alone. Nothing guarantees the next shadcn keeps doing that,
+// and the failure is quiet: the project still builds, it is just unstyled, mis-scoped, or
+// carrying a second `@theme inline` or `@custom-variant dark` beside the first. So run
+// the recipe for real and assert both files survived it.
 //
 // NOT part of `deps:verify`, and it must not become part of it: this fetches a preset
 // over the network from a third party, and the repo's standing green gate may not depend
@@ -37,37 +39,45 @@ const PRESET_URL = "https://tweakcn.com/r/themes/modern-minimal.json";
 
 const playground = join(root, ".dev/playground");
 const playgroundUi = join(playground, "packages/ui");
-const playgroundCss = join(playgroundUi, "src/styles/globals.css");
-const playgroundDesign = join(playground, "DESIGN.md");
+const playgroundCss = join(playgroundUi, "src/styles/web.css");
+const playgroundGlobals = join(playgroundUi, "src/styles/globals.css");
+const playgroundDesign = join(playground, "apps/web/DESIGN.md");
 const playgroundComponentsJson = join(playgroundUi, "components.json");
 const playgroundDist = join(playground, "apps/web/dist");
 
-// Everything the base hand-wrote into globals.css that a merge must not eat. Each one is
-// a real failure mode, not a formatting preference: drop a @source glob and packages/ui
-// renders unstyled, drop @custom-variant and every `dark:` utility stops matching, drop
-// @layer base and the border/background reset goes with it.
+// Everything the base hand-wrote into globals.css. The preset targets web.css, and the
+// drill asserts that globals.css comes out of it byte for byte, so these lines are
+// checked BEFORE the recipe: an unchanged file only proves the shared layer survived if
+// the shared layer was there to begin with. Each one is a real failure mode, not a
+// formatting preference: drop a @source glob and packages/ui renders unstyled, drop
+// @layer base and the border/background reset goes with it. The `dark`
+// variant lives in web.css and is counted in SINGLETON_BLOCKS below: a missing one stops
+// every `dark:` utility matching, and a second one is the merge failure this drill hunts.
 //
 // The packages/ui scan is a list rather than one `../**` glob, because Tailwind scans
 // content and not imports: a primitive nobody renders would otherwise be charged to every
 // stylesheet that imports this file. One sentinel line from each half of that list is
-// enough to catch a merge that ate the block.
+// enough to catch a template that lost the block.
 const MUST_SURVIVE = [
   '@source "../blocks/**/*.{ts,tsx}";',
   '@source "../lib/**/*.{ts,tsx}";',
   '@source "../components/button.tsx";',
   '@source "../../../../apps/**/*.{ts,tsx,astro}";',
   '@source not "../../../../**/node_modules";',
-  "@custom-variant dark (&:is(.dark *));",
   "@layer base {",
 ] as const;
 
-// Blocks shadcn is expected to MERGE INTO rather than append after. A second `:root`
-// later in the file would win by source order and silently strip whatever the first one
-// declared but the preset did not.
+// Blocks shadcn is expected to MERGE INTO rather than append after, counted across
+// globals.css and web.css together. A second `:root` later in the file would win by
+// source order and silently strip whatever the first one declared but the preset did
+// not. `@custom-variant dark` is here because shadcn writes one into its target when the
+// target lacks one, without looking through the `@import` — so a variant moved back into
+// globals.css leaves two across the pair, and one dropped from web.css leaves none.
 const SINGLETON_BLOCKS: readonly [label: string, pattern: RegExp][] = [
   [":root", /^\s*:root\s*\{/gm],
   [".dark", /^\s*\.dark\s*\{/gm],
   ["@theme inline", /^\s*@theme inline\s*\{/gm],
+  ["@custom-variant dark", /^\s*@custom-variant dark\b/gm],
 ];
 
 function fail(message: string, ...detail: string[]): never {
@@ -138,11 +148,11 @@ function fingerprint(content: string): string {
 
 function readRecordedFingerprint(design: string): string {
   const match =
-    /tokens sha256:([a-f0-9]{12}) of packages\/ui\/src\/styles\/globals\.css/.exec(
+    /tokens sha256:([a-f0-9]{12}) of packages\/ui\/src\/styles\/web\.css/.exec(
       design
     );
   if (!match?.[1]) {
-    fail("DESIGN.md has no valid token fingerprint");
+    fail("apps/web/DESIGN.md has no web.css token fingerprint");
   }
   return match[1];
 }
@@ -186,15 +196,25 @@ const recordedFingerprint = readRecordedFingerprint(designBefore);
 const fingerprintBefore = fingerprint(cssBefore);
 if (recordedFingerprint !== fingerprintBefore) {
   fail(
-    "the freshly scaffolded DESIGN.md fingerprint does not match globals.css",
+    "the freshly scaffolded DESIGN.md fingerprint does not match web.css",
     `recorded ${recordedFingerprint}, computed ${fingerprintBefore}`
   );
 }
 step(`DESIGN.md is present, lint-clean, and current at ${recordedFingerprint}`);
 const componentsJsonBefore = await readFile(playgroundComponentsJson, "utf-8");
+const globalsBefore = await readFile(playgroundGlobals, "utf-8");
+const missing = MUST_SURVIVE.filter((rule) => !globalsBefore.includes(rule));
+if (missing.length > 0) {
+  fail(
+    `the freshly scaffolded globals.css lacks ${String(missing.length)} hand-written rule(s)`,
+    ...missing,
+    "The template's shared layer moved or lost a rule. Update MUST_SURVIVE to match it,",
+    "or restore the rule; otherwise the unchanged-globals.css check below proves nothing."
+  );
+}
 const basePrimary = readRootPrimary(
   cssBefore,
-  "the freshly scaffolded globals.css"
+  "the freshly scaffolded web.css"
 );
 
 // --- Run the documented recipe ---------------------------------------------------
@@ -218,6 +238,7 @@ run(
 );
 
 const cssAfter = await readFile(playgroundCss, "utf-8");
+const globalsAfter = await readFile(playgroundGlobals, "utf-8");
 const componentsJsonAfter = await readFile(playgroundComponentsJson, "utf-8");
 const fingerprintAfter = fingerprint(cssAfter);
 if (fingerprintAfter === recordedFingerprint) {
@@ -233,7 +254,7 @@ step(`DESIGN.md drift detected: ${recordedFingerprint} → ${fingerprintAfter}`)
 
 if (cssAfter === cssBefore) {
   fail(
-    "shadcn add left globals.css untouched",
+    "shadcn add left web.css untouched",
     `The preset at ${PRESET_URL} applied nothing — the URL may have moved, or shadcn`,
     "no longer treats a registry:style item as a theme swap. Check its output above."
   );
@@ -248,27 +269,26 @@ if (componentsJsonAfter !== componentsJsonBefore) {
   );
 }
 
-const missing = MUST_SURVIVE.filter((rule) => !cssAfter.includes(rule));
-if (missing.length > 0) {
+if (globalsAfter !== globalsBefore) {
   fail(
-    `${String(missing.length)} hand-written rule(s) did not survive the preset merge`,
-    ...missing,
-    "shadcn now overwrites globals.css rather than merging into it. Either pin shadcn",
-    "back, or stop documenting the in-place recipe in the template's AGENTS.md."
+    "shadcn add rewrote globals.css",
+    "components.json points at web.css, so the preset must land there alone. A write",
+    "here means shadcn followed the @import, and the shared layer is no longer shared.",
+    "Either pin shadcn back, or stop documenting the in-place recipe in AGENTS.md."
   );
 }
 
 for (const [label, pattern] of SINGLETON_BLOCKS) {
-  const count = cssAfter.match(pattern)?.length ?? 0;
+  const count = `${globalsAfter}\n${cssAfter}`.match(pattern)?.length ?? 0;
   if (count !== 1) {
     fail(
-      `expected exactly one \`${label}\` block after the merge, found ${String(count)}`,
+      `expected exactly one \`${label}\` across globals.css and web.css after the merge, found ${String(count)}`,
       "A duplicated block wins by source order and drops whatever the first one declared."
     );
   }
 }
 
-const presetPrimary = readRootPrimary(cssAfter, "globals.css after the preset");
+const presetPrimary = readRootPrimary(cssAfter, "web.css after the preset");
 if (sameColor(presetPrimary, basePrimary)) {
   fail(
     `--primary is still the base value (${basePrimary}) after applying the preset`,
@@ -310,7 +330,7 @@ if (sameColor(builtPrimary, basePrimary)) {
   fail(
     "the built CSS still carries the base --primary value",
     `Expected the preset's ${presetPrimary}, found the template's ${basePrimary}.`,
-    "globals.css was swapped but the build did not pick it up — suspect a stale",
+    "web.css was swapped but the build did not pick it up — suspect a stale",
     "Turborepo cache in the playground (play:init runs `git init` for exactly this)."
   );
 }

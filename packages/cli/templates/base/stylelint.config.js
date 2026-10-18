@@ -2,8 +2,8 @@ import ultracite from "ultracite/stylelint";
 
 // Ultracite's Stylelint config with the at-rule allow-list widened for Tailwind v4.
 // Its list stops at tailwind/apply/layer/variants/responsive/screen/source/reference,
-// and `packages/ui/src/styles/globals.css` also uses `@theme` and `@custom-variant`,
-// so without these entries the config fails on the only CSS file you ship.
+// and the theme files in `packages/ui/src/styles/` also use `@theme` and
+// `@custom-variant`, so without these entries the config fails on every one of them.
 //
 // The notation rules match shadcn's own output: its colour tokens are written
 // `oklch(0.985 0 0)`, and rewriting them to `oklch(98.5% 0deg)` would have to be
@@ -32,7 +32,7 @@ export default {
 
     // Stylelint 17.15.0 added `at-rule-prelude-no-invalid`, which checks an at-rule's
     // prelude against the CSS grammar. Tailwind's `@apply` takes a list of utility
-    // class names, which no grammar describes, so every use in `globals.css` is
+    // class names, which no grammar describes, so every use in a theme file is
     // reported. Ignore that one at-rule rather than turning the rule off — it still
     // validates `@media`, `@supports` and the rest.
     "at-rule-prelude-no-invalid": [true, { ignoreAtRules: ["apply"] }],

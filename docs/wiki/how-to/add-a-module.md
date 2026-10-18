@@ -30,8 +30,10 @@ Before writing anything, `add` prints what it intends to do:
 - **Config patches** — edits to files another module already owns.
 
 When the plan writes into `packages/ui/`, `add` also reminds you to run the
-`/saasaloy-design update` skill afterwards, because those writes can invalidate the
-project's `DESIGN.md`.
+`/saasaloy-design update` skill afterwards, because a write there, such as a new block,
+can invalidate the web app's `apps/web/DESIGN.md`. The reminder also fires for the admin
+module, which writes its own theme file there; that one does not touch the web app's
+contract.
 
 Then it asks `Proceed?`. Answer no and nothing is written.
 

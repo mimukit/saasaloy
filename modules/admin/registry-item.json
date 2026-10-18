@@ -39,6 +39,10 @@
     {
       "path": "files/api/routes/admin-users.ts",
       "target": "@api/routes/admin-users.ts"
+    },
+    {
+      "path": "files/ui/styles/admin.css",
+      "target": "@ui/styles/admin.css"
     }
   ],
   "scaffolds": [
@@ -75,10 +79,6 @@
         {
           "path": "files/src/main.tsx",
           "target": "src/main.tsx"
-        },
-        {
-          "path": "files/src/styles/admin.css",
-          "target": "src/styles/admin.css"
         },
         {
           "path": "files/src/routeTree.gen.ts",

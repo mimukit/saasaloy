@@ -63,6 +63,7 @@ describe(readBaseDeclaration, () => {
 
     await expect(readBaseDeclaration(template)).resolves.toStrictEqual({
       seedFiles: ["README.md"],
+      retiredSeedFiles: [],
       ownedFiles: [],
     });
   });
@@ -70,6 +71,24 @@ describe(readBaseDeclaration, () => {
   it("treats a template with no declaration as one with no seed files", async () => {
     await expect(readBaseDeclaration(template)).resolves.toStrictEqual({
       seedFiles: [],
+      retiredSeedFiles: [],
+      ownedFiles: [],
+    });
+  });
+
+  it("folds a retired seed into the seed list", async () => {
+    await write(
+      template,
+      BASE_DECLARATION,
+      JSON.stringify({
+        seedFiles: ["apps/web/DESIGN.md"],
+        retiredSeedFiles: ["DESIGN.md"],
+      })
+    );
+
+    await expect(readBaseDeclaration(template)).resolves.toStrictEqual({
+      seedFiles: ["apps/web/DESIGN.md", "DESIGN.md"],
+      retiredSeedFiles: ["DESIGN.md"],
       ownedFiles: [],
     });
   });
@@ -309,9 +328,17 @@ describe("the shipped declaration", () => {
       (await listTemplateFiles(dir)).map((f) => f.target)
     );
 
-    expect(declaration.seedFiles.length).toBeGreaterThan(0);
-    for (const seed of declaration.seedFiles) {
+    const retired = new Set(declaration.retiredSeedFiles);
+    const current = declaration.seedFiles.filter((seed) => !retired.has(seed));
+
+    expect(current.length).toBeGreaterThan(0);
+    for (const seed of current) {
       expect(shipped, `${seed} is declared seed but not shipped`).toContain(
+        seed
+      );
+    }
+    for (const seed of retired) {
+      expect(shipped, `${seed} is retired but still shipped`).not.toContain(
         seed
       );
     }
@@ -338,6 +365,7 @@ describe("the shipped declaration", () => {
 
     for (const target of [
       "packages/ui/src/styles/globals.css",
+      "packages/ui/src/styles/web.css",
       "packages/ui/src/blocks/hero.tsx",
       "packages/ui/src/components/badge.tsx",
       "packages/ui/src/index.ts",
@@ -611,6 +639,36 @@ describe("baseUpdateInput — classifying base files through the module engine",
     expect(actionOf(base, "README.md")).toBeUndefined();
     expect(base.files.map((f) => f.target)).toStrictEqual(["AGENTS.md"]);
     expect(base.removals).toStrictEqual([]);
+    await cleanup();
+  });
+
+  // #193: DESIGN.md moved from the root to apps/web/. A project made before the move
+  // records the root path; retiring it keeps `update` from deleting the owner's file.
+  it("never removes a retired seed the project still records", async () => {
+    await write(template, "DESIGN.md", "design\n");
+    await write(template, "AGENTS.md", "v1\n");
+    await declare(["DESIGN.md"]);
+    const state = await scaffold();
+    const next = await bumped({
+      "apps/web/DESIGN.md": "design\n",
+      "AGENTS.md": "v2\n",
+    });
+    await write(
+      next,
+      BASE_DECLARATION,
+      JSON.stringify({
+        seedFiles: ["apps/web/DESIGN.md"],
+        retiredSeedFiles: ["DESIGN.md"],
+      })
+    );
+
+    const { base, cleanup } = await planAgainst(next, state);
+
+    expect(base.removals).toStrictEqual([]);
+    expect(base.files.map((f) => f.target)).toStrictEqual(["AGENTS.md"]);
+    await expect(readFile(join(root, "DESIGN.md"), "utf-8")).resolves.toBe(
+      "design\n"
+    );
     await cleanup();
   });
 

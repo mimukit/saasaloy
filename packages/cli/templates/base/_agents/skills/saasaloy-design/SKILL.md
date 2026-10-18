@@ -1,6 +1,6 @@
 ---
 name: saasaloy-design
-description: Keep DESIGN.md true of the Saasaloy design layer. Use theme to choose and apply a registry style, update after packages/ui changes, or audit the design contract for token drift.
+description: Keep apps/web/DESIGN.md true of the Saasaloy design layer. Use theme to choose and apply a registry style, update after packages/ui changes, or audit the design contract for token drift.
 derived-from: "designkit (MIT), narrowed 2026-08-09"
 ---
 
@@ -8,7 +8,9 @@ derived-from: "designkit (MIT), narrowed 2026-08-09"
 
 This skill records the design system that the project already uses. It writes no components and no pages. Use `uikit` for that work.
 
-The token home is `packages/ui/src/styles/globals.css`. The design contract is `DESIGN.md` at the project root.
+The token home is `packages/ui/src/styles/web.css`. The design contract is `apps/web/DESIGN.md`. `web.css` imports `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values.
+
+This skill covers the web app only. Another app's theme file, such as the admin module's `packages/ui/src/styles/admin.css`, is out of scope. Do not read its tokens into this contract, and do not edit it.
 
 The grounding rule controls every mode. Every token value must exist in the project code or in the Tailwind utility that the project uses. Do not choose a nearby value because it looks cleaner.
 
@@ -24,15 +26,15 @@ If the user does not name a mode, ask which mode to use. Do not choose between a
 
 | Mode | Files |
 |------|-------|
-| `theme` | `packages/ui/src/styles/globals.css`, `DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
-| `update` | `DESIGN.md` only |
+| `theme` | `packages/ui/src/styles/web.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
+| `update` | `apps/web/DESIGN.md` only |
 | `audit` | none |
 
 Do not edit `components.json` during a theme change. Do not add a dependency, script, component, page, or Tailwind class.
 
 ## Shared rules
 
-Read `DESIGN.md`, `packages/ui/src/styles/globals.css`, and all files under `packages/ui/src/` before you derive tokens. Read the application files that use `@repo/ui` when you need to confirm usage.
+Read `apps/web/DESIGN.md`, `packages/ui/src/styles/web.css`, `packages/ui/src/styles/globals.css`, and all files under `packages/ui/src/` before you derive tokens. Read the application files that use `@repo/ui` when you need to confirm usage.
 
 Find the system in this order. Stop at the first match.
 
@@ -58,24 +60,24 @@ The seed is a one-time base file. ADR 0022 means Saasaloy has no update path for
 
 ## Fingerprint
 
-The fingerprint covers only `packages/ui/src/styles/globals.css`. It does not cover components, blocks, or other files.
+The fingerprint covers only `packages/ui/src/styles/web.css`. It does not cover `globals.css`, components, blocks, or other files.
 
 Compute the fingerprint from the file bytes. Use the first 12 lowercase hexadecimal characters of SHA-256.
 
 ```sh
-node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write(createHash('sha256').update(readFileSync('packages/ui/src/styles/globals.css')).digest('hex').slice(0, 12))"
+node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write(createHash('sha256').update(readFileSync('packages/ui/src/styles/web.css')).digest('hex').slice(0, 12))"
 ```
 
 The scaffold seed ends with this stamp.
 
 ```markdown
-_Seeded from the saasaloy base template · CLI <version> · tokens sha256:<12 hex> of packages/ui/src/styles/globals.css_
+_Seeded from the saasaloy base template · CLI <version> · tokens sha256:<12 hex> of packages/ui/src/styles/web.css_
 ```
 
 After `theme` or `update`, replace the seed stamp with this stamp.
 
 ```markdown
-_Updated from packages/ui on YYYY-MM-DD · tokens sha256:<12 hex> of packages/ui/src/styles/globals.css_
+_Updated from packages/ui on YYYY-MM-DD · tokens sha256:<12 hex> of packages/ui/src/styles/web.css_
 ```
 
 Do not change the fingerprint during `audit`.
@@ -85,7 +87,7 @@ Do not change the fingerprint during `audit`.
 Run the official linter after each write.
 
 ```sh
-pnpm dlx @google/design.md lint DESIGN.md
+pnpm dlx @google/design.md lint apps/web/DESIGN.md
 ```
 
 The format is alpha. Read the current schema when a lint finding conflicts with this skill.
@@ -126,13 +128,13 @@ Use the package-local executable from the project root.
 pnpm --filter @repo/ui exec shadcn add <registry-style-url>
 ```
 
-Confirm that the `@source` rules, `@custom-variant dark`, and `@layer base` remain in `globals.css`. Confirm that `components.json` did not change.
+`components.json` points shadcn at `web.css`, so the preset merges into the `:root`, `.dark` and `@theme inline` blocks there. Confirm that `globals.css` did not change and still holds the `@source` rules and `@layer base`. Confirm that `web.css` and `globals.css` hold one `@theme inline` and one `@custom-variant dark` between them. Confirm that `components.json` did not change.
 
 Stop and report the failure when the preset removes a required rule or changes `components.json`. Do not repair an unknown preset merge without approval.
 
 ### 4. Re-derive the contract
 
-Run the shared extraction process against the merged `globals.css` and its usage. Update the token front matter and only the prose sections that the new tokens affect.
+Run the shared extraction process against the merged `web.css` and its usage. Update the token front matter and only the prose sections that the new tokens affect.
 
 Use the product brief to update Overview and Do's and Don'ts. Do not add product claims that the brief does not support.
 
@@ -168,7 +170,7 @@ Audit is read-only. Do not edit or format any file.
 
 ### 1. Check the fingerprint offline
 
-Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from `globals.css`.
+Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from `web.css`.
 
 - `current` means the two fingerprints match.
 - `stale` means they differ.
@@ -182,7 +184,7 @@ Use `orphaned` for a documented token with no current source. Use `uncovered` fo
 
 ### 3. Lint when possible
 
-Run `pnpm dlx @google/design.md lint DESIGN.md` when the tool and network are available. If it cannot run, state that the fingerprint check ran offline and structural lint did not run.
+Run `pnpm dlx @google/design.md lint apps/web/DESIGN.md` when the tool and network are available. If it cannot run, state that the fingerprint check ran offline and structural lint did not run.
 
 ### 4. Report
 
@@ -192,7 +194,7 @@ Open with the file count that the audit scanned. Give one verdict for the finger
 
 - Never write a component or a page. Use `uikit` for that work.
 - Never add a token value that the project does not contain.
-- Never change `globals.css` in `update` or `audit`.
+- Never change `globals.css` in any mode, or `web.css` in `update` or `audit`.
 - Never write during `audit`.
 - Never claim that lint passed when the linter did not run.
 - Never treat a matching fingerprint as proof that component usage has no drift.

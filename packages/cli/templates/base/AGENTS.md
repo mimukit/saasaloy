@@ -119,14 +119,33 @@ split, blank-on-purpose keys, and the offline rule.
 
 ### The `@repo/ui` Design Layer
 
-`packages/ui` owns the design layer: the Tailwind 4 theme (`src/styles/globals.css`),
-the `cn()` helper, the vendored [shadcn](https://ui.shadcn.com) primitives in
-`src/components/`, the marketing **blocks** in `src/blocks/`, the store-bound
-**containers** in `src/containers/`, and the landing page's copy in `src/content/`.
-`apps/web` pulls the theme in once, through the shared layout that imports
-`@repo/ui/globals.css`.
+`packages/ui` owns the design layer: the Tailwind 4 theme in `src/styles/`, the `cn()`
+helper, the vendored [shadcn](https://ui.shadcn.com) primitives in `src/components/`, the
+marketing **blocks** in `src/blocks/`, the store-bound **containers** in
+`src/containers/`, and the landing page's copy in `src/content/`.
 
-`DESIGN.md` at the repository root records the token values and the rules behind them. Read it before you add or change UI.
+The theme is one shared file plus one theme file per app:
+
+- **`src/styles/globals.css`** is the shared layer: the Tailwind imports, the `@source`
+  globs and the base layer. It holds no token values, and no app imports it directly.
+- **`src/styles/web.css`** is the web app's theme: the `dark` custom variant, its `:root`
+  and `.dark` token values, its `@theme inline` colour mapping and its radius scale. It
+  imports `globals.css`, and `apps/web` pulls it in once, through the shared layout that
+  imports `@repo/ui/styles/web.css`. `components.json` points here, so a shadcn preset
+  lands here.
+- **`src/styles/admin.css`** is the admin app's theme, in the same shape, written by
+  `saasaloy add admin`.
+
+Each theme file repeats the `dark` variant and the `@theme inline` mapping on purpose.
+shadcn merges a preset in place only when the target file itself holds them, and it does
+not look through an `@import`. Move either one into `globals.css` and a preset appends a
+duplicate to `web.css` instead.
+
+**Each app has its own `DESIGN.md`, in its own folder.** `apps/web/DESIGN.md` records the
+web tokens in `web.css` and the rules behind them, and fingerprints `web.css`. An app
+that carries its own theme file gets its own `apps/<app>/DESIGN.md`, which fingerprints
+that file. There is no `DESIGN.md` at the repository root. Read the document for the app
+you are changing before you add or change UI.
 
 Primitives, blocks and containers are reached by subpath — none is re-exported from the
 package root, so importing one never drags in the rest. The root export is project-wide
@@ -179,7 +198,7 @@ pnpm --filter @repo/ui exec shadcn add dialog
   imports and a blanket glob charges every app for every primitive. A primitive the
   landing page or `src/blocks/` renders gets an `@source "../components/<name>.tsx";` line
   in `globals.css`; a primitive only one app renders gets its `@source` line in that app's
-  own stylesheet, the way `apps/admin/src/styles/admin.css` takes the whole directory.
+  own theme file, the way `src/styles/admin.css` takes the whole directory.
   Nothing errors when you skip this — the classes just never reach the CSS.
 - `style` is `base-nova` (Base UI) and is fixed at init — the CLI cannot change it later.
 - `rsc` is `false`, so the CLI strips the `"use client"` directive for you. It means
@@ -188,7 +207,7 @@ pnpm --filter @repo/ui exec shadcn add dialog
 Primitives are source you own. Edit them in place rather than wrapping them.
 
 **Swapping the whole theme for a preset.** The token set in
-`packages/ui/src/styles/globals.css` is shadcn's `neutral` with `cssVariables: true`, and
+`packages/ui/src/styles/web.css` is shadcn's `neutral` with `cssVariables: true`, and
 any shadcn **`registry:style`** item is a drop-in replacement for it. The same
 `--filter … exec` form applies — there is no separate theme command:
 
@@ -197,10 +216,11 @@ pnpm --filter @repo/ui exec shadcn add https://tweakcn.com/r/themes/modern-minim
 ```
 
 The CLI merges the preset's `:root`, `.dark` and `@theme inline` blocks **into** the
-existing ones, so the file's hand-written parts — the `@source` rules, the
-`@custom-variant dark`, the `@layer base` rules — stay put, and `components.json` is not
-touched. It usually *extends* `@theme inline` with mappings the base does not carry
-(fonts, tracking, shadows); that is expected.
+existing ones in `web.css` and keeps its `@custom-variant dark`, so the hand-written
+parts in `globals.css` — the `@source` rules and the `@layer base` rules — stay put, and
+`components.json` is not touched. The preset reaches the web app only; the admin theme
+in `admin.css` keeps its own values. It usually *extends* `@theme inline` with mappings
+the base does not carry (fonts, tracking, shadows); that is expected.
 
 Two places to get an item from:
 
@@ -212,15 +232,45 @@ Two places to get an item from:
 Neither is special: the mechanism is the `registry:style` shape, so any URL that serves
 one works.
 
-**This edits a base file, and base files have no update path.** Saasaloy hands you the
-template once; it never comes back to migrate it. A swapped theme is yours to maintain,
-including re-applying anything you had customised in `globals.css` that the preset
-overwrote. Diff the file after running the command rather than assuming.
+**This edits a file the project owns.** `web.css` is an owned base file: `saasaloy
+update` never overwrites it, and a later template change to it reaches you only through
+the merge plan. A swapped theme is yours to maintain, including re-applying anything you
+had customised in `web.css` that the preset overwrote. Diff the file after running the
+command rather than assuming.
 
-A preset swap invalidates `DESIGN.md`, which records the token values the old theme had. The `saasaloy-design` skill's `theme` flow runs the command above for you and re-derives the contract from the merged result, so prefer it over running the command by hand. Pick one or the other — running both applies the preset twice.
+A preset swap invalidates `apps/web/DESIGN.md`, which records the token values the old theme had. The `saasaloy-design` skill's `theme` flow runs the command above for you and re-derives the contract from the merged result, so prefer it over running the command by hand. Pick one or the other — running both applies the preset twice.
 
 Light/dark/system switching is unaffected by any of this — it keys off the `.dark` class,
 which every preset keeps.
+
+**A project made before the theme split.** Older projects kept the web tokens in
+`globals.css` and the design document at the repository root. `saasaloy update` creates
+`packages/ui/src/styles/web.css` and lists `globals.css` and `Layout.astro` in the merge
+plan, because the project owns both; it never moves your tokens for you. Finish the split
+by hand, in this order:
+
+1. Move the `@custom-variant dark` line, the `:root` block, the `.dark` block and the
+   `@theme inline` block from `globals.css` into `web.css`, replacing the template's
+   copies there, below its `@import "./globals.css";`. Keep your own values, not the
+   template's.
+2. Add `"./styles/*": "./src/styles/*"` to the `exports` of `packages/ui/package.json`,
+   if the update did not.
+3. In `apps/web/src/layouts/Layout.astro`, import `@repo/ui/styles/web.css` in place of
+   `@repo/ui/globals.css`.
+4. Set `tailwind.css` in `packages/ui/components.json` to `src/styles/web.css`, if the
+   update did not.
+5. Move `DESIGN.md` to `apps/web/DESIGN.md`, and run the `saasaloy-design` skill's
+   `update` flow so its fingerprint names `web.css`.
+6. Run `pnpm build` and check that `globals.css` and `web.css` hold one `@theme inline`
+   and one `@custom-variant dark` between them.
+
+With the admin app installed, `saasaloy update` also moves its theme: it creates
+`packages/ui/src/styles/admin.css` and deletes `apps/admin/src/styles/admin.css`, or
+keeps it with a warning when you edited it. Carry any edit across to the new file, then
+delete the old one. The new admin app imports `@repo/ui/styles/admin.css`, so its build
+fails until step 2 adds the `./styles/*` export. Update the base and finish step 2 before
+you build admin, and before you run `saasaloy add admin` on a project made before the
+split.
 
 **Blocks — the page-level compositions.** `src/blocks/` holds the marketing blocks the
 landing page is built from: `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`,
@@ -383,9 +433,9 @@ inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 
 The third has no place in that order, because it runs whenever the UI moves:
 
-3. **`saasaloy-design`** keeps `DESIGN.md` true. Its `theme` flow swaps the preset and
-   re-derives the contract; `update` re-derives after you change `globals.css` or add
-   components; `audit` reports where the code and the contract disagree. It reads the
+3. **`saasaloy-design`** keeps `apps/web/DESIGN.md` true. Its `theme` flow swaps the
+   preset and re-derives the contract; `update` re-derives after you change `web.css` or
+   add components; `audit` reports where the code and the contract disagree. It reads the
    product brief when one exists and never writes it.
 
 Invoke them rather than editing eight blocks by hand — and if you do edit by hand, keep the
@@ -451,7 +501,8 @@ hook (which is also how you keep hooks out of CI).
 
 ### ✅ Always Do
 
-- Read `DESIGN.md` before writing or changing UI
+- Read the app's `DESIGN.md` (`apps/web/DESIGN.md` for the web app) before writing or
+  changing UI
 - Run `pnpm typecheck` before committing code changes
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)

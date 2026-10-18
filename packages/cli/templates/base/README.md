@@ -30,7 +30,7 @@ saasaloy list               # what the registry offers, and what you already hav
 
 ## UI components
 
-`DESIGN.md` records the project's design tokens and UI rules for people and agents.
+`apps/web/DESIGN.md` records the web app's design tokens and UI rules for people and agents.
 
 `packages/ui` ships a Tailwind 4 theme, a small set of [shadcn](https://ui.shadcn.com)
 primitives, and the marketing blocks the landing page is built from. Import primitives and

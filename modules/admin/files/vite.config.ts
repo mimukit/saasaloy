@@ -19,9 +19,10 @@ export default defineConfig({
     // hand-edit it — add or delete a file under src/routes/ and let the plugin rewrite it.
     tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
-    // Tailwind 4 is a Vite plugin. The theme, the tokens and the @source globs all live
-    // in packages/ui/src/styles/globals.css, which src/main.tsx imports via
-    // `@repo/ui/globals.css`. Do not declare a second entrypoint here.
+    // Tailwind 4 is a Vite plugin. The theme lives in packages/ui: the @source globs in
+    // src/styles/globals.css, this app's tokens in src/styles/admin.css, which
+    // src/main.tsx imports via `@repo/ui/styles/admin.css`. Do not declare a second
+    // entrypoint here.
     tailwindcss(),
   ],
   // `PUBLIC_` replaces Vite's default `VITE_` prefix, so the browser bundle only ever

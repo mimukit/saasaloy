@@ -1,8 +1,14 @@
-/* The one theme for the whole monorepo. `@repo/ui` owns Tailwind's entrypoint, the
-   source globs, and the token set; apps import it via the `@repo/ui/globals.css`
-   subpath export (see apps/web/src/layouts/Layout.astro) rather than redeclaring it.
-   Tokens follow shadcn's `neutral` base color with `cssVariables: true`, so anything
-   added later with `pnpm --filter @repo/ui exec shadcn add <x>` themes correctly. */
+/* The shared layer of the theme. `@repo/ui` owns Tailwind's entrypoint, the source globs
+   and the base layer here, and NO token values. Each app's tokens, colour mapping and
+   `dark` variant live in its own theme file beside this one, which imports this file
+   first:
+
+     - web.css    the web app's tokens (apps/web/src/layouts/Layout.astro imports it)
+     - admin.css  the admin app's tokens, written by the admin module
+
+   An app imports its theme file, never this one directly. The token set in web.css is
+   shadcn's `neutral` base color with `cssVariables: true`, and components.json points at
+   web.css, so a preset or `pnpm --filter @repo/ui exec shadcn add <x>` lands there. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
@@ -28,7 +34,7 @@
 
      - a block or an app page renders it → add its line here;
      - only one app renders it → add an `@source` line in THAT app's own stylesheet
-       instead, the way apps/admin/src/styles/admin.css does for the shell primitives.
+       instead, the way admin.css does for the shell primitives.
 
    Get this wrong and the failure is the silent one the comment above describes: the class
    never reaches the CSS and the component renders unstyled. */
@@ -55,130 +61,10 @@
    utilities no page uses. This exclusion makes the result independent of git state. */
 @source not "../../../../**/node_modules";
 
-/* Dark mode is the `.dark` class shadcn assumes. It is set pre-paint by the inline
-   THEME_INIT_SCRIPT (packages/ui/src/lib/theme.ts) that every host document emits —
-   from the visitor's stored choice, falling back to the OS preference. The chosen
-   state also lands on <html> as `data-theme`, which is what blocks/theme-toggle.tsx
-   keys its icons off; nothing here needs to know about it. */
-@custom-variant dark (&:is(.dark *));
-
-:root {
-  /* Tell the browser which palette the document is using, so native UI it renders for
-     us — scrollbars, form controls, the default canvas — follows the theme too. The
-     tokens below only cover what we paint ourselves. Paired with `.dark` rather than
-     `light dark` on :root, because the theme is class-driven, not media-driven: the
-     pre-paint script resolves the visitor's choice (or the OS preference behind it)
-     into a class, and re-resolves on the fly when the OS flips while the choice is
-     `system`. `light dark` here would let the OS override an explicit choice. */
-  color-scheme: light;
-
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-}
-
-.dark {
-  color-scheme: dark;
-
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
-}
-
-@theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
-  --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --color-card: var(--card);
-  --color-card-foreground: var(--card-foreground);
-  --color-popover: var(--popover);
-  --color-popover-foreground: var(--popover-foreground);
-  --color-primary: var(--primary);
-  --color-primary-foreground: var(--primary-foreground);
-  --color-secondary: var(--secondary);
-  --color-secondary-foreground: var(--secondary-foreground);
-  --color-muted: var(--muted);
-  --color-muted-foreground: var(--muted-foreground);
-  --color-accent: var(--accent);
-  --color-accent-foreground: var(--accent-foreground);
-  --color-destructive: var(--destructive);
-  --color-border: var(--border);
-  --color-input: var(--input);
-  --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
-}
+/* Each app keeps its DESIGN.md in its own folder, and Tailwind's cwd-rooted detection
+   reads Markdown too. A design document names utilities in prose (`text-6xl`, `shadow`),
+   and without this line each one lands in that app's stylesheet. */
+@source not "../../../../apps/*/DESIGN.md";
 
 @layer base {
   * {
