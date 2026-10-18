@@ -1,6 +1,6 @@
 # QA Plan: Landing page as a reusable production template
 
-_Generated 2026-10-18 · against `1213eb5` (uncommitted changes: the full #191 build) · covers the thirteen landing blocks, the real Saasaloy copy, the skip link and link-preview tags, the `verify:a11y` gate, the docs and the skills_
+_Generated 2026-10-18 · against `8a85f3a` on [PR #194](https://github.com/mimukit/saasaloy/pull/194), rebased onto `main` after #195 · covers the thirteen landing blocks, the real Saasaloy copy, the skip link and link-preview tags, the `verify:a11y` gate, the docs and the skills · runs the QA rows of the [landing page rubric](0058-qa-landing-page-rubric-2026-10-18.md)_
 
 ## Summary
 
@@ -40,7 +40,7 @@ Serve the built site in a second terminal, and leave it running:
 python3 -m http.server 4321 -d .dev/playground/apps/web/dist/client
 ```
 
-- [ ] Environment ready
+- [x] Environment ready
 
 ## Test cases at a glance
 
@@ -71,7 +71,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 2. In the OS settings, turn off "reduce motion".
 3. In the browser, clear the site's local storage, so the theme follows the OS.
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: The page reads well in the light theme  ·  🔴 Critical
 
@@ -80,14 +80,14 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 **Steps**
 
 1. Set the OS appearance to light and reload. Scroll the whole page top to bottom.
-   - [ ] Every section reads correctly, with no text illegible or invisible on its background
+   - [x] Every section reads correctly, with no text illegible or invisible on its background
      - navbar: logo, four links, theme toggle, GitHub and Get started
      - hero: pill, headline, lead, both buttons, terminal and file tree, fade at the bottom
      - logo row, pain points, how it works, feature grid, showcase, audience
      - testimonials, pricing (badge on the middle tier), FAQ, CTA with the command chip, footer
-   - [ ] The sections share one rhythm: equal side margins and similar gaps between sections
+   - [x] The sections share one rhythm: equal side margins and similar gaps between sections
 2. Compare the page with the round 3 mockup (`~/scratch/landing-mockup/page.html` on devaloy).
-   - [ ] Each section has the layout the owner approved
+   - [x] Each section has the layout the owner approved
 
 **Result**
 
@@ -494,7 +494,7 @@ pnpm -C .dev/playground lint && pnpm -C .dev/playground typecheck && pnpm -C .de
 - ✅ `pnpm verify:preset` → the tweakcn preset merges cleanly, the base rules survive, and the `apps/web/DESIGN.md` fingerprint matches `web.css`.
 - ✅ `pnpm deps:verify` → pins agree, and the fresh playground builds, lints, passes verify-css and typechecks.
 - ✅ The generated project's lint, typecheck and build pass.
-- ✅ `pnpm dlx @google/design.md lint` on the template's `DESIGN.md` → 0 errors and 0 warnings.
+- ✅ `pnpm dlx @google/design.md lint` on the template's `apps/web/DESIGN.md` → 0 errors and 0 warnings.
 - ✅ Chromium behaviour script on the built site:
   - the footer shows the current year on a page whose HTML says 2019
   - the page hydrates only `Navbar` and `PricingTable`

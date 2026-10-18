@@ -73,7 +73,7 @@ Rebuild the landing blocks in place against a rubric, add three blocks, and fix 
 
 1. Build a throwaway HTML mockup of the full thirteen-section page in the Tailark visual language, in light and dark themes, at a mobile and a desktop width. Use only the current tokens and the system font stack. Give each section one proposal. Render it in the T3 thread and do not commit it. Round 1 (ten sections, A and B variants) was superseded on 2026-10-18 when the owner chose the Tailark direction.
 2. Record the owner's pick for each section under this phase, as text.
-3. Write the rubric to `docs/qa/` with the next serial. Rows: responsive, keyboard, semantics, contrast in both themes, colour independence, JS budget, motion, content, identity. Mark each row as gate, QA or owner-judged.
+3. Write the rubric to `docs/qa/` with the next serial. Rows: responsive, keyboard, semantics, contrast in both themes, colour independence, JS budget, motion, content, identity. Mark each row as gate, QA or owner-judged. Written to [`0058-qa-landing-page-rubric-2026-10-18.md`](../qa/0058-qa-landing-page-rubric-2026-10-18.md). The QA plan for the build, [`0059-qa-landing-page-template-2026-10-18.md`](../qa/0059-qa-landing-page-template-2026-10-18.md), runs its QA rows.
 
 Done when: the owner has picked a layout for each of the thirteen sections, the choice is recorded under this phase, and the rubric file exists.
 

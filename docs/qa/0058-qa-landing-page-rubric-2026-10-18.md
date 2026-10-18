@@ -1,6 +1,6 @@
 # Rubric: the landing page as a production template
 
-_Written 2026-10-18 for [plan 0068](../plans/0068-plan-landing-page-template-2026-10-18.md) Phase 1 · tracked in #191 · applies to `packages/cli/templates/base/apps/web/src/pages/index.astro`, the thirteen landing blocks in `packages/ui/src/blocks/`, and `Layout.astro`_
+_Written 2026-10-18 for [plan 0068](../plans/0068-plan-landing-page-template-2026-10-18.md) Phase 1 · tracked in #191 · applies to `packages/cli/templates/base/apps/web/src/pages/index.astro`, the thirteen landing blocks in `packages/ui/src/blocks/`, and `Layout.astro` · the [QA plan](0059-qa-landing-page-template-2026-10-18.md) holds the steps for this PR's QA rows_
 
 ## How to read this
 
