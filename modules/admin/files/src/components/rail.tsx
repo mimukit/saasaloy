@@ -102,7 +102,7 @@ export function Rail({
 
         <div className="flex shrink-0 flex-col items-center gap-1">
           {/* Inert chrome on its own: the delegated [data-theme-toggle] handler in
-              src/main.tsx is what cycles light → dark → system. */}
+              src/main.tsx is what flips light and dark. */}
           <ThemeToggle className="size-11 md:size-9" />
 
           <DropdownMenu>

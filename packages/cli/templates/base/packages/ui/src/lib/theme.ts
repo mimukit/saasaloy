@@ -1,6 +1,11 @@
 // The theme state machine — light / dark / system — shared by every host that renders
 // @repo/ui. Framework-free on purpose: no React, no Astro, no imports at all.
 //
+// `system` is the starting state: a visitor who never pressed the toggle follows the OS.
+// The toggle itself has two states. A press flips the PAINTED palette, light to dark or
+// dark to light, and stores that choice. It never steps back to `system`; a visitor who
+// wants the OS again clears the `theme` key, and a host may call `setTheme("system")`.
+//
 // THIS FILE IS IMPORTED IN NODE. Both hosts pull it in at *build* time (Astro
 // frontmatter, and a Vite config for a React SPA), so there must be no `window`,
 // `document` or `localStorage` access at module scope. Every browser API below lives
@@ -13,10 +18,11 @@ export const THEME_STORAGE_KEY = "theme";
 /**
  * localStorage key marking that the visitor has used a toggle at least once.
  *
- * THEME_STORAGE_KEY alone cannot carry that fact, because `system` is spelled as an
- * absent key — so a first visit and a deliberate `system` read the same. A host that
- * wants a default other than the OS preference (the admin app starts on dark) needs to
- * tell those two apart, and this key is the only difference between them.
+ * A press always stores `light` or `dark`, so THEME_STORAGE_KEY usually carries the fact
+ * on its own. This key covers the rest: a choice made under the old three-state toggle,
+ * where `system` was spelled as an absent key, and a host that sets `system` itself. A
+ * host that wants a default other than the OS preference (the admin app starts on dark)
+ * reads both keys through `hasChosenTheme`.
  *
  * `installThemeToggle` writes it on every press. Nothing clears it.
  */
@@ -28,25 +34,36 @@ export const THEME_ATTRIBUTE = "data-theme";
 /** Attribute marking a toggle trigger. The delegated click listener matches on it. */
 export const THEME_TOGGLE_ATTRIBUTE = "data-theme-toggle";
 
+/**
+ * Attribute on `<html>` while a toggle press animates. globals.css scopes the circular
+ * reveal to it, so any other view transition a page starts keeps the browser's default.
+ */
+export const THEME_REVEAL_ATTRIBUTE = "data-theme-reveal";
+
 export type Theme = "light" | "dark" | "system";
 
 /** What `system` collapses to once the OS preference is read. */
 export type ResolvedTheme = "light" | "dark";
 
-/** Cycle order for the toggle: light → dark → system → light. */
-export const THEME_ORDER: readonly Theme[] = ["light", "dark", "system"];
-
-// The accessible name for each state, naming both where you are and where the next
-// press takes you — the icon carries the state visually, and a button's accessible name
-// has to carry the action. THEME_INIT_SCRIPT keeps this current as the state cycles, so
-// the block's static aria-label and this map must not drift; both read it from here.
-export const THEME_LABELS: Record<Theme, string> = {
-  dark: "Theme: dark. Switch to system.",
+// The accessible name for each PAINTED palette, naming both where you are and where the
+// next press takes you — the icon carries the palette visually, and a button's accessible
+// name has to carry the action. It keys on the palette, not the choice, because `system`
+// paints one of the two and the press flips whichever one is showing. THEME_INIT_SCRIPT
+// and `relabelThemeToggles` keep every toggle current; both read this map.
+export const THEME_LABELS: Record<ResolvedTheme, string> = {
+  dark: "Theme: dark. Switch to light.",
   light: "Theme: light. Switch to dark.",
-  system: "Theme: system. Switch to light.",
 };
 
+/**
+ * The toggle's static name, before any script has run. The palette is unknown at render
+ * time, so it names the action only. The button stays hidden until the script marks the
+ * page, and the script replaces this name on DOMContentLoaded.
+ */
+export const THEME_TOGGLE_LABEL = "Switch between light and dark theme";
+
 const OS_DARK_QUERY = "(prefers-color-scheme: dark)";
+const REDUCED_MOTION_QUERY = "(prefers-reduced-motion: reduce)";
 
 /**
  * Whether a raw string is one of the three themes.
@@ -100,14 +117,14 @@ export function setTheme(theme: Theme): void {
 }
 
 /**
- * Give every `[data-theme-toggle]` in the document the accessible name of the state it is
- * in. `setTheme` calls this, so a host only needs it directly for the one case `setTheme`
+ * Give every `[data-theme-toggle]` in the document the accessible name of the palette it
+ * shows. `setTheme` calls this, so a host only needs it directly for the one case `setTheme`
  * cannot cover: a toggle that MOUNTS AFTER the theme was applied.
  *
- * That is the ordinary case in a React host. `theme-toggle.tsx` renders a static
- * `aria-label` for `system` — the truthful value for a first-time visitor — and the theme
- * is applied in the entry module, before React has mounted anything. Without this call the
- * button announces "Theme: system" over a painted dark page until the first press.
+ * That is the ordinary case in a React host. `theme-toggle.tsx` renders the static
+ * THEME_TOGGLE_LABEL, and the theme is applied in the entry module, before React has
+ * mounted anything. Without this call the button never says which palette is showing
+ * until the first press.
  *
  * The Astro host gets the same repair from THEME_INIT_SCRIPT's `DOMContentLoaded` handler.
  *
@@ -119,8 +136,10 @@ export function relabelThemeToggles(theme?: Theme): void {
   const painted = theme ?? root.getAttribute(THEME_ATTRIBUTE);
   const named = isTheme(painted) ? painted : getStoredTheme();
 
+  const label = THEME_LABELS[resolveTheme(named)];
+
   for (const trigger of root.querySelectorAll(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
-    trigger.setAttribute("aria-label", THEME_LABELS[named]);
+    trigger.setAttribute("aria-label", label);
   }
 }
 
@@ -132,25 +151,71 @@ function onClick(event: MouseEvent): void {
   if (!(target instanceof Element)) {
     return;
   }
-  if (!target.closest(`[${THEME_TOGGLE_ATTRIBUTE}]`)) {
+  const trigger = target.closest(`[${THEME_TOGGLE_ATTRIBUTE}]`);
+  if (!trigger) {
     return;
   }
 
-  const painted = document.documentElement.getAttribute(THEME_ATTRIBUTE);
-  // An unrecognised `data-theme` gives index -1 and starts the cycle at the head of
-  // THEME_ORDER.
-  const index = isTheme(painted) ? THEME_ORDER.indexOf(painted) : -1;
-  const next = THEME_ORDER[(index + 1) % THEME_ORDER.length] ?? "light";
+  // Flip what is painted. From `system` that is the opposite of the OS palette, so the
+  // first press always changes what the visitor sees.
+  const next: ResolvedTheme = document.documentElement.classList.contains(
+    "dark"
+  )
+    ? "light"
+    : "dark";
 
-  setTheme(next);
+  revealTheme(trigger, () => {
+    setTheme(next);
+  });
 
-  // After `setTheme`, and unconditionally: a `system` press CLEARS THEME_STORAGE_KEY, so
-  // this key is the only record that the visitor pressed anything at all.
+  // After `setTheme`, and unconditionally, so a press is on record even where
+  // THEME_STORAGE_KEY could not be written.
   try {
     localStorage.setItem(THEME_CHOICE_KEY, "1");
   } catch {
     // Unwritable storage costs persistence, not the current page.
   }
+}
+
+/**
+ * Run `apply` inside a view transition, so the new theme spreads from `trigger` as a
+ * growing circle. The animation itself is CSS, in globals.css. JavaScript only starts the
+ * transition and says where the circle starts and how far it must grow, because CSS
+ * cannot start a view transition or measure the button.
+ *
+ * It applies the change at once, with no animation, where the browser has no view
+ * transitions or the visitor asks for reduced motion. THEME_INIT_SCRIPT repeats this in
+ * ES5 for the Astro host; keep the two in step.
+ */
+export function revealTheme(trigger: Element, apply: () => void): void {
+  if (
+    !("startViewTransition" in document) ||
+    window.matchMedia(REDUCED_MOTION_QUERY).matches
+  ) {
+    apply();
+    return;
+  }
+
+  const root = document.documentElement;
+  const box = trigger.getBoundingClientRect();
+  const x = box.left + box.width / 2;
+  const y = box.top + box.height / 2;
+  // The distance to the farthest corner, so the circle covers the whole viewport.
+  const radius = Math.hypot(
+    Math.max(x, window.innerWidth - x),
+    Math.max(y, window.innerHeight - y)
+  );
+
+  root.style.setProperty("--theme-reveal-x", `${x}px`);
+  root.style.setProperty("--theme-reveal-y", `${y}px`);
+  root.style.setProperty("--theme-reveal-r", `${radius}px`);
+  root.setAttribute(THEME_REVEAL_ATTRIBUTE, "");
+
+  const endReveal = () => {
+    root.removeAttribute(THEME_REVEAL_ATTRIBUTE);
+  };
+  // `finished` settles after the animation, or at once when the browser skips it.
+  void document.startViewTransition(apply).finished.finally(endReveal);
 }
 
 // The OS half of the same job, and the reason this is not click-only. THEME_INIT_SCRIPT
@@ -171,14 +236,15 @@ function onOsChange(): void {
  * removes it again.
  *
  * A host that inlines THEME_INIT_SCRIPT already has this and must NOT call it — the two
- * listeners would both fire and the cycle would advance twice per press. It exists for the
+ * listeners would both fire and each press would flip the palette twice, back to where
+ * it started. It exists for the
  * host that cannot inline the script: a Vite SPA's `index.html` substitutes only `%VITE_*%`
  * values, so it has no way to reach a TypeScript constant. Such an app calls this once from
- * its entry module instead of pasting a second copy of the cycle rule.
+ * its entry module instead of pasting a second copy of the toggle rule.
  *
- * It cycles from what is PAINTED, not from what is stored, for the reason the shared script
- * gives: where storage is unwritable the write is a no-op, so reading storage would answer
- * the same value forever and every press would land on the same theme.
+ * It flips what is PAINTED, not what is stored, for the reason the shared script gives:
+ * where storage is unwritable the write is a no-op, so reading storage would answer the
+ * same value forever and every press would land on the same theme.
  */
 export function installThemeToggle(): () => void {
   const media = window.matchMedia(OS_DARK_QUERY);
@@ -232,7 +298,8 @@ export function hasChosenTheme(): boolean {
 // It also installs the toggle's behaviour, which is why the block that renders the
 // button needs no JavaScript of its own: a delegated click listener on `document`
 // (registered while <head> parses — `document` exists, the button need not) plus a
-// matchMedia listener that re-resolves only while the state is `system`.
+// matchMedia listener that re-resolves only while the state is `system`. A press flips
+// light and dark; `system` is only ever the state a visitor starts in.
 //
 // Written as ES5-era syntax with no optional chaining: it ships unminified and
 // untranspiled to every visitor, including the ones the rest of the bundle drops.
@@ -240,10 +307,11 @@ export const THEME_INIT_SCRIPT = `(function () {
   var STORAGE_KEY = ${JSON.stringify(THEME_STORAGE_KEY)};
   var ATTRIBUTE = ${JSON.stringify(THEME_ATTRIBUTE)};
   var TRIGGER = "[" + ${JSON.stringify(THEME_TOGGLE_ATTRIBUTE)} + "]";
-  var ORDER = ${JSON.stringify(THEME_ORDER)};
+  var REVEAL = ${JSON.stringify(THEME_REVEAL_ATTRIBUTE)};
   var LABELS = ${JSON.stringify(THEME_LABELS)};
   var root = document.documentElement;
   var media = window.matchMedia(${JSON.stringify(OS_DARK_QUERY)});
+  var still = window.matchMedia(${JSON.stringify(REDUCED_MOTION_QUERY)});
 
   function read() {
     try {
@@ -266,37 +334,53 @@ export const THEME_INIT_SCRIPT = `(function () {
     root.classList.toggle("dark", theme === "dark" || (theme === "system" && media.matches));
   }
 
-  function relabel(theme) {
+  // Name every toggle after the palette that is painted now, which is what a press flips.
+  function relabel() {
+    var label = LABELS[root.classList.contains("dark") ? "dark" : "light"];
     var triggers = root.querySelectorAll(TRIGGER);
     for (var i = 0; i < triggers.length; i++) {
-      triggers[i].setAttribute("aria-label", LABELS[theme]);
+      triggers[i].setAttribute("aria-label", label);
     }
+  }
+
+  // The same circular reveal as revealTheme() in lib/theme.ts: a view transition whose
+  // animation lives in globals.css. No view transitions, or reduced motion: apply at once.
+  function reveal(trigger, apply) {
+    if (!document.startViewTransition || still.matches) return apply();
+    var box = trigger.getBoundingClientRect();
+    var x = box.left + box.width / 2;
+    var y = box.top + box.height / 2;
+    var r = Math.sqrt(Math.pow(Math.max(x, innerWidth - x), 2) + Math.pow(Math.max(y, innerHeight - y), 2));
+    root.style.setProperty("--theme-reveal-x", x + "px");
+    root.style.setProperty("--theme-reveal-y", y + "px");
+    root.style.setProperty("--theme-reveal-r", r + "px");
+    root.setAttribute(REVEAL, "");
+    function done() { root.removeAttribute(REVEAL); }
+    document.startViewTransition(apply).finished.then(done, done);
   }
 
   paint(read());
 
   document.addEventListener("click", function (event) {
     var node = event.target;
-    if (!node || typeof node.closest !== "function" || !node.closest(TRIGGER)) return;
-    // Cycle from what is painted, not from what is stored. Where storage is unwritable
-    // the write() above is a no-op, so read() would answer "system" forever and every
-    // press would land on light. The attribute is set by paint() on every transition and
-    // is the one state that survives a dead localStorage.
-    var current = root.getAttribute(ATTRIBUTE) || read();
-    var next = ORDER[(ORDER.indexOf(current) + 1) % ORDER.length];
-    write(next);
-    paint(next);
-    relabel(next);
+    var trigger = node && typeof node.closest === "function" && node.closest(TRIGGER);
+    if (!trigger) return;
+    // Two states only: flip the palette that is painted, never step back to "system".
+    // Reading the class, not storage, keeps this working where storage is unwritable:
+    // write() is then a no-op and read() would answer "system" forever.
+    var next = root.classList.contains("dark") ? "light" : "dark";
+    reveal(trigger, function () {
+      write(next);
+      paint(next);
+      relabel();
+    });
   });
 
   media.addEventListener("change", function () {
-    if (root.getAttribute(ATTRIBUTE) === "system") paint("system");
+    if (root.getAttribute(ATTRIBUTE) !== "system") return;
+    paint("system");
+    relabel();
   });
 
-  document.addEventListener("DOMContentLoaded", function () {
-    // The attribute is author-writable, so anything could be sitting there. LABELS has no
-    // entry for a value outside ORDER, and aria-label="undefined" is worse than a stale one.
-    var painted = root.getAttribute(ATTRIBUTE);
-    relabel(ORDER.indexOf(painted) < 0 ? read() : painted);
-  });
+  document.addEventListener("DOMContentLoaded", relabel);
 })();`;

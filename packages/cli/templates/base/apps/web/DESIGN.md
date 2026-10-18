@@ -220,7 +220,7 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 
 ## Motion
 
-Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group.
+Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group. A theme toggle press reveals the new theme as a circle that grows from the button, through a view transition whose animation lives in `globals.css`. The script only starts it, and reduced motion skips it.
 
 ## Dark Mode
 

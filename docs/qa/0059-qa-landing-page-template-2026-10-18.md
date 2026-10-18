@@ -103,10 +103,17 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Steps**
 
-1. Click the theme toggle in the navbar until the moon icon shows. Scroll the page again.
+1. In DevTools, open Application → Local Storage and delete the `theme` key. Set the OS to light mode, and reload the page.
+   - [ ] The page is light, and the toggle shows the sun icon
+2. Click the theme toggle in the navbar once. Scroll the page again.
+   - [ ] The page turns dark, and the toggle shows the moon icon
    - [ ] The same sweep is clean in the dark theme
    - [ ] No border, grid line or chip disappears into the dark background
-2. Reload the page.
+3. Click the toggle two more times.
+   - [ ] Each click flips light and dark, and no click shows a third, "system" icon
+   - [ ] In Chromium, Safari or a current Firefox, the new theme grows as a circle from the button in under half a second
+   - [ ] The page ends dark
+4. Reload the page.
    - [ ] The dark theme stays, with no white flash during the load
 
 **Result**
@@ -319,6 +326,8 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 1. Reload at the top and scroll to the footer.
    - [ ] Nothing fades, slides or sweeps, and every element is visible at once
    - [ ] The logo row stands still, wraps onto two lines and shows each name once
+2. Click the theme toggle.
+   - [ ] The theme changes at once, with no growing circle
 
 **Result**
 
