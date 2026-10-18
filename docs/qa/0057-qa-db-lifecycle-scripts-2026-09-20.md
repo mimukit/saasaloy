@@ -85,7 +85,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    cat compose.yaml
    ```
 
-   - [ ] The file says it is development only, and names the credentials and the volume
+   - [x] The file says it is development only, and names the credentials and the volume
      - the header comment warns against production use
      - the image is `postgres:18` and the port is `5432`
      - a comment ties the credentials to `packages/db/scripts/backends/docker.ts`
@@ -96,7 +96,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    pnpm db:setup
    ```
 
-   - [ ] The output says the container started and the database was created
+   - [x] The output says the container started and the database was created
    - [ ] The summary names the backend, the database, the host and the branch rule
      - `Backend   a local Docker container`
      - `Database  playground_dev`
@@ -108,10 +108,10 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    cat apps/api/.env.db && grep DATABASE_URL apps/api/.env
    ```
 
-   - [ ] `apps/api/.env.db` holds the state block, and every line of it is a comment
+   - [x] `apps/api/.env.db` holds the state block, and every line of it is a comment
      - the block begins with `# db:setup state:` and ends with `# end db:setup state`
      - it records `backend=docker`, `database=playground_dev` and a `created` time
-   - [ ] `DATABASE_URL` in `apps/api/.env` points at `playground_dev` on `127.0.0.1:5432`
+   - [x] `DATABASE_URL` in `apps/api/.env` points at `playground_dev` on `127.0.0.1:5432`
 
 4. Ask the container which databases exist.
 
@@ -119,21 +119,21 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    $DB_CMD "select datname from pg_database where datname like 'playground%';"
    ```
 
-   - [ ] Exactly one row, `playground_dev`
+   - [x] Exactly one row, `playground_dev`
 
-5. Rebuild the api env file, then read the state again.
+5. Rebuild the api env file, then read the state again. `env:setup` refuses to run while `packages/env/.env` is missing, and the playground has none until `saasaloy env` writes it. `touch` creates the file empty and leaves an existing one alone. `--only api` skips `web`, whose `PUBLIC_*` keys an empty file cannot fill.
 
    ```sh
-   pnpm env:setup && pnpm db:status
+   touch packages/env/.env && pnpm env:setup --only api && pnpm db:status
    ```
 
-   - [ ] `env:setup` rewrites `apps/api/.env` and keeps `DATABASE_URL` on `playground_dev`
-   - [ ] `db:status` still reports `Backend   a local Docker container` and `Database  playground_dev`
+   - [x] `env:setup` prints `Updated apps/api/.env.` and keeps `DATABASE_URL` on `playground_dev`
+   - [x] `db:status` still reports `Backend   a local Docker container` and `Database  playground_dev`
      - if `env:setup` names another unset key, write that key down in Notes and skip this step
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -151,7 +151,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    printf 'import { pgTable, serial, text } from "drizzle-orm/pg-core";\n\nexport const widgets = pgTable("widgets", {\n  id: serial("id").primaryKey(),\n  name: text("name").notNull(),\n});\n' > packages/db/src/schema/widgets.ts && pnpm --filter @repo/db db:generate
    ```
 
-   - [ ] drizzle-kit reports one table and writes a file under `packages/db/migrations`
+   - [x] drizzle-kit reports one table and writes a file under `packages/db/migrations`
 
 2. Run the command again.
 
@@ -159,7 +159,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    pnpm db:setup
    ```
 
-   - [ ] The output says the migrations applied, and the database name has not changed
+   - [x] The output says the migrations applied, and the database name has not changed
 
 3. Ask the database what it holds.
 
@@ -167,7 +167,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    $DB_CMD -d playground_dev "select table_name from information_schema.tables where table_schema = 'public';"
    ```
 
-   - [ ] The `widgets` table exists
+   - [x] The `widgets` table exists
 
 4. Read the status report.
 
@@ -175,12 +175,12 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    pnpm db:status
    ```
 
-   - [ ] The report says `Applied   1` and `0 pending migrations`
-   - [ ] The report names the branch it read from git
+   - [x] The report says `Applied   1` and `0 pending migrations`
+   - [x] The report names the branch it read from git
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -198,8 +198,8 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    pnpm db:drop
    ```
 
-   - [ ] The message names the database that went, says `DATABASE_URL` is gone from `apps/api/.env`, and says `apps/api/.env.db` is deleted
-   - [ ] A second line says the container is still running, and names `docker compose down -v`
+   - [x] The message names the database that went, says `DATABASE_URL` is gone from `apps/api/.env`, and says `apps/api/.env.db` is deleted
+   - [x] A second line says the container is still running, and names `docker compose down -v`
 
 2. Ask the container what is left.
 
@@ -207,7 +207,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    $DB_CMD "select datname from pg_database where datname like 'playground%';"
    ```
 
-   - [ ] No rows
+   - [x] No rows
 
 3. Confirm the container survived the drop.
 
@@ -215,7 +215,7 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    docker compose ps
    ```
 
-   - [ ] `playground-postgres-1` is still up
+   - [x] `playground-postgres-1` is still up
 
 4. Read the env file and the status report.
 
@@ -223,12 +223,12 @@ git init -q && git add -A && git -c user.email=qa@test -c user.name=qa commit -q
    grep -c DATABASE_URL apps/api/.env; ls apps/api/.env.db; pnpm db:status
    ```
 
-   - [ ] `grep` prints `0`, and `ls` says `apps/api/.env.db` does not exist
-   - [ ] `db:status` says there is no database yet, and names the one `db:setup` would create
+   - [x] `grep` prints `0`, and `ls` says `apps/api/.env.db` does not exist
+   - [x] `db:status` says there is no database yet, and names the one `db:setup` would create
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -264,7 +264,7 @@ pnpm db:setup
 git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playground-feature && pnpm install
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: A second branch gets a database of its own · 🔴 Critical
 
@@ -278,8 +278,8 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    pnpm db:setup --server
    ```
 
-   - [ ] The summary names a database with `issue_999` in it, not `playground_dev`
-   - [ ] The last line says this branch has its own database and to run `pnpm db:drop` when done
+   - [x] The summary names a database with `issue_999` in it, not `playground_dev`
+   - [x] The last line says this branch has its own database and to run `pnpm db:drop` when done
 
 2. Add a table in the feature worktree only, then apply it.
 
@@ -287,7 +287,7 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    printf 'import { pgTable, serial, text } from "drizzle-orm/pg-core";\n\nexport const widgets = pgTable("widgets", {\n  id: serial("id").primaryKey(),\n  name: text("name").notNull(),\n});\n' > packages/db/src/schema/widgets.ts && pnpm --filter @repo/db db:generate && pnpm db:setup
    ```
 
-   - [ ] The migration applies against the branch database
+   - [x] The migration applies against the branch database
 
 3. Ask the server which databases exist.
 
@@ -295,7 +295,7 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    $DB_CMD "select datname from pg_database where datname like 'playground%' order by datname;"
    ```
 
-   - [ ] Two rows: `playground_dev` and one branch database naming issue 999
+   - [x] Two rows: `playground_dev` and one branch database naming issue 999
 
 4. Ask the `main` database whether the unmerged table reached it.
 
@@ -303,12 +303,12 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    $DB_CMD -d playground_dev "select table_name from information_schema.tables where table_schema = 'public';"
    ```
 
-   - [ ] `widgets` is **not** there
+   - [x] `widgets` is **not** there
      - this is the whole point of the branch rule; a hit here is a blocking failure
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -326,7 +326,7 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    pnpm db:drop
    ```
 
-   - [ ] The message names the branch database, not `playground_dev`
+   - [x] The message names the branch database, not `playground_dev`
 
 2. Ask the server what is left.
 
@@ -334,7 +334,7 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    $DB_CMD "select datname from pg_database where datname like 'playground%' order by datname;"
    ```
 
-   - [ ] One row, `playground_dev`
+   - [x] One row, `playground_dev`
 
 3. Go back to the first worktree and read its status.
 
@@ -342,11 +342,11 @@ git worktree add ../playground-feature -b issue-999-add-widgets && cd ../playgro
    cd ../playground && pnpm db:status
    ```
 
-   - [ ] The report still names `playground_dev` and says it is reachable
+   - [x] The report still names `playground_dev` and says it is reachable
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -368,7 +368,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop/.de
 cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && pnpm play:reset && cd .dev/playground && ./saasaloy add database-postgres --yes && pnpm install && pnpm db:setup
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-3.1: `--server` and `--reset` on the same server · 🟡 Normal
 
@@ -382,7 +382,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:setup --server
    ```
 
-   - [ ] The command refuses, names the current database and backend, and prints the exact command to run instead
+   - [x] The command refuses, names the current database and backend, and prints the exact command to run instead
 
 2. Run the command it named.
 
@@ -390,7 +390,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:setup --reset --server
    ```
 
-   - [ ] The output says it is replacing the database, then reports `Backend   the server DATABASE_URL names`
+   - [x] The output says it is replacing the database, then reports `Backend   the server DATABASE_URL names`
 
 3. Read the state block.
 
@@ -398,11 +398,11 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    cat apps/api/.env.db
    ```
 
-   - [ ] The block now records `backend=server`
+   - [x] The block now records `backend=server`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -420,7 +420,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    cd packages/db && node scripts/setup.ts --docker --neon
    ```
 
-   - [ ] One line, naming the three flags and saying to pass one
+   - [x] One line, naming the three flags and saying to pass one
 
 2. Pass a flag the command does not take.
 
@@ -428,7 +428,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    node scripts/setup.ts --wat
    ```
 
-   - [ ] One line, naming the unknown flag and listing the flags it does take
+   - [x] One line, naming the unknown flag and listing the flags it does take
 
 3. Save both files, then point `DATABASE_URL` at a database these scripts did not make.
 
@@ -436,7 +436,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    cp ../../apps/api/.env /tmp/qa-env.bak && cp ../../apps/api/.env.db /tmp/qa-env-db.bak && printf 'DATABASE_URL=postgres://user:secret@prod.example.com:5432/production\n' > ../../apps/api/.env
    ```
 
-   - [ ] Both copies exist under `/tmp`
+   - [x] Both copies exist under `/tmp`
 
 4. Try to drop it while the state file still names the real database.
 
@@ -444,8 +444,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    node scripts/drop.ts
    ```
 
-   - [ ] The command drops nothing and says `DATABASE_URL` names `production` but `apps/api/.env.db` records the real database
-   - [ ] No output anywhere carries the password `secret`
+   - [x] The command drops nothing and says `DATABASE_URL` names `production` but `apps/api/.env.db` records the real database
+   - [x] No output anywhere carries the password `secret`
 
 5. Delete the state file, then try again.
 
@@ -453,8 +453,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    rm ../../apps/api/.env.db && node scripts/drop.ts
    ```
 
-   - [ ] The command drops nothing and says there is no development database
-   - [ ] No output anywhere carries the password `secret`
+   - [x] The command drops nothing and says there is no development database
+   - [x] No output anywhere carries the password `secret`
 
 6. Put the real files back.
 
@@ -462,11 +462,11 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    cp /tmp/qa-env.bak ../../apps/api/.env && cp /tmp/qa-env-db.bak ../../apps/api/.env.db && cd ../..
    ```
 
-   - [ ] Both files are back
+   - [x] Both files are back
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -490,7 +490,7 @@ Skip this scenario with no network.
 cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && pnpm play:reset && cd .dev/playground && ./saasaloy add database-postgres --yes && pnpm install
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-4.1: `--neon` creates, reports and drops · 🟢 Low
 
@@ -504,8 +504,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:setup --neon
    ```
 
-   - [ ] The summary names neon.new, a `.neon.tech` host, the PostgreSQL 17 note, an expiry and a claim URL
-   - [ ] No Docker container starts
+   - [x] The summary names neon.new, a `.neon.tech` host, the PostgreSQL 17 note, an expiry and a claim URL
+   - [x] No Docker container starts
 
 2. Read the report.
 
@@ -513,7 +513,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:status
    ```
 
-   - [ ] The report shows a time left, in hours and minutes
+   - [x] The report shows a time left, in hours and minutes
 
 3. Drop it.
 
@@ -521,11 +521,11 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:drop
    ```
 
-   - [ ] The message says the database went, and names neon.new
+   - [x] The message says the database went, and names neon.new
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -547,7 +547,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
 cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && pnpm play:reset && cd .dev/playground && ./saasaloy add database-d1 --yes && pnpm install && printf 'import { sqliteTable, integer, text } from "drizzle-orm/sqlite-core";\n\nexport const widgets = sqliteTable("widgets", {\n  id: integer("id").primaryKey({ autoIncrement: true }),\n  name: text("name").notNull(),\n});\n' > packages/db/src/schema/widgets.ts && pnpm --filter @repo/db db:generate
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-5.1: The three commands on D1 · 🔴 Critical
 
@@ -561,7 +561,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    ls compose.yaml
    ```
 
-   - [ ] The file does not exist; only the Postgres driver writes it
+   - [x] The file does not exist; only the Postgres driver writes it
 
 2. Prepare the database.
 
@@ -569,7 +569,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:setup
    ```
 
-   - [ ] wrangler shows the migration applied, and the last line names `apps/api/.wrangler/state`
+   - [x] wrangler shows the migration applied, and the last line names `apps/api/.wrangler/state`
 
 3. Read the report.
 
@@ -577,7 +577,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:status
    ```
 
-   - [ ] The report names the state directory, and wrangler says there is nothing left to apply
+   - [x] The report names the state directory, and wrangler says there is nothing left to apply
 
 4. Drop the local database.
 
@@ -585,8 +585,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:drop && ls apps/api/.wrangler/state
    ```
 
-   - [ ] The message names the directory it deleted
-   - [ ] `v3` remains but holds no `d1` directory
+   - [x] The message names the directory it deleted
+   - [x] `v3` remains but holds no `d1` directory
 
 5. Run the drop a second time.
 
@@ -594,11 +594,11 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    pnpm db:drop
    ```
 
-   - [ ] The command deletes nothing, says so, and points at `apps/api/.wrangler/state`
+   - [x] The command deletes nothing, says so, and points at `apps/api/.wrangler/state`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -634,8 +634,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    cat saasaloy.json && ls compose.yaml
    ```
 
-   - [ ] `saasaloy.json` records `"@root": "."`
-   - [ ] `compose.yaml` exists at the repo root, not under `packages/db`
+   - [x] `saasaloy.json` records `"@root": "."`
+   - [x] `compose.yaml` exists at the repo root, not under `packages/db`
 
 2. Remove the driver.
 
@@ -643,8 +643,8 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    ./saasaloy remove database-postgres --yes
    ```
 
-   - [ ] The output lists `compose.yaml` among the files it deleted
-   - [ ] The warning names the script keys it leaves behind
+   - [x] The output lists `compose.yaml` among the files it deleted
+   - [x] The warning names the script keys it leaves behind
 
 3. Confirm the root file is gone.
 
@@ -652,11 +652,11 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
    ls compose.yaml
    ```
 
-   - [ ] The file does not exist
+   - [x] The file does not exist
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -678,7 +678,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop && 
 cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-7.1: The skills and the ADR match the commands · 🟢 Low
 
@@ -692,7 +692,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop
    sed -n '/## The lifecycle commands/,/## Hyperdrive/p' modules/database-postgres/skills/saasaloy-database-postgres/SKILL.md
    ```
 
-   - [ ] The section matches what the commands did
+   - [x] The section matches what the commands did
      - the three commands and the branch rule read the way Scenario 1 and Scenario 2 behaved
      - the backend table lists docker, server and neon, and says docker is the default
      - the example state block matches the file `db:setup` wrote
@@ -704,7 +704,7 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop
    sed -n '/## The lifecycle commands/,/## Switching drivers/p' modules/database-d1/skills/saasaloy-database-d1/SKILL.md
    ```
 
-   - [ ] The section says the commands are wrappers, and explains why D1 needs no backend and no state block
+   - [x] The section says the commands are wrappers, and explains why D1 needs no backend and no state block
 
 3. Read the decision record.
 
@@ -712,13 +712,13 @@ cd /home/dev/worktrees/saasaloy/issue-152-add-db-setup-db-status-and-db-drop
    cat docs/adr/0042-adr-the-db-lifecycle-commands-belong-to-the-drivers-2026-09-20.md
    ```
 
-   - [ ] The record answers the two questions a reader will have
+   - [x] The record answers the two questions a reader will have
      - why the commands live in the drivers and not in a `db` capability
      - why a backend is not a provider
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
@@ -798,6 +798,6 @@ Results:
 
 _Tick one when you finish the run._
 
-- [ ] Pass: every case passed
+- [x] Pass: every case passed
 - [ ] Fail: at least one case failed
 - [ ] Partial: cases were skipped or not reached
