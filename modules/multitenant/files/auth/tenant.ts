@@ -20,6 +20,10 @@ import {
 } from "./tenant-rules";
 import type { Principal, Tenant, TenantResolver } from "./tenant-rules";
 
+// Kept for an `api-keys` plugin from saasaloy 0.5.2, which imports `loadStatements` from
+// here. Remove it once no supported release imports it from `./tenant`.
+export { loadStatements } from "./statements";
+
 // Tenant resolution, the api-facing half. `./tenant-rules.ts` holds every decision this
 // file makes; here it reads the session, runs the one role query, and throws.
 //
