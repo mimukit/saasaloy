@@ -64,7 +64,7 @@ Rejected alternatives, one line each:
 - `wrangler secret bulk` after the deploy. The first deploy fails on the `auth` module-scope check, and each push adds a second Worker version.
 - A `build:production` turbo task. Two build tasks per workspace, and a cached dev build could still ship.
 
-### Phase 1: confirm the wrangler behaviour on the pinned version
+### Phase 1: confirm the wrangler behaviour on the pinned version (#198)
 
 Run each check against the pinned wrangler (`4.145.0` today) on a throwaway Cloudflare account, from a project under `.dev/`. Record the answers in this plan's open questions and adjust Phases 3 and 4.
 
@@ -75,7 +75,7 @@ Run each check against the pinned wrangler (`4.145.0` today) on a throwaway Clou
 
 Done when: each question has a recorded yes or no with the wrangler output that shows it.
 
-### Phase 2: prefix account-scoped names with the project name
+### Phase 2: prefix account-scoped names with the project name (#197)
 
 - Render `{{PROJECT_NAME}}` in module files and in descriptor patch entries during `saasaloy add`, through `resolveProjectName`. Hash the rendered bytes, as the base does, so `saasaloy update` does not report a false change.
 - Rename: `modules/api/files/wrangler.jsonc` `"name": "api"` to `{{PROJECT_NAME}}-api`, admin likewise, `database-d1`'s `app-db`, `queue-cloudflare`'s `app-jobs` and `app-jobs-dlq`, and the KV and R2 names in `kv-cloudflare` and `storage-cloudflare`.
@@ -84,7 +84,7 @@ Done when: each question has a recorded yes or no with the wrangler output that 
 
 Done when: in `.dev/`, two projects named `alpha` and `beta` with `api` and `database-d1` installed show `alpha-api`, `alpha-db`, `beta-api` and `beta-db` in their `apps/api/wrangler.jsonc`, and `saasaloy update` in each reports no module change.
 
-### Phase 3: deploy from the base template
+### Phase 3: deploy from the base template (#198)
 
 - Make `Service.file` optional. `env:setup` skips a row without a file. Add `{ name: "deploy", environment: "prod", omit: [] }` to the base `SERVICES`. Rename `infra` to `deploy` in the `envServices` enum of `packages/cli/schemas/registry-item.schema.json` and in `SERVICE_NAMES` in `packages/cli/src/lib/env-example.ts`.
 - Add `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` to the base `.env.example` under `# @services deploy`.
@@ -100,7 +100,7 @@ Done when: in `.dev/`, two projects named `alpha` and `beta` with `api` and `dat
 
 Done when: in `.dev/`, `saasaloy init` then `pnpm deploy:production` prints a `workers.dev` URL; the served page carries the prod `PUBLIC_SITE_URL`; no file under `apps/` holds a prod value; and a blank `CLOUDFLARE_API_TOKEN` with no `wrangler login` stops the run before any build.
 
-### Phase 4: module deploy steps
+### Phase 4: module deploy steps (#198)
 
 - `api` and `admin`: change `deploy` to `env-deploy api` and `env-deploy admin`.
 - `database-d1`, `kv-cloudflare`, `storage-cloudflare`: drop the placeholder ids (`"local"`, `<replace-me>`) if Phase 1 shows provisioning and local dev both work without them. Otherwise keep the placeholder and document the first-deploy step.
@@ -109,7 +109,7 @@ Done when: in `.dev/`, `saasaloy init` then `pnpm deploy:production` prints a `w
 
 Done when: in `.dev/`, a project with `api`, `auth`, `database-d1`, `kv-cloudflare` and `queue-cloudflare` deploys from an empty Cloudflare account with one `pnpm deploy:production`, and a request to the api that reads KV and the database succeeds.
 
-### Phase 5: remove `infra` and write the ADR
+### Phase 5: remove `infra` and write the ADR (#198)
 
 - Delete `modules/infra/`.
 - Remove `infra` from `packages/cli/src/lib/doctor.ts:887`, `scripts/verify-pins.test.ts:187`, the base `pnpm-workspace.yaml` (the `infra` entry and the `@pulumi/pulumi` postinstall allowance), both `oxlint.config.mjs` files, and the `env-setup.ts` comment.
@@ -119,7 +119,7 @@ Done when: in `.dev/`, a project with `api`, `auth`, `database-d1`, `kv-cloudfla
 
 Done when: `grep -rniE 'pulumi|\binfra\b' --exclude-dir=node_modules .` matches only `docs/adr/`, `docs/plans/`, `docs/qa/`, `CHANGELOG.md`, the doctor warning and the `infra-ci-deploy` module, and `pnpm test`, `pnpm lint` and `pnpm deps:check` pass.
 
-### Phase 6: docs and the upgrade path
+### Phase 6: docs and the upgrade path (#198)
 
 - Rewrite `docs/wiki/how-to/deploy-to-cloudflare.md` around `pnpm deploy:production`. Keep `env-deploy <service>` as the per-workspace route. Cover partial failure and `wrangler rollback`, removed secrets and `wrangler secret delete`, and teardown with `wrangler delete` plus the D1, KV, R2 and queue delete commands.
 - Add a runbook for a project that already runs `infra`: never run `pulumi destroy`, because it deletes live resources; copy the D1 `database_id` and other ids out of `infra/state/` into `wrangler.jsonc`; keep the old resource and Worker names, since the prefix applies only to new installs; delete `infra/` and its `SERVICES` row; rename the credentials; run `pnpm deploy:production`. Say that `infra-ci-deploy` is unrelated to the old module.
@@ -127,7 +127,7 @@ Done when: `grep -rniE 'pulumi|\binfra\b' --exclude-dir=node_modules .` matches 
 
 Done when: the wiki commands and the runbook each run as written in `.dev/`, and the runbook takes a project scaffolded with the last release that ships `infra` to a working `pnpm deploy:production` with its existing Workers and data.
 
-### Phase 7: the `infra-ci-deploy` module
+### Phase 7: the `infra-ci-deploy` module (#199)
 
 - Add `modules/infra-ci-deploy/`, which writes `@root/.github/workflows/deploy.yml`. GitHub reads workflows only from the repository root, which is the stated reason the `@root` rule asks for.
 - The workflow runs `pnpm deploy:production` on push to `main`. `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` and the value-source credentials (`ENV_SOURCE` and the Infisical keys, when installed) come from repository secrets as environment variables.
