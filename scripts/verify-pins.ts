@@ -83,6 +83,24 @@ export const PIN_RULES: readonly PinRule[] = [
       "modules/infra/files/package.json",
     ],
   },
+  // Issue #152. The repo's oxlint config imports the template's config and lints every
+  // shipped file with its rules, and that config resolves `ultracite` and runs `oxlint`
+  // from this repo's node_modules. A newer preset in the template adds rules the repo
+  // never sees, so a module passes `pnpm lint` here and fails a user's first commit.
+  // `oxlint-tsgolint` is the type-aware backend and moves with `oxlint`. Prettier and
+  // its plugins are coupled the same way: Ultracite 7.12 handed `cn` and `cva` to the
+  // Tailwind plugin, and `prettier --check` here has to sort classes as a project does.
+  ...[
+    "oxlint",
+    "oxlint-tsgolint",
+    "prettier",
+    "prettier-plugin-astro",
+    "prettier-plugin-tailwindcss",
+    "ultracite",
+  ].map((dep) => ({
+    dep,
+    files: ["package.json", "packages/cli/templates/base/package.json"],
+  })),
 ];
 
 const SECTIONS = [

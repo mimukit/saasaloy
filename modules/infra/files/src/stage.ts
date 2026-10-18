@@ -65,7 +65,8 @@ export async function stageAssets(
       continue;
     }
     const from = join(sourceDir, entry);
-    if (!(await stat(from)).isFile()) {
+    const info = await stat(from);
+    if (!info.isFile()) {
       continue;
     }
     const to = join(stageDir, entry);

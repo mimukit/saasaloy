@@ -306,7 +306,7 @@ async function readStream(stream: ReadableStream): Promise<Uint8Array> {
   while (!done) {
     // Sequential by nature: the next chunk is not requestable until this one arrives.
     const read = await reader.read();
-    done = read.done;
+    ({ done } = read);
     if (read.value !== undefined) {
       chunks.push(
         typeof read.value === "string"

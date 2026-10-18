@@ -25,20 +25,17 @@ const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
-    {
-      /*
+    {/*
       Explicit icon link, not the implicit /favicon.ico lookup. Without a link the
       browser guesses /favicon.ico, and Chrome tags that guess `Sec-Fetch-Site:
       cross-site`, which the Astro dev server blocks with a `[router]` warning
       (astro/dist/vite-plugin-astro-server/sec-fetch.js). A declared same-origin
       link never gets that treatment. Replace public/favicon.svg with the project mark.
-    */
-    }
+    */}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
     <link rel="canonical" href={canonical} />
     {description && <meta name="description" content={description} />}
-    {
-      /*
+    {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
       paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
       from bundling it into a deferred module, which would defeat the whole point —
@@ -49,8 +46,7 @@ const canonical = new URL(Astro.url.pathname, webEnv().PUBLIC_SITE_URL).href;
       `[data-theme-toggle]` on the page through one delegated listener. That is why
       @repo/ui/blocks/theme-toggle needs no client directive. Do not inline a second
       resolver here, and do not turn this into an import.
-    */
-    }
+    */}
     <script is:inline set:html={THEME_INIT_SCRIPT} />
   </head>
   <body class="bg-background text-foreground min-h-dvh font-sans antialiased">

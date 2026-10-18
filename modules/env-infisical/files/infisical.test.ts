@@ -14,7 +14,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, describe, it } from "node:test";
-import { EnvError } from "../sources.ts";
+import { EnvError } from "../error.ts";
 import {
   authEnv,
   failure,

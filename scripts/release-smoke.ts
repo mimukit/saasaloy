@@ -12,11 +12,14 @@
 // uptime. The remote fetch path is a separate, deliberate manual check before the first
 // publish.
 //
-// The last step is the one exception, and it needs the npm registry. It installs the
-// scaffolded project and starts the web app's `astro dev` (issue #186). A dependency the
+// The last two steps are the exception, and they need the npm registry. The first installs
+// the scaffolded project and starts the web app's `astro dev` (issue #186). A dependency the
 // template reaches through a range can move under our exact pins with no change on our
 // side, and then a fresh project's dev server fails for everyone. Only a real install
 // finds that, so `.github/workflows/smoke.yml` runs this script on a schedule as well.
+// The second scaffolds a project with every module, one per database driver, and runs
+// that project's own `pnpm lint` (issue #152). Only there do imports between workspaces
+// resolve, the type-aware pass reach the installed blocks, and `add` format its patches.
 //
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
@@ -25,7 +28,7 @@
 // `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawn, spawnSync } from "node:child_process";
-import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
 import { join, relative, resolve } from "node:path";
 
 const root = resolve(import.meta.dirname, "..");
@@ -75,6 +78,18 @@ const RENDER_ERROR_PATTERNS = [
   /Invalid hook call/,
   /Cannot read properties of null \(reading 'use[A-Z]\w*'\)/,
 ];
+
+/** A registry module as the lint step reads it: its name and the modules it excludes. */
+export interface ModuleEntry {
+  name: string;
+  conflictsWith: string[];
+}
+
+/** One project the lint step scaffolds, and the modules it adds, in order. */
+export interface FullScaffold {
+  name: string;
+  modules: string[];
+}
 
 export interface SmokeOptions {
   /** Leave `.dev/release-smoke/` in place after a green run, for inspection. */
@@ -132,6 +147,33 @@ export function findRenderErrors(log: string): string[] {
     );
 }
 
+/**
+ * The projects that together put every registry module through a real project's
+ * `pnpm lint` (issue #152). Exported for its own test.
+ *
+ * Two modules that conflict cannot share a project, so each module that declares a
+ * conflict gets a project of its own, with every conflict-free module added after it.
+ * Today that is one project per database driver. The driver goes first because most
+ * other modules require a database.
+ */
+export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
+  const free = modules
+    .filter((entry) => entry.conflictsWith.length === 0)
+    .map((entry) => entry.name)
+    .toSorted();
+  const exclusive = modules
+    .filter((entry) => entry.conflictsWith.length > 0)
+    .map((entry) => entry.name)
+    .toSorted();
+  if (exclusive.length === 0) {
+    return [{ modules: free, name: "full" }];
+  }
+  return exclusive.map((name) => ({
+    modules: [name, ...free],
+    name: `full-${name}`,
+  }));
+}
+
 function fail(message: string, ...detail: string[]): never {
   console.error(`release-smoke: ${message}`);
   for (const line of detail) {
@@ -161,6 +203,94 @@ function run(
   if (result.status !== 0) {
     fail(`${label} failed`, `exit code ${String(result.status)}`);
   }
+}
+
+/**
+ * `run`, with the output held back unless the command fails. Forty `saasaloy add` runs
+ * would otherwise bury the one line that matters.
+ */
+function runQuiet(
+  command: string,
+  args: readonly string[],
+  label: string,
+  options: { cwd: string; env?: NodeJS.ProcessEnv }
+): void {
+  const result = spawnSync(command, args, {
+    cwd: options.cwd,
+    encoding: "utf-8",
+    env: options.env ?? process.env,
+  });
+  if (result.error) {
+    fail(`${label} could not start`, String(result.error));
+  }
+  if (result.status !== 0) {
+    const output = `${result.stdout}${result.stderr}`.trim().split("\n");
+    fail(`${label} failed`, ...output.slice(-30));
+  }
+}
+
+/** Every module in the local registry, with the modules each one conflicts with. */
+async function readModules(registryDir: string): Promise<ModuleEntry[]> {
+  const entries: ModuleEntry[] = [];
+  for (const dirent of await readdir(registryDir, { withFileTypes: true })) {
+    if (!dirent.isDirectory()) {
+      continue;
+    }
+    const descriptor = await readManifest(
+      join(registryDir, dirent.name, "registry-item.json")
+    );
+    const conflicts = descriptor.conflictsWith;
+    entries.push({
+      conflictsWith: Array.isArray(conflicts)
+        ? conflicts.filter((name): name is string => typeof name === "string")
+        : [],
+      name: dirent.name,
+    });
+  }
+  return entries;
+}
+
+/**
+ * Scaffold one project with every module in `scaffold`, then run the project's own
+ * `pnpm lint`, in the order a user takes: install the base, add the modules, install
+ * again. `add` formats the files it patches with the project's own Prettier, which only
+ * exists after the first install.
+ */
+function lintFullScaffold(
+  bin: string,
+  scaffold: FullScaffold,
+  env: NodeJS.ProcessEnv
+): void {
+  const dir = join(workDir, scaffold.name);
+  step(
+    `scaffolding ${scaffold.name} with ${String(scaffold.modules.length)} modules`
+  );
+  runQuiet(
+    bin,
+    ["init", scaffold.name, "--no-install", "--no-git"],
+    `saasaloy init ${scaffold.name}`,
+    { cwd: workDir }
+  );
+  // A real project is its own git repository, and oxlint honours `.gitignore` up to
+  // the repository root. Without this one, oxlint walks up into this repo, whose
+  // `.gitignore` excludes `.dev/`, and finds nothing to lint.
+  runQuiet("git", ["init", "--quiet"], `git init in ${scaffold.name}`, {
+    cwd: dir,
+  });
+  runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+    cwd: dir,
+  });
+  for (const name of scaffold.modules) {
+    runQuiet(bin, ["add", name, "--yes"], `saasaloy add ${name}`, {
+      cwd: dir,
+      env,
+    });
+  }
+  runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+    cwd: dir,
+  });
+  step(`running \`pnpm lint\` in ${scaffold.name}`);
+  run("pnpm", ["lint"], `pnpm lint in ${scaffold.name}`, { cwd: dir });
 }
 
 async function readManifest(file: string): Promise<Record<string, unknown>> {
@@ -392,13 +522,26 @@ async function main(): Promise<void> {
     fail("the web app's dev server failed", ...devFailure.split("\n"));
   }
 
+  // --- Lint a project that holds every module (needs the network) -------------------
+
+  // The repo lints each shipped file with the template's oxlint config, but only a real
+  // project resolves the imports between workspaces, runs the type-aware pass over the
+  // installed blocks, and formats the files `add` patches. Issue #152 found 54 errors
+  // that only showed up here.
+  const scaffolds = fullScaffolds(
+    await readModules(offlineEnv.SAASALOY_REGISTRY_DIR)
+  );
+  for (const scaffold of scaffolds) {
+    lintFullScaffold(bin, scaffold, offlineEnv);
+  }
+
   if (!options.keep) {
     await rm(scratch, { force: true, recursive: true });
   }
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, and scaffolds a project that takes the api module and serves its web app in dev.${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module in ${String(scaffolds.length)} project(s).${kept}`
   );
 }
 

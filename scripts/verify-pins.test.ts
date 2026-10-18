@@ -201,6 +201,26 @@ describe("PIN_RULES", () => {
     assert.ok(plugin.files.includes("modules/api/files/package.json"));
   });
 
+  // Issue #152. The repo lints and formats shipped files the way a project does, which
+  // only holds while both run the same oxlint, Prettier and Ultracite.
+  it("holds the lint toolchain to the template's versions", () => {
+    for (const dep of [
+      "oxlint",
+      "oxlint-tsgolint",
+      "prettier",
+      "prettier-plugin-astro",
+      "prettier-plugin-tailwindcss",
+      "ultracite",
+    ]) {
+      const rule = PIN_RULES.find((entry) => entry.dep === dep);
+      assert.ok(rule !== undefined, `no pin rule for ${dep}`);
+      assert.ok(rule.files.includes("package.json"));
+      assert.ok(
+        rule.files.includes("packages/cli/templates/base/package.json")
+      );
+    }
+  });
+
   it("names at least two manifests per rule", () => {
     for (const rule of PIN_RULES) {
       assert.ok(rule.files.length >= 2, `${rule.dep} needs two manifests`);

@@ -98,7 +98,7 @@ export interface LoggerVariables {
  * `logger-<provider>` module appends to — see `src/index.ts`.
  */
 export function defineLogger(config: LoggerConfig): LoggerRegistry {
-  const providers = config.providers;
+  const { providers } = config;
   const redactKeys = new Set(
     [...DEFAULT_REDACT_KEYS, ...(config.redact ?? [])].map((key) =>
       key.toLowerCase()

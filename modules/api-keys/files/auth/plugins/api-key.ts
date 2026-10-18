@@ -9,7 +9,7 @@ import { env } from "cloudflare:workers";
 import { SUPERADMIN_ROLE } from "../authorize";
 import type { AuthDbBindings } from "../db-provider";
 import { can } from "../rbac-rules";
-import { loadStatements } from "../tenant";
+import { loadStatements } from "../statements";
 import type { AuthRequestContext } from "../server";
 
 // Organization-owned API keys, in two plugins.

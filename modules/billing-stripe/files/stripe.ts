@@ -1,6 +1,6 @@
 import { env } from "cloudflare:workers";
 import { stripe as stripePlugin } from "@better-auth/stripe";
-import Stripe from "stripe";
+import { Stripe } from "stripe";
 import { enqueueBillingEvent } from "../enqueue";
 import { plans } from "../plans";
 import { BillingError } from "../provider";
@@ -372,7 +372,7 @@ function subjectOf(
 function project(
   subscription: Stripe.Subscription
 ): NonNullable<BillingEvent["subscription"]> {
-  const item = subscription.items.data[0];
+  const [item] = subscription.items.data;
 
   return {
     billingInterval: item?.price.recurring?.interval ?? null,

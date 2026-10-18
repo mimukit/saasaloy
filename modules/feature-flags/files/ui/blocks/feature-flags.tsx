@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button } from "@repo/ui/components/button";
@@ -90,7 +90,7 @@ export function FeatureFlags({
 
   return (
     <div className="grid gap-6">
-      {error ? (
+      {error !== null && error !== "" ? (
         <p
           role="alert"
           className="border-destructive/40 text-destructive rounded-lg border px-3 py-2 text-sm"
@@ -124,12 +124,12 @@ export function FeatureFlags({
               className="min-h-11"
               disabled={busy}
               aria-pressed={maintenance.enabled}
-              onClick={() =>
+              onClick={() => {
                 onSave(maintenance.key, {
                   enabled: !maintenance.enabled,
                   percentage: null,
-                })
-              }
+                });
+              }}
             >
               {maintenance.enabled ? "Reopen the site" : "Close the site"}
             </Button>
@@ -208,7 +208,7 @@ function FlagCard({
   const isPercentage = flag.type === "percentage";
   const dirty = isPercentage && percentage !== serverPercentage;
 
-  function addOverride(event: FormEvent<HTMLFormElement>) {
+  function addOverride(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (tenantId.trim() === "") {
       return;
@@ -229,7 +229,7 @@ function FlagCard({
             <Badge variant="secondary">{flag.type}</Badge>
             {flag.hasRow ? null : <Badge variant="outline">code default</Badge>}
           </div>
-          {flag.description ? (
+          {flag.description !== null && flag.description !== "" ? (
             <p className="text-muted-foreground mt-1 text-sm">
               {flag.description}
             </p>
@@ -242,14 +242,14 @@ function FlagCard({
           className="min-h-11 md:min-h-8"
           disabled={busy}
           aria-pressed={flag.enabled}
-          onClick={() =>
+          onClick={() => {
             onSave(flag.key, {
               enabled: !flag.enabled,
               // The server's value, not the draft: On/Off must not commit an
               // uncommitted slider drag.
               percentage: isPercentage ? serverPercentage : null,
-            })
-          }
+            });
+          }}
         >
           {flag.enabled ? "On" : "Off"}
         </Button>
@@ -271,7 +271,9 @@ function FlagCard({
             step={1}
             value={percentage}
             disabled={busy}
-            onChange={(event) => setPercentage(Number(event.target.value))}
+            onChange={(event) => {
+              setPercentage(Number(event.target.value));
+            }}
             className="accent-primary h-11 min-w-0 flex-1 md:h-8"
           />
           <span className="w-12 shrink-0 text-right text-sm tabular-nums">
@@ -282,9 +284,9 @@ function FlagCard({
             size="sm"
             className="min-h-11 md:min-h-8"
             disabled={busy || !dirty}
-            onClick={() =>
-              onSave(flag.key, { enabled: flag.enabled, percentage })
-            }
+            onClick={() => {
+              onSave(flag.key, { enabled: flag.enabled, percentage });
+            }}
           >
             Save
           </Button>
@@ -312,7 +314,9 @@ function FlagCard({
                 size="sm"
                 className="min-h-11 md:min-h-8"
                 disabled={busy}
-                onClick={() => onClearOverride(flag.key, override.tenantId)}
+                onClick={() => {
+                  onClearOverride(flag.key, override.tenantId);
+                }}
               >
                 Clear
               </Button>
@@ -325,7 +329,9 @@ function FlagCard({
         <Input
           value={tenantId}
           disabled={busy}
-          onChange={(event) => setTenantId(event.target.value)}
+          onChange={(event) => {
+            setTenantId(event.target.value);
+          }}
           placeholder="Tenant id"
           aria-label={`Tenant id to override ${flag.key} for`}
           className="h-11 md:h-8"
