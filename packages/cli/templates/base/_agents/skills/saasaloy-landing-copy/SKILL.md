@@ -113,7 +113,7 @@ This file is deleted once the copy lands in `packages/ui/src/content/landing.ts`
 ## Hero
 | Key | Now | Proposed |
 |-----|-----|----------|
-| `hero.announcement` | v0.5 early preview | In beta with two firms |
+| `hero.announcement` | See what's new | In beta with two firms |
 | `hero.primaryActionLabel` | Get started | Join the beta |
 
 `hero.title`:

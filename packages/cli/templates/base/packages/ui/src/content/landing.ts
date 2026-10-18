@@ -104,7 +104,7 @@ export const landing = {
   // produces. Commands, paths and the module that added each path are code (5d); the
   // comment lines under a command are prose.
   hero: {
-    announcement: "v0.5 early preview",
+    announcement: "See what's new",
     announcementHref: `${REPO}/blob/main/packages/cli/CHANGELOG.md`,
     title: "Ship the SaaS, not the scaffolding.",
     description:
