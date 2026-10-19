@@ -101,7 +101,7 @@ export function ShellLayout({
             </ol>
           </nav>
           {/* Inert chrome on its own: the delegated [data-theme-toggle] handler in the
-              admin app's src/main.tsx is what cycles light → dark → system. */}
+              admin app's src/main.tsx is what flips light and dark. */}
           <ThemeToggle />
         </header>
 

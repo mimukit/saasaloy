@@ -270,6 +270,6 @@ Controls use short colour and shadow transitions. Popups fade and scale in from 
 
 ## Dark Mode
 
-The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and the theme toggle cycles light, dark and system. Every component uses the semantic tokens, so both themes stay in step.
+The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and a press on the theme toggle flips light and dark, with a circle reveal from the button. Every component uses the semantic tokens, so both themes stay in step.
 
 _Seeded by the saasaloy admin module · tokens sha256:b187a46c1de4 of packages/ui/src/styles/admin.css_
