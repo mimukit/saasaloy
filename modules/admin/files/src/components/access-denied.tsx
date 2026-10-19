@@ -1,12 +1,13 @@
 import { ShieldAlertIcon } from "lucide-react";
 
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
+  Empty,
+  EmptyContent,
+  EmptyDescription,
+  EmptyHeader,
+  EmptyMedia,
+  EmptyTitle,
+} from "@repo/ui/components/admin/empty";
 
 import type { AdminSession } from "@admin/lib/auth";
 import { SignOutButton } from "@admin/components/sign-out-button";
@@ -17,30 +18,30 @@ import { SignOutButton } from "@admin/components/sign-out-button";
 // Telling them plainly that the account lacks the role, and offering the one action that
 // can change the outcome, ends the interaction instead of spinning it.
 //
-// It renders inside AppShell, in the content panel, like every other screen. The rail and
-// nav panel around it are inert for this visitor — every link they hold re-runs the guard
+// It renders inside AppShell, in the content panel, like every other screen. The sidebar
+// around it is inert for this visitor — every link it holds re-runs the guard
 // and lands back here — but a screen that drops the shell reads as a crash rather than a
 // refusal, and the guard, not the chrome, is what keeps the data out of reach.
 export function AccessDenied({ session }: { session: AdminSession }) {
   return (
     // A `div`, not a `main`: this renders inside AppShell's content panel, which is
     // already the document's `<main>`, and a nested main landmark breaks landmark
-    // navigation for a screen reader.
-    <div className="mx-auto flex h-full max-w-lg items-center px-6 py-10">
-      <Card className="w-full">
-        <CardHeader>
-          <ShieldAlertIcon className="text-muted-foreground size-5" />
-          <CardTitle>This account cannot open the admin app</CardTitle>
-          <CardDescription>
-            You are signed in as {session.user.email}, but the account does not
-            carry the admin role. Ask an existing admin to grant it, then sign
-            in again.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <SignOutButton variant="outline" />
-        </CardContent>
-      </Card>
-    </div>
+    // navigation for a screen reader. Empty renders a div.
+    <Empty className="min-h-full">
+      <EmptyHeader>
+        <EmptyMedia variant="icon">
+          <ShieldAlertIcon />
+        </EmptyMedia>
+        <EmptyTitle>This account cannot open the admin app</EmptyTitle>
+        <EmptyDescription>
+          You are signed in as {session.user.email}, but the account does not
+          carry the admin role. Ask an existing admin to grant it, then sign in
+          again.
+        </EmptyDescription>
+      </EmptyHeader>
+      <EmptyContent>
+        <SignOutButton variant="outline" />
+      </EmptyContent>
+    </Empty>
   );
 }

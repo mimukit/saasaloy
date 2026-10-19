@@ -2,11 +2,11 @@ import { useRouter } from "@tanstack/react-router";
 import { LogOutIcon } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@repo/ui/components/button";
+import { Button } from "@repo/ui/components/admin/button";
 
 import { auth, forgetSession } from "@admin/lib/auth";
 
-// Sign-out is the one control several surfaces need: the rail's account menu has it, and
+// Sign-out is the one control several surfaces need: the sidebar's account menu has it, and
 // so does the access-denied panel a signed-in non-admin lands on. The order of operations
 // lives in this one hook so those surfaces share it rather than each re-deriving it.
 //
@@ -14,7 +14,7 @@ import { auth, forgetSession } from "@admin/lib/auth";
 // dropped, and only then does the router re-run the root guard. Invalidating first would
 // re-run `beforeLoad` against the stale cache and put the user straight back where they were.
 //
-// It is a hook rather than only a button because the rail renders sign-out as a menu item.
+// It is a hook rather than only a button because the sidebar renders sign-out as a menu item.
 // A menu's own item element carries the roving focus and the keyboard handling, so a button
 // smuggled inside it would be unreachable by keyboard.
 export function useSignOut() {
@@ -58,19 +58,13 @@ export function SignOutButton({
 
   return (
     <div className="flex flex-col gap-2">
-      <Button
-        variant={variant}
-        size="sm"
-        className="w-full justify-start"
-        disabled={pending}
-        onClick={signOut}
-      >
-        <LogOutIcon data-icon="inline-start" />
+      <Button variant={variant} size="sm" loading={pending} onClick={signOut}>
+        <LogOutIcon />
         {pending ? "Signing out…" : "Sign out"}
       </Button>
 
       {error ? (
-        <p role="alert" className="text-destructive text-sm">
+        <p role="alert" className="text-destructive-foreground text-sm">
           {error}
         </p>
       ) : null}

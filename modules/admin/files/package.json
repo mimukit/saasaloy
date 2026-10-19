@@ -16,7 +16,6 @@
     "@repo/ui": "workspace:*",
     "@tanstack/react-query": "5.104.0",
     "@tanstack/react-router": "1.170.41",
-    "@tanstack/react-table": "9.2.4",
     "hono": "4.13.12",
     "lucide-react": "1.49.0",
     "react": "19.3.0",

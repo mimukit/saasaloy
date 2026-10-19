@@ -1,7 +1,7 @@
 import { cn } from "@repo/ui/lib/utils";
 
-// The chip row under a page header — the reference's "2 Open" pill, generalised to the
-// set of views a screen can be narrowed to.
+// The chip row under a page header: the set of views a screen can be narrowed to, each
+// with its count. The pressed chip takes the hover tone and a hairline.
 //
 // Every chip is a real `button`, not a styled `div`, so it is reachable by keyboard and
 // announced as pressable. The selected one carries `aria-pressed`, and the styling keys
@@ -50,14 +50,16 @@ export function FilterChips({
             onSelect(chip.id);
           }}
           className={cn(
-            "text-muted-foreground focus-visible:ring-ring/50 flex h-6 items-center gap-1.5 rounded-full px-2.5 text-xs font-medium whitespace-nowrap transition-colors focus-visible:ring-[3px] focus-visible:outline-none",
-            "hover:bg-accent hover:text-accent-foreground",
-            "aria-pressed:bg-accent aria-pressed:text-accent-foreground"
+            "text-muted-foreground focus-visible:ring-ring flex h-7 items-center gap-1.5 rounded-md border border-transparent px-2.5 text-[0.8125rem] font-medium whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-offset-1 focus-visible:outline-none",
+            "hover:bg-accent hover:text-foreground",
+            "aria-pressed:bg-accent aria-pressed:text-foreground aria-pressed:border-border"
           )}
         >
           {chip.label}
           {chip.count === undefined ? null : (
-            <span className="tabular-nums opacity-70">{chip.count}</span>
+            <span className="text-muted-foreground tabular-nums">
+              {chip.count}
+            </span>
           )}
         </button>
       ))}

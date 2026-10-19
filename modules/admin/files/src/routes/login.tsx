@@ -2,9 +2,11 @@ import { createFileRoute, useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 import type { FormEvent } from "react";
 
-import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+import { siteName } from "@repo/ui";
+import { BrandMark } from "@repo/ui/blocks/admin/brand-mark";
+import { Button } from "@repo/ui/components/admin/button";
+import { Field, FieldLabel } from "@repo/ui/components/admin/field";
+import { Input } from "@repo/ui/components/admin/input";
 
 import { auth, forgetSession } from "@admin/lib/auth";
 import { resolveDestination, toInternalPath } from "@admin/lib/redirect";
@@ -86,61 +88,57 @@ function LoginScreen() {
     setPending(false);
   }
 
-  // The shell's own geometry, minus the shell: the same canvas, the same rounded panel
-  // and the same hairline as a content panel, with one panel centred on it instead of
-  // three side by side. Signing in then swaps this panel for the full layout rather than
-  // changing the surface under it.
+  // One card on the shell's canvas, with the brand mark the sidebar carries. Signing in
+  // swaps this card for the full layout on the same surface rather than changing the
+  // surface under it.
   return (
     <main className="bg-background flex min-h-dvh items-center justify-center p-4">
-      <div className="bg-card text-card-foreground border-border w-full max-w-sm rounded-xl border">
-        <div className="border-border border-b px-5 py-4">
-          <h1 className="text-lg font-semibold tracking-tight">Sign in</h1>
-          <p className="text-muted-foreground mt-0.5 text-sm">
-            The admin app is open to admin accounts only.
-          </p>
-        </div>
+      <div className="bg-card text-card-foreground border-border w-full max-w-sm rounded-2xl border p-6 shadow-xs/5 sm:p-7">
+        <BrandMark className="mb-5" />
+        <h1 className="text-lg font-semibold tracking-tight">
+          Sign in to {siteName} admin
+        </h1>
+        <p className="text-muted-foreground mt-1 text-sm">
+          Use an account with the admin role.
+        </p>
 
-        <div className="px-5 py-4">
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="email">Email</Label>
-              <Input
-                id="email"
-                type="email"
-                name="email"
-                autoComplete="username"
-                required
-                value={email}
-                onChange={(event) => setEmail(event.target.value)}
-              />
-            </div>
+        <form onSubmit={handleSubmit} className="mt-6 flex flex-col gap-4">
+          <Field>
+            <FieldLabel>Email</FieldLabel>
+            <Input
+              type="email"
+              name="email"
+              autoComplete="username"
+              required
+              value={email}
+              onChange={(event) => setEmail(event.target.value)}
+            />
+          </Field>
 
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="password">Password</Label>
-              <Input
-                id="password"
-                type="password"
-                name="password"
-                autoComplete="current-password"
-                required
-                value={password}
-                onChange={(event) => setPassword(event.target.value)}
-              />
-            </div>
+          <Field>
+            <FieldLabel>Password</FieldLabel>
+            <Input
+              type="password"
+              name="password"
+              autoComplete="current-password"
+              required
+              value={password}
+              onChange={(event) => setPassword(event.target.value)}
+            />
+          </Field>
 
-            {/* `role="alert"` announces the failure to a screen reader without moving focus,
-                so the caret stays in the field the visitor is about to correct. */}
-            {error ? (
-              <p role="alert" className="text-destructive text-sm">
-                {error}
-              </p>
-            ) : null}
+          {/* `role="alert"` announces the failure to a screen reader without moving focus,
+              so the caret stays in the field the visitor is about to correct. */}
+          {error ? (
+            <p role="alert" className="text-destructive-foreground text-sm">
+              {error}
+            </p>
+          ) : null}
 
-            <Button type="submit" disabled={pending}>
-              {pending ? "Signing in…" : "Sign in"}
-            </Button>
-          </form>
-        </div>
+          <Button type="submit" size="lg" loading={pending} className="mt-1">
+            Sign in
+          </Button>
+        </form>
       </div>
     </main>
   );

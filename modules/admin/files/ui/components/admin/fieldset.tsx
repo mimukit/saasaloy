@@ -1,0 +1,30 @@
+import { Fieldset as FieldsetPrimitive } from "@base-ui/react/fieldset";
+import type React from "react";
+import { cn } from "@repo/ui/lib/utils";
+
+export function Fieldset({
+  className,
+  ...props
+}: FieldsetPrimitive.Root.Props): React.ReactElement {
+  return (
+    <FieldsetPrimitive.Root
+      className={className}
+      data-slot="fieldset"
+      {...props}
+    />
+  );
+}
+export function FieldsetLegend({
+  className,
+  ...props
+}: FieldsetPrimitive.Legend.Props): React.ReactElement {
+  return (
+    <FieldsetPrimitive.Legend
+      className={cn("text-foreground font-semibold", className)}
+      data-slot="fieldset-legend"
+      {...props}
+    />
+  );
+}
+
+export { Fieldset as FieldsetPrimitive } from "@base-ui/react/fieldset";
