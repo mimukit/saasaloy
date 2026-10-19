@@ -162,6 +162,40 @@ export default defineConfig({
       rules: { "unicorn/filename-case": "off" },
     },
 
+    // The admin app has its own primitive set in packages/ui/src/components/admin/, which
+    // `saasaloy add admin` writes. Its names repeat the base ones (`button`, `card`), so an
+    // editor's autocomplete offers both and the wrong one renders with no error, in the
+    // web app's styling. Inside the admin app and the admin folders of @repo/ui, a base
+    // primitive or a base block with an admin twin is a lint error. A project without the
+    // admin app has no file under these globs, so the rule never fires there.
+    {
+      files: [
+        "apps/admin/**",
+        "packages/ui/src/blocks/admin/**",
+        "packages/ui/src/components/admin/**",
+        "packages/ui/src/containers/admin/**",
+      ],
+      rules: {
+        "no-restricted-imports": [
+          "error",
+          {
+            patterns: [
+              {
+                group: [
+                  "@repo/ui/components/*",
+                  "!@repo/ui/components/admin/*",
+                  "@repo/ui/blocks/error-state",
+                  "@repo/ui/blocks/theme-toggle",
+                ],
+                message:
+                  "Admin code uses the admin set: import from @repo/ui/components/admin/* and @repo/ui/blocks/admin/*.",
+              },
+            ],
+          },
+        ],
+      },
+    },
+
     // The design system is vendored from shadcn and re-synced with
     // `pnpm --filter @repo/ui exec shadcn add …`. `Label` is a primitive: the control
     // it labels is supplied by the call site, which this rule cannot see.

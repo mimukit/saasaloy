@@ -1,6 +1,6 @@
 ---
 name: saasaloy-design
-description: Keep apps/web/DESIGN.md true of the Saasaloy design layer. Use theme to choose and apply a registry style, update after packages/ui changes, or audit the design contract for token drift.
+description: Keep apps/web/DESIGN.md, and apps/admin/DESIGN.md when the admin app is installed, true of the Saasaloy design layer. Use theme to choose and apply a registry style to the web app, update after packages/ui changes, or audit a design contract for token drift.
 derived-from: "designkit (MIT), narrowed 2026-08-09"
 ---
 
@@ -8,9 +8,16 @@ derived-from: "designkit (MIT), narrowed 2026-08-09"
 
 This skill records the design system that the project already uses. It writes no components and no pages. Use `uikit` for that work.
 
-The token home is `packages/ui/src/styles/web.css`. The design contract is `apps/web/DESIGN.md`. `web.css` imports `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values.
+Each app has its own token home and its own contract:
 
-This skill covers the web app only. Another app's theme file, such as the admin module's `packages/ui/src/styles/admin.css`, is out of scope. Do not read its tokens into this contract, and do not edit it.
+| App | Token home | Contract |
+|-----|------------|----------|
+| web | `packages/ui/src/styles/web.css` | `apps/web/DESIGN.md` |
+| admin, when installed | `packages/ui/src/styles/admin.css` | `apps/admin/DESIGN.md` |
+
+Both theme files import `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values. Ask which app when the user does not say, and work on one contract at a time. Never read one app's tokens into the other app's contract.
+
+The admin contract also covers the admin primitive set in `packages/ui/src/components/admin/`, its blocks in `packages/ui/src/blocks/admin/` and its containers in `packages/ui/src/containers/admin/`. The web contract covers the base `components/`, the other `blocks/` and the web app.
 
 The grounding rule controls every mode. Every token value must exist in the project code or in the Tailwind utility that the project uses. Do not choose a nearby value because it looks cleaner.
 
@@ -26,15 +33,17 @@ If the user does not name a mode, ask which mode to use. Do not choose between a
 
 | Mode | Files |
 |------|-------|
-| `theme` | `packages/ui/src/styles/web.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
-| `update` | `apps/web/DESIGN.md` only |
+| `theme` | web only: `packages/ui/src/styles/web.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
+| `update` | the chosen app's `DESIGN.md` only |
 | `audit` | none |
+
+`theme` never runs for the admin app. A preset targets `web.css` through `components.json`, and nothing writes to `admin.css` but a person. When the user asks to restyle the admin app, say so, and offer `update` after they edit `admin.css`.
 
 Do not edit `components.json` during a theme change. Do not add a dependency, script, component, page, or Tailwind class.
 
 ## Shared rules
 
-Read `apps/web/DESIGN.md`, `packages/ui/src/styles/web.css`, `packages/ui/src/styles/globals.css`, and all files under `packages/ui/src/` before you derive tokens. Read the application files that use `@repo/ui` when you need to confirm usage.
+Read the chosen app's `DESIGN.md` and theme file, `packages/ui/src/styles/globals.css`, and the files under `packages/ui/src/` that the app renders before you derive tokens. Read the application files that use `@repo/ui` when you need to confirm usage.
 
 Find the system in this order. Stop at the first match.
 
@@ -65,11 +74,11 @@ Use only these component token keys: `backgroundColor`, `textColor`, `typography
 
 Keep the sections in this order: Overview, Colors, Typography, Layout, Elevation & Depth, Shapes, Components, Do's and Don'ts, Motion, Dark Mode.
 
-The seed is a one-time base file. ADR 0022 means Saasaloy has no update path for it. The fingerprint detects drift, and this skill repairs the contract.
+The web contract is a one-time base seed. ADR 0022 means Saasaloy has no update path for it. The admin contract is an admin module file, so `saasaloy update` lists an edited copy in its merge plan. In both cases the fingerprint detects drift, and this skill repairs the contract.
 
 ## Fingerprint
 
-The fingerprint covers only `packages/ui/src/styles/web.css`. It does not cover `globals.css`, components, blocks, or other files.
+The fingerprint covers only the chosen app's theme file: `packages/ui/src/styles/web.css` for the web contract, `packages/ui/src/styles/admin.css` for the admin contract. It does not cover `globals.css`, components, blocks, or other files. The commands and stamps below name `web.css`; substitute `admin.css` for the admin contract.
 
 Compute the fingerprint from the file bytes. Use the first 12 lowercase hexadecimal characters of SHA-256.
 
@@ -93,10 +102,11 @@ Do not change the fingerprint during `audit`.
 
 ## Official linter
 
-Run the official linter after each write.
+Run the official linter after each write, on the contract you wrote.
 
 ```sh
 pnpm dlx @google/design.md lint apps/web/DESIGN.md
+pnpm dlx @google/design.md lint apps/admin/DESIGN.md
 ```
 
 The format is alpha. Read the current schema when a lint finding conflicts with this skill.
@@ -179,7 +189,7 @@ Audit is read-only. Do not edit or format any file.
 
 ### 1. Check the fingerprint offline
 
-Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from `web.css`.
+Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from the chosen app's theme file, `web.css` or `admin.css`.
 
 - `current` means the two fingerprints match.
 - `stale` means they differ.
@@ -193,7 +203,7 @@ Use `orphaned` for a documented token with no current source. Use `uncovered` fo
 
 ### 3. Lint when possible
 
-Run `pnpm dlx @google/design.md lint apps/web/DESIGN.md` when the tool and network are available. If it cannot run, state that the fingerprint check ran offline and structural lint did not run.
+Run `pnpm dlx @google/design.md lint apps/<app>/DESIGN.md` for the chosen app when the tool and network are available. If it cannot run, state that the fingerprint check ran offline and structural lint did not run.
 
 ### 4. Report
 
