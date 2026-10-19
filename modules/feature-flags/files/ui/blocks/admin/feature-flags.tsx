@@ -1,25 +1,33 @@
+import { FlagIcon } from "lucide-react";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
+import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button } from "@repo/ui/components/admin/button";
 import {
   Card,
-  CardContent,
   CardDescription,
   CardHeader,
+  CardPanel,
   CardTitle,
-} from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+} from "@repo/ui/components/admin/card";
+import { Field, FieldLabel } from "@repo/ui/components/admin/field";
+import { Input } from "@repo/ui/components/admin/input";
+import { Label } from "@repo/ui/components/admin/label";
+import { Switch } from "@repo/ui/components/admin/switch";
 import { cn } from "@repo/ui/lib/utils";
 
-// The Flags screen's markup, and nothing else.
+// The Flags screen's editor, and nothing else. It is the body of the page: the route
+// renders the PageHeader above it and the PageBody around it, so this block writes no
+// heading, no outer padding and no page width of its own. It is built on the admin set
+// only, because the lint guard on `blocks/admin/**` bans the base primitives.
 //
 // **This block knows nothing about the network.** It takes the rows and four callbacks and
 // calls them. Where a toggle goes, which client sends it, and what a failure means are the
 // app's business, so `packages/ui` imports no api package and no http client — the same rule
-// the waitlist block follows. `apps/admin/src/routes/flags.tsx` supplies the functions.
+// the waitlist block follows. `apps/admin/src/routes/flags.tsx` supplies the functions, and
+// it is also the one that raises a toast for each result, because only it sees the answer.
 //
 // It also knows nothing about the cache. Everything it renders came from the database, which
 // is what stops the screen showing an operator their own write stale: the published document
@@ -28,7 +36,8 @@ import { cn } from "@repo/ui/lib/utils";
 //
 // The maintenance flag is pulled out of the list into its own panel. It is the one flag whose
 // effect is the whole site, and burying it in a list sorted by key would put it between two
-// ordinary rollouts.
+// ordinary rollouts. It keeps a labelled button rather than a switch for the same reason: a
+// switch is easy to brush past, and "Close the site" says what the click does.
 
 export interface FlagRow {
   key: string;
@@ -69,8 +78,6 @@ export interface FeatureFlagsProps {
   onClearOverride: (key: string, tenantId: string) => void;
   /** Set while a save is in flight, so the controls can refuse a second click. */
   busy?: boolean;
-  /** Shown above the list when the last action failed. */
-  error?: string | null;
   /** The reserved key the maintenance panel is built from. */
   maintenanceKey?: string;
 }
@@ -82,23 +89,13 @@ export function FeatureFlags({
   onSaveOverride,
   onClearOverride,
   busy = false,
-  error = null,
   maintenanceKey = "system.maintenance",
 }: FeatureFlagsProps) {
   const maintenance = flags.find((flag) => flag.key === maintenanceKey);
   const rest = flags.filter((flag) => flag.key !== maintenanceKey);
 
   return (
-    <div className="grid gap-6">
-      {error !== null && error !== "" ? (
-        <p
-          role="alert"
-          className="border-destructive/40 text-destructive rounded-lg border px-3 py-2 text-sm"
-        >
-          {error}
-        </p>
-      ) : null}
-
+    <div className="grid gap-4">
       {maintenance ? (
         <Card
           className={cn(
@@ -106,7 +103,7 @@ export function FeatureFlags({
           )}
         >
           <CardHeader>
-            <CardTitle className="flex items-center gap-2">
+            <CardTitle className="flex items-center gap-2 text-sm">
               Maintenance mode
               {maintenance.enabled ? (
                 <Badge variant="destructive">Site closed</Badge>
@@ -118,10 +115,10 @@ export function FeatureFlags({
               reach every location.
             </CardDescription>
           </CardHeader>
-          <CardContent>
+          <CardPanel className="pt-0">
             <Button
               variant={maintenance.enabled ? "destructive" : "outline"}
-              className="min-h-11"
+              size="sm"
               disabled={busy}
               aria-pressed={maintenance.enabled}
               onClick={() => {
@@ -133,23 +130,25 @@ export function FeatureFlags({
             >
               {maintenance.enabled ? "Reopen the site" : "Close the site"}
             </Button>
-          </CardContent>
+          </CardPanel>
         </Card>
       ) : null}
 
       <Card>
         <CardHeader>
-          <CardTitle>Flags</CardTitle>
+          <CardTitle className="text-sm">Flags</CardTitle>
           <CardDescription>
             A value change takes effect without a deploy. A new key does not —
             add it to the flags array in packages/feature-flags and ship.
           </CardDescription>
         </CardHeader>
-        <CardContent className="grid gap-3">
+        <CardPanel className="grid gap-3 pt-0">
           {rest.length === 0 ? (
-            <p className="text-muted-foreground text-sm">
-              No flags are registered yet.
-            </p>
+            <EmptyState
+              icon={FlagIcon}
+              title="No flags are registered yet"
+              description="Add a key to the flags array in packages/feature-flags and deploy. It shows here with its code default."
+            />
           ) : (
             rest.map((flag) => (
               <FlagCard
@@ -165,7 +164,7 @@ export function FeatureFlags({
               />
             ))
           )}
-        </CardContent>
+        </CardPanel>
       </Card>
     </div>
   );
@@ -236,33 +235,32 @@ function FlagCard({
           ) : null}
         </div>
 
-        <Button
-          variant={flag.enabled ? "default" : "outline"}
-          size="sm"
-          className="min-h-11 md:min-h-8"
+        {/* The switch shows the server's value, not a local one: it flips when the refetch
+            after the save lands, so a refused write never leaves it showing a lie. */}
+        <Switch
+          checked={flag.enabled}
           disabled={busy}
-          aria-pressed={flag.enabled}
-          onClick={() => {
+          aria-label={flag.key}
+          onCheckedChange={(checked) => {
             onSave(flag.key, {
-              enabled: !flag.enabled,
-              // The server's value, not the draft: On/Off must not commit an
+              enabled: checked,
+              // The server's value, not the draft: the switch must not commit an
               // uncommitted slider drag.
               percentage: isPercentage ? serverPercentage : null,
             });
           }}
-        >
-          {flag.enabled ? "On" : "Off"}
-        </Button>
+        />
       </div>
 
       {isPercentage ? (
         <div className="flex items-center gap-3">
           <Label
             htmlFor={`${flag.key}-percentage`}
-            className="text-muted-foreground shrink-0 text-xs"
+            className="text-muted-foreground shrink-0 text-xs sm:text-xs"
           >
             Rollout
           </Label>
+          {/* A native range input: the admin set ports no slider. */}
           <input
             id={`${flag.key}-percentage`}
             type="range"
@@ -274,7 +272,7 @@ function FlagCard({
             onChange={(event) => {
               setPercentage(Number(event.target.value));
             }}
-            className="accent-primary h-11 min-w-0 flex-1 md:h-8"
+            className="accent-primary h-8 min-w-0 flex-1"
           />
           <span className="w-12 shrink-0 text-right text-sm tabular-nums">
             {percentage}%
@@ -282,7 +280,6 @@ function FlagCard({
           <Button
             variant="outline"
             size="sm"
-            className="min-h-11 md:min-h-8"
             disabled={busy || !dirty}
             onClick={() => {
               onSave(flag.key, { enabled: flag.enabled, percentage });
@@ -298,7 +295,7 @@ function FlagCard({
           {overrides.map((override) => (
             <li
               key={override.tenantId}
-              className="bg-muted/40 flex items-center justify-between gap-2 rounded-md px-2 py-1.5 text-sm"
+              className="bg-muted/40 flex items-center justify-between gap-2 rounded-md px-2 py-1 text-sm"
             >
               <span className="truncate">
                 <code className="text-xs">{override.tenantId}</code>
@@ -311,8 +308,7 @@ function FlagCard({
               </span>
               <Button
                 variant="ghost"
-                size="sm"
-                className="min-h-11 md:min-h-8"
+                size="xs"
                 disabled={busy}
                 onClick={() => {
                   onClearOverride(flag.key, override.tenantId);
@@ -325,22 +321,27 @@ function FlagCard({
         </ul>
       ) : null}
 
-      <form onSubmit={addOverride} className="flex items-center gap-2">
-        <Input
-          value={tenantId}
-          disabled={busy}
-          onChange={(event) => {
-            setTenantId(event.target.value);
-          }}
-          placeholder="Tenant id"
-          aria-label={`Tenant id to override ${flag.key} for`}
-          className="h-11 md:h-8"
-        />
+      <form onSubmit={addOverride} className="flex items-end gap-2">
+        {/* The label is for screen readers only: the placeholder carries it on screen,
+            and a visible "Tenant id" under every flag would double the card's height. */}
+        <Field className="min-w-0 flex-1">
+          <FieldLabel className="sr-only">
+            Tenant id to override {flag.key} for
+          </FieldLabel>
+          <Input
+            value={tenantId}
+            disabled={busy}
+            onChange={(event) => {
+              setTenantId(event.target.value);
+            }}
+            placeholder="Tenant id"
+          />
+        </Field>
         <Button
           type="submit"
           variant="outline"
           size="sm"
-          className="min-h-11 shrink-0 md:min-h-8"
+          className="shrink-0"
           disabled={busy}
         >
           Override on

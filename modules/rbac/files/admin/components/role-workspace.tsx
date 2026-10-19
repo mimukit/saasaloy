@@ -4,24 +4,66 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
-import { useState } from "react";
-import type { FormEvent } from "react";
+import { LockIcon, PlusIcon, ShieldIcon, UsersIcon } from "lucide-react";
+import { useMemo, useState } from "react";
+import type { SubmitEvent } from "react";
 
 import { BASE_ROLES, roles as baseRoles } from "@repo/auth/access";
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
+import { DataTable } from "@repo/ui/blocks/admin/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
+import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@repo/ui/components/admin/alert";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@repo/ui/components/admin/alert-dialog";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button } from "@repo/ui/components/admin/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "@repo/ui/components/admin/dialog";
+import { Field, FieldLabel } from "@repo/ui/components/admin/field";
+import { Input } from "@repo/ui/components/admin/input";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/components/admin/select";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
+import {
+  Tabs,
+  TabsList,
+  TabsPanel,
+  TabsTab,
+} from "@repo/ui/components/admin/tabs";
+import { toastManager } from "@repo/ui/components/admin/toast";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 
 import {
+  PERMISSION_COUNT,
   PermissionGrid,
+  countHeld,
   togglePermission,
 } from "@admin/components/permission-grid";
 import type {
@@ -30,8 +72,15 @@ import type {
 } from "@admin/components/permission-grid";
 import { auth } from "@admin/lib/auth";
 
-// The `/roles` screen's three panels: the locked base roles, the organization's custom
-// roles, and the member list that assigns them.
+// The whole `/roles` page below the frame: the header with its "New role" action, a tab
+// strip, the roles table with the selected role's detail panel, and the member table that
+// assigns them. It renders PageLayout itself because the selection, the dialog and every
+// mutation live here; the route only decides `canManage`.
+//
+// Base and custom roles share ONE table. A base role is a locked row whose panel shows its
+// grid read-only; a custom role's panel carries the editor, the save and the delete. The
+// permission grid stays this module's own component, inside the panel and the create
+// dialog, because no admin primitive is a resource-by-action matrix.
 //
 // EVERY CONTROL HERE IS COSMETIC. `canManage` hides the create, edit, delete and assign
 // controls from a caller `can()` refuses, and hiding is all it does — Better Auth checks
@@ -44,11 +93,125 @@ interface OrganizationSummary {
   name: string;
 }
 
-/** A base role flattened out of `access.ts` for the read-only panel. */
+/** One row of the roles table: a base role from `access.ts` or a custom one. */
+interface RoleRow {
+  /** `base:` or `custom:` plus the name, so the two kinds can never share a row id. */
+  id: string;
+  name: string;
+  locked: boolean;
+  permission: ReadonlyPermissionMap;
+  /** The emails of the members holding this role right now. */
+  holders: readonly string[];
+}
+
+/** What a member row's role picker needs. */
+interface MemberAssignment {
+  roles: readonly string[];
+  disabled: boolean;
+  onChange: (role: string) => void;
+}
+
+/** One row of the members table, flattened out of the plugin's member record. */
+interface MemberRow {
+  id: string;
+  name: string;
+  email: string;
+  role: string;
+  /** The role picker's inputs, or `null` when the caller may not assign. */
+  assignment: MemberAssignment | null;
+}
+
+/** A base role flattened out of `access.ts` for the locked rows. */
 const BASE_ROLE_ROWS = BASE_ROLES.map((name) => ({
   name,
   permission: baseRoles[name].statements satisfies ReadonlyPermissionMap,
 }));
+
+const TAB_ROLES = "roles";
+const TAB_MEMBERS = "members";
+
+// The roles table's shape, at module scope: it reads only the row, so it is a constant
+// rather than an array rebuilt every render.
+const ROLE_COLUMNS: readonly DataTableColumn<RoleRow>[] = [
+  {
+    id: "name",
+    header: "Role",
+    value: (role) => role.name,
+    sortable: true,
+    cell: (role) => <span className="font-medium">{role.name}</span>,
+  },
+  {
+    id: "kind",
+    header: "Type",
+    value: (role) => (role.locked ? "base" : "custom"),
+    sortable: true,
+    // A custom role is the thing this screen exists to manage, so it takes the blue pill;
+    // a base role is fixed in code and stays neutral, with the lock beside it.
+    cell: (role) =>
+      role.locked ? (
+        <Badge variant="secondary">
+          <LockIcon />
+          Base
+        </Badge>
+      ) : (
+        <StatusPill label="custom" tone="open" />
+      ),
+  },
+  {
+    id: "permissions",
+    header: "Permissions",
+    value: (role) => countHeld(role.permission),
+    sortable: true,
+    align: "end",
+    cell: (role) => (
+      <span className="tabular-nums">
+        {countHeld(role.permission)} of {PERMISSION_COUNT}
+      </span>
+    ),
+  },
+  {
+    id: "members",
+    header: "Members",
+    value: (role) => role.holders.length,
+    sortable: true,
+    align: "end",
+    cell: (role) => <span className="tabular-nums">{role.holders.length}</span>,
+  },
+];
+
+// The members table's shape. The role cell reads the picker's inputs off the row, so no
+// column needs the screen's state and no component is defined during render.
+const MEMBER_COLUMNS: readonly DataTableColumn<MemberRow>[] = [
+  {
+    id: "name",
+    header: "Name",
+    value: (member) => member.name,
+    sortable: true,
+    cell: (member) => <span className="font-medium">{member.name}</span>,
+  },
+  {
+    id: "email",
+    header: "Email",
+    value: (member) => member.email,
+    sortable: true,
+  },
+  {
+    id: "role",
+    header: "Role",
+    value: (member) => member.role,
+    sortable: true,
+    cell: (member) =>
+      member.assignment === null ? (
+        <Badge variant="secondary">{member.role}</Badge>
+      ) : (
+        <MemberRoleSelect
+          role={member.role}
+          email={member.email}
+          {...member.assignment}
+        />
+      ),
+  },
+];
 
 export function RoleWorkspace({
   organization,
@@ -61,8 +224,11 @@ export function RoleWorkspace({
   const queryClient = useQueryClient();
   const [newRoleName, setNewRoleName] = useState("");
   const [newRolePermission, setNewRolePermission] = useState<PermissionMap>({});
+  const [createOpen, setCreateOpen] = useState(false);
   const [editing, setEditing] = useState<string | null>(null);
   const [draft, setDraft] = useState<PermissionMap>({});
+  const [tab, setTab] = useState<string>(TAB_ROLES);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   const rolesQuery = queryOptions({
     queryKey: ["organizations", organization.id, "roles"],
@@ -93,26 +259,17 @@ export function RoleWorkspace({
   const members = useQuery(membersQuery);
 
   /**
-   * Who holds each role right now. `deleteRole` does NOT check for holders in
-   * `better-auth@1.7.2`, and a member left holding a deleted name resolves to no
-   * statements at all — a silent lockout rather than a demotion. So delete is disabled
-   * while anyone holds the role, and the holders are named so the operator knows who to
-   * reassign first.
-   */
-  const holdersOf = (role: string) =>
-    (members.data ?? []).filter((member) => member.role === role);
-
-  /**
    * The owners, counted for the last-owner rule. Better Auth refuses to demote the final
-   * owner server-side; the select disables the option so the operator does not have to
-   * read an error to learn it.
+   * owner server-side; the select disables itself so the operator does not have to read
+   * an error to learn it.
    */
   const ownerCount = (members.data ?? []).filter(
     (member) => member.role === "owner"
   ).length;
 
-  const refreshRoles = () =>
-    queryClient.invalidateQueries({ queryKey: rolesQuery.queryKey });
+  const refreshRoles = async () => {
+    await queryClient.invalidateQueries({ queryKey: rolesQuery.queryKey });
+  };
 
   const createRole = useMutation({
     mutationFn: async () => {
@@ -126,9 +283,22 @@ export function RoleWorkspace({
       }
     },
     onSuccess: async () => {
+      toastManager.add({
+        type: "success",
+        title: "Role created",
+        description: `${newRoleName.trim()} can now be assigned to a member.`,
+      });
       setNewRoleName("");
       setNewRolePermission({});
+      setCreateOpen(false);
       await refreshRoles();
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The role was not created",
+        description: error.message,
+      });
     },
   });
 
@@ -143,9 +313,21 @@ export function RoleWorkspace({
         throw new Error(result.error.message);
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, roleName) => {
+      toastManager.add({
+        type: "success",
+        title: "Permissions saved",
+        description: `${roleName} takes the new permissions on the next request.`,
+      });
       setEditing(null);
       await refreshRoles();
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The permissions were not saved",
+        description: error.message,
+      });
     },
   });
 
@@ -159,7 +341,24 @@ export function RoleWorkspace({
         throw new Error(result.error.message);
       }
     },
-    onSuccess: refreshRoles,
+    onSuccess: async (_data, roleName) => {
+      toastManager.add({
+        type: "success",
+        title: "Role deleted",
+        description: `${roleName} is gone from this organization.`,
+      });
+      // The row is about to leave the table, so its panel closes with it.
+      setSelectedId(null);
+      setEditing(null);
+      await refreshRoles();
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The role was not deleted",
+        description: error.message,
+      });
+    },
   });
 
   const assignRole = useMutation({
@@ -179,12 +378,24 @@ export function RoleWorkspace({
         throw new Error(result.error.message);
       }
     },
-    onSuccess: async () => {
+    onSuccess: async (_data, { role }) => {
+      toastManager.add({
+        type: "success",
+        title: "Role changed",
+        description: `The member now holds ${role}.`,
+      });
       await queryClient.invalidateQueries({ queryKey: membersQuery.queryKey });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The role was not changed",
+        description: error.message,
+      });
     },
   });
 
-  const submitNewRole = (event: FormEvent) => {
+  const submitNewRole = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     createRole.mutate();
   };
@@ -194,178 +405,273 @@ export function RoleWorkspace({
     ...(customRoles.data ?? []).map((role) => role.role),
   ];
 
+  // Base rows first, in `access.ts` order, then the custom ones. The holder emails are
+  // folded into the row so the table and the panel read the same list.
+  const roleRows = useMemo<readonly RoleRow[]>(() => {
+    /**
+     * Who holds each role right now. `deleteRole` does NOT check for holders in
+     * `better-auth@1.7.2`, and a member left holding a deleted name resolves to no
+     * statements at all — a silent lockout rather than a demotion. So delete is disabled
+     * while anyone holds the role, and the holders are named so the operator knows who to
+     * reassign first.
+     */
+    const holderEmails = (role: string) =>
+      (members.data ?? [])
+        .filter((member) => member.role === role)
+        .map((member) => member.user.email);
+    return [
+      ...BASE_ROLE_ROWS.map((role) => ({
+        id: `base:${role.name}`,
+        name: role.name,
+        locked: true,
+        permission: role.permission,
+        holders: holderEmails(role.name),
+      })),
+      ...(customRoles.data ?? []).map((role) => ({
+        id: `custom:${role.role}`,
+        name: role.role,
+        locked: false,
+        permission: (role.permission ?? {}) satisfies PermissionMap,
+        holders: holderEmails(role.role),
+      })),
+    ];
+  }, [customRoles.data, members.data]);
+
+  // Each row carries its own role picker's inputs — the roles on offer, whether it is
+  // locked, what a pick does — so the column shape below can stay at module scope while
+  // the cell still reads the screen's state. `null` is the read-only caller's badge.
+  const memberRows: readonly MemberRow[] = (members.data ?? []).map(
+    (member) => ({
+      id: member.id,
+      name: member.user.name || member.user.email,
+      email: member.user.email,
+      role: member.role,
+      assignment: canManage
+        ? {
+            roles: assignableRoles,
+            // The last owner cannot be demoted. Better Auth refuses it server-side
+            // too; disabling here saves the operator an error they cannot act on.
+            disabled:
+              (member.role === "owner" && ownerCount <= 1) ||
+              assignRole.isPending,
+            onChange: (role: string) => {
+              assignRole.mutate({ memberId: member.id, role });
+            },
+          }
+        : null,
+    })
+  );
+
+  const selected = roleRows.find((role) => role.id === selectedId);
+
+  const closePanel = () => {
+    setSelectedId(null);
+    setEditing(null);
+  };
+
   return (
-    <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Base roles</CardTitle>
-          <CardDescription>
-            The three roles every organization starts with. They are locked:
-            edit packages/auth/src/access.ts to change what they hold, and the
-            change is reviewed like any other code.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {BASE_ROLE_ROWS.map((role) => (
-            <div key={role.name} className="grid gap-2">
-              <div className="flex items-center gap-2">
-                <p className="text-sm font-medium">{role.name}</p>
-                <Badge variant="secondary">Locked</Badge>
-                <span className="text-muted-foreground text-xs">
-                  {holdersOf(role.name).length} member(s)
+    <PageLayout
+      detailLabel={selected?.name}
+      onDetailClose={closePanel}
+      detail={
+        selected === undefined ? undefined : (
+          <RolePanel
+            role={selected}
+            canManage={canManage}
+            isEditing={editing === selected.name}
+            draft={draft}
+            saving={updateRole.isPending}
+            saveError={updateRole.error?.message}
+            deleting={deleteRole.isPending}
+            onClose={closePanel}
+            onEdit={() => {
+              const isEditing = editing === selected.name;
+              setEditing(isEditing ? null : selected.name);
+              setDraft(
+                customRoles.data?.find((role) => role.role === selected.name)
+                  ?.permission ?? {}
+              );
+            }}
+            onToggle={(resource, action) => {
+              setDraft((current) =>
+                togglePermission(current, resource, action)
+              );
+            }}
+            onSave={() => {
+              updateRole.mutate(selected.name);
+            }}
+            onDelete={() => {
+              deleteRole.mutate(selected.name);
+            }}
+          />
+        )
+      }
+    >
+      {/* The count waits for the custom roles: a header reading "3" that jumps to "5" a
+          moment later would be stating a number it did not have yet. */}
+      <PageHeader
+        title="Roles"
+        count={customRoles.isPending ? undefined : roleRows.length}
+        description={`Permissions for ${organization.id}. Base roles are locked; custom roles take effect on the next request.`}
+        actions={
+          canManage ? (
+            <Button
+              size="sm"
+              onClick={() => {
+                setCreateOpen(true);
+              }}
+            >
+              <PlusIcon />
+              New role
+            </Button>
+          ) : undefined
+        }
+      />
+
+      {canManage ? null : (
+        <div className="border-border shrink-0 border-b px-(--page-gutter) py-3">
+          {/* `status`, not the Alert's default `alert`: this is a standing fact about the
+              caller's role, not something that just went wrong. */}
+          <Alert variant="info" role="status">
+            <AlertTitle>Read-only</AlertTitle>
+            <AlertDescription>
+              Your role does not hold ac:create in this organization, so the
+              edit controls are hidden. Ask an owner to change a role for you.
+            </AlertDescription>
+          </Alert>
+        </div>
+      )}
+
+      <Tabs
+        value={tab}
+        onValueChange={(next: string) => {
+          setTab(next);
+          // The panel belongs to the roles table; it does not follow the visitor into
+          // the members tab.
+          closePanel();
+        }}
+        className="flex min-h-0 flex-1 flex-col gap-0"
+      >
+        <div className="border-border flex shrink-0 items-center gap-3 border-b px-(--page-gutter) py-2">
+          <TabsList>
+            <TabsTab value={TAB_ROLES}>Roles</TabsTab>
+            <TabsTab value={TAB_MEMBERS}>
+              Members
+              {members.data === undefined ? null : (
+                <span className="text-muted-foreground tabular-nums">
+                  {members.data.length}
                 </span>
-              </div>
-              <PermissionGrid
-                value={role.permission}
-                idPrefix={`base-${role.name}`}
-              />
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Custom roles</CardTitle>
-          <CardDescription>
-            Roles this organization defined at runtime. A custom role picks from
-            the same resources the base roles use.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
+              )}
+            </TabsTab>
+          </TabsList>
           {customRoles.isPending ? (
-            <p className="text-muted-foreground text-sm">Loading roles…</p>
+            <span className="text-muted-foreground text-xs">
+              Loading custom roles…
+            </span>
           ) : null}
+        </div>
+
+        <TabsPanel value={TAB_ROLES} className="flex min-h-0 flex-1 flex-col">
+          <DataTable
+            caption="Roles in this organization, with their type, the permissions they hold and how many members hold them."
+            columns={ROLE_COLUMNS}
+            rows={roleRows}
+            rowId={(role) => role.id}
+            selectedId={selectedId}
+            onRowClick={(role) => {
+              setSelectedId(role.id);
+              setEditing(null);
+            }}
+            // The three base roles are always rows, so this shows only if `access.ts`
+            // declares none.
+            emptyState={
+              <EmptyState
+                icon={ShieldIcon}
+                title="No roles to show"
+                description="packages/auth/src/access.ts declares the base roles. Add one there to see it here."
+              />
+            }
+          />
           {customRoles.data?.length === 0 ? (
-            <div className="border-border rounded-lg border border-dashed p-4 text-sm">
-              <p className="font-medium">No custom roles yet</p>
-              <p className="text-muted-foreground mt-1">
-                Create one below to grant a narrower slice than member.
-              </p>
-            </div>
+            <p className="border-border text-muted-foreground shrink-0 border-t px-(--page-gutter) py-3 text-sm">
+              No custom roles yet.{" "}
+              {canManage
+                ? "Use New role to grant a narrower slice than member."
+                : "An owner can create one to grant a narrower slice than member."}
+            </p>
           ) : null}
+        </TabsPanel>
 
-          {customRoles.data?.map((role) => {
-            const holders = holdersOf(role.role);
-            const isEditing = editing === role.role;
-            const permission: PermissionMap = role.permission ?? {};
-            return (
-              <div key={role.role} className="grid gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <p className="text-sm font-medium">{role.role}</p>
-                  <span className="text-muted-foreground text-xs">
-                    {holders.length} member(s)
-                  </span>
-                  {canManage ? (
-                    <div className="ml-auto flex gap-2">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 md:min-h-7"
-                        onClick={() => {
-                          setEditing(isEditing ? null : role.role);
-                          setDraft(permission);
-                        }}
-                      >
-                        {isEditing ? "Cancel" : "Edit"}
-                      </Button>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="min-h-11 md:min-h-7"
-                        // Held roles cannot be deleted: the plugin would delete it and
-                        // leave every holder resolving to no permissions at all.
-                        disabled={holders.length > 0 || deleteRole.isPending}
-                        onClick={() => deleteRole.mutate(role.role)}
-                      >
-                        Delete
-                      </Button>
-                    </div>
-                  ) : null}
-                </div>
-                {holders.length > 0 && canManage ? (
-                  <p className="text-muted-foreground text-xs">
-                    Held by {holders.map((h) => h.user.email).join(", ")}.
-                    Reassign them before deleting this role.
-                  </p>
-                ) : null}
-                <PermissionGrid
-                  value={isEditing ? draft : permission}
-                  idPrefix={`role-${role.role}`}
-                  onToggle={
-                    isEditing
-                      ? (resource, action) =>
-                          setDraft((current) =>
-                            togglePermission(current, resource, action)
-                          )
-                      : undefined
-                  }
-                  disabled={updateRole.isPending}
+        <TabsPanel value={TAB_MEMBERS} className="flex min-h-0 flex-1 flex-col">
+          <DataTable
+            caption={`Who holds which role in ${organization.name}.`}
+            columns={MEMBER_COLUMNS}
+            rows={memberRows}
+            rowId={(member) => member.id}
+            emptyState={
+              members.isPending ? (
+                <EmptyState icon={UsersIcon} title="Loading members…" />
+              ) : (
+                <EmptyState
+                  icon={UsersIcon}
+                  title="No members yet"
+                  description={`A member appears here once they join ${organization.name}.`}
                 />
-                {isEditing ? (
-                  <div>
-                    <Button
-                      size="sm"
-                      className="min-h-11 md:min-h-7"
-                      disabled={updateRole.isPending}
-                      onClick={() => updateRole.mutate(role.role)}
-                    >
-                      Save permissions
-                    </Button>
-                  </div>
-                ) : null}
-              </div>
-            );
-          })}
-
-          {updateRole.error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {updateRole.error.message}
-            </p>
-          ) : null}
-          {deleteRole.error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {deleteRole.error.message}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+              )
+            }
+          />
+        </TabsPanel>
+      </Tabs>
 
       {canManage ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Create a role</CardTitle>
-            <CardDescription>
-              Pick a name and the permissions it holds. Owner, admin and member
-              are refused: those three are locked.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4" onSubmit={submitNewRole}>
-              <div className="grid gap-2">
-                <Label htmlFor="new-role-name">Role name</Label>
-                <Input
-                  id="new-role-name"
-                  value={newRoleName}
-                  placeholder="viewer"
-                  onChange={(event) => setNewRoleName(event.target.value)}
-                  required
+        <Dialog open={createOpen} onOpenChange={setCreateOpen}>
+          <DialogPopup>
+            <form className="flex min-h-0 flex-col" onSubmit={submitNewRole}>
+              <DialogHeader>
+                <DialogTitle>New role</DialogTitle>
+                <DialogDescription>
+                  Pick a name and the permissions it holds. Owner, admin and
+                  member are refused: those three are locked.
+                </DialogDescription>
+              </DialogHeader>
+              <DialogPanel className="grid gap-4">
+                <Field>
+                  <FieldLabel>Role name</FieldLabel>
+                  <Input
+                    value={newRoleName}
+                    placeholder="viewer"
+                    onChange={(event) => {
+                      setNewRoleName(event.target.value);
+                    }}
+                    required
+                  />
+                </Field>
+                <PermissionGrid
+                  value={newRolePermission}
+                  idPrefix="new-role"
+                  disabled={createRole.isPending}
+                  onToggle={(resource, action) => {
+                    setNewRolePermission((current) =>
+                      togglePermission(current, resource, action)
+                    );
+                  }}
                 />
-              </div>
-              <PermissionGrid
-                value={newRolePermission}
-                idPrefix="new-role"
-                disabled={createRole.isPending}
-                onToggle={(resource, action) =>
-                  setNewRolePermission((current) =>
-                    togglePermission(current, resource, action)
-                  )
-                }
-              />
-              <div>
+                {createRole.error ? (
+                  <p
+                    className="text-destructive-foreground text-sm"
+                    role="alert"
+                  >
+                    {createRole.error.message}
+                  </p>
+                ) : null}
+              </DialogPanel>
+              <DialogFooter>
+                <DialogClose render={<Button variant="ghost" />}>
+                  Cancel
+                </DialogClose>
                 <Button
                   type="submit"
-                  className="min-h-11"
+                  loading={createRole.isPending}
                   disabled={
                     createRole.isPending ||
                     newRoleName.trim() === "" ||
@@ -375,74 +681,204 @@ export function RoleWorkspace({
                 >
                   Create role
                 </Button>
-              </div>
-              {createRole.error ? (
-                <p className="text-destructive text-sm" role="alert">
-                  {createRole.error.message}
-                </p>
-              ) : null}
+              </DialogFooter>
             </form>
-          </CardContent>
-        </Card>
+          </DialogPopup>
+        </Dialog>
       ) : null}
+    </PageLayout>
+  );
+}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-          <CardDescription>
-            Who holds which role in {organization.name}.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-2">
-          {members.data?.map((member) => {
-            const isLastOwner = member.role === "owner" && ownerCount <= 1;
-            return (
-              <div
-                key={member.id}
-                className="border-border flex min-h-11 flex-wrap items-center justify-between gap-3 rounded-lg border px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="truncate text-sm font-medium">
-                    {member.user.name || member.user.email}
-                  </p>
-                  <p className="text-muted-foreground truncate text-xs">
-                    {member.user.email}
-                  </p>
-                </div>
-                {canManage ? (
-                  <select
-                    aria-label={`Role for ${member.user.email}`}
-                    className="border-border min-h-11 rounded-lg border px-2 text-sm md:min-h-9"
-                    value={member.role}
-                    // The last owner cannot be demoted. Better Auth refuses it server-side
-                    // too; disabling here saves the operator an error they cannot act on.
-                    disabled={isLastOwner || assignRole.isPending}
-                    onChange={(event) =>
-                      assignRole.mutate({
-                        memberId: member.id,
-                        role: event.target.value,
-                      })
-                    }
-                  >
-                    {assignableRoles.map((role) => (
-                      <option key={role} value={role}>
-                        {role}
-                      </option>
-                    ))}
-                  </select>
-                ) : (
-                  <Badge variant="secondary">{member.role}</Badge>
-                )}
-              </div>
-            );
-          })}
-          {assignRole.error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {assignRole.error.message}
+/**
+ * The selected role's panel: who holds it, its permission grid, and — for a custom role a
+ * caller may manage — the edit, save and delete controls. It holds no state; the
+ * workspace owns the draft and every mutation.
+ */
+function RolePanel({
+  role,
+  canManage,
+  isEditing,
+  draft,
+  saving,
+  saveError,
+  deleting,
+  onClose,
+  onEdit,
+  onToggle,
+  onSave,
+  onDelete,
+}: {
+  role: RoleRow;
+  canManage: boolean;
+  isEditing: boolean;
+  draft: PermissionMap;
+  saving: boolean;
+  saveError: string | undefined;
+  deleting: boolean;
+  onClose: () => void;
+  onEdit: () => void;
+  onToggle: (resource: string, action: string) => void;
+  onSave: () => void;
+  onDelete: () => void;
+}) {
+  const editable = canManage && !role.locked;
+  const held = role.holders.length > 0;
+
+  return (
+    <DetailPanel
+      title={role.name}
+      description={role.locked ? "Base role, locked" : "Custom role"}
+      onClose={onClose}
+      attributes={[
+        {
+          label: "Type",
+          value: role.locked ? (
+            <Badge variant="secondary">
+              <LockIcon />
+              Base
+            </Badge>
+          ) : (
+            <StatusPill label="custom" tone="open" />
+          ),
+        },
+        {
+          label: "Permissions",
+          value: `${countHeld(role.permission)} of ${PERMISSION_COUNT}`,
+        },
+        { label: "Held by", value: role.holders.join(", ") },
+      ]}
+      actions={
+        <>
+          <div className="flex items-center gap-2">
+            <p className="flex-1 text-sm font-medium">Permissions</p>
+            {editable ? (
+              <Button variant="outline" size="sm" onClick={onEdit}>
+                {isEditing ? "Cancel" : "Edit"}
+              </Button>
+            ) : null}
+          </div>
+
+          {role.locked ? (
+            <p className="text-muted-foreground text-xs">
+              Edit packages/auth/src/access.ts to change what this role holds,
+              and the change is reviewed like any other code.
             </p>
           ) : null}
-        </CardContent>
-      </Card>
-    </div>
+
+          <PermissionGrid
+            value={isEditing ? draft : role.permission}
+            idPrefix={`${role.locked ? "base" : "role"}-${role.name}`}
+            onToggle={isEditing ? onToggle : undefined}
+            disabled={saving}
+          />
+
+          {isEditing ? (
+            <Button
+              size="sm"
+              className="self-start"
+              loading={saving}
+              disabled={saving}
+              onClick={onSave}
+            >
+              Save permissions
+            </Button>
+          ) : null}
+          {saveError === undefined ? null : (
+            <p className="text-destructive-foreground text-sm" role="alert">
+              {saveError}
+            </p>
+          )}
+
+          {editable ? (
+            <div className="border-border flex flex-col gap-2 border-t pt-3">
+              {held ? (
+                <p className="text-muted-foreground text-xs">
+                  Held by {role.holders.join(", ")}. Reassign them before
+                  deleting this role.
+                </p>
+              ) : null}
+              <AlertDialog>
+                <AlertDialogTrigger
+                  // Held roles cannot be deleted: the plugin would delete it and leave
+                  // every holder resolving to no permissions at all.
+                  disabled={held || deleting}
+                  render={
+                    <Button
+                      variant="destructive-outline"
+                      size="sm"
+                      className="self-start"
+                    />
+                  }
+                >
+                  Delete role
+                </AlertDialogTrigger>
+                <AlertDialogPopup>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Delete {role.name}?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Nobody holds this role, so no member loses access. A
+                      deleted role is not restored; create it again to bring it
+                      back.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogClose render={<Button variant="ghost" />}>
+                      Cancel
+                    </AlertDialogClose>
+                    <AlertDialogClose
+                      render={<Button variant="destructive" />}
+                      onClick={onDelete}
+                    >
+                      Delete role
+                    </AlertDialogClose>
+                  </AlertDialogFooter>
+                </AlertDialogPopup>
+              </AlertDialog>
+            </div>
+          ) : null}
+        </>
+      }
+    />
+  );
+}
+
+/** The role picker in a member's row. Picking a role assigns it at once, as before. */
+function MemberRoleSelect({
+  role,
+  email,
+  roles,
+  disabled,
+  onChange,
+}: MemberAssignment & {
+  /** The role the member holds now. */
+  role: string;
+  email: string;
+}) {
+  return (
+    <Select
+      value={role}
+      disabled={disabled}
+      onValueChange={(next: string | null) => {
+        if (next !== null && next !== role) {
+          onChange(next);
+        }
+      }}
+    >
+      <SelectTrigger
+        size="sm"
+        aria-label={`Role for ${email}`}
+        className="w-40"
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectPopup>
+        {roles.map((option) => (
+          <SelectItem key={option} value={option}>
+            {option}
+          </SelectItem>
+        ))}
+      </SelectPopup>
+    </Select>
   );
 }

@@ -4,28 +4,66 @@ import {
   useQuery,
   useQueryClient,
 } from "@tanstack/react-query";
+import { KeyRoundIcon, PlusIcon, ShieldIcon } from "lucide-react";
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { SubmitEvent } from "react";
 
 import { statements } from "@repo/auth/access";
 import { allows } from "@repo/auth/rbac-rules";
 import type { PrincipalLike } from "@repo/auth/rbac-rules";
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
+import { DataTable } from "@repo/ui/blocks/admin/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
+import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+  Alert,
+  AlertAction,
+  AlertDescription,
+  AlertTitle,
+} from "@repo/ui/components/admin/alert";
+import {
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from "@repo/ui/components/admin/alert-dialog";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button } from "@repo/ui/components/admin/button";
+import { Checkbox } from "@repo/ui/components/admin/checkbox";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+  DialogTrigger,
+} from "@repo/ui/components/admin/dialog";
+import {
+  Field,
+  FieldDescription,
+  FieldLabel,
+} from "@repo/ui/components/admin/field";
+import { Fieldset, FieldsetLegend } from "@repo/ui/components/admin/fieldset";
+import { Input } from "@repo/ui/components/admin/input";
+import { Label } from "@repo/ui/components/admin/label";
+import { Spinner } from "@repo/ui/components/admin/spinner";
+import { toastManager } from "@repo/ui/components/admin/toast";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 
 import { auth } from "@admin/lib/auth";
 
-// The `/api-keys` screen's two panels: the organization's keys, and the form that issues
-// one.
+// The `/api-keys` screen: a header with the key count and a "New key" button, the
+// one-time banner for a key just issued, the organization's keys in a table, a detail
+// panel for the selected key with its scope and its revoke action, and the dialog that
+// issues a key.
 //
 // EVERY CONTROL HERE IS COSMETIC. The picker offers only what the caller holds, and that
 // is a courtesy, not the gate: `apiKeyScopeGuard()` on the api refuses an over-scoped
@@ -52,23 +90,33 @@ interface KeyRow {
 /** A scope map as the create endpoint takes it. */
 type ScopeMap = Record<string, string[]>;
 
-function formatDate(value: string | Date | null): string {
-  if (!value) {
-    return "—";
+/**
+ * The api sends dates as strings, or nothing. A Date is what DataTable sorts and formats,
+ * and `null` is what it renders as the em dash, so an unparseable value goes to `null`
+ * rather than to "Invalid Date".
+ */
+function toDate(value: string | Date | null): Date | null {
+  if (value === null || value === "") {
+    return null;
   }
   const date = value instanceof Date ? value : new Date(value);
-  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+  return Number.isNaN(date.getTime()) ? null : date;
 }
 
-function describeScope(scope: Record<string, string[]> | null | undefined) {
-  const entries = Object.entries(scope ?? {}).filter(
+function formatDate(value: string | Date | null): string | undefined {
+  return toDate(value)?.toLocaleDateString();
+}
+
+/** The resource:action pairs a key holds, with empty resources dropped. */
+function scopeEntries(scope: Record<string, string[]> | null | undefined) {
+  return Object.entries(scope ?? {}).filter(
     ([, actions]) => actions.length > 0
   );
-  return entries.length === 0
-    ? "No scope. This key reads nothing."
-    : entries
-        .map(([resource, actions]) => `${resource}:${actions.join(",")}`)
-        .join("  ");
+}
+
+/** The key's visible prefix. The plugin stores the first few characters for this. */
+function prefixOf(row: KeyRow): string {
+  return `${row.start ?? ""}…`;
 }
 
 /**
@@ -94,6 +142,52 @@ function toggleScope(
   return draft;
 }
 
+// The table's shape, at module scope: it reads no state, so it stays one constant array
+// and its `cell` renderers stay out of the render pass. The scope is not a column. It is
+// too wide for a row, so it lives in the detail panel.
+const COLUMNS: readonly DataTableColumn<KeyRow>[] = [
+  {
+    id: "name",
+    header: "Name",
+    value: (row) => row.name ?? "unnamed",
+    sortable: true,
+    cell: (row) => (
+      <div className="flex min-w-0 items-center gap-2">
+        <span className="truncate font-medium">{row.name ?? "unnamed"}</span>
+        <code className="text-muted-foreground font-mono text-xs">
+          {prefixOf(row)}
+        </code>
+      </div>
+    ),
+  },
+  {
+    id: "status",
+    header: "Status",
+    value: (row) => row.enabled,
+    sortable: true,
+    cell: (row) =>
+      row.enabled ? (
+        <Badge variant="success">Enabled</Badge>
+      ) : (
+        <Badge variant="secondary">Disabled</Badge>
+      ),
+  },
+  {
+    id: "expires",
+    header: "Expires",
+    value: (row) => toDate(row.expiresAt),
+    sortable: true,
+    align: "end",
+  },
+  {
+    id: "last-used",
+    header: "Last used",
+    value: (row) => toDate(row.lastRequest),
+    sortable: true,
+    align: "end",
+  },
+];
+
 export function ApiKeyWorkspace({
   organizationId,
   principal,
@@ -106,10 +200,15 @@ export function ApiKeyWorkspace({
   const [name, setName] = useState("");
   const [expiryDays, setExpiryDays] = useState("");
   const [scope, setScope] = useState<ScopeMap>({});
+  const [createOpen, setCreateOpen] = useState(false);
+  const [revokeOpen, setRevokeOpen] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
 
   // The plaintext key, held for exactly as long as this component is mounted. Navigating
   // away unmounts the route and the value goes with it, which is the whole storage policy:
-  // the plugin returns the key once and has no endpoint that returns it again.
+  // the plugin returns the key once and has no endpoint that returns it again. It shows
+  // in a banner on the page rather than inside the create dialog, so an Escape press or a
+  // backdrop click cannot throw it away before the operator has copied it.
   const [issued, setIssued] = useState<string | null>(null);
 
   /**
@@ -141,15 +240,16 @@ export function ApiKeyWorkspace({
       if (result.error) {
         throw new Error(result.error.message);
       }
-      // The list endpoint answers `{ apiKeys, total }`, not an array.
-      const rows: KeyRow[] = result.data?.apiKeys ?? [];
+      // The list endpoint answers `{ apiKeys, total }`, not a bare array.
+      const rows: readonly KeyRow[] = result.data?.apiKeys ?? [];
       return rows;
     },
   });
   const keys = useQuery(keysQuery);
 
-  const refreshKeys = () =>
-    queryClient.invalidateQueries({ queryKey: keysQuery.queryKey });
+  const refreshKeys = async () => {
+    await queryClient.invalidateQueries({ queryKey: keysQuery.queryKey });
+  };
 
   const createKey = useMutation({
     mutationFn: async () => {
@@ -179,7 +279,22 @@ export function ApiKeyWorkspace({
       setName("");
       setExpiryDays("");
       setScope({});
+      setCreateOpen(false);
+      toastManager.add({
+        type: "success",
+        title: "Key issued",
+        description: "Copy it from the banner now. It is shown once.",
+      });
       await refreshKeys();
+    },
+    // The dialog stays open on a failure, with the message inline under the form, so the
+    // operator can fix the name or the scope and submit again without retyping.
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The key was not issued",
+        description: error.message,
+      });
     },
   });
 
@@ -190,38 +305,293 @@ export function ApiKeyWorkspace({
         throw new Error(result.error.message);
       }
     },
-    onSuccess: refreshKeys,
+    onSuccess: async (_data, keyId) => {
+      setRevokeOpen(false);
+      // The revoked row leaves the list, so its panel closes with it.
+      setSelectedId((current) => (current === keyId ? null : current));
+      toastManager.add({
+        type: "success",
+        title: "Key revoked",
+        description: "The api refuses it from now on.",
+      });
+      await refreshKeys();
+    },
+    onError: (error) => {
+      setRevokeOpen(false);
+      toastManager.add({
+        type: "error",
+        title: "The key was not revoked",
+        description: error.message,
+      });
+    },
   });
 
-  const submitNewKey = (event: FormEvent) => {
+  const submitNewKey = (event: SubmitEvent) => {
     event.preventDefault();
     createKey.mutate();
   };
 
+  const rows = keys.data ?? [];
+  const selected = rows.find((row) => row.id === selectedId);
+  const selectedScope = scopeEntries(selected?.permissions);
+
   return (
-    <div className="grid gap-6">
-      {issued ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Copy this key now</CardTitle>
-            <CardDescription>
-              It is shown once. Only a SHA-256 hash is stored, so nothing on
-              this screen or in the api can show it again. Leave this page and
-              it is gone.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="grid gap-3">
-            <code className="border-border bg-muted overflow-x-auto rounded-lg border px-3 py-2 font-mono text-sm">
-              {issued}
-            </code>
-            <div className="flex gap-2">
+    <PageLayout
+      detailLabel={selected?.name ?? undefined}
+      onDetailClose={() => {
+        setSelectedId(null);
+      }}
+      detail={
+        selected === undefined ? undefined : (
+          <DetailPanel
+            title={selected.name ?? "unnamed"}
+            description={
+              <code className="font-mono">{prefixOf(selected)}</code>
+            }
+            onClose={() => {
+              setSelectedId(null);
+            }}
+            attributes={[
+              {
+                label: "Status",
+                value: selected.enabled ? "Enabled" : "Disabled",
+              },
+              { label: "Expires", value: formatDate(selected.expiresAt) },
+              { label: "Last used", value: formatDate(selected.lastRequest) },
+              { label: "Key id", value: selected.id },
+            ]}
+            groups={[
+              {
+                id: "scope",
+                label: "Scope",
+                icon: ShieldIcon,
+                // A key's scope is fixed when it is issued. Editing a role later changes
+                // members and never keys, so the panel shows it and offers no edit.
+                items:
+                  selectedScope.length === 0
+                    ? [
+                        {
+                          label: "Scope",
+                          value: "No scope. This key reads nothing.",
+                        },
+                      ]
+                    : selectedScope.map(([resource, actions]) => ({
+                        label: resource,
+                        value: (
+                          <span className="font-mono">
+                            {actions.join(", ")}
+                          </span>
+                        ),
+                      })),
+              },
+            ]}
+            actions={
+              canDelete ? (
+                <AlertDialog open={revokeOpen} onOpenChange={setRevokeOpen}>
+                  <AlertDialogTrigger
+                    render={<Button variant="destructive-outline" size="sm" />}
+                  >
+                    Revoke key
+                  </AlertDialogTrigger>
+                  <AlertDialogPopup>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>
+                        Revoke {selected.name ?? "this key"}?
+                      </AlertDialogTitle>
+                      <AlertDialogDescription>
+                        Every caller using it stops working at once. A revoked
+                        key cannot be restored; issue a new one instead.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogClose
+                        render={<Button variant="ghost" />}
+                        disabled={revokeKey.isPending}
+                      >
+                        Cancel
+                      </AlertDialogClose>
+                      <Button
+                        variant="destructive"
+                        loading={revokeKey.isPending}
+                        onClick={() => {
+                          revokeKey.mutate(selected.id);
+                        }}
+                      >
+                        Revoke
+                      </Button>
+                    </AlertDialogFooter>
+                  </AlertDialogPopup>
+                </AlertDialog>
+              ) : undefined
+            }
+          />
+        )
+      }
+    >
+      <PageHeader
+        title="API keys"
+        count={keys.data?.length}
+        description={
+          <>
+            Machine credentials for {organizationId}, sent as{" "}
+            <code>Authorization: Bearer</code>. A key&apos;s scope is fixed when
+            it is issued.
+          </>
+        }
+        actions={
+          canCreate ? (
+            <Dialog
+              open={createOpen}
+              onOpenChange={(open) => {
+                setCreateOpen(open);
+                // A fresh dialog starts without the last attempt's error.
+                if (open) {
+                  createKey.reset();
+                }
+              }}
+            >
+              <DialogTrigger render={<Button size="sm" />}>
+                <PlusIcon />
+                New key
+              </DialogTrigger>
+              <DialogPopup>
+                <form className="contents" onSubmit={submitNewKey}>
+                  <DialogHeader>
+                    <DialogTitle>Issue a key</DialogTitle>
+                    <DialogDescription>
+                      The picker offers only what your own role holds. Asking
+                      for more is refused by the api, not just hidden here.
+                    </DialogDescription>
+                  </DialogHeader>
+
+                  <DialogPanel className="grid gap-4">
+                    <Field>
+                      <FieldLabel>Name</FieldLabel>
+                      <Input
+                        value={name}
+                        required
+                        placeholder="deploy pipeline"
+                        onChange={(event) => {
+                          setName(event.target.value);
+                        }}
+                      />
+                    </Field>
+
+                    <Field>
+                      <FieldLabel>Expires in (days)</FieldLabel>
+                      <Input
+                        type="number"
+                        min={1}
+                        max={MAX_EXPIRY_DAYS}
+                        value={expiryDays}
+                        placeholder="leave blank for no expiry"
+                        onChange={(event) => {
+                          setExpiryDays(event.target.value);
+                        }}
+                      />
+                      <FieldDescription>
+                        One to {MAX_EXPIRY_DAYS} days. Blank keeps the key valid
+                        until it is revoked.
+                      </FieldDescription>
+                    </Field>
+
+                    <Fieldset className="grid gap-2">
+                      <FieldsetLegend className="text-sm">Scope</FieldsetLegend>
+                      {offered.length === 0 ? (
+                        <p className="text-muted-foreground text-sm">
+                          Your role holds no statements, so a key issued now
+                          would read nothing.
+                        </p>
+                      ) : null}
+                      {offered.map(([resource, actions]) => (
+                        <div
+                          key={resource}
+                          className="border-border grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[8rem_minmax(0,1fr)] sm:items-center"
+                        >
+                          <p className="text-sm font-medium">{resource}</p>
+                          <div className="flex flex-wrap gap-x-4 gap-y-2">
+                            {actions.map((action) => {
+                              const checked =
+                                scope[resource]?.includes(action) ?? false;
+                              return (
+                                // Base UI's checkbox is a span with a hidden input, so
+                                // the wrapping label is what names it and what makes
+                                // the word a click target.
+                                <Label
+                                  key={action}
+                                  className="min-h-11 font-normal md:min-h-7"
+                                >
+                                  <Checkbox
+                                    checked={checked}
+                                    onCheckedChange={() => {
+                                      setScope((current) =>
+                                        toggleScope(current, resource, action)
+                                      );
+                                    }}
+                                  />
+                                  <span
+                                    className={
+                                      checked ? "" : "text-muted-foreground"
+                                    }
+                                  >
+                                    {action}
+                                  </span>
+                                </Label>
+                              );
+                            })}
+                          </div>
+                        </div>
+                      ))}
+                    </Fieldset>
+
+                    {createKey.error ? (
+                      <p className="text-destructive-foreground text-sm">
+                        {createKey.error.message}
+                      </p>
+                    ) : null}
+                  </DialogPanel>
+
+                  <DialogFooter>
+                    <DialogClose render={<Button variant="ghost" />}>
+                      Cancel
+                    </DialogClose>
+                    <Button
+                      type="submit"
+                      loading={createKey.isPending}
+                      disabled={name.trim() === ""}
+                    >
+                      Issue key
+                    </Button>
+                  </DialogFooter>
+                </form>
+              </DialogPopup>
+            </Dialog>
+          ) : undefined
+        }
+      />
+
+      {issued === null ? null : (
+        <div className="border-border shrink-0 border-b px-(--page-gutter) py-3">
+          <Alert variant="warning">
+            <KeyRoundIcon />
+            <AlertTitle>Copy this key now</AlertTitle>
+            <AlertDescription>
+              <span>
+                It is shown once. Only a SHA-256 hash is stored, so nothing on
+                this screen or in the api can show it again. Leave this page and
+                it is gone.
+              </span>
+              <code className="border-border bg-muted text-foreground overflow-x-auto rounded-lg border px-3 py-2 font-mono text-sm">
+                {issued}
+              </code>
+            </AlertDescription>
+            <AlertAction>
               <Button
                 variant="outline"
                 size="sm"
-                className="min-h-11 md:min-h-7"
                 onClick={() => {
                   // The rejection is deliberately swallowed. A browser that refuses
-                  // clipboard access still leaves the key selectable in the box above,
+                  // clipboard access still leaves the key selectable in the box,
                   // and an error toast here would say nothing the operator can act on.
                   navigator.clipboard.writeText(issued).catch(() => {
                     // nothing to tell the operator; the key is on screen.
@@ -233,187 +603,51 @@ export function ApiKeyWorkspace({
               <Button
                 variant="outline"
                 size="sm"
-                className="min-h-11 md:min-h-7"
-                onClick={() => setIssued(null)}
+                onClick={() => {
+                  setIssued(null);
+                }}
               >
                 I have it
               </Button>
+            </AlertAction>
+          </Alert>
+        </div>
+      )}
+
+      <DataTable
+        caption="API keys, with their status, expiry and last use."
+        columns={COLUMNS}
+        rows={rows}
+        rowId={(row) => row.id}
+        selectedId={selectedId}
+        onRowClick={(row) => {
+          setSelectedId(row.id);
+        }}
+        // The table has no filter, so its empty slot covers three cases: the first load,
+        // a failed load, and an organization with no keys yet.
+        emptyState={
+          keys.isPending ? (
+            <div className="flex justify-center py-10">
+              <Spinner className="text-muted-foreground size-5" />
             </div>
-          </CardContent>
-        </Card>
-      ) : null}
-
-      <Card>
-        <CardHeader>
-          <CardTitle>Keys</CardTitle>
-          <CardDescription>
-            A key&apos;s scope is fixed when it is issued. Editing a role later
-            changes members and never keys, so reissue a key to change what it
-            may do.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-4">
-          {keys.isPending ? (
-            <p className="text-muted-foreground text-sm">Loading keys…</p>
-          ) : null}
-          {keys.error ? (
-            <p className="text-destructive text-sm">{keys.error.message}</p>
-          ) : null}
-          {keys.data?.length === 0 ? (
-            <div className="border-border rounded-lg border border-dashed p-4 text-sm">
-              <p className="font-medium">No keys yet</p>
-              <p className="text-muted-foreground mt-1">
-                Issue one below to let a script or a deploy pipeline call the
-                api.
-              </p>
-            </div>
-          ) : null}
-
-          {keys.data?.map((row) => (
-            <div key={row.id} className="grid gap-2">
-              <div className="flex flex-wrap items-center gap-2">
-                <p className="text-sm font-medium">{row.name ?? "unnamed"}</p>
-                <code className="text-muted-foreground font-mono text-xs">
-                  {row.start ?? "—"}…
-                </code>
-                {row.enabled ? null : (
-                  <Badge variant="secondary">Disabled</Badge>
-                )}
-                {canDelete ? (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto min-h-11 md:min-h-7"
-                    disabled={revokeKey.isPending}
-                    onClick={() => revokeKey.mutate(row.id)}
-                  >
-                    Revoke
-                  </Button>
-                ) : null}
-              </div>
-              <dl className="text-muted-foreground grid gap-x-6 gap-y-1 text-xs sm:grid-cols-3">
-                <div>
-                  <dt className="inline">Expires: </dt>
-                  <dd className="inline">{formatDate(row.expiresAt)}</dd>
-                </div>
-                <div>
-                  <dt className="inline">Last used: </dt>
-                  <dd className="inline">{formatDate(row.lastRequest)}</dd>
-                </div>
-                <div className="sm:col-span-3">
-                  <dt className="inline">Scope: </dt>
-                  <dd className="inline font-mono">
-                    {describeScope(row.permissions)}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ))}
-        </CardContent>
-      </Card>
-
-      {canCreate ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>Issue a key</CardTitle>
-            <CardDescription>
-              The picker offers only what your own role holds. Asking for more
-              is refused by the api, not just hidden here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form className="grid gap-4" onSubmit={submitNewKey}>
-              <div className="grid gap-2">
-                <Label htmlFor="api-key-name">Name</Label>
-                <Input
-                  id="api-key-name"
-                  value={name}
-                  required
-                  placeholder="deploy pipeline"
-                  onChange={(event) => setName(event.target.value)}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <Label htmlFor="api-key-expiry">Expires in (days)</Label>
-                <Input
-                  id="api-key-expiry"
-                  type="number"
-                  min={1}
-                  max={MAX_EXPIRY_DAYS}
-                  value={expiryDays}
-                  placeholder="leave blank for no expiry"
-                  onChange={(event) => setExpiryDays(event.target.value)}
-                />
-              </div>
-
-              <div className="grid gap-2">
-                <p className="text-sm font-medium">Scope</p>
-                {offered.length === 0 ? (
-                  <p className="text-muted-foreground text-sm">
-                    Your role holds no statements, so a key issued now would
-                    read nothing.
-                  </p>
-                ) : null}
-                {offered.map(([resource, actions]) => (
-                  <div
-                    key={resource}
-                    className="border-border grid gap-2 rounded-lg border px-3 py-2 sm:grid-cols-[10rem_minmax(0,1fr)] sm:items-center"
-                  >
-                    <p className="text-sm font-medium">{resource}</p>
-                    <div className="flex flex-wrap gap-x-4 gap-y-2">
-                      {actions.map((action) => {
-                        const id = `scope-${resource}-${action}`;
-                        const checked =
-                          scope[resource]?.includes(action) ?? false;
-                        return (
-                          <label
-                            key={action}
-                            htmlFor={id}
-                            className="flex min-h-11 items-center gap-2 text-sm md:min-h-7"
-                          >
-                            <input
-                              id={id}
-                              type="checkbox"
-                              className="border-border size-4 rounded"
-                              checked={checked}
-                              onChange={() =>
-                                setScope((current) =>
-                                  toggleScope(current, resource, action)
-                                )
-                              }
-                            />
-                            <span
-                              className={checked ? "" : "text-muted-foreground"}
-                            >
-                              {action}
-                            </span>
-                          </label>
-                        );
-                      })}
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              {createKey.error ? (
-                <p className="text-destructive text-sm">
-                  {createKey.error.message}
-                </p>
-              ) : null}
-
-              <div>
-                <Button
-                  type="submit"
-                  disabled={createKey.isPending || name.trim() === ""}
-                >
-                  {createKey.isPending ? "Issuing…" : "Issue key"}
-                </Button>
-              </div>
-            </form>
-          </CardContent>
-        </Card>
-      ) : null}
-    </div>
+          ) : keys.error ? (
+            <EmptyState
+              title="Keys did not load"
+              description={keys.error.message}
+            />
+          ) : (
+            <EmptyState
+              icon={KeyRoundIcon}
+              title="No keys yet"
+              description={
+                canCreate
+                  ? "Issue one to let a script or a deploy pipeline call the api."
+                  : "Ask someone who may issue keys in this organization to create one."
+              }
+            />
+          )
+        }
+      />
+    </PageLayout>
   );
 }

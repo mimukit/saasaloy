@@ -95,8 +95,8 @@
       "target": "@validators/feature-flags.ts"
     },
     {
-      "path": "files/ui/blocks/feature-flags.tsx",
-      "target": "@ui/blocks/feature-flags.tsx"
+      "path": "files/ui/blocks/admin/feature-flags.tsx",
+      "target": "@ui/blocks/admin/feature-flags.tsx"
     },
     {
       "path": "files/admin/routes/flags.tsx",
