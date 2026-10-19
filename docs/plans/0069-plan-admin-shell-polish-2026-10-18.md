@@ -168,7 +168,7 @@ As built: palette B keeps the measured canvas, panel and hover tones and swaps t
 
 Done when: both `DESIGN.md` files pass the official linter, a fresh playground's `AGENTS.md` names both design documents and the `@repo/ui` import paths for the admin primitives, the QA plan exists, and the two follow-up issues are filed.
 
-As built: `apps/admin/DESIGN.md` is an admin module scaffold file, not a base seed, so `saasaloy update` lists an edited copy in the merge plan. The follow-ups are #201 (module overview cards), #202 (an automated a11y check over a seeded admin app) and #203 (a DOM test runner for the admin primitives and the frame). The manual QA plan is `docs/qa/0058-qa-admin-shell-polish-2026-10-18.md`.
+As built: `apps/admin/DESIGN.md` is an admin module scaffold file, not a base seed, so `saasaloy update` lists an edited copy in the merge plan. The follow-ups are #201 (module overview cards), #202 (an automated a11y check over a seeded admin app) and #203 (a DOM test runner for the admin primitives and the frame). The manual QA plan is `docs/qa/0060-qa-admin-shell-polish-2026-10-18.md`.
 
 ## Open questions
 

@@ -98,7 +98,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-2.4 | 2: Admin signed in, no teams or keys yet | Keyboard focus in the dialog, the menu, the select and the alert dialog | 🟡 Normal |
 | TC-3.1 | 3: Admin signed in, 360 px | The mobile shell, the sheets and no sideways scroll | 🔴 Critical |
 | TC-4.1 | 4: Admin signed in, light theme | The light theme on every page | 🟡 Normal |
-| TC-4.2 | 4: Admin signed in, light theme | The system theme and the first-visit default | 🟢 Low |
+| TC-4.2 | 4: Admin signed in, light theme | The two-state toggle and the first-visit default | 🟢 Low |
 | TC-5.1 | 5: Admin signed in, slow or stopped API | The loading skeleton | 🟡 Normal |
 | TC-5.2 | 5: Admin signed in, slow or stopped API | The error screens and "Try again" | 🔴 Critical |
 | TC-5.3 | 5: Admin signed in, slow or stopped API | The 404 screen | 🟢 Low |
@@ -295,7 +295,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Setup.** Run once, for every case in this scenario.
 
-1. Press the theme toggle in the header until it shows the sun icon.
+1. Press the theme toggle in the header once, so the page shows the light theme.
 
 - [ ] Setup complete
 
@@ -319,14 +319,14 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-4.2: The system theme and the first-visit default  ·  🟢 Low
+### TC-4.2: The two-state toggle and the first-visit default  ·  🟢 Low
 
-**Goal.** The app follows the operating system on "system" and starts in dark on a first visit.
+**Goal.** The toggle flips light and dark only, and a first visit starts in dark.
 
 **Steps**
 
-1. Press the toggle until it shows the monitor icon. Change the appearance of the operating system.
-   - [ ] The app follows the operating system
+1. Press the toggle three times. Watch the page on each press.
+   - [ ] Each press flips light and dark with a circle that grows from the button, and no press shows a monitor icon
 2. Clear the site data and reload.
    - [ ] The app starts in dark
 
