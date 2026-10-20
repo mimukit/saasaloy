@@ -170,6 +170,10 @@ transitive `dependsOn` too — the message names the module in the chain that de
 the one you typed. The matcher is `packages/cli/src/lib/semver.ts`, ~400 lines owned rather than the
 `semver` package added as a runtime dependency for one boolean.
 
+The floor is also read off the raw JSON when a descriptor fails the schema, so a CLI meeting a field it does not know prints the upgrade line rather than the Ajv dump (#205). That only works for a CLI that already has the check: 0.5.2 and older validate first and print the dump whatever the floor says.
+
+`packages/cli/src/lib/registry-floors.test.ts` keeps the floors honest. It reads the descriptor schema at every `v*` tag out of git and fails when a descriptor some release cannot read declares no floor, or a floor that release still satisfies. It also fails when the floor excludes the CLI in this tree, and when the schema changed since the latest tag while `packages/cli/package.json` still names that tag's version. A CLI change a descriptor opts into by value rather than by a new field, such as the `@root` alias, has no schema trace, so the test carries a `BEHAVIOURS` table: add a row with the version that ships it.
+
 ```sh
 pnpm cli doctor modules            # the whole registry
 pnpm cli doctor modules/waitlist   # one module
@@ -552,7 +556,21 @@ Use it only when you have just watched the gate pass on this exact tree. Steps 1
 
 ### Modules that need a new CLI
 
-If your PR makes a module depend on a CLI change, set that module's `requires.saasaloy` to the version that ships the change, and release at least a **minor**. See [Declaring the CLI a descriptor needs](#declaring-the-cli-a-descriptor-needs). Nothing checks this automatically; `cli-requires` then enforces your range fatally for every user.
+A module change reaches users the moment it merges, and a CLI change reaches them only at the next release, so the PR that teaches the CLI something a descriptor uses does three things in the same diff:
+
+1. Bump `packages/cli/package.json` to the version that will ship the change, at least a **minor**.
+2. Set `requires.saasaloy` on every module that uses it to `>=` that version. See [Declaring the CLI a descriptor needs](#declaring-the-cli-a-descriptor-needs).
+3. Ask for a release in the PR body, because until it ships every published CLI refuses those modules.
+
+`registry-floors.test.ts` fails the gate when step 1 or 2 is missing. Nothing enforces step 3, so release soon after the merge.
+
+The version is then already bumped when you release. Release it as it stands, so release-it publishes that version rather than asking for a new one:
+
+```sh
+pnpm release --no-increment
+```
+
+With `--no-increment` release-it skips `npm version` and still writes the changelog, commits, tags and publishes. Without it you pick a bump on top of the bumped version, which skips a version number but breaks nothing, because every floor still holds.
 
 ### If it fails after the push
 
