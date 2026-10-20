@@ -13,7 +13,9 @@ const result = spawnSync("pnpm", ["run", "db:migrate:local"], {
 });
 if (result.status === 0) {
   process.stdout.write(
-    "Local D1 database is migrated. It lives in apps/api/.wrangler/state, which git ignores.\n"
+    "Local D1 database is migrated. It lives in apps/api/.wrangler/state, which git ignores.\n" +
+      // Setup never writes rows, so the database holds what the developer last put in it.
+      "Run pnpm db:seed to fill it with the rows in packages/db/src/seed/slices/.\n"
   );
 } else {
   process.stderr.write(

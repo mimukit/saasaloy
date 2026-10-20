@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-d1
-description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, applying migrations with db:migrate:local and db:migrate:prod, or preparing, reporting on and dropping the local database with db:setup, db:status and db:drop. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, replacing the placeholder database_id with a real one, applying migrations with db:migrate:local and db:migrate:prod, preparing, reporting on and dropping the local database with db:setup, db:status and db:drop, seeding it with db:seed, or writing route tests against a local test database with testDatabase(). The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-d1 — the Cloudflare D1 driver
@@ -161,6 +161,51 @@ project root before `rimraf` sees it. A wrangler upgrade that moves the path tur
 no-op that says so, rather than a delete somewhere else. If that happens, look under
 `apps/api/.wrangler/state` and update the path in `scripts/drop.ts`.
 
+## Seed data: `db:seed`
+
+`pnpm db:seed` fills the local D1 database with the rows in `packages/db/src/seed/slices/`, one file per table. The slice contract (slugs, `seedId`, the conflict key) is in the `saasaloy-database` skill, "Seed data". This section is what the D1 runner does with it.
+
+```sh
+pnpm db:setup   # apply every migration; it never writes rows
+pnpm db:seed    # upsert every slice row, print a count per table
+```
+
+The runner opens the same local database `vite dev` and `db:migrate:local` use, through wrangler's `getPlatformProxy` with `apps/api/wrangler.jsonc`, `persist.path` set to `apps/api/.wrangler/state/v3`, and `remoteBindings: false`. It sends the whole seed as one `db.batch`, which D1 runs atomically. A rerun prints the same counts and resets each seed row to its slice values; rows you made by hand stay. To drop rows a slice no longer has, run `pnpm db:drop`, `pnpm db:setup`, then `pnpm db:seed`.
+
+The guard runs before anything opens: `--remote` is refused, any other flag is refused, and so is `NODE_ENV=production`. There is no way to seed a remote D1 database with this command, on purpose.
+
+**Beside a running api.** Local D1 runs in WAL mode, so `db:seed` works while `pnpm dev` serves the api and no request is in flight. A request that writes at the same moment makes the batch fail with `SQLITE_BUSY`, and nothing is written. The runner sends the batch again up to three times, waiting 250 ms, 500 ms and 1 s, then exits `1` asking you to stop the api or run the command again.
+
+## Route tests
+
+The api's tests run in Node with Vitest, against a local D1 of their own. `pnpm test` from the repo root runs them.
+
+```ts
+// apps/api/src/routes/projects.test.ts
+import { describe, expect, it } from "vitest";
+import { testDatabase } from "@repo/db/testing";
+import app from "../index";
+
+const database = testDatabase();
+
+describe("GET /projects", () => {
+  it("lists the seeded projects", async () => {
+    const res = await app.request("/projects", {}, database.env);
+    expect(res.status).toBe(200);
+  });
+});
+```
+
+The test file is the same one you would write on Postgres; only the harness behind `@repo/db/testing` differs. `auth` ships a worked example at `apps/api/src/routes/auth.test.ts`.
+
+How it fits together:
+
+- **Global setup.** `apps/api/test/setup/database.ts` re-exports `setup` from `packages/db/scripts/test-setup.ts`, and the api's `vitest.config.ts` runs every file in that folder once per run. It deletes `apps/api/.wrangler/test-state`, opens a fresh local D1 there, applies every migration with Drizzle's D1 migrator and runs the seed. That database is a template; the development one in `apps/api/.wrangler/state` is never opened.
+- **One copy per test file.** `testDatabase()` copies the template to a temporary folder and opens its own local D1 on it with `getPlatformProxy`, so test files running in parallel never share a database. The copy is deleted when the file ends.
+- **Reset before every test.** D1 has no transaction a test could hold open and roll back. So before each test the copy is emptied, children first, and the seed is written again, in one batch. Every test starts from the seed and sees nothing an earlier test wrote. `database.env` carries the copy as `DB`; `database.db` is a Drizzle client on it.
+
+Read `database.env` and `database.db` inside a test, never at module scope: the database opens in a `beforeAll` hook.
+
 ## Switching drivers
 
 `database-d1` and `database-postgres` declare each other in `conflictsWith`, so `add` refuses the
@@ -223,6 +268,8 @@ There is no data migration in either direction; see ADR 0026.
 - **Replace `database_id` before going remote**, and only then. Local dev needs no Cloudflare
   account.
 - **Migrations are manual** — generate, review, then apply local or prod explicitly.
+- **`db:seed` is local only.** It refuses `--remote` and `NODE_ENV=production`.
+- **Route tests use `testDatabase()`**, which works on a copy. Never point a test at `apps/api/.wrangler/state`.
 - **Remote application is not this module's job to automate.** `db:migrate:prod` exists for manual
   use; centralized production deploy belongs to the future **`infra`** capability.
 - **One driver per project.** Adding `database-postgres` beside this one is refused, by design.

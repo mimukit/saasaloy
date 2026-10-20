@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/d1";
+import type { DrizzleD1Database } from "drizzle-orm/d1";
 import { schema } from "./schema";
 
 // The D1 client. `getDb` wraps the Worker's D1 binding in a Drizzle instance carrying the
@@ -17,8 +18,25 @@ import { schema } from "./schema";
 // is typed without api's entry needing a code-level patch:
 //
 //   new Hono<{ Bindings: DbBindings }>()
+
+/**
+ * The key a route test may put a client under, on the `env` it hands the app. `getDb`
+ * returns that client instead of wrapping `env.DB`.
+ *
+ * The D1 harness in `./testing.ts` does not need it: it hands the routes a real local D1
+ * binding as `DB`, because D1 has no transaction a test could hold open and roll back. The
+ * key exists so a route test is written the same way under both drivers, and
+ * `database-postgres` uses it for exactly that rollback.
+ *
+ * `Symbol.for`, so the test and the route agree on the key even when Vitest loads this file
+ * twice.
+ */
+export const TEST_DB: unique symbol = Symbol.for("@repo/db/test-db");
+
 export interface DbBindings {
   DB: D1Database;
+  /** The route test seam. See `TEST_DB`. */
+  [TEST_DB]?: unknown;
 }
 
 /**
@@ -30,12 +48,15 @@ export interface DbBindings {
  * Prefer `withDb` in a route anyway. It is the same call here, and under
  * `database-postgres` the close it performs is not optional.
  */
-export function getDb(env: DbBindings) {
+export function getDb(env: DbBindings): Db {
+  if (env[TEST_DB] !== undefined) {
+    return env[TEST_DB] as Db;
+  }
   return drizzle(env.DB, { schema });
 }
 
 /** The Drizzle client this driver hands a repository. */
-export type Db = ReturnType<typeof getDb>;
+export type Db = DrizzleD1Database<typeof schema> & { $client: D1Database };
 
 /**
  * The part of a Hono `Context` `withDb` reads. Structural on purpose: `packages/db` stays
