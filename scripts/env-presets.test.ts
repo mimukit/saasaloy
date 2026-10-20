@@ -175,3 +175,101 @@ describe("every module that declares an env var routes it", () => {
     });
   }
 });
+
+interface PackageJson {
+  name?: string;
+  exports?: Record<string, string>;
+  dependencies?: Record<string, string>;
+}
+
+interface Patch {
+  file?: string;
+  kind?: string;
+  section?: string;
+  name?: string;
+  import?: { from?: string };
+}
+
+/** Every `@repo/*` package.json a module or the base template ships, by package name. */
+function workspacePackages(): Map<string, PackageJson[]> {
+  const found = new Map<string, PackageJson[]>();
+  const add = (path: string) => {
+    const pkg = JSON.parse(readFileSync(path, "utf-8")) as PackageJson;
+    if (pkg.name?.startsWith("@repo/")) {
+      found.set(pkg.name, [...(found.get(pkg.name) ?? []), pkg]);
+    }
+  };
+  for (const module of modules()) {
+    const path = join(MODULES, module, "files", "package.json");
+    if (existsSync(path)) {
+      add(path);
+    }
+  }
+  return found;
+}
+
+/** Whether an `exports` map answers a subpath, wildcard entries included. */
+function exportsSubpath(pkg: PackageJson, subpath: string): boolean {
+  return Object.keys(pkg.exports ?? {}).some((key) => {
+    if (!key.includes("*")) {
+      return key === subpath;
+    }
+    const [head = "", tail = ""] = key.split("*");
+    return subpath.startsWith(head) && subpath.endsWith(tail);
+  });
+}
+
+// #206: `database-postgres` patched `databaseEnv` into `apps/api/src/env.ts` from
+// `@repo/db/env-preset`, but `packages/db` exported no such subpath and never depended on
+// `@repo/env`, so a fresh project failed `pnpm typecheck` twice. No patch kind edits an
+// exports map, so the owning package.json has to declare the subpath up front.
+describe("every env preset a module patches in resolves", () => {
+  const packages = workspacePackages();
+
+  for (const module of modules()) {
+    const patches =
+      (descriptorOf(module) as { patches?: Patch[] }).patches ?? [];
+
+    for (const patch of patches) {
+      const from = patch.import?.from;
+      const match = from?.match(/^(@repo\/[^/]+)\/(.+)$/);
+      if (patch.kind !== "plugin-array" || !match?.[1] || !match[2]) {
+        continue;
+      }
+      const [, name, rest] = match;
+      const subpath = `./${rest}`;
+
+      it(`${module}'s import of ${from} is exported`, () => {
+        const owners = packages.get(name) ?? [];
+        assert.ok(owners.length > 0, `No module ships ${name}'s package.json.`);
+        for (const pkg of owners) {
+          assert.ok(
+            exportsSubpath(pkg, subpath),
+            `${name}'s package.json has no "${subpath}" export, so ${module}'s import of ${from} does not resolve.`
+          );
+        }
+      });
+
+      if (rest !== "env-preset") {
+        continue;
+      }
+
+      it(`${name} depends on @repo/env when ${module} patches in its preset`, () => {
+        const declared = (packages.get(name) ?? []).every(
+          (pkg) => pkg.dependencies?.["@repo/env"] !== undefined
+        );
+        const patched = patches.some(
+          (p) =>
+            p.kind === "package-json-dependency" &&
+            p.section === "dependencies" &&
+            p.name === "@repo/env" &&
+            p.file?.endsWith("/package.json")
+        );
+        assert.ok(
+          declared || patched,
+          `${name}'s env preset imports @repo/env, but neither its package.json nor ${module} adds the dependency.`
+        );
+      });
+    }
+  }
+});
