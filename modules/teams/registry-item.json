@@ -2,6 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "teams",
   "type": "saasaloy:feature",
+  "requires": { "saasaloy": ">=0.5.1" },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {},
