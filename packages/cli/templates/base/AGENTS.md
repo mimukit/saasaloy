@@ -124,6 +124,8 @@ helper, the vendored [shadcn](https://ui.shadcn.com) primitives in `src/componen
 marketing **blocks** in `src/blocks/`, the store-bound **containers** in
 `src/containers/`, and the landing page's copy in `src/content/`.
 
+Those layer folders are the whole top level of `src/`: `assets` (images, SVGs and icons, added when the first one arrives), `blocks`, `components`, `containers`, `content`, `lib` and `styles`. Do not add an app folder such as `src/admin/` or `src/web/` beside them. When one app needs its own files inside a layer, give that layer a child folder (`blocks/admin/`, `components/shared/`).
+
 The theme is one shared file plus one theme file per app:
 
 - **`src/styles/globals.css`** is the shared layer: the Tailwind imports, the `@source`
@@ -207,6 +209,8 @@ pnpm --filter @repo/ui exec shadcn add dialog
 
 Primitives are source you own. Edit them in place rather than wrapping them.
 
+**No UI kit or component library as a dependency.** When a design comes from a kit (Tailark, coss ui, a licensed dashboard kit), copy or rebuild the component into `src/components/` or `src/blocks/` as source this project owns. Do not install the kit's package, and keep no link to its repository for later updates. A copied component changes by hand, like any other file here. The shadcn CLI above is the one sanctioned way to fetch a primitive, because it writes source and leaves no runtime dependency behind.
+
 **Swapping the whole theme for a preset.** The token set in
 `packages/ui/src/styles/web.css` is shadcn's `neutral` with `cssVariables: true`, and
 any shadcn **`registry:style`** item is a drop-in replacement for it. The same
@@ -241,8 +245,7 @@ command rather than assuming.
 
 A preset swap invalidates `apps/web/DESIGN.md`, which records the token values the old theme had. The `saasaloy-design` skill's `theme` flow runs the command above for you and re-derives the contract from the merged result, so prefer it over running the command by hand. Pick one or the other — running both applies the preset twice.
 
-Light/dark/system switching is unaffected by any of this — it keys off the `.dark` class,
-which every preset keeps.
+Theme switching is unaffected by any of this. It keys off the `.dark` class, which every preset keeps. The toggle has two states, light and dark: `system` is only the starting state for a visitor who never pressed it, and no press steps back to `system`. Do not give the toggle a third state or a light/dark/system menu.
 
 **A project made before the theme split.** Older projects kept the web tokens in
 `globals.css` and the design document at the repository root. `saasaloy update` creates
@@ -367,6 +370,8 @@ The rules below are not stylistic — each one prevents a real failure:
   React file under `apps/web/src/components/` builds the client and passes the function
   down. Astro serializes island props, so the page renders **that** file, never the block
   directly.
+- **A link that leaves the site opens a new tab.** Spread `externalLinkProps(href)` from `@repo/ui/lib/external-link` onto the anchor and render `newTabHint(href)` inside it. The href decides: an absolute URL gets `target="_blank"`, `rel="noopener noreferrer"` and a screen-reader hint, and a path or a same-page anchor stays in the tab. Do not write `target="_blank"` by hand.
+- **A value that waits on a request shows a skeleton.** Render the `Skeleton` primitive at the size the value will take until the response arrives, never a blank gap or a spinner. Add it with `pnpm --filter @repo/ui exec shadcn add skeleton` the first time a block needs it.
 - **A block never imports a store either.** Local state is fine; shared state is not. See
   the containers section below.
 - **A module's UI arrives here too, and you wire it up by hand.** `saasaloy add <module>`
@@ -445,6 +450,8 @@ record and nothing else. Follow them when you add a block or a key:
    commands, module names, file paths). A translation layer reads `id`, `icon`, `mark`,
    every `*Href` and the quoted code as non-message data. A pair of backticks inside a
    message renders as `<code>` through `inlineCode()` from `@repo/ui/lib/inline-code`.
+
+**No copy that goes stale.** Do not write a version number, a release date or a count into a message. Say something general and link to where the current value lives: the hero pill says "See what's new" and links to the changelog, so it stays true across every release.
 
 Two consequences worth knowing. Blanking a navbar or footer link's label in content drops
 that link, which is how a removed section loses its nav entry without editing a block. And
@@ -532,6 +539,7 @@ hook (which is also how you keep hooks out of CI).
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
 - Run the tests: `pnpm test` (`turbo run test` across every workspace). Only `packages/env` ships tests in the base — they run on `node --test` with no runner to install. Pick a runner and add a `test` script per workspace when you have something else to test.
+- Before you hand over UI work, run `pnpm dev`, load the pages you changed, and read the dev server's terminal output. Fix every error and warning it prints. A clean build does not prove a clean dev server.
 
 ## Boundaries
 
@@ -548,6 +556,7 @@ hook (which is also how you keep hooks out of CI).
 ### ⚠️ Ask First
 
 - Adding new dependencies (especially to root `package.json`)
+- Building new UI before the owner has approved a mockup. Show screenshots of the mockup first and get approval. A change after approval gets a new mockup, not a fix after the work lands
 - Modifying Turborepo configuration (`turbo.json`)
 - Changing TypeScript strictness settings
 - Modifying the husky hooks (`.husky/`), `lint-staged.config.js`, or `commitlint.config.js`

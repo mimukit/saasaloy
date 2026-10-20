@@ -190,7 +190,7 @@ The template uses Tailwind's system sans stack, with no web font. Three named si
 
 ## Layout
 
-Three container widths live in `web.css`. `section-container` is every section's frame at `64rem`. `section-container-narrow` is a deliberate `48rem` reading measure for the FAQ and the closing CTA. `section-container-wide` is `80rem`, for the navbar and the hero's product frame. All three share a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own, so sections can be added, removed and reordered without the spacing drifting. Components use Tailwind's default spacing scale, which stays omitted from the token map because the project does not define a custom scale.
+Three container widths live in `web.css`. `section-container` is every section's frame at `64rem`. `section-container-narrow` is a deliberate `48rem` reading measure for the FAQ and the closing CTA. `section-container-wide` is `80rem`, for the navbar and the hero's product frame. All three share a `1.5rem` gutter. The sticky navbar floats: a gap holds it off the top of the viewport, and it overlays the first section instead of pushing it down. The hero's background, grid and light beams start at the top of the page, behind the bar, so no band of plain background shows above the hero. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own, so sections can be added, removed and reordered without the spacing drifting. Components use Tailwind's default spacing scale, which stays omitted from the token map because the project does not define a custom scale.
 
 ## Elevation & Depth
 
@@ -206,6 +206,10 @@ The landing page is thirteen blocks in `packages/ui/src/blocks/`, composed by ex
 
 Primary buttons use the primary pair. Secondary buttons use the secondary pair. Destructive actions use the destructive token with restrained tint states. Inputs and buttons share a `2rem` default height and the `lg` radius. Cards use the card pair and a border-strength ring.
 
+Cards in one row share one height. The grid stretches its cards, so it carries no `items-start`, and sibling cards hold the same number of one-line items. The pricing tiers are the worked example: five one-line bullets each. A card's primary action sits inside that card, on the primary button, never below or beside it.
+
+A value that waits on a request shows the `Skeleton` primitive in its place, at the size the value will take, until the response arrives. It never shows a blank gap or a spinner. Add the primitive with `pnpm --filter @repo/ui exec shadcn add skeleton` the first time a page needs it.
+
 The `error-state` block is the one screen for a failure: a wrong path, a failed render, a server error. It is a single centered card holding a muted icon, a status label in the mono face at the smallest size, a title at `body-lg`, a description in `muted-foreground`, and one or two actions on the button scale. It carries no destructive token and no alert tint, because a mistyped address is not a danger state. Every app renders this block rather than its own error markup, so a theme change reaches all three at once.
 
 ## Do's and Don'ts
@@ -217,6 +221,8 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 - Do not add a color, radius, shadow, or type size that the code does not define.
 - Do not use a shadow when a border or tonal surface provides the needed separation.
 - Keep UI copy direct and specific. Use the product brief for product language.
+- Do not put a value in copy that goes stale: a version number, a release date, a count. Say something general and link to where the current value lives, the way the hero pill says "See what's new" and links to the changelog.
+- Open every link that leaves the site in a new tab. Spread `externalLinkProps(href)` from `@repo/ui/lib/external-link` onto the anchor and render `newTabHint(href)` inside it. A path on this site or a same-page anchor stays in the tab.
 
 ## Motion
 
@@ -225,5 +231,7 @@ Motion is CSS only and additive. With reduced motion requested, or in a browser 
 ## Dark Mode
 
 The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
+
+The theme toggle has two states, light and dark. `system` is only the starting state: a visitor who never pressed the toggle follows the OS. A press flips the resolved mode and stores the choice, and no press steps back to `system`. Do not add a third state or a light/dark/system menu to the toggle.
 
 _Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:e25d78b57596 of packages/ui/src/styles/web.css_
