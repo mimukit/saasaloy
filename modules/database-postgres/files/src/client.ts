@@ -1,4 +1,5 @@
 import { drizzle } from "drizzle-orm/postgres-js";
+import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { schema } from "./schema";
 
@@ -15,13 +16,29 @@ import { schema } from "./schema";
 //
 //   new Hono<{ Bindings: DbBindings }>()
 //
-// Both fields are optional because a project supplies exactly one of them:
+// Both connection fields are optional because a project supplies exactly one of them:
 // `DATABASE_URL` is the default (a Workers secret in production, `apps/api/.env` locally) and
 // `HYPERDRIVE` only exists once you opt into a Hyperdrive binding. See the
 // `saasaloy-database-postgres` skill.
+
+/**
+ * The key a route test puts its open transaction under, on the `env` it hands the app.
+ *
+ * `getDb` returns that transaction instead of opening a connection, and `withDb` leaves it
+ * open, so every query a route runs lands in the test's transaction and the fixture in
+ * `./testing.ts` rolls all of it back. A route's own `db.transaction()` on it becomes a
+ * savepoint. Nothing in production sets the key: a Worker's `env` has no symbol keys.
+ *
+ * `Symbol.for`, so the test and the route agree on the key even when Vitest loads this file
+ * twice.
+ */
+export const TEST_DB: unique symbol = Symbol.for("@repo/db/test-db");
+
 export interface DbBindings {
   DATABASE_URL?: string;
   HYPERDRIVE?: { connectionString: string };
+  /** The route test seam. Only `testEnv()` from `./testing` sets it; see `TEST_DB`. */
+  [TEST_DB]?: unknown;
 }
 
 /**
@@ -74,7 +91,10 @@ export function resolveConnectionString(env: DbBindings): string {
  * `withDb` below does exactly that. Prefer it in a route and call `getDb` directly only
  * where there is no request context to hand it.
  */
-export function getDb(env: DbBindings) {
+export function getDb(env: DbBindings): Db {
+  if (env[TEST_DB] !== undefined) {
+    return env[TEST_DB] as Db;
+  }
   const sql = postgres(resolveConnectionString(env), {
     max: 5,
     fetch_types: false,
@@ -83,7 +103,9 @@ export function getDb(env: DbBindings) {
 }
 
 /** The Drizzle client this driver hands a repository. */
-export type Db = ReturnType<typeof getDb>;
+export type Db = PostgresJsDatabase<typeof schema> & {
+  $client: ReturnType<typeof postgres>;
+};
 
 /**
  * The part of a Hono `Context` `withDb` reads. Structural on purpose: `packages/db` stays
@@ -118,6 +140,11 @@ export async function withDb<T>(
   body: (db: Db) => Promise<T>
 ): Promise<T> {
   const db = getDb(c.env);
+  // A route test owns its transaction and rolls it back itself, so there is nothing here
+  // to close. See `TEST_DB`.
+  if (c.env[TEST_DB] !== undefined) {
+    return body(db);
+  }
   try {
     return await body(db);
   } finally {

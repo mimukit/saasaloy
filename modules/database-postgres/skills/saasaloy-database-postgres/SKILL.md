@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, seeding it with db:seed, writing route tests against the test database with testDatabase(), opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -293,6 +293,52 @@ Throwing the container away is a separate, manual step:
 docker compose down -v   # stops the container and deletes its volume
 ```
 
+## Seed data: `db:seed`
+
+`pnpm db:seed` fills this checkout's development database with the rows in `packages/db/src/seed/slices/`, one file per table. The slice contract (slugs, `seedId`, the conflict key) is in the `saasaloy-database` skill, "Seed data". This section is what the Postgres runner does with it.
+
+```sh
+pnpm db:setup   # create and migrate the database; it never writes rows
+pnpm db:seed    # upsert every slice row, print a count per table
+```
+
+It writes the whole seed in one transaction, so either every row lands or none does. A rerun prints the same counts and resets each seed row to its slice values; rows you made by hand stay. To drop rows a slice no longer has, run `pnpm db:setup --reset`, then `pnpm db:seed`.
+
+The guard runs before any connection opens:
+
+- `NODE_ENV=production` is refused first.
+- The target is `DATABASE_URL` from the environment, or the one in `apps/api/.env`. Its database must be `<project>_dev` or `<project>_dev_<x>`, the names `db:setup` makes, so `DATABASE_URL=…/postgres pnpm db:seed` exits `1` and writes nothing.
+
+## Route tests
+
+The api's tests run in Node with Vitest, against a test database of their own: `<project>_dev_test`, beside the development one. `pnpm test` from the repo root runs them.
+
+```ts
+// apps/api/src/routes/projects.test.ts
+import { describe, expect, it } from "vitest";
+import { testDatabase } from "@repo/db/testing";
+import app from "../index";
+
+const database = testDatabase();
+
+describe("GET /projects", () => {
+  it("lists the seeded projects", async () => {
+    const res = await app.request("/projects", {}, database.env);
+    expect(res.status).toBe(200);
+  });
+});
+```
+
+`auth` ships a worked example at `apps/api/src/routes/auth.test.ts`: it signs a seed user in, and a second test proves the session it wrote is gone.
+
+How it fits together:
+
+- **Global setup.** `apps/api/test/setup/database.ts` re-exports `setup` from `packages/db/scripts/test-setup.ts`, and the api's `vitest.config.ts` runs every file in that folder once per run. It creates the test database when it is missing (with the same server code `db:setup` uses, starting the container first on the docker backend), applies every migration and runs the seed. When migrating fails, because the migration files were regenerated, it drops the test database, creates it again and migrates once more. `TEST_DATABASE_URL` names another test database; the guard still applies, and it may not name the development database.
+- **One transaction per test.** `testDatabase()` registers an `aroundEach` hook that opens a transaction, runs the test inside it and rolls it back. `database.env` carries that transaction under the `TEST_DB` symbol key, `getDb` returns it instead of opening a connection, and `withDb` leaves it open. A route's own `db.transaction()` becomes a savepoint. `database.db` is the same transaction, to set a row up or to look behind a route.
+- **Node, not workerd.** The test calls `app.request(path, init, env)` directly. `@cloudflare/vitest-pool-workers` is not used: a postgres.js transaction the test holds would cross request contexts, which workerd refuses.
+
+Read `database.env` and `database.db` inside a test, never at module scope: the transaction exists only while a test runs.
+
 ## Hyperdrive: the opt-in
 
 [Hyperdrive](https://developers.cloudflare.com/hyperdrive/) is Cloudflare's connection pooler and
@@ -407,5 +453,7 @@ There is no data migration in either direction; see ADR 0026.
 - **Tables import `drizzle-orm/pg-core`**, matching `dialect: "postgresql"` in `drizzle.config.ts`.
   Never hand-edit that config.
 - **Migrations are manual** — generate, review, then apply with `db:migrate`.
+- **`db:seed` writes only to a database `db:setup` named**, never with `NODE_ENV=production`.
+- **Route tests use `testDatabase()`**, so each one rolls back. Never point a test at the development database.
 - **Hyperdrive is opt-in and code-free.** Add the binding; change nothing in `src/`.
 - **One driver per project.** Adding `database-d1` beside this one is refused, by design.

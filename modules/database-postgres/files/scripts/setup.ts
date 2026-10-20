@@ -128,6 +128,11 @@ function printSummary(context: Context, state: State, url: string): void {
   say(
     `DATABASE_URL is set in ${API_ENV}, and the state block in ${STATE_FILE}.`
   );
+  // Setup never writes rows, `--reset` included, so a database always holds what the
+  // developer last put in it. Seeding is its own command.
+  say(
+    "Run pnpm db:seed to fill it with the rows in packages/db/src/seed/slices/."
+  );
 }
 
 await run(async () => {
