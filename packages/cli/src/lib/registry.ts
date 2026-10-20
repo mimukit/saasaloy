@@ -2,6 +2,8 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { downloadTemplate } from "giget";
+import { readVersion } from "../version.js";
+import { describeInvalidDescriptor } from "./cli-requires.js";
 import { RefusalError } from "./exit.js";
 import { pathExists, readDirNames } from "./fs-utils.js";
 import type { RegistryItem } from "./schema.js";
@@ -176,8 +178,15 @@ export async function loadModuleFolder(
   }
   const result = await validateRegistryItem(parsed);
   if (!result.valid) {
+    // A descriptor this CLI cannot validate is most often one written for a newer CLI,
+    // so the refusal reads its `requires.saasaloy` floor first (#205).
     throw new RefusalError(
-      `Module "${name}" has an invalid descriptor:\n  ${result.errors.join("\n  ")}`
+      describeInvalidDescriptor({
+        cliVersion: await readVersion(),
+        errors: result.errors,
+        name,
+        raw: parsed,
+      })
     );
   }
   const item = parsed as RegistryItem;

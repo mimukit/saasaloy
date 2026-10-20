@@ -146,6 +146,33 @@ describe(LocalRegistrySource, () => {
     await rm(broken, { force: true, recursive: true });
   });
 
+  // The path 0.5.2 met (#205): a field it never heard of, under a floor it fails.
+  it("refuses a descriptor for a newer CLI with the upgrade line", async () => {
+    const future = await mkdtemp(join(tmpdir(), "saasaloy-future-"));
+    await mkdir(join(future, "later"), { recursive: true });
+    await writeFile(
+      join(future, "later", "registry-item.json"),
+      JSON.stringify({
+        fromTheFuture: true,
+        name: "later",
+        requires: { saasaloy: ">=999.0.0" },
+        type: "saasaloy:capability",
+      })
+    );
+    const source = new LocalRegistrySource(future);
+    let thrown: unknown;
+    try {
+      await source.readModule("later");
+    } catch (error) {
+      thrown = error;
+    }
+    expect(isRefusal(thrown)).toBeTruthy();
+    expect((thrown as Error).message).toMatch(
+      /^Module "later" needs saasaloy >=999\.0\.0, and \S+ is installed\. Upgrade with/
+    );
+    await rm(future, { force: true, recursive: true });
+  });
+
   it("errors when the registry directory does not exist", async () => {
     const source = new LocalRegistrySource(join(dir, "nope"));
     await expect(source.readModule("hello")).rejects.toThrow(/does not exist/);
