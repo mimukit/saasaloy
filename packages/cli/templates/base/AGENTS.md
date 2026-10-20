@@ -538,7 +538,7 @@ hook (which is also how you keep hooks out of CI).
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
-- Run the tests: `pnpm test` (`turbo run test` across every workspace). Only `packages/env` ships tests in the base — they run on `node --test` with no runner to install. Pick a runner and add a `test` script per workspace when you have something else to test.
+- Run the tests: `pnpm test`. It runs `turbo run test` (each workspace's own `test` script), then `vitest run` from the root, whose `vitest.config.ts` treats every workspace under `apps/*` and `packages/*` as a project. Write new tests for Vitest: put a `*.test.ts` file beside the code, and give the workspace a `vitest.config.ts` only when it needs setup of its own. Do not add a per-workspace `test` script that calls Vitest, or the file runs twice. `packages/env` is the exception: its tests run on `node --test` through its own `test` script, and the root config leaves it out.
 - Before you hand over UI work, run `pnpm dev`, load the pages you changed, and read the dev server's terminal output. Fix every error and warning it prints. A clean build does not prove a clean dev server.
 
 ## Boundaries
