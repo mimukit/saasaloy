@@ -1,0 +1,3 @@
+# Vitest global setups for the api's tests. `../../vitest.config.ts` runs every `*.ts`
+# file here once before the first test file. The installed database driver drops
+# `database.ts` here, which prepares and seeds the test database. Empty in the base module.
