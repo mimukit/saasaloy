@@ -122,3 +122,64 @@ export function formatCliMismatches(
     `Nothing was written.`,
   ].join("\n");
 }
+
+export interface DescribeInvalidDescriptorArgs {
+  /** The module whose descriptor failed the schema. */
+  name: string;
+  /** The descriptor as parsed, before any schema check. */
+  raw: unknown;
+  /** The schema errors, one line each. */
+  errors: string[];
+  /** The running CLI's version, from `readVersion()`. */
+  cliVersion: string;
+}
+
+/**
+ * The refusal for a descriptor that fails this CLI's schema (#205).
+ *
+ * `detectCliMismatches` runs on a resolved graph, and a descriptor reaches the graph only
+ * after it validates. A descriptor written for a newer CLI carries the very field this CLI
+ * does not know, so it failed the schema first and the user read an Ajv dump instead of
+ * the upgrade sentence. This reads the floor off the raw JSON, so the sentence comes first.
+ * A descriptor with no floor, or one this CLI meets, still gets the schema errors, with an
+ * upgrade hint when an unknown property could be a newer field.
+ */
+export function describeInvalidDescriptor(
+  args: DescribeInvalidDescriptorArgs
+): string {
+  const { name, raw, errors, cliVersion } = args;
+  const range = rawRequiresRange(raw);
+  if (range !== undefined && isValidRange(range)) {
+    if (cliVersion === UNKNOWN_VERSION) {
+      return `Module "${name}" needs saasaloy ${range}, and this CLI's own version could not be read. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+    }
+    if (!satisfies(cliVersion, range)) {
+      return `Module "${name}" needs saasaloy ${range}, and ${cliVersion} is installed. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+    }
+  }
+  const lines = [
+    `Module "${name}" has an invalid descriptor:`,
+    ...errors.map((e) => `  ${e}`),
+  ];
+  // An unknown property is the one error a newer CLI can fix. A wrong type or a missing
+  // required key is the author's bug on every version, so it gets no hint.
+  if (errors.some((e) => e.includes("unexpected property"))) {
+    lines.push(
+      `It may use a field newer than saasaloy ${cliVersion}. Upgrade with \`${UPGRADE_COMMAND}\` and retry.`
+    );
+  }
+  return lines.join("\n");
+}
+
+// `requires.saasaloy` off an unvalidated descriptor: a string or nothing.
+function rawRequiresRange(raw: unknown): string | undefined {
+  if (typeof raw !== "object" || raw === null) {
+    return undefined;
+  }
+  const { requires } = raw as { requires?: unknown };
+  if (typeof requires !== "object" || requires === null) {
+    return undefined;
+  }
+  const { saasaloy } = requires as { saasaloy?: unknown };
+  return typeof saasaloy === "string" ? saasaloy : undefined;
+}

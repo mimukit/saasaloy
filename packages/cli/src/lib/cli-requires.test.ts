@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  describeInvalidDescriptor,
   detectCliMismatches,
   formatCliMismatches,
   UPGRADE_COMMAND,
@@ -202,5 +203,86 @@ describe("the `requires` field against the descriptor schema", () => {
   it("rejects a bare string, which is the shape an author would guess", async () => {
     const result = await validateRegistryItem({ ...base, requires: ">=0.3" });
     expect(result.errors.length).toBeGreaterThan(0);
+  });
+});
+
+// A descriptor written for a newer CLI fails this CLI's schema before the graph check can
+// read its floor, so the floor is read off the raw JSON (#205).
+describe(describeInvalidDescriptor, () => {
+  const errors = ['(root): unexpected property "envServices"'];
+  const raw = {
+    envServices: { default: ["api"] },
+    name: "api",
+    requires: { saasaloy: ">=0.6.0" },
+    type: "saasaloy:capability",
+  };
+
+  it("names the floor instead of the schema errors when the CLI is too old", () => {
+    const message = describeInvalidDescriptor({
+      cliVersion: "0.5.2",
+      errors,
+      name: "api",
+      raw,
+    });
+    expect(message).toBe(
+      `Module "api" needs saasaloy >=0.6.0, and 0.5.2 is installed. Upgrade with \`${UPGRADE_COMMAND}\`.`
+    );
+  });
+
+  it("says the version is unreadable rather than guessing", () => {
+    const message = describeInvalidDescriptor({
+      cliVersion: "unknown",
+      errors,
+      name: "api",
+      raw,
+    });
+    expect(message).toMatch(/could not be read/);
+  });
+
+  // The CLI meets the floor, so the descriptor is broken on its own terms.
+  it("keeps the schema errors when the CLI meets the floor", () => {
+    const message = describeInvalidDescriptor({
+      cliVersion: "0.6.0",
+      errors,
+      name: "api",
+      raw,
+    });
+    expect(message).toMatch(
+      /^Module "api" has an invalid descriptor:\n {2}\(root\): unexpected property "envServices"/
+    );
+  });
+
+  it("hints at an upgrade for an unknown property with no floor", () => {
+    const { requires: _requires, ...noFloor } = raw;
+    const message = describeInvalidDescriptor({
+      cliVersion: "0.5.2",
+      errors,
+      name: "api",
+      raw: noFloor,
+    });
+    expect(message).toMatch(/invalid descriptor/);
+    expect(message).toContain(
+      `It may use a field newer than saasaloy 0.5.2. Upgrade with \`${UPGRADE_COMMAND}\` and retry.`
+    );
+  });
+
+  it("gives no hint for an error no upgrade fixes", () => {
+    const message = describeInvalidDescriptor({
+      cliVersion: "0.5.2",
+      errors: ['(root): missing required property "type"'],
+      name: "api",
+      raw: { name: "api" },
+    });
+    expect(message).not.toMatch(/Upgrade/);
+  });
+
+  it("ignores a floor that is not a range", () => {
+    const message = describeInvalidDescriptor({
+      cliVersion: "0.5.2",
+      errors,
+      name: "api",
+      raw: { ...raw, requires: { saasaloy: "soon" } },
+    });
+    expect(message).toMatch(/invalid descriptor/);
   });
 });
