@@ -60,6 +60,10 @@
       "target": "@api/routes/auth.ts"
     },
     {
+      "path": "files/api/routes/auth.vitest.ts",
+      "target": "@api/routes/auth.test.ts"
+    },
+    {
       "path": "files/db/schema/auth.sqlite.ts",
       "target": "@db/schema/auth.ts",
       "onlyWith": "database-d1"
@@ -68,6 +72,22 @@
       "path": "files/db/schema/auth.pg.ts",
       "target": "@db/schema/auth.ts",
       "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/seed/users.ts",
+      "target": "@db/seed/slices/users.ts"
+    },
+    {
+      "path": "files/db/seed/accounts.ts",
+      "target": "@db/seed/slices/accounts.ts"
+    },
+    {
+      "path": "files/db/seed/sessions.ts",
+      "target": "@db/seed/slices/sessions.ts"
+    },
+    {
+      "path": "files/db/seed/verifications.ts",
+      "target": "@db/seed/slices/verifications.ts"
     }
   ],
   "scaffolds": [

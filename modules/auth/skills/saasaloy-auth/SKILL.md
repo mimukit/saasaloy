@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first superadmin or checking a user's role, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth. Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin or reading one with getSession, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin array (billing/teams), rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -265,6 +265,23 @@ Take the index identifier from your own generated migration rather than from the
 Read it before you apply it, because a `DROP COLUMN` is not reversible and SQLite rewrites the table to do it. Take a copy of the database first. A Postgres project gets the same two statements with `DROP INDEX "accounts_issuer_account_id_uidx"` and `ALTER TABLE "accounts" DROP COLUMN "issuer"`. Nothing reads the column after the drop: better-auth 1.7.3's `getAuthTables()` never writes it and the adapter never selects it.
 
 Leaving the column in place is the option that breaks. The snapshot no longer declares it, so `db:generate` treats it as drift on every later run, and a fresh insert against a database that still has `issuer text NOT NULL` fails the constraint the moment 1.7.3 stops writing the value.
+
+## Seed users and the dev password
+
+`auth` ships seed slices for its four tables, so `pnpm db:seed` gives a development database four users, one for each way the admin app shows a user:
+
+| Email | Role | Notes |
+| --- | --- | --- |
+| `superadmin@example.test` | `superadmin` | sign in here to reach every admin page |
+| `admin@example.test` | `admin` | |
+| `member@example.test` | `user` | |
+| `banned@example.test` | `user` | banned, so sign-in is refused |
+
+Every one has an email-and-password account with the password **`saasaloy-dev-password`**, and `db:seed` prints it after the counts. The hash in `packages/db/src/seed/slices/accounts.ts` is precomputed in Better Auth's own format, so the seed never loads Better Auth. `sessions` and `verifications` ship empty slices: a seeded session would carry a token nobody holds.
+
+A seeded database already holds a superadmin, so the first-user promotion above does not fire there: the first person to sign up gets `user`. Sign in as `superadmin@example.test` instead. Never seed a database other people can reach; the password is in this file.
+
+`auth` also ships the example route test, `apps/api/src/routes/auth.test.ts`. It signs the seeded superadmin in through `POST /auth/sign-in/email` and checks the session row, then a second test proves that row is gone. Copy its shape for a route of your own; the database driver's skill, "Route tests", explains `testDatabase()`.
 
 ## Revocation: delete the session row
 

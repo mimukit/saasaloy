@@ -64,6 +64,10 @@
     {
       "path": "files/web/components/WaitlistForm.tsx",
       "target": "@web/components/WaitlistForm.tsx"
+    },
+    {
+      "path": "files/db/seed/waitlist-entries.ts",
+      "target": "@db/seed/slices/waitlist-entries.ts"
     }
   ],
   "agent": {

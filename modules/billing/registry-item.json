@@ -158,6 +158,14 @@
       "path": "files/db/schema/billing.pg.ts",
       "target": "@db/schema/billing.ts",
       "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/seed/billing-subscriptions.ts",
+      "target": "@db/seed/slices/billing-subscriptions.ts"
+    },
+    {
+      "path": "files/db/seed/billing-events.ts",
+      "target": "@db/seed/slices/billing-events.ts"
     }
   ],
   "scaffolds": [
