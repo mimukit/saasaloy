@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database
-description: Runbook for the database capability — the driver-neutral Drizzle ORM data layer in packages/db. Use when adding or changing tables, writing repositories, generating migrations, or choosing between the database-d1 and database-postgres drivers. Covers the schema-barrel drop convention, the thin repository pattern, and db:generate. The connection, the dialect and the migrate commands belong to the driver skills, saasaloy-database-d1 and saasaloy-database-postgres.
+description: Runbook for the database capability — the driver-neutral Drizzle ORM data layer in packages/db. Use when adding or changing tables, writing repositories, writing seed slices for db:seed, generating migrations, or choosing between the database-d1 and database-postgres drivers. Covers the schema-barrel drop convention, the thin repository pattern, seed slices, and db:generate. The connection, the dialect and the migrate commands belong to the driver skills, saasaloy-database-d1 and saasaloy-database-postgres.
 ---
 
 # database — the driver-neutral data layer
@@ -280,6 +280,43 @@ creates a database per branch over a chosen backend and records it in a state bl
 `database-d1` wraps wrangler, because its local state is already per worktree. The core adds none of
 those three names. Read the driver skill your project has.
 
+## Seed data
+
+`pnpm db:seed` fills the development database with example rows. The rows live in **seed slices**: one file per table under `packages/db/src/seed/slices/`, named after the table in kebab-case (`organization_roles` → `organization-roles.ts`). Each module that ships a table ships its slice too, so `saasaloy add teams` brings the rows for its four tables.
+
+```ts
+// packages/db/src/seed/slices/projects.ts
+import { projects as projectsTable } from "../../schema/projects";
+import { seedId } from "../id";
+import { defineSlice } from "../slice";
+
+export const projects = defineSlice(projectsTable, {
+  rows: {
+    website: { name: "Website", organizationId: seedId("organizations", "acme") },
+    mobile: { name: "Mobile app", organizationId: seedId("organizations", "acme") },
+  },
+});
+```
+
+The engine in `packages/db/src/seed/` is driver-neutral. `index.ts` globs `slices/*.ts` with the same eager `import.meta.glob` the schema barrel uses, so a new slice file needs no edit anywhere else. The runner and its guard belong to the driver: read `saasaloy-database-d1` or `saasaloy-database-postgres` for what `db:seed` refuses and where it writes.
+
+**Rows are keyed by slug, and the slug makes the id.** A table with a single text primary key gets `id = seedId("<table>", "<slug>")` when the row leaves `id` out. `seedId` is a UUIDv5 of the table name and the slug, so a row in another slice points at it with the same call: `userId: seedId("users", "superadmin")`. Every id is known before the first write, which is what lets Postgres run the whole seed in one transaction and D1 in one batch.
+
+**The conflict key is the primary key, with one exception.** Every row is an `insert … on conflict do update` on the table's primary key, read from the Drizzle schema. A composite key such as `billing_events` (`provider`, `provider_event_id`) needs nothing extra. A primary key the database generates (an identity or autoincrement column, such as `waitlist_entries.id`) cannot be named by a row, so the slice names a unique key instead: `key: ["email"]`. No other slice may point at those rows by slug; the plan refuses a `seedId` of a generated-key table.
+
+**A rerun is an upsert.** `pnpm db:seed` twice prints the same counts. Each seed row goes back to its slice values, and every row you made by hand stays, including one that points at a seed row: a session, an organization you made as the superadmin.
+
+**A row removed from a slice stays in the database.** The seed keeps no state between runs, so it cannot tell an old seed row from one you made. Start clean with `pnpm db:setup --reset` on Postgres, or `pnpm db:drop` then `pnpm db:setup` on D1, then `pnpm db:seed`. `db:setup` never seeds on either driver.
+
+**One row for each state the UI shows differently.** That is the size rule, and the review test for a slice: one subscription per normalized status, one invitation per status, one flag per type. No number cap and no generated data.
+
+**A table change updates its slice in the same change.** Add a table, add its slice; rename a column, rename it in the slice. A table that should stay empty gets a slice with `rows: {}`, which records the choice. Two checks hold the rule:
+
+- `packages/db/src/seed/completeness.test.ts` runs with `pnpm test` and fails naming every schema table that has no slice, or a slice the plan cannot build.
+- In the saasaloy repo, `scripts/seed-slices.test.ts` fails when a module ships a table and no `@db/seed/slices/<table>.ts` for it.
+
+A slice may also set `after: ["<table>"]` for an order no foreign key shows, and `message` for a line `db:seed` prints after the counts. The `auth` slices use it to print the dev password every seed user signs in with.
+
 ## Boundaries to honor
 
 - **Drop `src/schema/<name>.ts` to add a table.** Never hand-edit the barrel.
@@ -293,3 +330,4 @@ those three names. Read the driver skill your project has.
 - **`auth` and `waitlist` install under either driver**, and each picks its schema variant when you
   add it. Switching driver later means removing and adding those modules too; see the driver skill.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.
+- **Every table has a seed slice.** One file per table in `src/seed/slices/`, changed in the same change as the table.

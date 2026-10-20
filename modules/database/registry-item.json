@@ -31,6 +31,42 @@
         {
           "path": "files/src/repositories/.gitkeep",
           "target": "src/repositories/.gitkeep"
+        },
+        {
+          "path": "files/src/seed/index.ts",
+          "target": "src/seed/index.ts"
+        },
+        {
+          "path": "files/src/seed/id.ts",
+          "target": "src/seed/id.ts"
+        },
+        {
+          "path": "files/src/seed/slice.ts",
+          "target": "src/seed/slice.ts"
+        },
+        {
+          "path": "files/src/seed/order.ts",
+          "target": "src/seed/order.ts"
+        },
+        {
+          "path": "files/src/seed/plan.ts",
+          "target": "src/seed/plan.ts"
+        },
+        {
+          "path": "files/src/seed/table.ts",
+          "target": "src/seed/table.ts"
+        },
+        {
+          "path": "files/src/seed/apply.ts",
+          "target": "src/seed/apply.ts"
+        },
+        {
+          "path": "files/src/seed/completeness.vitest.ts",
+          "target": "src/seed/completeness.test.ts"
+        },
+        {
+          "path": "files/src/seed/slices/.gitkeep",
+          "target": "src/seed/slices/.gitkeep"
         }
       ]
     }
