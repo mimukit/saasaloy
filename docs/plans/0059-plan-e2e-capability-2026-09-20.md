@@ -49,6 +49,8 @@ Reuses: the `scaffolds` + `aliases` mechanism (`modules/api/registry-item.json`)
 
 ### Phase 1: a unit runner in the base template
 
+Moved to [plan 0072](0072-plan-seed-system-2026-10-20.md) Phase 1 (#207), because its seed completeness test and route test harness need the runner first. What shipped differs in three places: the root script is `turbo run test && vitest run`, so `packages/env` keeps its `node:test` run; the `projects` glob excludes `packages/env`, whose tests Vitest cannot collect; and no `packages/ui` example test ships, because the database modules bring the first real tests. Exclude `packages/e2e` in the same glob when Phase 2 lands.
+
 - Add `vitest` (exact-pinned) to the base template's root `devDependencies` and `"test": "vitest run"` to the root scripts.
 - Add `vitest.config.ts` at the template root with a `projects` glob over `apps/*` and `packages/*`, excluding `packages/e2e`.
 - Write one real example test in `packages/ui`, covering an existing exported function rather than a placeholder assertion.

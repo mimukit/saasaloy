@@ -100,7 +100,7 @@ None. Every decision above was settled in the grill.
 Deferred by decision, to be filed as their own issues.
 
 1. **`db:prune`.** The precedent ships it because `db:drop` gets forgotten. It needs the git worktree list and a server-wide database list.
-2. **`db:seed`.** `db:setup` in the precedent migrates *and* seeds, and its seed guard (`refuse a database not named <prefix>_dev or <prefix>_dev_<branch>`) is what makes the branch-name rule fully load-bearing.
+2. **`db:seed`.** `db:setup` in the precedent migrates *and* seeds, and its seed guard (`refuse a database not named <prefix>_dev or <prefix>_dev_<branch>`) is what makes the branch-name rule fully load-bearing. Built by [plan 0072](0072-plan-seed-system-2026-10-20.md) (#207): `db:seed` ships in both drivers, and `db:setup` stays separate and never seeds.
 3. **An `env` capability.** Phase 2 inlines an env-file reader and writer per driver. unishopr's `packages/env` is the shape a `saasaloy add env` would take, and `saasaloy env` would use it too.
 4. **`remove <driver>` leaves patched script keys behind.** The D1 skill already records this wart for `packages/db/tsconfig.json`. This plan widens it to six script keys and a root `compose.yaml`, so the skills must say so until the remover handles it.
 

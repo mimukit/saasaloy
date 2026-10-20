@@ -92,6 +92,10 @@ _Avoid: cache, mirror. A cache may be dropped without consequence; a projection 
 The SQL name of a table a module or project ships, always plural snake_case: `users`, `feature_flag_overrides`, `waitlist_entries`. The Drizzle **export key** is the camelCase form of the same plural, a column stays singular (`user_id`), and an index starts with its table name. Better Auth's tables follow the rule because `drizzleAdapter` runs with `usePlural: true`, which looks each model up by `<model>s` export key and appends that `s` to a plugin's custom `modelName` too ([ADR 0038](docs/adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md)).
 _Avoid: model name for the SQL name. A model name is Better Auth's key (`user`, `apikey`); the export key and the table name are the project's._
 
+### Seed slice
+The example rows for **one table**, in one file under `packages/db/src/seed/slices/`, named after the table in kebab-case. `defineSlice(table, { rows })` keys each row by a slug, and the slug makes the row's id: `seedId("<table>", "<slug>")`, a UUIDv5, which another slice writes to point at the row. `pnpm db:seed` upserts every row on the table's primary key, or on the unique `key` a slice names when the database generates the primary key. A module that ships a table ships its slice, and a slice holds one row for each state the UI shows differently ([plan 0072](docs/plans/0072-plan-seed-system-2026-10-20.md)).
+_Avoid: fixture, seed file, factory. A fixture suggests test-only data, and a factory makes random rows; a slice is hand-written, read by both `db:seed` and the route test harness, and keyed to one table._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 

@@ -133,6 +133,8 @@ Web finding (#186): `astro dev` exits before it is ready on a base-only project 
 
 ### Phase 4: seed data (#187)
 
+Superseded by [plan 0072](0072-plan-seed-system-2026-10-20.md) (#207). Seed data now lives in per-table seed slices that modules install into `packages/db/src/seed/slices/`, and `pnpm db:seed` writes them on both drivers, so no `modules/<name>/seed.ts` and no HTTP seeding ships. `play:restore --db` already ends with `pnpm db:seed`; `play:up` should call the same command when it lands. The seed users are `superadmin@example.test`, `admin@example.test`, `member@example.test` and `banned@example.test`, with the password `saasaloy-dev-password`.
+
 - A module can ship `modules/<name>/seed.ts`. It uses the HTTP API only and is never copied into a project.
 - The auth seed signs up `admin@example.test` first, so it gets `superadmin`, then `customer@example.test`, both with a known password.
 - Other seeds add two organizations, a subscription on the console billing provider, and waitlist rows.
