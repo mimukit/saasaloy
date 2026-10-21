@@ -101,6 +101,14 @@
     {
       "path": "files/admin/routes/flags.tsx",
       "target": "@admin/routes/flags.tsx"
+    },
+    {
+      "path": "files/db/seed/feature-flags.ts",
+      "target": "@db/seed/slices/feature-flags.ts"
+    },
+    {
+      "path": "files/db/seed/feature-flag-overrides.ts",
+      "target": "@db/seed/slices/feature-flag-overrides.ts"
     }
   ],
   "scaffolds": [

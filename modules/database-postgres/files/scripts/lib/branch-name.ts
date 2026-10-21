@@ -73,6 +73,23 @@ export function branchDatabaseName(prefix: string, branch: string): string {
 }
 
 /**
+ * The test database of the checkout whose development database is `database`:
+ * `<database>_test`, so two worktrees running `pnpm test` at once never share one, and one
+ * run's drop on a failed migration never reaches the other's. A name over 63 bytes is cut
+ * and gets `_` plus a SHA-1 prefix of `database` before the `_test`.
+ */
+export function testDatabaseName(database: string): string {
+  const name = `${database}_test`;
+  if (name.length <= MAX_IDENTIFIER_BYTES) {
+    return name;
+  }
+  const kept = database
+    .slice(0, MAX_IDENTIFIER_BYTES - HASH_LENGTH - "__test".length)
+    .replace(/_+$/, "");
+  return `${kept}_${hashOf(database)}_test`;
+}
+
+/**
  * Throw unless `database` is one this project's scripts may create or drop: the plain
  * `<prefix>` or `<prefix>_<something>`, `[a-z0-9_]` only and inside 63 bytes.
  *

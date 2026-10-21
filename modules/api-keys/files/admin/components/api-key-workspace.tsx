@@ -141,7 +141,9 @@ export function ApiKeyWorkspace({
       if (result.error) {
         throw new Error(result.error.message);
       }
-      return (result.data ?? []) as unknown as KeyRow[];
+      // The list endpoint answers `{ apiKeys, total }`, not an array.
+      const rows: KeyRow[] = result.data?.apiKeys ?? [];
+      return rows;
     },
   });
   const keys = useQuery(keysQuery);

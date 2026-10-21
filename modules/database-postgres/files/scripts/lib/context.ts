@@ -13,9 +13,9 @@ import { formatState, inferState, parseState } from "./state.ts";
 import type { State } from "./state.ts";
 import { databaseOf, hostOf } from "./url.ts";
 
-// What `db:setup`, `db:status` and `db:drop` share: where the repo root, the api env file
-// and the state file are, which database this checkout should use, one short-lived SQL
-// connection, and the pnpm child process that runs the migrations.
+// What `db:setup`, `db:status`, `db:drop` and `db:seed` share: where the repo root, the api
+// env file and the state file are, which database this checkout should use, one short-lived
+// SQL connection, and the pnpm child process that runs the migrations.
 //
 // Every script runs from `packages/db` (`pnpm --filter @repo/db db:setup`), so the repo root
 // is two levels up.
@@ -121,9 +121,14 @@ function projectName(root: string): string {
  * file. A checkout on `main` (or outside git) gets the plain `<prefix>`; every other branch
  * gets `<prefix>_<branch>`, so a migration that is not merged never reaches a database
  * another developer shares.
+ *
+ * `root` defaults to two levels above the working directory, which is the repo root for a
+ * script run through `pnpm --filter @repo/db`. The test harness passes its own, because
+ * Vitest runs from the repo root.
  */
-export function loadContext(): Context {
-  const root = resolve(process.cwd(), "../..");
+export function loadContext(
+  root: string = resolve(process.cwd(), "../..")
+): Context {
   const branch = gitBranch(root);
   const prefix = databasePrefix(projectName(root));
   const isDefaultBranch = !branch || DEFAULT_BRANCHES.has(branch);

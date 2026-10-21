@@ -102,6 +102,10 @@
     {
       "path": "files/admin/components/api-key-workspace.tsx",
       "target": "@admin/components/api-key-workspace.tsx"
+    },
+    {
+      "path": "files/db/seed/api-keys.ts",
+      "target": "@db/seed/slices/api-keys.ts"
     }
   ],
   "agent": {

@@ -76,6 +76,22 @@
     {
       "path": "files/admin/components/organization-workspace.tsx",
       "target": "@admin/components/organization-workspace.tsx"
+    },
+    {
+      "path": "files/db/seed/organizations.ts",
+      "target": "@db/seed/slices/organizations.ts"
+    },
+    {
+      "path": "files/db/seed/members.ts",
+      "target": "@db/seed/slices/members.ts"
+    },
+    {
+      "path": "files/db/seed/invitations.ts",
+      "target": "@db/seed/slices/invitations.ts"
+    },
+    {
+      "path": "files/db/seed/organization-roles.ts",
+      "target": "@db/seed/slices/organization-roles.ts"
     }
   ],
   "agent": {

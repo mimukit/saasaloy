@@ -1,6 +1,6 @@
 ---
 name: saasaloy-api
-description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, and how features add their own wrangler bindings.
+description: Runbook for the api capability — Hono on Cloudflare Workers with a statically chained, RPC-typed route table. Use when adding, changing, or debugging routes in apps/api, building a typed client with hc<AppType>, wiring bindings (c.env), logging from a route (c.get("log")), running the Worker locally, testing a route with Vitest in Node (app.request), or deploying it. Covers the chained-route registration convention, the mount-relative path rule, explicit status codes, and how features add their own wrangler bindings.
 ---
 
 # api — Hono on Cloudflare Workers
@@ -345,6 +345,29 @@ curl http://localhost:4000/health # → {"status":"ok"}
 `vite dev` runs the actual Workers runtime, so local behavior matches the edge closely. Editing a
 route file is picked up on the next request with no restart.
 
+## Test it: Vitest in Node
+
+`pnpm test` from the repo root runs the api's tests with Vitest, in Node rather than in workerd. Put a `*.test.ts` file beside the route, or under `apps/api/test/`, and call the app directly:
+
+```ts
+import { describe, expect, it } from "vitest";
+import app from "../index";
+
+describe("GET /health", () => {
+  it("answers", async () => {
+    const res = await app.request("/health", {}, {});
+    expect(res.status).toBe(200);
+  });
+});
+```
+
+The third argument to `app.request` is `c.env` for that request, so the test decides every binding. `apps/api/vitest.config.ts` is what makes this work, and it is why Vitest never reads `vite.config.ts`, whose Cloudflare plugin would boot the whole Worker first:
+
+- **`cloudflare:workers` resolves to `test/cloudflare-workers.ts`.** Code that imports `env` from it at module scope, such as Better Auth's options in `@repo/auth`, loads unchanged. The stand-in's `env` holds the values in `apps/api/.env`, so run `pnpm env:setup` when a test fails on a missing key.
+- **Every file in `test/setup/` is a Vitest global setup**, run once per `pnpm test`. A module drops one there rather than editing the config. The database driver ships `test/setup/database.ts`, which prepares a seeded test database; read the driver skill's "Route tests" section for `testDatabase()`, the helper a route test that touches the database uses.
+
+Do not add a `test` script to `apps/api/package.json`: the root `vitest.config.ts` already runs this workspace, and a second script would run every file twice.
+
 ## Ports are fixed, on purpose
 
 | Service | Port | Pinned in |
@@ -407,3 +430,4 @@ Deployment of all services is centralized in the future **`infra`** capability (
   route (`auth`) answers its own misses and never reaches that handler.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
+- **Test a route in Node with `app.request(path, init, env)`.** A setup step goes in `test/setup/`, not in `vitest.config.ts`.

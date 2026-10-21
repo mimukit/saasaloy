@@ -53,7 +53,7 @@ What it reuses:
 
 Rejected, one line each: delete-then-insert (a hand-made row that references a seed row through a foreign key with no cascade blocks every rerun); the unishopr marker column with `.returning()` (it needs interactive transactions, which D1 lacks); seeding through the HTTP API (plan 0066's idea, which cannot reach a table without a route, so no completeness check); a `plugin-array` registry of slices (a second list to keep in step with the files, when the glob already exists).
 
-### Phase 1: Vitest in the base template (#207)
+### Phase 1: Vitest in the base template (#207) (built 2026-10-20)
 
 - Add `vitest` exact-pinned to the template root `devDependencies`, a root `vitest.config.ts` with `projects` over `apps/*` and `packages/*`, and point the root `test` script at it.
 - Turn on oxlint's `vitest` preset in the template's `oxlint.config.mjs`.
@@ -61,7 +61,7 @@ Rejected, one line each: delete-then-insert (a hand-made row that references a s
 
 Done when: `saasaloy init` in `.dev` followed by `pnpm test` runs Vitest, finds no tests, and exits 0, and `pnpm deps:check` lists the new pin.
 
-### Phase 2: Seed engine in the `database` core (#207)
+### Phase 2: Seed engine in the `database` core (#207) (built 2026-10-20)
 
 - Scaffold `packages/db/src/seed/`: `slice.ts` (`defineSlice`, the slice type), `id.ts` (`seedId`), `order.ts` (foreign-key order, cycle error), `plan.ts` (the upsert plan from slices and schema, with the conflict key resolved for each table), `index.ts` (the glob over `slices/*.ts`), and an empty `slices/` folder.
 - Scaffold `packages/db/src/seed/completeness.test.ts`.
@@ -70,7 +70,7 @@ Done when: `saasaloy init` in `.dev` followed by `pnpm test` runs Vitest, finds 
 
 Done when: `pnpm test:modules` passes with the engine tests, and on a fresh `.dev` project with `database` and either driver, `pnpm test` runs the completeness test and it passes with zero tables.
 
-### Phase 3: Postgres runner (#207)
+### Phase 3: Postgres runner (#207) (built 2026-10-20)
 
 - `database-postgres/files/scripts/seed.ts`: load the seed entry through `runnerImport`, run the guard, open one postgres.js connection, run the plan in one transaction, print a count per table and the database name.
 - `db:seed` in `packages/db` and at the root. `db:setup` prints a hint to run it and never seeds, `--reset` included.
@@ -78,14 +78,14 @@ Done when: `pnpm test:modules` passes with the engine tests, and on a fresh `.de
 
 Done when: on a fresh `.dev` project with `database-postgres`, `pnpm db:setup` then `pnpm db:seed` seeds one hand-written example slice and prints its count, a second run prints the same count and the row count in the table is unchanged, a seed row edited by hand is back to its slice values after the rerun, a row inserted by hand survives the rerun, `DATABASE_URL` naming `postgres` makes `db:seed` exit 1 with no write, and `NODE_ENV=production pnpm db:seed` exits 1 before it connects.
 
-### Phase 4: D1 runner (#207)
+### Phase 4: D1 runner (#207) (built 2026-10-20)
 
 - `database-d1/files/scripts/seed.ts`: the same entry through `runnerImport`, local D1 through `getPlatformProxy` (absolute `persist.path`, `remoteBindings: false`), the plan as one `db.batch` with the `SQLITE_BUSY` retry, the same output.
 - `db:seed` scripts as in Phase 3.
 
 Done when: the Phase 3 checks pass on a fresh `.dev` project with `database-d1` (with `--remote` in place of the `postgres` database name for the refusal check), and `db:seed` succeeds while `pnpm dev` runs the api with no request in flight.
 
-### Phase 5: Module slices (#207)
+### Phase 5: Module slices (#207) (built 2026-10-20)
 
 - Ship a slice with real rows from `auth` (`users`, `accounts`; `sessions` and `verifications` ship empty slices), `billing`, `waitlist`, `feature-flags`, `api-keys`, `teams` and `multitenant`, each landing at `@db/seed/slices/<table>.ts`, with one row for each state the UI shows differently.
 - Document the dev password the `auth` slice uses, and print it at the end of `db:seed` when the `users` slice ran.
@@ -93,7 +93,7 @@ Done when: the Phase 3 checks pass on a fresh `.dev` project with `database-d1` 
 
 Done when: on a `.dev` project with every module that has a table, on each driver, `pnpm db:seed` prints a count for every table, the completeness test passes, the repo test passes, and the seeded superadmin signs in to the admin app with the documented password.
 
-### Phase 6: Postgres route test harness (#207)
+### Phase 6: Postgres route test harness (#207) (built 2026-10-20)
 
 - In `database-postgres`: `packages/db/src/testing.ts` with `TEST_DB` and `testEnv()`; the `TEST_DB` branch in `getDb` and `withDb` of both drivers' `client.ts`; a Vitest `globalSetup` for `apps/api` that creates `<prefix>_test` through the existing backend code when it is missing, migrates it and seeds it once per run, reading `TEST_DATABASE_URL` or deriving it from `DATABASE_URL`.
 - A `test` fixture that opens a transaction, hands it to `getDb` through `env[TEST_DB]`, and rolls it back after the test.
@@ -101,14 +101,14 @@ Done when: on a `.dev` project with every module that has a table, on each drive
 
 Done when: on a fresh `.dev` project with `database-postgres` and `auth`, `pnpm test` creates `<prefix>_test` on the first run, both example tests pass, a second `pnpm test` passes without reseeding, and `psql` shows the seeded row count unchanged after the run.
 
-### Phase 7: D1 route test harness (#207)
+### Phase 7: D1 route test harness (#207) (built 2026-10-20)
 
 - In `database-d1`: the same `globalSetup` shape on local D1 under a separate persist directory (opened through `getPlatformProxy` in Node, so `testEnv()` hands the routes that D1 binding), and a per-file hook that reruns the seed plan.
 - The same two example tests.
 
 Done when: the Phase 6 example tests pass on a fresh `.dev` project with `database-d1`, and the dev database under `apps/api/.wrangler/state` is untouched by the run.
 
-### Phase 8: Docs and the term (#207)
+### Phase 8: Docs and the term (#207) (built 2026-10-20)
 
 - A "Seed data" section in the `saasaloy-database` skill (the slice contract, `seedId`, the conflict-key rule, upsert reruns, the removed-row rule and its `db:setup --reset` fix, the one-row-per-UI-state rule, the "a table change updates its slice" rule) and runbook sections in both driver skills (guard, `db:seed`, `SQLITE_BUSY` on D1, the test harness).
 - Add **seed slice** to `CONTEXT.md`.

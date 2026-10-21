@@ -279,6 +279,8 @@ file where a capability already auto-discovers it.
   register it with a `chained-route` patch (below). The drop alone mounts nothing.
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
+- **Every table ships its seed slice.** Drop `files/db/seed/<table-in-kebab-case>.ts` → `@db/seed/slices/<table-in-kebab-case>.ts`, one row for each state the UI shows differently, and `rows: {}` for a table that stays empty. `scripts/seed-slices.test.ts` fails when a module ships a table without one. The `saasaloy-database` skill, "Seed data", has the slice contract.
+- **A Vitest test file is `<name>.vitest.ts` in the module and `<name>.test.ts` in the project.** Set the rename in the descriptor (`"path": "files/api/routes/auth.vitest.ts", "target": "@api/routes/auth.test.ts"`). `pnpm test:modules` runs `node --test` over `modules/*/files/**/*.test.ts`, and it would fail on a file that imports `vitest`.
 - **`queue`** scaffolds `packages/queue` with a **job table** and a **schedule table**, both plain
   array literals in `src/index.ts`. Background work is two parts, the same shape as a route. Drop
   `files/queue/jobs/<feature>.ts` → `@queue/jobs/<feature>.ts`, exporting a **factory**

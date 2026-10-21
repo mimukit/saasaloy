@@ -4,5 +4,5 @@
     "types": ["node", "vite/client"],
     "allowImportingTsExtensions": true
   },
-  "include": ["src", "scripts", "drizzle.config.ts"]
+  "include": ["src", "scripts", "drizzle.config.ts", "vitest.config.ts"]
 }

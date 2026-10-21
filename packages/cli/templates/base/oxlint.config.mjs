@@ -2,6 +2,7 @@ import { defineConfig } from "oxlint";
 import astro from "ultracite/oxlint/astro";
 import core from "ultracite/oxlint/core";
 import react from "ultracite/oxlint/react";
+import vitest from "ultracite/oxlint/vitest";
 
 // Run it as `oxlint -c oxlint.config.mjs` — the flag is not optional. oxlint only
 // auto-discovers `.oxlintrc.json`, and a JSON config cannot `extends` Ultracite's
@@ -9,8 +10,8 @@ import react from "ultracite/oxlint/react";
 // modules. The JS config format is experimental and needs Node.js, which this
 // project already requires (>= 24).
 //
-// Add `ultracite/oxlint/tanstack` when an admin SPA lands, and
-// `ultracite/oxlint/vitest` when the first test file does. The full preset list is
+// Add `ultracite/oxlint/tanstack` when an admin SPA lands. `vitest` is on because the
+// root `vitest.config.ts` runs every workspace's tests. The full preset list is
 // angular, astro, core, jest, js-plugins, nestjs, next, qwik, react, remix, solid,
 // svelte, tanstack, vitest, vue.
 
@@ -39,7 +40,7 @@ function mergePresets(...presets) {
   return merged;
 }
 
-const ultracite = mergePresets(core, astro, react);
+const ultracite = mergePresets(core, astro, react, vitest);
 
 // Rules turned off for the whole project, each with its reason. Ultracite enables
 // ~470, including whole families oxlint itself files under `style`, `pedantic` and
@@ -202,8 +203,8 @@ export default defineConfig({
       rules: { "import/no-cycle": "off" },
     },
 
-    // `packages/env` runs on `node:test`, not vitest — the base ships no test runner to
-    // install, which is the whole reason its tests are written against Node's own. Three
+    // `packages/env` runs on `node:test`, not vitest. Its tests predate the base's Vitest
+    // setup, and the root `vitest.config.ts` leaves the package out. Three
     // vitest rules point these files at a runner they cannot use, and
     // `no-floating-promises` fires on every `describe`, whose promise the runner itself
     // awaits. Prefixing twenty call sites with `void` would say nothing the runner does

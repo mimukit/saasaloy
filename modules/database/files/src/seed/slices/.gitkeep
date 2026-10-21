@@ -1,0 +1,3 @@
+# Seed slices live here: one file per table, each exporting `defineSlice(table, { rows })`.
+# `../index.ts` globs this folder, so a new file is picked up with no edit anywhere else.
+# The completeness test (`../completeness.test.ts`) fails until every table has one.

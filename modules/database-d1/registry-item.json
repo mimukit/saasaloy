@@ -49,6 +49,12 @@
       "value": "node scripts/drop.ts"
     },
     {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:seed",
+      "value": "node scripts/seed.ts"
+    },
+    {
       "file": "package.json",
       "kind": "package-json-script",
       "name": "db:setup",
@@ -65,6 +71,12 @@
       "kind": "package-json-script",
       "name": "db:drop",
       "value": "pnpm --filter @repo/db db:drop"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:seed",
+      "value": "pnpm --filter @repo/db db:seed"
     },
     {
       "file": "packages/db/package.json",
@@ -92,6 +104,10 @@
     {
       "path": "files/src/client.ts",
       "target": "@db/client.ts"
+    },
+    {
+      "path": "files/src/testing.ts",
+      "target": "@db/testing.ts"
     }
   ],
   "scaffolds": [
@@ -117,6 +133,27 @@
         {
           "path": "files/scripts/drop.ts",
           "target": "scripts/drop.ts"
+        },
+        {
+          "path": "files/scripts/seed.ts",
+          "target": "scripts/seed.ts"
+        },
+        {
+          "path": "files/scripts/test-setup.ts",
+          "target": "scripts/test-setup.ts"
+        },
+        {
+          "path": "files/scripts/lib/seed.ts",
+          "target": "scripts/lib/seed.ts"
+        }
+      ]
+    },
+    {
+      "workspace": "apps/api",
+      "files": [
+        {
+          "path": "files/api/test/setup/database.ts",
+          "target": "test/setup/database.ts"
         }
       ]
     }

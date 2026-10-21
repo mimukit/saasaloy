@@ -72,6 +72,10 @@
     {
       "path": "files/api/routes/projects.ts",
       "target": "@api/routes/projects.ts"
+    },
+    {
+      "path": "files/db/seed/projects.ts",
+      "target": "@db/seed/slices/projects.ts"
     }
   ],
   "agent": {

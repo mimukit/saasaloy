@@ -5,7 +5,7 @@
 //   node scripts/playground.ts restore       reset tracked files, remove untracked ones,
 //                                            then `pnpm install`
 //   node scripts/playground.ts restore --db  also stop the api, wipe the database,
-//                                            and migrate; you start the api again
+//                                            migrate and seed; you start the api again
 //
 // Ignored files survive a restore, so node_modules, the env files and the D1 state stay.
 // Every git call pins GIT_DIR to the playground's own `.git`: the playground sits inside
@@ -13,7 +13,8 @@
 // would reset the maintainer's own work. `saasaloy init` creates that `.git`: the
 // playground is ignored here, so init treats it as a project of its own (ADR 0024).
 //
-// Seeds (#187) are not run yet; `restore --db` leaves an empty, migrated database.
+// `restore --db` ends with `pnpm db:seed`, so the database holds the installed modules'
+// seed slices (plan 0072).
 import { spawnSync } from "node:child_process";
 import type { SpawnSyncOptions } from "node:child_process";
 import { existsSync, readFileSync, rmSync } from "node:fs";
@@ -263,6 +264,15 @@ function resetDatabase(driver: Driver): void {
     pnpm(["-C", db, "db:migrate"], env);
   }
   console.log(`[play] wiped and migrated the ${driver} database`);
+  // A playground made before the seed system (plan 0072) has no db:seed script.
+  if (existsSync(resolve(db, "scripts/seed.ts"))) {
+    pnpm(
+      ["-C", db, "db:seed"],
+      driver === "d1"
+        ? undefined
+        : { ...process.env, DATABASE_URL: databaseUrl() }
+    );
+  }
 }
 
 async function restore(db: boolean): Promise<void> {

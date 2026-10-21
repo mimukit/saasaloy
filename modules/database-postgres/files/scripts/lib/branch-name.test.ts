@@ -8,6 +8,7 @@ import {
   assertManagedDatabase,
   branchDatabaseName,
   databasePrefix,
+  testDatabaseName,
 } from "./branch-name.ts";
 
 describe("databasePrefix", () => {
@@ -94,5 +95,31 @@ describe("assertManagedDatabase", () => {
       () => assertManagedDatabase("app_dev", `app_dev_${"a".repeat(60)}`),
       /Refusing/
     );
+  });
+});
+
+describe("testDatabaseName", () => {
+  it("appends _test to the development database", () => {
+    assert.equal(testDatabaseName("app_dev"), "app_dev_test");
+    assert.equal(
+      testDatabaseName("app_dev_issue_207_abc123"),
+      "app_dev_issue_207_abc123_test"
+    );
+  });
+
+  it("gives two worktrees two test databases", () => {
+    assert.notEqual(
+      testDatabaseName(branchDatabaseName("app_dev", "issue-207-seed")),
+      testDatabaseName(branchDatabaseName("app_dev", "issue-208-other"))
+    );
+  });
+
+  it("stays a managed name inside 63 bytes for a long branch", () => {
+    const database = branchDatabaseName("app_dev", `feature-${"x".repeat(80)}`);
+    const name = testDatabaseName(database);
+    assert.ok(name.length <= 63);
+    assert.match(name, /_test$/);
+    assert.notEqual(name, testDatabaseName(`${database.slice(0, -1)}y`));
+    assertManagedDatabase("app_dev", name);
   });
 });

@@ -51,6 +51,18 @@
           "target": "vite.config.ts"
         },
         {
+          "path": "files/vitest.config.ts",
+          "target": "vitest.config.ts"
+        },
+        {
+          "path": "files/test/cloudflare-workers.ts",
+          "target": "test/cloudflare-workers.ts"
+        },
+        {
+          "path": "files/test/setup/.gitkeep",
+          "target": "test/setup/.gitkeep"
+        },
+        {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
         },

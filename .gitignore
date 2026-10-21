@@ -169,3 +169,6 @@ routeTree.gen.ts
 
 # ---- statuskit scratch snapshots ----
 /docs/status/
+
+# verifykit proof bundles; the assets live on refs/verify-assets/*
+docs/verify/
