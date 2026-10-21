@@ -1,0 +1,25 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "payment-console",
+  "type": "saasaloy:feature",
+  "dependsOn": ["payment"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/payment/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "payment",
+      "arrayProp": "providers",
+      "call": "consolePayment",
+      "import": {
+        "name": "consolePayment",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/console.ts", "target": "@payment/providers/console.ts" }
+  ],
+  "scaffolds": []
+}
