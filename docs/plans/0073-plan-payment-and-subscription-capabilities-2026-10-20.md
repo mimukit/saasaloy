@@ -1,5 +1,7 @@
 # Plan: rename `billing` to `subscription`, add the `payment` capability, and move the open gateway PRs
 
+Grilled: 2026-10-21
+
 ## Context
 
 primeshopr sells one order at a time and needs one-time payments: a shopper pays by bKash, Nagad, Rocket or bank transfer outside the site and submits the transaction ID, staff confirm it, and a card gateway comes later (primeshopr plan 0018, Phase 6). saasaloy's `billing` capability models subscriptions only, and plan 0050 lists one-time purchases as a non-goal.
@@ -32,6 +34,22 @@ Success: `saasaloy add payment payment-manual` on a fresh project with either da
 | Manual method config | `payment-manual` takes its accounts as options in the registration call (`manual({ methods: { bkash: { account, kind: "personal" }, bank: { … } } })`), the same shape as `storage-memory`'s `seed` option. Account numbers are checked in, not env values (ADR 0039). |
 | Subscription renewal | A plan with a `price` and `renewal: "payment"` renews by calling `payment.create` with `reference_type = "subscription"`. A successful payment extends the period through the existing event path, so `applyEvent` stays the single writer (ADR 0034). |
 | Installed projects | The rename is breaking. A project with `billing` installed follows a runbook in the `saasaloy-subscription` skill: remove the three old modules, add the new ones, and accept drizzle-kit's rename prompt for each table. The CLI does not migrate it. |
+| Status-change listeners (grilled Q1, Q15) | `definePayment({ providers, listeners })`. After each status write the core awaits every listener in order, inline, with `(env, { payment, from, to })`. A listener that throws is logged with `console.error` and the payment ID, and the API call still succeeds. Listeners must be idempotent. The `payments` row is the source of truth, and the skill tells an app to read it by reference. `payment` does not depend on `queue`. |
+| Email (grilled Q2) | The `payment` core sends no email and does not depend on `email`. The skill shows a listener that sends #170's rejection notice through the app's own email. |
+| Admin dependency (defaulted Q5) | `payment` has `dependsOn: ["admin"]`, as `billing`, `teams` and `feature-flags` do. |
+| Optional `submit` (defaulted Q9) | `submit` is optional in the provider contract. On a provider without it, the core throws `invalid_request`. |
+| Refunds (defaulted Q10) | A refund is allowed only from `successful`. The sum of a payment's `payment_refunds` rows must stay at or below `amount`. There is no `refunded` status. |
+| Return URL (defaulted Q11) | An optional `PAYMENT_APP_URL`. `create` refuses a `returnUrl` on any other origin, as `BILLING_APP_URL` does. With the key unset, only `http://localhost` origins pass. |
+| HTTP status per code (defaulted Q12) | `not_found` 404; `conflict` and `duplicate_transaction` 409; `invalid_request`, `method_unavailable` and `callback_invalid` 400; `rate_limited` 429; `declined` and `provider_error` 502. |
+| `payment-console` checkout page (defaulted Q8) | The provider's `handleCallback` serves `GET /payment/callback/console/checkout/:id`, and the page's form posts to `/payment/callback/console/complete`. No extra route. |
+| Review data (grilled Q19) | `payments.claimed_amount` (nullable), which `submit` fills. `payment_events` carries `actor_user_id` (nullable), `reason` (`amount_mismatch`, `not_found`, `duplicate`, `other`, nullable) and `note` (nullable free text). Reject requires a reason. |
+| Admin Payments page (grilled Q3, Q18) | Mockup round 1 approved on 2026-10-21. See Phase 2. |
+| `users.billing_customer_id` (defaulted Q6) | #211 renames it to `subscription_customer_id`. `payment` never reads it. |
+| Runbook (defaulted Q7) | #211 writes the full runbook, because projects outside this repo may have `billing` installed. |
+| Phase 6 safety net (defaulted Q16) | With inline listeners, #216's renewal-due job also scans `successful` payments with `reference_type = "subscription"` that did not extend a period, and applies them. |
+| Seed slices (defaulted Q13) | Not in #212 or #213. A follow-up adds example rows once #207 lands. |
+| Test approach (defaulted Q14) | Unit tests under `pnpm test:modules` (vitest, as `billing` uses) for the status machine, provider selection and error normalization. End-to-end proof on fresh `.dev` projects with each database driver, with Postgres through `docker compose`. |
+| Outward actions (grilled Q4) | Each issue builds in its own worktree. The build commits, pushes, and opens stacked PRs: #213's PR targets #212's branch. Each issue moves to `in-review`. |
 
 ## Approach
 
@@ -62,6 +80,8 @@ Done when: `rg -i billing modules packages/cli/src scripts docs/wiki CONTEXT.md 
 
 ### Phase 2: the `payment` core and `payment-console` (#212)
 
+Mockup: round 1 approved 2026-10-21 (grill Q18), rendered in the T3 thread and not committed. The page at `/payments` has filter chips `Submitted` (default), `Successful`, `Failed`, `Pending`, `Cancelled` with counts; a table of reference, method, amount, transaction ID, submitted time and status, with an "Amount differs" pill when `claimed_amount` differs from `amount`; and a detail panel with an "unverified" banner that names the receiving account, an asked-against-claimed comparison, the submission and payment attributes, the event history, and Confirm and Reject actions. Reject opens a dialog with a required reason and an optional note for the shopper. A successful payment shows "Record refund" and the refunded total. A lost review race shows a toast that someone else reviewed the payment first. The empty queue says no payments wait for review. At 360 px the table becomes a card list and the detail becomes a sheet.
+
 - `modules/payment`: the provider contract, `definePayment`, `createPayment(env)`, `PaymentError`, the three tables in both dialects, the store, the callback route, the review routes, the admin Payments page, the env preset (`PAYMENT_PROVIDER` as a comma list), the method-to-provider selection, the AGENTS.md sentence for a list-valued `<CAP>_PROVIDER`, and the `saasaloy-payment` skill with the shopper route pattern.
 - `modules/payment-console`: one runtime file, the local hosted checkout page, and its registration patch.
 
@@ -77,11 +97,15 @@ Done when: on a fresh `.dev` project, `create` with method `bkash` returns the c
 
 ### Phase 4: `payment-sslcommerz` (#214)
 
+Attended: needs SSLCOMMERZ sandbox credentials from the owner.
+
 - Port the gateway half of #169: session init returning `redirect`, IPN validation through the validator API in `handleCallback`, amount and currency checks, refunds through the refund API, and the sandbox and live hosts by env.
 
 Done when: against the SSLCOMMERZ sandbox, a `.dev` project creates a payment, completes the hosted checkout, receives a validated IPN that moves the payment to `successful` with `settled_amount` set, ignores a replayed IPN, refuses a tampered one with `callback_invalid`, and records a refund.
 
 ### Phase 5: `payment-bkash` (#215)
+
+Attended: needs bKash sandbox credentials from the owner.
 
 - Port #171: tokenized checkout returning `redirect`, execute on callback, status re-read in place of signature trust, the grant token in `kv` refreshed by a provider job, and refunds.
 - Record the "a provider may depend on a capability and own a scheduled job" decision under a new ADR number.
@@ -101,11 +125,7 @@ No saasaloy-registry data moves. A project with `billing` installed keeps workin
 
 ## Open questions
 
-- How does the app react to a status change: a listener array in `definePayment` called after the write, a queue job like `subscription`'s event path, or both? On Postgres a listener could run in the same transaction as the status change; on D1 it cannot.
-- Does `payment` depend on `admin`, as `billing` does, or ship the Payments page under `onlyWith: "admin"`?
-- Does any project outside this repo have `billing` installed? If none, the runbook can be short.
-- Does `users.billing_customer_id` become `subscription_customer_id`, or a vendor-neutral `customer_id` that a `payment` provider could also read?
-- Which email templates move to `payment` (a `payment_rejected` notice from #170), and does `payment` then depend on `email`?
+None. The grill on 2026-10-21 settled each one (Q1, Q2, Q5, Q6, Q7).
 
 ## Non-goals
 
