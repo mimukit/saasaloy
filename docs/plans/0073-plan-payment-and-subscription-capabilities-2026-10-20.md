@@ -48,7 +48,7 @@ Success: `saasaloy add payment payment-manual` on a fresh project with either da
 | Runbook (defaulted Q7) | #211 writes the full runbook, because projects outside this repo may have `billing` installed. |
 | Phase 6 safety net (defaulted Q16) | With inline listeners, #216's renewal-due job also scans `successful` payments with `reference_type = "subscription"` that did not extend a period, and applies them. |
 | Seed slices (defaulted Q13) | Not in #212 or #213. A follow-up adds example rows once #207 lands. |
-| Test approach (defaulted Q14) | Unit tests under `pnpm test:modules` (vitest, as `billing` uses) for the status machine, provider selection and error normalization. End-to-end proof on fresh `.dev` projects with each database driver, with Postgres through `docker compose`. |
+| Test approach (defaulted Q14) | Unit tests under `pnpm test:modules` (`node --test`, as `billing` uses) for the status machine, provider selection and error normalization. End-to-end proof on fresh `.dev` projects with each database driver, with Postgres through `docker compose`. |
 | Outward actions (grilled Q4) | Each issue builds in its own worktree. The build commits, pushes, and opens stacked PRs: #213's PR targets #212's branch. Each issue moves to `in-review`. |
 
 ## Approach
