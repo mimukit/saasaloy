@@ -206,6 +206,8 @@ How it fits together:
 
 Read `database.env` and `database.db` inside a test, never at module scope: the database opens in a `beforeAll` hook.
 
+`apps/api` does not depend on `drizzle-orm`, so a test file cannot import `eq` or another operator from it. Select the rows with `database.db.select().from(table)` and filter them in the test, or put the query in a repository under `packages/db/src/repositories/` and import that.
+
 ## Switching drivers
 
 `database-d1` and `database-postgres` declare each other in `conflictsWith`, so `add` refuses the

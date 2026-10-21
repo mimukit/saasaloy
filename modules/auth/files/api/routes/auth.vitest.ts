@@ -12,6 +12,9 @@ import app from "../index";
 // The first test reads seed rows through a route (the superadmin's user and credential
 // account) and writes one (the session sign-in creates). The second proves that write did
 // not outlive its test. Copy this shape for a route of your own.
+//
+// In the saasaloy repo this file is named `.vitest.ts`, so `pnpm test:modules`, which runs
+// `node --test` over `*.test.ts`, does not collect it. The descriptor renames it.
 
 const SUPERADMIN = seedId("users", "superadmin");
 

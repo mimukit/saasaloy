@@ -9,6 +9,9 @@ import { missingSlices } from "./plan";
 //
 // A table that should stay empty still gets a slice, with `rows: {}`. That records the
 // choice where the next reader looks for it.
+//
+// In the saasaloy repo this file is named `.vitest.ts`, so `pnpm test:modules`, which runs
+// `node --test` over `*.test.ts`, does not collect it. The descriptor renames it.
 
 describe("seed slices", () => {
   it("fill every table in the schema", () => {
