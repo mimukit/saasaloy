@@ -7,7 +7,9 @@ _Generated 2026-10-18, updated 2026-10-21 · against `45fd794` (clean) · covers
 - `pnpm deploy:production` checks every production value, then builds and deploys every Worker with wrangler, secrets included.
 - Working means one command deploys a fresh project to an empty Cloudflare account, a second run creates no resource, and an old `infra` project moves across with its data.
 
-The agent ran every check that needs no Cloudflare account. The results are in **Automated verification** at the end. The manual cases below are only the checks that need a live account.
+The agent ran every check that needs no Cloudflare account. The results are in **Automated verification** at the end.
+
+On 2026-10-21 the agent also ran Scenarios 1 and 2 live on `0eab263`, which changes only this plan after `45fd794`. The target was the Brainaloy Personal account, declared disposable for resources whose names start with `qa198-` only. The token reached that one account. Before the run, the account held no Worker, D1 database, KV namespace or queue. Every resource in the run had a `qa198-` name, and after the run the account held none of them again. The result is TC-1.1 pass, TC-2.1 pass, TC-2.2 pass and TC-2.3 fail. Scenario 3 is not run.
 
 ## Environment
 
@@ -43,7 +45,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-2.3 | 2: Project with api, auth, D1, KV and queues, empty account | The wiki teardown commands empty the account | 🟢 Low |
 | TC-3.1 | 3: Project on the last `infra` release, deployed with Pulumi | The runbook moves the project and keeps its data | 🔴 Critical |
 
-## Scenario 1: Fresh landing-page project, empty account
+## Scenario 1: Fresh landing-page project, empty account · run by the agent on Brainaloy Personal at `0eab263`
 
 **Setup.** Run once, for every case in this scenario.
 
@@ -59,7 +61,7 @@ node packages/cli/dist/index.js init .dev/qa198-web --no-install && pnpm -C .dev
 printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa198.example.com\nCLOUDFLARE_API_TOKEN=\nCLOUDFLARE_ACCOUNT_ID=\n' > .dev/qa198-web/packages/env/.env.prod
 ```
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-1.1: Two deploys ship the landing page and update one Worker  ·  🔴 Critical
 
@@ -77,11 +79,12 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    curl -s https://qa198-web-web.<your-subdomain>.workers.dev/ | grep -o '<link rel="canonical" href="[^"]*"'
    ```
 
-   - [ ] The deploy prints a `workers.dev` URL for `qa198-web-web`, and the canonical URL is `https://qa198.example.com/`
+   - [x] The deploy prints a `workers.dev` URL for `qa198-web-web`, and the canonical URL is `https://qa198.example.com/`
 2. Open the URL in a browser.
-   - [ ] The page looks the same as the screenshot the agent took of the local production build
+   - [x] The page looks the same as the screenshot the agent took of the local production build
      - screenshot: `/tmp/qakit/0061-qa-wrangler-native-deploy-2026-10-18/web-1440.png` light 1440 px
      - screenshot: `/tmp/qakit/0061-qa-wrangler-native-deploy-2026-10-18/web-375.png` light 375 px
+     - screenshot: `/tmp/qakit/0061-qa-wrangler-native-deploy-2026-10-18/live-1440.png` light 1440 px, the live page
 3. Change `PUBLIC_SITE_URL` in `.dev/qa198-web/packages/env/.env.prod` to `https://qa198-second.example.com`. Deploy again, read the canonical URL, and list the deployments.
 
    ```sh
@@ -96,15 +99,27 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    pnpm -C .dev/qa198-web/apps/web exec wrangler deployments list
    ```
 
-   - [ ] The deploy prints the same URL, the canonical URL is `https://qa198-second.example.com/`, and the list shows two deployments
+   - [x] The deploy prints the same URL, the canonical URL is `https://qa198-second.example.com/`, and the list shows two deployments
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
-**Notes.** _what actually happened on a fail; why it was skipped_
+**Notes.** The agent ran the deploys with `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` unset in the shell, so the credentials came from `.env.prod`.
+
+```text
+Every service has its production values (source: local).
+@repo/web:deploy: Using redirected Wrangler configuration.
+@repo/web:deploy: ✨ Success! Uploaded 12 files (2.18 sec)
+@repo/web:deploy: Uploaded qa198-web-web (6.70 sec)
+@repo/web:deploy:   https://qa198-web-web.brainaloy-personal.workers.dev
+```
+
+- The first deploy served status `200` with `<link rel="canonical" href="https://qa198.example.com/"`. The live page had 3 stylesheets, 0 console messages and no overflow at 1440 px. No `/tmp/env-deploy-*` folder remained.
+- The second deploy printed the same URL. The canonical URL changed to `https://qa198-second.example.com/`, and `wrangler deployments list` showed 2 deployments.
+- The reset printed "Successfully deleted qa198-web-web", and the account then held no Worker.
 
 **Reset.** Run after every case above, before moving to Scenario 2.
 
@@ -116,7 +131,9 @@ pnpm -C .dev/qa198-web/apps/web exec wrangler delete --force
 rm -rf .dev/qa198-web
 ```
 
-## Scenario 2: Project with api, auth, D1, KV and queues, empty account
+## Scenario 2: Project with api, auth, D1, KV and queues, empty account · run by the agent on Brainaloy Personal at `0eab263`
+
+_In the agent's run, every resource had a `qa198-` name: the api Worker `qa198-api`, the database `qa198-app-db`, and the queues `qa198-jobs` and `qa198-jobs-dlq`, set in `apps/api/wrangler.jsonc`. The web Worker was `qa198-full-web`. `PUBLIC_API_URL` and `BETTER_AUTH_URL` were `https://qa198-api.brainaloy-personal.workers.dev`. On a throwaway account, use the names below._
 
 **Setup.** Run once, for every case in this scenario.
 
@@ -152,7 +169,7 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
 
 6. List `QA_EXTRA_SECRET` for the api. In `.dev/qa198-full/packages/env/.env.example`, add the line `QA_EXTRA_SECRET=` under the `# @services api` line.
 
-- [ ] Setup complete
+- [x] Setup complete
 
 ### TC-2.1: Two deploys build the whole project and create each resource once  ·  🔴 Critical
 
@@ -170,8 +187,8 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    curl -s -w '\n%{http_code}\n' https://qa198-api.<your-subdomain>.workers.dev/probe
    ```
 
-   - [ ] `db:migrate:prod` prints "No D1 database named app-db yet. Creating it." before the api deploys, and both Workers print a `workers.dev` URL
-   - [ ] The probe returns `{"kv":"kv-ok","db":{"n":0}}` with status `200`
+   - [x] `db:migrate:prod` prints "No D1 database named app-db yet. Creating it." before the api deploys, and both Workers print a `workers.dev` URL
+   - [x] The probe returns `{"kv":"kv-ok","db":{"n":0}}` with status `200`
 2. Run the deploy again, then list the resources in the account.
 
    ```sh
@@ -182,15 +199,32 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    cd .dev/qa198-full/apps/api && pnpm exec wrangler d1 list && pnpm exec wrangler kv namespace list && pnpm exec wrangler queues list && cd ../../../..
    ```
 
-   - [ ] The second run creates no database and provisions nothing, and the account holds one `app-db`, one `qa198-api-kv`, one `app-jobs` and one `app-jobs-dlq`
+   - [x] The second run creates no database and provisions nothing, and the account holds one `app-db`, one `qa198-api-kv`, one `app-jobs` and one `app-jobs-dlq`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
-**Notes.** _what actually happened on a fail; why it was skipped_
+**Notes.** First deploy, trimmed to the lines that prove the checkpoints:
+
+```text
+@repo/db:db:migrate:prod: No D1 database named qa198-app-db yet. Creating it.
+@repo/db:db:migrate:prod: ✅ Successfully created DB 'qa198-app-db' in region APAC
+@repo/db:db:migrate:prod: │ 0000_wise_bloodstrike.sql │
+@repo/web:deploy:   https://qa198-full-web.brainaloy-personal.workers.dev
+@repo/api:deploy: Provisioning KV (KV Namespace)...
+@repo/api:deploy: Provisioning JOBS (Queue)...
+@repo/api:deploy: Provisioning JOBS_DLQ (Queue)...
+@repo/api:deploy: Uploaded qa198-api (13.29 sec)
+@repo/api:deploy:   https://qa198-api.brainaloy-personal.workers.dev
+```
+
+- The api upload listed `KV`, `JOBS`, `JOBS_DLQ`, `DB`, the three rate limits and nine secrets, `QA_EXTRA_SECRET` included, with no `CLOUDFLARE_*` key.
+- The probe returned `{"kv":"kv-ok","db":{"n":0}}` with status `200`.
+- The second deploy printed 0 "Provisioning" or "Creating" lines and "✅ No migrations to apply!". The lists held one each of `qa198-app-db`, `qa198-api-kv`, `qa198-jobs` and `qa198-jobs-dlq`, and the probe returned the same body.
+- The queue bug in *Not covered* did not appear. The api Worker with `queue-cloudflare` started and served the probe.
 
 ### TC-2.2: Secrets and rollback work as the deploy wiki says  ·  🟡 Normal
 
@@ -208,7 +242,7 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    pnpm -C .dev/qa198-full/apps/api exec wrangler secret delete QA_EXTRA_SECRET && pnpm -C .dev/qa198-full/apps/api exec wrangler secret list
    ```
 
-   - [ ] The first list holds `QA_EXTRA_SECRET` and no `CLOUDFLARE_*` key, and the second list does not hold `QA_EXTRA_SECRET`
+   - [x] The first list holds `QA_EXTRA_SECRET` and no `CLOUDFLARE_*` key, and the second list does not hold `QA_EXTRA_SECRET`
 2. Roll the api back, then call the probe route.
 
    ```sh
@@ -219,15 +253,19 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
    curl -s https://qa198-api.<your-subdomain>.workers.dev/probe
    ```
 
-   - [ ] wrangler reports the previous version as active, and the probe still returns `{"kv":"kv-ok","db":{"n":0}}`
+   - [x] wrangler reports the previous version as active, and the probe still returns `{"kv":"kv-ok","db":{"n":0}}`
 
 **Result**
 
-- [ ] Pass
+- [x] Pass
 - [ ] Fail
 - [ ] Skipped
 
-**Notes.** _what actually happened on a fail; why it was skipped_
+**Notes.**
+
+- List after the deploy without `QA_EXTRA_SECRET`: `BETTER_AUTH_SECRET BETTER_AUTH_URL CORS_ORIGINS KV_KEY_PREFIX KV_PROVIDER LOGGER_PROVIDER LOG_LEVEL QA_EXTRA_SECRET QUEUE_PROVIDER`.
+- `wrangler secret delete` printed "✨ Success! Deleted secret QA_EXTRA_SECRET", and the next list held the same keys without `QA_EXTRA_SECRET`.
+- The agent ran `wrangler rollback --message "qa198 rollback check" -y`, because its shell has no prompt. It printed "Worker Version 6c61e334-4f76-4cf2-86a7-5ef7b92d7258 has been deployed to 100% of traffic." The probe then returned `{"kv":"kv-ok","db":{"n":0}}` with status `200`.
 
 ### TC-2.3: The wiki teardown commands empty the account  ·  🟢 Low
 
@@ -246,10 +284,25 @@ printf 'PUBLIC_SITE_URL=https://qa198.example.com\nPUBLIC_API_URL=https://api.qa
 **Result**
 
 - [ ] Pass
-- [ ] Fail
+- [x] Fail
 - [ ] Skipped
 
-**Notes.** _what actually happened on a fail; why it was skipped_
+**Notes.** The wiki order fails when `queue-cloudflare` is installed. The first command, `wrangler delete` for the api Worker, stopped with this error:
+
+```text
+Cannot delete this Worker as it is a consumer for a Queue. Remove it from the Queue's consumers first, then retry. [code: 10064]
+```
+
+The queue delete commands also stopped:
+
+```text
+Cannot delete queue 'qa198-jobs' that is still referenced by a binding in a Worker. Unbind queue 'qa198-jobs' from the Workers 'qa198-api'; then try again. [code: 11005]
+```
+
+- The web Worker, the D1 database and the KV namespace commands passed as written.
+- This order cleared the deadlock: `wrangler queues consumer remove qa198-jobs qa198-api`, then `wrangler delete --force` for the api Worker, then `wrangler queues delete` for each queue. Each one printed success.
+- The lists then showed no Worker, D1 database, KV namespace or queue in the account.
+- The fix is a wiki change: in "Tearing it down", remove the queue consumer before the api Worker delete.
 
 **Reset.** Run after every case above, before moving to Scenario 3.
 
@@ -388,7 +441,7 @@ pnpm db:setup
 - ✅ `saasaloy doctor` → no infra line without `infra/`. With `infra/`, it warns "infra/ is the Pulumi deploy that pnpm deploy:production replaced", warns against `pulumi destroy`, and links the runbook.
 - ✅ `pnpm db:setup` with no `database_id` and no KV `id` in `apps/api/wrangler.jsonc` → migration `0000_powerful_odin.sql` applies to the local D1 database.
 - ❌ `pnpm deps:check` → 72 outdated, 66 up to date. No pin this branch adds is outdated. The bump is left for a separate PR.
-- ❌ Live `wrangler deploy` to a Cloudflare account → not run. The agent's permission rules blocked it on 2026-10-18. Scenarios 1 to 3 are the live check.
+- ✅ Live `wrangler deploy` to a Cloudflare account → the agent ran Scenarios 1 and 2 on 2026-10-21. Their results are in the cases above. Scenario 3 is not run.
 
 ### Browser checks
 
@@ -401,9 +454,10 @@ _Driven with `playwright-cli` against `http://127.0.0.1:4398/`, a static server 
 
 ## Not covered / needs human judgment
 
-- The live deploy itself. The agent did not upload anything to Cloudflare, so the provisioning and reuse behaviour rests on wrangler's source until TC-1.1 and TC-2.1 pass.
+- Scenario 3, the move from the Pulumi `infra` module. It needs a project deployed with the old CLI and Pulumi, and the agent did not run it.
+- R2 provisioning. Scenario 2 has no `storage-cloudflare`, so no bucket was created.
 - Queue dead-letter routing. TC-2.1 shows both queues exist; it does not force a message to the dead-letter queue.
-- A known bug outside this branch. In a `.dev` project with `queue-cloudflare`, `vite dev` for the api stopped with "Cannot access 'PROVIDER_NAME' before initialization". If TC-2.1's Worker fails to start with the same error, record it in Notes, and run Scenario 2 again without `queue-cloudflare`.
+- A known bug outside this branch. In a `.dev` project with `queue-cloudflare`, `vite dev` for the api stopped with "Cannot access 'PROVIDER_NAME' before initialization". The deployed api Worker with `queue-cloudflare` did not show it in TC-2.1.
 - `env-infisical` as the value source. Every scenario uses `local`. The Infisical path loads through the same `EnvSource` contract and has unit tests, but no live Infisical project was used.
 - Two projects in one account. The project-name prefix is issue #197. Scenario 2 renames the api Worker by hand for that reason.
 - CI deploy. That is issue #199.
