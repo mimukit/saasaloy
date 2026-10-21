@@ -27,6 +27,10 @@ export default defineConfig({
   },
   test: {
     environment: "node",
+    // Off because `@repo/db` builds its schema and its seed from `import.meta.glob`, and
+    // Vitest's on-disk transform cache keeps a stale expansion after a file is added.
+    // `packages/db/vitest.config.ts` explains it; the root config cannot set it for us.
+    fsModuleCache: false,
     globalSetup: globSync("test/setup/*.ts", { cwd: here(".") })
       .toSorted()
       .map((file) => here(`./${file}`)),
