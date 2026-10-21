@@ -302,7 +302,7 @@ Cannot delete queue 'qa198-jobs' that is still referenced by a binding in a Work
 - The web Worker, the D1 database and the KV namespace commands passed as written.
 - This order cleared the deadlock: `wrangler queues consumer remove qa198-jobs qa198-api`, then `wrangler delete --force` for the api Worker, then `wrangler queues delete` for each queue. Each one printed success.
 - The lists then showed no Worker, D1 database, KV namespace or queue in the account.
-- The fix is a wiki change: in "Tearing it down", remove the queue consumer before the api Worker delete.
+- Fixed in the wiki on 2026-10-21. "Tearing it down" now starts with `wrangler queues consumer remove app-jobs api`, which is the order the agent ran. Run this case again on the next live pass to tick it.
 
 **Reset.** Run after every case above, before moving to Scenario 3.
 

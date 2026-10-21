@@ -114,9 +114,10 @@ pnpm --filter @repo/api exec wrangler secret delete OLD_KEY
 
 ## Tearing it down
 
-There is no command that destroys a project. Each piece goes with its own wrangler command, run from a workspace that has wrangler:
+There is no command that destroys a project. Each piece goes with its own wrangler command, run from a workspace that has wrangler, in this order. With `queue-cloudflare`, remove the api Worker as the queue's consumer first: Cloudflare refuses to delete a Worker that consumes a queue, and refuses to delete a queue that a Worker still binds.
 
 ```bash
+pnpm --filter @repo/api exec wrangler queues consumer remove app-jobs api   # queue-cloudflare only; use your api Worker name
 pnpm --filter @repo/api exec wrangler delete                          # the api Worker
 pnpm --filter @repo/web exec wrangler delete                          # the web Worker
 pnpm --filter @repo/api exec wrangler d1 delete app-db                # the D1 database and its data
@@ -139,4 +140,4 @@ A project scaffolded before this flow may still have an `infra/` workspace and a
 - [Add a module](add-a-module.md): installing `api` and `database` in the first place.
 - [Architecture](../architecture.md): why the CLI stops at copying files in.
 
-_Checked against branch `issue-198` on 2026-10-18 with `--dry-run` deploys in a scaffolded project. A live upload to Cloudflare was not run for this revision._
+_Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, `database-d1`, `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
