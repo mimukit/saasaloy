@@ -340,7 +340,7 @@ How it fits together:
 
 Read `database.env` and `database.db` inside a test, never at module scope: the transaction exists only while a test runs.
 
-`apps/api` does not depend on `drizzle-orm`, so a test file cannot import `eq` or another operator from it. Select the rows with `database.db.select().from(table)` and filter them in the test, or put the query in a repository under `packages/db/src/repositories/` and import that.
+`apps/api` does not depend on `drizzle-orm`, so a test file cannot import `eq` or another operator from it. Import the table from `@repo/db/schema/<file>` and a seed row's id from `@repo/db/seed/id` (`seedId("users", "superadmin")`), select the rows with `database.db.select().from(table)` and filter them in the test. Or put the query in a repository under `packages/db/src/repositories/` and import that.
 
 ## Hyperdrive: the opt-in
 
