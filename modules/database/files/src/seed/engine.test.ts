@@ -215,6 +215,19 @@ describe("planSeed", () => {
     assert.deepEqual(step?.rows[0]?.update, []);
   });
 
+  it("never updates the primary key of a text-id table upserted on another key", () => {
+    const plan = planSeed(tables, [
+      {
+        key: ["email"],
+        rows: { ada: { email: "ada@example.test" } },
+        table: "users",
+      },
+    ]);
+    const [ada] = plan[0]?.rows ?? [];
+    assert.equal(ada?.values.id, seedId("users", "ada"));
+    assert.deepEqual(ada?.update, []);
+  });
+
   it("plans a composite-key table", () => {
     const plan = planSeed(tables, [
       {

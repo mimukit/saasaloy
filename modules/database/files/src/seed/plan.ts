@@ -136,7 +136,12 @@ function planRows(
           );
         }
       }
-      const update = Object.keys(values).filter((key) => !target.includes(key));
+      // The primary key is never updated, also when the slice upserts on another key: a
+      // hand-made row that shares the unique key would take the seed id, and a foreign key
+      // with no cascade would break.
+      const update = Object.keys(values).filter(
+        (key) => !target.includes(key) && !table.primaryKey.includes(key)
+      );
       return { slug, values, update };
     });
 }
