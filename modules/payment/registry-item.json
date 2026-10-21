@@ -2,7 +2,9 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "payment",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "requires": {
+    "saasaloy": ">=0.6.0"
+  },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {
@@ -71,8 +73,14 @@
       "constName": "NAV_AREAS",
       "area": "/",
       "group": "Manage",
-      "entry": { "to": "/payments", "label": "Payments" },
-      "icon": { "name": "BanknoteIcon", "from": "lucide-react" }
+      "entry": {
+        "to": "/payments",
+        "label": "Payments"
+      },
+      "icon": {
+        "name": "BanknoteIcon",
+        "from": "lucide-react"
+      }
     }
   ],
   "files": [
@@ -101,6 +109,18 @@
     {
       "path": "files/admin/routes/payments.tsx",
       "target": "@admin/routes/payments.tsx"
+    },
+    {
+      "path": "files/db/seed/payments.ts",
+      "target": "@db/seed/slices/payments.ts"
+    },
+    {
+      "path": "files/db/seed/payment-events.ts",
+      "target": "@db/seed/slices/payment-events.ts"
+    },
+    {
+      "path": "files/db/seed/payment-refunds.ts",
+      "target": "@db/seed/slices/payment-refunds.ts"
     }
   ],
   "scaffolds": [
@@ -110,13 +130,34 @@
         "@payment": "packages/payment/src"
       },
       "files": [
-        { "path": "files/package.json", "target": "package.json" },
-        { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/index.ts", "target": "src/index.ts" },
-        { "path": "files/src/define.ts", "target": "src/define.ts" },
-        { "path": "files/src/provider.ts", "target": "src/provider.ts" },
-        { "path": "files/src/store.ts", "target": "src/store.ts" },
-        { "path": "files/src/env-preset.ts", "target": "src/env-preset.ts" },
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/store.ts",
+          "target": "src/store.ts"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
+        },
         {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
