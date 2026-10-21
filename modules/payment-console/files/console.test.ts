@@ -39,6 +39,7 @@ function fakeStore(): PaymentStore {
         settledAmount: null,
         status: "pending",
         submittedAt: null,
+        settledAt: null,
         transactionId: null,
         transactionIdNormalized: null,
         updatedAt: now,

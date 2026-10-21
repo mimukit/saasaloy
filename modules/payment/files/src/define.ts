@@ -160,7 +160,12 @@ export function definePayment(config: PaymentConfig): PaymentRegistry {
           note?: string | null;
         } = {}
       ): Promise<Payment | undefined> => {
-        const moved = await store.transition(payment.id, from, to, patch);
+        const moved = await store.transition(
+          payment.id,
+          from,
+          to,
+          to === "successful" ? { ...patch, settledAt: new Date() } : patch
+        );
         if (!moved) {
           return;
         }

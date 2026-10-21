@@ -96,6 +96,8 @@ export interface Payment {
   /** Whatever the provider asked the core to keep, plus `instructions` for a manual payment. */
   providerData: ProviderData | null;
   submittedAt: Date | null;
+  /** When the payment became `successful`. A later refund leaves it alone. */
+  settledAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 }

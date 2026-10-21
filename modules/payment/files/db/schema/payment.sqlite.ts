@@ -60,6 +60,7 @@ export const payments = sqliteTable(
     /** The provider's own data, plus `instructions` for a manual payment. JSON. */
     providerData: text("provider_data", { mode: "json" }),
     submittedAt: timestampMs("submitted_at"),
+    settledAt: timestampMs("settled_at"),
     createdAt: timestampMs("created_at").notNull().default(createdAtDefault),
     updatedAt: timestampMs("updated_at")
       .notNull()

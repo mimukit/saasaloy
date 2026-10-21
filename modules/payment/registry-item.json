@@ -64,6 +64,15 @@
         "name": "paymentEnv",
         "from": "@repo/payment/env-preset"
       }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": { "to": "/payments", "label": "Payments" },
+      "icon": { "name": "BanknoteIcon", "from": "lucide-react" }
     }
   ],
   "files": [
@@ -88,6 +97,10 @@
       "path": "files/db/schema/payment.pg.ts",
       "target": "@db/schema/payment.ts",
       "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/admin/routes/payments.tsx",
+      "target": "@admin/routes/payments.tsx"
     }
   ],
   "scaffolds": [

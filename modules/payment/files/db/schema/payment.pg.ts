@@ -62,6 +62,7 @@ export const payments = pgTable(
     /** The provider's own data, plus `instructions` for a manual payment. */
     providerData: jsonb("provider_data"),
     submittedAt: timestamptz("submitted_at"),
+    settledAt: timestamptz("settled_at"),
     createdAt: timestamptz("created_at").notNull().defaultNow(),
     updatedAt: timestamptz("updated_at")
       .notNull()

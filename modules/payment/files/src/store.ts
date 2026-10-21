@@ -44,6 +44,7 @@ export interface PaymentPatch {
   senderAccount?: string | null;
   providerData?: ProviderData | null;
   submittedAt?: Date | null;
+  settledAt?: Date | null;
 }
 
 /** One `payment_events` row before it is written. */

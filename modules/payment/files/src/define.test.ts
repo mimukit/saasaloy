@@ -69,6 +69,7 @@ function memoryStore(): MemoryStore {
         settledAmount: null,
         status: "pending",
         submittedAt: null,
+        settledAt: null,
         transactionId: null,
         transactionIdNormalized: null,
         updatedAt: now,
@@ -440,6 +441,16 @@ describe("refunds", () => {
     assert.equal(after.refundedAmount, 125_000);
     assert.equal(after.status, "successful");
     assert.equal(store.refunds.length, 2);
+  });
+
+  it("stamps settledAt on success, and a refund leaves it alone", async () => {
+    const payment = await successful();
+    const settledAt = store.rows.get(payment.id)?.settledAt;
+    assert.ok(settledAt instanceof Date);
+    const { payment: after } = await client().refund(payment.id, {
+      amount: 100,
+    });
+    assert.equal(after.settledAt, settledAt);
   });
 
   it("releases the reservation when the provider refuses the refund", async () => {

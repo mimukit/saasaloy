@@ -201,6 +201,7 @@ export interface PaymentView {
   /** The account the payer was told to pay, from a manual provider's instructions. */
   receivingAccount: ReceivingAccount | null;
   submittedAt: string | null;
+  settledAt: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -354,6 +355,7 @@ function toView(payment: Payment, userEmail: string | null): PaymentView {
     settledAmount: payment.settledAmount,
     status: payment.status,
     submittedAt: payment.submittedAt?.toISOString() ?? null,
+    settledAt: payment.settledAt?.toISOString() ?? null,
     transactionId: payment.transactionId,
     updatedAt: payment.updatedAt.toISOString(),
     userEmail: userEmail ?? null,
