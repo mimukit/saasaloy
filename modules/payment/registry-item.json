@@ -8,7 +8,7 @@
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {
-    "PAYMENT_PROVIDER": "Which installed providers take payments, as a comma list in priority order: `console` (add payment-console), and later `manual`, `sslcommerz`, `bkash`. `create({ method })` picks the first listed provider that offers the method. Always required: unset, empty or an unknown name throws when the client is built, so nothing takes real money by accident and nothing stops taking it silently.",
+    "PAYMENT_PROVIDER": "Which installed providers take payments, as a comma list in priority order: `console` (add payment-console), `manual` (add payment-manual), and later `sslcommerz`, `bkash`. `create({ method })` picks the first listed provider that offers the method. Always required: unset, empty or an unknown name throws when the client is built, so nothing takes real money by accident and nothing stops taking it silently.",
     "PAYMENT_APP_URL": "The origin of the app a hosted checkout returns the payer to, e.g. https://shop.x.com. `create` refuses a returnUrl on any other origin. Optional; when unset, only http://localhost origins pass, which is the dev default."
   },
   "envServices": {

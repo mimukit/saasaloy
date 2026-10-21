@@ -1,0 +1,39 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "payment-manual",
+  "type": "saasaloy:feature",
+  "dependsOn": ["payment", "validators"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "Manual payments already in the payments table survive this removal. Confirm or reject the submitted ones before you remove the provider: the core refuses to act on a payment whose provider is not registered.",
+    "The @repo/validators dependency stays in packages/payment/package.json. A package-json-dependency patch has no removal inverse, so drop the line by hand and run pnpm install."
+  ],
+  "patches": [
+    {
+      "file": "packages/payment/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "payment",
+      "arrayProp": "providers",
+      "call": "manual",
+      "import": {
+        "name": "manual",
+        "from": "./providers/manual"
+      }
+    },
+    {
+      "file": "packages/payment/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/validators",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/manual.ts",
+      "target": "@payment/providers/manual.ts"
+    }
+  ],
+  "scaffolds": []
+}
