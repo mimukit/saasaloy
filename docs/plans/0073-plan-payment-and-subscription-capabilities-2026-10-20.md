@@ -78,7 +78,7 @@ Rejected, one line each: one capability with a recurring mode (puts plan state i
 
 Done when: `rg -i billing modules packages/cli/src scripts docs/wiki CONTEXT.md AGENTS.md README.md` prints only the runbook and history notes, `pnpm lint`, `pnpm test` and `pnpm test:modules` pass, and on a fresh `.dev` project `saasaloy add subscription subscription-console` then `db:generate` produces `subscriptions` and `subscription_events`, and the console checkout flow works in the admin app as it did under `billing`.
 
-### Phase 2: the `payment` core and `payment-console` (#212)
+### Phase 2: the `payment` core and `payment-console` (#212) (built 2026-10-21)
 
 Mockup: round 1 approved 2026-10-21 (grill Q18), rendered in the T3 thread and not committed. The page at `/payments` has filter chips `Submitted` (default), `Successful`, `Failed`, `Pending`, `Cancelled` with counts; a table of reference, method, amount, transaction ID, submitted time and status, with an "Amount differs" pill when `claimed_amount` differs from `amount`; and a detail panel with an "unverified" banner that names the receiving account, an asked-against-claimed comparison, the submission and payment attributes, the event history, and Confirm and Reject actions. Reject opens a dialog with a required reason and an optional note for the shopper. A successful payment shows "Record refund" and the refunded total. A lost review race shows a toast that someone else reviewed the payment first. The empty queue says no payments wait for review. At 360 px the table becomes a card list and the detail becomes a sheet.
 
