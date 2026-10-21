@@ -89,7 +89,7 @@ Mockup round 2, accepted 2026-10-21 (grill Q20): the page as built on the shared
 
 Done when: on fresh `.dev` projects with `database-postgres` and with `database-d1`, `saasaloy add payment-console` installs cleanly (it brings in `payment`), `db:generate` produces the three tables, an example route that calls `create` gets a redirect, following it posts to the callback and the payment becomes `successful` with two `payment_events` rows, an unset `PAYMENT_PROVIDER` throws at construction, and `pnpm test:modules` passes with tests for the status machine and the error normalization.
 
-### Phase 3: `payment-manual` (#213)
+### Phase 3: `payment-manual` (#213) (built 2026-10-21)
 
 - Port the provider half of #170: the instructions, the submission fields (transaction ID, sender account, amount), normalization and validation, with `bangladeshMobile` for the sender number.
 - Methods `bkash`, `nagad`, `rocket` and `bank`. `methods()` reports `card` as unavailable.
