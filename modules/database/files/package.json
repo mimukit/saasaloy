@@ -2,13 +2,14 @@
   "name": "@repo/db",
   "private": true,
   "type": "module",
-  "//exports": "No patch kind edits an exports map, so entries a feature module fills are declared here up front. './tenant' and './tenant-column' are filled by the multitenant module (src/tenant.ts, src/tenant-column.ts); until it is installed the subpaths resolve to nothing and nothing imports them.",
+  "//exports": "No patch kind edits an exports map, so entries a feature module fills are declared here up front. './tenant' and './tenant-column' are filled by the multitenant module (src/tenant.ts, src/tenant-column.ts); until it is installed the subpaths resolve to nothing and nothing imports them. './env-preset' is filled by database-postgres (src/env-preset.ts, which validates DATABASE_URL); database-d1 reads no env var and ships none.",
   "exports": {
     "./client": "./src/client.ts",
     "./schema/*": "./src/schema/*.ts",
     "./repositories/*": "./src/repositories/*.ts",
     "./tenant": "./src/tenant.ts",
-    "./tenant-column": "./src/tenant-column.ts"
+    "./tenant-column": "./src/tenant-column.ts",
+    "./env-preset": "./src/env-preset.ts"
   },
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
