@@ -44,7 +44,9 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `billing` is the capability that scaffolds `packages/billing` (`@repo/billing`): a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, and a provider registry, with zero runtime dependencies and no payment vendor named anywhere in it. `BILLING_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0034 for why a payment capability takes providers even though the project owns the table.
 
-A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `billing-stripe`, `billing-console`) is a narrow feature: one file into a
+`payment` is the capability that scaffolds `packages/payment` (`@repo/payment`): one-time payments linked to an app record by an opaque reference, with a provider contract, a status machine over `payments`, `payment_events` and `payment_refunds`, status-change listeners and a provider registry, with zero runtime dependencies. `PAYMENT_PROVIDER` is a comma list in priority order, and `create({ method })` stores the first listed provider that offers the method. It ships the public callback route `/payment/callback/:provider/*` and the staff review routes under `/admin/payment`, and no shopper routes: an app authorizes its own reference and calls `createPayment(env)`. See ADR 0045.
+
+A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `billing-stripe`, `billing-console`, `payment-console`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.
