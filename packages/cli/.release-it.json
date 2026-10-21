@@ -13,7 +13,8 @@
     "releaseName": "v${version}"
   },
   "npm": {
-    "publish": true
+    "publish": true,
+    "allowSameVersion": true
   },
   "hooks": {
     "before:init": ["pnpm -w run release:preflight"]

@@ -533,7 +533,7 @@ Edit the root `README.md`. Never edit the copy. `release:smoke` asserts `README.
 Two pieces of state, and nothing else. A second machine needs both:
 
 - `gh auth login` — the release scripts read `GITHUB_TOKEN` from the shell, or call `gh auth token` when it is unset, and release-it uses it to create the GitHub Release.
-- `npm login`, on an account with 2FA. Confirm with `npm whoami`. release-it prompts for the OTP at publish time.
+- `npm login`, on an account with 2FA. Confirm with `npm whoami`. Login does not replace publish authentication. Run the release in an interactive terminal so npm can request an authenticator code or browser approval. Do not use `--ci` for a local release because it disables the authentication prompt. Use `--only-version` to automate the other release steps while keeping npm authentication interactive.
 
 There is no token in the repo and no OIDC provenance, because provenance needs a CI publish and CI does not publish.
 
@@ -567,10 +567,10 @@ A module change reaches users the moment it merges, and a CLI change reaches the
 The version is then already bumped when you release. Release it as it stands, so release-it publishes that version rather than asking for a new one:
 
 ```sh
-pnpm release --no-increment
+pnpm release 0.6.0 --only-version
 ```
 
-With `--no-increment` release-it skips `npm version` and still writes the changelog, commits, tags and publishes. Without it you pick a bump on top of the bumped version, which skips a version number but breaks nothing, because every floor still holds.
+Replace `0.6.0` with the version in `packages/cli/package.json`. The explicit version preserves the planned version and selects the changelog range from the latest tag to the new tag. The npm configuration enables `allowSameVersion`, so `npm version` accepts the unchanged version. Do not use `--no-increment` here because the changelog plugin selects the previous release range. Do not use `--ci` because npm needs an interactive authentication prompt.
 
 ### If it fails after the push
 
