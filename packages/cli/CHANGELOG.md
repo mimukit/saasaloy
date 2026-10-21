@@ -1,5 +1,113 @@
 # Changelog
 
+## [0.6.0](https://github.com/mimukit/saasaloy/compare/v0.5.2...v0.6.0) (2026-10-21)
+
+### ⚠ BREAKING CHANGES
+
+* **env:** env-exec is removed, and the infra service name
+  is now deploy in envServices.
+* **cli:** no command writes .dev.vars or .dev.vars.example any
+  more. An existing project migrates with one `pnpm env:setup`, which
+  carries a leftover file's values into .env and deletes it.
+
+  - `saasaloy add` writes packages/env/.env.example, one tracked key list
+    with a `# @services` line per reader set, replacing
+    apps/api/.dev.vars.example and every per-workspace example
+  - a key no installed module describes keeps the comment and the section
+    it already had, so the base template's own keys survive regeneration
+  - a key the declaring module calls optional gets a `# Blank on purpose`
+    line, which is what stops env:setup failing on it
+  - `saasaloy env` prompts into the gitignored packages/env/.env and
+    nothing else; routeVariable, the workspace inference and the
+    `ambiguous` prompt are deleted, about 200 lines
+  - `saasaloy env --check` reports a declared key the key list omits,
+    which doctor cannot see because it runs offline
+  - `saasaloy doctor` fails on a leftover .dev.vars, naming the file and
+    the command that migrates it, because wrangler hides .env behind one
+    without warning
+  - the base _gitignore drops its .dev.vars lines; a leftover one wants to
+    be visible until it is deleted
+  - every module message and skill that named .dev.vars now names .env and
+    the two commands that fill it
+* **cli:** saasaloy add infra no longer resolves. A project
+  on infra follows docs/wiki/runbooks/move-off-the-infra-module.md.
+* **ui:** the web tokens move from globals.css to
+  packages/ui/src/styles/web.css, and DESIGN.md moves to
+  apps/web/DESIGN.md. saasaloy update creates web.css and sends
+  globals.css and Layout.astro to the merge plan. Finish the move
+  with the steps in the base AGENTS.md under "A project made
+  before the theme split". The admin app imports
+  @repo/ui/styles/admin.css, which needs the new ./styles/*
+  export in packages/ui/package.json.
+
+### Features
+
+* **api:** run the api's tests in node with vitest ([7b28436](https://github.com/mimukit/saasaloy/commit/7b28436215b0dca2eb0af06de4caaf4919497b10)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **cli:** add the [@root](https://github.com/root) alias for a repo-root file ([399e666](https://github.com/mimukit/saasaloy/commit/399e66604384893367bf55753ca61d3821f4abb1)), references [#152](https://github.com/mimukit/saasaloy/issues/152)
+* **cli:** format patched files with the project's prettier ([e1898ae](https://github.com/mimukit/saasaloy/commit/e1898aefbb195080a7904147bdfce865fa81dfb8))
+* **cli:** generate one key list and retire .dev.vars ([8ad2cd4](https://github.com/mimukit/saasaloy/commit/8ad2cd48fdeb144541fafc5ff34151f936bc9bde))
+* **cli:** name the cli floor before the schema errors ([d002c99](https://github.com/mimukit/saasaloy/commit/d002c990855db00fdc4c3503d5525aff1070674b)), references [#205](https://github.com/mimukit/saasaloy/issues/205)
+* **cli:** remove the pulumi infra module ([76cdf6d](https://github.com/mimukit/saasaloy/commit/76cdf6d92e511e5089a170744125ced8fcd6f6d4)), references [#198](https://github.com/mimukit/saasaloy/issues/198)
+* **database-d1:** add db:seed and a route test harness ([4e29dff](https://github.com/mimukit/saasaloy/commit/4e29dff32271296b15496bca77c587248f313d5e)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **database-d1:** add db:setup, db:status and db:drop ([514feb1](https://github.com/mimukit/saasaloy/commit/514feb1c0460a006835e8834383bcd2ac8d2d1e3)), references [#152](https://github.com/mimukit/saasaloy/issues/152)
+* **database-postgres:** add db:seed and a route test harness ([0a6d332](https://github.com/mimukit/saasaloy/commit/0a6d332da72dac48b29ea421c3ea4f93e6800636)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **database-postgres:** add db:setup, db:status and db:drop ([7e4c941](https://github.com/mimukit/saasaloy/commit/7e4c941dedfd8291f820c3e393a2e6db77d2d895)), references [#152](https://github.com/mimukit/saasaloy/issues/152)
+* **database:** add the seed engine and slice convention ([237d243](https://github.com/mimukit/saasaloy/commit/237d2433657ab9b5cee4ecdc7b2eb45cb455b050)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **env-infisical:** add the infisical value source ([0de8155](https://github.com/mimukit/saasaloy/commit/0de8155e0811fe9ea1d5e17da81057b473187c3a))
+* **env:** add packages/env to the base template ([b26c31d](https://github.com/mimukit/saasaloy/commit/b26c31d54336f2eb174974e2a295a266c31a7fc3))
+* **env:** compose capability presets per service ([5566777](https://github.com/mimukit/saasaloy/commit/5566777f786fab738786f30dc3f6afa934f1fe2b))
+* **env:** deploy every worker with pnpm deploy:production ([8253ea5](https://github.com/mimukit/saasaloy/commit/8253ea5da7b5130ff4cef25daaada120ab213965)), references [#198](https://github.com/mimukit/saasaloy/issues/198)
+* **modules:** deploy modules through env-deploy ([9234e30](https://github.com/mimukit/saasaloy/commit/9234e30a2a4552ac1ad44636ee9798f9e65ebd9a)), references [#198](https://github.com/mimukit/saasaloy/issues/198)
+* **modules:** ship seed slices for every module table ([976e6d4](https://github.com/mimukit/saasaloy/commit/976e6d4863b4286fef6033aac6a03c275d983da4)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **payment-manual:** add the manual payment provider ([92ca217](https://github.com/mimukit/saasaloy/commit/92ca21759fb60d48bbeecb0c092e71ffeabd6f9c)), references [#213](https://github.com/mimukit/saasaloy/issues/213)
+* **payment:** add the admin payments review page ([58bb445](https://github.com/mimukit/saasaloy/commit/58bb445746787e1ea2ca38b702c58a9aa6b3c02d)), references [#212](https://github.com/mimukit/saasaloy/issues/212)
+* **payment:** add the payment capability and payment-console ([90dbe4b](https://github.com/mimukit/saasaloy/commit/90dbe4be0d01967a0ea85c770b1c1267fb4203ed)), references [#212](https://github.com/mimukit/saasaloy/issues/212)
+* **payment:** ship seed slices for the payment tables ([49d510d](https://github.com/mimukit/saasaloy/commit/49d510d1cc4a2045fd811c52c0011cef030db069)), references [#212](https://github.com/mimukit/saasaloy/issues/212)
+* **repo:** add play:snap and play:restore ([4e2c5dc](https://github.com/mimukit/saasaloy/commit/4e2c5dca09979930667287f422b9fd44cf7f35ef)), references [#178](https://github.com/mimukit/saasaloy/issues/178)
+* **repo:** allow a reasoned verify-content exception ([8341bf0](https://github.com/mimukit/saasaloy/commit/8341bf048c08168eaf2b7f826e8cc82538168a0d)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **repo:** sync module edits into the playground ([dcf8214](https://github.com/mimukit/saasaloy/commit/dcf821415d597b307ee477d8279569a9696b7dd7)), references [#178](https://github.com/mimukit/saasaloy/issues/178)
+* **template:** run vitest across every workspace ([e1b5313](https://github.com/mimukit/saasaloy/commit/e1b5313271a8267e19b283948bd3752beba79e98)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **ui:** add landing layout, type and motion tokens ([b7adb4b](https://github.com/mimukit/saasaloy/commit/b7adb4b6a292f12150fa4d65c1b5de368f622b68)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **ui:** balance the pricing cards ([ebfbcce](https://github.com/mimukit/saasaloy/commit/ebfbccedd793d872e0903e4b4d645912ca9fe333))
+* **ui:** drop the version from the hero pill ([72cd201](https://github.com/mimukit/saasaloy/commit/72cd20147a081005d41f55b0a93d67e0bf006f6a)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **ui:** make the theme toggle two-state with a reveal ([fa213d4](https://github.com/mimukit/saasaloy/commit/fa213d42669dd9bc671fed7048ed5dc87f7eb6b2)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **ui:** open outbound landing links in a new tab ([c6bb096](https://github.com/mimukit/saasaloy/commit/c6bb096c08b1282f14cd86becc1efe144dd2666f))
+* **ui:** rebuild the landing page as thirteen blocks ([b571dfd](https://github.com/mimukit/saasaloy/commit/b571dfdf1fed36b92d60825746d377c048931b71)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **ui:** reveal the hero light beams on load ([0fbc7db](https://github.com/mimukit/saasaloy/commit/0fbc7db4546056cab14fc4432b2f870367c1df4d))
+* **validators:** add a bangladesh mobile schema ([ff8ebfc](https://github.com/mimukit/saasaloy/commit/ff8ebfca7c0850384c21b6b19c3523928dbcf611)), closes [#147](https://github.com/mimukit/saasaloy/issues/147)
+
+### Bug Fixes
+
+* **api-keys:** read the key list from apiKeys ([3d296ae](https://github.com/mimukit/saasaloy/commit/3d296aeb28510bbe57a656f556598ac75c639222))
+* **cli:** keep earlier services on a redeclared env key ([be06bf9](https://github.com/mimukit/saasaloy/commit/be06bf9aa79c4e862bb9c3b31bf327251ae0ba0d))
+* **cli:** name a generic ai coding tool in skill hints ([c40be88](https://github.com/mimukit/saasaloy/commit/c40be88834d51ede1f2372bbc1844a89ac2c8e99))
+* **cli:** run git init in an ignored target ([003320a](https://github.com/mimukit/saasaloy/commit/003320a564e2ac86feb2cde4736c68ce4c32eec7)), references [#178](https://github.com/mimukit/saasaloy/issues/178)
+* **database-postgres:** export env-preset and add @repo/env ([7e3c8f9](https://github.com/mimukit/saasaloy/commit/7e3c8f9d7eb65e397fe866b90a2c44a830870920)), closes [#206](https://github.com/mimukit/saasaloy/issues/206)
+* **database-postgres:** guard the test database and seed host ([de06ed1](https://github.com/mimukit/saasaloy/commit/de06ed12e706de386f588f921c688a981ad8c280)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **database-postgres:** keep the state block in apps/api/.env.db ([d491269](https://github.com/mimukit/saasaloy/commit/d491269587f02320fce0b566e890e3902d178366))
+* **database:** keep the primary key out of the upsert set ([4e6f4df](https://github.com/mimukit/saasaloy/commit/4e6f4df64773cbe2a34700110f3a311751cab6e5)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **database:** turn off the vitest module cache ([eba5691](https://github.com/mimukit/saasaloy/commit/eba56912c2571e6516a6b5757ccf90408e703dec)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **env-infisical:** import the provider with a .ts path ([012f16a](https://github.com/mimukit/saasaloy/commit/012f16a3909042faa95e7c89913136319c766fc4))
+* **env:** break the cycle between sources and infisical ([d8f0a3f](https://github.com/mimukit/saasaloy/commit/d8f0a3f29f07fad3398b69a28f27c84f72562bff))
+* **modules:** seed only rows the admin pages keep ([ca14f85](https://github.com/mimukit/saasaloy/commit/ca14f851df3a95d66403a6b203a033c038f5dc0c)), references [#207](https://github.com/mimukit/saasaloy/issues/207)
+* **multitenant:** move loadStatements out of tenant.ts ([cfacb74](https://github.com/mimukit/saasaloy/commit/cfacb74764442eb03130c2dd06b30ff89d129278))
+* **multitenant:** re-export loadStatements from tenant.ts ([a392772](https://github.com/mimukit/saasaloy/commit/a3927729276599c661edab2cccddbd475841b19e))
+* **registry:** declare the cli each descriptor needs ([ca43144](https://github.com/mimukit/saasaloy/commit/ca43144f288e8a3db0a5c8cc3f2080ca9b6141a4)), closes [#205](https://github.com/mimukit/saasaloy/issues/205)
+* **release:** support planned versions with interactive npm auth ([904ad49](https://github.com/mimukit/saasaloy/commit/904ad49eb253300ab1dee2e05f37f4bbc02a065b))
+* **repo:** finish a play:watch sync job only once ([3033c91](https://github.com/mimukit/saasaloy/commit/3033c91f2dfb03f1b790b817bd9c94d5c5cf92f8)), references [#178](https://github.com/mimukit/saasaloy/issues/178)
+* **repo:** keep play:restore --db honest when a step fails ([275dfa2](https://github.com/mimukit/saasaloy/commit/275dfa28d1d74f97cfb7a3d3631ba0df46af334e)), references [#178](https://github.com/mimukit/saasaloy/issues/178)
+* **repo:** lint shipped files with the template's config ([24a9a24](https://github.com/mimukit/saasaloy/commit/24a9a242e42b3664168e708d24c9c750e8daeca0))
+* **repo:** stop restarting the api on play:restore --db ([2b1fb3c](https://github.com/mimukit/saasaloy/commit/2b1fb3cf104f09aa7573e761d7c8b87c3b6a913a))
+* **ui:** pass the type-aware lint in two shipped blocks ([cbe7122](https://github.com/mimukit/saasaloy/commit/cbe712276931cbc015b0e4b3b2d1d93d82b00bc3))
+* **ui:** run the hero background behind the navbar ([98fb3c4](https://github.com/mimukit/saasaloy/commit/98fb3c448e3ea2636869bc5331d9573076e1792b)), references [#191](https://github.com/mimukit/saasaloy/issues/191)
+* **validators:** accept only a space as whitespace ([a56b7cb](https://github.com/mimukit/saasaloy/commit/a56b7cbe0fae0f82cf908ad6b2d7e9d461504f5d))
+* **web:** keep astro build off the dev server's vite cache ([2fa06c5](https://github.com/mimukit/saasaloy/commit/2fa06c54d6495f9e5da6e97707b96b6cbe9bd324))
+* **web:** scan island deps for the client optimizer ([93aef6a](https://github.com/mimukit/saasaloy/commit/93aef6ada61e78c1a47dbeab40bc49b814b80345))
+
+### Code Refactoring
+
+* **ui:** split the shared stylesheet into per-app themes ([dd9a0ec](https://github.com/mimukit/saasaloy/commit/dd9a0eca11064c2a53170badcc537f8746e36d31)), references [#191](https://github.com/mimukit/saasaloy/issues/191) [#192](https://github.com/mimukit/saasaloy/issues/192) [#193](https://github.com/mimukit/saasaloy/issues/193)
+
 ## [0.5.2](https://github.com/mimukit/saasaloy/compare/v0.5.1...v0.5.2) (2026-10-02)
 
 ### Features
