@@ -247,7 +247,7 @@ export const landing = {
         id: "deploy",
         title: "Deploy",
         description:
-          "Each Worker deploys with wrangler, or all of them at once with the `infra` module.",
+          "`pnpm deploy:production` ships every Worker with wrangler, its secrets and its resources included.",
       },
     ],
   },
@@ -402,7 +402,6 @@ export const landing = {
           "kv",
           "storage",
           "billing",
-          "infra",
         ],
       },
       {

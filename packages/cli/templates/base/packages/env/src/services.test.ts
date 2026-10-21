@@ -31,16 +31,22 @@ addService({
   omit: [],
 });
 addService({
-  name: "infra",
-  file: "infra/.env",
+  name: "ops",
+  file: "ops/.env",
   environment: "prod",
   omit: ["DATABASE_URL"],
 });
 
 describe("the service table", () => {
-  it("seeds web and takes the rows a const-array patch appends", () => {
-    assert.deepEqual(serviceNames().toSorted(), ["api", "infra", "web"]);
-    assert.equal(findService("infra")?.file, "infra/.env");
+  it("seeds web and deploy, and takes the rows a const-array patch appends", () => {
+    assert.deepEqual(serviceNames().toSorted(), [
+      "api",
+      "deploy",
+      "ops",
+      "web",
+    ]);
+    assert.equal(findService("ops")?.file, "ops/.env");
+    assert.equal(findService("deploy")?.file, undefined);
     assert.equal(findService("nope"), undefined);
   });
 });
@@ -61,9 +67,13 @@ describe("selectServices", () => {
 
   it("writes the one prod service --only names", () => {
     assert.deepEqual(
-      selectServices("prod", "infra").map((service) => service.name),
-      ["infra"]
+      selectServices("prod", "ops").map((service) => service.name),
+      ["ops"]
     );
+  });
+
+  it("refuses a service with no file to write", () => {
+    assert.throws(() => selectServices("prod", "deploy"), /no \.env file/);
   });
 
   it("refuses a service that does not belong to the environment", () => {

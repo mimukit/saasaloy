@@ -178,18 +178,15 @@ export default defineConfig({
       rules: { "no-console": "off" },
     },
 
-    // Three more places where `console` is the right call, all from modules.
+    // Two more places where `console` is the right call, both from the queue module.
     // A queue provider's batch consumer and cron tick run outside a request, so there is
     // no `c.get("log")` to reach for, and `@repo/queue` has no runtime dependencies to
     // import `@repo/logger` with. Workers Logs indexes `console` directly. The example
     // job's whole body is one log line, which is what makes it a readable example.
-    // `infra` is a Pulumi program on the deploying machine, which reports its progress
-    // on stdout and has no Workers logger to route through.
     {
       files: [
         "packages/queue/src/providers/**",
         "packages/queue/src/jobs/example.ts",
-        "infra/**",
       ],
       rules: { "no-console": "off" },
     },
@@ -210,7 +207,7 @@ export default defineConfig({
     // awaits. Prefixing twenty call sites with `void` would say nothing the runner does
     // not already guarantee.
     //
-    // `env:setup` and `env-exec` are node scripts, so `process` and `console` are theirs
+    // `env:setup` and `env-deploy` are node scripts, so `process` and `console` are theirs
     // to use. Nothing a Worker imports reaches them (ADR 0041).
     {
       files: ["packages/env/**/*.test.ts"],
@@ -238,7 +235,7 @@ export default defineConfig({
       },
     },
     {
-      files: ["packages/env/scripts/**", "packages/env/src/exec.ts"],
+      files: ["packages/env/scripts/**", "packages/env/src/deploy.ts"],
       rules: { "no-console": "off", "unicorn/no-process-exit": "off" },
     },
   ],

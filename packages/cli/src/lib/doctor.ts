@@ -881,10 +881,38 @@ export function checkEnv(args: EnvCheckArgs): Finding[] {
   return findings;
 }
 
+/** The runbook that moves a project off the deleted `infra` module. */
+export const INFRA_RUNBOOK =
+  "https://github.com/mimukit/saasaloy/blob/main/docs/wiki/runbooks/move-off-the-infra-module.md";
+
+/**
+ * The deploy rule (ADR 0043): a project that still carries the `infra/` workspace from
+ * the Pulumi deploy that `pnpm deploy:production` replaced.
+ *
+ * It is a warning with a pointer, never a delete. `infra/state/` holds the ids of live
+ * Cloudflare resources, and the runbook copies them out before anything goes.
+ */
+export function checkRetiredInfra(hasInfra: boolean): Finding[] {
+  return hasInfra
+    ? [
+        finding(
+          "deploy",
+          "/infra",
+          `infra/ is the Pulumi deploy that pnpm deploy:production replaced, and nothing runs it any more. Never run pulumi destroy: it deletes the live Workers and their data. Follow ${INFRA_RUNBOOK} to move the resource ids into wrangler.jsonc, then delete infra/.`
+        ),
+      ]
+    : [];
+}
+
+/** Whether the project still has the `infra/` directory `checkRetiredInfra` reports. */
+export function hasRetiredInfra(root: string): Promise<boolean> {
+  return pathExists(resolveWithinRoot(root, "infra"));
+}
+
 /** Read what `checkEnv` needs off a project on disk. */
 export async function readEnvState(root: string): Promise<EnvCheckArgs> {
   const legacy: string[] = [];
-  for (const workspace of ["apps/api", "apps/web", "apps/admin", "infra"]) {
+  for (const workspace of ["apps/api", "apps/web", "apps/admin"]) {
     for (const name of LEGACY_ENV_FILES) {
       const path = posix.join(workspace, name);
       if (await pathExists(resolveWithinRoot(root, path))) {

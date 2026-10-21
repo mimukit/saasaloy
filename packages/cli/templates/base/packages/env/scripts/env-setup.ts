@@ -6,8 +6,9 @@ import { setupServices } from "../src/setup.ts";
 import { sources } from "../src/sources.ts";
 
 // `pnpm env:setup [--env dev|prod] [--only <service>]`: write each service's `.env` from
-// the selected value source. `dev` writes every dev service; `--env prod --only infra`
-// writes one production file and nothing under `apps/`.
+// the selected value source. `dev` writes every dev service; `--env prod --only <service>`
+// writes one production file and nothing under `apps/`. A deploy writes no file at all:
+// `pnpm deploy:production` loads the production values in memory.
 
 function readOptions(args: string[]): {
   environment: Environment;

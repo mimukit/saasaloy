@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "bin": {
-    "env-exec": "./src/exec.ts"
+    "env-deploy": "./src/deploy.ts"
   },
   "exports": {
     ".": "./src/index.ts",

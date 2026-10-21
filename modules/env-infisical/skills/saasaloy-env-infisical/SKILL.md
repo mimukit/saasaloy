@@ -1,18 +1,18 @@
 ---
 name: saasaloy-env-infisical
-description: Runbook for env-infisical — the Infisical value source for pnpm env:setup. Use when setting up Infisical for a project, when choosing folders per service, when a machine identity is needed for CI, when env:setup reports Infisical did not answer, or when it refuses with no access.
+description: Runbook for env-infisical — the Infisical value source for pnpm env:setup and pnpm deploy:production. Use when setting up Infisical for a project, when choosing folders per service, when a machine identity is needed for CI, when env:setup reports Infisical did not answer, or when it refuses with no access.
 ---
 
 # env-infisical — Infisical as a value source
 
 `saasaloy add env-infisical` registers a second value source in `packages/env/src/sources.ts`. Select it with `ENV_SOURCE=infisical`; leave the variable unset and `pnpm env:setup` keeps using the built-in `local` source.
 
-Nothing about this reaches a Worker. Values arrive in a deployed Worker as bindings and secrets exactly as before, and this module only fills the files `pnpm env:setup` writes.
+This source answers two commands. `pnpm env:setup` asks it for each service's `dev` values and writes them to the service's `.env`. `ENV_SOURCE=infisical pnpm deploy:production` asks it for the `prod` values and keeps them in memory: `env-deploy` builds each Worker with them and uploads its secrets with `wrangler deploy --secrets-file`. Nothing a Worker imports reads Infisical.
 
 ## Setting it up
 
 1. Install the Infisical CLI and run `infisical init` in the repository root. That writes `.infisical.json`, which names the project and holds no secret. Commit it.
-2. Create one folder per service plus `/shared`: `/shared`, `/api`, `/web`, `/admin`, `/infra`. A key several services read lives in `/shared` and is stored once.
+2. Create one folder per service plus `/shared`: `/shared`, `/api`, `/web`, `/admin`, `/deploy`. A key several services read lives in `/shared` and is stored once. `/deploy` holds `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`.
 3. Put a value in Infisical for every key `packages/env/.env.example` lists for that service, in every environment that needs it.
 4. Run `ENV_SOURCE=infisical pnpm env:setup`.
 

@@ -509,7 +509,7 @@ three `ratelimits` entries matched on `name`, and the registration patch.
   "patches": [
     { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
       "bindingType": "kv_namespaces", "matchOn": "binding",
-      "entry": { "binding": "KV", "id": "<replace-me>" } },
+      "entry": { "binding": "KV" } },     // no id: wrangler creates the namespace on deploy
     { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
       "bindingType": "ratelimits", "matchOn": "name",
       "entry": { "name": "RL_STRICT", "namespace_id": "1001",

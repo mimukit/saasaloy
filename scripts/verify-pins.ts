@@ -80,7 +80,6 @@ export const PIN_RULES: readonly PinRule[] = [
       "packages/cli/templates/base/apps/web/package.json",
       "modules/api/files/package.json",
       "modules/admin/files/package.json",
-      "modules/infra/files/package.json",
     ],
   },
   // Issue #152. The repo's oxlint config imports the template's config and lints every

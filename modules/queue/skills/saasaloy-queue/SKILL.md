@@ -95,16 +95,9 @@ The module patches `apps/api/wrangler.jsonc` with two producer bindings (`JOBS` 
 
 A job declared `durable: true` is refused at `enqueue` with `QueueError("provider_error")` rather than run as a plain message. Cloudflare Queues cannot checkpoint, and downgrading in silence would drop the replay the handler asked for. The Workflows path is issue #131.
 
-### Create the queues first
+### The first deploy creates the queues
 
-The bindings name queues; they do not create them. Run this once per Cloudflare account, before the first deploy:
-
-```sh
-wrangler queues create app-jobs
-wrangler queues create app-jobs-dlq
-```
-
-A binding pointing at a queue that does not exist fails the deploy, not the request, so you find out at `wrangler deploy` rather than in production. Queues need a Workers **paid plan**; `queue-memory` exists so local development needs neither the plan nor the queues.
+The bindings name queues, and `wrangler deploy` creates each producer queue the account does not have yet: `app-jobs` and `app-jobs-dlq`, since the dead-letter queue has a producer binding too. A later deploy finds both by name and creates nothing. You run no `wrangler queues create`. Queues need a Workers **paid plan**; `queue-memory` exists so local development needs neither the plan nor the queues.
 
 ### `wrangler dev` does not deliver a message to your consumer
 
@@ -149,10 +142,6 @@ export const chargeInvoiceJob = (): Job =>
 ```
 
 Read state and return early, or write through a unique key and let the constraint reject the duplicate. Do not use `ctx.attempt` as the test: attempt 0 can arrive twice.
-
-### `infra` does not know about these bindings yet
-
-`modules/infra` translates `wrangler.jsonc` bindings into provisioning steps. It does not yet handle `queues`, `triggers` or `send_email`, so installing `queue-cloudflare` in a project that uses `infra` gets you the bindings but not the queue creation. Run the two `wrangler queues create` commands by hand until the translator lands (issue #130).
 
 ## `queue-memory`
 

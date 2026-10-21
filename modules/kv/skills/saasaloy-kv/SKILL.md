@@ -151,18 +151,20 @@ Swapping providers is the env var plus `saasaloy add kv-<provider>`. No call sit
 
 ## Setting up `kv-cloudflare`
 
-`saasaloy add kv-cloudflare` writes four entries into `apps/api/wrangler.jsonc` and registers the provider. Two of them need a human afterwards.
+`saasaloy add kv-cloudflare` writes four entries into `apps/api/wrangler.jsonc` and registers the provider. One of them may need a human afterwards.
 
-**1. Create the namespace and paste its id.** The patch writes a placeholder, because the CLI cannot create a namespace for you.
-
-```sh
-wrangler kv namespace create app-kv
-```
+**1. The namespace needs no id.** The patch writes the binding alone:
 
 ```jsonc
 // apps/api/wrangler.jsonc
-"kv_namespaces": [{ "binding": "KV", "id": "<replace-me>" }] // ← paste the id it printed
+"kv_namespaces": [{ "binding": "KV" }]
 ```
+
+Local dev keys the miniflare store by the binding, so it runs with no account. On the first `pnpm deploy:production`, wrangler creates a namespace titled `<worker name>-kv` (for example `api-kv`) and binds it. Every later deploy reuses the namespace the deployed Worker already holds. An interactive deploy offers to write the id back into `wrangler.jsonc`; keep it or discard it, both work. A namespace you created by hand works too: put its `id` on the binding.
+
+One case creates a second namespace: deleting the Worker and deploying again. The new Worker holds no binding to inherit, so wrangler tries to create `api-kv` again and Cloudflare refuses the duplicate title. Put the old namespace's `id` (from `wrangler kv namespace list`) on the binding before you redeploy.
+
+A project made before this change carries `"id": "<replace-me>"`. Delete that field, or replace it with the real id; wrangler sends any id it finds.
 
 Leave `binding` as `KV` unless you pass a different name to `cloudflare({ binding })` in `packages/kv/src/index.ts`. The binding name is the credential; there is no API token and no secret for this provider.
 
@@ -190,7 +192,6 @@ Each `namespace_id` must be a unique positive integer **per Cloudflare account**
 
 **5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter billing with it.
 
-**6. The `infra` module does not translate these yet.** `modules/infra`'s `translate.ts` handles `d1_databases` and `vars` only, so `kv_namespaces` and `ratelimits` in `wrangler.jsonc` do not become Pulumi resources. Create the namespace with `wrangler` as above and keep the ids in `wrangler.jsonc` until that gap closes.
 
 ## Limits worth knowing before you design around KV
 

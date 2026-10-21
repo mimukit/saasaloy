@@ -198,7 +198,9 @@ DATABASE_URL="postgres://…" pnpm --filter @repo/db db:migrate
 `drizzle-kit migrate` records what it applied in a `drizzle.__drizzle_migrations` table, so
 re-running it is a no-op. There is no `drizzle-kit push` script and nothing migrates on boot.
 Generate, review the SQL, commit it beside the schema change, then apply it as a command you run.
-Automating the production run belongs to the future **`infra`** capability, not here.
+`pnpm deploy:production` does not run this for you: the base `turbo.json` waits on a
+`db:migrate:prod` task, and this driver defines none, because the production `DATABASE_URL` is
+yours to manage. Apply migrations before you deploy code that reads them.
 
 ## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 

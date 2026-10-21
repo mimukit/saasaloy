@@ -400,8 +400,10 @@ There are no bindings, and there should not be — the session and the database 
 Set `PUBLIC_API_URL` at **build** time, not on the Worker. Vite inlines it into the bundle, so a
 runtime variable would arrive too late to matter.
 
-Like every other module, `admin` owns no deploy pipeline. The `deploy` script is for local and
-manual use; centralized deployment is the future `infra` capability's job.
+`pnpm deploy:production` deploys this app with every other Worker. Its `deploy` script is
+`env-deploy admin`, which builds with the `admin` service's production values in the
+environment, so the bundle inlines the production `PUBLIC_API_URL` and the dev `.env` stays as it
+is. The app is assets-only, so it gets no secrets.
 
 ## Removing the module
 

@@ -184,7 +184,6 @@ describe("PIN_RULES", () => {
       "packages/cli/templates/base/apps/web/package.json",
       "modules/api/files/package.json",
       "modules/admin/files/package.json",
-      "modules/infra/files/package.json",
     ]) {
       assert.ok(wrangler.files.includes(file), `wrangler rule misses ${file}`);
     }

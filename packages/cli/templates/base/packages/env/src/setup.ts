@@ -35,6 +35,13 @@ export function legacyDevVarsPath(file: string): string {
   return path.join(path.dirname(file), ".dev.vars");
 }
 
+/** A service row that names a file, which is every row `env:setup` can write. */
+type FileService = Service & { file: string };
+
+function hasFile(service: Service): service is FileService {
+  return service.file !== undefined;
+}
+
 export async function setupServices(options: {
   root: string;
   environment: Environment;
@@ -42,7 +49,9 @@ export async function setupServices(options: {
   source: EnvSource;
   processEnv: Record<string, string | undefined>;
 }): Promise<SetupReport> {
-  const { root, environment, services, source, processEnv } = options;
+  const { root, environment, source, processEnv } = options;
+  // A row with no file, such as `deploy`, holds values a tool loads in memory.
+  const services = options.services.filter(hasFile);
 
   for (const service of services) {
     if (environment === "prod" && service.file.startsWith("apps/")) {
@@ -53,7 +62,7 @@ export async function setupServices(options: {
   }
 
   const planned: {
-    service: Service;
+    service: FileService;
     target: string;
     exists: boolean;
     legacy: string | undefined;
@@ -141,7 +150,7 @@ export async function setupServices(options: {
 /** The source did not answer: keep every file when all are complete, and fail otherwise. */
 function keepComplete(
   root: string,
-  services: Service[],
+  services: FileService[],
   reason: string
 ): SetupReport {
   const problems = services.flatMap((service) => {

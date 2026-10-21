@@ -34,3 +34,21 @@ PUBLIC_SITE_URL=http://localhost:3000
 # Origin this site calls for api and auth requests (e.g. https://api.x.com). The api
 # Worker's pinned dev port is 4000. Unset, the build fails naming this key.
 PUBLIC_API_URL=http://localhost:4000
+
+# =============================================================================
+# Deploy credentials
+# =============================================================================
+# @services deploy
+
+# Cloudflare API token wrangler deploys with, from https://dash.cloudflare.com/profile/api-tokens.
+# The "Edit Cloudflare Workers" template covers Workers; add "D1: Edit" with a database,
+# and "Workers KV Storage: Edit", "Workers R2 Storage: Edit" and "Queues: Edit" for those.
+# pnpm deploy:production never puts it in a Worker's secrets.
+# Blank on purpose: unset, wrangler uses your `wrangler login` session, and the deploy
+# stops before any build when there is none.
+CLOUDFLARE_API_TOKEN=
+
+# The Cloudflare account id the Workers and their resources deploy into.
+# Blank on purpose: unset, wrangler uses the one account the token or login can reach,
+# and asks or fails when there are several.
+CLOUDFLARE_ACCOUNT_ID=

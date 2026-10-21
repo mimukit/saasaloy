@@ -281,17 +281,6 @@ export default defineConfig({
       env: { node: false, serviceworker: true, worker: true },
     },
 
-    // --- Pulumi surface ----------------------------------------------------
-    // The infra module is the one shipped asset that does NOT run on workerd.
-    // Pulumi executes it as an ordinary Node ESM program on the deploying
-    // machine, so it reads `process.env` and the filesystem. Keep it out of the
-    // Workers glob above; giving it `serviceworker`/`worker` env would hide the
-    // Node globals it actually depends on.
-    {
-      files: ["modules/infra/files/**"],
-      env: { browser: false, node: true },
-    },
-
     // --- React surfaces ----------------------------------------------------
     // The shipped design system and the waitlist module's client components:
     // browser globals plus React 19. Type-aware off, same reason as above.
@@ -475,15 +464,6 @@ export default defineConfig({
     // failures, both of which Workers Logs indexes from `console` directly.
     {
       files: ["modules/queue-*/files/**"],
-      rules: { "no-console": "off" },
-    },
-    // The infra module is deploy tooling, in the same class as `scripts/**`
-    // above: a Pulumi program reports its own progress on stdout, and the three
-    // sites here are that report — an empty-discovery notice and the per-secret
-    // push lines. `@repo/logger` is a Workers runtime package and never resolves
-    // on the deploying machine, so there is no logger to route them through.
-    {
-      files: ["modules/infra/files/**"],
       rules: { "no-console": "off" },
     },
   ],

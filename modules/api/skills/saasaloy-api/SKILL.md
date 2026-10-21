@@ -234,7 +234,7 @@ Four rules hold here:
 - **The `import.from` is the package export, not a scaffold alias.** `apps/api` reaches into another workspace, so the specifier is `@repo/queue/providers/cloudflare`, resolved by the `"./providers/*"` entry in `packages/queue`'s `exports` map. `@queue` is a descriptor-target alias the CLI uses to place files; it is not a TypeScript path and does not resolve at runtime.
 - **`HandlerSet` is declared in `worker.ts`, not imported from a capability.** `api` depends on no capability, and every capability that registers a handler depends on `api`. An import the other way would invert that.
 - **`defineWorker` exports a hook only when a set declares it.** Cloudflare reads a `queue` export as a promise that the Worker consumes a queue, so an empty stub would claim a consumer that does not exist.
-- **`infra` is not the registration path.** A provider patches `wrangler.jsonc` and `worker.ts` directly, because `modules/infra` reads `wrangler.jsonc` after the fact and a project that never installs `infra` would otherwise get no binding at all.
+- **The deploy tooling is not the registration path.** A provider patches `wrangler.jsonc` and `worker.ts` directly. `pnpm deploy:production` hands that config to `wrangler deploy` as it is, and wrangler creates the resources the bindings name.
 
 ## Logging: `c.get("log")`, never `console.log`
 
@@ -406,10 +406,13 @@ curl -i -H 'Origin: http://localhost:9999' http://localhost:4000/health # → no
 
 ## Deploy
 
-`api` owns **no** deploy step — it ships only its own `wrangler.jsonc` (this service's config).
-Deployment of all services is centralized in the future **`infra`** capability (IaC). The
-`deploy` script (`wrangler deploy`) exists for local/manual use, but production deploys are
-`infra`'s job, not this module's.
+`pnpm deploy:production` at the repository root deploys this Worker with every other one. Its
+`deploy` script is `env-deploy api`: it loads the `api` service's production values and the
+Cloudflare credentials from the value source, builds with them, and runs `wrangler deploy
+--secrets-file`, so the secrets land in the same Worker version as the code. A key the
+`wrangler.jsonc` `vars` block already sets stays a plain var and is not sent as a secret.
+`pnpm --filter @repo/api run deploy` deploys this Worker alone. With `database-d1` installed,
+`turbo run deploy` applies the D1 migrations first. See the `saasaloy-env` skill.
 
 ## Conventions to honor
 

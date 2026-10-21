@@ -97,7 +97,7 @@ Each row installs on top of the previous one. Nothing from a later row lands in 
 | Email | Cloudflare Email Sending, Plunk, or a console logger |
 | Storage | Cloudflare R2, or in memory |
 | Background work | Cloudflare Queues and Cron Triggers, or an in-process runner |
-| Infra | wrangler per workspace, or Pulumi via the `infra` module |
+| Deploy | wrangler, through `pnpm deploy:production` |
 | Monorepo | Turborepo + pnpm |
 
 ## Modules
@@ -106,7 +106,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 
 | Tier | Modules |
 |---|---|
-| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `infra` |
+| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing` |
 | Feature | `waitlist`, `teams`, `multitenant`, `rbac`, `api-keys`, `entitlements`, `email-react`, `ratelimit`, `feature-flags` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe` |
 | Driver | `database-d1`, `database-postgres` |
@@ -121,7 +121,7 @@ The default registry is this repo. `saasaloy add waitlist` fetches `modules/wait
 
 ## Deploy
 
-Each deployable workspace owns its `wrangler.jsonc` and `deploy` script, or the `infra` module deploys every Worker with one Pulumi program. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
+`pnpm deploy:production` deploys every Worker in the project with wrangler. It loads the production values from the value source in memory, checks every one of them before anything builds, and uploads each Worker's secrets with its code. Wrangler creates the D1, KV, R2 and queue resources on the first deploy. Each deployable workspace keeps its own `wrangler.jsonc` and a `deploy` script that runs `env-deploy <service>`. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
 
 ## Documentation
 

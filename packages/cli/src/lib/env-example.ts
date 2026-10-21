@@ -28,7 +28,7 @@ export const ENV_EXAMPLE = "packages/env/.env.example";
 export const PUBLIC_PREFIX = "PUBLIC_";
 
 /** The services a project can have. The order here is the order the sections print in. */
-export const SERVICE_NAMES = ["api", "web", "admin", "infra"] as const;
+export const SERVICE_NAMES = ["api", "web", "admin", "deploy"] as const;
 
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 

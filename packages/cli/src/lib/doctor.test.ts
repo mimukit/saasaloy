@@ -11,12 +11,15 @@ import {
   checkEnv,
   checkPolicyBindings,
   checkProject,
+  checkRetiredInfra,
   checkTarget,
   KV_INDEX_FILE,
   readPolicyState,
   registryModuleNames,
   resolveDoctorTarget,
   WRANGLER_FILE,
+  hasRetiredInfra,
+  INFRA_RUNBOOK,
   readEnvState,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
@@ -770,5 +773,36 @@ describe(readEnvState, () => {
       legacy: [],
       hasKeyList: true,
     });
+  });
+});
+
+describe(checkRetiredInfra, () => {
+  it("is quiet without an infra/ directory", () => {
+    expect(checkRetiredInfra(false)).toStrictEqual([]);
+  });
+
+  it("warns against pulumi destroy and points at the runbook", () => {
+    const [found] = checkRetiredInfra(true);
+    expect(found?.module).toBe("deploy");
+    expect(found?.message).toContain("Never run pulumi destroy");
+    expect(found?.message).toContain(INFRA_RUNBOOK);
+  });
+});
+
+describe(hasRetiredInfra, () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-infra-state-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { force: true, recursive: true });
+  });
+
+  it("sees an infra/ directory left from the Pulumi deploy", async () => {
+    await expect(hasRetiredInfra(root)).resolves.toBeFalsy();
+    await mkdir(join(root, "infra", "state"), { recursive: true });
+    await expect(hasRetiredInfra(root)).resolves.toBeTruthy();
   });
 });

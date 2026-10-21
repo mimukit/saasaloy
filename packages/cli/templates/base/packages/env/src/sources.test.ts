@@ -74,6 +74,21 @@ describe("the local source", () => {
     assert.deepEqual([...(await local.load(request(root)))], [["A", "one"]]);
   });
 
+  it("reads packages/env/.env.prod for production, never the dev file", async () => {
+    const root = makeRoot("A=dev\n");
+    writeFileSync(path.join(root, "packages/env/.env.prod"), "A=prod\n");
+    const prod = { ...request(root), environment: "prod" as const };
+    assert.deepEqual([...(await local.load(prod))], [["A", "prod"]]);
+  });
+
+  it("says production is not set up when .env.prod is missing", async () => {
+    const prod = {
+      ...request(makeRoot("A=dev\n")),
+      environment: "prod" as const,
+    };
+    await assert.rejects(local.load(prod), /\.env\.prod does not exist/);
+  });
+
   it("says the project is not set up when the file is missing", async () => {
     await assert.rejects(local.load(request(makeRoot())), (error: unknown) => {
       assert.ok(error instanceof EnvError);
