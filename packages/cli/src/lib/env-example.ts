@@ -158,9 +158,15 @@ export function renderEnvExample(args: RenderExampleArgs): string {
 
   const bySection = new Map<string, string[]>();
   for (const name of names) {
-    // A declaring module decides; otherwise the file keeps the section it already had.
+    // A declaring module adds its services to the section the file already had. `add`
+    // unions declarations within one run only, so a key a later run declares again
+    // (`PUBLIC_API_URL` from `admin`, then from `waitlist`) keeps the earlier services.
+    const declared = args.services[name];
+    const kept = existing[name]?.services;
     const section = sectionKey(
-      args.services[name] ?? existing[name]?.services ?? servicesFor(name)
+      declared || kept
+        ? [...(kept ?? []), ...(declared ?? [])]
+        : servicesFor(name)
     );
     bySection.set(section, [...(bySection.get(section) ?? []), name]);
   }

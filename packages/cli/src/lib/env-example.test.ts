@@ -102,6 +102,27 @@ describe(renderEnvExample, () => {
     );
   });
 
+  it("adds a later module's services to the section a key already has", () => {
+    // `saasaloy add admin`, then `saasaloy add waitlist` in a second run: the second plan
+    // only knows waitlist's `web`, and admin still reads the key.
+    const out = renderEnvExample({
+      ...base,
+      envVars: { PUBLIC_API_URL: "Origin." },
+      services: { PUBLIC_API_URL: ["web"] },
+      existing: {
+        PUBLIC_API_URL: {
+          value: "http://localhost:4000",
+          comment: ["# Origin."],
+          services: ["admin"],
+        },
+      },
+    });
+
+    expect(out).toContain(
+      "# @services web admin\n\n# Origin.\nPUBLIC_API_URL=http://localhost:4000"
+    );
+  });
+
   it("prints the sections in a stable order", () => {
     const render = () =>
       renderEnvExample({
