@@ -1,5 +1,5 @@
 import { resolve } from "node:path";
-import { assertManagedDatabase } from "./branch-name.ts";
+import { assertManagedDatabase, testDatabaseName } from "./branch-name.ts";
 import { API_ENV, withSql } from "./context.ts";
 import type { Context } from "./context.ts";
 import { databaseOf, hostOf } from "./url.ts";
@@ -61,6 +61,56 @@ export function assertSeedTarget(prefix: string, url: string): string {
   } catch {
     throw new Error(
       `Refusing to seed "${database}": db:seed only writes to ${prefix} and ${prefix}_<branch>, the databases pnpm db:setup makes.`
+    );
+  }
+  return database;
+}
+
+/**
+ * Throw when `DATABASE_URL` from the environment names another server than the one
+ * `pnpm db:setup` wrote to `apps/api/.env`. The name check alone lets a shell variable
+ * aimed at a remote `<prefix>` through, and the seed writes a superadmin whose password
+ * it prints. `db:seed` only; the test setup has `assertTestTarget`.
+ */
+export function assertSeedServer(
+  context: Context,
+  env: NodeJS.ProcessEnv = process.env
+): void {
+  if (!env.DATABASE_URL) {
+    return;
+  }
+  const recorded = context.env.values.get("DATABASE_URL");
+  if (!recorded) {
+    throw new Error(
+      `Refusing to seed: DATABASE_URL is set in the environment, but ${API_ENV} has none to check it against. Run pnpm db:setup first.`
+    );
+  }
+  const asked = hostOf(env.DATABASE_URL);
+  const known = hostOf(recorded);
+  if (asked !== known) {
+    throw new Error(
+      `Refusing to seed ${asked}: DATABASE_URL in the environment names another server than ${known}, the one in ${API_ENV}. Unset it, or run pnpm db:setup against that server.`
+    );
+  }
+}
+
+/**
+ * Throw unless `url` names this checkout's test database, `testDatabaseName` of its
+ * development database: the one database the route test setup may create, migrate, drop
+ * and seed. `assertSeedTarget` is not enough here: it accepts every branch database, and a
+ * failed migration drops the test database with `WITH (FORCE)`. Returns the name.
+ */
+export function assertTestTarget(context: Context, url: string): string {
+  let database: string;
+  try {
+    database = databaseOf(url);
+  } catch {
+    throw new Error("Refusing to use the test database: its URL is not a URL.");
+  }
+  const expected = testDatabaseName(context.database);
+  if (database !== expected) {
+    throw new Error(
+      `Refusing to use "${database}" as the test database: the route test setup creates, migrates, drops and seeds only ${expected}. Point TEST_DATABASE_URL at ${expected}, or unset it.`
     );
   }
   return database;

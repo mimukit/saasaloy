@@ -1,5 +1,6 @@
 import { loadContext, readFlags, run, say } from "./lib/context.ts";
 import {
+  assertSeedServer,
   assertSeedTarget,
   loadSeedEntry,
   refuseProduction,
@@ -15,7 +16,8 @@ import {
 // A row deleted from a slice stays in the database; `pnpm db:setup --reset` starts clean.
 //
 // The guard runs before any connection opens: `NODE_ENV=production` is refused, and so is
-// any database that is not `<prefix>` or `<prefix>_<branch>`. See the
+// any database that is not `<prefix>` or `<prefix>_<branch>`, and a `DATABASE_URL` in the
+// environment that names another server than `apps/api/.env`. See the
 // `saasaloy-database-postgres` skill.
 
 await run(async () => {
@@ -24,6 +26,7 @@ await run(async () => {
   const context = loadContext();
   const url = seedUrl(context);
   assertSeedTarget(context.prefix, url);
+  assertSeedServer(context);
 
   const entry = await loadSeedEntry(context.root);
   const result = await writeSeed(url, entry);

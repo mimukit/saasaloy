@@ -308,10 +308,11 @@ The guard runs before any connection opens:
 
 - `NODE_ENV=production` is refused first.
 - The target is `DATABASE_URL` from the environment, or the one in `apps/api/.env`. Its database must be `<project>_dev` or `<project>_dev_<x>`, the names `db:setup` makes, so `DATABASE_URL=…/postgres pnpm db:seed` exits `1` and writes nothing.
+- A `DATABASE_URL` from the environment must name the same server (`host:port`) as the one in `apps/api/.env`. A shell variable aimed at a remote database with the right name is refused, and so is one set while `apps/api/.env` has none.
 
 ## Route tests
 
-The api's tests run in Node with Vitest, against a test database of their own: `<project>_dev_test`, beside the development one. `pnpm test` from the repo root runs them.
+The api's tests run in Node with Vitest, against a test database of their own: the checkout's development database plus `_test`, such as `<project>_dev_test` on the default branch and `<project>_dev_issue_207_<hash>_test` on a branch. Two worktrees never share one. `pnpm test` from the repo root runs them.
 
 ```ts
 // apps/api/src/routes/projects.test.ts
@@ -333,11 +334,13 @@ describe("GET /projects", () => {
 
 How it fits together:
 
-- **Global setup.** `apps/api/test/setup/database.ts` re-exports `setup` from `packages/db/scripts/test-setup.ts`, and the api's `vitest.config.ts` runs every file in that folder once per run. It creates the test database when it is missing (with the same server code `db:setup` uses, starting the container first on the docker backend), applies every migration and runs the seed. When migrating fails, because the migration files were regenerated, it drops the test database, creates it again and migrates once more. `TEST_DATABASE_URL` names another test database; the guard still applies, and it may not name the development database.
+- **Global setup.** `apps/api/test/setup/database.ts` re-exports `setup` from `packages/db/scripts/test-setup.ts`, and the api's `vitest.config.ts` runs every file in that folder once per run. It creates the test database when it is missing (with the same server code `db:setup` uses, starting the container first on the docker backend), applies every migration and runs the seed. When migrating fails, because the migration files were regenerated, it drops the test database, creates it again and migrates once more. `TEST_DATABASE_URL` may move the test database to another server, but the setup refuses any database name other than the checkout's own `<database>_test`, because a failed migration drops the database it names.
 - **One transaction per test.** `testDatabase()` registers an `aroundEach` hook that opens a transaction, runs the test inside it and rolls it back. `database.env` carries that transaction under the `TEST_DB` symbol key, `getDb` returns it instead of opening a connection, and `withDb` leaves it open. A route's own `db.transaction()` becomes a savepoint. `database.db` is the same transaction, to set a row up or to look behind a route.
 - **Node, not workerd.** The test calls `app.request(path, init, env)` directly. `@cloudflare/vitest-pool-workers` is not used: a postgres.js transaction the test holds would cross request contexts, which workerd refuses.
 
 Read `database.env` and `database.db` inside a test, never at module scope: the transaction exists only while a test runs.
+
+`apps/api` does not depend on `drizzle-orm`, so a test file cannot import `eq` or another operator from it. Select the rows with `database.db.select().from(table)` and filter them in the test, or put the query in a repository under `packages/db/src/repositories/` and import that.
 
 ## Hyperdrive: the opt-in
 

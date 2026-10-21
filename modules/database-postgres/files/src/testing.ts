@@ -22,7 +22,7 @@ import { schema } from "./schema";
 //     });
 //   });
 //
-// The Vitest global setup in `scripts/test-setup.ts` creates `<prefix>_test`, migrates it
+// The Vitest global setup in `scripts/test-setup.ts` creates `<database>_test`, migrates it
 // and seeds it once per run, and provides its URL here. Each test then runs inside one
 // transaction on that database, and `getDb` returns the transaction through the `TEST_DB`
 // key on `env`, so a seeded row is there to read and nothing a test writes reaches the next
