@@ -55,9 +55,13 @@ export function MenuPopup({
         side={side}
         sideOffset={sideOffset}
       >
+        {/* `min-w-32` is the default width, and a caller's own `min-w-*` replaces it
+            through tailwind-merge. coss writes it as `not-[class*='w-']:min-w-32`, which
+            this Tailwind compiles to `:not(:is())`: a selector that matches every popup
+            and outranks the caller's width, so every menu sized to its text. */}
         <MenuPrimitive.Popup
           className={cn(
-            "bg-popover relative flex origin-(--transform-origin) rounded-lg border shadow-lg/5 outline-none not-dark:bg-clip-padding not-[class*='w-']:min-w-32 before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
+            "bg-popover relative flex min-w-32 origin-(--transform-origin) rounded-lg border shadow-lg/5 outline-none not-dark:bg-clip-padding before:pointer-events-none before:absolute before:inset-0 before:rounded-[calc(var(--radius-lg)-1px)] before:shadow-[0_1px_--theme(--color-black/4%)] focus:outline-none dark:before:shadow-[0_-1px_--theme(--color-white/6%)]",
             className
           )}
           data-slot="menu-popup"
