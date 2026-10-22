@@ -1,14 +1,13 @@
 /* The shared layer of the theme. `@repo/ui` owns Tailwind's entrypoint, the source globs
-   and the base layer here, and NO token values. Each app's tokens, colour mapping and
-   `dark` variant live in its own theme file beside this one, which imports this file
-   first:
+   and the base layer here, and NO token values. The tokens, colour mapping and `dark`
+   variant live in a theme file beside this one, which imports this file first:
 
-     - web.css    the web app's tokens (apps/web/src/layouts/Layout.astro imports it)
+     - brand.css  the product's tokens (web.css imports it, and Layout.astro imports web.css)
      - admin.css  the admin app's tokens, written by the admin module
 
-   An app imports its theme file, never this one directly. The token set in web.css is
-   shadcn's `neutral` base color with `cssVariables: true`, and components.json points at
-   web.css, so a preset or `pnpm --filter @repo/ui exec shadcn add <x>` lands there. */
+   An app imports its own stylesheet, never this one directly. The token set in brand.css
+   is shadcn's `neutral` base color with `cssVariables: true`, and components.json points
+   at brand.css, so a preset or `pnpm --filter @repo/ui exec shadcn add <x>` lands there. */
 @import "tailwindcss";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";

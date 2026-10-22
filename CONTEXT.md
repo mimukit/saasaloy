@@ -308,7 +308,7 @@ A `.saasaloy/manifest.json` entry whose hash the CLI took off disk rather than f
 _Avoid: pristine entry, baseline hash._
 
 ### Owned file
-A base-template file the template ships once and the project owns afterwards — `globals.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
+A base-template file the template ships once and the project owns afterwards — `globals.css`, `brand.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
 _Avoid: user file, editable file._
 
 ### Seed file
@@ -332,7 +332,7 @@ The committed design contract for one app, in that app's folder: `apps/web/DESIG
 Agent guidance copied by `init` because every generated project needs it. It differs from a module skill, which arrives only when `saasaloy add` installs its module.
 
 ### Token fingerprint
-The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/web.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
+The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/brand.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
 
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.

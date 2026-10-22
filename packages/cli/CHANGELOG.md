@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased
+
+### ⚠ BREAKING CHANGES
+
+* **ui:** the web tokens move from packages/ui/src/styles/web.css to
+  a new brand.css beside it: the `:root` and `.dark` blocks,
+  `@custom-variant dark` and `@theme inline`. brand.css imports
+  globals.css, web.css imports brand.css and keeps the landing
+  layout, type and motion utilities, and components.json points
+  shadcn at brand.css. saasaloy update creates brand.css from the
+  template and sends web.css to the merge plan because the project
+  owns it. globals.css and Layout.astro join the merge plan for
+  comment changes only. update leaves apps/web/DESIGN.md alone
+  because it is a seed file, and overwrites components.json only if
+  you never edited it.
+  Until you finish the steps below, Layout.astro still loads your
+  old web.css, so the site looks the same and brand.css is unused.
+
+  1. Copy the `@custom-variant dark` line and the `:root`, `.dark`
+     and `@theme inline` blocks from your web.css into brand.css,
+     replacing the template's copies below its
+     `@import "./globals.css";`. Keep your own values: a preset you
+     applied lives in web.css, not in the new file.
+  2. In web.css, delete those four and change
+     `@import "./globals.css";` to `@import "./brand.css";`. Keep
+     the landing block, from the comment that opens "The landing
+     page's layout" to the end of the file.
+  3. Set `tailwind.css` in packages/ui/components.json to
+     `src/styles/brand.css`, if the update did not.
+  4. Run the saasaloy-design skill's `update` flow, or edit the last
+     line of apps/web/DESIGN.md by hand so it names
+     packages/ui/src/styles/brand.css with the first 12 hex
+     characters of that file's sha256.
+  5. Run `pnpm build` and check that globals.css, brand.css and
+     web.css hold one `:root`, one `.dark`, one `@theme inline` and
+     one `@custom-variant dark` between them.
+
 ## [0.6.1](https://github.com/mimukit/saasaloy/compare/v0.6.0...v0.6.1) (2026-10-22)
 
 ### ⚠ BREAKING CHANGES

@@ -12,10 +12,10 @@ Each app has its own token home and its own contract:
 
 | App | Token home | Contract |
 |-----|------------|----------|
-| web | `packages/ui/src/styles/web.css` | `apps/web/DESIGN.md` |
+| web | `packages/ui/src/styles/brand.css` | `apps/web/DESIGN.md` |
 | admin, when installed | `packages/ui/src/styles/admin.css` | `apps/admin/DESIGN.md` |
 
-Both theme files import `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values. Ask which app when the user does not say, and work on one contract at a time. Never read one app's tokens into the other app's contract.
+`brand.css` and `admin.css` both import `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values. The web app's stylesheet, `packages/ui/src/styles/web.css`, imports `brand.css` and adds the landing page's layout, type and motion vocabulary. Ask which app when the user does not say, and work on one contract at a time. Never read one app's tokens into the other app's contract.
 
 The admin contract also covers the admin primitive set in `packages/ui/src/components/admin/`, its blocks in `packages/ui/src/blocks/admin/` and its containers in `packages/ui/src/containers/admin/`. The web contract covers the base `components/`, the other `blocks/` and the web app.
 
@@ -33,11 +33,11 @@ If the user does not name a mode, ask which mode to use. Do not choose between a
 
 | Mode | Files |
 |------|-------|
-| `theme` | web only: `packages/ui/src/styles/web.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
+| `theme` | web only: `packages/ui/src/styles/brand.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
 | `update` | the chosen app's `DESIGN.md` only |
 | `audit` | none |
 
-`theme` never runs for the admin app. A preset targets `web.css` through `components.json`, and nothing writes to `admin.css` but a person. When the user asks to restyle the admin app, say so, and offer `update` after they edit `admin.css`.
+`theme` never runs for the admin app. A preset targets `brand.css` through `components.json`, and nothing writes to `admin.css` but a person. When the user asks to restyle the admin app, say so, and offer `update` after they edit `admin.css`.
 
 Do not edit `components.json` during a theme change. Do not add a dependency, script, component, page, or Tailwind class.
 
@@ -61,7 +61,7 @@ Write elevation as prose under `## Elevation & Depth`. Never add `elevation` to 
 
 Write motion as prose under `## Motion`. The alpha schema has no motion token group and no component transition token.
 
-The landing page's layout, type and motion vocabulary lives at the end of `web.css`, after the colour tokens, and `DESIGN.md` must name all of it:
+The landing page's layout, type and motion vocabulary lives in `web.css`, after its import of `brand.css`, and `DESIGN.md` must name all of it:
 
 - The type ramp in `@theme`: `--text-display`, `--text-section-title` and `--text-lead`. Record the largest size of each fluid `clamp()` step as the token's `fontSize`, and describe the fluid range in the Typography prose.
 - The container widths in `@theme` (`--container-page`, `--container-narrow`, `--container-wide`) and the `section-container*` and `section-y` utilities. Describe them under `## Layout`. Spacing stays omitted, because these are named widths and one section rhythm, not a spacing scale.
@@ -78,24 +78,24 @@ The web contract is a one-time base seed. ADR 0022 means Saasaloy has no update 
 
 ## Fingerprint
 
-The fingerprint covers only the chosen app's theme file: `packages/ui/src/styles/web.css` for the web contract, `packages/ui/src/styles/admin.css` for the admin contract. It does not cover `globals.css`, components, blocks, or other files. The commands and stamps below name `web.css`; substitute `admin.css` for the admin contract.
+The fingerprint covers only the chosen app's token home: `packages/ui/src/styles/brand.css` for the web contract, `packages/ui/src/styles/admin.css` for the admin contract. It does not cover `globals.css`, `web.css`, components, blocks, or other files. The commands and stamps below name `brand.css`; substitute `admin.css` for the admin contract.
 
 Compute the fingerprint from the file bytes. Use the first 12 lowercase hexadecimal characters of SHA-256.
 
 ```sh
-node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write(createHash('sha256').update(readFileSync('packages/ui/src/styles/web.css')).digest('hex').slice(0, 12))"
+node --input-type=module -e "import { createHash } from 'node:crypto'; import { readFileSync } from 'node:fs'; process.stdout.write(createHash('sha256').update(readFileSync('packages/ui/src/styles/brand.css')).digest('hex').slice(0, 12))"
 ```
 
 The scaffold seed ends with this stamp.
 
 ```markdown
-_Seeded from the saasaloy base template · CLI <version> · tokens sha256:<12 hex> of packages/ui/src/styles/web.css_
+_Seeded from the saasaloy base template · CLI <version> · tokens sha256:<12 hex> of packages/ui/src/styles/brand.css_
 ```
 
 After `theme` or `update`, replace the seed stamp with this stamp.
 
 ```markdown
-_Updated from packages/ui on YYYY-MM-DD · tokens sha256:<12 hex> of packages/ui/src/styles/web.css_
+_Updated from packages/ui on YYYY-MM-DD · tokens sha256:<12 hex> of packages/ui/src/styles/brand.css_
 ```
 
 Do not change the fingerprint during `audit`.
@@ -147,13 +147,13 @@ Use the package-local executable from the project root.
 pnpm --filter @repo/ui exec shadcn add <registry-style-url>
 ```
 
-`components.json` points shadcn at `web.css`, so the preset merges into the `:root`, `.dark` and `@theme inline` blocks there. Confirm that `globals.css` did not change and still holds the `@source` rules and `@layer base`. Confirm that `web.css` and `globals.css` hold one `@theme inline` and one `@custom-variant dark` between them. Confirm that `components.json` did not change.
+`components.json` points shadcn at `brand.css`, so the preset merges into the `:root`, `.dark` and `@theme inline` blocks there. Confirm that `globals.css` and `web.css` did not change, that `globals.css` still holds the `@source` rules and `@layer base`, and that `web.css` still holds the landing vocabulary. Confirm that `globals.css`, `brand.css` and `web.css` hold one `@theme inline` and one `@custom-variant dark` between them. Confirm that `components.json` did not change.
 
 Stop and report the failure when the preset removes a required rule or changes `components.json`. Do not repair an unknown preset merge without approval.
 
 ### 4. Re-derive the contract
 
-Run the shared extraction process against the merged `web.css` and its usage. Update the token front matter and only the prose sections that the new tokens affect.
+Run the shared extraction process against the merged `brand.css`, the landing vocabulary in `web.css`, and their usage. Update the token front matter and only the prose sections that the new tokens affect.
 
 Use the product brief to update Overview and Do's and Don'ts. Do not add product claims that the brief does not support.
 
@@ -189,7 +189,7 @@ Audit is read-only. Do not edit or format any file.
 
 ### 1. Check the fingerprint offline
 
-Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from the chosen app's theme file, `web.css` or `admin.css`.
+Read the recorded 12-character fingerprint from the final stamp. Compute the current fingerprint from the chosen app's token home, `brand.css` or `admin.css`.
 
 - `current` means the two fingerprints match.
 - `stale` means they differ.
@@ -213,7 +213,7 @@ Open with the file count that the audit scanned. Give one verdict for the finger
 
 - Never write a component or a page. Use `uikit` for that work.
 - Never add a token value that the project does not contain.
-- Never change `globals.css` in any mode, or `web.css` in `update` or `audit`.
+- Never change `globals.css` or `web.css` in any mode, or `brand.css` in `update` or `audit`.
 - Never write during `audit`.
 - Never claim that lint passed when the linter did not run.
 - Never treat a matching fingerprint as proof that component usage has no drift.

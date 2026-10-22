@@ -15,6 +15,7 @@
     "packages/env/src/sources.ts",
     "apps/web/src/env.ts",
     "packages/ui/src/styles/globals.css",
+    "packages/ui/src/styles/brand.css",
     "packages/ui/src/styles/web.css",
     "packages/ui/src/blocks/**",
     "packages/ui/src/components/**",

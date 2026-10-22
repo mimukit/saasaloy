@@ -1,6 +1,6 @@
 /* The admin app's theme: its token values, its colour mapping and its radius scale. It
    imports the shared layer first, and apps/admin/src/main.tsx imports this file once, as
-   `@repo/ui/styles/admin.css`. The admin module writes it here, beside web.css, so both
+   `@repo/ui/styles/admin.css`. The admin module writes it here, beside brand.css, so both
    apps' themes live in the UI package and a project without the admin app carries none
    of it.
 
@@ -58,11 +58,11 @@
 @source "../components/admin/**/*.tsx";
 
 /* The `.dark` class, set before React mounts (see apps/admin/src/main.tsx). Declared
-   here rather than in globals.css for the reason web.css gives. */
+   here rather than in globals.css for the reason brand.css gives. */
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  /* Native UI (scrollbars, form controls) follows the class-driven theme. web.css
+  /* Native UI (scrollbars, form controls) follows the class-driven theme. brand.css
      explains why this is `light` here and `dark` under `.dark`, never `light dark`. */
   color-scheme: light;
 
@@ -201,9 +201,9 @@
   --warning-foreground: oklch(0.828 0.189 84.429);
 }
 
-/* The colour mapping and the radius scale repeat web.css's on purpose: each theme file
+/* The colour mapping and the radius scale repeat brand.css's on purpose: each theme file
    holds its own `@theme inline` and `dark` variant, because globals.css holds neither
-   (web.css says why). The `status-*` and `accent-sort` lines are the admin app's own:
+   (brand.css says why). The `status-*` and `accent-sort` lines are the admin app's own:
    the two extra accents and the status pill's three state tones. */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
