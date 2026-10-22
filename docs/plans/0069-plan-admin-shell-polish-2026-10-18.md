@@ -97,11 +97,13 @@ Done when: the owner has picked a design for each screen, a shell shape, a palet
 
 The owner reviewed the mockup in the T3 thread on 2026-10-18 and picked:
 
-- **Shell shape:** Shell B. An inset sidebar holds the brand mark and product name, the organization picker, the grouped nav and the user menu at its foot. The sidebar collapses to a 56 px icon strip with a tooltip on each icon, and below `md` it opens as a sheet from a menu button. The content panel has a sticky header with the collapse toggle, the page path and the theme toggle. The rail and the nav panel go. Phase 4 ports the coss sidebar.
+- **Shell shape:** Shell B. An inset sidebar holds the brand mark and product name, the organization picker, the grouped nav and the user menu at its foot. The sidebar collapses to a 56 px icon strip with a tooltip on each icon, and below `md` it opens as a sheet from a menu button. The content panel has a sticky header with the collapse toggle, the page path and the theme toggle (moved into the account menu on 2026-10-22, see below). The rail and the nav panel go. Phase 4 ports the coss sidebar.
 - **Palette treatment:** palette B. Borders and inputs are alpha over the canvas: white at 8 % and 10 % in dark, black at 8 % and 11 % in light. Each surface carries a 1 px highlight edge: an inset top line of white at 6 % in dark and a bottom line of black at 4 % in light. The measured neutral ramp stays for the canvas, the panel and the hover tone.
 - **Organization picker:** P1, at the top of the sidebar under the brand row and above the nav groups. Until #141 it renders an empty slot.
 - **Brand mark:** yes. A mark at the top of the sidebar, in the collapsed strip, in the mobile header and on the sign-in card.
 - **Screens:** the list, the detail panel, the teams create dialog, the overview, sign-in, the empty, loading and error states, and the primitive strip all pass as drawn. Controls are 32 px buttons and 30 px inputs with an 8 px radius and a 2 px focus ring. A detail panel opens as a bottom sheet below `md`. Menus, dialogs and toasts take the raised hover tone.
+
+After PR #204 opened, the owner moved the theme control on 2026-10-22. It is a "Theme" submenu in the account menu, with Light, Dark and System as radio items and a check on the current choice, and the header keeps only the sidebar toggle and the page path. The owner compared seven layouts in an HTML mock and picked the submenu because custom themes will be added later and each one becomes one more item in it. It brings back System as a choice in the admin app; the web app's toggle stays two-state. The owner asked for this change directly, so it took no new mockup round beyond that comparison.
 
 ### Phase 3: move the admin components into `@repo/ui` (#192) (built 2026-10-18)
 
