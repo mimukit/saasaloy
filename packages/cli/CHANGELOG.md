@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.6.1](https://github.com/mimukit/saasaloy/compare/v0.6.0...v0.6.1) (2026-10-22)
+
+### ⚠ BREAKING CHANGES
+
+* **admin:** the admin blocks moved from apps/admin/src/components
+  to @repo/ui/blocks/admin, and rail.tsx and nav-panel.tsx are gone.
+
+### Features
+
+* **admin:** move the theme control into an account submenu ([4c58b7d](https://github.com/mimukit/saasaloy/commit/4c58b7d0f9fe4a15db57858fcf317e27fe44a5a2)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **admin:** rebuild the admin shell on a copied coss ui set ([f7ff0a5](https://github.com/mimukit/saasaloy/commit/f7ff0a57a7ae26efc297cd78518ddb26179ef386)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **modules:** move the module admin pages onto the admin set ([e13f490](https://github.com/mimukit/saasaloy/commit/e13f49047a2e8fff6e840ce48efd3afec3a3b29f)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+
+### Bug Fixes
+
+* **admin:** flip the admin theme toggle between light and dark ([cac560e](https://github.com/mimukit/saasaloy/commit/cac560ee7d67398db9abc73219c56ae068d8b64b)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **admin:** honour a menu popup's own min width ([8fade11](https://github.com/mimukit/saasaloy/commit/8fade119e15c01b11940ca89d817dd2c6abc1e4d)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **admin:** keep the page header fixed on a short screen ([a9d6bd7](https://github.com/mimukit/saasaloy/commit/a9d6bd7a8d85137c2ffd1a221d2199909ce6a999)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **admin:** render the 404 screen inside the existing shell ([f84b929](https://github.com/mimukit/saasaloy/commit/f84b929c9d24bb51c83259744c8f18ff5cb32819)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **modules:** name the organization on the roles and keys pages ([94fcbc3](https://github.com/mimukit/saasaloy/commit/94fcbc31b0faf19ea0709b2809ddf4dd3a7977e2)), references [#192](https://github.com/mimukit/saasaloy/issues/192)
+* **payment:** use admin components in payments ([7d25f1a](https://github.com/mimukit/saasaloy/commit/7d25f1a25a45c20a2b23d0b2e6a662c5141e3b05))
+
 ## [0.6.0](https://github.com/mimukit/saasaloy/compare/v0.5.2...v0.6.0) (2026-10-21)
 
 ### ⚠ BREAKING CHANGES
