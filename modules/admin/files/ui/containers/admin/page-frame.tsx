@@ -12,6 +12,9 @@ import { cn } from "@repo/ui/lib/utils";
 //     pages move together, with no module file in the diff.
 //   - the height. The frame fills the shell's content panel, so a page can pin its header
 //     and scroll its body, or hand the whole height to PageLayout's list and detail.
+//     Every link in that chain sizes with `flex-1 min-h-0`, never `h-full`: Safari does
+//     not always resolve a percentage of a flex item's height, and the page header then
+//     scrolls away with the body.
 //   - where errors and loading land. The router wraps every route in its own error
 //     boundary, which catches a render failure as well as a loader's throw, and the
 //     admin app sets `defaultErrorComponent` and `defaultPendingComponent` in
@@ -29,7 +32,7 @@ export function PageFrame({
     <div
       data-slot="page-frame"
       className={cn(
-        "flex h-full min-h-0 flex-col [--page-gutter:--spacing(4)] md:[--page-gutter:--spacing(6)]",
+        "flex min-h-0 flex-1 flex-col [--page-gutter:--spacing(4)] md:[--page-gutter:--spacing(6)]",
         className
       )}
     >

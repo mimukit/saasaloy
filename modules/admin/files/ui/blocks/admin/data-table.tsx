@@ -138,8 +138,8 @@ export function DataTable<TRow extends object>({
   return (
     <div
       className={cn(
-        "min-h-0 flex-1",
-        "[&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto",
+        "flex min-h-0 flex-1 flex-col",
+        "[&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto",
         className
       )}
     >

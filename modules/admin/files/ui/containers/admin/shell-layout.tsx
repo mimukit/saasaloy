@@ -93,7 +93,12 @@ export function ShellLayout({
           </nav>
         </header>
 
-        <div className="min-h-0 flex-1 overflow-auto">{children}</div>
+        {/* A flex column, so the page frame inside takes its height from `flex-1`. A
+            percentage height here would leave Safari without a height to resolve, and the
+            whole panel, page header included, would scroll as one block. */}
+        <div className="flex min-h-0 flex-1 flex-col overflow-auto">
+          {children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
   );
