@@ -24,11 +24,13 @@ drifting port turns into an unexplained CORS rejection.
 | --- | --- | --- | --- |
 | `apps/web` (Astro) | 3000 | `http://localhost:3000` | `apps/web/astro.config.mjs` (`server.port`) |
 | `apps/admin` (TanStack Start) | 3001 | `http://localhost:3001` | `apps/admin/vite.config.ts` (`server.port`, `strictPort`) |
+| `apps/app` (TanStack Router) | 3002 | `http://localhost:3002` | `apps/app/vite.config.ts` (`server.port`, `strictPort`) |
+| `packages/email-react` preview | 3003 | `http://localhost:3003` | `packages/email-react/package.json` (`dev`, `--port`) |
 | `apps/api` (Hono on Workers) | 4000 | `http://localhost:4000` | `apps/api/wrangler.jsonc` (`dev.port`) |
 | Postgres (local, `database-postgres`) | 5432 | `postgres://postgres:postgres@127.0.0.1:5432/app` | `DATABASE_URL` in `packages/env/.env.example` |
 
-The `apps/admin` and `apps/api` rows apply once you run `saasaloy add admin` or
-`saasaloy add api`.
+The `apps/admin`, `apps/app`, preview and `apps/api` rows apply once you run
+`saasaloy add` for `admin`, `app`, `email-react` or `api`.
 
 Rules for a new app or service:
 

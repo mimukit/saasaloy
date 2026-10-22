@@ -386,6 +386,7 @@ Do not add a `test` script to `apps/api/package.json`: the root `vitest.config.t
 |---|---|---|
 | `apps/web` (Astro) | **3000** | `astro.config.mjs` (`server.port` + `vite.server.strictPort`) |
 | `apps/admin` (Vite SPA) | **3001** | `vite.config.ts` (`server.port` + `strictPort`), allowlisted in `DEV_ORIGINS` |
+| `apps/app` (Vite SPA) | **3002** | `vite.config.ts` (`server.port` + `strictPort`), allowlisted in `DEV_ORIGINS` |
 | `apps/api` (Worker) | **4000** | `vite.config.ts` (`server.port` + `strictPort`) and `wrangler.jsonc` (`dev.port`) |
 
 Frontends take 3xxx, backends 4xxx. These aren't cosmetic: `DEV_ORIGINS` in `src/index.ts` (and

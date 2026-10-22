@@ -33,8 +33,12 @@ const authEnv = env as unknown as AuthEnv;
 
 // Same localhost dev fallback `modules/api`'s CORS spine uses — one origin list, two
 // readers (api's `cors()` middleware and this file's `trustedOrigins`), no drift.
-// :3000 is apps/web, :3001 is apps/admin; the api Worker itself is :4000.
-const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
+// :3000 is apps/web, :3001 is apps/admin, :3002 is apps/app; the api Worker itself is :4000.
+const DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+];
 
 function trustedOrigins(): string[] {
   const configured = authEnv.CORS_ORIGINS?.split(",")

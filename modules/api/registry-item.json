@@ -9,7 +9,7 @@
   "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {
-    "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to localhost dev origins when unset."
+    "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to the localhost dev origins when unset. A set value replaces them, so list every deployed frontend (web, admin, app)."
   },
   "envServices": {
     "default": ["api"]

@@ -37,6 +37,21 @@
      web.css hold one `:root`, one `.dark`, one `@theme inline` and
      one `@custom-variant dark` between them.
 
+* **email-react:** the template preview moves from port 3002 to
+  3003, because the coming `app` module takes 3002. saasaloy update
+  changes the `dev` script in packages/email-react/package.json.
+  Change a bookmark or a script that opens localhost:3002.
+
+### Features
+
+* **api, auth:** `http://localhost:3002` joins the dev origin list
+  in apps/api/src/index.ts and packages/auth/src/auth.ts, ready for
+  the `app` module. A project made before this release gets it from
+  `saasaloy update api auth`. Until then, a request from :3002 fails
+  CORS. The `CORS_ORIGINS` description now says that a set value
+  replaces the localhost list, so a deployed project lists every
+  frontend origin in it.
+
 ## [0.6.1](https://github.com/mimukit/saasaloy/compare/v0.6.0...v0.6.1) (2026-10-22)
 
 ### ⚠ BREAKING CHANGES

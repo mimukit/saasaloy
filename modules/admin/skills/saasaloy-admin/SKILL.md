@@ -429,7 +429,7 @@ A project that installed admin before the table moved into `@repo/ui` gets the d
 `3001` is not cosmetic. The api's `DEV_ORIGINS` allowlist and better-auth's `trustedOrigins` both
 hardcode `http://localhost:3001` as the keyless dev fallback, so a drifting port turns into a CORS
 rejection that reads like a code bug. `strictPort` makes a busy port fail loudly instead of quietly
-shifting to `3002`.
+shifting to `3002`, the port `apps/app` holds.
 
 In production the origin comes from `PUBLIC_API_URL`, and the api needs the admin origin in
 `CORS_ORIGINS`. The prefix is `PUBLIC_` rather than Vite's default `VITE_` (`envPrefix` in
