@@ -131,35 +131,24 @@ function RootLayout() {
   );
 }
 
-// What an address that matches no route renders. It sits inside AppShell, so the sidebar
-// stays usable and the visitor can click their way out instead of reaching for the
-// back button.
+// What an address that matches no route renders. The router renders the root route's
+// not-found component in place of RootLayout's <Outlet />, so it already sits inside
+// AppShell and PageFrame: the sidebar stays usable, and the visitor can click their way
+// out instead of reaching for the back button. It must not wrap itself in the shell
+// again, or the page shows a second sidebar and header inside the first.
 //
 // Only an admin ever sees this screen, and that is the guard working rather than a hole in
 // it. The router resolves `beforeLoad` top-down before it installs the not-found boundary,
 // and a redirect thrown there ends the match, so an anonymous visitor asking for an unknown
-// path lands on /login and learns nothing about which admin paths exist. The session is
-// therefore present in practice; the null branch below is a type guard, not a second case.
+// path lands on /login and learns nothing about which admin paths exist.
 function RootNotFound() {
-  const { session } = Route.useRouteContext();
-
-  const screen = (
+  return (
     <ErrorState
       code={errors.notFound.code}
       title={errors.notFound.title}
       description={errors.notFound.description}
       primaryAction={{ label: errors.notFound.homeLabel, href: "/" }}
     />
-  );
-
-  if (!session) {
-    return screen;
-  }
-
-  return (
-    <AppShell session={session}>
-      <PageFrame>{screen}</PageFrame>
-    </AppShell>
   );
 }
 
