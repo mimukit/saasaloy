@@ -567,8 +567,11 @@ describe(checkProject, () => {
   });
 });
 
-// #229. A core whose `requiresOneOf` nothing installed meets: an owner removed, or a
-// project that predates the split. The lock carries the list, since the descriptor is gone.
+// #229. A core whose `requiresOneOf` nothing installed meets, such as an owner removed
+// after the split. The lock carries the list, since the descriptor is gone. A lock
+// written before the split has no list, so doctor stays quiet on such a project until
+// the next `add` or `update` rewrites the entry; `update` is the guard there, and it
+// refuses with exit 2 before it plans a delete.
 function lockRequiring(
   name: string,
   requiresOneOf: string[]

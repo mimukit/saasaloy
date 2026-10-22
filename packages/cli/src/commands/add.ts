@@ -664,19 +664,15 @@ export async function runAdd(argv: string[]): Promise<number> {
   // already refuses in this situation; both commands now answer it the same way (#98).
   // A preview writes nothing and needs no confirmation, so it is exempt. With no module
   // named the picker's own non-interactive refusal below is the more specific message,
-  // so leave that case to it.
-  if (
-    coord.module &&
+  // so leave that case to it. The refusal itself waits until after the `requiresOneOf`
+  // check: an unmet requirement names the modules to pick from, and `--yes` would not
+  // have answered it anyway (#229).
+  const cannotConfirm =
+    Boolean(coord.module) &&
     !opts.yes &&
     !opts.dryRun &&
     !opts.diff &&
-    !process.stdin.isTTY
-  ) {
-    cancel(
-      "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview."
-    );
-    return EXIT_REFUSED;
-  }
+    !process.stdin.isTTY;
 
   let root: string;
   let config: Awaited<ReturnType<typeof loadConfig>>;
@@ -806,6 +802,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
     if (unmet.length > 0) {
       cancel(formatMissingRequirements(unmet, requested));
+      return EXIT_REFUSED;
+    }
+    if (cannotConfirm) {
+      cancel(
+        "No terminal to confirm in — re-run with `--yes` to apply, or `--dry-run` to preview."
+      );
       return EXIT_REFUSED;
     }
 

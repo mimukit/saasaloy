@@ -120,6 +120,75 @@ describe("runAdd without a module name", () => {
   });
 });
 
+// #229 QA (A1). With no terminal and no `--yes`, a module whose `requiresOneOf` is
+// unmet used to get the generic "no terminal to confirm in" refusal, which names a flag
+// that cannot help: `--yes` never picks an owner. The requirement refusal names the
+// options, so it comes first. A module with nothing to pick still gets the confirm one.
+describe("runAdd with no terminal and no --yes (#229)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    await mkdir(join(registry, name, "files"), { recursive: true });
+    await writeFile(
+      join(registry, name, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", ...item }),
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-notty-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-notty-reg-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeModule("core", { requiresOneOf: ["owner-a", "owner-b"] });
+    await writeModule("owner-a", { dependsOn: ["core"] });
+    await writeModule("owner-b", { dependsOn: ["core"] });
+    await writeModule("plain", {});
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(argv: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      const code = await runAdd(argv);
+      return { code, out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("names the owners of an unmet requiresOneOf, not the --yes flag", async () => {
+    const { code, out } = await run(["core"]);
+    expect(code).toBe(2);
+    expect(out).toContain("core needs one of: owner-a, owner-b");
+    expect(out).not.toContain("No terminal to confirm in");
+  });
+
+  it("still refuses a module with nothing to pick for want of a terminal", async () => {
+    const { code, out } = await run(["plain"]);
+    expect(code).toBe(2);
+    expect(out).toContain("No terminal to confirm in");
+  });
+});
+
 // #98 Phase 4. `add` used to merge npm deps into package.json *before* executePlan ran,
 // so a mid-plan write failure left a project whose package.json advertised packages no
 // module had actually installed. The write now trails a successful apply. The rollback
