@@ -17,9 +17,9 @@ import {
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { ReactNode } from "react";
 
-import { Button } from "@repo/ui/components/button";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+import { Button } from "@repo/ui/components/admin/button";
+import { Input } from "@repo/ui/components/admin/input";
+import { Label } from "@repo/ui/components/admin/label";
 
 import { DataTable } from "@admin/components/data-table";
 import type { DataTableColumn } from "@admin/components/data-table";
