@@ -102,7 +102,7 @@ Every route except `/login` renders inside `src/components/app-shell.tsx`. That 
 | Part | File | What it holds |
 |---|---|---|
 | Sidebar | `containers/admin/shell-sidebar.tsx` | the brand row (`BrandMark` and the product name), the organization picker's empty slot for #141, every area's nav groups, and the account menu at the foot with the name, the email and sign-out |
-| Content panel | `containers/admin/shell-layout.tsx` | a sticky header with the sidebar toggle, the page path and the theme toggle, then the route inside the page frame |
+| Content panel | `containers/admin/shell-layout.tsx` | a sticky header with the sidebar toggle and the page path, then the route inside the page frame |
 
 The sidebar is the coss sidebar from the admin set, `variant="inset"` and `collapsible="icon"`. It sits on the canvas; the content panel is the one raised surface beside it. The header toggle and ⌘B / Ctrl+B collapse it to a 56 px icon strip, where each row shows its label in a tooltip. Below `md` it opens as a sheet from the same toggle, and following a link closes the sheet. The open state is component state only, never storage, so a reload lands on the expanded sidebar.
 
@@ -144,7 +144,7 @@ Keep the `as const`. It is what holds every `to` at a literal type the router ca
 This module writes the admin app's whole UI kit into `packages/ui/src/`, and admin code uses nothing else:
 
 - **`components/admin/`** holds the primitives: 39 components adapted from coss ui on Base UI, plus `StatusPill`. Alert, alert dialog, avatar, badge, breadcrumb, button, card, checkbox, collapsible, combobox, dialog, empty, field, fieldset, form, group, input, input group, kbd, label, menu, meter, popover, radio group, scroll area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, toggle, toggle group and tooltip. The names are coss's: `*Popup` and `*Panel` for the parts shadcn calls `*Content`, `Menu*` for the dropdown menu, and a `render` prop instead of `asChild`. A few shadcn aliases (`DialogContent`, `DropdownMenu*`, `TabsTrigger`) are exported too. `NOTICE.md` in the folder carries the MIT notice the copy needs; keep it there.
-- **`blocks/admin/`** holds the page blocks below, plus `BrandMark`, `ThemeToggle` and `ErrorState`, the admin twins of the base blocks.
+- **`blocks/admin/`** holds the page blocks below, plus `BrandMark`, `ThemeMenuItem` and `ErrorState`. `ThemeMenuItem` (in `theme-toggle.tsx`) and `ErrorState` are the admin twins of the base blocks; the theme control is a row in the sidebar's account menu, not a header button.
 - **`containers/admin/`** holds `ShellLayout`, `ShellSidebar`, `PageFrame`, `PageLayout` and `PageBody`.
 - **`lib/admin/`** holds two helpers the primitives use, and **`assets/`** holds the brand mark.
 
@@ -362,9 +362,9 @@ Beyond the shadcn set, `admin.css` declares the status pairs the primitives read
 
 The `theme` key alone cannot carry this. `setTheme("system")` DELETES it — that is how `@repo/ui`'s state machine spells "follow the OS", and the landing page depends on it — so a first visit and a deliberate `system` both read as an absent key. `hasChosenTheme()` separates them by reading a second key, `theme-chosen`, which `installThemeToggle()` writes on every press and nothing clears. Never chosen means dark; chosen with no `theme` key means `system`, resolved against the OS.
 
-`index.html` emits no `THEME_INIT_SCRIPT` — that is the Astro host's mechanism, and there is no Vite plugin here. The trade is one frame of the light palette on an empty body before the entry module runs. `main.tsx` calls `installThemeToggle()` from `@repo/ui/lib/theme` instead: `ThemeToggle` is inert chrome whose click handling normally lives in that script, and importing the handler keeps the toggle rule in one place. A press flips light and dark off what is painted, not off storage, so it still works where storage is unwritable. It never steps back to `system`.
+`index.html` emits no `THEME_INIT_SCRIPT` — that is the Astro host's mechanism, and there is no Vite plugin here. The trade is one frame of the light palette on an empty body before the entry module runs. `main.tsx` calls `installThemeToggle()` from `@repo/ui/lib/theme` instead, for the OS listener that script would otherwise install. The Theme submenu below sets the theme itself.
 
-`ShellLayout` calls `relabelThemeToggles()` in a `useEffect`. `setTheme` renames every toggle it can find, but the theme is applied before React mounts the button, so without that call the control keeps `ThemeToggle`'s static `system` label over a painted dark page.
+`ThemeMenuItem` is a "Theme" submenu (`MenuSub`, `MenuSubTrigger`, `MenuSubPopup`) with one `MenuRadioItem` per entry in its `THEME_OPTIONS` list. A pick calls `setTheme(value)` inside `revealTheme`, then writes `THEME_CHOICE_KEY`, so the starting-theme rule in `main.tsx` keeps the choice on the next load, `system` included. It does not use the delegated `[data-theme-toggle]` handler, because that handler only flips light and dark. The current choice is the `data-theme` attribute on `<html>`, which `setTheme` writes, read through a `MutationObserver`. To add a theme, teach `@repo/ui/lib/theme` to apply it, then add one entry to `THEME_OPTIONS`. `main.tsx` still calls `installThemeToggle()` for its OS listener, which repaints a visitor on `system` when the OS changes.
 
 ### The two dependencies the theme and the table add
 

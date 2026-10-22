@@ -1,7 +1,5 @@
-import { useEffect } from "react";
 import type { ReactNode } from "react";
 
-import { ThemeToggle } from "@repo/ui/blocks/admin/theme-toggle";
 import {
   SidebarInset,
   SidebarProvider,
@@ -14,11 +12,11 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/admin/shell-nav";
-import { relabelThemeToggles } from "@repo/ui/lib/theme";
 
 // The shell every admin screen renders inside: an inset sidebar on the canvas, and a
-// content panel beside it with a sticky header. The header carries the sidebar toggle,
-// the page path and the theme control; the page itself scrolls under it.
+// content panel beside it with a sticky header. The header carries the sidebar toggle
+// and the page path; the page itself scrolls under it. The theme control is a row in the
+// sidebar's account menu.
 //
 // This file composes and holds no navigation data and no router. The admin app's
 // AppShell reads the current path and the session, and passes them in with the nav
@@ -62,13 +60,6 @@ export function ShellLayout({
   organizationPicker?: ReactNode;
   children: ReactNode;
 }) {
-  // The theme is applied in the admin app's src/main.tsx, before React mounts anything,
-  // so `setTheme`'s own relabel pass finds no toggle to rename. Name it once here, after
-  // the button exists.
-  useEffect(() => {
-    relabelThemeToggles();
-  }, []);
-
   const pageLabel = pageLabelFor(areas, currentPath);
 
   return (
@@ -100,9 +91,6 @@ export function ShellLayout({
               )}
             </ol>
           </nav>
-          {/* Inert chrome on its own: the delegated [data-theme-toggle] handler in the
-              admin app's src/main.tsx is what flips light and dark. */}
-          <ThemeToggle />
         </header>
 
         <div className="min-h-0 flex-1 overflow-auto">{children}</div>

@@ -89,12 +89,12 @@ function applyStartingTheme(): void {
 
 applyStartingTheme();
 
-// The toggle's behaviour, from @repo/ui rather than re-implemented here. The
-// `theme-toggle` block is deliberately inert chrome: its click handling lives in
-// THEME_INIT_SCRIPT, which only the Astro host inlines. This app cannot inline it — a
-// Vite index.html substitutes only `%VITE_*%` values — so it installs the same delegated
-// listener from the same module instead. Nothing else in the app changes the theme, and
-// the listener lives for the document's lifetime, so its remover is unused.
+// The theme's runtime behaviour, from @repo/ui rather than re-implemented here. The
+// account menu's Theme submenu sets the theme itself, but a visitor on `system` must still
+// follow the OS while the page is open, and that listener lives in THEME_INIT_SCRIPT,
+// which only the Astro host inlines. This app cannot inline it — a Vite index.html
+// substitutes only `%VITE_*%` values — so it installs the same listeners from the same
+// module instead. They live for the document's lifetime, so the remover is unused.
 installThemeToggle();
 
 const rootElement = document.querySelector("#root");

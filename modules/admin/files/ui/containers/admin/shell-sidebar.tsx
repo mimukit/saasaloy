@@ -3,6 +3,7 @@ import type { ReactNode } from "react";
 
 import { siteName } from "@repo/ui";
 import { BrandMark } from "@repo/ui/blocks/admin/brand-mark";
+import { ThemeMenuItem } from "@repo/ui/blocks/admin/theme-toggle";
 import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
 import {
   Menu,
@@ -35,7 +36,7 @@ import type {
 } from "@repo/ui/containers/admin/shell-nav";
 
 // The admin sidebar: the brand row, the organization picker's slot, every area's nav
-// groups, and the account menu at the foot.
+// groups, and the account menu at the foot. The account menu also holds the Theme submenu.
 //
 // It collapses to an icon strip at desktop (the header's toggle, or ⌘B / Ctrl+B) and
 // opens as a sheet below `md`. Both are the coss sidebar's own behaviour; this file only
@@ -176,6 +177,10 @@ export function ShellSidebar({
                     <span className="block truncate">{account.email}</span>
                   </MenuGroupLabel>
                 </MenuGroup>
+
+                <MenuSeparator />
+
+                <ThemeMenuItem />
 
                 <MenuSeparator />
 

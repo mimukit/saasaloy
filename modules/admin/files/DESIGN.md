@@ -237,7 +237,7 @@ The app loads Inter as `Inter Variable`, with the single-storey `l` and `g` and 
 
 ## Layout
 
-The shell is an inset sidebar on the canvas and one content panel beside it with an 8 px gutter. The sidebar holds the brand row, the organization picker's slot, the nav groups and the account menu; it collapses to a 56 px icon strip, and below `md` it opens as a sheet. The content panel has a sticky header with the sidebar toggle, the page path and the theme toggle.
+The shell is an inset sidebar on the canvas and one content panel beside it with an 8 px gutter. The sidebar holds the brand row, the organization picker's slot, the nav groups and the account menu; it collapses to a 56 px icon strip, and below `md` it opens as a sheet. The content panel has a sticky header with the sidebar toggle and the page path. The account menu holds a "Theme" submenu above "Sign out".
 
 Every page renders inside the page frame, which sets `--page-gutter`: 16 px below `md` and 24 px from `md` up. The page header, the page body, toolbar rows and the table's first and last columns all pad with that variable, so they line up and move together. A selected record docks as a column at the right of the content panel from `md` up and opens as a bottom sheet below it.
 
@@ -270,6 +270,6 @@ Controls use short colour and shadow transitions. Popups fade and scale in from 
 
 ## Dark Mode
 
-The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and a press on the theme toggle flips light and dark, with a circle reveal from the button. Every component uses the semantic tokens, so both themes stay in step.
+The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and the "Theme" submenu in the account menu picks Light, Dark or System, with a circle reveal from the picked item. Every component uses the semantic tokens, so both themes stay in step.
 
 _Seeded by the saasaloy admin module · tokens sha256:b187a46c1de4 of packages/ui/src/styles/admin.css_
