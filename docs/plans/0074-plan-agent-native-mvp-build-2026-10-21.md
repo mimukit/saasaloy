@@ -45,7 +45,7 @@ Success: a headless agent starts in an empty folder that holds a complete produc
 | `update --resolved` | Records the file's current hash as the new baseline in the manifest, the same model as ADR 0006. It does not check the content. |
 | Descriptor vocabulary | Two fixed enums. `stage` is one of `validate`, `mvp`, `teams`, `money`, `scale`. `needs` is a list from `cloudflare-paid`, `stripe`, `domain`, `vendor-account`. The schema keeps both optional, and this repo's `doctor` requires `description`. |
 | One check command | `pnpm check` runs typecheck, lint, test and build, and stops at the first failure. It edits no file. Skills run `pnpm lint:fix` and `pnpm format` before it. |
-| ADRs | Two. One for the CLI's unattended contract (the no-TTY rule and `--json` with `schemaVersion`). One for the `app` module as the product UI home, with `shell` as its shared owner. |
+| ADRs | Two, written at the grill: ADR 0046 for the CLI's unattended contract (the no-TTY rule and `--json` with `schemaVersion`), and ADR 0047 for the `app` module as the product UI home, with `shell` as its shared owner. |
 | Test runners | CLI changes test with the CLI's Vitest suite (`packages/cli`). Repo scripts, the scorer and the skill lint test use `node --test` beside the script. `app` routes use plan 0072's route test harness. `shell` and `app` screens get no DOM tests. The scorer checks them over HTTP, and #202 and #203 own UI tests. |
 | Benchmark | Claude Code in headless mode: `claude -p --permission-mode bypassPermissions --max-turns 400`, run on demand on this box, inside `.dev/bench/` only. It does not run in CI. |
 | Benchmark input | One hand-written B2C single-user brief at `scripts/agent-bench/brief.md`, complete and with `autonomy: afk`. The owner reviews it in the Phase 2 PR. A second brief, for a B2B team product, comes after the first PASS and is outside this plan. |
@@ -73,7 +73,7 @@ What it reuses:
 
 Rejected, one line each: an MCP server (a second interface to keep in step with the CLI, and every agent already runs shell commands); a generated section in `AGENTS.md` (ADR 0007 rejected regenerated views for a reason that still holds); module stacks as the first move (#58 composes modules but does not teach the agent to build a feature); named human checkpoints during the run (intake up front instead); an idea file as the minimum intake (the agent would invent product decisions nobody made); `app` depending on `admin` for its shell (customer code would import "admin"); a copied shell per app (about 60 files that drift).
 
-### Phase 1: approve the `app` shell mockup
+### Phase 1: approve the `app` shell mockup (#227)
 
 Attended: the owner approves the mockup screenshots in the planning session.
 
@@ -84,7 +84,7 @@ Attended: the owner approves the mockup screenshots in the planning session.
 
 Done when: this plan carries an "`app` mockup approved" row with a date and a screenshot path.
 
-### Phase 2: the benchmark and a baseline run
+### Phase 2: the benchmark and a baseline run (#222)
 
 - Add `scripts/agent-bench.ts`. It makes an empty folder `.dev/bench/<run-id>/` and copies in `scripts/agent-bench/brief.md` as `./product-brief.md` and `scripts/agent-bench/env` as `./env`. It puts the local CLI on `PATH` through `scripts/saasaloy-shim.sh` and sets `SAASALOY_REGISTRY_DIR` to this repo's `modules/`. Then it starts `claude -p` with the prompt in `scripts/agent-bench/prompt.md`.
 - The prompt names the repo URL, `./product-brief.md` and `./env`, and asks for a SaaS MVP. Nothing else.
@@ -94,7 +94,7 @@ Done when: this plan carries an "`app` mockup approved" row with a date and a sc
 
 Done when: `node scripts/agent-bench.ts` finishes with a per-line PASS/FAIL table and leaves no process running, and the baseline report names the first step where the agent stopped.
 
-### Phase 3: no command waits on a missing TTY
+### Phase 3: no command waits on a missing TTY (#223)
 
 - Route every `@clack/prompts` call in `packages/cli/src/commands/` through the guard. That covers the `init` name prompt (`init.ts:291`), the `init` install prompt (`init.ts:439`), and the `remove` confirms (`remove.ts:325`, `remove.ts:340`).
 - Add `init --yes`, which installs with no prompt. Make a failed `pnpm install` in `init` exit 1 (`init.ts:449-470`).
@@ -103,7 +103,7 @@ Done when: `node scripts/agent-bench.ts` finishes with a per-line PASS/FAIL tabl
 
 Done when: the closed-stdin test passes for every command in `packages/cli/src/commands/index.ts`, and `saasaloy init </dev/null` exits 2 and names `<name>`.
 
-### Phase 4: a flag answers every prompt
+### Phase 4: a flag answers every prompt (#223)
 
 - `add --with <module>` satisfies a `requiresOneOf` choice, so `saasaloy add waitlist --with database-d1 --yes` installs in one command.
 - `env --from-file <path>` and `env --set KEY=VALUE` (repeatable) write `packages/env/.env` with no prompt. Both check each key against the installed modules' `envVars` and refuse an unknown key.
@@ -112,17 +112,17 @@ Done when: the closed-stdin test passes for every command in `packages/cli/src/c
 
 Done when: a CLI e2e test builds a project with `auth`, `admin`, `email`, `email-console` and `waitlist --with database-d1` using flags only and no TTY, and a second `update` after `--resolved` exits 0.
 
-### Phase 5: the CLI speaks JSON, and modules describe themselves
+### Phase 5: the CLI speaks JSON, and modules describe themselves (#223)
 
 - Add `description` (one line), `stage` and `needs` to `registry-item.schema.json`, with the enums from Design decisions. Fill all three on every descriptor.
 - Make `saasaloy doctor` in this repo fail a descriptor with no `description`.
 - Add `--json` to `list`, `doctor`, `outdated`, `env --check` and `add --dry-run`. `list --json` carries name, tier, description, stage, needs, `dependsOn`, `requiresOneOf`, `conflictsWith`, `envVars`, the skill name and an `installed` flag.
 - Add `list --installed`.
-- Write the ADR for the CLI's unattended contract: the no-TTY rule from Phase 3 and the `--json` shape.
+- Keep [ADR 0046](../adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) true: amend it if the build changes the no-TTY rule or the `--json` shape.
 
 Done when: `saasaloy list --json | node -e` parses, every module in it has a non-empty `description`, `stage` and `needs`, and `saasaloy add waitlist --dry-run --json` lists every file and patch that the human-readable plan shows.
 
-### Phase 6: the generated project's agent guide
+### Phase 6: the generated project's agent guide (#224)
 
 - Cut the base `AGENTS.md` to 250 lines or fewer. Move the design-layer detail (about 360 lines today) into `packages/ui/AGENTS.md`, with a `packages/ui/CLAUDE.md` that holds `@AGENTS.md`.
 - Drop the migration notes for projects made before the theme split from `AGENTS.md`. They stay in the changelog and the `update` merge plan.
@@ -134,7 +134,7 @@ Done when: `saasaloy list --json | node -e` parses, every module in it has a non
 
 Done when: `wc -l` on the base `AGENTS.md` prints 250 or fewer, a scaffolded project has `packages/ui/AGENTS.md`, and `pnpm check` passes on a fresh `saasaloy init` project.
 
-### Phase 7: auth blocks and the password reset mail
+### Phase 7: auth blocks and the password reset mail (#225)
 
 - Add `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` to the `auth` module's files, written into `@repo/ui`. Each takes an `onSubmit` and does no IO.
 - Change `admin`'s `login.tsx` to render the sign-in block.
@@ -143,7 +143,7 @@ Done when: `wc -l` on the base `AGENTS.md` prints 250 or fewer, a scaffolded pro
 
 Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POST to the api's password reset endpoint writes a reset mail to the api's stdout, and the admin sign-in still works with a seeded admin.
 
-### Phase 8: the `shell` capability
+### Phase 8: the `shell` capability (#226)
 
 - Add `modules/shell/` as a capability. Move #204's shell files from `@repo/ui/*/admin` to `@repo/ui/*/shell`: layout, nav, user menu and theme toggle, with no auth logic.
 - Make `admin` depend on `shell` and import from the new paths.
@@ -152,17 +152,17 @@ Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POS
 
 Done when: `saasaloy add admin` in a fresh project also installs `shell`, the admin app renders its shell from `@repo/ui/*/shell`, and `grep -r "ui/blocks/admin" modules/admin/files` finds no shell file.
 
-### Phase 9: the `app` module
+### Phase 9: the `app` module (#227)
 
 - Add `modules/app/` as a capability that depends on `api`, `auth` and `shell`. It scaffolds `apps/app` on port 3002 with `strictPort`, the shell approved in Phase 1, sign-in and sign-up routes that render the `auth` blocks, a signed-in home, and the error screen from `@repo/ui`.
 - Add `http://localhost:3002` to `DEV_ORIGINS` in `apps/api/src/index.ts` and `packages/auth/src/auth.ts` through patches. Add the port to the `AGENTS.md` port map.
 - Ship `saasaloy-app` with "Add a screen", "Protect a screen", "Call the api", wire-up, removal and failure modes.
 - Ship a seed slice only if the module adds a table, and a route test for any route it adds.
-- Write the ADR for the `app` module as the product UI home, with `shell` as the shared owner.
+- Keep [ADR 0047](../adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md) true: amend it if the build changes the `app` or `shell` decision.
 
 Done when: in a project with `app`, a seeded plain user signs in at `http://localhost:3002` and sees the home screen, a signed-out visit redirects to sign in, and `pnpm check` passes.
 
-### Phase 10: AFK paths for the base skills
+### Phase 10: AFK paths for the base skills (#224)
 
 - `saasaloy-setup`: the interview stays attended. Its last question, "Run the build unattended?", writes `autonomy: afk` to the brief's frontmatter. When a later run finds `autonomy: afk` and a complete brief, it sets `siteName` and `lang` and asks nothing. With an incomplete brief, it lists the missing sections under "Blocked" in `docs/build-log.md` and stops.
 - `saasaloy-landing-copy`: under `autonomy: afk`, it writes `landing.ts` from the brief with no draft approval, and it logs the change in `docs/build-log.md`.
@@ -171,7 +171,7 @@ Done when: in a project with `app`, a seeded plain user signs in at `http://loca
 
 Done when: each of the three skills, started on the benchmark brief, writes its output with no question to the user, and `saasaloy-setup` started on a brief with one empty section stops and logs that section.
 
-### Phase 11: the build skill and the feature recipe
+### Phase 11: the build skill and the feature recipe (#228)
 
 - Add `saasaloy-build` to the base skills. It moves `./product-brief.md` into `docs/` after `init` when it finds one there. It checks that the brief is complete, picks modules from `saasaloy list --json` by `stage` and `needs`, and runs the stages in order on `build/mvp`. Each stage ends with `pnpm lint:fix`, `pnpm format`, `pnpm check` and one commit. It writes and resumes `docs/build-log.md`, so a new session continues where the last one stopped.
 - Add `saasaloy-feature` to the base skills: one entity from start to finish. The steps are table, `db:generate`, migrate, seed slice, validator, route, `hc` client, a screen in `app`, a list in `admin`, a route test, and `pnpm check`. It hands off to each module skill for the detail and does not copy it.
@@ -181,7 +181,7 @@ Done when: each of the three skills, started on the benchmark brief, writes its 
 
 Done when: `scripts/skills.test.ts` passes on `node --test`. It checks that each capability skill has a "Next" line and each skill of a UI-writing module has a "Wire-up" section.
 
-### Phase 12: the consumer entry point
+### Phase 12: the consumer entry point (#228)
 
 - Add `llms.txt` at the repo root. It says what Saasaloy is, how to start a project, that a complete brief is the required input, where the build skill is, and links the wiki pages an agent needs.
 - Add `docs/wiki/how-to/build-with-an-agent.md`. It covers how to run `saasaloy-setup` to write the brief, the env file, the prompt to give, what to expect in `docs/build-log.md` and on `build/mvp`, and what stays a human step.
@@ -190,7 +190,7 @@ Done when: `scripts/skills.test.ts` passes on `node --test`. It checks that each
 
 Done when: `llms.txt` exists, and a `node --test` script test checks that every link in it resolves to a file in this repo.
 
-### Phase 13: the benchmark reaches the bar
+### Phase 13: the benchmark reaches the bar (#228)
 
 - Run `scripts/agent-bench.ts`. For each FAIL line, fix it in this plan's scope or file a GitHub issue labelled `needs-planning`, then run again.
 - Stop after 3 runs. If FAIL lines remain, the report lists them with their issues.
