@@ -4,7 +4,7 @@
 
 ## Status
 
-accepted
+accepted, amended 2026-10-22 by [ADR 0048](0048-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)
 
 ## Considered Options
 
@@ -19,3 +19,7 @@ accepted
 - `defaultPermissions` returns `{}` rather than nothing when the body asks for no scope. The option's type has no `undefined` arm, and `{}` is a key that `can()` denies for every pair, which is the same answer.
 - `/api-key/update` is not covered, and `apiKeyScopeGuard()` does not list it. The plugin refuses `permissions` there for the same reason, `defaultPermissions` runs on create only, and the screen offers no edit, so a scope stays fixed at issue time. Revoke and re-issue is the supported change. An update may still overwrite the stored `metadata.scope`, which changes nothing, per the point above.
 - This is pinned to 1.7.2. If a later release lets a client set `permissions` behind an option, the `metadata.scope` channel should go and `scopeOf` should read one field again.
+
+## Amendment — 2026-10-22: in user mode the ceiling is the key vocabulary
+
+ADR 0048 splits the owner. Under `api-keys-user` there are no roles, so `apiKeyScopeGuard()` checks the requested scope against `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts`, not against the creator's statements, and it checks every create, with or without a session. The transport is unchanged in both modes: the scope travels as `metadata.scope`, `defaultPermissions` writes it to `permissions`, and only `permissions` is authoritative.
