@@ -958,6 +958,104 @@ describe("runAdd — --force and the already-installed early return", () => {
   });
 });
 
+// #229. A module split: the core's new version stops listing a patch, and the owner the
+// project now adds ships that same patch. The project already carries the edit, so the
+// owner's patch is a no-op, and the manifest has to move the record to the owner rather
+// than leave it under the core, or `remove` reverses it with the wrong module.
+describe("runAdd — an already-applied patch moves to the module that depends on its owner (#229)", () => {
+  let project: string;
+  let registry: string;
+
+  const scriptPatch = {
+    file: "package.json",
+    kind: "package-json-script",
+    name: "keys:check",
+    value: "echo keys",
+  };
+
+  async function descriptor(
+    name: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    await mkdir(join(registry, name), { recursive: true });
+    await writeFile(
+      join(registry, name, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", files: [], ...item }),
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-repatch-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-repatch-reg-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeFile(
+      join(project, "package.json"),
+      '{\n  "name": "app",\n  "scripts": {}\n}\n',
+      "utf-8"
+    );
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<number> {
+    const captured = capture();
+    try {
+      return await runAdd(args);
+    } finally {
+      captured.restore();
+    }
+  }
+
+  async function patchOwners(): Promise<string[]> {
+    const manifest = JSON.parse(
+      await readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+    ) as Manifest;
+    return manifest.patches.map((p) => p.module);
+  }
+
+  it("records the patch under the new module when its owner is a dependency", async () => {
+    await descriptor("keys", { patches: [scriptPatch] });
+    await expect(run(["keys", "--yes"])).resolves.toBe(0);
+    await expect(patchOwners()).resolves.toStrictEqual(["keys"]);
+    const before = await readFile(join(project, "package.json"), "utf-8");
+
+    // The split: the core drops the patch and the owner carries it.
+    await descriptor("keys", {});
+    await descriptor("keys-owner", {
+      dependsOn: ["keys"],
+      patches: [scriptPatch],
+    });
+    await expect(run(["keys-owner", "--yes"])).resolves.toBe(0);
+
+    await expect(patchOwners()).resolves.toStrictEqual(["keys-owner"]);
+    await expect(
+      readFile(join(project, "package.json"), "utf-8")
+    ).resolves.toBe(before);
+  });
+
+  it("keeps the patch under an unrelated module that recorded it", async () => {
+    await descriptor("keys", { patches: [scriptPatch] });
+    await expect(run(["keys", "--yes"])).resolves.toBe(0);
+
+    await descriptor("stranger", { patches: [scriptPatch] });
+    await expect(run(["stranger", "--yes"])).resolves.toBe(0);
+
+    await expect(patchOwners()).resolves.toStrictEqual(["keys"]);
+  });
+});
+
 // `requires.saasaloy` at the command level (#50): the range is checked against the
 // running CLI before a plan is built, so a refusal leaves the project byte-identical.
 // The ranges are derived from the CLI's own version so a release bump cannot flip a case:

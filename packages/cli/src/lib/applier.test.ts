@@ -26,6 +26,8 @@ import { pathExists } from "./fs-utils.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 import type { LoadedModule } from "./registry.js";
+import { buildRemovePlan, executeRemovePlan } from "./remover.js";
+import { emptyLock } from "./lock.js";
 import type { RegistryItem, SaasaloyConfig } from "./schema.js";
 import { validateManifest, validateRegistryItem } from "./schema.js";
 
@@ -1311,6 +1313,159 @@ describe("applier — chained-route end to end", () => {
     expect(entry).toContain('.route("/waitlist", waitlist)');
     expect(entry).toContain('.route("/billing", billing)');
     expect(manifest.patches).toHaveLength(2);
+  });
+});
+
+// #229. A module split moves a patch from a core into an owner that depends on it. The
+// project already carries the edit, so the owner's `add` finds it applied and changed
+// nothing — and the manifest kept the patch under the core, so `remove <owner>` left the
+// edit behind and `remove <core>` reversed an edit the owner still needed. Files already
+// change hands along `dependsOn`; a patch now does too, under the same rule.
+describe("applier — an already-applied patch changes owner along dependsOn (#229)", () => {
+  // The owner carries the core's patch, byte for byte, the way a split moves it.
+  async function waitlistOwner(dependsOn: string[]): Promise<LoadedModule> {
+    const core = await waitlistWithRoute();
+    return writeModule("waitlist-owner", {
+      type: "saasaloy:feature",
+      dependsOn,
+      patches: core.item.patches ?? [],
+    });
+  }
+
+  async function installCore(
+    config: SaasaloyConfig,
+    manifest: Manifest
+  ): Promise<LoadedModule[]> {
+    const mods = [await apiWorkspace(), await waitlistWithRoute()];
+    await executePlan(
+      await plan({
+        install: ["api", "waitlist"],
+        modules: mods,
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
+    return mods;
+  }
+
+  it("re-records the patch under a module that depends on its recorded owner", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = await installCore(config, manifest);
+    const before = await readFile(
+      join(root, ...ENTRY_TARGET.split("/")),
+      "utf-8"
+    );
+
+    const owner = await waitlistOwner(["waitlist"]);
+    const result = await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [...mods, owner],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+
+    expect(result.patched).toHaveLength(0);
+    await expect(
+      readFile(join(root, ...ENTRY_TARGET.split("/")), "utf-8")
+    ).resolves.toBe(before);
+    expect(manifest.patches).toHaveLength(1);
+    expect(manifest.patches[0]?.module).toBe("waitlist-owner");
+  });
+
+  it("follows a transitive dependsOn too", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = await installCore(config, manifest);
+    const middle = await writeModule("waitlist-middle", {
+      type: "saasaloy:feature",
+      dependsOn: ["waitlist"],
+    });
+    const owner = await waitlistOwner(["waitlist-middle"]);
+    await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [...mods, middle, owner],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual([
+      "waitlist-owner",
+    ]);
+  });
+
+  it("leaves the patch under an unrelated module that recorded it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = await installCore(config, manifest);
+    const stranger = await waitlistOwner(["api"]);
+    await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [...mods, stranger],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
+  });
+
+  it("lets `remove <owner>` reverse the moved patch, and `remove <core>` leave it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = await installCore(config, manifest);
+    const owner = await waitlistOwner(["waitlist"]);
+    await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [...mods, owner],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    const lock = emptyLock();
+    const entryAbs = join(root, ...ENTRY_TARGET.split("/"));
+
+    const corePlan = await buildRemovePlan({
+      root,
+      name: "waitlist",
+      config,
+      manifest,
+      lock,
+    });
+    expect(corePlan.patches).toHaveLength(0);
+
+    const ownerPlan = await buildRemovePlan({
+      root,
+      name: "waitlist-owner",
+      config,
+      manifest,
+      lock,
+    });
+    expect(ownerPlan.patches).toHaveLength(1);
+    await executeRemovePlan(ownerPlan, { root, config, manifest, lock });
+    const after = await readFile(entryAbs, "utf-8");
+    expect(after).not.toContain(".route(");
+    expect(manifest.patches).toStrictEqual([]);
   });
 });
 

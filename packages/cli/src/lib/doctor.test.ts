@@ -15,6 +15,7 @@ import {
   checkProject,
   checkRetiredInfra,
   checkTarget,
+  checkUnmetRequirements,
   KV_INDEX_FILE,
   readConfigState,
   readPolicyState,
@@ -563,6 +564,63 @@ describe(checkProject, () => {
 
     expect(findings).toHaveLength(1);
     expect(findings[0]?.module).toBe("auth");
+  });
+});
+
+// #229. A core whose `requiresOneOf` nothing installed meets: an owner removed, or a
+// project that predates the split. The lock carries the list, since the descriptor is gone.
+function lockRequiring(
+  name: string,
+  requiresOneOf: string[]
+): ReturnType<typeof emptyLock> {
+  const lock = emptyLock();
+  lock.modules[name] = {
+    source: "local",
+    ref: "local",
+    resolved: "local",
+    requiresOneOf,
+  };
+  return lock;
+}
+
+describe(checkUnmetRequirements, () => {
+  it("flags an installed module none of whose options is installed, naming each add", () => {
+    const findings = checkUnmetRequirements({
+      installed: ["api-keys"],
+      lock: lockRequiring("api-keys", [
+        "api-keys-organization",
+        "api-keys-user",
+      ]),
+    });
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]?.module).toBe("api-keys");
+    expect(findings[0]?.where).toBe("/installed/api-keys");
+    expect(findings[0]?.message).toContain(
+      "saasaloy add api-keys-organization"
+    );
+    expect(findings[0]?.message).toContain("saasaloy add api-keys-user");
+  });
+
+  it("says nothing when one option is installed", () => {
+    expect(
+      checkUnmetRequirements({
+        installed: ["api-keys", "api-keys-user"],
+        lock: lockRequiring("api-keys", [
+          "api-keys-organization",
+          "api-keys-user",
+        ]),
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("ignores a lock entry for a module that is not installed", () => {
+    expect(
+      checkUnmetRequirements({
+        installed: [],
+        lock: lockRequiring("api-keys", ["api-keys-user"]),
+      })
+    ).toStrictEqual([]);
   });
 });
 

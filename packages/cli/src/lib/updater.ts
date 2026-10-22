@@ -453,6 +453,8 @@ export interface ModuleUpdatePlan {
   prereqDependsOn: Record<string, string[]>;
   /** Each prerequisite's own `conflictsWith`, for the same reason. */
   prereqConflictsWith: Record<string, string[]>;
+  /** Each prerequisite's own `requiresOneOf`, for the same reason (#229). */
+  prereqRequiresOneOf: Record<string, string[]>;
   /** The new version's own `dependsOn`, written into the lock entry. */
   dependsOn?: string[];
   /**
@@ -462,6 +464,11 @@ export interface ModuleUpdatePlan {
    * second driver (#98).
    */
   conflictsWith?: string[];
+  /**
+   * The new version's own `requiresOneOf`, written into the lock entry so `doctor` can
+   * still name an unmet one once the descriptor is gone (#229).
+   */
+  requiresOneOf?: string[];
   /** Removal warnings from the new descriptor, persisted only after a clean update. */
   removeWarnings: string[];
   /**
@@ -794,6 +801,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   let prereqPlan: Plan | undefined;
   const prereqDependsOn: Record<string, string[]> = {};
   const prereqConflictsWith: Record<string, string[]> = {};
+  const prereqRequiresOneOf: Record<string, string[]> = {};
   const prereqNames = (input.prereqs?.order ?? []).filter(
     (n) => !config.installed.includes(n)
   );
@@ -815,6 +823,10 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       const conflictsWith = prereqItem?.conflictsWith;
       if (conflictsWith && conflictsWith.length > 0) {
         prereqConflictsWith[prereq] = conflictsWith;
+      }
+      const requiresOneOf = prereqItem?.requiresOneOf;
+      if (requiresOneOf && requiresOneOf.length > 0) {
+        prereqRequiresOneOf[prereq] = requiresOneOf;
       }
     }
   }
@@ -839,11 +851,15 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     ...(prereqPlan ? { prereqPlan } : {}),
     prereqDependsOn,
     prereqConflictsWith,
+    prereqRequiresOneOf,
     ...(theirs.item.dependsOn && theirs.item.dependsOn.length > 0
       ? { dependsOn: theirs.item.dependsOn }
       : {}),
     ...(theirs.item.conflictsWith && theirs.item.conflictsWith.length > 0
       ? { conflictsWith: theirs.item.conflictsWith }
+      : {}),
+    ...(theirs.item.requiresOneOf && theirs.item.requiresOneOf.length > 0
+      ? { requiresOneOf: theirs.item.requiresOneOf }
       : {}),
     removeWarnings: [...(theirs.item.removeWarnings ?? [])],
     newEnvVars: newEnvVars(base, theirs),
@@ -1349,6 +1365,7 @@ export async function executeUpdatePlan(
         resolved: mod.comparison.latest,
         ...(mod.dependsOn ? { dependsOn: mod.dependsOn } : {}),
         ...(mod.conflictsWith ? { conflictsWith: mod.conflictsWith } : {}),
+        ...(mod.requiresOneOf ? { requiresOneOf: mod.requiresOneOf } : {}),
       };
       result.lockMoved.push(mod.name);
     } else {
@@ -1370,12 +1387,14 @@ export async function executeUpdatePlan(
     for (const prereq of mod.prereqPlan?.install ?? []) {
       const dependsOn = mod.prereqDependsOn[prereq];
       const conflictsWith = mod.prereqConflictsWith[prereq];
+      const requiresOneOf = mod.prereqRequiresOneOf[prereq];
       lock.modules[prereq] = {
         source: mod.comparison.source,
         ref: mod.comparison.ref,
         resolved: mod.comparison.latest,
         ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
         ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
+        ...(requiresOneOf && requiresOneOf.length > 0 ? { requiresOneOf } : {}),
       };
     }
   }

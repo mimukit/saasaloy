@@ -1141,6 +1141,42 @@ export async function readEnvState(root: string): Promise<EnvCheckArgs> {
   };
 }
 
+export interface RequirementState {
+  /** `saasaloy.json`'s `installed` list. */
+  installed: string[];
+  /** The project's lock, the one offline record of each module's `requiresOneOf`. */
+  lock: Lockfile;
+}
+
+/**
+ * An installed module whose `requiresOneOf` names no installed module (#229). `add` and
+ * `update` refuse to create that state, but `remove` of the one owner leaves it, and so
+ * does a lock written by a hand edit. The project then imports files nobody ships. Read
+ * from the lock because the descriptor is gone, so an entry written before the lock
+ * recorded `requiresOneOf` is not checked until the next `add` or `update` rewrites it.
+ */
+export function checkUnmetRequirements(state: RequirementState): Finding[] {
+  const installed = new Set(state.installed);
+  return state.installed
+    .filter((name) => {
+      const options = state.lock.modules[name]?.requiresOneOf ?? [];
+      return (
+        options.length > 0 && !options.some((option) => installed.has(option))
+      );
+    })
+    .toSorted()
+    .map((name) => {
+      const options = state.lock.modules[name]?.requiresOneOf ?? [];
+      return finding(
+        name,
+        `/installed/${name}`,
+        `needs one of: ${options.join(", ")}, and none is installed — run ${options
+          .map((option) => `\`saasaloy add ${option}\``)
+          .join(" or ")}`
+      );
+    });
+}
+
 /** Check every module named by `target`, in name order. */
 export async function checkTarget(
   target: DoctorTarget

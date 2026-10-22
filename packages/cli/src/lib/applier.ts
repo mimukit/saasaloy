@@ -34,7 +34,13 @@ import {
   readIfPresent,
   resolveWithinRoot,
 } from "./fs-utils.js";
-import { recordLink, recordManagedFile, recordPatch } from "./manifest.js";
+import {
+  recordLink,
+  recordManagedFile,
+  recordPatch,
+  samePatchEntry,
+  untrackPatch,
+} from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { PatchMatch } from "./patch/index.js";
@@ -135,6 +141,14 @@ export interface PlannedPatch {
    *  what we would have written. `update` reports these into its merge plan; `add`
    *  ignores it (issue #48, decision 1). */
   matched?: PatchMatch;
+  /**
+   * Installed modules the manifest records this same patch under, each one this module
+   * reaches through `dependsOn` or is reached by (#229). Set by `buildPlan` only. When
+   * `executePlan` finds the patch already applied, it moves the record to this module,
+   * the way a file changes hands under `mayShareTarget`, so `remove` reverses the patch
+   * with the module that now carries it. An unrelated recorder is never listed here.
+   */
+  takesOverFrom?: string[];
 }
 
 // A `.claude/skills/<name>` symlink pointing at the real, committed `.agents/skills/<name>`
@@ -953,6 +967,26 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       ...(await previewPatches({ root, module: name, ops, planned }))
     );
   }
+  // A patch the manifest already records under another module may change hands by the
+  // same rule a file does: only along `dependsOn`, in either direction (#229). A module
+  // split is the case, where an owner ships the patch its core used to carry.
+  for (const p of patches) {
+    const previous = manifest.patches
+      .filter(
+        (entry) =>
+          entry.module !== p.module &&
+          samePatchEntry(entry, {
+            module: entry.module,
+            file: p.file,
+            patch: p.patch,
+          }) &&
+          mayShareTarget(p.module, entry.module, modules)
+      )
+      .map((entry) => entry.module);
+    if (previous.length > 0) {
+      p.takesOverFrom = previous;
+    }
+  }
 
   return {
     install,
@@ -997,6 +1031,13 @@ export interface ApplyResult {
   /** Patches the codemod declined to apply, each with the reason it gave. Distinct from
    *  an idempotent no-op, which changes nothing and has nothing to report. */
   patchRefusals: PatchRefusal[];
+}
+
+// Drop the records a planned patch takes over, once this module holds its own (#229).
+function takeOverPatch(manifest: Manifest, p: PlannedPatch): void {
+  for (const module of p.takesOverFrom ?? []) {
+    untrackPatch(manifest, { file: p.file, module, patch: p.patch });
+  }
 }
 
 /** A patch left unapplied on purpose, and the codemod's own account of why. */
@@ -1092,6 +1133,16 @@ export async function executePlan(
         module: p.module,
         patch: p.patch,
       });
+      takeOverPatch(manifest, p);
+    } else if (reason === undefined && p.takesOverFrom !== undefined) {
+      // Already applied, and recorded under a module this one may take it from (#229).
+      // Nothing is written; the record moves, so `remove` reverses it with this module.
+      recordPatch(manifest, {
+        file: p.file,
+        module: p.module,
+        patch: p.patch,
+      });
+      takeOverPatch(manifest, p);
     } else if (reason !== undefined) {
       // The codemod refused rather than no-op'd: nothing is written and nothing is
       // tracked, so the manifest keeps saying `remove` has no business in this file.
