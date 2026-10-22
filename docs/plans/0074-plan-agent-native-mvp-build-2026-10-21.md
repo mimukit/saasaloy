@@ -1,6 +1,6 @@
 # Plan: an agent builds a SaaS MVP on Saasaloy with no human at the keyboard
 
-Grilled: 2026-10-21
+Grilled: 2026-10-22
 
 ## Context
 
@@ -52,6 +52,16 @@ Success: a headless agent starts in an empty folder that holds a complete produc
 | Benchmark cadence | Manual runs before a release, and after a change to a base skill or to the CLI's unattended contract. `CONTRIBUTING.md`'s release checklist gets a line for it. |
 | Approved outward actions | Phase 13 may file GitHub issues for FAIL lines, labelled `needs-planning`, with no human present. Publishing this plan may edit #183's body to drop the customer panel and link this plan. Nothing else. |
 | UI house rules for `shell` and `app` | The rules in the base `apps/web/DESIGN.md` and `AGENTS.md`, plus the admin shell rules #192 settles. The visual reference is PR #204's admin shell. Phase 1 approves the `app` variant of it. |
+| `app` look | The `shell` frame with the web brand tokens, light first. `admin` keeps its dark backoffice theme. Settled in the #227 grill on 2026-10-22. |
+| Brand tokens | The token block of the base `packages/ui/src/styles/web.css` moves to `brand.css`: the token values, `@custom-variant dark` and `@theme inline`. `web.css` imports it and keeps the landing layout and motion CSS. The `app` stylesheet imports it too. `components.json` and the `apps/web/DESIGN.md` fingerprint name `brand.css`, because shadcn merges a preset in place only in the file that holds both blocks. |
+| `shell` stays app-neutral | `shell` has no dependency on `admin` and imports no app stylesheet. Its components read semantic tokens only, and each app stylesheet adds `@source` for the shell folders. This is what lets `saasaloy add app` run with no `admin`. |
+| `app` dev origin | `http://localhost:3002` goes into `DEV_ORIGINS` in the base source of `api` and `auth`, the same as 3001, with no patch. A project made before that release gets it through `saasaloy update api auth`. `saasaloy-app` says so in its wire-up step and names the CORS symptom in failure modes, and the changelog says the same. |
+| `app` production origin | No new key. The production `app` origin goes into `CORS_ORIGINS`, the one list the api CORS spine and `auth`'s `trustedOrigins` both read through `packages/env`. `saasaloy-app` documents it with `COOKIE_DOMAIN` and the workers.dev case. |
+| `app` deploy | `apps/app` ships an assets-only `wrangler.jsonc` with `not_found_handling: "single-page-application"`, a `"deploy": "env-deploy app"` script, and an `app` row in `packages/env/src/services.ts`, like `admin`. `pnpm deploy:production` deploys it. |
+| `app` routes and home | `/sign-in`, `/sign-up` and `/`. The safe-destination check copies admin's `redirect.ts`, and a sign-up lands on `/`. The scaffolded home has a welcome panel and an empty state that points to `saasaloy-feature`, with no demo entity. The list and form patterns ship as recipes in `saasaloy-app`. |
+| `app` port | 3002, as settled on 2026-10-21. The `email-react` preview held 3002 and moves to 3003, settled in the #227 grill on 2026-10-22. |
+| Password reset screens | Outside #227. #230 plans reset blocks in `auth` and the routes in `app`. |
+| `app` tests | `app` adds no api route, so it ships no route test. A CLI e2e test adds `app` to base, `api`, `database-d1` and `auth` with no `admin`. `pnpm check` runs in a `.dev` project. |
 
 ## Approach
 
@@ -75,12 +85,13 @@ Rejected, one line each: an MCP server (a second interface to keep in step with 
 
 ### Phase 1: approve the `app` shell mockup (#227)
 
-Attended: the owner approves the mockup screenshots in the planning session.
+Attended: the owner approves the mockup screenshots in the planning session. It waits on PR #204 to merge.
 
-- Wait for PR #204 (the admin shell rebuild) to merge, so the mockup starts from the shell that `shell` will own.
-- Mock up four `app` screens: sign in, sign up, the signed-in home with one entity list, and one entity form. Show both themes and a 360px width.
+- Wait for PR #204 (the admin shell rebuild) to merge, so the mockup starts from the shell that `shell` will own. The approval row records the main SHA the mockup used, and a shell change after it starts a new round.
+- Build the mockup as a throwaway Vite app under `.dev/app-mockup/` that renders the merged #204 components and the `brand.css` tokens with fake data. Keep only the screenshots, under `docs/plans/assets/`, and delete the app after approval.
+- Mock up four `app` screens: sign in, sign up, the signed-in home with one entity list, and one entity form. The entity is a neutral "Projects" demo: name, status pill, member count and updated in the list, and name, description and status in the form. Show both themes and a 360px width.
 - Record the approval and the round it settled on as a row in this plan's Design decisions.
-- Phases 2 to 7 do not wait on this phase. Phase 9 does.
+- Phases 2 to 7 and the Phase 9 prep do not wait on this phase. The rest of Phase 9 does.
 
 Done when: this plan carries an "`app` mockup approved" row with a date and a screenshot path.
 
@@ -154,13 +165,16 @@ Done when: `saasaloy add admin` in a fresh project also installs `shell`, the ad
 
 ### Phase 9: the `app` module (#227)
 
+Prep, which does not wait on Phase 1: add `http://localhost:3002` to `DEV_ORIGINS` in the base source of `api` (`modules/api/files/src/index.ts`) and `auth` (`modules/auth/files/src/auth.ts`), add the 3002 row to the `AGENTS.md` port map, move the `email-react` preview from 3002 to 3003 (its `dev` script, its skill and a port map row), and correct the `CORS_ORIGINS` description in `modules/api/files/src/env.ts`, which says the localhost origins are always allowed when a set value replaces them. Split the base `web.css` token block into `brand.css` per Design decisions, prove the web build gives the same CSS, and prove a shadcn preset apply still merges in a `.dev` project.
+
 - Add `modules/app/` as a capability that depends on `api`, `auth` and `shell`. It scaffolds `apps/app` on port 3002 with `strictPort`, the shell approved in Phase 1, sign-in and sign-up routes that render the `auth` blocks, a signed-in home, and the error screen from `@repo/ui`.
-- Add `http://localhost:3002` to `DEV_ORIGINS` in `apps/api/src/index.ts` and `packages/auth/src/auth.ts` through patches. Add the port to the `AGENTS.md` port map.
-- Ship `saasaloy-app` with "Add a screen", "Protect a screen", "Call the api", wire-up, removal and failure modes.
-- Ship a seed slice only if the module adds a table, and a route test for any route it adds.
+- The home has no demo entity. `@repo/ui/styles/app.css` imports `brand.css` and adds `@source` for the shell folders.
+- Ship an assets-only `wrangler.jsonc` with the single-page-application fallback, a `deploy` script through `env-deploy app`, and an `app` row in `packages/env/src/services.ts`.
+- Ship `saasaloy-app` with "Add a screen" (with the list and form recipes from the approved mockup), "Protect a screen", "Call the api", wire-up, removal and failure modes. Wire-up names `saasaloy update api auth` for a project made before the prep release and the production origin in `CORS_ORIGINS`. Failure modes names the CORS symptom, `COOKIE_DOMAIN` and the workers.dev case.
+- Ship a seed slice only if the module adds a table, and a route test for any route it adds. Add a CLI e2e test that adds `app` with no `admin`.
 - Keep [ADR 0047](../adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md) true: amend it if the build changes the `app` or `shell` decision.
 
-Done when: in a project with `app`, a seeded plain user signs in at `http://localhost:3002` and sees the home screen, a signed-out visit redirects to sign in, and `pnpm check` passes.
+Done when: in a project with `app`, a seeded plain user signs in at `http://localhost:3002` and sees the home screen, a signed-out visit redirects to sign in, `saasaloy add app` works in a project with no `admin`, `pnpm deploy:production` includes `apps/app`, and `pnpm check` passes.
 
 ### Phase 10: AFK paths for the base skills (#224)
 
@@ -201,7 +215,7 @@ Done when: one benchmark run prints PASS on every MVP bar line, and the report l
 
 ## Open questions
 
-None. The grill on 2026-10-21 settled every question in the draft.
+None. The grill on 2026-10-21 settled every question in the draft, and the #227 grill on 2026-10-22 settled the `app` details.
 
 ## Non-goals
 
