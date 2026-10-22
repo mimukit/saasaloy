@@ -103,7 +103,7 @@ Three parts matter, each for its own reason:
 - **`notNull` is not negotiable.** A nullable tenant column makes a row belonging to no organization, which every scoped query silently omits and no guard ever refuses.
 - **The index carries every scoped read.** Without it each one is a full scan.
 
-The `teams` and `api-keys` tables already meet the convention. `members`, `invitations` and `organization_roles` were hand-written that way; `api_keys` gets there through the API-key plugin's `referenceId` field rename. `organizations` itself is the parent and carries no tenant column.
+The `teams` and `api-keys-organization` tables already meet the convention. `members`, `invitations` and `organization_roles` were hand-written that way; `api_keys` gets there through the API-key plugin's `referenceId` field rename. `organizations` itself is the parent and carries no tenant column.
 
 ## What `TenantId` refuses
 
@@ -136,7 +136,7 @@ Every one of these renders through api's `ERROR_CODES` envelope, so a caller par
 | No active organization, or membership revoked | 403 | `no active organization` |
 | `x-organization-id` from a caller who may not send it | 403 | `forbidden` |
 | `x-organization-id` from a `superadmin` on the admin session naming no organization | 404 | `unknown organization` |
-| A claimed bearer credential that fails (`api-keys`) | 401 | `invalid api key` |
+| A claimed bearer credential that fails (`api-keys-organization`) | 401 | `invalid api key` |
 | A `can()` refusal | 403 | `permission required: <resource>:<action>` |
 | A write naming a base role (`teams`) | 403 | `base role is locked: <name>` |
 

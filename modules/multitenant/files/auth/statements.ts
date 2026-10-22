@@ -6,7 +6,7 @@ import { resolveStatements } from "./tenant-rules";
 import type { ResolvedStatements } from "./tenant-rules";
 
 // The statements a member's role grants, read from the base roles and the organization's
-// custom ones. It sits apart from `./tenant.ts` because `api-keys`' plugin calls it, and
+// custom ones. It sits apart from `./tenant.ts` because `api-keys-organization`'s plugin calls it, and
 // that plugin loads inside `./auth.ts`. `./tenant.ts` imports `./auth.ts`, so a plugin
 // that imported `./tenant.ts` would close a cycle through the auth instance. Keep this
 // file free of `./auth.ts` and everything that imports it.
@@ -28,9 +28,9 @@ function baseRoleStatements(): Record<string, ResolvedStatements> {
  * than asking again, so a route with three permission checks still pays for one round
  * trip.
  *
- * Exported because `api-keys`' `apiKeyScopeGuard()` resolves the caller's statements the
- * same way before it decides whether a requested key scope exceeds them. Two callers, one
- * merge rule.
+ * Exported because `api-keys-organization`'s `apiKeyScopeGuard()` resolves the caller's
+ * statements the same way before it decides whether a requested key scope exceeds them.
+ * Two callers, one merge rule.
  */
 export async function loadStatements(
   c: AuthRequestContext,

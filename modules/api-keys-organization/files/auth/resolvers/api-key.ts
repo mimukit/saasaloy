@@ -10,6 +10,15 @@ import type {
   TenantResolver,
 } from "../tenant-rules";
 import type { TenantRequestContext } from "../tenant";
+import {
+  INVALID_API_KEY,
+  bearerKey,
+  hasBearer,
+} from "../plugins/api-key-options";
+
+// Re-exported from here, where it lived before the shared options file, so an import that
+// names this file keeps working.
+export { INVALID_API_KEY } from "../plugins/api-key-options";
 
 // The bearer credential, as a tenant resolver.
 //
@@ -24,20 +33,6 @@ import type { TenantRequestContext } from "../tenant";
 // browser or a deploy script, and `requirePermission` runs the same `can()` over the key's fixed
 // scope that it runs over a member's resolved statements. There is no second permission
 // system on the machine path, and adding one is the mistake this file exists to prevent.
-
-/** The header a machine caller presents its key in. */
-const AUTHORIZATION_HEADER = "authorization";
-
-/** The scheme, with its trailing space. Case-insensitive, per RFC 7235. */
-const BEARER_PREFIX = "bearer ";
-
-/**
- * The message every failed key gets, whatever went wrong: not found, revoked, disabled,
- * expired, or a hash that matches nothing. Exported and fixed, because a machine caller
- * matches on it, and because the four failures must not be distinguishable — telling a
- * caller "that key existed but is expired" tells them the key existed.
- */
-export const INVALID_API_KEY = "invalid api key";
 
 /** The plugin's verify result, narrowed to the fields the resolver reads. */
 interface VerifiedKey {
@@ -72,8 +67,7 @@ export function apiKeyTenant(): TenantResolver<TenantRequestContext> {
     name: "api-key",
 
     claims(headers: HeaderReader): boolean {
-      const header = headers.get(AUTHORIZATION_HEADER);
-      return header !== null && header.toLowerCase().startsWith(BEARER_PREFIX);
+      return hasBearer(headers);
     },
 
     async resolve(c: TenantRequestContext): Promise<Tenant> {
@@ -86,9 +80,8 @@ export function apiKeyTenant(): TenantResolver<TenantRequestContext> {
         throw new HTTPException(denial.status, { message: denial.message });
       }
 
-      const header = c.req.raw.headers.get(AUTHORIZATION_HEADER) ?? "";
-      const key = header.slice(BEARER_PREFIX.length).trim();
-      if (key === "") {
+      const key = bearerKey(c.req.raw.headers);
+      if (key === null) {
         throw invalidKeyError();
       }
 

@@ -86,8 +86,9 @@ function defineTenantResolvers(
  * itself with one patch. Keep the array literal here, and never omit it, even though no
  * resolver ships by default.
  *
- * `api-keys` adds `apiKeyTenant` to it. Order is precedence: the first resolver whose
- * `claims` returns true owns the request, and the session path never runs for it.
+ * `api-keys-organization` adds `apiKeyTenant` to it. Order is precedence: the first
+ * resolver whose `claims` returns true owns the request, and the session path never runs
+ * for it.
  */
 export const tenantResolvers = defineTenantResolvers({
   resolvers: [],

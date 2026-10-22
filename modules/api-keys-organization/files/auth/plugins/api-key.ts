@@ -11,22 +11,30 @@ import type { AuthDbBindings } from "../db-provider";
 import { can } from "../permission-rules";
 import { loadStatements } from "../statements";
 import type { AuthRequestContext } from "../server";
+import {
+  API_KEY_OPTIONS,
+  GUARDED_PATHS,
+  field,
+  scopeOf,
+} from "./api-key-options";
 
 // Organization-owned API keys, in two plugins.
 //
 // `apiKeyPlugin()` is `@better-auth/api-key` with this project's options fixed in one
-// place, so the descriptor's `plugin-array` patch only has to append a zero-argument
-// call. `apiKeyScopeGuard()` is the rule the plugin has no option for: a key may not be
-// issued with more permission than the member issuing it holds.
+// place, so the core's `plugin-array` patch only has to append a zero-argument call. The
+// options both owners share come from `./api-key-options.ts`, which `api-keys` ships.
+// `apiKeyScopeGuard()` is the rule the plugin has no option for: a key may not be issued
+// with more permission than the member issuing it holds.
 //
 // Both go into `auth.plugins`, and the order in the array is the order they were patched
 // in. It does not matter here: the guard matches on a path, and the plugin owns that
 // path whichever way round they sit.
 
 /**
- * The API-key plugin, configured.
+ * The API-key plugin, configured for organization-owned keys.
  *
- * Every option below is a decision, not a default worth restating:
+ * The options every owner shares live in `./api-key-options.ts`, each with its reason.
+ * This owner adds the three that make a key an organization's:
  *
  * - `references: "organization"` makes `referenceId` an organization id, so a key is
  *   owned by an organization and never by a user. The plugin then checks the caller's
@@ -41,126 +49,21 @@ import type { AuthRequestContext } from "../server";
  *   resolves to the `apiKeys` export, stored as the `api_keys` table. Without it the
  *   adapter appends `s` to the plugin's own model name `apikey` and asks for `apikeys`,
  *   which is not a word and not an export.
- * - `enableSessionForAPIKeys: false`. The plugin's mocked session carries no
- *   `activeOrganizationId`, so it would resolve to no tenant at all. The bearer resolver
- *   in `../resolvers/api-key.ts` turns a verified key into a `Tenant` instead, and that
- *   is the one path a machine caller takes.
- * - `rateLimit.enabled: false`, and with it `remaining` and the refill columns unused.
- *   Limits belong to the `ratelimit` module, not to one credential type.
- * - `keyExpiration.defaultExpiresIn: null`. A key with no expiry stays valid until it is
- *   revoked, which is what an operator issuing one for a deploy pipeline expects. An
- *   expiry is offered on the create form and it is theirs to set.
- * - `requireName: true`. A key list of eight unnamed rows is a key list nobody dares
- *   revoke from.
- * - `defaultPrefix: "sk_"` and `startingCharactersConfig.charactersLength: 8`, so the
- *   screen shows `sk_a1b2c` and a reader can tell two keys apart without holding either.
- * - `enableMetadata: true` and `permissions.defaultPermissions`, together, are how a
- *   scope reaches the row from a browser at all. `@better-auth/api-key` 1.7.2 refuses
- *   `permissions` on any request that carries a `Request` or headers — it throws
- *   `SERVER_ONLY_PROPERTY` (`dist/index.mjs`, the `isClientRequest` check on
- *   `/api-key/create`), because the plugin has no idea whether the caller is allowed to
- *   ask for that scope. This project does know: `apiKeyScopeGuard()` below is exactly
- *   that check. So the screen sends the requested scope as `metadata.scope`, which is not
- *   a server-only field, the guard validates it against the creator's own statements, and
- *   `defaultPermissions` reads it back off the body and writes it to the `permissions`
- *   column. Nothing is stripped and nothing is smuggled: the scope travels on a field the
- *   plugin lets a client set, and it is only applied after the guard has passed it.
  *
- *   `metadata.scope` is a request-time transport, and its stored value is not
- *   authoritative. The plugin does persist it: it defaults `metadata` to `null` and then
- *   copies the body's value over that default before the adapter `create`, and
- *   `/api-key/update` overwrites the column whenever `enableMetadata` is on. So a created
- *   key holds two copies of its scope, and only `permissions` decides anything —
- *   `apiKeyTenant` in `../resolvers/api-key.ts` reads `verified.permissions`, `can()`
- *   reads what that resolver returns, and the `/api-keys` screen renders
- *   `row.permissions`.
- *   `defaultPermissions` runs on create only, so a `metadata.scope` written later never
- *   reaches `permissions` and the two copies drift apart with no effect on authorization.
- *   Read `permissions`. Never read `metadata.scope` off a stored row.
- *
- * `deferUpdates` stays off. It needs `advanced.backgroundTasks.handler`, and there is no
- * `waitUntil` behind that hook on Workers, so the `lastRequest` write stays synchronous.
- * One write per bearer call, accepted by decision.
+ * The bearer resolver in `../resolvers/api-key.ts` turns a verified key into a `Tenant`,
+ * and `apiKeyScopeGuard()` below is the check that lets `metadata.scope` through.
  */
 export function apiKeyPlugin() {
   return apiKey({
-    defaultPrefix: "sk_",
-    enableMetadata: true,
-    enableSessionForAPIKeys: false,
-    keyExpiration: { defaultExpiresIn: null },
-    permissions: {
-      // An empty map when the body asks for nothing. The option's type has no `undefined`
-      // arm, and `{}` is the same answer said in the type's own vocabulary: a key that
-      // holds no statement, which `can()` denies for every pair.
-      defaultPermissions: (_referenceId, ctx) => scopeOf(ctx.body) ?? {},
-    },
-    rateLimit: { enabled: false },
+    ...API_KEY_OPTIONS,
     references: "organization",
-    requireName: true,
     schema: {
       apikey: {
         modelName: "apiKey",
         fields: { referenceId: "organizationId" },
       },
     },
-    startingCharactersConfig: { charactersLength: 8 },
   });
-}
-
-/**
- * The one endpoint that writes a key's scope.
- *
- * `/api-key/update` is deliberately not here, and adding it would be reachable code that
- * protects nothing. `permissions` on update is a server-only property, so a request
- * carrying headers is refused by the plugin before any scope lands, and a server-side call
- * carrying none has no session for the guard to read. `defaultPermissions` runs on create
- * only, so a `metadata.scope` sent to update never reaches the `permissions` column
- * either. A guard there would also read the wrong organization: the update body has no
- * `organizationId` field, so it would fall back to the caller's active organization rather
- * than the key's. A scope is a snapshot at issue time — revoke and re-issue (ADR 0036).
- *
- * `get`, `list` and `delete` write no scope.
- */
-const GUARDED_PATHS = new Set(["/api-key/create"]);
-
-/** Read one property off an unknown body without asserting the whole shape. */
-function field(source: unknown, name: string): unknown {
-  return typeof source === "object" && source !== null
-    ? (source as Record<string, unknown>)[name]
-    : undefined;
-}
-
-/**
- * The requested scope, or `null` when the body asks for none.
- *
- * Two places carry it, and they are read in that order. `permissions` is the plugin's own
- * field, which only a server-side `auth.api.createApiKey` call may set. `metadata.scope`
- * is the browser's channel, described on `apiKeyPlugin` above. A request never sets both,
- * because the one that can set `permissions` has no reason to go the long way round.
- *
- * `null` means "do not check": create with no scope mints a key holding nothing, and
- * update with `permissions: null` clears one. Neither can exceed anything. A value that is
- * not a permission map falls through to the plugin's own validation.
- */
-function scopeOf(body: unknown): Record<string, string[]> | null {
-  const permissions =
-    field(body, "permissions") ?? field(field(body, "metadata"), "scope");
-  if (
-    typeof permissions !== "object" ||
-    permissions === null ||
-    Array.isArray(permissions)
-  ) {
-    return null;
-  }
-  const scope: Record<string, string[]> = {};
-  for (const [resource, actions] of Object.entries(permissions)) {
-    if (Array.isArray(actions)) {
-      scope[resource] = actions.filter(
-        (action): action is string => typeof action === "string"
-      );
-    }
-  }
-  return Object.keys(scope).length > 0 ? scope : null;
 }
 
 /**

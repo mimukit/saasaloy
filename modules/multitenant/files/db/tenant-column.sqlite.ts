@@ -10,9 +10,9 @@ import { organizations } from "./schema/teams";
 // organization declares `organizationId: text("organization_id").notNull().references(()
 // => organizations.id)` plus one index on that column. `members`, `invitations` and
 // `organization_roles` from `teams` were hand-written that way before this helper existed,
-// and `api_keys` from `api-keys` gets there through the plugin's own field rename. The two
-// functions below are the same declaration, written once, for every table a project adds
-// afterwards.
+// and `api_keys` from `api-keys-organization` gets there through the plugin's own field
+// rename. The two functions below are the same declaration, written once, for every table
+// a project adds afterwards.
 //
 // `forTenant` in `./tenant.ts` accepts a table only when it carries this column, so a
 // table that skips the convention cannot be read through the guard at all. That is the

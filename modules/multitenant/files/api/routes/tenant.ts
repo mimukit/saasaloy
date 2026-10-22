@@ -10,8 +10,8 @@ import { Hono } from "hono";
 //
 // It is also the debugging entry point. A `curl` here answers "which organization does
 // the server think I am in, and what may I do there" in one call, on the cookie path and
-// on the bearer path alike, which is why `api-keys` resolves through the same helper
-// rather than adding a second route.
+// on the bearer path alike, which is why `api-keys-organization` resolves through the
+// same helper rather than adding a second route.
 //
 // Route module contract, from `modules/admin/files/api/routes/admin-users.ts`: a NAMED
 // export built as ONE chained expression, or the exported type forgets the route and it

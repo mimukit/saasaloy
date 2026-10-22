@@ -63,7 +63,10 @@ export interface MemberPrincipal {
   readonly statements: ResolvedStatements;
 }
 
-/** A machine caller holding an organization-owned API key. Filled by `api-keys`. */
+/**
+ * A machine caller holding an organization-owned API key. Filled by
+ * `api-keys-organization`.
+ */
 export interface ApiKeyPrincipal {
   readonly kind: "apiKey";
   readonly keyId: string;
@@ -100,8 +103,8 @@ export interface HeaderReader {
 }
 
 /**
- * A credential a module teaches this project to authenticate. `api-keys` registers one
- * for `Authorization: Bearer`.
+ * A credential a module teaches this project to authenticate. `api-keys-organization`
+ * registers one for `Authorization: Bearer`.
  *
  * `claims` is a cheap, synchronous look at the headers, and it answers "is this my
  * credential", not "is it valid". Returning `true` takes the request off the session

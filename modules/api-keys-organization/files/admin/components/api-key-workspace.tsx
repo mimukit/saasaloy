@@ -269,7 +269,7 @@ export function ApiKeyWorkspace({
         // request that carries headers, so a browser cannot set it at all; the scope
         // travels here instead, `apiKeyScopeGuard()` checks it against this caller's own
         // statements, and the plugin's `defaultPermissions` writes it to the column. See
-        // the long note on `apiKeyPlugin` in `@auth/plugins/api-key.ts`.
+        // the long note on `API_KEY_OPTIONS` in `@auth/plugins/api-key-options.ts`.
         ...(Object.keys(scope).length > 0 ? { metadata: { scope } } : {}),
       });
       if (result.error) {
