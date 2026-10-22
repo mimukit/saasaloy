@@ -28,6 +28,14 @@ A module that scaffolds an app or package **and** establishes convention-based e
 ### Feature module
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
 
+### `shell`
+The capability that owns the app frame every signed-in app renders: layout, nav, user menu and theme toggle, under `@repo/ui/*/shell`. It holds no auth logic, so each app keeps its own guard ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
+_Avoid: admin shell, layout._
+
+### `app` module
+The capability at `apps/app` that holds every screen a signed-in end user sees: the product UI home. It renders the `shell` and the `auth` sign-in blocks, and guards on the session, where `admin` guards on the role. `web` keeps only public pages ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
+_Avoid: customer panel, dashboard, portal._
+
 ### Team
 The product word for the `teams` feature module, which adds Better Auth organizations, members, invitations, and active-organization switching. It does not mean Better Auth's nested teams-within-an-organization sub-feature. That sub-feature stays disabled, so the module adds no `team` or `teamMember` table.
 _Avoid: using team to mean an organization subdivision unless the nested plugin feature is enabled later._
@@ -251,6 +259,22 @@ The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file,
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
+
+### Product brief
+`docs/product-brief.md` in a generated project: what the product is, for whom, and in which language, written once through the attended `saasaloy-setup` interview. Every other skill reads it instead of asking the owner again, and an unattended run requires a complete one.
+_Avoid: PRD, spec._
+
+### Unattended run
+A build in which an agent works from a complete product brief that carries `autonomy: afk` in its frontmatter, and asks no question after it starts. It commits once per stage on `build/mvp`, never pushes, and records what it could not do in the build log ([ADR 0046](docs/adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) is the CLI half).
+_Avoid: AFK mode, autopilot. `afk` is only the field value._
+
+### Build log
+`docs/build-log.md` in a generated project: each stage of an unattended run with its commit, each step left for a human under "Blocked", and the point where a new session resumes.
+_Avoid: progress file, stop report._
+
+### MVP bar
+The fixed list of checks an unattended run must pass to count as a finished local MVP, scored by the agent benchmark (`scripts/agent-bench.ts`). Plan 0074 defines the list.
+_Avoid: done criteria._
 
 ## Key-value, limits & flags
 
