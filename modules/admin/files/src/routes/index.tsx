@@ -1,15 +1,29 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
-import { createFileRoute } from "@tanstack/react-router";
+import { Link, createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 import { RefreshCwIcon } from "lucide-react";
+import { useMemo } from "react";
 
-import { Button } from "@repo/ui/components/button";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button, buttonVariants } from "@repo/ui/components/admin/button";
+import {
+  Card,
+  CardAction,
+  CardDescription,
+  CardHeader,
+  CardPanel,
+  CardTitle,
+} from "@repo/ui/components/admin/card";
+import { PageBody } from "@repo/ui/containers/admin/page-body";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { errors } from "@repo/ui/content/errors";
 
-import { AttributeList } from "@admin/components/attribute-list";
-import { PageHeader } from "@admin/components/page-header";
-import { PageLayout } from "@admin/components/page-layout";
-import { StatusPill } from "@admin/components/status-pill";
 import { api } from "@admin/lib/api";
+import { initialsOf } from "@admin/lib/initials";
+import { usersQuery } from "@admin/lib/users-query";
 
 // The convention every admin screen follows, written once here so a feature module can
 // copy it: describe the request as `queryOptions(...)`, prefetch it in the route's
@@ -35,131 +49,191 @@ const healthQuery = queryOptions({
   },
 });
 
-// The dashboard at `/`. `createFileRoute("/")` is generated from this file's path under
-// src/routes/ — the router plugin writes the id, so never rename the call by hand.
+// The dashboard at `/`: the api's health, the user count, and the five newest sign-ups.
+// Both requests are ones the app already makes — `GET /health` and `GET /admin/users` —
+// so the overview adds no api route. `createFileRoute("/")` is generated from this file's
+// path under src/routes/; the router plugin writes the id, so never rename it by hand.
 //
-// `ensureQueryData` in the loader means the request starts while the route is still
-// resolving, and `defaultPreload: "intent"` starts it on hover. By the time the component
-// mounts the cache is warm, so `useQuery` below returns data on its first render instead
-// of flashing a spinner. A cached, unexpired entry short-circuits the fetch entirely.
+// `ensureQueryData` in the loader means both requests start while the route is still
+// resolving, and `defaultPreload: "intent"` starts them on hover. By the time the
+// component mounts the cache is warm, so `useQuery` below returns data on its first
+// render instead of flashing a skeleton. A cached, unexpired entry skips the fetch.
 export const Route = createFileRoute("/")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(healthQuery),
+  loader: ({ context }) =>
+    Promise.all([
+      context.queryClient.ensureQueryData(healthQuery),
+      context.queryClient.ensureQueryData(usersQuery),
+    ]),
   component: Dashboard,
   errorComponent: DashboardError,
 });
 
+/** How many sign-ups the overview lists. */
+const NEWEST_COUNT = 5;
+
 function Dashboard() {
   const queryClient = useQueryClient();
-  // The loader already resolved this, so `data` is present on the first render. The hook
-  // is still what the component reads, because it subscribes: an invalidation anywhere in
-  // the app re-renders this screen, which a value returned from the loader would not.
-  const { data, isFetching, dataUpdatedAt } = useQuery(healthQuery);
+  // The loader already resolved both, so `data` is present on the first render. The hooks
+  // are still what the component reads, because they subscribe: an invalidation anywhere
+  // in the app re-renders this screen, which a value returned from the loader would not.
+  const health = useQuery(healthQuery);
+  const users = useQuery(usersQuery);
 
-  const status = data?.status;
+  // The api returns at most 100 users and promises no order, so the newest five are
+  // picked here. With more than 100 accounts the list is the newest of the first page.
+  const newest = useMemo(
+    () =>
+      (users.data?.users ?? [])
+        .toSorted(
+          (left, right) =>
+            new Date(right.createdAt).getTime() -
+            new Date(left.createdAt).getTime()
+        )
+        .slice(0, NEWEST_COUNT),
+    [users.data]
+  );
+
+  const status = health.data?.status;
+  const refreshing = health.isFetching || users.isFetching;
 
   return (
     // No `detail` prop here: the overview has nothing to select, so PageLayout renders a
-    // single column and no side panel. /users is the screen that passes one.
+    // single column. /users is the screen that passes one.
     <PageLayout>
       <PageHeader
         title="Overview"
-        description="Live data from the api Worker."
         actions={
           <Button
             variant="outline"
             size="sm"
-            disabled={isFetching}
-            // Invalidation, not `refetch()`: marking the key stale refreshes every screen
-            // holding this query, and it is the same call a mutation's `onSuccess` makes.
+            loading={refreshing}
+            // Invalidation, not `refetch()`: marking the keys stale refreshes every screen
+            // holding these queries, and it is the same call a mutation's `onSuccess` makes.
             onClick={() =>
-              queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })
+              Promise.all([
+                queryClient.invalidateQueries({
+                  queryKey: healthQuery.queryKey,
+                }),
+                queryClient.invalidateQueries({
+                  queryKey: usersQuery.queryKey,
+                }),
+              ])
             }
           >
-            <RefreshCwIcon data-icon="inline-start" />
-            {isFetching ? "Refreshing…" : "Refresh"}
+            <RefreshCwIcon />
+            Refresh
           </Button>
         }
       />
 
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <section
-          aria-labelledby="api-health"
-          className="border-border max-w-2xl rounded-xl border p-4"
-        >
-          <div className="mb-3 flex items-center gap-2">
-            <h2 id="api-health" className="text-sm font-medium">
-              Api health
-            </h2>
-            {/* The one live value on this screen, so it gets the pill rather than a row
-                of plain text. `open` is the muted blue the reference reserves for a
-                healthy state; anything other than "ok" falls back to neutral. */}
-            <StatusPill
-              label={status ?? "unknown"}
-              tone={status === "ok" ? "open" : "neutral"}
-            />
-          </div>
+      <PageBody>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Card>
+            <CardHeader>
+              <CardDescription>API health</CardDescription>
+              <CardTitle className="flex flex-wrap items-center gap-2">
+                {/* "ok" is the one healthy answer; anything else is worth a second look,
+                    so it takes the warning badge rather than a quiet neutral one. */}
+                {status === "ok" ? (
+                  <Badge variant="success">Healthy</Badge>
+                ) : (
+                  <Badge variant="warning">{status ?? "Unknown"}</Badge>
+                )}
+                <span className="text-muted-foreground text-sm font-normal">
+                  {health.dataUpdatedAt === 0
+                    ? null
+                    : `Checked ${new Date(health.dataUpdatedAt).toLocaleTimeString()}`}
+                </span>
+              </CardTitle>
+            </CardHeader>
+            <CardPanel className="text-muted-foreground pt-0 text-xs">
+              <code className="font-mono">GET /health</code>, typed by the route
+              file in apps/api through <code className="font-mono">hc</code>.
+            </CardPanel>
+          </Card>
 
-          {/* The same label/value rows the detail panel uses, so the two screens read as
-              one system and neither invents its own field layout. */}
-          <AttributeList
-            items={[
-              {
-                label: "Endpoint",
-                value: <code className="font-mono text-xs">GET /health</code>,
-              },
-              {
-                label: "Client",
-                value: (
-                  <code className="font-mono text-xs">hc&lt;AppType&gt;</code>
-                ),
-              },
-              { label: "Status", value: status },
-              {
-                label: "Checked",
-                value:
-                  dataUpdatedAt === 0
-                    ? undefined
-                    : new Date(dataUpdatedAt).toLocaleTimeString(),
-              },
-            ]}
-          />
+          <Card>
+            <CardHeader>
+              <CardDescription>Users</CardDescription>
+              <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums">
+                {users.data?.total.toLocaleString() ?? "—"}
+              </CardTitle>
+            </CardHeader>
+            <CardPanel className="text-muted-foreground pt-0 text-xs">
+              Every account in this project.
+            </CardPanel>
+          </Card>
+        </div>
 
-          <p className="text-muted-foreground mt-3 text-sm">
-            The response is typed by the route file in apps/api, so a schema
-            change there fails this app&#39;s typecheck.
-          </p>
-        </section>
-      </div>
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-sm">Newest sign-ups</CardTitle>
+            <CardAction>
+              <Link
+                to="/users"
+                className={buttonVariants({ variant: "ghost", size: "sm" })}
+              >
+                View all
+              </Link>
+            </CardAction>
+          </CardHeader>
+          <CardPanel className="px-0 pt-0 pb-2">
+            {newest.length === 0 ? (
+              <p className="text-muted-foreground px-6 py-4 text-sm">
+                Nobody has signed up yet.
+              </p>
+            ) : (
+              <ul className="divide-border divide-y">
+                {newest.map((user) => (
+                  <li
+                    key={user.id}
+                    className="flex items-center gap-3 px-6 py-2.5"
+                  >
+                    <Avatar className="size-7">
+                      <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
+                    </Avatar>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium">
+                        {user.name}
+                      </p>
+                      <p className="text-muted-foreground truncate text-xs">
+                        {user.email}
+                      </p>
+                    </div>
+                    <time
+                      dateTime={user.createdAt}
+                      className="text-muted-foreground shrink-0 text-xs tabular-nums"
+                    >
+                      {new Date(user.createdAt).toLocaleDateString()}
+                    </time>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </CardPanel>
+        </Card>
+      </PageBody>
     </PageLayout>
   );
 }
 
 // A down api is the ordinary case in dev, not an exception worth a blank screen. The
-// route's `errorComponent` catches the loader's throw and the query's, and the reset
-// button re-runs the loader.
+// route's `errorComponent` catches the loader's throw, and the retry re-runs the loader.
 function DashboardError({ error, reset }: ErrorComponentProps) {
   return (
     <PageLayout>
-      <PageHeader
-        title="Overview"
-        description="The api did not answer."
-        actions={
-          <Button variant="outline" size="sm" onClick={reset}>
-            <RefreshCwIcon data-icon="inline-start" />
-            Try again
-          </Button>
-        }
+      <PageHeader title="Overview" />
+      <ErrorState
+        code={errors.renderFailure.code}
+        title="The api did not answer"
+        description="Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev)."
+        detail={error instanceof Error ? error.message : undefined}
+        primaryAction={{
+          label: errors.renderFailure.retryLabel,
+          onClick: reset,
+        }}
+        secondaryAction={null}
       />
-
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div
-          role="alert"
-          className="border-border text-muted-foreground max-w-2xl rounded-xl border p-4 text-sm"
-        >
-          {error.message} Check that apps/api is running on the origin
-          PUBLIC_API_URL names (http://localhost:4000 in dev).
-        </div>
-      </div>
     </PageLayout>
   );
 }

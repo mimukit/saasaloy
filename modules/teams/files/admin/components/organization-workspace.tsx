@@ -5,21 +5,33 @@ import {
   useQueryClient,
 } from "@tanstack/react-query";
 import { useState } from "react";
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode, SubmitEvent } from "react";
 
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+  AlertDialog,
+  AlertDialogClose,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogPopup,
+  AlertDialogTitle,
+} from "@repo/ui/components/admin/alert-dialog";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button } from "@repo/ui/components/admin/button";
+import { Field, FieldLabel } from "@repo/ui/components/admin/field";
+import { Input } from "@repo/ui/components/admin/input";
+import { Skeleton } from "@repo/ui/components/admin/skeleton";
+import { toastManager } from "@repo/ui/components/admin/toast";
 
 import { auth } from "@admin/lib/auth";
+
+// The members and invitations of the active organization. It renders in the actions
+// slot of that organization's detail panel on /teams, so it is sized for a narrow column:
+// stacked lists and a one-field invite form, no tables.
+//
+// Removing a member and revoking an invitation each confirm in an AlertDialog. The id
+// waiting on the confirm is the dialog's open state, so there is no second boolean to
+// keep in step. Every mutation reports its result as a toast.
 
 interface OrganizationSummary {
   id: string;
@@ -37,6 +49,16 @@ function renderCollectionState(
     return loading;
   }
   return hasItems ? items : empty;
+}
+
+/** Two placeholder rows while a list loads, in the shape of the rows that replace them. */
+function ListSkeleton({ label }: { label: string }) {
+  return (
+    <div className="grid gap-2" role="status" aria-label={label}>
+      <Skeleton className="h-10 w-full" />
+      <Skeleton className="h-10 w-full" />
+    </div>
+  );
 }
 
 export function OrganizationWorkspace({
@@ -97,11 +119,23 @@ export function OrganizationWorkspace({
       return result.data;
     },
     onSuccess: async (invitation) => {
+      toastManager.add({
+        type: "success",
+        title: "Invitation issued",
+        description: `Copy the Invitation ID for ${email}.`,
+      });
       setEmail("");
       setInvitationId(invitation?.id ?? null);
       setCopyStatus("");
       await queryClient.invalidateQueries({
         queryKey: invitationsQuery.queryKey,
+      });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The invitation was not issued",
+        description: error.message,
       });
     },
   });
@@ -117,8 +151,16 @@ export function OrganizationWorkspace({
       }
     },
     onSuccess: async () => {
+      toastManager.add({ type: "success", title: "Member removed" });
       setMemberToRemove(null);
       await queryClient.invalidateQueries({ queryKey: membersQuery.queryKey });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The member was not removed",
+        description: error.message,
+      });
     },
   });
 
@@ -132,14 +174,22 @@ export function OrganizationWorkspace({
       }
     },
     onSuccess: async () => {
+      toastManager.add({ type: "success", title: "Invitation revoked" });
       setInvitationToRevoke(null);
       await queryClient.invalidateQueries({
         queryKey: invitationsQuery.queryKey,
       });
     },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The invitation was not revoked",
+        description: error.message,
+      });
+    },
   });
 
-  const handleInvite = (event: FormEvent<HTMLFormElement>) => {
+  const handleInvite = (event: SubmitEvent<HTMLFormElement>) => {
     event.preventDefault();
     inviteMember.mutate();
   };
@@ -153,226 +203,256 @@ export function OrganizationWorkspace({
     }
   };
 
-  const error =
-    members.error ??
-    invitations.error ??
-    removeMember.error ??
-    revokeInvitation.error;
+  // A list that did not load is not a mutation result, so it stays inline rather than
+  // raising a toast. The mutations above report their own failures.
+  const loadError = members.error ?? invitations.error;
+
+  const memberPendingRemoval = members.data?.find(
+    (member) => member.id === memberToRemove
+  );
+  const invitationPendingRevoke = pendingInvitations?.find(
+    (invitation) => invitation.id === invitationToRevoke
+  );
 
   return (
     <div className="grid gap-6">
-      <Card>
-        <CardHeader>
-          <CardTitle>Members</CardTitle>
-          <CardDescription>
+      <section className="grid gap-3" aria-labelledby="organization-members">
+        <div>
+          <h3 id="organization-members" className="text-sm font-medium">
+            Members
+          </h3>
+          <p className="text-muted-foreground text-xs">
             People in {organization.name} and their organization role.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          {renderCollectionState(
-            members.isPending,
-            Boolean(members.data?.length),
-            <p className="text-muted-foreground text-sm" role="status">
-              Loading members…
-            </p>,
-            <div className="divide-border divide-y">
-              {members.data?.map((member) => (
-                <div
-                  key={member.id}
-                  className="flex min-h-12 items-center justify-between gap-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {member.user.name || member.user.email}
-                    </p>
-                    <p className="text-muted-foreground truncate text-xs">
-                      {member.user.email}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{member.role}</Badge>
-                    {memberToRemove === member.id ? (
-                      <>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="min-h-11 md:min-h-7"
-                          disabled={removeMember.isPending}
-                          onClick={() => removeMember.mutate(member.id)}
-                        >
-                          Confirm removal
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-11 md:min-h-7"
-                          disabled={removeMember.isPending}
-                          onClick={() => setMemberToRemove(null)}
-                        >
-                          Keep member
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="min-h-11 md:min-h-7"
-                        onClick={() => setMemberToRemove(member.id)}
-                      >
-                        Remove
-                      </Button>
-                    )}
-                  </div>
-                </div>
-              ))}
-            </div>,
-            <p className="text-muted-foreground text-sm">
-              This organization has no members.
-            </p>
-          )}
-        </CardContent>
-      </Card>
+          </p>
+        </div>
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Invitations</CardTitle>
-          <CardDescription>
+        {renderCollectionState(
+          members.isPending,
+          Boolean(members.data?.length),
+          <ListSkeleton label="Loading members" />,
+          <div className="divide-border divide-y">
+            {members.data?.map((member) => (
+              <div
+                key={member.id}
+                className="flex min-h-12 items-center justify-between gap-3 py-2"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {member.user.name || member.user.email}
+                  </p>
+                  <p className="text-muted-foreground truncate text-xs">
+                    {member.user.email}
+                  </p>
+                </div>
+                <div className="flex shrink-0 items-center gap-2">
+                  <Badge variant="outline">{member.role}</Badge>
+                  <Button
+                    variant="destructive-outline"
+                    size="sm"
+                    onClick={() => {
+                      setMemberToRemove(member.id);
+                    }}
+                  >
+                    Remove
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>,
+          <p className="text-muted-foreground text-sm">
+            This organization has no members.
+          </p>
+        )}
+      </section>
+
+      <section
+        className="grid gap-3"
+        aria-labelledby="organization-invitations"
+      >
+        <div>
+          <h3 id="organization-invitations" className="text-sm font-medium">
+            Invitations
+          </h3>
+          <p className="text-muted-foreground text-xs">
             Invite a member and copy the returned Invitation ID.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="grid gap-5">
-          <form
-            className="flex flex-col gap-3 sm:flex-row sm:items-end"
-            onSubmit={handleInvite}
+          </p>
+        </div>
+
+        <form className="flex items-end gap-2" onSubmit={handleInvite}>
+          <Field className="min-w-0 flex-1">
+            <FieldLabel>Email</FieldLabel>
+            <Input
+              type="email"
+              value={email}
+              required
+              autoComplete="email"
+              onChange={(event) => {
+                setEmail(event.target.value);
+              }}
+            />
+          </Field>
+          <Button
+            type="submit"
+            loading={inviteMember.isPending}
+            disabled={!email}
           >
-            <div className="grid flex-1 gap-2">
-              <Label htmlFor="invitation-email">Email</Label>
-              <Input
-                id="invitation-email"
-                className="min-h-11 md:min-h-8"
-                type="email"
-                value={email}
-                required
-                autoComplete="email"
-                onChange={(event) => setEmail(event.target.value)}
-              />
+            Invite
+          </Button>
+        </form>
+
+        {invitationId === null ? null : (
+          <div className="bg-muted grid gap-3 rounded-lg p-3">
+            <div>
+              <p className="text-sm font-medium">Invitation ID</p>
+              <code className="mt-1 block font-mono text-xs break-all">
+                {invitationId}
+              </code>
             </div>
             <Button
-              type="submit"
-              className="min-h-11 md:min-h-8"
-              disabled={!email || inviteMember.isPending}
+              variant="outline"
+              size="sm"
+              className="justify-self-start"
+              onClick={() => {
+                void copyInvitationId(invitationId);
+              }}
             >
-              {inviteMember.isPending
-                ? "Issuing invitation…"
-                : "Issue invitation"}
+              Copy invitation ID
             </Button>
-          </form>
-
-          {inviteMember.error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {inviteMember.error.message}
+            <p className="text-muted-foreground text-xs">
+              A signed-in recipient application accepts it with{" "}
+              <code className="font-mono">
+                auth.organization.acceptInvitation({"{ invitationId }"})
+              </code>
+              .
             </p>
-          ) : null}
+            <p className="text-muted-foreground text-xs" aria-live="polite">
+              {copyStatus}
+            </p>
+          </div>
+        )}
 
-          {invitationId ? (
-            <div className="bg-muted grid gap-3 rounded-lg p-3">
-              <div>
-                <p className="text-sm font-medium">Invitation ID</p>
-                <code className="mt-1 block font-mono text-xs break-all">
-                  {invitationId}
-                </code>
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                className="min-h-11 justify-self-start md:min-h-7"
-                onClick={async () => {
-                  await copyInvitationId(invitationId);
-                }}
+        {renderCollectionState(
+          invitations.isPending,
+          Boolean(pendingInvitations?.length),
+          <ListSkeleton label="Loading invitations" />,
+          <div className="divide-border divide-y">
+            {pendingInvitations?.map((invitation) => (
+              <div
+                key={invitation.id}
+                className="flex min-h-12 items-center justify-between gap-3 py-2"
               >
-                Copy invitation ID
-              </Button>
-              <p className="text-muted-foreground text-xs">
-                A signed-in recipient application accepts it with{" "}
-                <code className="font-mono">
-                  auth.organization.acceptInvitation({"{ invitationId }"})
-                </code>
-                .
-              </p>
-              <p className="text-muted-foreground text-xs" aria-live="polite">
-                {copyStatus}
-              </p>
-            </div>
-          ) : null}
-
-          {renderCollectionState(
-            invitations.isPending,
-            Boolean(pendingInvitations?.length),
-            <p className="text-muted-foreground text-sm" role="status">
-              Loading invitations…
-            </p>,
-            <div className="divide-border divide-y">
-              {pendingInvitations?.map((invitation) => (
-                <div
-                  key={invitation.id}
-                  className="flex min-h-12 items-center justify-between gap-3 py-2"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-sm font-medium">
-                      {invitation.email}
-                    </p>
-                    <p className="text-muted-foreground text-xs">
-                      {invitation.role} · {invitation.status}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    {invitationToRevoke === invitation.id ? (
-                      <>
-                        <Button
-                          variant="destructive"
-                          size="sm"
-                          className="min-h-11 md:min-h-7"
-                          disabled={revokeInvitation.isPending}
-                          onClick={() => revokeInvitation.mutate(invitation.id)}
-                        >
-                          Confirm revoke
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="min-h-11 md:min-h-7"
-                          disabled={revokeInvitation.isPending}
-                          onClick={() => setInvitationToRevoke(null)}
-                        >
-                          Keep invitation
-                        </Button>
-                      </>
-                    ) : (
-                      <Button
-                        variant="destructive"
-                        size="sm"
-                        className="min-h-11 md:min-h-7"
-                        onClick={() => setInvitationToRevoke(invitation.id)}
-                      >
-                        Revoke
-                      </Button>
-                    )}
-                  </div>
+                <div className="min-w-0">
+                  <p className="truncate text-sm font-medium">
+                    {invitation.email}
+                  </p>
+                  <p className="text-muted-foreground text-xs">
+                    {invitation.role} · {invitation.status}
+                  </p>
                 </div>
-              ))}
-            </div>,
-            <p className="text-muted-foreground text-sm">
-              This organization has no pending invitations.
-            </p>
-          )}
+                <Button
+                  variant="destructive-outline"
+                  size="sm"
+                  className="shrink-0"
+                  onClick={() => {
+                    setInvitationToRevoke(invitation.id);
+                  }}
+                >
+                  Revoke
+                </Button>
+              </div>
+            ))}
+          </div>,
+          <p className="text-muted-foreground text-sm">
+            This organization has no pending invitations.
+          </p>
+        )}
+      </section>
 
-          {error ? (
-            <p className="text-destructive text-sm" role="alert">
-              {error.message}
-            </p>
-          ) : null}
-        </CardContent>
-      </Card>
+      {loadError ? (
+        <p className="text-destructive-foreground text-sm" role="alert">
+          {loadError.message}
+        </p>
+      ) : null}
+
+      {/* Closing the dialog any way but the confirm button clears the id, which is the
+          old "Keep member" path. A pending removal holds the dialog open. */}
+      <AlertDialog
+        open={memberToRemove !== null}
+        onOpenChange={(next) => {
+          if (!next && !removeMember.isPending) {
+            setMemberToRemove(null);
+          }
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Remove this member?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {memberPendingRemoval
+                ? `${memberPendingRemoval.user.name || memberPendingRemoval.user.email} loses access to ${organization.name}.`
+                : `The member loses access to ${organization.name}.`}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose
+              render={<Button variant="outline" />}
+              disabled={removeMember.isPending}
+            >
+              Keep member
+            </AlertDialogClose>
+            <Button
+              variant="destructive"
+              loading={removeMember.isPending}
+              onClick={() => {
+                if (memberToRemove !== null) {
+                  removeMember.mutate(memberToRemove);
+                }
+              }}
+            >
+              Remove member
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
+
+      <AlertDialog
+        open={invitationToRevoke !== null}
+        onOpenChange={(next) => {
+          if (!next && !revokeInvitation.isPending) {
+            setInvitationToRevoke(null);
+          }
+        }}
+      >
+        <AlertDialogPopup>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Revoke this invitation?</AlertDialogTitle>
+            <AlertDialogDescription>
+              {invitationPendingRevoke
+                ? `The invitation for ${invitationPendingRevoke.email} stops working.`
+                : "The invitation stops working."}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose
+              render={<Button variant="outline" />}
+              disabled={revokeInvitation.isPending}
+            >
+              Keep invitation
+            </AlertDialogClose>
+            <Button
+              variant="destructive"
+              loading={revokeInvitation.isPending}
+              onClick={() => {
+                if (invitationToRevoke !== null) {
+                  revokeInvitation.mutate(invitationToRevoke);
+                }
+              }}
+            >
+              Revoke invitation
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogPopup>
+      </AlertDialog>
     </div>
   );
 }

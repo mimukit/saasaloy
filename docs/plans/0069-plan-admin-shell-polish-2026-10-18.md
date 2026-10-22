@@ -82,7 +82,7 @@ Restructure first with no visual change, then apply the design on the new struct
 
 Done when: a fresh playground with admin builds both apps; a screenshot of web `/` and admin `/users` matches the pre-split build in both themes; `pnpm verify:preset` passes and leaves one `@theme inline` and one `@custom-variant dark` across `globals.css` and `web.css`; `pnpm deps:verify` and `pnpm lint` pass; and a `saasaloy update` on a playground made before the split creates `web.css` and lists `globals.css` in the merge plan.
 
-### Phase 2: mockup (#192)
+### Phase 2: mockup (#192) (built 2026-10-18)
 
 1. Build a throwaway HTML mockup on the current admin tokens and Inter, with the controls drawn in the coss ui style: the highlight edge, alpha borders, the coss control heights and focus rings. Show each screen in light and dark themes at a mobile and a desktop width.
 2. Cover these screens: the shell in two labelled variants, the current rail plus nav panel and an inset sidebar with icon collapse and a sticky top header in the shadcnuikit pattern, each with its content header and account menu; a list view (`/users`), a detail view (the users detail panel), a form (the teams create form), the overview at `/` with health, user count and newest sign-ups, and sign-in.
@@ -93,7 +93,19 @@ Done when: a fresh playground with admin builds both apps; a screenshot of web `
 
 Done when: the owner has picked a design for each screen, a shell shape, a palette treatment, a picker placement and a yes or no on the brand mark, and the picks are recorded under this phase.
 
-### Phase 3: move the admin components into `@repo/ui` (#192)
+#### Phase 2 picks (2026-10-18)
+
+The owner reviewed the mockup in the T3 thread on 2026-10-18 and picked:
+
+- **Shell shape:** Shell B. An inset sidebar holds the brand mark and product name, the organization picker, the grouped nav and the user menu at its foot. The sidebar collapses to a 56 px icon strip with a tooltip on each icon, and below `md` it opens as a sheet from a menu button. The content panel has a sticky header with the collapse toggle, the page path and the theme toggle (moved into the account menu on 2026-10-22, see below). The rail and the nav panel go. Phase 4 ports the coss sidebar.
+- **Palette treatment:** palette B. Borders and inputs are alpha over the canvas: white at 8 % and 10 % in dark, black at 8 % and 11 % in light. Each surface carries a 1 px highlight edge: an inset top line of white at 6 % in dark and a bottom line of black at 4 % in light. The measured neutral ramp stays for the canvas, the panel and the hover tone.
+- **Organization picker:** P1, at the top of the sidebar under the brand row and above the nav groups. Until #141 it renders an empty slot.
+- **Brand mark:** yes. A mark at the top of the sidebar, in the collapsed strip, in the mobile header and on the sign-in card.
+- **Screens:** the list, the detail panel, the teams create dialog, the overview, sign-in, the empty, loading and error states, and the primitive strip all pass as drawn. Controls are 32 px buttons and 30 px inputs with an 8 px radius and a 2 px focus ring. A detail panel opens as a bottom sheet below `md`. Menus, dialogs and toasts take the raised hover tone.
+
+After PR #204 opened, the owner moved the theme control on 2026-10-22. It is a "Theme" submenu in the account menu, with Light, Dark and System as radio items and a check on the current choice, and the header keeps only the sidebar toggle and the page path. The owner compared seven layouts in an HTML mock and picked the submenu because custom themes will be added later and each one becomes one more item in it. It brings back System as a choice in the admin app; the web app's toggle stays two-state. The owner asked for this change directly, so it took no new mockup round beyond that comparison.
+
+### Phase 3: move the admin components into `@repo/ui` (#192) (built 2026-10-18)
 
 1. Move `DataTable`, `DetailPanel`, `FilterChips`, `AttributeList` and `PageHeader` to `packages/ui/src/blocks/admin/`, `StatusPill` to `packages/ui/src/components/admin/`, and `PageLayout` to `packages/ui/src/containers/admin/`. The admin module's descriptor writes them.
 2. Split the shell. The rail, nav panel and shell layout move to `containers/admin/` as router-free components that take nav data, the current path and a link renderer. `apps/admin/src/components/app-shell.tsx` keeps the router and session wiring and passes them in.
@@ -102,6 +114,8 @@ Done when: the owner has picked a design for each screen, a shell shape, a palet
 5. Rewrite `containers/README.md` and the UI layer section of the base `AGENTS.md` for the seven-layer layout, `assets` included.
 
 Done when: `pnpm typecheck` passes in a playground with all five admin-contributing modules, `/users` looks unchanged, `rg "@admin/components/(data-table|detail-panel|page-layout|page-header|status-pill)"` finds nothing, and a `saasaloy update` dry run lists the moved files under the admin record.
+
+As built: the rail and the nav panel moved router-free into `containers/admin/` with structural nav types in `shell-nav.tsx`, and `AppShell` kept the router and the session. Phase 6 then replaced both with the sidebar shell in the same run, so `/users` looked unchanged only between the two phases, checked by diff rather than by eye. The users query moved to `src/lib/users-query.ts` because the overview reads it too.
 
 ### Phase 4: the admin primitive set (#192)
 
@@ -117,6 +131,8 @@ Done when: `pnpm typecheck` passes in a playground with all five admin-contribut
 
 Done when: `pnpm typecheck`, `pnpm lint` and the new render tests pass in a playground with all five admin-contributing modules; `pnpm lint` fails when an admin route imports `@repo/ui/components/button`; `components/admin/` holds the 37 ports, `StatusPill` and `NOTICE.md`, and `rg -i "coss" packages/ui/src/components/admin --glob '!NOTICE.md'` finds nothing; `git diff` on `apps/admin/package.json` and `packages/ui/package.json` adds no dependency beyond the Base UI bump; and a playground without the admin module has no `packages/ui/src/components/admin/` folder.
 
+As built: 39 ports, not 37. `toggle` came in because `toggle-group` imports it, and `sidebar` because Phase 2 picked Shell B. Two coss helpers landed in `lib/admin/`: `segmented-control.ts`, which `tabs` reads, and `use-media-query.ts`, rewritten onto Tailwind's own breakpoints so `max-md` agrees with every `md:` class. The ports were changed where this repo's lint rules or the plan required it: the sidebar no longer writes its open state to a cookie (stored nav state is a non-goal), its skeleton has a fixed width instead of `Math.random`, the table row hover and selected tones use the `accent` token, and a card's action stacks under its title below `sm`. The owner chose on 2026-10-18 to replace the automated keyboard render tests with browser checks and the QA plan, because the repo's `node --test` has no JSX transform and no DOM; #203 tracks a DOM test runner. The import guard also bans the base `error-state` and `theme-toggle` blocks, which have admin twins. `packages/ui/package.json` gained an `./assets/*` export for the brand mark.
+
 ### Phase 5: the page frame, the states and the module pages (#192)
 
 1. Add `containers/admin/page-frame.tsx` with the padding, the scroll area and the error boundary. Render it in `__root.tsx` around `<Outlet />`.
@@ -128,6 +144,8 @@ Done when: `pnpm typecheck`, `pnpm lint` and the new render tests pass in a play
 
 Done when: each of the five module pages shows the frame and `PageHeader` in the playground; `pnpm lint` passes with the import guard on every module page; a change to the frame's padding in one file changes all seven pages with no module file in the diff; and each list shows its empty state with no rows, the skeleton while its loader runs, and the admin `ErrorState` when the api answers 500.
 
+As built: the frame has no error boundary of its own. TanStack Router wraps each route in a boundary that catches render failures as well as loader throws, and `defaultErrorComponent` (`src/components/route-error.tsx`) renders inside the frame. `PageBody` joined `containers/admin/` as the padded body under a header. Mutation results moved from inline error text to toasts on every module page; field-level errors stayed inline. The teams workspace now opens in the detail panel of the active organization, the rbac page puts roles and members in two tabs, and a flag's on/off became a switch. The api-keys list was broken before this plan: `@better-auth/api-key` 1.7.7 answers `{ apiKeys, total }`, and the page now reads `apiKeys`. The frame render test moved to #203 with the keyboard tests.
+
 ### Phase 6: apply the design (#192)
 
 1. Refine the admin tokens in `admin.css` to the Phase 2 picks, in both themes, including the palette treatment (measured ramp or coss-style alpha borders).
@@ -138,7 +156,9 @@ Done when: each of the five module pages shows the frame and `PageHeader` in the
 
 Done when: in the playground, all seven pages and sign-in render in light and dark at 360 px and 1280 px with no horizontal overflow; the overview shows the user count and five sign-ups from a seeded database; and the picker slot renders in the shell.
 
-### Phase 7: the design documents, the skills and the QA plan (#192)
+As built: palette B keeps the measured canvas, panel and hover tones and swaps the hairline and input borders for alpha values; the sidebar takes the canvas tone. The brand mark is `assets/brand-mark.svg`, drawn through a CSS mask by `blocks/admin/brand-mark.tsx` so one file follows both themes. The picker slot is an empty `data-slot="organization-picker"` element at the top of the sidebar. A browser pass on 2026-10-18 found no page-level horizontal overflow on any of the seven pages at 360 px, after the card fix above.
+
+### Phase 7: the design documents, the skills and the QA plan (#192) (built 2026-10-18)
 
 1. Write `apps/admin/DESIGN.md` from the final `admin.css` values, with its fingerprint over `packages/ui/src/styles/admin.css`. The admin module ships it.
 2. Lint `apps/web/DESIGN.md` and `apps/admin/DESIGN.md` with the official linter.
@@ -149,6 +169,8 @@ Done when: in the playground, all seven pages and sign-in render in light and da
 7. File two follow-up issues: module-contributed overview cards, and `verify:a11y` over a seeded admin app after #178.
 
 Done when: both `DESIGN.md` files pass the official linter, a fresh playground's `AGENTS.md` names both design documents and the `@repo/ui` import paths for the admin primitives, the QA plan exists, and the two follow-up issues are filed.
+
+As built: `apps/admin/DESIGN.md` is an admin module scaffold file, not a base seed, so `saasaloy update` lists an edited copy in the merge plan. The follow-ups are #201 (module overview cards), #202 (an automated a11y check over a seeded admin app) and #203 (a DOM test runner for the admin primitives and the frame). The manual QA plan is `docs/qa/0060-qa-admin-shell-polish-2026-10-18.md`.
 
 ## Open questions
 

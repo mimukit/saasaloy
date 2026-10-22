@@ -16,7 +16,7 @@ description: Runbook for the feature-flags module — typed flags with per-tenan
 | `packages/db/src/schema/feature-flags.ts` | `feature_flags` and `feature_flag_overrides` |
 | `packages/db/src/repositories/feature-flags.ts` | every query those tables need |
 | `packages/validators/src/feature-flags.ts` | the write body schema, shared by the route and `hc` |
-| `packages/ui/src/blocks/feature-flags.tsx` + `apps/admin/src/routes/flags.tsx` | the Flags screen |
+| `packages/ui/src/blocks/admin/feature-flags.tsx` + `apps/admin/src/routes/flags.tsx` | the Flags screen |
 
 ## Where a value comes from
 

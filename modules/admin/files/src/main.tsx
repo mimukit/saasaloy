@@ -2,12 +2,16 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
+
+import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
 import {
   getStoredTheme,
   hasChosenTheme,
   installThemeToggle,
   setTheme,
 } from "@repo/ui/lib/theme";
+
+import { RouteError } from "@admin/components/route-error";
 
 import { routeTree } from "./routeTree.gen";
 // The one theme import for the whole SPA. admin.css lives in packages/ui beside web.css:
@@ -36,10 +40,16 @@ const queryClient = new QueryClient({
 // import. That is what makes the loader + Query pairing work: the loader fills the cache
 // before the component mounts, and the component's `useQuery` finds the data already
 // there, so the screen paints with data on the first frame.
+// Every route gets a loading state and an error state from here, so a module page that
+// writes neither still shows a skeleton while its loader runs and the error screen when
+// the api fails. Both render inside the page frame the root route wraps around <Outlet />.
+// A route overrides either one by setting its own `pendingComponent` or `errorComponent`.
 const router = createRouter({
   routeTree,
   context: { queryClient },
   defaultPreload: "intent",
+  defaultPendingComponent: PageSkeleton,
+  defaultErrorComponent: RouteError,
   scrollRestoration: true,
 });
 
@@ -79,12 +89,12 @@ function applyStartingTheme(): void {
 
 applyStartingTheme();
 
-// The toggle's behaviour, from @repo/ui rather than re-implemented here. The
-// `theme-toggle` block is deliberately inert chrome: its click handling lives in
-// THEME_INIT_SCRIPT, which only the Astro host inlines. This app cannot inline it — a
-// Vite index.html substitutes only `%VITE_*%` values — so it installs the same delegated
-// listener from the same module instead. Nothing else in the app changes the theme, and
-// the listener lives for the document's lifetime, so its remover is unused.
+// The theme's runtime behaviour, from @repo/ui rather than re-implemented here. The
+// account menu's Theme submenu sets the theme itself, but a visitor on `system` must still
+// follow the OS while the page is open, and that listener lives in THEME_INIT_SCRIPT,
+// which only the Astro host inlines. This app cannot inline it — a Vite index.html
+// substitutes only `%VITE_*%` values — so it installs the same listeners from the same
+// module instead. They live for the document's lifetime, so the remover is unused.
 installThemeToggle();
 
 const rootElement = document.querySelector("#root");

@@ -19,19 +19,19 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-} from "@repo/ui/components/table";
+} from "@repo/ui/components/admin/table";
 import { cn } from "@repo/ui/lib/utils";
 
-import { EMPTY, isEmptyValue } from "@admin/components/attribute-list";
+import { EMPTY, isEmptyValue } from "@repo/ui/blocks/admin/attribute-list";
 
 // The dense list the reference renders in the content panel: a muted header row, rows
 // about 48px tall, an em dash wherever a cell has nothing, and one column at a time
 // carrying the active sort in orange.
 //
-// This is the ONLY file in the app that imports @tanstack/react-table, and that is the
-// point. A caller describes its screen with `columns` and `rows` — plain data and plain
-// callbacks — and never sees a ColumnDef, a row model, or a sorting state. Swapping the
-// library out is then an edit to this file rather than to every route.
+// This is the ONLY file in the admin app or @repo/ui that imports @tanstack/react-table,
+// and that is the point. A caller describes its screen with `columns` and `rows` — plain
+// data and plain callbacks — and never sees a ColumnDef, a row model, or a sorting state.
+// Swapping the library out is then an edit to this file rather than to every route.
 //
 // The library earns its place on sorting alone: comparators for strings, numbers and
 // dates, a stable order for equal keys, and one place that owns which column is active.
@@ -138,8 +138,8 @@ export function DataTable<TRow extends object>({
   return (
     <div
       className={cn(
-        "min-h-0 flex-1",
-        "[&>[data-slot=table-container]]:h-full [&>[data-slot=table-container]]:overflow-auto",
+        "flex min-h-0 flex-1 flex-col",
+        "[&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto",
         className
       )}
     >
@@ -166,7 +166,7 @@ export function DataTable<TRow extends object>({
                         : "descending"
                   }
                   className={cn(
-                    "text-muted-foreground h-9 px-3 text-xs font-medium",
+                    "text-muted-foreground h-9 px-3 text-xs font-medium first:ps-(--page-gutter) last:pe-(--page-gutter)",
                     column.align === "end" && "text-right"
                   )}
                 >
@@ -205,7 +205,7 @@ export function DataTable<TRow extends object>({
             <TableRow className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
-                className="text-muted-foreground h-24 px-3 text-center whitespace-normal"
+                className="text-muted-foreground px-3 text-center whitespace-normal"
               >
                 {emptyState ?? "Nothing to show."}
               </TableCell>
@@ -254,7 +254,7 @@ export function DataTable<TRow extends object>({
                       <TableCell
                         key={column.id}
                         className={cn(
-                          "h-12 px-3 text-sm",
+                          "h-11 px-3 text-sm first:ps-(--page-gutter) last:pe-(--page-gutter)",
                           column.align === "end" && "text-right"
                         )}
                       >

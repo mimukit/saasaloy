@@ -8,13 +8,20 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import { MAINTENANCE_KEY } from "@repo/feature-flags";
-import { ErrorState } from "@repo/ui/blocks/error-state";
-import { FeatureFlags } from "@repo/ui/blocks/feature-flags";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { FeatureFlags } from "@repo/ui/blocks/admin/feature-flags";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { toastManager } from "@repo/ui/components/admin/toast";
+import { PageBody } from "@repo/ui/containers/admin/page-body";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 
 import { api } from "@admin/lib/api";
 
-// The Flags screen. It supplies the block with rows and four callbacks and does nothing else
-// — the markup lives in `@repo/ui/blocks/feature-flags`, per ADR 0030.
+// The Flags screen. It renders the page header and supplies the block with rows and four
+// callbacks — the editor's markup lives in `@repo/ui/blocks/admin/feature-flags`, per ADR
+// 0030. It renders inside the page frame the root route provides, so it writes no padding
+// and no page width of its own. The toggle list is an editor, not a list of records, so it
+// sits in PageBody rather than in a DataTable.
 //
 // Every value on this screen comes from `GET /flags`, which reads the database directly. The
 // published kv document is deliberately up to ~70 seconds behind, and showing an operator a
@@ -82,36 +89,82 @@ function Flags() {
         );
       }
     },
-    onSuccess: () =>
-      queryClient.invalidateQueries({ queryKey: flagsQuery.queryKey }),
+    // Each result raises a toast, the failure included: the switch shows the server's value,
+    // so a refused write would otherwise look like a click that did nothing. The invalidation
+    // is still awaited, so `isPending` holds the controls until the refetch lands.
+    onSuccess: async (_data, input) => {
+      toastManager.add({ type: "success", ...describeWrite(input) });
+      await queryClient.invalidateQueries({ queryKey: flagsQuery.queryKey });
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The change did not save",
+        description: error.message,
+      });
+    },
   });
 
   return (
-    <main className="mx-auto max-w-4xl px-6 py-10">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">Flags</h1>
-        <p className="text-muted-foreground text-sm">
-          Toggle a feature, roll one out to a share of users, or close the site.
-          A change reaches every location in about a minute.
-        </p>
-      </div>
-
-      <FeatureFlags
-        flags={flags.data?.flags ?? []}
-        overrides={flags.data?.overrides ?? []}
-        busy={write.isPending}
-        error={write.error?.message ?? null}
-        maintenanceKey={MAINTENANCE_KEY}
-        onSave={(key, value) => write.mutate({ key, kind: "global", value })}
-        onSaveOverride={(key, tenantId, value) =>
-          write.mutate({ key, kind: "override", tenantId, value })
-        }
-        onClearOverride={(key, tenantId) =>
-          write.mutate({ key, kind: "clear", tenantId })
-        }
+    // No `detail` prop: a flag has nothing more to show than its card, so PageLayout
+    // renders a single column.
+    <PageLayout>
+      <PageHeader
+        title="Flags"
+        count={flags.data?.flags.length}
+        description="Toggle a feature, roll one out to a share of users, or close the site. A change reaches every location in about a minute."
       />
-    </main>
+
+      <PageBody>
+        <FeatureFlags
+          flags={flags.data?.flags ?? []}
+          overrides={flags.data?.overrides ?? []}
+          busy={write.isPending}
+          maintenanceKey={MAINTENANCE_KEY}
+          onSave={(key, value) => {
+            write.mutate({ key, kind: "global", value });
+          }}
+          onSaveOverride={(key, tenantId, value) => {
+            write.mutate({ key, kind: "override", tenantId, value });
+          }}
+          onClearOverride={(key, tenantId) => {
+            write.mutate({ key, kind: "clear", tenantId });
+          }}
+        />
+      </PageBody>
+    </PageLayout>
   );
+}
+
+// The words for a saved write. The maintenance flag gets its own, because "Saved
+// system.maintenance" hides that the whole site just closed or reopened.
+function describeWrite(input: Write): { title: string; description: string } {
+  const reach = "It reaches every location in about a minute.";
+  if (input.kind === "clear") {
+    return {
+      title: "Override cleared",
+      description: `${input.tenantId} inherits the global ${input.key} again. ${reach}`,
+    };
+  }
+  if (input.kind === "override") {
+    return {
+      title: "Override saved",
+      description: `${input.key} for ${input.tenantId}. ${reach}`,
+    };
+  }
+  if (input.key === MAINTENANCE_KEY) {
+    return {
+      title: input.value.enabled ? "Site closed" : "Site reopened",
+      description: reach,
+    };
+  }
+  return {
+    title: `${input.key} is ${input.value.enabled ? "on" : "off"}`,
+    description:
+      input.value.percentage === null
+        ? reach
+        : `Rollout ${String(input.value.percentage)}%. ${reach}`,
+  };
 }
 
 function sendWrite(input: Write) {
@@ -132,15 +185,20 @@ function sendWrite(input: Write) {
   });
 }
 
-// DESIGN.md: every app renders the `error-state` block rather than its own error markup, so
-// a theme change reaches all three at once.
+// The router's default error screen would do, but these words name the two likely causes.
+// The header stays, so a failed load still reads as the Flags page inside the shell.
 function FlagsError({ error, reset }: ErrorComponentProps) {
   return (
-    <ErrorState
-      code="500"
-      title="Flags did not load"
-      description={`${error.message} Check that the api is running and that you are signed in as an admin.`}
-      primaryAction={{ label: "Try again", onClick: reset }}
-    />
+    <PageLayout>
+      <PageHeader title="Flags" />
+      <ErrorState
+        code="500"
+        title="Flags did not load"
+        description="Check that the api is running and that you are signed in as an admin."
+        detail={error instanceof Error ? error.message : undefined}
+        primaryAction={{ label: "Try again", onClick: reset }}
+        secondaryAction={null}
+      />
+    </PageLayout>
   );
 }

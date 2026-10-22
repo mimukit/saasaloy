@@ -2,8 +2,9 @@ import type { ReactNode } from "react";
 
 import { cn } from "@repo/ui/lib/utils";
 
-// The title bar at the top of a content panel — the reference's "Ahmed Reza" row, with
-// its hairline separating the header from whatever scrolls beneath it.
+// The title bar at the top of a page, with its hairline separating the header from
+// whatever scrolls beneath it. It pads itself with the page frame's `--page-gutter`, so
+// it lines up with PageBody and the table's first column on every page.
 //
 // It is a `header` with the page's only `h1`. The shell above it renders no heading of
 // its own, so this is the top of the document outline on every screen.
@@ -31,13 +32,13 @@ export function PageHeader({
   return (
     <header
       className={cn(
-        "border-border flex shrink-0 items-center gap-3 border-b px-4 py-3",
+        "border-border flex min-h-14 shrink-0 flex-wrap items-center gap-x-3 gap-y-2 border-b px-(--page-gutter) py-2.5",
         className
       )}
     >
       <div className="flex min-w-0 flex-1 flex-col gap-0.5">
         <div className="flex min-w-0 items-baseline gap-2">
-          <h1 className="min-w-0 truncate text-lg font-semibold tracking-tight">
+          <h1 className="min-w-0 truncate text-base font-semibold tracking-tight">
             {title}
           </h1>
           {count === undefined ? null : (
@@ -54,7 +55,7 @@ export function PageHeader({
       </div>
 
       {actions === undefined ? null : (
-        <div className="flex shrink-0 items-center gap-1">{actions}</div>
+        <div className="flex shrink-0 items-center gap-2">{actions}</div>
       )}
     </header>
   );

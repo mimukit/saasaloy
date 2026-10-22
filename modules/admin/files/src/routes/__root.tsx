@@ -6,7 +6,9 @@ import {
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { ErrorState } from "@repo/ui/blocks/error-state";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { ToastProvider } from "@repo/ui/components/admin/toast";
+import { PageFrame } from "@repo/ui/containers/admin/page-frame";
 import { errors } from "@repo/ui/content/errors";
 
 import { AccessDenied } from "@admin/components/access-denied";
@@ -98,35 +100,49 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
   notFoundComponent: RootNotFound,
 });
 
+// Every page renders inside PageFrame, which owns the gutter, the height and the last-resort
+// error boundary. A module page gets all three from this one place and imports none of
+// them. The router's default pending and error components (src/main.tsx) render inside
+// the frame too, because they replace the <Outlet /> it wraps.
+//
+// The toast provider sits above both branches, so a screen and the sign-in form can each
+// raise a toast through `toastManager` from @repo/ui/components/admin/toast.
 function RootLayout() {
   const { session } = Route.useRouteContext();
 
   // Only /login reaches this branch: every other path redirected in beforeLoad. A non-admin
   // never reaches this component at all — the guard threw before it rendered.
   if (!session) {
-    return <Outlet />;
+    return (
+      <ToastProvider>
+        <Outlet />
+      </ToastProvider>
+    );
   }
 
   return (
-    <AppShell session={session}>
-      <Outlet />
-    </AppShell>
+    <ToastProvider>
+      <AppShell session={session}>
+        <PageFrame>
+          <Outlet />
+        </PageFrame>
+      </AppShell>
+    </ToastProvider>
   );
 }
 
-// What an address that matches no route renders. It sits inside AppShell, so the rail and
-// nav panel stay usable and the visitor can click their way out instead of reaching for the
-// back button.
+// What an address that matches no route renders. The router renders the root route's
+// not-found component in place of RootLayout's <Outlet />, so it already sits inside
+// AppShell and PageFrame: the sidebar stays usable, and the visitor can click their way
+// out instead of reaching for the back button. It must not wrap itself in the shell
+// again, or the page shows a second sidebar and header inside the first.
 //
 // Only an admin ever sees this screen, and that is the guard working rather than a hole in
 // it. The router resolves `beforeLoad` top-down before it installs the not-found boundary,
 // and a redirect thrown there ends the match, so an anonymous visitor asking for an unknown
-// path lands on /login and learns nothing about which admin paths exist. The session is
-// therefore present in practice; the null branch below is a type guard, not a second case.
+// path lands on /login and learns nothing about which admin paths exist.
 function RootNotFound() {
-  const { session } = Route.useRouteContext();
-
-  const screen = (
+  return (
     <ErrorState
       code={errors.notFound.code}
       title={errors.notFound.title}
@@ -134,12 +150,6 @@ function RootNotFound() {
       primaryAction={{ label: errors.notFound.homeLabel, href: "/" }}
     />
   );
-
-  if (!session) {
-    return screen;
-  }
-
-  return <AppShell session={session}>{screen}</AppShell>;
 }
 
 // The root route's error boundary, and the second half of the guard. A NotAdminError is the
@@ -158,7 +168,9 @@ function RootError({ error, reset }: ErrorComponentProps) {
   if (error instanceof NotAdminError) {
     return (
       <AppShell session={error.session}>
-        <AccessDenied session={error.session} />
+        <PageFrame>
+          <AccessDenied session={error.session} />
+        </PageFrame>
       </AppShell>
     );
   }
@@ -168,8 +180,10 @@ function RootError({ error, reset }: ErrorComponentProps) {
       code={errors.renderFailure.code}
       title={errors.renderFailure.title}
       description={errors.renderFailure.description}
+      detail={error instanceof Error ? error.message : undefined}
       primaryAction={{ label: errors.renderFailure.retryLabel, onClick: reset }}
       secondaryAction={{ label: errors.renderFailure.homeLabel, href: "/" }}
+      className="min-h-dvh"
     />
   );
 }

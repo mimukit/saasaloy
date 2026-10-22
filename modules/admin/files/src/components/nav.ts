@@ -1,15 +1,13 @@
-// The shell's navigation data, and the two rules that read it. It lives in its own module
-// rather than in app-shell.tsx because all three shell files need it: app-shell.tsx
-// composes, rail.tsx renders the areas, nav-panel.tsx renders one area's groups. With the
-// data in the composer the two leaves imported their own parent, which happens to work
-// only while nothing reads NAV_AREAS at module scope.
+// The shell's navigation data, and the two rules that read it. app-shell.tsx hands it to
+// the sidebar in @repo/ui, which renders every area's groups. It lives in its own module
+// rather than in app-shell.tsx so the rules below stay unit-testable without React.
 //
 // It is a .ts file, not .tsx: nothing here renders, and being JSX-free is what lets the
 // tool repo unit-test `navCount` and `areaFor` directly.
 //
 // Dropping src/routes/<feature>.tsx is enough to make a screen reachable — the router
 // plugin wires it up with no patch. Adding it to NAV_AREAS below is the separate, optional
-// step that puts it in the nav panel.
+// step that puts it in the sidebar.
 
 import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
 
@@ -18,12 +16,13 @@ import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
 // the reason this list is written out rather than derived from the router at runtime, and
 // the reason it is `as const`: widening `to` to `string` would take the check away.
 //
-// Shape, one area per top-level destination in the rail:
+// Shape, one area per top-level destination:
 //
 //   { label, to, icon, count?, groups: [{ label, items: [{ to, label, icon, count? }] }] }
 //
-// The seed ships one area, "Admin", with one group. A second area gets its own rail icon
-// and its own nav panel; nothing else has to change.
+// The seed ships one area, "Admin", with one group. The sidebar lists every area's groups
+// in order, and the area's label is the first step of the header's page path; nothing
+// else has to change for a second area.
 export const NAV_AREAS = [
   {
     label: "Admin",
@@ -71,7 +70,7 @@ export function navCount(entry: {
  *
  * Longest prefix, not first match, because "/" prefixes everything — an area at "/reports"
  * has to beat the root area for "/reports/weekly". A path under no area at all falls back
- * to the first, so the shell always has a nav panel to draw.
+ * to the first, so the shell always has an area to name.
  */
 export function areaFor(pathname: string): NavArea {
   return (

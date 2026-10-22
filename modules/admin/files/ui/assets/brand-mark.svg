@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
+  <defs>
+    <mask id="brand-mark-cut">
+      <rect width="32" height="32" rx="9" fill="#fff" />
+      <path d="M21 11.6c-1-1.6-2.9-2.6-5-2.6-2.9 0-5 1.6-5 3.8 0 2.4 2.2 3.2 5 3.7 2.8.5 5 1.4 5 3.8 0 2.3-2.2 3.9-5.1 3.9-2.2 0-4.1-1-5.1-2.7" stroke="#000" stroke-width="3.2" stroke-linecap="round" />
+    </mask>
+  </defs>
+  <rect width="32" height="32" rx="9" fill="#000" mask="url(#brand-mark-cut)" />
+</svg>

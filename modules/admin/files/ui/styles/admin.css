@@ -16,11 +16,24 @@
      canvas (--background)    #080808    oklch(0.134 0 0)               mockup-1, strip left of the icon rail
      panel  (--card)          #13161b    oklch(0.199 0.011 260.66)      mockup-1, empty area of the nav and content panels
      hover/selected           #1c2026    oklch(0.242 0.013 258.37)      mockup-1, the active "Your inbox" row and the "2 Open" chip
-     hairline (--border)      #373c43    oklch(0.354 0.014 256.77)      mockup-1, the rule under the content-panel header
+     hairline (former)        #373c43    oklch(0.354 0.014 256.77)      mockup-1, the rule under the content-panel header
      body text (--foreground) #fafafa    oklch(0.985 0 0)               mockup-1, the active nav row label
      muted text               #c8c6c5    oklch(0.828 0.003 48.71)       mockup-1, the "User" column header and the row counts
      status pill fill         #2e476b    oklch(0.395 0.069 257.5)       mockup-1, the "Open" pill in the Status column
      sort accent              #f6825a    oklch(0.729 0.152 39.51)       mockup-1, the "Last activity" sort header; mockup-3, the Copilot tab underline
+
+   PALETTE B (the Phase 2 pick of plan 0069). The canvas, the panel and the hover tone
+   keep the measured ramp above. Borders and inputs are alpha over whatever they sit on
+   instead of the measured hairline: white at 8 % and 10 % on dark, black at 8 % and 11 %
+   on light. An alpha rule reads the same on the canvas, on a panel and on a raised
+   menu, where one solid grey reads heavy on one and vanishes on another. The 1 px
+   highlight edge the primitives draw (a `before:` shadow, white 6 % above on dark, black
+   4 % below on light) comes from the components, not from a token. The sidebar takes
+   the canvas tone, because it sits on the canvas with no panel of its own; the content
+   panel is the one raised surface beside it.
+
+   The focus ring is a plain neutral, Tailwind's neutral-400 on light and neutral-500 on
+   dark, so it reads on every surface without a hue that would compete with a status.
 
    The ramp carries a faint blue cast (chroma 0.011-0.014 around hue 258) rather than
    pure grey. That is what the screenshots hold, and dropping it to `0 0` makes the
@@ -33,16 +46,16 @@
 
 @import "./globals.css";
 
-/* The shell primitives, opted into by this app alone.
+/* The admin primitive set, opted into by this app alone.
 
    globals.css lists the primitives the landing page renders and stops there, because
-   Tailwind scans content rather than imports: a blanket components glob would push the
-   shell's tooltip, menu, sheet, tabs, table, avatar and scroll-area utilities into the
-   landing page stylesheet as well. This app renders all of them, so it asks for the whole
-   directory here.
+   Tailwind scans content rather than imports. The admin app renders only its own set in
+   components/admin/, never a base primitive, so it scans that folder and not the base
+   components. The blocks and containers it renders are already in globals.css's globs.
 
-   The path is relative to this file, so `../components` is packages/ui/src/components. */
-@source "../components/*.tsx";
+   The path is relative to this file, so `../components/admin` is
+   packages/ui/src/components/admin. */
+@source "../components/admin/**/*.tsx";
 
 /* The `.dark` class, set before React mounts (see apps/admin/src/main.tsx). Declared
    here rather than in globals.css for the reason web.css gives. */
@@ -71,9 +84,9 @@
   --accent: oklch(0.933 0.011 76.6);
   --accent-foreground: oklch(0.258 0.007 67.5);
   --destructive: oklch(0.501 0.178 28.7);
-  --border: oklch(0.853 0.012 79.78);
-  --input: oklch(0.853 0.012 79.78);
-  --ring: oklch(0.712 0.018 79.32);
+  --border: oklch(0 0 0 / 8%);
+  --input: oklch(0 0 0 / 11%);
+  --ring: oklch(0.708 0 0);
   --chart-1: oklch(0.258 0.007 67.5);
   --chart-2: oklch(0.517 0.016 74.29);
   --chart-3: oklch(0.712 0.018 79.32);
@@ -82,14 +95,14 @@
 
   /* The rail and the nav panel are `sidebar` surfaces. They sit on the canvas as
      panels, so they take the panel fill rather than a fourth tone. */
-  --sidebar: oklch(1 0 0);
+  --sidebar: oklch(0.96 0.008 73.74);
   --sidebar-foreground: oklch(0.197 0.005 67.53);
   --sidebar-primary: oklch(0.258 0.007 67.5);
   --sidebar-primary-foreground: oklch(0.96 0.008 73.74);
   --sidebar-accent: oklch(0.933 0.011 76.6);
   --sidebar-accent-foreground: oklch(0.258 0.007 67.5);
-  --sidebar-border: oklch(0.853 0.012 79.78);
-  --sidebar-ring: oklch(0.712 0.018 79.32);
+  --sidebar-border: oklch(0 0 0 / 6%);
+  --sidebar-ring: oklch(0.708 0 0);
 
   /* The two accents the shadcn set has no role for. `status-open` is the muted blue
      pill in the Status column and the circular primary action; `accent-sort` is the
@@ -98,6 +111,18 @@
   --status-open: oklch(0.915 0.024 256.11);
   --status-open-foreground: oklch(0.347 0.067 253.68);
   --accent-sort: oklch(0.579 0.158 41.66);
+
+  /* The status pairs the admin primitives read. Each pair is a fill and a text tone:
+     `--success` tints a badge or an alert, and `--success-foreground` is the darker
+     text on that tint, never a contrast colour for a solid fill. `--destructive-foreground`
+     follows the same rule for `--destructive`. Tailwind's 500 and 700 steps. */
+  --destructive-foreground: oklch(0.505 0.213 27.518);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.488 0.243 264.376);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.555 0.163 48.998);
 }
 
 .dark {
@@ -125,25 +150,35 @@
   /* An opaque hairline, not the base template's `oklch(1 0 0 / 10%)`. On a #080808
      canvas a 10% white border is invisible where two panels meet, and the panel edge
      is what separates the layout. */
-  --border: oklch(0.354 0.014 256.77);
-  --input: oklch(0.354 0.014 256.77);
-  --ring: oklch(0.354 0.014 256.77);
+  --border: oklch(1 0 0 / 8%);
+  --input: oklch(1 0 0 / 10%);
+  --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.743 0.11 256.84);
   --chart-2: oklch(0.729 0.152 39.51);
   --chart-3: oklch(0.828 0.003 48.71);
   --chart-4: oklch(0.354 0.014 256.77);
   --chart-5: oklch(0.242 0.013 258.37);
-  --sidebar: oklch(0.199 0.011 260.66);
+  --sidebar: oklch(0.134 0 0);
   --sidebar-foreground: oklch(0.985 0 0);
   --sidebar-primary: oklch(0.985 0 0);
   --sidebar-primary-foreground: oklch(0.199 0.011 260.66);
   --sidebar-accent: oklch(0.242 0.013 258.37);
   --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(0.354 0.014 256.77);
-  --sidebar-ring: oklch(0.354 0.014 256.77);
+  --sidebar-border: oklch(1 0 0 / 6%);
+  --sidebar-ring: oklch(0.556 0 0);
   --status-open: oklch(0.395 0.069 257.5);
   --status-open-foreground: oklch(0.985 0 0);
   --accent-sort: oklch(0.729 0.152 39.51);
+
+  /* The same pairs on dark: the fill keeps its 500 step and the text tone lifts to the
+     400 step, so it reads on a tinted dark fill. */
+  --destructive-foreground: oklch(0.704 0.191 22.216);
+  --info: oklch(0.623 0.214 259.815);
+  --info-foreground: oklch(0.707 0.165 254.624);
+  --success: oklch(0.696 0.17 162.48);
+  --success-foreground: oklch(0.765 0.177 163.223);
+  --warning: oklch(0.769 0.188 70.08);
+  --warning-foreground: oklch(0.828 0.189 84.429);
 }
 
 /* The colour mapping and the radius scale repeat web.css's on purpose: each theme file
@@ -189,6 +224,13 @@
   --color-status-open: var(--status-open);
   --color-status-open-foreground: var(--status-open-foreground);
   --color-accent-sort: var(--accent-sort);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
 }
 
 @theme {
@@ -202,6 +244,86 @@
   --font-sans:
     "Inter Variable", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
+
+  /* The motion the admin primitives name: the skeleton's shimmer and the toast's bump on
+     success and shake on error. The odd and even pairs are the same curve twice, so a
+     second toast of the same kind restarts the animation instead of skipping it. */
+  --animate-skeleton: skeleton 2s -1s infinite linear;
+  --animate-toast-success-odd: toast-success-odd 0.32s
+    cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-success-even: toast-success-even 0.32s
+    cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-even: toast-error-even 0.28s
+    cubic-bezier(0.5, 1, 0.89, 1);
+
+  @keyframes skeleton {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes toast-success-odd {
+    0%,
+    100% {
+      scale: 1;
+    }
+
+    30% {
+      scale: 1.025;
+    }
+
+    60% {
+      scale: 0.99;
+    }
+  }
+
+  @keyframes toast-success-even {
+    0%,
+    100% {
+      scale: 1;
+    }
+
+    30% {
+      scale: 1.025;
+    }
+
+    60% {
+      scale: 0.99;
+    }
+  }
+
+  @keyframes toast-error-odd {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+
+    25%,
+    75% {
+      translate: -3px 0;
+    }
+
+    50% {
+      translate: 3px 0;
+    }
+  }
+
+  @keyframes toast-error-even {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+
+    25%,
+    75% {
+      translate: -3px 0;
+    }
+
+    50% {
+      translate: 3px 0;
+    }
+  }
 }
 
 @layer base {

@@ -1,25 +1,31 @@
-import { queryOptions, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { IdCardIcon, RefreshCwIcon, ShieldIcon } from "lucide-react";
+import { CheckIcon, IdCardIcon, ShieldIcon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { Avatar, AvatarFallback } from "@repo/ui/components/avatar";
-import { Button } from "@repo/ui/components/button";
+import { DataTable } from "@repo/ui/blocks/admin/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
+import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { FilterChips } from "@repo/ui/blocks/admin/filter-chips";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button } from "@repo/ui/components/admin/button";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { errors } from "@repo/ui/content/errors";
 
-import { DataTable } from "@admin/components/data-table";
-import type { DataTableColumn } from "@admin/components/data-table";
-import { DetailPanel } from "@admin/components/detail-panel";
-import { FilterChips } from "@admin/components/filter-chips";
-import { PageHeader } from "@admin/components/page-header";
-import { PageLayout } from "@admin/components/page-layout";
-import { StatusPill } from "@admin/components/status-pill";
-import { api } from "@admin/lib/api";
 import { initialsOf } from "@admin/lib/initials";
+import { usersQuery } from "@admin/lib/users-query";
+import type { AdminUser } from "@admin/lib/users-query";
 
 // The worked example of a real admin screen, at `/users`. It is the one place in the
-// scaffold where every page primitive appears at once: a header with a count, a chip row,
-// a sortable table, and a route-owned detail panel.
+// scaffold where every page block appears at once: a header with a count, a chip row, a
+// sortable table with its empty state, a route-owned detail panel, and an error screen of
+// its own. It renders inside the page frame the root route provides.
 //
 // `createFileRoute("/users")` is generated from this file's path under src/routes/ — the
 // router plugin writes the id, so never rename the call by hand, and never hand-edit
@@ -27,36 +33,13 @@ import { initialsOf } from "@admin/lib/initials";
 //
 // This file is also what makes the "Users" row in NAV_AREAS type-check. Nav entries are
 // checked against the generated route tree, so the row and the route arrive together or
-// neither does.
-//
-// Every row here is real: `GET /admin/users` is served by apps/api/src/routes/admin-users.ts
-// behind `requireAdmin`, and `hc<AppType>` types the answer. There are no demo rows to
-// delete before this screen means anything.
-const usersQuery = queryOptions({
-  queryKey: ["admin", "users"],
-  queryFn: async () => {
-    const res = await api.admin.users.$get();
-    if (!res.ok) {
-      throw new Error(`The api answered ${res.status}.`);
-    }
-    return res.json();
-  },
-});
-
+// neither does. The request itself lives in src/lib/users-query.ts, because the overview
+// reads it too.
 export const Route = createFileRoute("/users")({
   loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery),
   component: Users,
   errorComponent: UsersError,
 });
-
-/**
- * One row of the table, taken from the query's own return type rather than redeclared.
- * Writing the fields out by hand would compile happily after the api dropped one of them;
- * this way a change in apps/api lands as a typecheck failure in this file.
- */
-type AdminUser = Awaited<
-  ReturnType<NonNullable<(typeof usersQuery)["queryFn"]>>
->["users"][number];
 
 /** The chips above the table. `all` is the resting state, so it is listed first. */
 const ROLE_FILTERS = [
@@ -89,8 +72,8 @@ const COLUMNS: readonly DataTableColumn<AdminUser>[] = [
     // The reference pairs a small avatar with the first cell's label. Everything richer
     // than a string is a `cell`; `value` stays the plain sort key above.
     cell: (user) => (
-      <div className="flex min-w-0 items-center gap-2">
-        <Avatar size="sm">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <Avatar className="size-7">
           <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
         </Avatar>
         <span className="truncate font-medium">{user.name}</span>
@@ -122,9 +105,19 @@ const COLUMNS: readonly DataTableColumn<AdminUser>[] = [
   {
     id: "verified",
     header: "Verified",
-    // No `cell`: DataTable renders a boolean as Yes/No, so the column needs no renderer.
     value: (user) => user.emailVerified,
     sortable: true,
+    // A verified address is the settled state and takes the success badge; an
+    // unverified one is waiting on the user, so it reads as pending rather than wrong.
+    cell: (user) =>
+      user.emailVerified ? (
+        <Badge variant="success">
+          <CheckIcon />
+          Verified
+        </Badge>
+      ) : (
+        <Badge variant="warning">Pending</Badge>
+      ),
   },
   {
     id: "created",
@@ -185,6 +178,12 @@ function Users() {
         selected === undefined ? undefined : (
           <DetailPanel
             title={selected.name || selected.email}
+            description={selected.email}
+            media={
+              <Avatar className="size-10">
+                <AvatarFallback>{initialsOf(selected.name)}</AvatarFallback>
+              </Avatar>
+            }
             onClose={() => {
               setSelectedId(null);
             }}
@@ -241,13 +240,9 @@ function Users() {
       {/* `total` is the api's own count, not `rows.length` and not `users.length`. The
           route caps its answer at 100, so the loaded page and the real total can differ,
           and the header states the total. */}
-      <PageHeader
-        title="Users"
-        count={data?.total}
-        description="Accounts the api returns from GET /admin/users."
-      />
+      <PageHeader title="Users" count={data?.total} />
 
-      <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2">
+      <div className="border-border flex shrink-0 items-center gap-2 border-b px-(--page-gutter) py-2">
         <FilterChips
           chips={chips}
           selectedId={roleFilter}
@@ -270,9 +265,29 @@ function Users() {
           setSelectedId(user.id);
         }}
         emptyState={
-          roleFilter === "all"
-            ? "No users yet."
-            : "No users with that role. Pick All to see every account."
+          roleFilter === "all" ? (
+            <EmptyState
+              icon={UsersIcon}
+              title="No users yet"
+              description="An account appears here as soon as someone signs up."
+            />
+          ) : (
+            <EmptyState
+              title="No users match this filter"
+              description="Nobody has that role yet. Change a role from the user's detail panel."
+              action={
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setRoleFilter("all");
+                  }}
+                >
+                  Show all users
+                </Button>
+              }
+            />
+          )
         }
       />
     </PageLayout>
@@ -281,30 +296,23 @@ function Users() {
 
 // A 403 is a real answer here, not only a down api: the route is role-gated on the server
 // as well as in the shell, so an account that lost its admin role sees this rather than an
-// empty table.
+// empty table. It is the worked example of a route overriding the router's default error
+// component, which src/main.tsx sets for every other route.
 function UsersError({ error, reset }: ErrorComponentProps) {
   return (
     <PageLayout>
-      <PageHeader
-        title="Users"
-        description="The user list did not load."
-        actions={
-          <Button variant="outline" size="sm" onClick={reset}>
-            <RefreshCwIcon data-icon="inline-start" />
-            Try again
-          </Button>
-        }
+      <PageHeader title="Users" />
+      <ErrorState
+        code={errors.renderFailure.code}
+        title="The user list did not load"
+        description="GET /admin/users answers 403 unless the signed-in account has the admin role, and 500 when the api fails."
+        detail={error instanceof Error ? error.message : undefined}
+        primaryAction={{
+          label: errors.renderFailure.retryLabel,
+          onClick: reset,
+        }}
+        secondaryAction={null}
       />
-
-      <div className="min-h-0 flex-1 overflow-auto p-4">
-        <div
-          role="alert"
-          className="border-border text-muted-foreground max-w-2xl rounded-xl border p-4 text-sm"
-        >
-          {error.message} GET /admin/users answers 403 unless the signed-in
-          account has the admin role.
-        </div>
-      </div>
     </PageLayout>
   );
 }

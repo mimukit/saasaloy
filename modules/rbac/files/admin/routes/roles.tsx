@@ -4,17 +4,13 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import { allows } from "@repo/auth/rbac-rules";
 import type { PrincipalLike } from "@repo/auth/rbac-rules";
-import { Button } from "@repo/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
+import { errors } from "@repo/ui/content/errors";
 
 import { RoleWorkspace } from "@admin/components/role-workspace";
-import { tenantQuery } from "@admin/lib/tenant";
+import { organizationQuery, tenantQuery } from "@admin/lib/tenant";
 
 // `/roles` — the active organization's roles, and who holds them.
 //
@@ -32,21 +28,36 @@ import { tenantQuery } from "@admin/lib/tenant";
 // The screen is scoped to the caller's active organization, behind the site-admin root
 // guard, exactly as `/teams` is. An organization picker over the superadmin bypass is a
 // filed follow-up.
+//
+// The route decides `canManage` and nothing else. RoleWorkspace renders the whole page
+// inside the frame the root route provides — the header, the tables, the detail panel and
+// the create dialog — because the selection and every mutation live there.
 
 export const Route = createFileRoute("/roles")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(tenantQuery),
+  // The organization's name waits on the tenant's id, so the two reads run in turn. Both
+  // land before the first render, and the header never shows an id or a placeholder.
+  loader: async ({ context }) => {
+    // oxlint-disable-next-line typescript/no-deprecated -- every admin loader reads its cache this way; moving to `query()` is one change across all of them
+    const tenant = await context.queryClient.ensureQueryData(tenantQuery);
+    // oxlint-disable-next-line typescript/no-deprecated -- as above
+    await context.queryClient.ensureQueryData(
+      organizationQuery(tenant.organizationId)
+    );
+  },
   component: Roles,
   errorComponent: RolesError,
 });
 
 function Roles() {
   const tenant = useQuery(tenantQuery);
-  if (!tenant.data) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-muted-foreground text-sm">Loading roles…</p>
-      </main>
-    );
+  const organization = useQuery({
+    ...organizationQuery(tenant.data?.organizationId ?? ""),
+    enabled: tenant.data !== undefined,
+  });
+  // The loader resolved both, so the guard only covers a refetch that dropped the cache.
+  // It shows the router's own skeleton rather than a sentence of its own.
+  if (!tenant.data || !organization.data) {
+    return <PageSkeleton />;
   }
 
   // The api returns the principal as JSON, so the literal `kind` narrows back to the
@@ -59,64 +70,45 @@ function Roles() {
   const canManage = allows(principal, { ac: ["create"] });
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">Roles</h1>
-        <p className="text-muted-foreground text-sm">
-          Permissions for {tenant.data.organizationId}. Base roles are locked;
-          custom roles are defined here and take effect on the next request.
-        </p>
-      </div>
-
-      {canManage ? null : (
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle>Read-only</CardTitle>
-            <CardDescription>
-              Your role does not hold ac:create in this organization, so the
-              edit controls are hidden. Ask an owner to change a role for you.
-            </CardDescription>
-          </CardHeader>
-        </Card>
-      )}
-
-      <RoleWorkspace
-        organization={{
-          id: tenant.data.organizationId,
-          name: "this organization",
-        }}
-        canManage={canManage}
-      />
-    </main>
+    <RoleWorkspace
+      organization={{
+        id: organization.data.id,
+        name: organization.data.name,
+      }}
+      canManage={canManage}
+    />
   );
 }
 
 function RolesError({ error, reset }: ErrorComponentProps) {
   // `no active organization` is the fixed message from `@repo/auth/tenant`. It is the one
   // failure with an obvious next step, so it gets its own copy rather than the generic
-  // "check that the api is running".
-  const needsOrganization = error.message === "no active organization";
+  // "check that the api is running". The router types `error` as `unknown`, so only a
+  // real Error has a message to compare or show.
+  const message = error instanceof Error ? error.message : undefined;
+  const needsOrganization = message === "no active organization";
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {needsOrganization
-              ? "No active organization"
-              : "Roles did not load"}
-          </CardTitle>
-          <CardDescription>
-            {needsOrganization
-              ? "Choose an organization on the Teams screen, then come back."
-              : `${error.message} Check that the api is running, then try again.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={reset}>
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <>
+      <PageHeader title="Roles" />
+      <ErrorState
+        code={errors.renderFailure.code}
+        title={
+          needsOrganization ? "No active organization" : "Roles did not load"
+        }
+        description={
+          needsOrganization
+            ? "Choose an organization on the Teams screen, then come back."
+            : "Check that the api is running, then try again."
+        }
+        detail={needsOrganization ? undefined : message}
+        primaryAction={{
+          label: errors.renderFailure.retryLabel,
+          onClick: reset,
+        }}
+        // No link to /teams: that route belongs to the teams module, which this one
+        // does not depend on, so the copy names the screen instead.
+        secondaryAction={null}
+      />
+    </>
   );
 }

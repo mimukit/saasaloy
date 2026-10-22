@@ -6,17 +6,35 @@ import {
 } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { CreditCardIcon, ExternalLinkIcon, RefreshCwIcon } from "lucide-react";
+import {
+  CreditCardIcon,
+  DownloadIcon,
+  ExternalLinkIcon,
+  ReceiptIcon,
+  RefreshCwIcon,
+} from "lucide-react";
+import { useMemo, useState } from "react";
 
-import { Badge } from "@repo/ui/components/badge";
-import { Button } from "@repo/ui/components/button";
+import { DataTable } from "@repo/ui/blocks/admin/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
+import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { Badge } from "@repo/ui/components/admin/badge";
+import { Button, buttonVariants } from "@repo/ui/components/admin/button";
 import {
   Card,
-  CardContent,
+  CardAction,
   CardDescription,
   CardHeader,
+  CardPanel,
   CardTitle,
-} from "@repo/ui/components/card";
+} from "@repo/ui/components/admin/card";
+import { toastManager } from "@repo/ui/components/admin/toast";
+import { PageBody } from "@repo/ui/containers/admin/page-body";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { errors } from "@repo/ui/content/errors";
 
 import { api } from "@admin/lib/api";
 
@@ -56,6 +74,14 @@ const invoicesQuery = queryOptions({
   },
 });
 
+/**
+ * One invoice row, taken from the query's own return type rather than redeclared. It is
+ * the JSON form of the provider's `Invoice`, so `createdAt` arrives as a string.
+ */
+type InvoiceRow = Awaited<
+  ReturnType<NonNullable<(typeof invoicesQuery)["queryFn"]>>
+>["invoices"][number];
+
 export const Route = createFileRoute("/billing")({
   loader: ({ context }) =>
     Promise.all([
@@ -66,14 +92,85 @@ export const Route = createFileRoute("/billing")({
   errorComponent: BillingError,
 });
 
+// Vendors report statuses in their own words, so only the two that every one of them
+// shares get a colour: a paid invoice is settled, an open one is waiting on the customer.
+// Everything else (draft, void, uncollectible, a vendor's own term) stays neutral.
+function InvoiceStatus({ status }: { status: string }) {
+  if (status === "paid") {
+    return <Badge variant="success">{status}</Badge>;
+  }
+
+  if (status === "open") {
+    return <Badge variant="warning">{status}</Badge>;
+  }
+
+  return <Badge variant="secondary">{status}</Badge>;
+}
+
+// The invoice table's shape, at module scope: it depends on no state, and hoisting it keeps
+// the `cell` renderers out of the render pass.
+const INVOICE_COLUMNS: readonly DataTableColumn<InvoiceRow>[] = [
+  {
+    id: "number",
+    header: "Invoice",
+    value: (invoice) => invoice.number ?? invoice.id,
+    sortable: true,
+    cell: (invoice) => (
+      <span className="font-mono text-xs">{invoice.number ?? invoice.id}</span>
+    ),
+  },
+  {
+    id: "status",
+    header: "Status",
+    value: (invoice) => invoice.status,
+    sortable: true,
+    cell: (invoice) => <InvoiceStatus status={invoice.status} />,
+  },
+  {
+    id: "created",
+    header: "Date",
+    // A Date, not the raw string: it is what sorts correctly and what DataTable formats
+    // for the cell.
+    value: (invoice) => new Date(invoice.createdAt),
+    sortable: true,
+  },
+  {
+    id: "amount",
+    header: "Amount",
+    // The minor-unit number sorts; the cell shows it formatted. Mixed currencies sort by
+    // the raw number, which is the best a list with no exchange rate can do.
+    value: (invoice) => invoice.amount,
+    sortable: true,
+    align: "end",
+    cell: (invoice) => (
+      <span className="font-medium tabular-nums">
+        {formatAmount(invoice.amount, invoice.currency)}
+      </span>
+    ),
+  },
+];
+
 function Billing() {
   const queryClient = useQueryClient();
   const subscription = useQuery(subscriptionQuery);
   const invoices = useQuery(invoicesQuery);
 
+  // The open invoice belongs to this route, not to DataTable or DetailPanel: the table
+  // reports a click and the panel reports a close, and this state decides what both mean.
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+
   const live = subscription.data?.subscription ?? null;
   const plan = subscription.data?.plan;
   const planList = subscription.data?.plans ?? [];
+  const invoiceRows = useMemo(
+    () => invoices.data?.invoices ?? [],
+    [invoices.data]
+  );
+  const selected = invoiceRows.find((invoice) => invoice.id === selectedId);
+  // A vendor may send either link as null, undefined or an empty string; all three mean
+  // "no page to open", so they collapse to null once, here.
+  const hostedUrl = linkOrNull(selected?.hostedUrl);
+  const pdfUrl = linkOrNull(selected?.pdfUrl);
 
   // Checkout and change-plan are the same gesture from here: buy when nothing is live,
   // move when something is. The api refuses a second live subscription either way, so the
@@ -97,8 +194,21 @@ function Billing() {
       }
       return body.url;
     },
+    // The success toast is brief on purpose: the very next line leaves the page for the
+    // vendor's checkout, so it only covers the moment before the browser navigates.
     onSuccess: (url) => {
+      toastManager.add({
+        type: "success",
+        title: live ? "Opening the plan change" : "Opening checkout",
+      });
       window.location.assign(url);
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: live ? "The plan did not change" : "Checkout did not open",
+        description: error.message,
+      });
     },
   });
 
@@ -116,161 +226,253 @@ function Billing() {
       return body.url;
     },
     onSuccess: (url) => {
+      toastManager.add({
+        type: "success",
+        title: "Opening the billing portal",
+      });
       window.location.assign(url);
+    },
+    onError: (error) => {
+      toastManager.add({
+        type: "error",
+        title: "The billing portal did not open",
+        description: error.message,
+      });
     },
   });
 
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <div className="mb-6 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="text-xl font-semibold tracking-tight">Billing</h1>
-          <p className="text-muted-foreground text-sm">
-            The plan this account is on, and the invoices behind it.
-          </p>
-        </div>
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={subscription.isFetching}
-          onClick={() =>
-            queryClient.invalidateQueries({ queryKey: ["billing"] })
-          }
-        >
-          <RefreshCwIcon data-icon="inline-start" />
-          {subscription.isFetching ? "Refreshing…" : "Refresh"}
-        </Button>
-      </div>
-
-      <div className="flex flex-col gap-6">
-        <Card>
-          <CardHeader>
-            <CardTitle>Current plan</CardTitle>
-            <CardDescription>
-              Resolved from the latest live row in{" "}
-              <code className="font-mono">billing_subscriptions</code>, falling
-              back to the default plan when there is none.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-wrap items-center gap-2 text-sm">
-            <span className="font-medium">{plan?.name ?? "—"}</span>
-            <Badge variant={live ? "default" : "secondary"}>
-              {live?.status ?? "no subscription"}
-            </Badge>
-            {live?.cancelAtPeriodEnd ? (
-              <Badge variant="secondary">cancels at period end</Badge>
-            ) : null}
-            {live?.trialEnd ? (
-              <span className="text-muted-foreground">
-                trial ends {formatDate(live.trialEnd)}
-              </span>
-            ) : null}
-            <div className="ms-auto">
-              <Button
-                variant="outline"
-                size="sm"
-                disabled={!live || portal.isPending}
-                onClick={() => portal.mutate()}
-              >
-                <CreditCardIcon data-icon="inline-start" />
-                {portal.isPending ? "Opening…" : "Manage billing"}
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Plans</CardTitle>
-            <CardDescription>
-              Declared in{" "}
-              <code className="font-mono">packages/billing/src/plans.ts</code>.
-              The default plan carries no price ids, so it has nothing to buy.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2">
-            {planList.map((candidate) => {
-              const isCurrent = candidate.id === plan?.id;
-
-              return (
-                <div
-                  key={candidate.id}
-                  className="flex flex-wrap items-center gap-2 rounded-lg border p-3 text-sm"
-                >
-                  <span className="font-medium">{candidate.name}</span>
-                  {candidate.trialDays ? (
-                    <Badge variant="secondary">
-                      {candidate.trialDays}-day trial
-                    </Badge>
-                  ) : null}
-                  {isCurrent ? <Badge>current</Badge> : null}
-                  <div className="ms-auto">
-                    <Button
-                      size="sm"
-                      disabled={
-                        isCurrent || candidate.isDefault || buy.isPending
-                      }
-                      onClick={() => buy.mutate(candidate.id)}
-                    >
-                      {live ? "Change to this plan" : "Subscribe"}
-                    </Button>
-                  </div>
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader>
-            <CardTitle>Invoices</CardTitle>
-            <CardDescription>
-              Read from the payment provider on each request. Nothing here is
-              stored in this project&#39;s database.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-2 text-sm">
-            {invoices.data?.invoices.length ? (
-              invoices.data.invoices.map((invoice) => (
-                <div
-                  key={invoice.id}
-                  className="flex flex-wrap items-center gap-3 border-b py-2 last:border-b-0"
-                >
-                  <span className="font-mono text-xs">
-                    {invoice.number ?? invoice.id}
-                  </span>
-                  <span>{formatDate(invoice.createdAt)}</span>
-                  <Badge variant="secondary">{invoice.status}</Badge>
-                  <span className="ms-auto font-medium">
-                    {formatAmount(invoice.amount, invoice.currency)}
-                  </span>
-                  {invoice.hostedUrl ? (
+    <PageLayout
+      detailLabel={selected?.number ?? selected?.id}
+      onDetailClose={() => {
+        setSelectedId(null);
+      }}
+      detail={
+        selected === undefined ? undefined : (
+          <DetailPanel
+            title={selected.number ?? selected.id}
+            description={formatAmount(selected.amount, selected.currency)}
+            onClose={() => {
+              setSelectedId(null);
+            }}
+            attributes={[
+              {
+                label: "Status",
+                value: <InvoiceStatus status={selected.status} />,
+              },
+              {
+                label: "Amount",
+                value: formatAmount(selected.amount, selected.currency),
+              },
+              { label: "Currency", value: selected.currency.toUpperCase() },
+              {
+                label: "Created",
+                value: new Date(selected.createdAt).toLocaleString(),
+              },
+              { label: "Number", value: selected.number },
+              { label: "Invoice id", value: selected.id },
+            ]}
+            // Both links point at the vendor's own pages, so they are plain anchors in the
+            // button's look rather than buttons. A vendor that issues neither leaves the
+            // panel with no actions, rather than with two dead buttons.
+            actions={
+              hostedUrl === null && pdfUrl === null ? undefined : (
+                <div className="flex flex-wrap gap-2">
+                  {hostedUrl === null ? null : (
                     <a
-                      href={invoice.hostedUrl}
+                      href={hostedUrl}
                       target="_blank"
                       rel="noreferrer"
-                      className="text-muted-foreground hover:text-foreground inline-flex items-center gap-1"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                      })}
                     >
-                      View
-                      <ExternalLinkIcon className="size-3.5" />
+                      <ExternalLinkIcon />
+                      View invoice
                     </a>
-                  ) : null}
+                  )}
+                  {pdfUrl === null ? null : (
+                    <a
+                      href={pdfUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      className={buttonVariants({
+                        variant: "outline",
+                        size: "sm",
+                      })}
+                    >
+                      <DownloadIcon />
+                      Download PDF
+                    </a>
+                  )}
                 </div>
-              ))
-            ) : (
-              <p className="text-muted-foreground">No invoices yet.</p>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+              )
+            }
+          />
+        )
+      }
+    >
+      {/* The count is the invoices the provider returned. Refresh stays in the header, so
+          its live state is visible whichever part of the page is scrolled into view. */}
+      <PageHeader
+        title="Billing"
+        count={invoices.data?.invoices.length}
+        description="The plan this account is on, and the invoices behind it."
+        actions={
+          <Button
+            variant="outline"
+            size="sm"
+            loading={subscription.isFetching || invoices.isFetching}
+            // One prefix key covers both queries, so a single invalidation refreshes the
+            // plan and the invoices together.
+            onClick={() => {
+              void queryClient.invalidateQueries({ queryKey: ["billing"] });
+            }}
+          >
+            <RefreshCwIcon />
+            Refresh
+          </Button>
+        }
+      />
 
-      {buy.error || portal.error ? (
-        <p className="text-destructive mt-4 text-sm" role="alert">
-          {(buy.error ?? portal.error)?.message}
-        </p>
-      ) : null}
-    </main>
+      {/* One scroll for the whole page. The cards sit in PageBody with its gutter, and the
+          invoice table runs full bleed under them, aligning its own first column to the
+          same gutter. Without the shared scroll the cards would squeeze the table to
+          nothing on a short screen. */}
+      <div className="min-h-0 flex-1 overflow-auto">
+        <PageBody className="flex-none overflow-visible">
+          <Card>
+            <CardHeader>
+              <CardTitle>Current plan</CardTitle>
+              <CardDescription>
+                Resolved from the latest live row in{" "}
+                <code className="font-mono">billing_subscriptions</code>,
+                falling back to the default plan when there is none.
+              </CardDescription>
+              <CardAction>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  disabled={!live}
+                  loading={portal.isPending}
+                  onClick={() => {
+                    portal.mutate();
+                  }}
+                >
+                  <CreditCardIcon />
+                  Manage billing
+                </Button>
+              </CardAction>
+            </CardHeader>
+            <CardPanel className="flex flex-wrap items-center gap-2 pt-0 text-sm">
+              <span className="font-medium">{plan?.name ?? "—"}</span>
+              <Badge variant={live ? "info" : "secondary"}>
+                {live?.status ?? "no subscription"}
+              </Badge>
+              {live?.cancelAtPeriodEnd === true ? (
+                <Badge variant="warning">cancels at period end</Badge>
+              ) : null}
+              {live?.trialEnd === undefined || live.trialEnd === null ? null : (
+                <span className="text-muted-foreground">
+                  trial ends {formatDate(live.trialEnd)}
+                </span>
+              )}
+            </CardPanel>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Plans</CardTitle>
+              <CardDescription>
+                Declared in{" "}
+                <code className="font-mono">packages/billing/src/plans.ts</code>
+                . The default plan carries no price ids, so it has nothing to
+                buy.
+              </CardDescription>
+            </CardHeader>
+            <CardPanel className="px-0 pt-0 pb-2">
+              <ul className="divide-border divide-y">
+                {planList.map((candidate) => {
+                  const isCurrent = candidate.id === plan?.id;
+
+                  return (
+                    <li
+                      key={candidate.id}
+                      className="flex flex-wrap items-center gap-2 px-6 py-2.5 text-sm"
+                    >
+                      <span className="font-medium">{candidate.name}</span>
+                      {(candidate.trialDays ?? 0) > 0 ? (
+                        <Badge variant="secondary">
+                          {candidate.trialDays}-day trial
+                        </Badge>
+                      ) : null}
+                      {isCurrent ? <Badge variant="info">current</Badge> : null}
+                      <Button
+                        className="ms-auto"
+                        size="sm"
+                        variant={isCurrent ? "outline" : "default"}
+                        disabled={
+                          isCurrent || candidate.isDefault || buy.isPending
+                        }
+                        // Only the pressed row spins; every other row stays disabled
+                        // while a checkout is in flight, so a second press cannot race it.
+                        loading={
+                          buy.isPending && buy.variables === candidate.id
+                        }
+                        onClick={() => {
+                          buy.mutate(candidate.id);
+                        }}
+                      >
+                        {live ? "Change to this plan" : "Subscribe"}
+                      </Button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </CardPanel>
+          </Card>
+        </PageBody>
+
+        <div className="border-border flex items-baseline gap-2 border-y px-(--page-gutter) py-2.5">
+          <h2 className="text-sm font-semibold">Invoices</h2>
+          <p className="text-muted-foreground truncate text-xs">
+            Read from the payment provider on each request. Nothing here is
+            stored in this project&#39;s database.
+          </p>
+        </div>
+
+        <DataTable
+          className="flex-none"
+          caption="Invoices from the payment provider, with their number, status, date and amount."
+          columns={INVOICE_COLUMNS}
+          rows={invoiceRows}
+          rowId={(invoice) => invoice.id}
+          selectedId={selectedId}
+          onRowClick={(invoice) => {
+            setSelectedId(invoice.id);
+          }}
+          // The table has no filter, so there is one empty case: the provider has issued
+          // nothing to this account yet.
+          emptyState={
+            <EmptyState
+              icon={ReceiptIcon}
+              title="No invoices yet"
+              description={
+                live
+                  ? "The provider lists an invoice here once it bills this subscription."
+                  : "Subscribe to a paid plan and its invoices appear here."
+              }
+            />
+          }
+        />
+      </div>
+    </PageLayout>
   );
+}
+
+function linkOrNull(url: string | null | undefined): string | null {
+  return url === undefined || url === null || url === "" ? null : url;
 }
 
 function formatDate(value: string | number | Date) {
@@ -289,26 +491,24 @@ function formatAmount(amount: number, currency: string) {
   return format.format(amount / 10 ** digits);
 }
 
+// The route keeps its own error screen because the likeliest cause is specific to this
+// module: `BILLING_PROVIDER` unset or naming a provider that is not installed. The
+// router's default would retry just as well, but it could not name the variable.
 function BillingError({ error, reset }: ErrorComponentProps) {
   return (
-    <main className="mx-auto max-w-3xl px-6 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>Billing did not load</CardTitle>
-          <CardDescription>
-            {error.message} Check that{" "}
-            <code className="font-mono">BILLING_PROVIDER</code> names an
-            installed provider — it is required, and there is no default in
-            either direction.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" size="sm" onClick={reset}>
-            <RefreshCwIcon data-icon="inline-start" />
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <PageLayout>
+      <PageHeader title="Billing" />
+      <ErrorState
+        code={errors.renderFailure.code}
+        title="Billing did not load"
+        description="Check that BILLING_PROVIDER names an installed provider. It is required, and there is no default in either direction."
+        detail={error instanceof Error ? error.message : undefined}
+        primaryAction={{
+          label: errors.renderFailure.retryLabel,
+          onClick: reset,
+        }}
+        secondaryAction={null}
+      />
+    </PageLayout>
   );
 }

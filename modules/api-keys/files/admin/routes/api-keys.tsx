@@ -3,17 +3,14 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import type { PrincipalLike } from "@repo/auth/rbac-rules";
-import { Button } from "@repo/ui/components/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@repo/ui/components/card";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { errors } from "@repo/ui/content/errors";
 
 import { ApiKeyWorkspace } from "@admin/components/api-key-workspace";
-import { tenantQuery } from "@admin/lib/tenant";
+import { organizationQuery, tenantQuery } from "@admin/lib/tenant";
 
 // `/api-keys` — the active organization's machine credentials.
 //
@@ -29,21 +26,36 @@ import { tenantQuery } from "@admin/lib/tenant";
 // The screen is scoped to the caller's active organization, behind the site-admin root
 // guard, exactly as `/teams` and `/roles` are. An organization picker over the superadmin
 // bypass is a filed follow-up.
+//
+// The route only resolves the caller. The whole page — header, key table, detail panel,
+// create dialog — is the workspace's, because the header's count and its "New key"
+// button both read state the workspace owns. It renders inside the root's page frame.
 
 export const Route = createFileRoute("/api-keys")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(tenantQuery),
+  // The organization's name waits on the tenant's id, so the two reads run in turn. Both
+  // land before the first render, and the header never shows an id or a placeholder.
+  loader: async ({ context }) => {
+    // oxlint-disable-next-line typescript/no-deprecated -- every admin loader reads its cache this way; moving to `query()` is one change across all of them
+    const tenant = await context.queryClient.ensureQueryData(tenantQuery);
+    // oxlint-disable-next-line typescript/no-deprecated -- as above
+    await context.queryClient.ensureQueryData(
+      organizationQuery(tenant.organizationId)
+    );
+  },
   component: ApiKeys,
   errorComponent: ApiKeysError,
 });
 
 function ApiKeys() {
   const tenant = useQuery(tenantQuery);
-  if (!tenant.data) {
-    return (
-      <main className="mx-auto max-w-5xl px-6 py-10">
-        <p className="text-muted-foreground text-sm">Loading API keys…</p>
-      </main>
-    );
+  const organization = useQuery({
+    ...organizationQuery(tenant.data?.organizationId ?? ""),
+    enabled: tenant.data !== undefined,
+  });
+  // The loader resolved both already, so the skeleton shows only if a cache entry was
+  // dropped between the loader and the render. It is the router's pending look, reused.
+  if (!tenant.data || !organization.data) {
+    return <PageSkeleton />;
   }
 
   // The api returns the principal as JSON, so the literal `kind` narrows back to the
@@ -52,50 +64,41 @@ function ApiKeys() {
   const principal = tenant.data.principal as PrincipalLike;
 
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <div className="mb-6">
-        <h1 className="text-xl font-semibold tracking-tight">API keys</h1>
-        <p className="text-muted-foreground text-sm">
-          Machine credentials for {tenant.data.organizationId}. A key carries a
-          fixed scope, chosen when it is issued, and calls the api with{" "}
-          <code>Authorization: Bearer</code>.
-        </p>
-      </div>
-
-      <ApiKeyWorkspace
-        organizationId={tenant.data.organizationId}
-        principal={principal}
-      />
-    </main>
+    <ApiKeyWorkspace
+      organizationId={tenant.data.organizationId}
+      organizationName={organization.data.name}
+      principal={principal}
+    />
   );
 }
 
 function ApiKeysError({ error, reset }: ErrorComponentProps) {
   // `no active organization` is the fixed message from `@repo/auth/tenant`. It is the one
   // failure with an obvious next step, so it gets its own copy rather than the generic
-  // "check that the api is running".
-  const needsOrganization = error.message === "no active organization";
+  // "check that the api is running". The router types `error` as unknown, so the message
+  // is read only off a real Error.
+  const message = error instanceof Error ? error.message : undefined;
+  const needsOrganization = message === "no active organization";
   return (
-    <main className="mx-auto max-w-5xl px-6 py-10">
-      <Card>
-        <CardHeader>
-          <CardTitle>
-            {needsOrganization
-              ? "No active organization"
-              : "API keys did not load"}
-          </CardTitle>
-          <CardDescription>
-            {needsOrganization
-              ? "Choose an organization on the Teams screen, then come back."
-              : `${error.message} Check that the api is running, then try again.`}
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <Button variant="outline" onClick={reset}>
-            Try again
-          </Button>
-        </CardContent>
-      </Card>
-    </main>
+    <PageLayout>
+      <PageHeader title="API keys" />
+      <ErrorState
+        code={errors.renderFailure.code}
+        title={
+          needsOrganization ? "No active organization" : "API keys did not load"
+        }
+        description={
+          needsOrganization
+            ? "Choose an organization on the Teams screen, then come back."
+            : "Check that the api is running, then try again."
+        }
+        detail={needsOrganization ? undefined : message}
+        primaryAction={{
+          label: errors.renderFailure.retryLabel,
+          onClick: reset,
+        }}
+        secondaryAction={null}
+      />
+    </PageLayout>
   );
 }

@@ -1,11 +1,12 @@
 # `src/containers/`
 
-Containers are the third UI layer. A container binds a shared store or cross-island state, then wires the data and the callbacks into pure blocks. Keep them thin — the visual weight stays in the block.
+Containers are the shells and layouts that hold blocks and components on a page: an app shell, a page layout, a page frame. The visual weight of a screen sits in its blocks; a container decides where they go.
 
-The base ships none, so this folder holds only this note. Delete the note when you add your first container.
+The base ships none. `saasaloy add admin` writes the admin app's shell and layouts into `src/containers/admin/`.
 
 Rules (the full version is in the repository's `AGENTS.md`):
 
-- A container imports a client-state store from `@repo/ui/lib/*`, subscribes to it, and renders blocks. It owns no markup a block could own.
-- No IO anywhere in `@repo/ui` — no fetch, no persistence, no auth. The app that owns the data hydrates the store.
-- One container, one file, one component export. Reach it by subpath: `import { CartSummary } from "@repo/ui/containers/cart-summary";`.
+- A container takes its data, its links and its callbacks as props. It imports no router and no session; the app that owns them passes them in.
+- No IO anywhere in `@repo/ui`: no fetch, no persistence, no auth.
+- One container, one file. Reach it by subpath: `import { ShellLayout } from "@repo/ui/containers/admin/shell-layout";`.
+- A folder may hold `admin/`, `web/` or `shared/` children where one app owns the files.

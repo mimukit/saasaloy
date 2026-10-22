@@ -11,14 +11,15 @@
     "./content/*": "./src/content/*.ts",
     "./components/*": "./src/components/*.tsx",
     "./blocks/*": "./src/blocks/*.tsx",
-    "./containers/*": "./src/containers/*.tsx"
+    "./containers/*": "./src/containers/*.tsx",
+    "./assets/*": "./src/assets/*"
   },
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@base-ui/react": "1.8.0",
+    "@base-ui/react": "1.9.0",
     "class-variance-authority": "0.7.1",
     "clsx": "2.1.1",
     "lucide-react": "1.49.0",

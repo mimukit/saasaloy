@@ -34,12 +34,263 @@
         "environment": "dev",
         "omit": []
       }
+    },
+    {
+      "file": "packages/ui/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@tanstack/react-table",
+      "range": "9.2.4"
     }
   ],
   "files": [
     {
       "path": "files/api/routes/admin-users.ts",
       "target": "@api/routes/admin-users.ts"
+    },
+    {
+      "path": "files/ui/assets/assets.d.ts",
+      "target": "@ui/assets/assets.d.ts"
+    },
+    {
+      "path": "files/ui/assets/brand-mark.svg",
+      "target": "@ui/assets/brand-mark.svg"
+    },
+    {
+      "path": "files/ui/blocks/admin/attribute-list.tsx",
+      "target": "@ui/blocks/admin/attribute-list.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/brand-mark.tsx",
+      "target": "@ui/blocks/admin/brand-mark.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/data-table.tsx",
+      "target": "@ui/blocks/admin/data-table.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/detail-panel.tsx",
+      "target": "@ui/blocks/admin/detail-panel.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/empty-state.tsx",
+      "target": "@ui/blocks/admin/empty-state.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/error-state.tsx",
+      "target": "@ui/blocks/admin/error-state.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/filter-chips.tsx",
+      "target": "@ui/blocks/admin/filter-chips.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/page-header.tsx",
+      "target": "@ui/blocks/admin/page-header.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/page-skeleton.tsx",
+      "target": "@ui/blocks/admin/page-skeleton.tsx"
+    },
+    {
+      "path": "files/ui/blocks/admin/theme-toggle.tsx",
+      "target": "@ui/blocks/admin/theme-toggle.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/NOTICE.md",
+      "target": "@ui/components/admin/NOTICE.md"
+    },
+    {
+      "path": "files/ui/components/admin/alert-dialog.tsx",
+      "target": "@ui/components/admin/alert-dialog.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/alert.tsx",
+      "target": "@ui/components/admin/alert.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/avatar.tsx",
+      "target": "@ui/components/admin/avatar.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/badge.tsx",
+      "target": "@ui/components/admin/badge.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/breadcrumb.tsx",
+      "target": "@ui/components/admin/breadcrumb.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/button.tsx",
+      "target": "@ui/components/admin/button.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/card.tsx",
+      "target": "@ui/components/admin/card.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/checkbox.tsx",
+      "target": "@ui/components/admin/checkbox.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/collapsible.tsx",
+      "target": "@ui/components/admin/collapsible.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/combobox.tsx",
+      "target": "@ui/components/admin/combobox.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/dialog.tsx",
+      "target": "@ui/components/admin/dialog.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/empty.tsx",
+      "target": "@ui/components/admin/empty.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/field.tsx",
+      "target": "@ui/components/admin/field.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/fieldset.tsx",
+      "target": "@ui/components/admin/fieldset.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/form.tsx",
+      "target": "@ui/components/admin/form.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/group.tsx",
+      "target": "@ui/components/admin/group.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/input-group.tsx",
+      "target": "@ui/components/admin/input-group.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/input.tsx",
+      "target": "@ui/components/admin/input.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/kbd.tsx",
+      "target": "@ui/components/admin/kbd.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/label.tsx",
+      "target": "@ui/components/admin/label.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/menu.tsx",
+      "target": "@ui/components/admin/menu.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/meter.tsx",
+      "target": "@ui/components/admin/meter.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/popover.tsx",
+      "target": "@ui/components/admin/popover.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/radio-group.tsx",
+      "target": "@ui/components/admin/radio-group.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/scroll-area.tsx",
+      "target": "@ui/components/admin/scroll-area.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/select.tsx",
+      "target": "@ui/components/admin/select.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/separator.tsx",
+      "target": "@ui/components/admin/separator.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/sheet.tsx",
+      "target": "@ui/components/admin/sheet.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/sidebar.tsx",
+      "target": "@ui/components/admin/sidebar.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/skeleton.tsx",
+      "target": "@ui/components/admin/skeleton.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/spinner.tsx",
+      "target": "@ui/components/admin/spinner.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/status-pill.tsx",
+      "target": "@ui/components/admin/status-pill.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/switch.tsx",
+      "target": "@ui/components/admin/switch.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/table.tsx",
+      "target": "@ui/components/admin/table.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/tabs.tsx",
+      "target": "@ui/components/admin/tabs.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/textarea.tsx",
+      "target": "@ui/components/admin/textarea.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/toast.tsx",
+      "target": "@ui/components/admin/toast.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/toggle-group.tsx",
+      "target": "@ui/components/admin/toggle-group.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/toggle.tsx",
+      "target": "@ui/components/admin/toggle.tsx"
+    },
+    {
+      "path": "files/ui/components/admin/tooltip.tsx",
+      "target": "@ui/components/admin/tooltip.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/page-body.tsx",
+      "target": "@ui/containers/admin/page-body.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/page-frame.tsx",
+      "target": "@ui/containers/admin/page-frame.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/page-layout.tsx",
+      "target": "@ui/containers/admin/page-layout.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/shell-layout.tsx",
+      "target": "@ui/containers/admin/shell-layout.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/shell-nav.tsx",
+      "target": "@ui/containers/admin/shell-nav.tsx"
+    },
+    {
+      "path": "files/ui/containers/admin/shell-sidebar.tsx",
+      "target": "@ui/containers/admin/shell-sidebar.tsx"
+    },
+    {
+      "path": "files/ui/lib/admin/segmented-control.ts",
+      "target": "@ui/lib/admin/segmented-control.ts"
+    },
+    {
+      "path": "files/ui/lib/admin/use-media-query.ts",
+      "target": "@ui/lib/admin/use-media-query.ts"
     },
     {
       "path": "files/ui/styles/admin.css",
@@ -78,6 +329,10 @@
           "target": "index.html"
         },
         {
+          "path": "files/DESIGN.md",
+          "target": "DESIGN.md"
+        },
+        {
           "path": "files/src/main.tsx",
           "target": "src/main.tsx"
         },
@@ -110,42 +365,6 @@
           "target": "src/components/nav.ts"
         },
         {
-          "path": "files/src/components/rail.tsx",
-          "target": "src/components/rail.tsx"
-        },
-        {
-          "path": "files/src/components/nav-panel.tsx",
-          "target": "src/components/nav-panel.tsx"
-        },
-        {
-          "path": "files/src/components/page-layout.tsx",
-          "target": "src/components/page-layout.tsx"
-        },
-        {
-          "path": "files/src/components/page-header.tsx",
-          "target": "src/components/page-header.tsx"
-        },
-        {
-          "path": "files/src/components/filter-chips.tsx",
-          "target": "src/components/filter-chips.tsx"
-        },
-        {
-          "path": "files/src/components/data-table.tsx",
-          "target": "src/components/data-table.tsx"
-        },
-        {
-          "path": "files/src/components/status-pill.tsx",
-          "target": "src/components/status-pill.tsx"
-        },
-        {
-          "path": "files/src/components/attribute-list.tsx",
-          "target": "src/components/attribute-list.tsx"
-        },
-        {
-          "path": "files/src/components/detail-panel.tsx",
-          "target": "src/components/detail-panel.tsx"
-        },
-        {
           "path": "files/src/components/access-denied.tsx",
           "target": "src/components/access-denied.tsx"
         },
@@ -168,6 +387,14 @@
         {
           "path": "files/src/routes/users.tsx",
           "target": "src/routes/users.tsx"
+        },
+        {
+          "path": "files/src/components/route-error.tsx",
+          "target": "src/components/route-error.tsx"
+        },
+        {
+          "path": "files/src/lib/users-query.ts",
+          "target": "src/lib/users-query.ts"
         }
       ]
     }

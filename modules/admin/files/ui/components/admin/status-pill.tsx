@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 
 import { cn } from "@repo/ui/lib/utils";
 
-// The rounded-full pill the reference renders in a table's Status column ("Open" on a
+// The pill the reference renders in a table's Status column ("Open" on a
 // muted blue fill). Also the right shape for a single-value state anywhere else on a
 // page — the overview's health result, a role, a plan tier.
 //
@@ -37,7 +37,7 @@ export function StatusPill({
   return (
     <span
       className={cn(
-        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-full px-2 text-xs font-medium whitespace-nowrap",
+        "inline-flex h-5 w-fit shrink-0 items-center gap-1 rounded-md px-1.5 text-xs font-medium whitespace-nowrap",
         "[&>svg]:size-3 [&>svg]:shrink-0",
         TONE_CLASS[tone],
         className
