@@ -10,7 +10,7 @@ import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
 import { ApiKeyWorkspace } from "@admin/components/api-key-workspace";
-import { tenantQuery } from "@admin/lib/tenant";
+import { organizationQuery, tenantQuery } from "@admin/lib/tenant";
 
 // `/api-keys` — the active organization's machine credentials.
 //
@@ -32,16 +32,29 @@ import { tenantQuery } from "@admin/lib/tenant";
 // button both read state the workspace owns. It renders inside the root's page frame.
 
 export const Route = createFileRoute("/api-keys")({
-  loader: ({ context }) => context.queryClient.ensureQueryData(tenantQuery),
+  // The organization's name waits on the tenant's id, so the two reads run in turn. Both
+  // land before the first render, and the header never shows an id or a placeholder.
+  loader: async ({ context }) => {
+    // oxlint-disable-next-line typescript/no-deprecated -- every admin loader reads its cache this way; moving to `query()` is one change across all of them
+    const tenant = await context.queryClient.ensureQueryData(tenantQuery);
+    // oxlint-disable-next-line typescript/no-deprecated -- as above
+    await context.queryClient.ensureQueryData(
+      organizationQuery(tenant.organizationId)
+    );
+  },
   component: ApiKeys,
   errorComponent: ApiKeysError,
 });
 
 function ApiKeys() {
   const tenant = useQuery(tenantQuery);
-  // The loader resolved this already, so the skeleton shows only if the cache entry was
+  const organization = useQuery({
+    ...organizationQuery(tenant.data?.organizationId ?? ""),
+    enabled: tenant.data !== undefined,
+  });
+  // The loader resolved both already, so the skeleton shows only if a cache entry was
   // dropped between the loader and the render. It is the router's pending look, reused.
-  if (!tenant.data) {
+  if (!tenant.data || !organization.data) {
     return <PageSkeleton />;
   }
 
@@ -53,6 +66,7 @@ function ApiKeys() {
   return (
     <ApiKeyWorkspace
       organizationId={tenant.data.organizationId}
+      organizationName={organization.data.name}
       principal={principal}
     />
   );

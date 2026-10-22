@@ -512,7 +512,7 @@ export function RoleWorkspace({
       <PageHeader
         title="Roles"
         count={customRoles.isPending ? undefined : roleRows.length}
-        description={`Permissions for ${organization.id}. Base roles are locked; custom roles take effect on the next request.`}
+        description={`Permissions for ${organization.name}. Base roles are locked; custom roles take effect on the next request.`}
         actions={
           canManage ? (
             <Button

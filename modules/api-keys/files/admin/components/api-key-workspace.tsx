@@ -190,9 +190,12 @@ const COLUMNS: readonly DataTableColumn<KeyRow>[] = [
 
 export function ApiKeyWorkspace({
   organizationId,
+  organizationName,
   principal,
 }: {
   organizationId: string;
+  /** The organization's name, for the header. The id stays for the api calls. */
+  organizationName: string;
   /** The resolved caller from `GET /tenant`. It decides what the picker offers. */
   principal: PrincipalLike;
 }) {
@@ -433,7 +436,7 @@ export function ApiKeyWorkspace({
         count={keys.data?.length}
         description={
           <>
-            Machine credentials for {organizationId}, sent as{" "}
+            Machine credentials for {organizationName}, sent as{" "}
             <code>Authorization: Bearer</code>. A key&apos;s scope is fixed when
             it is issued.
           </>

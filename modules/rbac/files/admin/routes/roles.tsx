@@ -10,7 +10,7 @@ import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
 import { errors } from "@repo/ui/content/errors";
 
 import { RoleWorkspace } from "@admin/components/role-workspace";
-import { tenantQuery } from "@admin/lib/tenant";
+import { organizationQuery, tenantQuery } from "@admin/lib/tenant";
 
 // `/roles` — the active organization's roles, and who holds them.
 //
@@ -34,18 +34,29 @@ import { tenantQuery } from "@admin/lib/tenant";
 // the create dialog — because the selection and every mutation live there.
 
 export const Route = createFileRoute("/roles")({
-  loader: async ({ context }) =>
+  // The organization's name waits on the tenant's id, so the two reads run in turn. Both
+  // land before the first render, and the header never shows an id or a placeholder.
+  loader: async ({ context }) => {
     // oxlint-disable-next-line typescript/no-deprecated -- every admin loader reads its cache this way; moving to `query()` is one change across all of them
-    await context.queryClient.ensureQueryData(tenantQuery),
+    const tenant = await context.queryClient.ensureQueryData(tenantQuery);
+    // oxlint-disable-next-line typescript/no-deprecated -- as above
+    await context.queryClient.ensureQueryData(
+      organizationQuery(tenant.organizationId)
+    );
+  },
   component: Roles,
   errorComponent: RolesError,
 });
 
 function Roles() {
   const tenant = useQuery(tenantQuery);
-  // The loader resolved this, so the guard only covers a refetch that dropped the cache.
+  const organization = useQuery({
+    ...organizationQuery(tenant.data?.organizationId ?? ""),
+    enabled: tenant.data !== undefined,
+  });
+  // The loader resolved both, so the guard only covers a refetch that dropped the cache.
   // It shows the router's own skeleton rather than a sentence of its own.
-  if (!tenant.data) {
+  if (!tenant.data || !organization.data) {
     return <PageSkeleton />;
   }
 
@@ -61,8 +72,8 @@ function Roles() {
   return (
     <RoleWorkspace
       organization={{
-        id: tenant.data.organizationId,
-        name: "this organization",
+        id: organization.data.id,
+        name: organization.data.name,
       }}
       canManage={canManage}
     />

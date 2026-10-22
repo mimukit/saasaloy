@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 
 import { api } from "@admin/lib/api";
+import { auth } from "@admin/lib/auth";
 
 // The `GET /tenant` query, in one place.
 //
@@ -29,3 +30,29 @@ export const tenantQuery = queryOptions({
     return res.json();
   },
 });
+
+/**
+ * The organization behind an id, for the screens that name it. `GET /tenant` carries the
+ * id only, and a raw id means nothing to the person reading the page, so a screen shows
+ * `name` instead. Better Auth's `getOrganization` checks that the caller is a member.
+ *
+ * The key sits under `["organizations", id]`, so the teams screen's invalidation of
+ * `["organizations"]` after a rename refreshes this name too.
+ */
+export function organizationQuery(organizationId: string) {
+  return queryOptions({
+    queryKey: ["organizations", organizationId, "detail"],
+    queryFn: async () => {
+      const result = await auth.organization.getOrganization({
+        query: { organizationId },
+      });
+      if (result.error) {
+        throw new Error(result.error.message);
+      }
+      if (!result.data) {
+        throw new Error("no active organization");
+      }
+      return result.data;
+    },
+  });
+}
