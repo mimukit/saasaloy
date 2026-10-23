@@ -61,9 +61,9 @@ The plan adds one switch (`testing.mode`) and one descriptor field (`when`), the
 
 Rejected: a `testing` module whose presence turns testing on, because a module cannot hold a mode value cleanly and `remove testing` would have to delete owner tests. A generated `ci.yml`, because it needs a YAML generator and an ADR 0034 exception that script patches avoid. Specs for every journey in `modules/e2e`, because that module would grow with every feature module and own files it does not maintain.
 
-### Phase 1: testing mode in `saasaloy.json` and `AGENTS.md`
+### Phase 1: testing mode in `saasaloy.json` and `AGENTS.md` (#242)
 
-Issue: core.
+Issue: #242.
 
 - Add `testing.mode` to `packages/cli/schemas/saasaloy.schema.json`; an absent key reads as `off`.
 - Add `--testing=<mode>` to `saasaloy init`, and one prompt in the attended init flow.
@@ -74,9 +74,9 @@ Issue: core.
 
 Done when: `saasaloy init .dev/t --testing=tdd --no-install` writes `"mode": "tdd"` and the `tdd` block, `saasaloy testing off` in that project rewrites both, `saasaloy testing` prints `off`, and `pnpm test` covers each case.
 
-### Phase 2: conditional files and backfill
+### Phase 2: conditional files and backfill (#242)
 
-Issue: core.
+Issue: #242.
 
 - Add `when` (`testing: true`, `installed: string[]`) to `files[]` and `patches` in `registry-item.schema.json`, plus `untested` on `files[]` and `enablesTesting` on the descriptor.
 - The applier skips an entry whose condition is false, and the manifest records it as skipped, so `update` does not report it missing.
@@ -88,9 +88,9 @@ Issue: core.
 
 Done when: a CLI test adds `auth` with testing off and finds no `auth.test.ts`, runs `testing tests-after` and finds it, runs `testing off` and still finds it; a second test adds a fixture module with `enablesTesting` to an `off` project and finds the mode at `tests-after` and `auth.test.ts` written.
 
-### Phase 3: the `saasaloy-testing` skill
+### Phase 3: the `saasaloy-testing` skill (#242)
 
-Issue: core.
+Issue: #242.
 
 - Add `packages/cli/templates/base/_agents/skills/saasaloy-testing/SKILL.md`.
 - It maps each change to its test: pure logic → unit test beside the file; api route → route test with `testDatabase()` and the four cases; provider → contract suite; new table → seed slice; user-visible flow → Playwright spec in the feature module, gated on `e2e`.
@@ -99,9 +99,9 @@ Issue: core.
 
 Done when: a fresh `init` has the skill under `.agents/skills/saasaloy-testing/` with its `.claude/skills/` symlink, and `pnpm verify:content` passes.
 
-### Phase 4: ship the module unit tests
+### Phase 4: ship the module unit tests (#243)
 
-Issue: tests. Depends on the core issue.
+Issue: #243. Blocked by #242.
 
 - Convert the 49 module unit tests to Vitest and rename them to `<name>.vitest.ts`, with a `when: { testing: true }` entry each.
 - Add `packages/cli/vitest.modules.config.ts` and point `pnpm test:modules` at it, so the files run in place with the existing shims.
@@ -110,9 +110,9 @@ Issue: tests. Depends on the core issue.
 
 Done when: `pnpm test:modules` runs every converted file on Vitest and passes, and the guard fails on a fixture descriptor that drops one test entry.
 
-### Phase 5: route tests for every route-owning module
+### Phase 5: route tests for every route-owning module (#243)
 
-Issue: tests.
+Issue: #243.
 
 - Write a route test for `admin`, `billing`, `feature-flags`, `multitenant` (2 files), `payment` (2 files), `rbac`, `storage` and `waitlist`, each with the four cases.
 - Gate each one, and the existing `auth` and `health-db` tests, with `when: { testing: true }`.
@@ -120,9 +120,9 @@ Issue: tests.
 
 Done when: a playground with every module and `--testing=tests-after` passes `pnpm test` on both drivers with 10 of 10 route-owning modules tested, and the guard fails on a fixture that drops one route test.
 
-### Phase 6: schema drift check
+### Phase 6: schema drift check (#243)
 
-Issue: tests.
+Issue: #243.
 
 - Add `db:check` to `database-d1` and `database-postgres`.
 - A `package-json-script` patch with `when: { testing: true }` runs it in the root `test` script before Vitest.
@@ -130,9 +130,9 @@ Issue: tests.
 
 Done when: in the playground, an edit to a table with no `db:generate` makes `pnpm test` fail at `db:check`, and `db:generate` makes it pass.
 
-### Phase 7: the opt-in `ci` module
+### Phase 7: the opt-in `ci` module (#244)
 
-Issue: CI. Depends on the core issue.
+Issue: #244. Blocked by #242.
 
 - Build `modules/ci`: the static workflow at `@root/.github/workflows/ci.yml`, a root `ci:prepare` script that does nothing by default, a patch that names `ci.yml` in `deploy.config.ts`, and a `saasaloy-ci` skill.
 - `database-postgres` patches `ci:prepare` with `docker compose up -d --wait`, under `when: { installed: ["ci"] }`.
@@ -140,9 +140,9 @@ Issue: CI. Depends on the core issue.
 
 Done when: a playground with `ci`, `database-postgres` and testing on runs `ci.yml` green on a push to a scratch repo, and `pnpm deploy:production --dry-run` reports the CI gate as on.
 
-### Phase 8: provider contract suites
+### Phase 8: provider contract suites (#245)
 
-Issue: later.
+Issue: #245. Blocked by #243, #155 and #172.
 
 - Spike `packages/kv/src/testing/contract.ts`: `kvContract(name, makeProvider)` registers the shared cases with Vitest (round trip, TTL floor, `list` cursor, `consume` window, error mapping to `KvError` codes with `providerCode` and `retryable`).
 - Run it against `kv-memory` and `kv-cloudflare` on Miniflare or the Workers Vitest pool; the spike picks one and records why. A vendor provider runs network cases only when its secret is set, and runs error mapping against recorded responses always.
@@ -151,9 +151,9 @@ Issue: later.
 
 Done when: every installed provider in the Phase 5 playground runs its capability's contract suite in `pnpm test`, and an owner-written provider can call `kvContract("mine", () => mine())`.
 
-### Phase 9: nightly full-project run
+### Phase 9: nightly full-project run (#245)
 
-Issue: later.
+Issue: #245. Blocked by #243, #155 and #172.
 
 - Measure the time to scaffold, install, `build`, `typecheck` and `test` one full-module project per driver with `--testing=tdd`.
 - Add `.github/workflows/full.yml` on a schedule, separate from `smoke.yml`, so the release preflight stays fast.
@@ -162,9 +162,9 @@ Issue: later.
 
 Done when: the scheduled job runs `build`, `typecheck` and `test` on both drivers and passes on `main`.
 
-### Phase 10: journey specs per feature module
+### Phase 10: journey specs per feature module (#245)
 
-Issue: later. Depends on #155.
+Issue: #245. Blocked by #243, #155 and #172.
 
 - Move the `waitlist` and `admin-*` specs from `modules/e2e` to their own modules under `when: { installed: ["e2e"] }`.
 - Write one journey spec per feature module with UI: `auth` sign-in and sign-out, `teams` invite and accept, `api-keys` create and use, `billing` checkout through `payment-console`, `storage` upload, `feature-flags` toggle in admin.
