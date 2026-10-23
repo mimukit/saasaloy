@@ -34,7 +34,7 @@ This plan supersedes Phase 4 of plan 0051 and adds the public-object path. Phase
 | The table name | `storage_objects`, plural snake_case, Drizzle export key `storageObjects` ([ADR 0038](../adr/0038-adr-table-names-are-plural-snake-case-2026-09-12.md)). Plan 0051's `storage_object` predates that ADR. |
 | The tenant column | A plain `tenantId` (`tenant_id text NOT NULL`), following the only precedent in the repo: `modules/feature-flags/files/db/schema/feature-flags.sqlite.ts:62` uses the same column and names it "whatever a project calls a tenant: an organization id under `teams`, or its own". **Not** `tenantColumn()` from `@repo/db/tenant-column`, because that ships in `multitenant` and would force organizations onto every project that wants file uploads. |
 | Where the tenant id comes from | One `resolveTenant(c)` helper inside this module. It returns the active organization id when `multitenant` is installed, and the literal `default` otherwise. The branch lives in that one function and nowhere else. |
-| The tenant id with no tenant concept | The literal `default`, so every key is `t/default/…`. `ownerId` still distinguishes users. Adding `multitenant` later leaves existing objects under `t/default/` where they still resolve, because a key cannot be rewritten and any other choice orphans them. |
+| The tenant id with no tenant concept | The literal `default`, so every key is `t/default/…`. Every user shares that tenant, so with no active organization each query also filters on `ownerId` and a user lists, downloads and deletes only their own objects (`resolveScope`). With an active organization the organization is the scope and every member acts on its objects. Adding `multitenant` later leaves existing objects under `t/default/` where they still resolve, because a key cannot be rewritten and any other choice orphans them; their owner reaches them with no organization active. |
 
 ## Approach
 
@@ -42,7 +42,7 @@ Build one feature module, `modules/file-uploads`, typed `saasaloy:feature`, on t
 
 It reuses the capability rather than reimplementing any of it. `createStorage(env)`, `buildKey`, `createUploadUrl` and `createDownloadUrl` come from `@repo/storage`, and the module adds no vendor dependency and touches no binding. The sweep job uses `defineJob` and `defineSchedule` from `@repo/queue`, registered through `plugin-array` patches on the `jobs` and `schedules` arrays the way `billing` registers its own. Input validation goes through `@validators`.
 
-Tenant scoping is the module's own, not `multitenant`'s. `resolveTenant(c)` returns a tenant id, the repository takes it as an argument on every call, and every query filters on it. That is weaker than `forTenant`, which wraps the query builder and cannot be bypassed, and the plan accepts the weaker guarantee in exchange for installing without `multitenant`. The repository being the only read path is what carries the guarantee, so a route issuing a raw query against the table is a review failure, not a style preference.
+Tenant scoping is the module's own, not `multitenant`'s. `resolveTenant(c)` returns a tenant id, `resolveScope(c)` adds the session user as owner when that id is `default`, the repository takes the scope as an argument on every request-path call, and every such query filters on it. That is weaker than `forTenant`, which wraps the query builder and cannot be bypassed, and the plan accepts the weaker guarantee in exchange for installing without `multitenant`. The repository being the only read path is what carries the guarantee, so a route issuing a raw query against the table is a review failure, not a style preference.
 
 The public path is entirely inside this module. `packages/storage` does not change, no file another module owns is overwritten, and the key stays within the pattern the core already enforces.
 
@@ -57,7 +57,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - **Depending on `multitenant` for `tenantColumn()` and `forTenant()`.** Stronger scoping, and it makes organizations a precondition for uploading a file. `feature-flags` set the precedent of a plain `tenant_id` column with no such dependency.
 - **A capability-owned object table.** Settled in plan 0051: it would force a database driver onto every storage install, and `file-uploads` is the only consumer.
 
-### Phase 1: the record and the repository
+### Phase 1: the record and the repository (built 2026-09-23)
 
 - [ ] `modules/file-uploads/registry-item.json`: `saasaloy:feature`, the six `dependsOn`, and `envVars` for `STORAGE_PURGE_AFTER_DAYS`, `STORAGE_PUBLIC_URL` and `STORAGE_IMAGE_TRANSFORMS`
 - [ ] `storage_objects` in two dialect variants under one target with `onlyWith`, export key `storageObjects`: `id`, `key`, `provider`, `tenantId`, `ownerId`, `contentType`, `size`, `visibility` (`private`, `public`), `status` (`pending`, `ready`, `rejected`, `deleting`, `deleted`), `createdAt`, `completedAt`, `deletedAt`, `metadata`
@@ -65,19 +65,19 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - [ ] Unique index on `key`; `storage_objects_tenant_id_idx`; `storage_objects_tenant_id_status_idx`
 - [ ] `id` is `crypto.randomUUID()` and the schema comment says it is security-relevant, because it is the unguessable segment of a public key
 - [ ] `resolveTenant(c)` in `@api/lib/file-uploads.ts` returns the active organization id when `multitenant` is installed and `default` otherwise, and it is the only place in the module that knows the difference
-- [ ] `@db/repositories/objects.ts` is the only read path. Every function takes a tenant id and filters on it, and every function filters `deletedAt IS NULL`. No route issues a raw query against the table
+- [ ] `@db/repositories/objects.ts` is the only read path. Every request-path function takes an `ObjectScope` (tenant, plus owner with no active organization) and filters on it, and every function filters `deletedAt IS NULL`. No route issues a raw query against the table
 - [ ] `@validators/file-uploads.ts` covers the upload request: filename, content type, declared size, visibility
 
-### Phase 2: the routes
+### Phase 2: the routes (built 2026-09-23)
 
 - [ ] `POST /files/uploads`: enforce the per-file cap, refuse `visibility: "public"` when `STORAGE_PUBLIC_URL` is unset, insert a `pending` row, build the key with scope `uploads` or `public-uploads`, return the upload target
 - [ ] `POST /files/uploads/:id/complete`: head the real object, verify size and content type against the row, delete the object and mark `rejected` on a mismatch, else mark `ready`
-- [ ] `GET /files`: the tenant's list, paginated, carrying `url` on every public row
+- [ ] `GET /files`: the scope's list, paginated, carrying `url` on every ready public row
 - [ ] `GET /files/:id/download`: a download target for a private object; refuses a public id
 - [ ] `DELETE /files/:id`: mark `deleting`, delete the object, then mark `deleted` with `deletedAt`
-- [ ] Every row carries owner, tenant, size and content type, and every query scopes by tenant
+- [ ] Every row carries owner, tenant, size and content type, and every query scopes by tenant, and by owner with no active organization
 
-### Phase 3: the public path
+### Phase 3: the public path (built 2026-09-23)
 
 - [ ] `GET /files/public/*`: no token, no session. It rejects any key whose scope segment is not `public-uploads`, and it rejects a key that fails `assertValidKey` before it reads the row
 - [ ] The wildcard receives the full five-segment key and serves it unchanged, so the same record resolves identically in dev and in production
@@ -85,7 +85,7 @@ The public path is entirely inside this module. `packages/storage` does not chan
 - [ ] The skill documents the production setup: the R2 custom domain, the Cache Rule on `/t/*/public-*/*`, and that Cloudflare image transformations must be enabled on the zone. **Confirm the current plan-tier requirement for transformations against Cloudflare's own docs before writing this step** — it was not verified during the grill
 - [ ] The skill states the failure mode in plain words: a public object is world-readable by anyone who learns its key, the choice is made once at upload, and there is no un-publish short of deleting the object and uploading it again
 
-### Phase 4: the UI and the sweep
+### Phase 4: the UI and the sweep (built 2026-09-23)
 
 - [ ] `@ui/blocks/file-uploads.tsx`: pick a file, request a target, PUT it, call `complete`, show the list
 - [ ] The `apps/admin` `/files` page, wired into `NAV_ITEMS` by `const-array`

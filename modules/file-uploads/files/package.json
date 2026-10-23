@@ -1,0 +1,21 @@
+{
+  "name": "@repo/file-uploads",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./env-preset": "./src/env-preset.ts"
+  },
+  "scripts": {
+    "clean": "rimraf -g \"*.tsbuildinfo\"",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@repo/env": "workspace:*"
+  },
+  "devDependencies": {
+    "@repo/tsconfig": "workspace:*",
+    "rimraf": "6.1.3",
+    "typescript": "7.0.2"
+  }
+}
