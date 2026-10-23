@@ -18,6 +18,7 @@ import {
   checkPlanNotes,
   compareSemver,
   expectedNoteIds,
+  FULL_SCAFFOLD_CHECKS,
   findRenderErrors,
   findUnknownAliases,
   findWorkspaceDeps,
@@ -628,5 +629,14 @@ describe("findUnknownAliases", () => {
       findUnknownAliases("alias  @config → packages/config/src"),
       []
     );
+  });
+});
+
+// Issue #220. A module's files only typecheck inside a scaffolded project, so dropping
+// `typecheck` from this list lets a type error ship to every new project again. `lint`
+// stays first: it is the cheaper check, and it fails on a formatting slip.
+describe("FULL_SCAFFOLD_CHECKS", () => {
+  it("lints, then typechecks, every full scaffold", () => {
+    assert.deepEqual(FULL_SCAFFOLD_CHECKS, ["lint", "typecheck"]);
   });
 });
