@@ -4,7 +4,7 @@ A Saasaloy project deploys with `pnpm deploy:production`. The base template owns
 
 ## Status
 
-accepted. Supersedes [ADR 0021](0021-adr-pulumi-iac-engine-for-infra-2026-07-25.md). Leaves [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md) and [ADR 0033](0033-adr-transient-state-capabilities-take-providers-2026-09-08.md) unchanged: Cloudflare is still the only runtime, and a provider still registers its handlers through `apps/api/src/worker.ts`.
+accepted. Supersedes [ADR 0021](0021-adr-pulumi-iac-engine-for-infra-2026-07-25.md). Leaves [ADR 0001](0001-adr-all-in-on-cloudflare-2026-07-22.md) and [ADR 0033](0033-adr-transient-state-capabilities-take-providers-2026-09-08.md) unchanged: Cloudflare is still the only runtime, and a provider still registers its handlers through `apps/api/src/worker.ts`. **Amended by [ADR 0048](0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md):** the root command is now `node packages/tooling/src/deploy-production.ts`, which gates, orders, smoke checks and tags the deploy, and the `deploy` task no longer runs `db:migrate:prod`, so a D1 project migrates production only with `--migrate`. The values, the `env-deploy` build and the secrets file below are unchanged.
 
 ## Why ADR 0021 no longer holds
 

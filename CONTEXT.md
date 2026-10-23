@@ -133,6 +133,20 @@ A key listed in `CHECKOUT_OWNED_KEYS` whose value on disk survives every `pnpm e
 A capability package's `src/env-preset.ts`: the `definePreset` call naming the keys that package reads, with a schema and a description for each. A service's `env.ts` folds the presets it installed into one `createEnv`, and a provider module appends its own preset to the capability's with a `plugin-array` patch. `scripts/env-presets.test.ts` fails when a preset and its descriptor's `envVars` disagree.
 _Avoid: schema for this. The schema is one key's validator; the preset is the set._
 
+## Production deploy
+
+### Deploy target
+A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api and admin modules append `api` (10) and `admin` (20) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
+_Avoid: app, for this. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
+
+### Smoke check
+A row in `SMOKE_CHECKS` in the same file: `{ id, service, path, status, body? }`, keyed by `id`. After every Worker is live, the deploy requests the path on each custom domain of the service (a `routes[]` entry with `custom_domain: true` in its `wrangler.jsonc`) and expects that status and body, three tries 5 seconds apart. A service with no custom domain gets no smoke check, and the run says so. A failed smoke check means no [deploy tag](#deploy-tag).
+_Avoid: health check, which names the api's `/health` route. That route is one thing a smoke check can request._
+
+### Deploy tag
+The annotated git tag `pnpm deploy:production` pushes after every gate, Worker and smoke check passed: the prefix from `packages/tooling/src/deploy.config.ts` (`deploy-` by default) and the UTC time, `deploy-20261023-1430`. The newest one is the commit that is live. A hotfix branch starts from it, and the migration gate counts the migration files changed since it. `--only` and a failed smoke check write none. Never move or delete one.
+_Avoid: release tag. A release is a version; a deploy tag records what went live and when._
+
 ## Object storage
 
 ### Object

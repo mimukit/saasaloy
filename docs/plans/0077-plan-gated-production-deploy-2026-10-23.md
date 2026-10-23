@@ -58,7 +58,8 @@ Each row names the grill question that settled it, and whether the owner answere
 | Tag push fails | The tag stays local. The run prints `git push origin <tag>` and exits 1. The Workers stay live. Q13, defaulted. |
 | `doctor` checks | Both findings are warnings with the fix printed, not errors. Q25, defaulted. |
 | Files a project owns or merges | The owner approved the whole table in "Files a generated project owns..." below. Q20, asked. |
-| Test runner | Vitest through the root `vitest.config.ts` `packages/*` project. `prod.ts` tests mock `spawnSync` and need no Docker. Q27, defaulted. |
+| Test runner | Vitest through the root `vitest.config.ts` `packages/*` project. `prod.ts` tests mock `spawnSync` and need no Docker. Q27, defaulted, then reopened as Q31: saasaloy's `test:base` runs base `*.test.ts` files on `node --test`, so Vitest tests in `packages/tooling` need their own run in saasaloy. The owner kept Vitest (Q31, asked). |
+| `@repo/env` export | The base `packages/env/package.json` exports `./deploy`, so `packages/tooling` imports `readWorkerConfig` and `parseJsonc` and keeps no second JSONC reader. Q32, asked. |
 | Attended phases | None. The plan changes no UI, and the agent runs the Phase 7 `.dev` checks. Q28, defaulted. |
 | Outward actions | Commit each phase on the issue branch, push it, and open a PR after Phase 7 passes. Tick the issue checkboxes. Nothing merges and no deploy runs. Q30, asked. |
 
