@@ -13,8 +13,9 @@ True for the whole plan. Do this once, before Scenario 1.
 
 - Branch under test: `issue-175-object-records-upload-ui-and-public-image-path`.
 - Run every command from the repo root unless a step says otherwise.
-- The api answers on `http://localhost:4000`. The admin app answers on `http://localhost:4321`.
-- There are no credentials yet. Scenario 1 creates the first account, and the `auth` module gives it the `superadmin` role.
+- The api answers on `http://localhost:4000`. The admin app answers on `http://localhost:3001`.
+- The credentials are the seeded ones `pnpm db:seed` writes below. Every seeded user signs in with the password `saasaloy-dev-password`. `superadmin@example.test` and `admin@example.test` both have the admin role, and neither belongs to an organization.
+- Environment values go through `packages/env`. You write `packages/env/.env`, and `pnpm env:setup` copies each service's keys into its own `.env`, such as `apps/api/.env`. Nothing reads `.dev.vars`.
 
 Build the CLI and create a clean playground.
 
@@ -28,26 +29,21 @@ Install the five modules under test.
 cd .dev/playground && for m in database-d1 storage-memory queue queue-memory file-uploads; do ./saasaloy add $m --yes; done
 ```
 
-Re-apply `file-uploads` so its two `queue` registrations land. A plain re-run answers "already installed".
-
-```sh
-cd .dev/playground && ./saasaloy add file-uploads --yes --force
-```
-
 ```sh
 cd .dev/playground && pnpm install
 ```
 
-Write the Worker environment.
+Write the environment. `queue` is installed before `file-uploads` above, so the sweep's two `queue` registrations land on the first add and no re-apply is needed.
 
 ```sh
-cat > .dev/playground/apps/api/.dev.vars <<'EOF'
+cat > .dev/playground/packages/env/.env <<'EOF'
 LOGGER_PROVIDER=console
 LOG_LEVEL=debug
-CORS_ORIGINS=http://localhost:4321,http://localhost:5173
+CORS_ORIGINS=http://localhost:3001,http://localhost:5173
 BETTER_AUTH_SECRET=dev-secret-dev-secret-dev-secret-32
 BETTER_AUTH_URL=http://localhost:4000
 PUBLIC_API_URL=http://localhost:4000
+PUBLIC_SITE_URL=http://localhost:3000
 STORAGE_PROVIDER=memory
 STORAGE_URL_SECRET=dev-storage-secret-dev-storage-32
 STORAGE_MAX_UPLOAD_BYTES=1048576
@@ -57,10 +53,22 @@ QUEUE_PROVIDER=memory
 EOF
 ```
 
+```sh
+cd .dev/playground && pnpm env:setup
+```
+
+`CORS_ORIGINS` has to name the admin origin, `http://localhost:3001`, or the browser blocks every api call the Files screen makes.
+
+**To unset a key later, edit the service's own file.** A blank value in `packages/env/.env` does not clear a key: `pnpm env:setup` keeps a value already in `apps/api/.env` when the source holds none. Edit `apps/api/.env` directly, then restart the api.
+
 Create the schema and apply it.
 
 ```sh
 cd .dev/playground/packages/db && pnpm db:generate && pnpm db:migrate:local
+```
+
+```sh
+cd .dev/playground && pnpm db:seed
 ```
 
 Set the database client. Every query below runs through it.
@@ -93,6 +101,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-1.4 | 1: Fresh project, no files, public uploads on | Read the screen at two widths and in dark mode | 🟡 Normal |
 | TC-1.5 | 1: Fresh project, no files, public uploads on | Reach and run the form from the keyboard | 🟡 Normal |
 | TC-1.6 | 1: Fresh project, no files, public uploads on | Delete a file | 🔴 Critical |
+| TC-1.7 | 1: Fresh project, no files, public uploads on | A second user with no organization sees none of these files | 🔴 Critical |
 | TC-2.1 | 2: Same project, `STORAGE_PUBLIC_URL` unset | The form refuses a public upload and says why | 🔴 Critical |
 | TC-3.1 | 3: Two organizations, one file each | One organization cannot see the other's file | 🔴 Critical |
 
@@ -100,9 +109,9 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 **Setup.** Run once, for every case in this scenario.
 
-1. Open `http://localhost:4321` in the browser.
-2. Sign up with `qa@example.com` and the password `password1234`.
-3. Open `http://localhost:4321/files`.
+1. Open `http://localhost:3001` in the browser.
+2. Sign in as `superadmin@example.test` with the password `saasaloy-dev-password`.
+3. Open `http://localhost:3001/files`.
 
 Prepare two files to upload.
 
@@ -272,6 +281,35 @@ printf 'hello world' > /tmp/qa-notes.txt && cp docs/assets/*.png /tmp/qa-avatar.
 
 **Notes.**
 
+### TC-1.7: A second user with no organization sees none of these files · 🔴 Critical
+
+**Goal.** With no organization active, every user shares the `default` tenant, and each one still sees and acts on only their own objects.
+
+**Steps**
+
+1. Open a private window. Sign in at `http://localhost:3001` as `admin@example.test` with the password `saasaloy-dev-password`, and open `/files`.
+   - [ ] The table shows no rows, and the Images panel does not appear
+2. Upload `/tmp/qa-notes.txt` as private in that window.
+   - [ ] The private window's table shows only that one row
+   - [ ] The superadmin's window, reloaded, does not show it
+3. Copy the superadmin's public image id from the query below. In the private window, open `http://localhost:4000/files/<id>/download` directly.
+
+   ```sh
+   cd .dev/playground && $DB_CMD "select id, owner_id, visibility from storage_objects;"
+   ```
+
+   - [ ] The api answers `{"error":{"code":"not_found",...}}`
+4. Open the superadmin's public image URL in the private window.
+   - [ ] The image still loads, because a public object is readable by anyone who holds its key
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.**
+
 **Reset.** Run after every case above, before moving to Scenario 2.
 
 ```sh
@@ -282,14 +320,14 @@ cd .dev/playground && $DB_CMD "delete from storage_objects;"
 
 **Setup.** Run once, for every case in this scenario.
 
-Clear the variable. The api reloads on its own.
+Clear the variable in the api's own file. A blank value in `packages/env/.env` would not clear it, as the Environment section says.
 
 ```sh
-cd .dev/playground && sed -i 's|^STORAGE_PUBLIC_URL=.*|STORAGE_PUBLIC_URL=|' apps/api/.dev.vars
+cd .dev/playground && sed -i 's|^STORAGE_PUBLIC_URL=.*|STORAGE_PUBLIC_URL=|' apps/api/.env
 ```
 
-1. Wait for the api terminal to report a reload.
-2. Reload `http://localhost:4321/files`.
+1. Stop the api terminal and run `pnpm dev` there again.
+2. Reload `http://localhost:3001/files`.
 
 - [ ] Setup complete
 
@@ -301,10 +339,10 @@ cd .dev/playground && sed -i 's|^STORAGE_PUBLIC_URL=.*|STORAGE_PUBLIC_URL=|' app
 
 1. Look at the Visibility control.
    - [ ] The Public radio button is disabled, and a line below the group names `STORAGE_PUBLIC_URL`
-2. Restore the variable, wait for the reload, and reload the page.
+2. Restore the variable, restart the api, and reload the page.
 
    ```sh
-   cd .dev/playground && sed -i 's|^STORAGE_PUBLIC_URL=$|STORAGE_PUBLIC_URL=http://localhost:4000/files/public|' apps/api/.dev.vars
+   cd .dev/playground && sed -i 's|^STORAGE_PUBLIC_URL=$|STORAGE_PUBLIC_URL=http://localhost:4000/files/public|' apps/api/.env
    ```
 
    - [ ] The Public radio button is usable again
@@ -338,8 +376,8 @@ cd .dev/playground/packages/db && pnpm db:generate && pnpm db:migrate:local
 ```
 
 1. Restart the api terminal.
-2. Sign in as `qa@example.com` in the normal window. Create an organization named `Alpha` and make it active.
-3. Open a private window. Sign up as `qa2@example.com` with the password `password1234`. Create an organization named `Beta` and make it active.
+2. Sign in as `superadmin@example.test` in the normal window. Create an organization named `Alpha` and make it active.
+3. Open a private window. Sign in as `admin@example.test` with the password `saasaloy-dev-password`. Create an organization named `Beta` and make it active.
 
 - [ ] Setup complete
 
