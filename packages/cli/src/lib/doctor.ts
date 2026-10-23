@@ -1196,7 +1196,13 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
 
 /** The one file a project owner edits in `@repo/config`. */
 export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
-/** The env var `config.app.name` superseded. Read by nothing; still warned about. */
+/** The values file `saasaloy env` writes and `pnpm env:setup` copies from. */
+const ENV_VALUES_FILE = "packages/env/.env";
+/**
+ * The env var `config.app.name` superseded. Billing no longer declares it, so a fresh
+ * project never lists it; an older project's key list keeps the line, because `add` never
+ * removes one, and this is how its owner learns the value does nothing.
+ */
 const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
 
 export interface ConfigCheckArgs {
@@ -1219,18 +1225,25 @@ export interface ConfigCheckArgs {
 export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   const findings: Finding[] = [];
 
-  for (const [file, contents] of Object.entries(args.envFiles ?? {}).toSorted(
-    ([a], [b]) => (a < b ? -1 : 1)
-  )) {
-    if (assignsVar(contents, DEPRECATED_APP_NAME)) {
-      findings.push(
-        finding(
-          "billing",
-          `/env/${DEPRECATED_APP_NAME}`,
-          `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
-        )
-      );
-    }
+  // `pnpm env:setup` copies the values file into each service's `.env`, so a key set in
+  // `packages/env/.env` would otherwise be reported once per copy. Report the source when
+  // it sets the key; a service file is reported only when the source does not, which is
+  // a value someone typed there by hand or a source other than the values file.
+  const setting = Object.entries(args.envFiles ?? {})
+    .filter(([, contents]) => assignsVar(contents, DEPRECATED_APP_NAME))
+    .map(([file]) => file)
+    .toSorted();
+  const reported = setting.includes(ENV_VALUES_FILE)
+    ? [ENV_VALUES_FILE]
+    : setting;
+  for (const file of reported) {
+    findings.push(
+      finding(
+        "billing",
+        `/env/${DEPRECATED_APP_NAME}`,
+        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
+      )
+    );
   }
 
   return findings;
@@ -1258,7 +1271,7 @@ function assignsVar(contents: string, name: string): boolean {
  */
 async function readEnvFiles(root: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  const targets = ["packages/env/.env"];
+  const targets = [ENV_VALUES_FILE];
   for (const app of await readDirNames(join(root, "apps"))) {
     targets.push(posix.join("apps", app, ".env"));
   }

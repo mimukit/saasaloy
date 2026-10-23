@@ -1072,7 +1072,7 @@ describe(checkConfigValues, () => {
     ).toStrictEqual([]);
   });
 
-  it("reports one finding per file that sets it, in path order", () => {
+  it("reports the values file once, not each copy env:setup made of it", () => {
     const found = checkConfigValues({
       envFiles: {
         "packages/env/.env": "BILLING_APP_NAME=Acme",
@@ -1080,8 +1080,21 @@ describe(checkConfigValues, () => {
       },
     });
     expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
-      "apps/api/.env",
       "packages/env/.env",
+    ]);
+  });
+
+  it("reports each service file, in path order, when the values file is clean", () => {
+    const found = checkConfigValues({
+      envFiles: {
+        "packages/env/.env": "BILLING_APP_URL=x",
+        "apps/web/.env": "BILLING_APP_NAME=Acme",
+        "apps/api/.env": "BILLING_APP_NAME=Acme",
+      },
+    });
+    expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
+      "apps/api/.env",
+      "apps/web/.env",
     ]);
   });
 });

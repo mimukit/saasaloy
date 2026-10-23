@@ -122,7 +122,7 @@ setBillingConfig({
 // empty unless a project wants billing mail signed differently, and the fallback to
 // `config.app.name` is applied here because a section never reads another section.
 //
-// `BILLING_APP_NAME` is deprecated and no longer read. `saasaloy doctor` says so when it is
+// `BILLING_APP_NAME` is retired: billing no longer declares it, and `saasaloy doctor` says so when it is
 // still set in a `.env`. The url stays an env var: it names a deployed origin.
 const appName = config.billing.appName || config.app.name;
 const billingUrl =

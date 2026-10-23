@@ -8,17 +8,12 @@
   "envVars": {
     "BILLING_PROVIDER": "Which installed provider takes payments: `stripe` (add billing-stripe) or `console` (add billing-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
     "BILLING_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
-    "BILLING_APP_NAME": "DEPRECATED: superseded by config.app.name (and config.billing.appName). No longer read; set the name in packages/config/src/project.ts instead. What the three billing emails call your project — the trial reminder, the payment-failed notice and the account-locked notice all name it.",
     "BILLING_APP_URL": "Absolute https URL the billing emails link to, normally your admin app's /billing page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/billing when unset, which is the dev default and is refused by the email renderer on any host but localhost."
   },
   "envServices": {
     "default": ["api"]
   },
-  "envOptional": [
-    "BILLING_LOCKOUT_DAYS",
-    "BILLING_APP_NAME",
-    "BILLING_APP_URL"
-  ],
+  "envOptional": ["BILLING_LOCKOUT_DAYS", "BILLING_APP_URL"],
   "removeWarnings": [
     "The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
     "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first."

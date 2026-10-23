@@ -103,7 +103,7 @@ Two kinds of setup stay manual:
 | `storage` | `STORAGE_PROVIDER`, `STORAGE_URL_SECRET`, `STORAGE_MAX_UPLOAD_BYTES`, `STORAGE_PROXY_URL` |
 | `storage-cloudflare` | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` |
 | `email-plunk` | `PLUNK_API_KEY`, `PLUNK_API_URL` |
-| `billing` | `BILLING_PROVIDER`, `BILLING_LOCKOUT_DAYS`, `BILLING_APP_NAME`, `BILLING_APP_URL` |
+| `billing` | `BILLING_PROVIDER`, `BILLING_LOCKOUT_DAYS`, `BILLING_APP_URL` |
 | `billing-stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `database-postgres` | `DATABASE_URL` |
 | `feature-flags` | `FLAGS_ISOLATE_TTL_SECONDS` |
