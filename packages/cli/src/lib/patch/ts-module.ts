@@ -74,6 +74,34 @@ export function insertIntoPluginArray(
 }
 
 /**
+ * Why `insertIntoPluginArray` declined to change `source`, or `undefined` when it had no
+ * objection (it added the call, or the call was already there).
+ *
+ * The one refusal is a missing export. The forward direction leaves a file alone when
+ * `<exportName>` is not a call holding an options object, which is right, and used to be
+ * silent, which was not: a module that patches `adminAuth` before the project's
+ * `auth.ts` has that export reported nothing, and the plugin was simply never added. That
+ * is the exact state of a project made before the client/admin split, mid-upgrade, until
+ * its new `auth.ts` is merged. Naming the export turns that into a warning `add` and
+ * `update` print, and `update` keeps the module's lock entry where it was, so the next
+ * run applies the patch.
+ */
+export function pluginArrayInsertRefusal(
+  source: string,
+  patch: PluginArrayInsert
+): string | undefined {
+  const mod = parseModule(source);
+  if (mod.exports[patch.exportName]?.$args?.[0]) {
+    return undefined;
+  }
+  return (
+    `\`export const ${patch.exportName} = <fn>({ ${patch.arrayProp}: [...] })\` is not ` +
+    `in this file, so \`${patch.call}()\` was not added. Merge the new version of the ` +
+    `file first, then run \`saasaloy update\` again for the module that ships the plugin`
+  );
+}
+
+/**
  * The inverse: take `call()` back out of the array, take the array with it when that
  * leaves it empty, and drop the named import it needed.
  *
