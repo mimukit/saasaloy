@@ -532,6 +532,7 @@ hook (which is also how you keep hooks out of CI).
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
 - Run the tests: `pnpm test`. It runs `turbo run test` (each workspace's own `test` script), then `vitest run` from the root, whose `vitest.config.ts` treats every workspace under `apps/*` and `packages/*` as a project. Write new tests for Vitest: put a `*.test.ts` file beside the code, and give the workspace a `vitest.config.ts` only when it needs setup of its own. Do not add a per-workspace `test` script that calls Vitest, or the file runs twice. `packages/env` is the exception: its tests run on `node --test` through its own `test` script, and the root config leaves it out.
+- Run the browser suite: `pnpm e2e`, once `saasaloy add e2e` is installed. It is Playwright against the running apps, in `packages/e2e`. Run `pnpm e2e:install` once per machine first to download Chromium. The root `vitest.config.ts` leaves `packages/e2e` out, so `pnpm test` never collects a Playwright spec. The `saasaloy-e2e` skill covers adding a flow and reading a red run.
 - `packages/tooling` tests run on Vitest through the root `vitest.config.ts`, like every other workspace. The workspace has a `typecheck` script and no `test` script, so `pnpm test` runs each file once.
 - Before you hand over UI work, run `pnpm dev`, load the pages you changed, and read the dev server's terminal output. Fix every error and warning it prints. A clean build does not prove a clean dev server.
 
