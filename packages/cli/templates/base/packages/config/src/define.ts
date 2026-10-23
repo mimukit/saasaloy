@@ -113,7 +113,7 @@ export function defineConfig<const S extends readonly AnySection[]>(args: {
   // section key, and no narrower type can be proved from a `Record` the compiler watched
   // being filled. The assertion is the seam between the two, and it is the only one.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return frozenCopy(composed) as unknown as Composed<S>;
+  return frozenCopy(composed) as Composed<S>;
 }
 
 /**
