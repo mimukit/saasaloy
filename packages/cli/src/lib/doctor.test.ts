@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { baseRecord } from "./base.js";
 import {
   checkBase,
+  checkDeploy,
   checkModule,
   checkPartialInstalls,
   checkEnv,
@@ -21,6 +22,8 @@ import {
   hasRetiredInfra,
   INFRA_RUNBOOK,
   readEnvState,
+  readDeployState,
+  DEPLOY_TARGETS_FILE,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
 import { hashContent } from "./fs-utils.js";
@@ -804,5 +807,159 @@ describe(hasRetiredInfra, () => {
     await expect(hasRetiredInfra(root)).resolves.toBeFalsy();
     await mkdir(join(root, "infra", "state"), { recursive: true });
     await expect(hasRetiredInfra(root)).resolves.toBeTruthy();
+  });
+});
+
+const TARGETS = `import type { DeployTarget } from "./types.ts";
+
+export const DEPLOY_TARGETS: DeployTarget[] = [
+  { service: "web", order: 30 },
+  { service: "api", order: 10 },
+];
+`;
+
+describe(checkDeploy, () => {
+  it("is quiet on a project that matches the engine", () => {
+    expect(
+      checkDeploy({
+        turbo: '{ "tasks": { "deploy": { "dependsOn": ["^build"] } } }',
+        deployable: ["api", "web"],
+        targets: TARGETS,
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("warns while turbo.json still names db:migrate:prod, and prints the fix", () => {
+    const [found, ...rest] = checkDeploy({
+      turbo:
+        '{ "tasks": { "deploy": { "dependsOn": ["^build", "^db:migrate:prod"] }, "db:migrate:prod": {} } }',
+      deployable: [],
+      targets: undefined,
+    });
+
+    expect(rest).toStrictEqual([]);
+    expect(found?.module).toBe("deploy");
+    expect(found?.where).toBe("/turbo.json");
+    expect(found?.message).toContain("db:migrate:prod");
+    expect(found?.message).toContain(
+      'Remove "^db:migrate:prod" from the deploy task\'s dependsOn'
+    );
+    expect(found?.message).toContain("pnpm deploy:production --migrate");
+  });
+
+  it("warns once per deployable workspace with no DEPLOY_TARGETS row", () => {
+    const findings = checkDeploy({
+      turbo: undefined,
+      deployable: ["admin", "api", "docs", "web"],
+      targets: TARGETS,
+    });
+
+    expect(findings.map((found) => found.where)).toStrictEqual([
+      `/${DEPLOY_TARGETS_FILE}`,
+      `/${DEPLOY_TARGETS_FILE}`,
+    ]);
+    expect(findings[0]?.message).toContain(
+      "apps/admin deploys and has no DEPLOY_TARGETS row"
+    );
+    expect(findings[0]?.message).toContain(
+      `Add { service: "admin", order: <number> } to ${DEPLOY_TARGETS_FILE}`
+    );
+    expect(findings[1]?.message).toContain("apps/docs");
+  });
+
+  it("warns when the targets file is missing, and says how to get it", () => {
+    const [found, ...rest] = checkDeploy({
+      turbo: undefined,
+      deployable: ["web"],
+      targets: undefined,
+    });
+
+    expect(rest).toStrictEqual([]);
+    expect(found?.message).toContain(`${DEPLOY_TARGETS_FILE} is missing`);
+    expect(found?.message).toContain("saasaloy update");
+  });
+
+  it("says nothing about a missing targets file when nothing deploys", () => {
+    expect(
+      checkDeploy({ turbo: undefined, deployable: [], targets: undefined })
+    ).toStrictEqual([]);
+  });
+
+  it("warns when the targets file has no DEPLOY_TARGETS array literal", () => {
+    const [found] = checkDeploy({
+      turbo: undefined,
+      deployable: ["web"],
+      targets: "export const DEPLOY_TARGETS = load();\n",
+    });
+
+    expect(found?.message).toContain("no DEPLOY_TARGETS array literal");
+  });
+
+  it("warns when the targets file does not parse", () => {
+    const [found] = checkDeploy({
+      turbo: undefined,
+      deployable: ["web"],
+      targets: "export const DEPLOY_TARGETS = [{\n",
+    });
+
+    expect(found?.message).toContain("could not be parsed");
+  });
+});
+
+describe(readDeployState, () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-deploy-state-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { force: true, recursive: true });
+  });
+
+  async function app(
+    name: string,
+    pkg: Record<string, unknown>,
+    wrangler?: string
+  ): Promise<void> {
+    const dir = join(root, "apps", name);
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, "package.json"), JSON.stringify(pkg), "utf-8");
+    if (wrangler) {
+      await writeFile(join(dir, wrangler), "{}", "utf-8");
+    }
+  }
+
+  it("counts an apps/ workspace with a name, a deploy script and a wrangler config", async () => {
+    await app(
+      "web",
+      { name: "@repo/web", scripts: { deploy: "env-deploy web" } },
+      "wrangler.jsonc"
+    );
+    await app(
+      "api",
+      { name: "@repo/api", scripts: { deploy: "env-deploy api" } },
+      "wrangler.json"
+    );
+    await app("docs", { name: "@repo/docs", scripts: {} }, "wrangler.jsonc");
+    await app("cli", { name: "@repo/cli", scripts: { deploy: "x" } });
+    await writeFile(join(root, "turbo.json"), "{}", "utf-8");
+
+    await expect(readDeployState(root)).resolves.toStrictEqual({
+      turbo: "{}",
+      deployable: ["api", "web"],
+      targets: undefined,
+    });
+  });
+
+  it("reads the targets file when the project has one", async () => {
+    await mkdir(join(root, "packages", "tooling", "src"), { recursive: true });
+    await writeFile(join(root, DEPLOY_TARGETS_FILE), TARGETS, "utf-8");
+
+    await expect(readDeployState(root)).resolves.toStrictEqual({
+      turbo: undefined,
+      deployable: [],
+      targets: TARGETS,
+    });
   });
 });

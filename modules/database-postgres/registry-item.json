@@ -50,6 +50,18 @@
       "value": "node scripts/seed.ts"
     },
     {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:dump",
+      "value": "env-deploy --run api -- node scripts/prod.ts dump"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:migrate",
+      "value": "env-deploy --run api -- node scripts/prod.ts migrate"
+    },
+    {
       "file": "package.json",
       "kind": "package-json-script",
       "name": "db:setup",
@@ -72,6 +84,18 @@
       "kind": "package-json-script",
       "name": "db:seed",
       "value": "pnpm --filter @repo/db db:seed"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:dump",
+      "value": "pnpm --filter @repo/db db:prod:dump"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:migrate",
+      "value": "pnpm --filter @repo/db db:prod:migrate"
     },
     {
       "file": "packages/db/package.json",
@@ -180,6 +204,18 @@
         {
           "path": "files/scripts/lib/url.ts",
           "target": "scripts/lib/url.ts"
+        },
+        {
+          "path": "files/scripts/lib/production.ts",
+          "target": "scripts/lib/production.ts"
+        },
+        {
+          "path": "files/scripts/lib/production.vitest.ts",
+          "target": "scripts/lib/production.test.ts"
+        },
+        {
+          "path": "files/scripts/prod.ts",
+          "target": "scripts/prod.ts"
         },
         {
           "path": "files/scripts/backends/docker.ts",

@@ -232,6 +232,51 @@ describe("runDoctor — what it reports and what it exits with", () => {
     });
   });
 
+  // ADR 0048: the deploy rules warn and print the fix, and never fail the run.
+  describe("the deploy warnings of a project", () => {
+    it("warns about the retired task and a workspace with no row, and exits 0", async () => {
+      const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-deploy-"));
+      temps.push(project);
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+      await writeFile(
+        join(project, "turbo.json"),
+        JSON.stringify({
+          tasks: {
+            deploy: { dependsOn: ["^build", "^db:migrate:prod"] },
+            "db:migrate:prod": { cache: false },
+          },
+        })
+      );
+      await mkdir(join(project, "apps", "api"), { recursive: true });
+      await writeFile(
+        join(project, "apps", "api", "package.json"),
+        JSON.stringify({
+          name: "@repo/api",
+          scripts: { deploy: "env-deploy api" },
+        })
+      );
+      await writeFile(join(project, "apps", "api", "wrangler.jsonc"), "{}");
+      await mkdir(join(project, "packages", "tooling", "src"), {
+        recursive: true,
+      });
+      await writeFile(
+        join(project, "packages", "tooling", "src", "targets.ts"),
+        'export const DEPLOY_TARGETS = [{ service: "web", order: 30 }];\n'
+      );
+
+      const { code, out } = await run([project]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("Deploy warnings");
+      expect(out).toContain("turbo.json still names db:migrate:prod");
+      expect(out).toContain("apps/api deploys and has no DEPLOY_TARGETS row");
+      expect(out).toContain("No problems found");
+    });
+  });
+
   it("refuses a directory that holds no module folders", async () => {
     const empty = await mkdtemp(join(tmpdir(), "saasaloy-doctor-empty-"));
     temps.push(empty);

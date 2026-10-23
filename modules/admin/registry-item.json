@@ -41,6 +41,28 @@
       "section": "dependencies",
       "name": "@tanstack/react-table",
       "range": "9.2.4"
+    },
+    {
+      "file": "packages/tooling/src/targets.ts",
+      "kind": "const-array",
+      "constName": "DEPLOY_TARGETS",
+      "key": "service",
+      "entry": {
+        "service": "admin",
+        "order": 20
+      }
+    },
+    {
+      "file": "packages/tooling/src/targets.ts",
+      "kind": "const-array",
+      "constName": "SMOKE_CHECKS",
+      "key": "id",
+      "entry": {
+        "id": "admin-home",
+        "service": "admin",
+        "path": "/",
+        "status": 200
+      }
     }
   ],
   "files": [

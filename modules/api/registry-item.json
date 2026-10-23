@@ -24,6 +24,29 @@
         "environment": "dev",
         "omit": []
       }
+    },
+    {
+      "file": "packages/tooling/src/targets.ts",
+      "kind": "const-array",
+      "constName": "DEPLOY_TARGETS",
+      "key": "service",
+      "entry": {
+        "service": "api",
+        "order": 10
+      }
+    },
+    {
+      "file": "packages/tooling/src/targets.ts",
+      "kind": "const-array",
+      "constName": "SMOKE_CHECKS",
+      "key": "id",
+      "entry": {
+        "id": "api-health",
+        "service": "api",
+        "path": "/health",
+        "status": 200,
+        "body": "\"ok\""
+      }
     }
   ],
   "files": [],
