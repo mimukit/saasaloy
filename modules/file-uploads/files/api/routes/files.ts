@@ -436,7 +436,7 @@ function storageFailure(c: Context, error: unknown): Response {
 function firstIssue(result: {
   error: { issues: { path: PropertyKey[]; message: string }[] };
 }): string {
-  const issue = result.error.issues[0];
+  const [issue] = result.error.issues;
   return issue
     ? `${issue.path.join(".")}: ${issue.message}`
     : "invalid request body";
