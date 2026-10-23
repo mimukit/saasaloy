@@ -45,7 +45,12 @@ export interface KvSetOptions {
 export interface KvListOptions {
   /** Only keys starting with this string. Match the prefix `client.key()` produced. */
   prefix?: string;
-  /** Page size. Omitted means the provider's own default. */
+  /**
+   * Page-size hint. A provider may not honour it exactly: `kv-memory` and `kv-cloudflare`
+   * cap it at 1000, and `kv-upstash` passes it to `SCAN` as `COUNT`, so a page there can
+   * hold more or fewer keys, or none while `complete` is false. Page until `complete` is
+   * true. Omitted means the provider's own default.
+   */
   limit?: number;
   /** The `cursor` from the previous page. Omitted means the first page. */
   cursor?: string;
