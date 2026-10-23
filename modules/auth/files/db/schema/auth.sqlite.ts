@@ -93,6 +93,12 @@ export const sessions = sqliteTable(
     // after a user chooses an active organization. This mirrors the plugin's `session`
     // schema block even when the teams module is not installed.
     activeOrganizationId: text("active_organization_id"),
+    // --- audience plugin (`packages/auth/src/plugins/audience.ts`) --- which user group
+    // the session belongs to: `client` (signed in at /auth) or `admin` (signed in at
+    // /admin/auth). Each instance finds a session by token only when this matches its
+    // own name, so a token copied into the other cookie is no session at all. The default
+    // makes a row written before the column existed read as a client session.
+    audience: text("audience").notNull().default("client"),
   },
   (table) => [index("sessions_user_id_idx").on(table.userId)]
 );

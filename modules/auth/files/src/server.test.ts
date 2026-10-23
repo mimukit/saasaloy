@@ -279,12 +279,14 @@ describe("server.ts wiring", () => {
     "utf-8"
   );
 
-  it("exports the three helpers the api routes call", () => {
+  it("exports the helpers the api routes call", () => {
     for (const name of [
       "requireSession",
       "requireRole",
       "requireAdmin",
+      "requireAdminApp",
       "requireSuperadmin",
+      "getAdminSession",
     ]) {
       assert.match(
         source,
@@ -318,8 +320,38 @@ describe("server.ts wiring", () => {
     // If a helper grows its own literal status or message, these go stale and the
     // tests above stop describing what the api actually answers.
     assert.match(source, /const \{ denial, session \} = decide\(/);
-    assert.match(source, /decide\(await getSession\(c\), role\)/);
+    assert.match(source, /[=] parseAudience\(/);
     assert.match(source, /new HTTPException\(denial\.status/);
+  });
+
+  it("reads every role gate from the admin session and demands the admin audience", () => {
+    // `requireRole` is the primitive under `requireAdmin`, `requireAdminApp` and
+    // `requireSuperadmin`. Reading `getSession` here would let the header pick the client
+    // session for an admin gate.
+    assert.match(
+      source,
+      /decide\(\s*await getAdminSession\(c\),\s*role,\s*ADMIN_AUDIENCE\s*\)/
+    );
+    assert.match(source, /adminAuth\.api\.getSession\(/);
+  });
+
+  it("reads requireSession from the audience the request names", () => {
+    assert.match(
+      source,
+      /decide\(\s*await getSession\(c\),\s*undefined,\s*requestAudience\(c\)\s*\)/
+    );
+  });
+
+  it("maps each audience to its own instance, with no branch", () => {
+    assert.match(
+      source,
+      /const INSTANCES = \{ admin: adminAuth, client: auth \} as const;/
+    );
+    assert.match(source, /return INSTANCES\[requestAudience\(c\)\];/);
+  });
+
+  it("gives requireAdminApp the group list", () => {
+    assert.match(source, /return requireRole\(c, ADMIN_APP_ROLES\);/);
   });
 
   it("holds no decision of its own, only `if (denial)`", () => {
@@ -329,7 +361,7 @@ describe("server.ts wiring", () => {
     const conditions = source.match(/^\s*if \(.*$/gm) ?? [];
     assert.deepEqual(
       conditions.map((line) => line.trim()),
-      ["if (denial) {", "if (denial) {"],
+      ["if (denial) {", "if (denial) {", "if (denial) {"],
       "server.ts must branch on nothing but decide()'s answer"
     );
   });

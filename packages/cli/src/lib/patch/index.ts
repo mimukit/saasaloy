@@ -45,6 +45,7 @@ import {
 import type { PackageJsonScript } from "./pkg-json-script.js";
 import {
   insertIntoPluginArray,
+  pluginArrayInsertRefusal,
   pluginArrayRemoveRefusal,
   removeFromPluginArray,
 } from "./ts-module.js";
@@ -106,6 +107,7 @@ export {
 export {
   insertIntoPluginArray,
   type PluginArrayInsert,
+  pluginArrayInsertRefusal,
   pluginArrayRemoveRefusal,
   removeFromPluginArray,
 } from "./ts-module.js";
@@ -326,6 +328,7 @@ const REFUSALS: { [K in PatchKind]?: Refusal<K> } = {
   "drizzle-column": drizzleColumnInsertRefusal,
   "nav-entry": navEntryInsertRefusal,
   "package-json-script": packageJsonScriptRefusal,
+  "plugin-array": pluginArrayInsertRefusal,
 };
 
 const REVERSAL_REFUSALS: { [K in PatchKind]?: Refusal<K> } = {

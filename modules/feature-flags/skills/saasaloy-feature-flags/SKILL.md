@@ -122,14 +122,14 @@ app.use(
   maintenance({
     flags: flagsFor,
     isAdmin: sessionIsAdmin,
-    bypassPaths: ["/health", "/auth", "/flags"],
+    bypassPaths: ["/health", "/auth", "/admin/auth", "/flags"],
   })
 );
 ```
 
-Three ways past the page, checked in this order: the path is on the bypass list, the flag is off, or the caller is an admin. The path check runs first because it costs no flag read.
+Three ways past the page, checked in this order: the path is on the bypass list, the flag is off, or the caller is an admin. The path check runs first because it costs no flag read. `sessionIsAdmin` reads the admin session through `getAdminSession`, whatever `x-auth-audience` says, and passes any role in `ADMIN_ROLES` (`admin` and `superadmin`). A client session never counts, even one that belongs to a superadmin.
 
-Put `/health` on the bypass list. A load balancer that gets a 503 may pull the Worker out of rotation. Put `/auth` there too, or an admin cannot sign in to turn maintenance back off — and `/flags`, or they cannot reach the switch once signed in.
+Put `/health` on the bypass list. A load balancer that gets a 503 may pull the Worker out of rotation. Put `/admin/auth` there too, or an admin cannot sign in on the admin app to turn maintenance back off, and `/flags`, or they cannot reach the switch once signed in. `/auth` is the client sign-in; leave it on the list only if clients may sign in while the site is closed. A prefix matches whole segments, so `/auth` does not cover `/admin/auth`.
 
 If the flag cannot be resolved at all, the request goes through. A store outage should not take an api down on the assumption that somebody meant to close it.
 

@@ -1186,6 +1186,14 @@ function reportResult(result: UpdateResult): void {
       TUI_ON_STDERR
     );
   }
+  // A refused patch did not land, and the module's lock entry stayed where it was, so a
+  // later `update` of the same module tries it again. Say which file and why.
+  for (const r of result.patchRefusals) {
+    log.warn(
+      `Config patch on ${pc.cyan(r.patch.file)} skipped — ${r.reason}.`,
+      TUI_ON_STDERR
+    );
+  }
   for (const link of result.linkConflicts) {
     log.warn(
       `Skill link ${pc.cyan(link.path)} left untouched — not ours to replace.`,

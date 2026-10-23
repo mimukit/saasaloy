@@ -156,23 +156,19 @@ function RootNotFound() {
 // deny path, so it renders the panel rather than a stack trace; anything else is a real
 // render failure and gets the same ErrorState every other app in the repo shows.
 //
-// The deny path renders inside AppShell. The error carries the session, so the shell has
-// what it needs, and the refusal reads as a screen of this app rather than as a crash. The
-// generic branch below does not: a render failure may be the shell itself, and wrapping the
-// fallback in the thing that just threw would take the fallback down with it.
+// The deny path renders without AppShell, on the login screen's card. The shell holds the
+// sidebar, the navigation and the user menu, and an account the guard refused must see none
+// of it. The error carries the session only so the panel can name the signed-in email. The
+// generic branch below drops the shell too, for its own reason: a render failure may be the
+// shell itself, and wrapping the fallback in the thing that just threw would take the
+// fallback down with it.
 //
 // `reset` is the router's own retry: it re-runs the failed match in place, which is the one
 // action that can clear a transient render error without a full page load. The home link is
 // the way out when it cannot.
 function RootError({ error, reset }: ErrorComponentProps) {
   if (error instanceof NotAdminError) {
-    return (
-      <AppShell session={error.session}>
-        <PageFrame>
-          <AccessDenied session={error.session} />
-        </PageFrame>
-      </AppShell>
-    );
+    return <AccessDenied session={error.session} />;
   }
 
   return (

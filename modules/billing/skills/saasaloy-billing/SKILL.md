@@ -35,7 +35,7 @@ Every contract method throws exactly one error type, `BillingError`, with a stab
 
 Every contract method takes `{ headers: Headers; auth: unknown }` as its second argument, supplied by the route in `apps/api`.
 
-The dependency runs `auth` → `billing` and never back (ADR 0034). `packages/billing` cannot import the auth instance to reach a vendor plugin mounted on it, and `apps/api` is the one workspace that imports both packages, so it hands the instance in. `auth` is `unknown` on purpose and is cast inside the provider file, which is what keeps every Better Auth type out of the core.
+The dependency runs `auth` → `billing` and never back (ADR 0034). `packages/billing` cannot import the auth instance to reach a vendor plugin mounted on it, and `apps/api` is the one workspace that imports both packages, so it hands the instance in. The route picks it with `authFor(c)` from `@repo/auth/server`: `auth` (the client session) by default, `adminAuth` (the admin session) when the request carries `x-auth-audience: admin`, as every call from `apps/admin` does. The billing screen in the admin app therefore bills the admin signed in there, not a client signed in on another tab. `auth` is `unknown` on purpose and is cast inside the provider file, which is what keeps every Better Auth type out of the core.
 
 `headers` is `c.req.raw.headers`, forwarded so a provider can resolve the session the vendor's own endpoints expect.
 
@@ -59,7 +59,7 @@ Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPl
 
 ## The routes
 
-`modules/billing` mounts seven endpoints at `/billing` in `apps/api`, all behind the session:
+`modules/billing` mounts seven endpoints at `/billing` in `apps/api`, all behind the session that `x-auth-audience` names (the client session unless the admin app calls):
 
 | Route | Body | Answers |
 |---|---|---|
@@ -102,7 +102,7 @@ Normalized event types: `subscription.changed`, `subscription.deleted`, `trial.e
 
 ## Register the webhook
 
-Stripe posts to **`https://<your-api-host>/auth/stripe/webhook`** — under the auth base path, because `@better-auth/stripe` owns the endpoint and the signature check. Set `STRIPE_WEBHOOK_SECRET` to the signing secret the dashboard shows for that endpoint.
+Stripe posts to **`https://<your-api-host>/auth/stripe/webhook`**, under the client auth base path, because `@better-auth/stripe` owns the endpoint and the signature check. `billing-stripe` registers the plugin on both `auth` and `adminAuth`, so the same endpoint also exists under `/admin/auth/stripe/webhook`; register only the `/auth` one, so each event arrives once. Set `STRIPE_WEBHOOK_SECRET` to the signing secret the dashboard shows for that endpoint.
 
 Subscribe these events and no others:
 
@@ -206,6 +206,6 @@ One file in `src/providers/`, exporting a factory that returns a `BillingProvide
 5. **Read price ids from `providerIds.<your-name>`** in `plans.ts`. Never hard-code one.
 6. **Register it.** A `plugin-array` patch appends your factory call to the `providers` array in `packages/billing/src/index.ts`, and a `package-json-dependency` patch puts the vendor SDK in `packages/billing/package.json` — never in another workspace (ADR 0020).
 
-A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into `auth.plugins` with a second `plugin-array` patch, the way `billing-stripe` does. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong — fix the contract.
+A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into the `plugins` arrays of both `auth` and `adminAuth` with two more `plugin-array` patches (`exportName` `auth` and `adminAuth`), the way `billing-stripe` does. A provider file that reaches the plugin's endpoints casts the `auth` it is handed, which is whichever instance `authFor(c)` picked. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong. Fix the contract.
 
 Run `.agents/skills/create-provider/` in its `billing` mode rather than writing the descriptor by hand.

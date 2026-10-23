@@ -53,7 +53,7 @@ No module patches `access.ts`. A project owns it outright.
 
 `owner`, `admin` and `member` are static, and they stay that way. Two things enforce it:
 
-- `roleLockGuard()`, a Better Auth `before` hook on `/organization/create-role`, `/update-role` and `/delete-role`. It refuses any request naming a base role with 403 `base role is locked: <name>`, and it runs before the plugin's own `ac` check, so an owner holding every statement cannot get past it.
+- `roleLockGuard()`, a Better Auth `before` hook on `/organization/create-role`, `/update-role` and `/delete-role`. Two `plugin-array` patches register it on both instances, `auth` and `adminAuth`, so the lock holds on the client session and on the admin session that the `/roles` screen uses. It refuses any request naming a base role with 403 `base role is locked: <name>`, and it runs before the plugin's own `ac` check, so an owner holding every statement cannot get past it.
 - The `/roles` screen renders base roles with no edit or delete control.
 
 The reason is the merge. `dynamicAccessControl` makes `hasPermission` load an organization's stored rows and merge each one **over** the static role of the same name. A stored row called `admin` would widen the static `admin` invisibly, and a row called `member` would widen every ordinary member in that organization at once. Neither shows up in a code review, and both survive a deploy.
@@ -104,7 +104,7 @@ Do not reach for the wrong one.
 
 | Helper | Question |
 | --- | --- |
-| `requireAdmin(c)` | may this session open `apps/admin`? |
+| `requireAdmin(c)` | does the admin session hold an admin role? (`requireAdminApp(c)` asks who may open `apps/admin`) |
 | `requireSuperadmin(c)` | is this the one role that crosses organizations? |
 | `requireTenant(c)` | which organization is this for, and as whom? |
 | `requireCan(c, p)` | that, and may they do this here? |
@@ -124,7 +124,7 @@ The permission message names the first missing pair, never the whole demand: a r
 
 ## Removal
 
-`saasaloy remove rbac` reverses two patches (the `roleLockGuard` plugin and the `/roles` nav entry) and prints three warnings.
+`saasaloy remove rbac` reverses three patches (the `roleLockGuard` plugin on `auth` and on `adminAuth`, and the `/roles` nav entry) and prints three warnings.
 
 The one to read twice: this module **owns** `packages/api/src/routes/projects.ts`, the gated copy of `multitenant`'s example, so removing `rbac` deletes that file while the `/projects` mount in `apps/api/src/index.ts` stays. Run `saasaloy add multitenant` to restore the ungated copy (ADR 0031: a re-run is recovery).
 

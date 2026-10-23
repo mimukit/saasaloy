@@ -7,8 +7,8 @@
   "dependencies": [],
   "envVars": {
     "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws while the Worker initializes when it is unset, unless BETTER_AUTH_URL names a loopback host.",
-    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it.\nFIRST USER WINS: the first account to sign up on an empty users table gets role 'superadmin', the role above 'admin'. Sign-up is open, so once this origin is public anyone who reaches /signup before you becomes the superadmin. Sign up yourself as soon as the API answers. Run /saasaloy-auth for the recovery SQL if somebody else got there first.",
-    "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset."
+    "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it.\nFIRST USER WINS: the first account to sign up on an empty users table gets role 'superadmin', the role above 'admin'. Client sign-up at /auth is open, so once this origin is public anyone who reaches /auth/sign-up/email before you becomes the superadmin. Sign up yourself as soon as the API answers, then sign in on the admin app with the same email and password. Run /saasaloy-auth for the recovery SQL if somebody else got there first.",
+    "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset. It scopes both session cookies, client.session_token (signed in at /auth) and admin.session_token (signed in at /admin/auth); their names keep the two sessions apart."
   },
   "envServices": {
     "default": ["api"]
@@ -26,6 +26,17 @@
       "call": "authRoute",
       "import": {
         "name": "authRoute",
+        "from": "./routes/auth"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "base",
+      "path": "/admin/auth",
+      "call": "adminAuthRoute",
+      "import": {
+        "name": "adminAuthRoute",
         "from": "./routes/auth"
       }
     },
@@ -72,6 +83,10 @@
       "path": "files/db/schema/auth.pg.ts",
       "target": "@db/schema/auth.ts",
       "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/site-roles.ts",
+      "target": "@db/repositories/site-roles.ts"
     },
     {
       "path": "files/db/seed/users.ts",
@@ -130,6 +145,22 @@
         {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
+        },
+        {
+          "path": "files/src/scoped-adapter.ts",
+          "target": "src/scoped-adapter.ts"
+        },
+        {
+          "path": "files/src/plugins/audience.ts",
+          "target": "src/plugins/audience.ts"
+        },
+        {
+          "path": "files/src/plugins/client-admin-guard.ts",
+          "target": "src/plugins/client-admin-guard.ts"
+        },
+        {
+          "path": "files/src/plugins/rank-guard.ts",
+          "target": "src/plugins/rank-guard.ts"
         },
         {
           "path": "files/src/server.ts",

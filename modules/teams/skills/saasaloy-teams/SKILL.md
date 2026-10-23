@@ -9,9 +9,9 @@ The `teams` feature adds Better Auth organizations to `packages/auth`, organizat
 
 ## Admin screen boundaries
 
-The `/teams` screen inherits the admin root guard. A valid session is not enough. The user must hold `admin` or `superadmin` before the route loader runs. Neither site role grants anything inside an organization: the screen still lists only the caller's own memberships.
+The `/teams` screen inherits the admin root guard. It runs on the admin session (`admin.session_token`), not the client session, and a valid session is not enough. The user must hold a role in `ADMIN_APP_ROLES` (`admin` or `superadmin` by default) before the route loader runs. Neither site role grants anything inside an organization: the screen still lists only the caller's own memberships.
 
-The screen lists the caller's own organizations through `auth.organization.list()`. It is not an all-organizations backoffice browser. Do not query the database directly to widen its scope because that bypasses the organization plugin's membership checks.
+The screen lists the caller's own organizations through `auth.organization.list()`, where `auth` is the admin app's client from `@admin/lib/auth` (`createAdminClient`, at `/admin/auth`). It reads the admin's memberships, never those of a client signed in on another tab. It is not an all-organizations backoffice browser. Do not query the database directly to widen its scope because that bypasses the organization plugin's membership checks.
 
 The screen supports organization creation, active-organization switching, member removal, invitation creation, and invitation cancellation. The create form derives an editable slug and checks it with `auth.organization.checkSlug()` before creation.
 
@@ -39,7 +39,7 @@ The file imports `better-auth/plugins/access` and `better-auth/plugins/organizat
 
 `dynamicAccessControl` is what makes the `organization_roles` table live. Turning the option off does not remove the table; drop both together, or `createRole` writes into nothing.
 
-The descriptor applies two `plugin-array` patches. One adds `organizationPlugin()` to `packages/auth/src/auth.ts`. The other adds `organizationClientPlugin()` to `authClientPlugins` in `packages/auth/src/client.ts`. Keep both calls at zero arguments because the patch engine records and reverses that exact shape. That is why the options live in the two wrapper files and not in the patch.
+The descriptor applies four `plugin-array` patches, two per instance. `organizationPlugin()` goes into the `plugins` arrays of both `auth` and `adminAuth` in `packages/auth/src/auth.ts`, and `organizationClientPlugin()` goes into both `authClientPlugins` and `adminAuthClientPlugins` in `packages/auth/src/client.ts`. The client session and the admin session each need the plugin, because the `/teams` screen runs on the admin session and invitation acceptance runs on the client session. A route that calls the organization API itself uses `authFor(c).api.*` from `@repo/auth/server`, so it reads the session `x-auth-audience` names. A project made before the client/admin split gets the `adminAuth` patches from `saasaloy update teams` after it merges the new `auth.ts`; see the `saasaloy-auth` skill. Keep both calls at zero arguments because the patch engine records and reverses that exact shape. That is why the options live in the two wrapper files and not in the patch.
 
 The descriptor also applies a `nav-entry` patch, which adds `{ to: "/teams", label: "Teams", icon: UsersRoundIcon }` to the `Manage` group of the `/` area in `apps/admin/src/components/nav.ts`, and adds the `UsersRoundIcon` import that row needs. Its stable identity is the `to` value `/teams`. Editing the label in a generated project does not create a duplicate on update, and `saasaloy remove` takes the row out along with its icon import, unless another row still uses that icon.
 

@@ -3,16 +3,15 @@ import { asTenantId } from "@repo/db/tenant";
 import { organizationExists } from "@repo/db/repositories/organizations";
 import { APIError } from "better-auth/api";
 import { HTTPException } from "hono/http-exception";
-import { auth } from "./auth";
-import { SUPERADMIN_ROLE } from "./authorize";
 import type { Denial } from "./authorize";
 import { withAuthScope } from "./db-provider";
-import { requireSession } from "./server";
+import { authFor, requireSession } from "./server";
 import type { AuthRequestContext } from "./server";
 import { loadStatements } from "./statements";
 import {
   ORGANIZATION_HEADER,
   headerDenial,
+  mayCrossOrganizations,
   noOrganizationDenial,
   pickResolver,
   superadminTenant,
@@ -130,7 +129,7 @@ export async function resolveTenant(
   const session = await requireSession(c);
   const header = c.req.raw.headers.get(ORGANIZATION_HEADER);
   if (header) {
-    if (session.user.role !== SUPERADMIN_ROLE) {
+    if (!mayCrossOrganizations(session)) {
       return { denial: headerDenial(), tenant: null };
     }
     // The header is a raw request value and `asTenantId` brands whatever it is handed, so
@@ -156,7 +155,9 @@ export async function resolveTenant(
   // an organization — advice that is wrong and unfollowable when the database is down.
   const active = await withAuthScope(c, async () => {
     try {
-      return await auth.api.getActiveMember({ headers: c.req.raw.headers });
+      return await authFor(c).api.getActiveMember({
+        headers: c.req.raw.headers,
+      });
     } catch (error) {
       if (error instanceof APIError) {
         return null;

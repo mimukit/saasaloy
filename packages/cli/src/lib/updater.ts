@@ -1138,6 +1138,8 @@ export interface UpdateResult {
   patched: PlannedUpdatePatch[];
   /** Patches whose target file was absent — reported, not applied. */
   patchConflicts: PlannedUpdatePatch[];
+  /** Patches the codemod refused, each with its reason — reported, not applied. */
+  patchRefusals: { patch: PlannedUpdatePatch; reason: string }[];
   links: PlannedLink[];
   linkConflicts: PlannedLink[];
   /** Prerequisites installed as part of the same confirmed plan. */
@@ -1175,6 +1177,7 @@ export async function executeUpdatePlan(
     untracked: [],
     patched: [],
     patchConflicts: [],
+    patchRefusals: [],
     links: [],
     linkConflicts: [],
     prereqsInstalled: [],
@@ -1254,8 +1257,15 @@ export async function executeUpdatePlan(
       // Re-apply against fresh disk state, never the preview — the engine is idempotent,
       // so a patch that already landed is a clean no-op.
       const source = await readFile(p.fileAbs, "utf-8");
-      const { content, changed } = applyPatch(source, p.patch, p.file);
+      const { content, changed, reason } = applyPatch(source, p.patch, p.file);
       if (!changed) {
+        // A refusal is not a no-op: the patch did not land. Report it, and keep the
+        // module's lock entry where it was, so the next `update` tries the patch again
+        // once the file holds what it needs — a merged `auth.ts` with `adminAuth`, say.
+        if (reason !== undefined) {
+          result.patchRefusals.push({ patch: p, reason });
+          clean = false;
+        }
         continue;
       }
       await writeFile(p.fileAbs, content, "utf-8");

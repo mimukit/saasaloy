@@ -398,8 +398,7 @@ condition picks the `pg-core` file on this driver and filters the SQLite one out
 built. `saasaloy add auth --dry-run` prints which source it chose. Their route files are single
 files under both drivers, because `withDb(c, …)` has the same signature here and on `database-d1`.
 
-`auth` carries one extra rule this driver forces: its Better Auth singleton is module-scope and its
-database client is not. Every `auth.api.*` call runs inside `withAuthScope(c, …)`, which is what
+`auth` carries one extra rule this driver forces: its two Better Auth instances (`auth` and `adminAuth`) are module-scope singletons and their database client is not. Every `api.*` call on either instance runs inside `withAuthScope(c, …)`, which is what
 keeps one request's socket from reaching the next request on the same isolate. Read
 `saasaloy-auth` before writing a protected route, and see ADR 0029.
 

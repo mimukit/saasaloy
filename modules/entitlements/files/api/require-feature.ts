@@ -1,4 +1,4 @@
-import { auth, withAuthScope } from "@repo/auth/server";
+import { authFor, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 import { resolveSubject } from "@repo/billing";
 import type { SubjectUser } from "@repo/billing";
@@ -75,8 +75,11 @@ export function requireFeature(name: string): MiddlewareHandler<{
   return (c, next) =>
     withAuthScope(c, async () => {
       // Nothing below is answerable without a subject, and an anonymous caller is a 401
-      // rather than a 402: they have no plan to be short of.
-      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      // rather than a 402: they have no plan to be short of. `authFor(c)` reads the session
+      // `x-auth-audience` names, the client session unless the admin app says otherwise.
+      const session = await authFor(c).api.getSession({
+        headers: c.req.raw.headers,
+      });
       if (!session?.user) {
         return c.json(
           { error: { code: "unauthorized", message: "sign in first" } },
@@ -127,7 +130,9 @@ export function requireWithinLimit(
 }> {
   return (c, next) =>
     withAuthScope(c, async () => {
-      const session = await auth.api.getSession({ headers: c.req.raw.headers });
+      const session = await authFor(c).api.getSession({
+        headers: c.req.raw.headers,
+      });
       if (!session?.user) {
         return c.json(
           { error: { code: "unauthorized", message: "sign in first" } },

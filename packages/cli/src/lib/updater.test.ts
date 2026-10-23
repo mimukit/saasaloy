@@ -1045,6 +1045,75 @@ describe(executeUpdatePlan, () => {
     return executeUpdatePlan(plan, { root, ...state });
   }
 
+  // The client/admin split (ADR 0050) added `adminAuth` to `packages/auth/src/auth.ts`,
+  // and every feature module that adds a Better Auth plugin now patches it too. A project
+  // made before the split runs `saasaloy update` and meets that patch while its own
+  // `auth.ts`, waiting in the merge plan, still has no `adminAuth`. The patch must say so
+  // and stay pending, not count as applied: the module's lock entry stays put, so the
+  // next `update` after the merge applies it.
+  it("reports a plugin-array patch whose export is missing, keeps the lock, and applies it after the merge", async () => {
+    const item = {
+      type: "saasaloy:feature" as const,
+      files: [],
+      patches: [
+        {
+          file: "packages/auth/src/auth.ts",
+          kind: "plugin-array" as const,
+          exportName: "adminAuth",
+          arrayProp: "plugins",
+          call: "organizationPlugin",
+          import: {
+            name: "organizationPlugin",
+            from: "./plugins/organization",
+          },
+        },
+      ],
+    };
+    const theirs = await writeModule("new", "email", item, {});
+    const authFile = join(root, "packages/auth/src/auth.ts");
+    await mkdir(dirname(authFile), { recursive: true });
+    await writeFile(
+      authFile,
+      `export const auth = betterAuth({\n  plugins: [admin()],\n});\n`,
+      "utf-8"
+    );
+    const lock = emailLock();
+    const state = { config: config(), manifest: emptyManifest(), lock };
+
+    const first = await run(
+      await build({ ...state, inputs: [input({ theirs })] }),
+      state
+    );
+    expect(first.patched).toHaveLength(0);
+    expect(first.patchRefusals).toHaveLength(1);
+    expect(first.patchRefusals[0]?.reason).toMatch(
+      /export const adminAuth = <fn>\(\{ plugins: \[\.\.\.\] \}\)/
+    );
+    expect(first.lockMoved).not.toContain("email");
+    expect(lock.modules.email?.resolved).toBe(OLD_SHA);
+
+    // The user merges the new `auth.ts`, which now has the second instance.
+    await writeFile(
+      authFile,
+      `export const auth = betterAuth({\n  plugins: [admin()],\n});\n\n` +
+        `export const adminAuth = betterAuth({\n  plugins: [admin()],\n});\n`,
+      "utf-8"
+    );
+
+    const second = await run(
+      await build({ ...state, inputs: [input({ theirs })] }),
+      state
+    );
+    expect(second.patchRefusals).toHaveLength(0);
+    expect(second.patched.map((p) => p.file)).toStrictEqual([
+      "packages/auth/src/auth.ts",
+    ]);
+    expect(second.lockMoved).toContain("email");
+    await expect(onDisk("packages/auth/src/auth.ts")).resolves.toContain(
+      "export const adminAuth = betterAuth({\n  plugins: [admin(), organizationPlugin()],"
+    );
+  });
+
   it("writes clean files and re-hashes them in the manifest", async () => {
     const { base, theirs } = await emailRevisions("v1\n", "v2\n");
     const manifest = emptyManifest();

@@ -1,6 +1,6 @@
 ---
 name: saasaloy-admin
-description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, composing the page blocks (page header, page body, page layout, data table, detail panel, filter chips, empty state, error state) and the admin primitive set in @repo/ui/components/admin, adding a nav group or an area to the sidebar shell, changing the admin theme in admin.css or the dark-by-default rule, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin, changing the admin-role guard or the login screen, debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, removing the module, or deploying the static bundle to Workers.
+description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, composing the page blocks (page header, page body, page layout, data table, detail panel, filter chips, empty state, error state) and the admin primitive set in @repo/ui/components/admin, adding a nav group or an area to the sidebar shell, changing the admin theme in admin.css or the dark-by-default rule, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin or requireAdminApp, changing the admin-role guard, the login screen or the admin session client (createAdminClient, /admin/auth, x-auth-audience), debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, removing the module, or deploying the static bundle to Workers.
 ---
 
 # admin — the role-gated backoffice SPA
@@ -97,7 +97,7 @@ Putting the screen in the sidebar is a separate, optional step. See [The shell](
 
 ## The shell
 
-Every route except `/login` renders inside `src/components/app-shell.tsx`. That file reads the router and the session and hands them to `ShellLayout` in `@repo/ui/containers/admin/shell-layout`, which imports no router and no session:
+Every route except `/login` renders inside `src/components/app-shell.tsx`, and so does every screen except the refusal page (`AccessDenied`, see [The gate](#the-gate-a-session-is-never-enough)). That file reads the router and the session and hands them to `ShellLayout` in `@repo/ui/containers/admin/shell-layout`, which imports no router and no session:
 
 | Part | File | What it holds |
 |---|---|---|
@@ -194,18 +194,21 @@ Copy that split when you add a screen: **the route owns the state and the data, 
 
 ## The gate: a session is never enough
 
-`src/routes/__root.tsx` decides access in `beforeLoad`, top-down, before any child route's `loader`
-fires. Three outcomes and no fourth:
+This app signs in on the **admin session**: `adminAuth` at `/admin/auth`, cookie `admin.session_token`. A client signed in on another app in the same browser holds `client.session_token`, which this app never reads, so the two stay signed in side by side. See "Two instances" in the `saasaloy-auth` skill.
+
+`src/routes/__root.tsx` decides access in `beforeLoad`, top-down, before any child route's `loader` fires. Three outcomes and no fourth:
 
 | Visitor | Outcome |
 |---|---|
-| Anonymous | `throw redirect({ to: "/login", search: { redirect: location.href } })`, except on `/login` itself |
-| Signed in, `user.role !== "admin"` | `throw new NotAdminError(session)` → the root `errorComponent` renders `AccessDenied` **in place** |
-| Signed in, `user.role === "admin"` | the shell renders |
+| No admin session (anonymous, or signed in only as a client) | `throw redirect({ to: "/login", search: { redirect: location.href } })`, except on `/login` itself |
+| Admin session, role not in `ADMIN_APP_ROLES` | `throw new NotAdminError(session)` → the root `errorComponent` renders `AccessDenied` **in place**, alone, without `AppShell` |
+| Admin session, role in `ADMIN_APP_ROLES` | the shell renders |
 
-The middle row is the one to keep. A non-admin holds a valid session, so redirecting them to
-`/login` sends them straight back the moment the guard reads it, and the address bar ping-pongs.
-They get a terminal panel with a sign-out button instead.
+`isAdmin` in `src/lib/auth.ts` makes the check against `ADMIN_APP_ROLES`, the browser copy of the list in `packages/auth/src/authorize.ts`. A project that adds a role such as `support` to the admin group adds it to both copies; the `saasaloy-auth` skill has the recipe.
+
+The middle row is rare. `adminAuth` refuses to open a session for an account outside `ADMIN_APP_ROLES`, with "Invalid email or password" on the login screen, so a client account never gets this far. The row is for an account whose role a superadmin removed after it signed in. It still holds a valid admin session, so redirecting it to `/login` sends it straight back the moment the guard reads it, and the address bar ping-pongs. It gets a terminal panel with a sign-out button instead.
+
+`AccessDenied` (`src/components/access-denied.tsx`) renders on its own, centered on the login screen's card, with no sidebar, header or user menu. The shell names every screen this app has, which a refused account has no reason to learn. The panel is the page's `<main>`, because no shell gives it one. `NotAdminError` keeps the session only so the panel can name the signed-in email.
 
 **Every deny is a throw, and that is load-bearing.** `beforeLoad` runs before any loader, but only a
 throw ends the match; a `beforeLoad` that returns normally lets every matched route's `loader` run.
@@ -217,7 +220,7 @@ guard turns away.
 
 ### This guard is the second half of the gate
 
-The first half is `requireAdmin` in `@repo/auth/server`, and the api route is where it runs. `beforeLoad` stops this app from asking on a denied visitor's behalf; it cannot stop `curl`, a stale bundle, or a second client someone writes against the same api. Ship a new admin route and you wire both halves or you have shipped neither:
+The first half is `requireAdmin` (or `requireAdminApp`) in `@repo/auth/server`, and the api route is where it runs. Both read the admin session whatever the request's `x-auth-audience` header says. Use `requireAdmin` for admin-only work and `requireAdminApp` for a route every admin-app role may call, `support` included when a project adds it. `beforeLoad` stops this app from asking on a denied visitor's behalf; it cannot stop `curl`, a stale bundle, or a second client someone writes against the same api. Ship a new admin route and you wire both halves or you have shipped neither:
 
 ```ts
 // apps/api/src/routes/reports.ts — the server half
@@ -240,15 +243,15 @@ export const Route = createFileRoute("/reports")({
 
 The screen needs no guard of its own. It is a child of `__root.tsx`, so it inherits `beforeLoad`, and a non-admin never reaches its loader. That inheritance is exactly what makes the server half easy to forget: the screen behaves correctly while the endpoint behind it answers anyone.
 
-`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` calls `requireAdmin`, then `auth.api.listUsers`, and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
+`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` calls `requireAdmin`, then `adminAuth.api.listUsers` (the admin plugin's endpoints answer only on the admin instance), and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
 
-Prove the server half yourself rather than trusting the screen. Sign in as a non-admin, take the cookie, and call the endpoint directly:
+Prove the server half yourself rather than trusting the screen. Sign in as a client through `POST /auth/sign-in/email`, take the cookie jar, and call the endpoint directly:
 
 ```sh
-curl -i -b /tmp/non-admin-cookies.txt http://localhost:4000/admin/users
+curl -i -b /tmp/client-cookies.txt http://localhost:4000/admin/users
 ```
 
-That answers `403` with `{"error":{"code":"forbidden","message":"role required: admin"}}`. A `200` means the route skipped the gate, whatever the browser shows.
+That answers `401` with `{"error":{"code":"unauthorized","message":"sign in first"}}`, because a client cookie is no admin session at all. An admin session whose role was removed after sign-in gets `403` with `"role required: admin or superadmin"`. A `200` means the route skipped the gate, whatever the browser shows.
 
 `src/lib/auth.ts` owns the read. `loadSession()` fetches once per page load and hands the same
 promise to every caller, so a burst of navigations costs one round trip; `forgetSession()` drops it.
@@ -259,9 +262,11 @@ a server denied. **Every code path that changes who is signed in calls `forgetSe
 the sign-in or sign-out that just happened. `login.tsx` and `components/sign-out-button.tsx` both
 show the order.
 
-The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on both halves (`admin()` server-side, `adminClient()` in `packages/auth/src/client.ts`). Drop the client half and `session.user.role` stops being typed.
+`src/lib/auth.ts` builds its client with `createAdminClient(apiBaseUrl)` from `@repo/auth/client`, which talks to `/admin/auth` with `credentials: "include"`. It keeps the export name `auth`, so a module screen that imports `auth` from `@admin/lib/auth` reaches the admin session with no change. Never build this app's client with `createClient`: that is the client-group factory at `/auth`, and its session never opens this app.
 
-**The first account to sign up becomes the admin.** A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` writes `role: "admin"` when the `users` table is still empty, so a fresh project reaches this shell without SQL. Every account after it keeps the plugin's `"user"` default and lands on `AccessDenied`. Sign-up is open, so claim that first slot the moment the api answers; if somebody beat you to it, the `wrangler d1 execute` one-liner in the `saasaloy-auth` skill flips the row. That skill owns the rule and the recovery path both.
+The role string itself comes from better-auth's `admin()` plugin, which the `auth` module enables on both halves (`admin()` server-side, `adminClient()` in `adminAuthClientPlugins` in `packages/auth/src/client.ts`). Drop the client half and `session.user.role` stops being typed.
+
+**The first account to sign up becomes the superadmin.** A `databaseHooks.user.create.before` hook in `packages/auth/src/auth.ts` writes `role: "superadmin"` when the `users` table is still empty, so a fresh project reaches this shell without SQL. This app has no sign-up, and neither has the admin instance, so the first account signs up as a client on `/auth` (a client app's sign-up screen, or `POST /auth/sign-up/email`) and then signs in here with the same email and password. Every account after it keeps the plugin's `"user"` default, and this app's login refuses it until a superadmin grants an admin-group role. Client sign-up is open, so claim that first slot the moment the api answers; if somebody beat you to it, the recovery SQL in the `saasaloy-auth` skill flips the row. That skill owns the rule and the recovery path both.
 
 **A deep link survives the login hop.** The guard records the path it turned an anonymous visitor
 away from as `?redirect=` on `/login`, and `login.tsx` navigates there after `forgetSession()` and
@@ -272,18 +277,20 @@ an absolute url, a control character), and `resolveDestination` then asks the ro
 new screen needs nothing here — it is in the generated route tree, so it is already a valid
 destination.
 
-There is deliberately **no sign-up route** here. An admin account is made by promoting an existing
-user, never by self-service at the backoffice door.
+There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSignUp: true`. An admin account is made by promoting an existing user, never by self-service at the backoffice door. Only a superadmin may grant `admin` or `superadmin` (the rank guard in the `saasaloy-auth` skill).
 
 ## The typed client
 
 `src/lib/api.ts` is the only place `hc` is called:
 
 ```ts
-export const api = hc<AppType>(apiBaseUrl, { init: { credentials: "include" } });
+export const api = hc<AppType>(apiBaseUrl, {
+  headers: { "x-auth-audience": "admin" },
+  init: { credentials: "include" },
+});
 ```
 
-Three properties are load-bearing:
+Four properties are load-bearing:
 
 - **`AppType` is `apps/api`'s route chain.** `api.health.$get()`, its path and its per-status
   response shape all come from the route file. Change a response schema in `apps/api` and this app
@@ -293,6 +300,7 @@ Three properties are load-bearing:
 - **`init.credentials: "include"`** is why this file exists instead of a one-line `hc()` per call
   site. `fetch` omits cookies cross-origin by default, so without it every request from `:3001`
   arrives anonymous and the api answers 401.
+- **`x-auth-audience: admin`** names which of the browser's two sessions each call means. The browser sends both cookies to the api host, the client one included when a client is signed in on another app in the same browser. The `requireAdmin*` gates read the admin session whatever the header says, but a generic gate (`requireSession`, `requireTenant`, `authFor(c)`) reads the session the header names. Without it, a teams or billing screen here would act as the client in the other tab. Any value other than `client` or `admin` gets 400.
 
 `@repo/api/client` is a **types-only** export (its `package.json` maps `./client` under a `types`
 condition alone), which is why `@repo/api` is a `devDependency`. No Worker code enters this bundle.
@@ -394,8 +402,7 @@ In production the origin comes from `PUBLIC_API_URL`, and the api needs the admi
 one env key spells the api origin for `web`, `admin` and `waitlist` alike. Unset or empty, it falls
 back to `http://localhost:4000`.
 
-Cookie behaviour is the `auth` module's (ADR 0004). Cross-origin dev works because api's `cors()`
-sets `credentials: true` for the allowlisted origins and the cookie is host-only on `localhost`. In
+Cookie behaviour is the `auth` module's (ADR 0004). Cross-origin dev works because api's `cors()` sets `credentials: true` for the allowlisted origins and the cookie is host-only on `localhost`. Cookies ignore the port, so `:3000` and `:3001` see the same jar; the names `client.session_token` and `admin.session_token` are what keep a client sign-in on the web app from replacing this app's session. In
 production, put the api and the admin app on sibling subdomains and set `COOKIE_DOMAIN`.
 
 ## Run it
@@ -463,14 +470,16 @@ files.
 - **Orange is `--accent-sort` and nothing else.** One active sort indicator, or an AI surface. Never
   a section background and never a status pill.
 - **Loading, not-found and error screens come from the app.** Inherit the router defaults and `__root.tsx`'s `notFoundComponent`; override a route's `errorComponent` only for better words, and do not write error markup outside the admin `ErrorState`.
-- **One `hc` call, in `src/lib/api.ts`.** Import `api`; do not build a second client.
+- **One `hc` call, in `src/lib/api.ts`.** Import `api`; do not build a second client, and do not drop its `x-auth-audience: admin` header.
+- **The auth client is `createAdminClient`.** `src/lib/auth.ts` exports it as `auth`; never swap in `createClient`.
+- **`/admin/auth/*` belongs to the admin auth instance.** An api route or middleware this app adds under `/admin/*` must not claim or gate it.
 - **One origin for api and auth**, from `src/lib/auth.ts`'s `apiBaseUrl`. A split origin loses the
   session cookie.
 - **The guard lives in `__root.tsx`'s `beforeLoad`**, and it is default-deny. A per-route session
   check is redundant, because every deny there is a throw and no child loader runs after one. Keep
   it that way: a deny that returns instead of throwing silently re-opens the loaders it was meant to
   stop. Do not turn `AccessDenied` into a redirect either.
-- **Every admin endpoint calls `requireAdmin`**, whatever the guard in `__root.tsx` does. The screen inheriting `beforeLoad` is not authorization; it is the reason a missing server check looks fine in a browser.
+- **Every admin endpoint calls `requireAdmin` or `requireAdminApp`**, whatever the guard in `__root.tsx` does. The screen inheriting `beforeLoad` is not authorization; it is the reason a missing server check looks fine in a browser.
 - **`forgetSession()` before `router.invalidate()`**, on every sign-in and sign-out path.
 - **Describe a request once with `queryOptions`**, prefetch in the loader, read with `useQuery`,
   refresh by invalidating the key.

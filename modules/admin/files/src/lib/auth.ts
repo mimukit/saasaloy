@@ -1,9 +1,16 @@
-import { createClient } from "@repo/auth/client";
+import { createAdminClient } from "@repo/auth/client";
 import { adminEnv } from "@admin/env";
 
-// The one auth client for the SPA. `@repo/auth` owns better-auth's configuration —
-// `basePath: "/auth"`, `credentials: "include"` and the `adminClient()` plugin all come
-// baked in — so this file only supplies the origin and caches the session lookup.
+// The one auth client for the SPA, on the admin session. `@repo/auth` owns better-auth's
+// configuration — `basePath: "/admin/auth"`, `credentials: "include"` and the
+// `adminClient()` plugin all come baked in — so this file only supplies the origin and
+// caches the session lookup.
+//
+// It is the admin client, not the client-group one, and that is the whole point: the
+// admin app signs in on its own instance and holds its own cookie, `admin.session_token`.
+// A client signed in on another app in the same browser keeps their own cookie, and
+// signing in or out here touches neither. The export keeps the name `auth`, so a module
+// screen that imports `auth` from this file needs no change.
 //
 /**
  * Origin the SPA calls for both api and auth requests. `apps/api` runs on 4000 in dev.
@@ -14,7 +21,7 @@ import { adminEnv } from "@admin/env";
  */
 export const apiBaseUrl = adminEnv().PUBLIC_API_URL;
 
-export const auth = createClient(apiBaseUrl);
+export const auth = createAdminClient(apiBaseUrl);
 
 /** The signed-in session, shaped by better-auth's `admin()` plugin (so `user.role` exists). */
 export type AdminSession = typeof auth.$Infer.Session;
@@ -26,12 +33,12 @@ export const ADMIN_ROLE = "admin";
 export const SUPERADMIN_ROLE = "superadmin";
 
 /**
- * The roles that open the shell. This is the browser's copy of `ADMIN_ROLES` in
- * `packages/auth/src/authorize.ts`, because a bundle cannot import from
- * `@repo/auth/server`. Change one list and change the other, or the SPA and the api
- * disagree about who gets in.
+ * The roles that open the shell: every role in the admin group. This is the browser's
+ * copy of `ADMIN_APP_ROLES` in `packages/auth/src/authorize.ts`, because a bundle cannot
+ * import from `@repo/auth/server`. Change one list and change the other, or the SPA and
+ * the api disagree about who gets in. A project that adds `support` adds it to both.
  */
-export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
+export const ADMIN_APP_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 
 // The root route's `beforeLoad` runs on every navigation, and an unmemoised getSession()
 // there costs a blocking round trip per click. One promise is kept and handed to every
@@ -68,11 +75,13 @@ export function forgetSession(): void {
 /**
  * True when the session may enter the shell. A session alone is never enough.
  *
- * Both site roles pass, matching `requireAdmin` on the api. The comparison stays `===`
- * per entry: a fold or a substring test would let `"Admin"` and `"administrator"` in,
- * and the api would then refuse every call the shell made.
+ * The admin instance already refuses to open a session for a role outside the group, so
+ * this fails only for a role a superadmin removed after sign-in. Every group role passes,
+ * matching `requireAdminApp` on the api. The comparison stays `===` per entry: a fold or
+ * a substring test would let `"Admin"` and `"administrator"` in, and the api would then
+ * refuse every call the shell made.
  */
 export function isAdmin(session: AdminSession | null): boolean {
   const role = session?.user.role;
-  return ADMIN_ROLES.some((candidate) => role === candidate);
+  return ADMIN_APP_ROLES.some((candidate) => role === candidate);
 }

@@ -1,4 +1,4 @@
-import { ADMIN_ROLE, getSession } from "@repo/auth/server";
+import { ADMIN_ROLES, getAdminSession } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import {
   listFlags,
@@ -84,11 +84,16 @@ export function flagsFor(c: FlagsRequestContext) {
 /**
  * Whether this request carries an admin session — what `maintenance()` bypasses on.
  *
+ * It reads the admin session, whatever `x-auth-audience` says, so an admin signed in on
+ * the admin app keeps working through maintenance and a client session never counts.
+ * Both admin roles pass, `superadmin` included, the same pair `requireAdmin` admits.
+ *
  * It answers `false` rather than throwing for a signed-out caller, because during
  * maintenance an anonymous request is the ordinary case and a 401 would replace the
  * maintenance page with an authentication error.
  */
 export async function sessionIsAdmin(c: AuthRequestContext): Promise<boolean> {
-  const session = await getSession(c);
-  return session?.user.role === ADMIN_ROLE;
+  const session = await getAdminSession(c);
+  const role = session?.user.role;
+  return ADMIN_ROLES.some((candidate) => role === candidate);
 }

@@ -442,6 +442,8 @@ module-scope singleton — that's the one place `createEmail` isn't handed a req
 `requireEmailVerification` on before a provider is installed and `EMAIL_PROVIDER` is set: sign-up
 will appear to hang.
 
+`auth.ts` builds two instances: `auth` for the client session at `/auth` and `adminAuth` for the admin session at `/admin/auth`. The block above goes on `auth`, where clients sign up. Both read one `users` and one `accounts` table, so a verified email and a new password count on both. If admins should reset a password from the admin app, add the same `sendResetPassword` to `adminAuth`'s `emailAndPassword` and keep its `disableSignUp: true`; the reset link then points at `/admin/auth`. See the `saasaloy-auth` skill.
+
 ## Boundaries to honor
 
 - **`export const email = defineEmail({ providers: [] })` stays in exactly that shape** — a real

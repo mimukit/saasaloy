@@ -24,6 +24,14 @@ import { apiBaseUrl } from "@admin/lib/auth";
 // without it every request from :3001 to :4000 arrives anonymous and the api answers
 // 401. The api's CORS layer already sets `credentials: true` for the allowlisted dev
 // origins, which is the server half of the same handshake.
+//
+// `x-auth-audience: admin` names which of the browser's two sessions each call means.
+// The browser sends both cookies to the api host, the client one included when a client
+// is signed in on another app in this browser. The `require*Admin*` gates read the admin
+// session whatever the header says, but a generic gate (`requireSession`,
+// `requireTenant`) reads the session the header names, so a teams or billing screen
+// here acts as the admin who is signed in, not as the client in the other tab.
 export const api = hc<AppType>(apiBaseUrl, {
+  headers: { "x-auth-audience": "admin" },
   init: { credentials: "include" },
 });

@@ -3,6 +3,7 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
   insertIntoPluginArray,
+  pluginArrayInsertRefusal,
   pluginArrayRemoveRefusal,
   removeFromPluginArray,
 } from "./ts-module.js";
@@ -227,6 +228,23 @@ export const auth = betterAuth({
       STRIPE
     );
     expect(out.endsWith("\n")).toBeTruthy();
+  });
+});
+
+describe(pluginArrayInsertRefusal, () => {
+  it("names a missing export, which the forward direction leaves alone", () => {
+    const missing = { ...STRIPE, exportName: "adminAuth" };
+
+    expect(insertIntoPluginArray(AUTH, missing)).toBe(AUTH);
+    expect(pluginArrayInsertRefusal(AUTH, missing)).toMatch(
+      /export const adminAuth = <fn>\(\{ plugins: \[\.\.\.\] \}\)` is not in this file, so `stripe\(\)` was not added/
+    );
+  });
+
+  it("has no objection when the export is there, added or already present", () => {
+    expect(pluginArrayInsertRefusal(AUTH, STRIPE)).toBeUndefined();
+    const added = insertIntoPluginArray(AUTH, STRIPE);
+    expect(pluginArrayInsertRefusal(added, STRIPE)).toBeUndefined();
   });
 });
 
