@@ -1,22 +1,24 @@
 # Plan: A release step with a changelog and a version before each production deploy
 
-Not grilled. Drafted: 2026-10-23. Issue: #236. Depends on #234 (plan 0077, the gated production deploy).
+Grilled: 2026-10-23
+
+Drafted: 2026-10-23. Issue: #236. Builds on #234 (plan 0077, the gated production deploy, merged in PR #235).
 
 ## Context
 
 A generated project needs a changelog and a release version for each production deploy. Nothing is published to npm. The owner settled the design on 2026-10-23:
 
-- `pnpm release` runs release-it before the deploy, on `main` or a `hotfix-*` branch. It bumps the root `package.json` version, writes `CHANGELOG.md`, commits `chore(release): v${version}`, tags `v${version}`, pushes, and creates a GitHub Release.
+- `pnpm release` runs release-it before the deploy, on a branch the deploy allows (`main` or `hotfix-*` by default). It bumps the root `package.json` version, writes `CHANGELOG.md`, commits `chore(release): v${version}`, tags `v${version}`, pushes, and creates a GitHub Release.
 - `pnpm deploy:production` stays a separate step and keeps all its gates. The release commit is clean, pushed and CI-green, so the gates pass on it.
 - The `deploy-<UTC time>` tag stays. `v*` names the release, and `deploy-*` records when it went live.
-- The deploy tag message names the version. The deploy warns, and never refuses, when no release exists since the last deploy tag.
+- The deploy tag message names the version. The deploy warns, and never refuses, when HEAD is not a release commit.
 - The deploy runbook and the deploy skill document the release step.
 
 It belongs in the base, beside the gated deploy, not in a module. It has no runtime code, no env keys and no provider choice, and it must agree with the deploy's branches, tags and gates.
 
-primeshopr builds it first and runs a few real releases. The base copies the proven files afterwards. primeshopr's work is uncommitted today: `.release-it.json`, root `release` and `release:dry` scripts, `release-it` 21.0.2 and `@release-it/conventional-changelog` 12.0.0 as devDependencies, and a `releaseWarning` plus a version in the tag message in `scripts/deploy-production.ts`.
+primeshopr builds it first and runs a real release. The base then builds the same behaviour in `packages/tooling`. primeshopr committed its release work in `0fff95b` and `ba4eb87`: a root `.release-it.json`, root `release` and `release:dry` scripts, `release-it` 21.0.2 and `@release-it/conventional-changelog` 12.0.0, and a release warning plus a version in the tag message in `scripts/deploy-production.ts`. On 2026-10-23 it has no `v*` tag, so no release has run yet.
 
-This is its own plan, not part of plan 0077, because #234 is already in progress in its own worktree. The release step builds on the engine #234 adds (`packages/tooling`, the `saasaloy-deploy` skill, `docs/runbook-deploy.md`, ADR 0048), so it waits for #234 to merge.
+This is its own plan, not part of plan 0077, because #234 was already in progress when the release step was designed.
 
 Success: a new project runs `pnpm release:dry` and sees the next version and the changelog entry. `pnpm release` then `pnpm deploy:production` writes a `v*` tag and a `deploy-*` tag whose message names that version. A release does not put the root `package.json` in the next `saasaloy update` merge plan.
 
@@ -25,75 +27,111 @@ Success: a new project runs `pnpm release:dry` and sees the next version and the
 | # | Finding | Evidence |
 |---|---------|----------|
 | 1 | The base has no release step | The base root `package.json` has `"version": "0.0.0"`, no `release` script and no release-it. |
-| 2 | A shape to copy exists | saasaloy's own `packages/cli/.release-it.json`. The project copy drops npm publish, the preflight hook and `ignoreRecommendedBump`, and adds `requireBranch: ["main", "hotfix-*"]`, as primeshopr's does. |
-| 3 | A release marks the root `package.json` as edited | `lib/base.ts` hashes each managed file whole. After the first version bump, every later base change to the root `package.json` goes to the merge plan. |
-| 4 | Lint and commit hooks need no change | The base `_prettierignore` lists `**/*.md`, so `CHANGELOG.md` is not formatted. The base `commitlint.config.js` has no `scope-enum`, so `chore(release)` passes. |
-| 5 | primeshopr's warning differs from the agreed rule | primeshopr warns when HEAD has no `v*` tag (`git describe --exact-match`). The agreed rule warns when no `v*` tag exists since the last `deploy-*` tag. They differ when a commit lands between the release and the deploy. |
+| 2 | The engine has no release field yet | `tagMessage(head, options, services)` in `packages/tooling/src/deploy-production.ts` takes no version. `Facts` has no release field. The deploy tag prefix is the `tagPrefix` key in `deploy.config.ts`. |
+| 3 | The root scripts point into `packages/tooling` | Plan 0077 settled `deploy:production` and `skills:link` as `node packages/tooling/src/<file>.ts` lines that never change. `release` takes the same shape. |
+| 4 | A release marks the root `package.json` as edited | `lib/base.ts` hashes each managed file whole. After the first version bump, every later base change to the root `package.json` goes to the merge plan. |
+| 5 | release-it facts | release-it 21 loads its config through `c12` and has a Node API. Its default `ci` is `ci-info`'s `isCI`, so outside CI it asks four questions. With no token, it warns and falls back to a web release page (`lib/plugin/github/GitHub.js`). The `conventionalcommits` preset reads `preMajor`, which turns a breaking change under 1.0 into a minor bump. |
+| 6 | Lint and commit hooks need no change | The base `_prettierignore` lists `**/*.md`, so `CHANGELOG.md` is not formatted. The base `commitlint.config.js` has no `scope-enum`, so `chore(release)` passes. |
+| 7 | primeshopr's warning matches the settled rule | primeshopr warns when HEAD has no `v*` tag (`git describe --exact-match`). The grill kept that rule (Q3). The agreed wording "no release since the last deploy tag" missed commits that land after the release. |
 
-## Design decisions (proposed, for the grill)
+## Settled design decisions
 
-| Decision | Proposal |
-|----------|----------|
-| Release tool | release-it with `npm.publish: false` and `@release-it/conventional-changelog` (preset `conventionalcommits`, infile `CHANGELOG.md`, header `# Changelog`). Root scripts `release` and `release:dry`, with the `GITHUB_TOKEN="${GITHUB_TOKEN:-$(gh auth token)}"` prefix saasaloy uses. Both packages are exact-pinned root devDependencies, kept fresh by `pnpm deps:update`. Rejected: a module (no runtime code, no env keys, no provider choice); changesets (it versions per package and assumes publish). |
-| Release config | `.release-it.json` at the root, a managed base file: `requireBranch`, `requireCleanWorkingDir`, `requireUpstream`, `requireCommits`, commit message `chore(release): v${version}`, tag `v${version}`, `github.release: true`. It sits at the root because release-it reads it there and a developer runs `pnpm release` from there. |
-| Release and deploy link | The deploy engine in `packages/tooling` reads the `v*` tag and names it in the tag message and the run output: `Production deploy of abc1234 (v0.3.0): api, admin, web.` It warns when no release exists since the last deploy tag, so a hotfix never waits on the changelog. |
-| `CHANGELOG.md` | Not shipped by the base, not a seed. release-it creates it on the first release, and the project owns it from then on. `update` never names it. |
+| # | Decision | Settled | How |
+|---|----------|---------|-----|
+| Q1 | Where the release config lives | `packages/tooling/src/release.ts`, a managed wrapper. It calls the release-it Node API with options it builds from `deploy.config.ts`: `branches` for `requireBranch`, and a `release` block for the rest. There is no `.release-it.json`. The branch list has one source. Rejected: a managed root `.release-it.json` (the branch list in two files, an edited copy in the merge plan); an owned one (a base fix never reaches a project). | asked |
+| Q2 | `update` and the root `version` key | The updater hashes the root `package.json` with `version` set to the template value, and on overwrite it writes the project's version back. This is one key in one file, and it amends the hash rule of ADR 0034. Rejected: an owned version file via `@release-it/bumper`; no change. | asked |
+| Q3 | When the deploy warns | When HEAD is not a release commit. The message tells two cases apart: no `v*` tag since the last deploy tag, or N commits after the newest `v*` tag. The dry run lists those commits. The deploy never refuses on this. | asked |
+| Q4 | primeshopr proof | One release from `main`, followed by one deploy. The hotfix release path stays unproven until a real hotfix, and the runbook says so. | asked |
+| Q5 | Start version | The template keeps `0.0.0`. `preMajor: true`, so the first `feat:` makes `0.1.0` and a break under 1.0 bumps the minor. `1.0.0` is a release the owner chooses with `pnpm release major`. | asked |
+| Q6 | Changelog sections | The preset default: `feat`, `fix`, `perf` and `revert` show, the rest hide, and dependency bumps hide with them. `release.changelogSections` overrides it. | defaulted |
+| Q7 | No token | `release.ts` reads `GITHUB_TOKEN`, then `gh auth token`. With neither, and `githubRelease` on, it refuses before it bumps anything and names both fixes. The web fallback waits on a page that no one opens on a headless box. | defaulted |
+| Q8 | CI on the release commit | CI always runs on it, and the deploy CI gate waits for it. The gate stays one rule. | defaulted |
+| Q9 | Hotfix merge-back | Merge the hotfix branch into `main`, never rebase it, because a rebase rewrites the commit the `v*` tag names. The runbook shows the `CHANGELOG.md` and `version` conflict and keeps both changelog entries. | defaulted |
+| Q10 | ADR | A new ADR 0049, "A release names each production deploy", citing 0048 and 0034. ADR 0048 is accepted and stays as it is. | defaulted |
+| Q11 | Questions during a run | `release.ts` runs release-it with `ci: true` and never asks. It prints the version and the changelog entry before it commits. `pnpm release:dry` is the preview. The `saasaloy-deploy` skill gives an agent the deploy rule: it runs `pnpm release` only after the owner says so in the same session. | asked |
+| Q12 | Where the proof lives | A primeshopr issue for the first release. #236 stays `blocked`, with a body line that links that issue, because GitHub records no dependency on an issue in another org. The owner promotes #236 when the primeshopr issue closes. | asked |
+| Q13 | Outward actions approved | The publish step: commit and push this plan to `main`, update the #236 body and labels, and file the primeshopr issue. An agent may also run `pnpm release` in primeshopr for that issue, which pushes a `v*` tag and creates a GitHub Release there. The build of #236 opens its own PR. | asked |
+| Q15 | Where the pins live | `release-it` and `@release-it/conventional-changelog`, exact-pinned in `packages/tooling` `dependencies`, kept fresh by `pnpm deps:update`. The wrapper imports them, and a workspace owns its vendor packages (ADR 0020). | defaulted |
+| Q16 | Root scripts | `"release": "node packages/tooling/src/release.ts"` and `"release:dry": "node packages/tooling/src/release.ts --dry-run"`. No shell prefix, so the lines work on every platform and never change. | defaulted |
+| Q17 | Version override | `pnpm release minor`, `major` or `1.2.3` goes to release-it as the increment. | defaulted |
+| Q18 | The `release` block | `release: { tagPrefix: "v", githubRelease: true, preMajor: true, changelogSections: undefined }` in `deploy.config.ts`. A missing block or key falls back to the default, because `update` never adds the block to an existing project's owned file. | defaulted |
+| Q19 | `update` for an existing project | `release.ts` arrives as a new managed file. The `packages/tooling` pins overwrite when that `package.json` is unedited. The two root scripts go through the root `package.json` merge plan. `saasaloy doctor` warns when `release.ts` exists and the root `release` script does not. | defaulted |
+| Q20 | Tests | Vitest in `packages/tooling`, as for the deploy engine. Tests cover the options built from the config, the token check, the warning text and the tag message. No test makes a git or network call. | defaulted |
 
 ## Approach
 
 ### Phase 1: proof in primeshopr
 
-Entry condition for Phase 2. primeshopr commits its release work and runs at least two real releases, one from `main` and one from a `hotfix-*` branch, each followed by a deploy. Record here what changed in its files after each run. The proven files are the source for Phase 2, not saasaloy's own `.release-it.json`.
+Attended: the owner, or an agent the owner names, runs the first primeshopr release. The primeshopr issue tracks it, and #236 stays `blocked` until it closes.
+
+1. In primeshopr, on `main`: `pnpm release:dry`, then `pnpm release`, then `pnpm deploy:production`.
+2. Record in this plan: the version, the `CHANGELOG.md` entry shape, the deploy tag message, and every file primeshopr changed to make the run pass.
+
+Done when: primeshopr has one `v*` tag, one GitHub Release and one `deploy-*` tag whose message names the version, and this plan records the run.
 
 ### Phase 2: decisions on record
 
-1. Grill this plan (grillkit). Record the result at the top.
-2. Amend ADR 0048 or write a new ADR for the release step and the warn-not-refuse rule.
-3. Add `release` and `release tag` to `CONTEXT.md`.
+1. ADR 0049, "A release names each production deploy", citing 0048 and 0034.
+2. `CONTEXT.md` defines release and release tag.
 
-### Phase 3: base files and the engine
+Done when: the ADR and the two terms are on the branch.
 
-1. Copy `.release-it.json` into the base template. Add `release` and `release:dry` to the root `package.json`, and pin `release-it` and `@release-it/conventional-changelog`.
-2. Engine: port `releaseWarning` and the version argument of `tagMessage` with their tests, changed to the agreed rule. The dry run prints the release line.
-3. Updater: the change the grill picks for the root `version` key (open question 3).
-4. Check in `.dev`: `saasaloy init`, two `feat:` commits, `pnpm release:dry`. See the next version and the changelog entry. Make no GitHub Release from `.dev`.
+### Phase 3: the release wrapper and the engine
 
-### Phase 4: docs and skills
+1. `packages/tooling/src/release.ts`: build the release-it options from `deploy.config.ts`, check the token, run release-it with `ci: true`, and pass `--dry-run` and the increment through.
+2. `packages/tooling/src/types.ts` and `deploy.config.ts`: the `release` block, with its defaults.
+3. `packages/tooling/package.json`: the two exact pins.
+4. Root `package.json`: the `release` and `release:dry` scripts.
+5. Engine: a `Facts.release` field (the `v*` tag on HEAD, and the commits after the newest one), the warning from Q3, and the version in `tagMessage` and the run output.
+6. Vitest tests from Q20.
 
-1. The `saasaloy-deploy` skill and `docs/runbook-deploy.md` put `pnpm release` before `pnpm deploy:production`, with the hotfix order.
-2. Base `AGENTS.md` "Branches and deploys" names the `v*` tag beside the `deploy-*` tag.
-3. `packages/cli/CHANGELOG.md` entry with the merge steps for an existing project.
+Done when: in `.dev`, a new project with two `feat:` commits runs `pnpm release:dry` and sees `0.1.0` and the changelog entry, and `pnpm deploy:production --dry-run` prints the release warning. No GitHub Release is made from `.dev`.
 
-### Phase 5: verification
+### Phase 4: `update` and `doctor`
+
+1. The updater hashes the root `package.json` with the template `version`, and it keeps the project's version on overwrite.
+2. `saasaloy doctor` warns when `release.ts` exists and the root `release` script does not.
+3. CLI tests for both.
+
+Done when: in `.dev`, a project that has bumped its version gets an unedited root `package.json` overwritten by `update`, with its version kept.
+
+### Phase 5: docs and skills
+
+1. The `saasaloy-deploy` skill and `docs/runbook-deploy.md`: `pnpm release` before `pnpm deploy:production`, the go-ahead rule for an agent, the hotfix order and its merge-back conflict, and a note that the hotfix release path is unproven.
+2. Base `AGENTS.md` "Branches and Deploys": the `v*` tag beside the `deploy-*` tag.
+3. `packages/cli/CHANGELOG.md`: the merge steps for an existing project.
+
+Done when: the skill, the runbook and `AGENTS.md` name the release step.
+
+### Phase 6: verification
 
 1. `pnpm lint`, `pnpm typecheck`, `pnpm test` in saasaloy.
-2. In `.dev`: `pnpm deploy:production --dry-run` on a project with and without a release since the last deploy tag. See the release line and the warning.
-3. In `.dev`: `saasaloy update` on a project made with the current base. Record which files land in the merge plan.
-4. Release smoke (`pnpm release:smoke`).
+2. In `.dev`: `saasaloy update` on a project made with the current base. Record which files land in the merge plan.
+3. `pnpm release:smoke`.
+
+Done when: all three pass, and the plan records the merge plan.
 
 ## Files a generated project owns, or that `saasaloy update` puts in a merge plan
 
 | File | Status in a project | What `update` does |
 |------|---------------------|--------------------|
-| `.release-it.json` | new, managed | created when absent. primeshopr has its own, so it lands in the merge plan when the two differ |
-| root `package.json` scripts and devDependencies | managed | overwrite when unedited, merge plan when edited |
-| root `package.json` `version` | changed by every `pnpm release` | today the whole file counts as edited after the first release. Open question 3 |
+| `packages/tooling/src/release.ts` | new, managed | created when absent |
+| `packages/tooling/package.json` | managed | overwrite when unedited, merge plan when edited |
+| `packages/tooling/src/deploy.config.ts` | owned | never written. The `release` block defaults cover a project without it |
+| root `package.json` scripts | managed | overwrite when unedited, merge plan when edited |
+| root `package.json` `version` | changed by every `pnpm release` | ignored by the hash, kept on overwrite (Q2) |
 | `CHANGELOG.md` | not a base file | never touched |
+
+## Follow-up for primeshopr (not done here)
+
+- After this lands: run `saasaloy update`, take `release.ts`, delete `.release-it.json` and the root release-it devDependencies, and move any changelog choice into the `release` block.
 
 ## Non-goals
 
 - npm publish, per-workspace versions, and a release run from CI. The version is one number for the whole project.
 - A release gate in the deploy. The deploy warns only.
+- A proven hotfix release. It waits for a real hotfix (Q4).
 
 ## Open questions
 
-1. Start version for a new project. The base ships `0.0.0`, and a first `feat:` bumps it to `0.1.0`. Proposed: keep `0.0.0` in the template, so the first release is `0.1.0`. Decide whether a `BREAKING CHANGE` before 1.0 bumps the major, or only the minor.
-2. The warning rule (finding 5). Proposed: the agreed rule, and the dry run also prints the commits after the release tag.
-3. The root `version` key and `update`. Options: the updater ignores the `version` key when it hashes the root `package.json`; or the version lives in a file the project owns, written by `@release-it/bumper`. Proposed: the updater ignores `version`, because `package.json` is where release-it and every tool look.
-4. Changelog sections. The `conventionalcommits` preset shows `feat`, `fix` and `perf`, and hides `chore`, `docs`, `refactor`, `test`, `ci`, `build` and `style`. Decide whether `perf` and `refactor` show, and whether `deps` bumps show.
-5. How `saasaloy update` brings the files to an existing project. `.release-it.json` is new, so it is created when absent. The two devDependencies and the two scripts go into the root `package.json`, which is in the merge plan for most projects. Decide whether the merge plan names them as separate steps, and whether `saasaloy doctor` warns when `.release-it.json` exists without the scripts.
-6. One branch list in two files. `requireBranch` in `.release-it.json` and the branches in `deploy.config.ts` must agree. Options: a `.release-it.ts` that imports the list (check that release-it 21 loads TypeScript config); or a `saasaloy doctor` check that compares them. Proposed: the doctor check, because JSON keeps the file simple.
-7. A hotfix release. A `v0.3.1` tag on `hotfix-<slug>` writes `CHANGELOG.md` and the `version` on that branch. Merging back into `main` then conflicts in both files. Decide the merge-back rule, and whether the runbook shows the conflict.
-8. The GitHub Release without `gh`. With no `GITHUB_TOKEN` and no `gh`, release-it falls back to a browser page, which hangs on a headless box. Proposed: the `release` script refuses with a message when neither is present.
-9. Branch protection. release-it pushes the release commit straight to `main`, and a project that protects `main` refuses the push. Decide whether the runbook documents a bypass rule, or whether this is a known limit.
-10. CI on the release commit. The push starts a new CI run, and the deploy CI gate waits for it. Decide whether `chore(release)` commits skip CI, or always run it. Proposed: always run it, so the gate rule stays one rule.
+None. Every decision is settled.
