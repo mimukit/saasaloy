@@ -1,4 +1,4 @@
-import { auth, requireAdmin, withAuthScope } from "@repo/auth/server";
+import { adminAuth, requireAdmin, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 import { Hono } from "hono";
 
@@ -25,21 +25,23 @@ import { Hono } from "hono";
 export const adminUsers = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/users",
   // One scope around the whole handler, because both halves below reach the database and
-  // `auth` is a module-scope singleton whose client is not. `requireAdmin` would enter its
-  // own scope if this did not, but `auth.api.listUsers` has no such wrapper and would
-  // throw under `database-postgres`. See packages/auth/src/db-scope.ts.
+  // `adminAuth` is a module-scope singleton whose client is not. `requireAdmin` would
+  // enter its own scope if this did not, but `adminAuth.api.listUsers` has no such
+  // wrapper and would throw under `database-postgres`. See packages/auth/src/db-scope.ts.
   (c) =>
     withAuthScope(c, async () => {
       // First line of the handler, before anything reads the database. It throws 401 when
-      // nobody is signed in and 403 when the session's role is not "admin", so the body
-      // below only ever runs for an admin.
+      // no admin session is signed in and 403 when its role is not an admin role, so the
+      // body below only ever runs for an admin.
       await requireAdmin(c);
 
-      // better-auth's `admin()` plugin owns the query. Going through `auth.api` rather than
-      // Drizzle keeps the vendor package inside `packages/auth` (ADR 0020) and keeps the
-      // shape in step with the plugin across a bump. It re-checks the caller's role itself;
+      // better-auth's `admin()` plugin owns the query, on the admin instance: its `/admin/*`
+      // endpoints answer only there, and the admin cookie is the one this request carries.
+      // Going through `adminAuth.api` rather than Drizzle keeps the vendor package inside
+      // `packages/auth` (ADR 0020) and keeps the shape in step with the plugin across a
+      // bump. It re-checks the caller's role itself;
       // `requireAdmin` runs first so the refusal is api's envelope, not the plugin's.
-      const { users, total } = await auth.api.listUsers({
+      const { users, total } = await adminAuth.api.listUsers({
         headers: c.req.raw.headers,
         query: { limit: 100 },
       });

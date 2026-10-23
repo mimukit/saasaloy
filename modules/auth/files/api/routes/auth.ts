@@ -1,10 +1,12 @@
 import { Hono } from "hono";
-import { auth, withAuthScope } from "@repo/auth/server";
+import { adminAuth, auth, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 
-// Mounted at `/auth` by this module's `chained-route` patch. The patch targets `base`,
-// the pre-chain binding in `apps/api/src/index.ts`, not the exported chain: a catch-all
-// answers every path under `/auth` with whatever Better Auth decides, so there is no
+// Two forwards, one per Better Auth instance: `authRoute` at `/auth` for the client group
+// and `adminAuthRoute` at `/admin/auth` for the admin group. This module's two
+// `chained-route` patches mount them. Each patch targets `base`, the pre-chain binding
+// in `apps/api/src/index.ts`, not the exported chain: a catch-all answers every path
+// under its prefix with whatever Better Auth decides, so there is no
 // per-path request or response type for `hc` to read. Mounting it on the annotated
 // `base` keeps it out of `AppType` instead of widening the client's surface with a
 // wildcard it cannot describe. It also lands after api's credentialed CORS middleware,
@@ -30,4 +32,14 @@ export const authRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",
   (c) => withAuthScope(c, () => auth.handler(c.req.raw))
+);
+
+// The admin group's forward, mounted at `/admin/auth`. Everything said above holds for
+// it. The path sits under `/admin` on purpose, so one edge rule covers the whole admin
+// group on the api, which reserves the prefix: a middleware a project adds on `/admin/*`
+// must skip `/admin/auth/*`, or the sign-in endpoint itself needs a session.
+export const adminAuthRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
+  ["GET", "POST"],
+  "/*",
+  (c) => withAuthScope(c, () => adminAuth.handler(c.req.raw))
 );
