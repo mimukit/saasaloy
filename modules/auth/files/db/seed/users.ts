@@ -1,3 +1,4 @@
+import { config } from "@repo/config";
 import { users as usersTable } from "../../schema/auth";
 import { defineSlice } from "../slice";
 
@@ -6,6 +7,9 @@ import { defineSlice } from "../slice";
 //
 // Seeding a superadmin means the first sign-up on a seeded database is not the first user,
 // so it gets the plain `user` role. Sign in as `superadmin@example.test` instead.
+//
+// The two site-admin roles come from `config.auth`, so a project that renames them in
+// `packages/config/src/project.ts` seeds the names its guards admit.
 
 export const users = defineSlice(usersTable, {
   rows: {
@@ -13,13 +17,13 @@ export const users = defineSlice(usersTable, {
       email: "superadmin@example.test",
       emailVerified: true,
       name: "Ada Superadmin",
-      role: "superadmin",
+      role: config.auth.superadminRole,
     },
     admin: {
       email: "admin@example.test",
       emailVerified: true,
       name: "Alan Admin",
-      role: "admin",
+      role: config.auth.adminRole,
     },
     member: {
       email: "member@example.test",
