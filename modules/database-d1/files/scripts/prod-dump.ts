@@ -14,8 +14,11 @@ import { defaultDumpDirectory, exportArgs, runDump } from "./lib/dump.ts";
 //
 // Restore one with `wrangler d1 execute <database_name> --remote --file <dump>`, or roll
 // the database back in place with D1 Time Travel (`wrangler d1 time-travel restore`).
+//
+// `pnpm db:prod:migrate` (`./migrate-prod.ts`) imports `dumpProduction` and runs it before
+// any migration, so the file runs a dump only as the entry point.
 
-const CONFIG = "../../apps/api/wrangler.jsonc";
+export const CONFIG = "../../apps/api/wrangler.jsonc";
 
 function projectName(): string {
   try {
@@ -28,7 +31,8 @@ function projectName(): string {
   }
 }
 
-function dump(): void {
+/** The `database_name` of the DB binding in apps/api/wrangler.jsonc. Throws when it has none. */
+export function databaseName(): string {
   // The parameter type is spelled out: wrangler's published types leave it implicit
   // `any` under this tsconfig.
   const binding = unstable_readConfig({ config: CONFIG }).d1_databases.find(
@@ -41,7 +45,12 @@ function dump(): void {
       `${CONFIG} has no d1_databases entry bound as DB with a database_name, so there is no database to export.`
     );
   }
-  runDump({
+  return database;
+}
+
+/** Export `database` into a new file in the dump folder. Answers its path, or throws. */
+export function dumpProduction(database: string): string {
+  return runDump({
     database,
     dumpDirectory:
       process.env.DB_DUMP_DIR ?? defaultDumpDirectory(homedir(), projectName()),
@@ -63,11 +72,13 @@ function dump(): void {
   });
 }
 
-try {
-  dump();
-} catch (error) {
-  process.stderr.write(
-    `${error instanceof Error ? error.message : String(error)}\n`
-  );
-  process.exitCode = 1;
+if (import.meta.main) {
+  try {
+    dumpProduction(databaseName());
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : String(error)}\n`
+    );
+    process.exitCode = 1;
+  }
 }

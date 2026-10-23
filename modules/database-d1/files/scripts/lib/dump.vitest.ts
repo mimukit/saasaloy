@@ -5,10 +5,11 @@ import {
   exportArgs,
   projectSlug,
   runDump,
+  runMigrate,
 } from "./dump.ts";
-import type { DumpDeps } from "./dump.ts";
+import type { DumpDeps, MigrateDeps } from "./dump.ts";
 
-// Tests for ./dump.ts, the order behind `pnpm db:prod:dump`. wrangler is a stand-in, so
+// Tests for ./dump.ts, the order behind `pnpm db:prod:dump` and `pnpm db:prod:migrate`. wrangler is a stand-in, so
 // they need no Cloudflare account and no network.
 //
 // In the saasaloy repo this file is named `.vitest.ts`, so `pnpm test:modules`, which runs
@@ -118,5 +119,94 @@ describe(runDump, () => {
 
     expect(() => runDump(deps)).toThrow(/wrangler d1 export failed \(exit 0\)/);
     expect(recorded.removed).toStrictEqual([FILE]);
+  });
+});
+
+function migrateFakes(over: Partial<MigrateDeps> = {}): {
+  deps: MigrateDeps;
+  calls: string[];
+  said: string[];
+} {
+  const calls: string[] = [];
+  const said: string[] = [];
+  const deps: MigrateDeps = {
+    ensureDatabase: () => {
+      calls.push("ensure");
+      return "existing";
+    },
+    dump: () => {
+      calls.push("dump");
+      return FILE;
+    },
+    migrate: () => {
+      calls.push("migrate");
+      return 0;
+    },
+    say: (message) => {
+      said.push(message);
+    },
+    ...over,
+  };
+  return { deps, calls, said };
+}
+
+describe(runMigrate, () => {
+  it("dumps the existing database before it migrates", () => {
+    const { deps, calls } = migrateFakes();
+
+    runMigrate(deps);
+
+    expect(calls).toStrictEqual(["ensure", "dump", "migrate"]);
+  });
+
+  it("stops before the migration when the dump fails", () => {
+    const { deps, calls } = migrateFakes({
+      dump: () => {
+        calls.push("dump");
+        throw new Error(
+          "wrangler d1 export failed (exit 1), so there is no dump of app-db."
+        );
+      },
+    });
+
+    expect(() => runMigrate(deps)).toThrow(
+      /wrangler d1 export failed \(exit 1\).*Nothing was migrated\./
+    );
+    expect(calls).toStrictEqual(["ensure", "dump"]);
+  });
+
+  it("stops before the migration on an empty dump", () => {
+    const { deps: dumpDeps } = fakes({ fileSize: () => 0 });
+    const { deps, calls } = migrateFakes({
+      dump: () => {
+        calls.push("dump");
+        return runDump(dumpDeps);
+      },
+    });
+
+    expect(() => runMigrate(deps)).toThrow(/Nothing was migrated\./);
+    expect(calls).toStrictEqual(["ensure", "dump"]);
+  });
+
+  it("skips the dump for a database it just created, and says so", () => {
+    const { deps, calls, said } = migrateFakes({
+      ensureDatabase: () => {
+        calls.push("ensure");
+        return "created";
+      },
+    });
+
+    runMigrate(deps);
+
+    expect(calls).toStrictEqual(["ensure", "migrate"]);
+    expect(said.join("\n")).toContain("nothing to dump");
+  });
+
+  it("names the dump when the migration fails", () => {
+    const { deps } = migrateFakes({ migrate: () => 1 });
+
+    expect(() => runMigrate(deps)).toThrow(
+      `wrangler d1 migrations apply failed (exit 1). ${FILE} holds the database as it was before it started.`
+    );
   });
 });

@@ -28,7 +28,7 @@ The command runs `packages/tooling/src/deploy-production.ts`. It stops at the fi
 
    A failed gate stops the run before anything builds, and every message ends with the command that clears it.
 2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing.
-3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. With `database-postgres` it dumps the production database first. With `database-d1` it creates the D1 database when the account has none by that name, then applies the pending migrations. No deploy migrates without the flag.
+3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. With `database-postgres` it dumps the production database first. With `database-d1` it creates the D1 database when the account has none by that name, dumps an existing one with `wrangler d1 export --remote`, then applies the pending migrations. A failed or empty dump stops the migration with either driver. No deploy migrates without the flag.
 4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `web` (30). A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
    - load that service's production values and the Cloudflare credentials into memory,
    - run `pnpm run build` with them in the environment, so the bundle inlines the production `PUBLIC_*` values while `apps/*/.env` keeps its dev values,

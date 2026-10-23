@@ -2,8 +2,10 @@ import { join } from "node:path";
 
 // The order behind `pnpm db:prod:dump` (see `../prod-dump.ts`): export the production D1
 // database with `wrangler d1 export --remote` into a new timestamped file, and refuse a
-// failed or empty export. Every side effect reaches `runDump` through `DumpDeps`, so the
-// tests run it with stand-ins and need no Cloudflare account.
+// failed or empty export. `pnpm db:prod:migrate` (see `../migrate-prod.ts`) runs the same
+// dump first and applies no migration without it. Every side effect reaches `runDump` and
+// `runMigrate` through their deps, so the tests run them with stand-ins and need no
+// Cloudflare account.
 
 /**
  * The root `package.json` name as a folder name: `@acme/shop` becomes `acme_shop`. A name
@@ -87,4 +89,50 @@ export function runDump(deps: DumpDeps): string {
   }
   deps.say(`Dumped ${deps.database} to ${file} (${String(size)} bytes).`);
   return file;
+}
+
+/** Everything `runMigrate` reads or does outside its own memory. */
+export interface MigrateDeps {
+  /**
+   * Make sure the production database exists. Answers `created` when this call made it,
+   * so it holds nothing yet. Throws when it can neither find nor create it.
+   */
+  ensureDatabase: () => "existing" | "created";
+  /** `runDump` with its own deps. Answers the dump's path, or throws. */
+  dump: () => string;
+  /** Run `wrangler d1 migrations apply --remote`. Answers the exit code. */
+  migrate: () => number;
+  say: (message: string) => void;
+}
+
+/**
+ * Dump the production database, then apply the pending migrations. A failed or empty dump
+ * throws before a migration starts, so a migration never runs without a fresh backup
+ * beside it. A database this run created holds no rows, so it has nothing to dump.
+ */
+export function runMigrate(deps: MigrateDeps): void {
+  const state = deps.ensureDatabase();
+  let file: string | undefined;
+  if (state === "created") {
+    deps.say("The database is new, so there is nothing to dump.");
+  } else {
+    try {
+      file = deps.dump();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      throw new Error(`${message} Nothing was migrated.`, { cause: error });
+    }
+  }
+  deps.say("Applying the pending migrations in packages/db/migrations/.");
+  const code = deps.migrate();
+  if (code !== 0) {
+    const backup =
+      file === undefined
+        ? "The database was new, so no dump was taken."
+        : `${file} holds the database as it was before it started.`;
+    throw new Error(
+      `wrangler d1 migrations apply failed (exit ${String(code)}). ${backup}`
+    );
+  }
+  deps.say("Migrated the production database.");
 }

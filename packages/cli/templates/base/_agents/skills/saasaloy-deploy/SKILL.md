@@ -115,7 +115,7 @@ A failure after the gates:
 | The run prints | What it means, and what to do |
 | --- | --- |
 | `<service> has no production value for <KEY>`, or another env check line | Nothing built. Report the key names. The owner sets the values. |
-| `Migrate failed. No deploy tag was written.` | No Worker deployed. Read the migration output. A Postgres migration names the dump it took first. |
+| `Migrate failed. No deploy tag was written.` | No Worker deployed. Read the migration output. The migration output names the dump it took first. |
 | `Deploy <service> failed. No deploy tag was written.` | That Worker did not go live. A Worker before it in the order is live on the new commit, and the run prints its rollback command. |
 | `The Workers are live, and a smoke check failed` | Follow "Roll back" at once: report the failing URL and its status, and propose the rollback the run printed. |
 | `... and the push failed, so the tag is local only` | The Workers are live. Run `git push origin <tag>`. |
@@ -125,7 +125,7 @@ A failure after the gates:
 - `--dry-run` prints the last deploy tag, the commits since it, the new migration files, every gate, the deploy order and the smoke checks, then runs the env check. It exits 0 and ends with the list of what would stop a real run.
 - `--migrate` runs `pnpm --filter @repo/db run db:prod:migrate` after the env check and before the first Worker, so a new migration lands before the code that reads it. A project with no `@repo/db` workspace refuses the flag. Keep each migration additive (a new table, a nullable or defaulted column), so old code runs on the new schema and a code rollback stays safe.
   - `database-postgres`: `db:prod:migrate` checks that `DATABASE_URL` names `<project>_production` on a server other than the development one in `apps/api/.env`. It then dumps the database with `pg_dump` and applies the migrations with `drizzle-kit migrate`. No migration runs without a good dump.
-  - `database-d1`: `db:prod:migrate` runs `wrangler d1 migrations apply DB --remote`, and creates the database first when the account has none by its `database_name`. It takes no dump. Run `pnpm db:prod:dump` before a migration you may need to undo.
+  - `database-d1`: `db:prod:migrate` runs `wrangler d1 migrations apply DB --remote`, and creates the database first when the account has none by its `database_name`. Before it migrates an existing database, it dumps it with `wrangler d1 export --remote`. No migration runs without a good dump. A database it has just created gets no dump, because it holds nothing.
 - `--skip-ci "<reason>"` passes the CI gate. The reason goes into the tag message. Every other gate still runs.
 - `--only <service>` deploys one Worker after the same gates, and runs only its smoke checks. It writes no tag, because the tag means "this commit is live on every Worker".
 
