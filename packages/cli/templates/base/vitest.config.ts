@@ -11,11 +11,15 @@ import { defineConfig } from "vitest/config";
 // `test` script, because the base shipped no test runner when they were written. Vitest
 // would collect those files and fail each one with "No test suite found".
 //
+// `packages/e2e` is left out too, once `saasaloy add e2e` writes it. It holds Playwright
+// specs, named `*.spec.ts`, which Vitest's default glob also matches. Playwright runs them
+// through `pnpm e2e`, against the running apps.
+//
 // `passWithNoTests` keeps a fresh project green: the base ships no Vitest test, and a
 // run that finds none would otherwise exit 1.
 export default defineConfig({
   test: {
     passWithNoTests: true,
-    projects: ["apps/*", "packages/*", "!packages/env"],
+    projects: ["apps/*", "packages/*", "!packages/env", "!packages/e2e"],
   },
 });

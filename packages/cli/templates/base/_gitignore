@@ -5,6 +5,10 @@ dist/
 .wrangler/
 *.tsbuildinfo
 
+# Playwright output. `saasaloy add e2e` writes both under packages/e2e/.
+playwright-report/
+test-results/
+
 # Logs
 *.log
 npm-debug.log*

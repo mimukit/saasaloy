@@ -2,6 +2,8 @@
 
 Grilled: 2026-09-20
 
+Rebuilt: 2026-10-23, after PR #164 fell behind `main`. [Plan 0081](0081-plan-e2e-capability-rebuild-2026-10-23.md) records what changed, and [ADR 0051](../adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md) is the decision record. Where the two disagree with this plan, they win.
+
 ## Context
 
 A scaffolded Saasaloy project ships no proof that it works. Nothing exercises sign-in, a waitlist submission, or an admin route against a running app, so a module that breaks another module's flow breaks it silently.

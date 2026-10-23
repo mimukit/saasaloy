@@ -10,6 +10,21 @@ pnpm install
 pnpm dev        # astro dev on apps/web
 ```
 
+## Test
+
+```sh
+pnpm test       # each workspace's own test script, then Vitest over apps/* and packages/*
+```
+
+`saasaloy add e2e` adds a browser suite on top. It brings Playwright, four flows against the running apps, and two commands:
+
+```sh
+pnpm e2e:install    # download Chromium, once per machine
+pnpm e2e            # migrate and seed the database, start the apps, run the flows
+```
+
+`pnpm test` never collects a Playwright spec, and `pnpm e2e` never collects a Vitest test.
+
 ## Deploy
 
 ```sh

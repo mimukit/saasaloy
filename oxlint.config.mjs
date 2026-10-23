@@ -466,5 +466,29 @@ export default defineConfig({
       files: ["modules/queue-*/files/**"],
       rules: { "no-console": "off" },
     },
+    // The `e2e` module's payload is a Playwright workspace, and the vitest preset's file
+    // glob (`**/*.{test,spec,…}`) claims its specs. Those files call a `test` and an
+    // `expect` from `@playwright/test`, so every vitest rule reading them reports on an API
+    // that is not there. Derived from the preset rather than listed by hand, so a preset
+    // bump cannot reopen the gap. The scaffolded project's own config carries the same
+    // override for `packages/e2e/**`; see `packages/cli/templates/base/oxlint.config.mjs`.
+    //
+    // `prepare.ts` and `global-teardown.ts` are node scripts: they report to stdout and
+    // exit with a status the `e2e` script reads.
+    //
+    // KEEP THIS LAST. oxlint lets the last matching override win.
+    {
+      files: ["modules/e2e/files/**"],
+      plugins: ["vitest"],
+      rules: {
+        ...Object.fromEntries(
+          (vitest.overrides ?? []).flatMap((override) =>
+            Object.keys(override.rules ?? {}).map((rule) => [rule, "off"])
+          )
+        ),
+        "no-console": "off",
+        "unicorn/no-process-exit": "off",
+      },
+    },
   ],
 });
