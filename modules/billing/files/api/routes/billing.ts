@@ -15,7 +15,7 @@ import type {
   PlanInterval,
   SubjectUser,
 } from "@repo/billing";
-import { auth, withAuthScope } from "@repo/auth/server";
+import { authFor, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import { createQueue } from "@repo/queue";
@@ -262,8 +262,8 @@ export const billingRoute = new Hono<{
  * request-scoped store, the provider client and the `HostContext`.
  *
  * `withAuthScope` is the outer wrapper for the same reason `apps/api/src/routes/admin-users.ts`
- * uses it: `auth` is a module-scope singleton whose database client is not, and a provider
- * calls `auth.api.*` inside its own file. `withDb` then opens this request's client for the
+ * uses it: each auth instance is a module-scope singleton whose database client is not,
+ * and a provider calls `authFor(c).api.*` inside its own file. `withDb` then opens this request's client for the
  * projection port, and `withBillingStore` puts that port where a job handler can reach it —
  * which is what makes `queue-memory`'s inline dispatch work end to end with no network.
  *
@@ -280,9 +280,14 @@ export const billingRoute = new Hono<{
 function guard<T>(c: BillingContext, body: (scope: Scope) => Promise<T>) {
   return withAuthScope(c, async () => {
     // Throws 401 through the api's `onError` when nobody is signed in, so everything below
-    // only ever runs for a session. Called through `auth.api` rather than `requireSession`
-    // to stay inside the scope already open, instead of opening a second client for it.
-    const session = await auth.api.getSession({ headers: c.req.raw.headers });
+    // only ever runs for a session. Called through the instance `authFor(c)` picks rather
+    // than `requireSession`, to stay inside the scope already open instead of opening a
+    // second client for it. `authFor(c)` reads the session `x-auth-audience` names, so the
+    // billing screen in the admin app bills the admin who is signed in there.
+    const instance = authFor(c);
+    const session = await instance.api.getSession({
+      headers: c.req.raw.headers,
+    });
     if (!session?.user) {
       return c.json(
         { error: { code: "unauthorized", message: "sign in first" } },
@@ -302,7 +307,7 @@ function guard<T>(c: BillingContext, body: (scope: Scope) => Promise<T>) {
         try {
           return await body({
             client: createBilling(c.env),
-            host: { auth, headers: c.req.raw.headers },
+            host: { auth: instance, headers: c.req.raw.headers },
             store,
             subject,
           });

@@ -18,7 +18,7 @@ import type { Context, MiddlewareHandler, Next } from "hono";
 //   maintenance({
 //     flags: flagsFor,
 //     isAdmin: sessionIsAdmin,
-//     bypassPaths: ["/health", "/auth"],
+//     bypassPaths: ["/health", "/auth", "/admin/auth"],
 //   })
 // );
 // ```
@@ -45,8 +45,9 @@ export interface MaintenanceOptions {
   isAdmin: (c: Context) => Promise<boolean>;
   /**
    * Path prefixes that stay reachable. Matched as a prefix, so `"/auth"` covers
-   * `/auth/sign-in`. Health checks belong here: a load balancer that gets a 503 may pull the
-   * Worker out of rotation and leave you with no way back in.
+   * `/auth/sign-in`, and the admin session needs its own `"/admin/auth"`: without it an admin
+   * cannot sign in while maintenance is on. Health checks belong here: a load balancer that
+   * gets a 503 may pull the Worker out of rotation and leave you with no way back in.
    */
   bypassPaths?: string[];
   /** Seconds for the `Retry-After` header. Default 300. */

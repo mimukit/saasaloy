@@ -20,6 +20,7 @@ import {
   ORGANIZATION_HEADER,
   UNKNOWN_ORGANIZATION,
   headerDenial,
+  mayCrossOrganizations,
   noOrganizationDenial,
   pickResolver,
   resolveStatements,
@@ -27,6 +28,14 @@ import {
   unknownOrganizationDenial,
 } from "./tenant-rules.ts";
 import type { ResolvedStatements, TenantId } from "./tenant-rules.ts";
+// The decision core `auth` ships, read across the module boundary only to check that the
+// two strings `mayCrossOrganizations` writes out still match it. It has no imports, so it
+// loads here the way this file's own subject does.
+import {
+  ADMIN_AUDIENCE,
+  CLIENT_AUDIENCE,
+  SUPERADMIN_ROLE,
+} from "../../../auth/files/src/authorize.ts";
 
 // The three static roles from `access.ts`, cut down to the resources these cases need.
 // The real map is built by better-auth's `createAccessControl`, which this file cannot
@@ -187,5 +196,41 @@ describe("superadminTenant", () => {
       organizationId: "org_b",
       principal: { kind: "superadmin", userId: "user_1" },
     });
+  });
+});
+
+describe("mayCrossOrganizations", () => {
+  it("lets a superadmin on the admin session send the organization header", () => {
+    assert.equal(
+      mayCrossOrganizations({
+        session: { audience: ADMIN_AUDIENCE },
+        user: { role: SUPERADMIN_ROLE },
+      }),
+      true
+    );
+  });
+
+  it("refuses a superadmin on the client session", () => {
+    assert.equal(
+      mayCrossOrganizations({
+        session: { audience: CLIENT_AUDIENCE },
+        user: { role: SUPERADMIN_ROLE },
+      }),
+      false
+    );
+  });
+
+  it("refuses an admin on the admin session, and a session with no audience", () => {
+    assert.equal(
+      mayCrossOrganizations({
+        session: { audience: ADMIN_AUDIENCE },
+        user: { role: "admin" },
+      }),
+      false
+    );
+    assert.equal(
+      mayCrossOrganizations({ user: { role: SUPERADMIN_ROLE } }),
+      false
+    );
   });
 });

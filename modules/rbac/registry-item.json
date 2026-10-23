@@ -24,6 +24,17 @@
       }
     },
     {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "adminAuth",
+      "arrayProp": "plugins",
+      "call": "roleLockGuard",
+      "import": {
+        "name": "roleLockGuard",
+        "from": "./plugins/role-lock"
+      }
+    },
+    {
       "file": "apps/admin/src/components/nav.ts",
       "kind": "nav-entry",
       "constName": "NAV_AREAS",

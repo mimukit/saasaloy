@@ -32,7 +32,29 @@
     {
       "file": "packages/auth/src/auth.ts",
       "kind": "plugin-array",
+      "exportName": "adminAuth",
+      "arrayProp": "plugins",
+      "call": "apiKeyPlugin",
+      "import": {
+        "name": "apiKeyPlugin",
+        "from": "./plugins/api-key"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
       "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "apiKeyScopeGuard",
+      "import": {
+        "name": "apiKeyScopeGuard",
+        "from": "./plugins/api-key"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "adminAuth",
       "arrayProp": "plugins",
       "call": "apiKeyScopeGuard",
       "import": {
@@ -44,6 +66,17 @@
       "file": "packages/auth/src/client.ts",
       "kind": "plugin-array",
       "exportName": "authClientPlugins",
+      "arrayProp": "plugins",
+      "call": "apiKeyClientPlugin",
+      "import": {
+        "name": "apiKeyClientPlugin",
+        "from": "./plugins/api-key-client"
+      }
+    },
+    {
+      "file": "packages/auth/src/client.ts",
+      "kind": "plugin-array",
+      "exportName": "adminAuthClientPlugins",
       "arrayProp": "plugins",
       "call": "apiKeyClientPlugin",
       "import": {

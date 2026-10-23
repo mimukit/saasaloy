@@ -256,3 +256,26 @@ export function noOrganizationDenial(): Denial {
 export function unknownOrganizationDenial(): Denial {
   return { status: 404, message: UNKNOWN_ORGANIZATION };
 }
+
+/** What `mayCrossOrganizations` reads off a session. Structural, like `RoleBearer`. */
+export interface CrossingSession {
+  user: { role?: string | null | undefined };
+  session?: { audience?: string | null | undefined };
+}
+
+/**
+ * Whether this session may send `x-organization-id`: a `superadmin` signed in on the
+ * admin session. Work across organizations is admin-group work, so a superadmin's client
+ * session, the one they shop or test the product with, gets `headerDenial()` like any
+ * other caller. The admin app sends `x-auth-audience: admin`, which is what puts the admin
+ * session on the request.
+ *
+ * The two strings are `SUPERADMIN_ROLE` and `ADMIN_AUDIENCE` from `./authorize.ts`,
+ * written out because this file carries no runtime import (see the top of the file).
+ * `tenant-rules.test.ts` checks that they still agree.
+ */
+export function mayCrossOrganizations(session: CrossingSession): boolean {
+  return (
+    session.user.role === "superadmin" && session.session?.audience === "admin"
+  );
+}
