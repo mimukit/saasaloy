@@ -128,7 +128,7 @@ Done when: in `.dev`, a project that has bumped its version gets an unedited roo
 
 1. The `saasaloy-deploy` skill and `docs/runbook-deploy.md`: `pnpm release` before `pnpm deploy:production`, the go-ahead rule for an agent, the hotfix order and its merge-back conflict, and a note that the hotfix release path is unproven.
 2. Base `AGENTS.md` "Branches and Deploys": the `v*` tag beside the `deploy-*` tag.
-3. `packages/cli/CHANGELOG.md`: the merge steps for an existing project.
+3. `packages/cli/CHANGELOG.md`: the merge steps for an existing project. They go in the `BREAKING CHANGE:` footer of a `!` commit, as #234 did, so the next CLI release writes them into the changelog.
 
 Done when: the skill, the runbook and `AGENTS.md` name the release step.
 
