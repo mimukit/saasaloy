@@ -242,7 +242,7 @@ describe("upstash kv provider", () => {
     do {
       const result = await store.list({
         limit: 500,
-        prefix: "page:",
+        prefix: "app:page:",
         ...(cursor === undefined ? {} : { cursor }),
       });
       pages += 1;
@@ -273,7 +273,7 @@ describe("upstash kv provider", () => {
     await store.set("app:wanted:1", 1);
     await store.set("app:wanted:2", 2);
 
-    const first = await store.list({ limit: 10, prefix: "wanted:" });
+    const first = await store.list({ limit: 10, prefix: "app:wanted:" });
     assert.deepEqual(first.keys, []);
     // Empty, and not the end. A caller that stops here misses both keys.
     assert.equal(first.complete, false);
@@ -282,7 +282,11 @@ describe("upstash kv provider", () => {
     const keys: string[] = [];
     let cursor = first.cursor;
     while (cursor !== undefined) {
-      const page = await store.list({ cursor, limit: 10, prefix: "wanted:" });
+      const page = await store.list({
+        cursor,
+        limit: 10,
+        prefix: "app:wanted:",
+      });
       keys.push(...page.keys);
       cursor = page.cursor;
     }
@@ -295,6 +299,49 @@ describe("upstash kv provider", () => {
     assert.deepEqual(onlyCall(redis, "scan"), ["0", { match: "app:*" }]);
   });
 
+  it("finds the keys under a prefix client.key() produced", async () => {
+    const redis = fake();
+    const store = client(redis);
+    const first = store.key({ namespace: "cache", parts: ["a"] });
+    const second = store.key({ namespace: "cache", parts: ["b"] });
+    await store.set(first, 1);
+    await store.set(second, 2);
+    await store.set(store.key({ namespace: "other", parts: ["c"] }), 3);
+
+    // The prefix a caller builds the way the contract says: from `client.key()`, so it
+    // already carries KV_KEY_PREFIX. kv-memory and kv-cloudflare read it the same way.
+    const prefix = store.key({ namespace: "cache", parts: ["x"] }).slice(0, -1);
+    assert.equal(prefix, "app:cache:");
+
+    const keys: string[] = [];
+    let cursor: string | undefined;
+    do {
+      const page = await store.list({
+        prefix,
+        ...(cursor === undefined ? {} : { cursor }),
+      });
+      keys.push(...page.keys);
+      cursor = page.cursor;
+    } while (cursor !== undefined);
+
+    assert.deepEqual(keys.toSorted(), [first, second]);
+    const scan = redis.calls.find((call) => call.name === "scan");
+    assert.deepEqual(scan?.args[1], { match: "app:cache:*" });
+  });
+
+  it("keeps a prefix shorter than KV_KEY_PREFIX inside this project", async () => {
+    const redis = fake();
+    await client(redis).list({ prefix: "ap" });
+    assert.deepEqual(onlyCall(redis, "scan"), ["0", { match: "app:*" }]);
+  });
+
+  it("answers a prefix outside KV_KEY_PREFIX with no keys and no request", async () => {
+    const redis = fake();
+    const page = await client(redis).list({ prefix: "other:" });
+    assert.deepEqual(page, { complete: true, keys: [] });
+    assert.deepEqual(redis.calls, []);
+  });
+
   it("escapes glob characters in the prefix and in KV_KEY_PREFIX", async () => {
     const redis = fake();
     const env = { ...ENV, KV_KEY_PREFIX: "a[1]:" };
@@ -303,7 +350,7 @@ describe("upstash kv provider", () => {
     await store.set("a[1]:cache:*raw", "mine");
     await store.set("a[1]:cacheX:other", "theirs");
 
-    const page = await store.list({ prefix: "cache:*" });
+    const page = await store.list({ prefix: "a[1]:cache:*" });
     // Without the escape, `[1]` is a character class and `*` matches anything, so both
     // keys would come back.
     assert.deepEqual(page.keys, ["a[1]:cache:*raw"]);
@@ -314,7 +361,7 @@ describe("upstash kv provider", () => {
 
   it("passes the caller's limit through as SCAN's COUNT", async () => {
     const redis = fake();
-    await client(redis).list({ limit: 250, prefix: "x:" });
+    await client(redis).list({ limit: 250, prefix: "app:x:" });
     assert.deepEqual(onlyCall(redis, "scan"), [
       "0",
       { count: 250, match: "app:x:*" },
@@ -485,11 +532,85 @@ describe("upstash kv provider", () => {
       );
     });
 
+    const transport: { error: Error; providerCode: string | undefined }[] = [
+      {
+        error: Object.assign(new TypeError("fetch failed"), {
+          cause: Object.assign(
+            new Error("getaddrinfo ENOTFOUND x.upstash.io"),
+            {
+              code: "ENOTFOUND",
+            }
+          ),
+        }),
+        providerCode: "ENOTFOUND",
+      },
+      {
+        error: new TypeError("fetch failed"),
+        providerCode: "TypeError",
+      },
+      {
+        error: Object.assign(new Error("The operation timed out."), {
+          name: "TimeoutError",
+        }),
+        providerCode: "TimeoutError",
+      },
+      {
+        error: Object.assign(new Error("This operation was aborted"), {
+          name: "AbortError",
+        }),
+        providerCode: "AbortError",
+      },
+      { error: new Error("socket hang up"), providerCode: undefined },
+    ];
+
+    for (const row of transport) {
+      it(`maps a transport failure (${row.error.name}: ${row.error.message}) to a retryable provider_error`, async () => {
+        const store = client(
+          fake({
+            get(): Promise<string | null> {
+              return Promise.reject(row.error);
+            },
+          })
+        );
+
+        await assert.rejects(
+          () => store.get("app:k"),
+          (error: unknown) => {
+            assert.ok(error instanceof KvError);
+            assert.equal(error.code, "provider_error");
+            assert.equal(error.retryable, true);
+            assert.equal(error.providerCode, row.providerCode);
+            return true;
+          }
+        );
+      });
+    }
+
+    it("refuses a limiter reply that is not two numbers", async () => {
+      const store = client(
+        fake({
+          eval(): Promise<unknown> {
+            return Promise.resolve(["many", "soon"]);
+          },
+        })
+      );
+
+      await assert.rejects(
+        () => store.consume({ key: "1.2.3.4", policy: "strict" }),
+        (error: unknown) => {
+          assert.ok(error instanceof KvError);
+          assert.equal(error.code, "provider_error");
+          assert.equal(error.retryable, false);
+          return true;
+        }
+      );
+    });
+
     it("falls through to provider_error, not retryable, on an unknown failure", async () => {
       const store = client(
         fake({
           get(): Promise<string | null> {
-            return Promise.reject(new Error("socket hang up"));
+            return Promise.reject(new Error("unexpected reply shape"));
           },
         })
       );
@@ -534,6 +655,30 @@ describe("upstash kv provider", () => {
         (error: unknown) => {
           assert.ok(error instanceof KvError);
           assert.match(error.message, /KV_KEY_PREFIX/);
+          return true;
+        }
+      );
+    });
+
+    it("does not cache a failed client build", async () => {
+      const env: Record<string, unknown> = {
+        KV_KEY_PREFIX: "app:",
+        KV_PROVIDER: "upstash",
+        UPSTASH_REDIS_REST_TOKEN: "token",
+      };
+      const store = defineKv({ policies: [], providers: [upstash()] }).create(
+        env
+      );
+
+      await assert.rejects(() => store.get("app:k"), /UPSTASH_REDIS_REST_URL/);
+      // The same env object, now complete. A cached rejection would name the URL again;
+      // a fresh build passes the secret check and fails later, on the absent package.
+      env.UPSTASH_REDIS_REST_URL = "https://example.upstash.io";
+      await assert.rejects(
+        () => store.get("app:k"),
+        (error: unknown) => {
+          assert.ok(error instanceof KvError);
+          assert.doesNotMatch(error.message, /No `UPSTASH_REDIS_REST_URL`/);
           return true;
         }
       );

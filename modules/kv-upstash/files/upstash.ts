@@ -28,8 +28,9 @@ import type {
 //   on a global database with read replicas.
 // - **`KV_KEY_PREFIX` is required here.** One Redis database is one flat keyspace, so
 //   `list({})` without a prefix would `SCAN` the whole database and hand back foreign
-//   keys. The core applies the prefix when it builds a key; this file also prepends it to
-//   the `MATCH` glob and to every limiter bucket. Empty or unset throws before any
+//   keys. The core applies the prefix when it builds a key, so a `list` prefix from
+//   `client.key()` already carries it; this file keeps the `MATCH` glob inside it and
+//   prepends it to every limiter bucket. Empty or unset throws before any
 //   request. `kv-cloudflare` needs none of this because its namespace already scopes it.
 // - **`limit` is a hint, not a page size.** SCAN's `COUNT` is how much work one iteration
 //   does, so a page may hold more or fewer keys than asked — and an empty page with a
@@ -140,6 +141,13 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
 
     const built = build(env);
     clients.set(env, built);
+    // A failed build is not cached. A missing secret fails again on the next call anyway,
+    // and a transient import failure must not stick for the life of the isolate.
+    built.catch(() => {
+      if (clients.get(env) === built) {
+        clients.delete(env);
+      }
+    });
     return built;
   }
 
@@ -232,7 +240,12 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
 
     async list(env: KvEnv, listOptions: KvListOptions): Promise<KvListResult> {
       try {
-        const match = `${escapeGlob(keyPrefix(env))}${escapeGlob(listOptions.prefix ?? "")}*`;
+        const match = scanMatch(keyPrefix(env), listOptions.prefix ?? "");
+        if (match === undefined) {
+          // The caller's prefix lies outside `KV_KEY_PREFIX`, so every key it could match
+          // belongs to another project. Answer the empty result without a request.
+          return { complete: true, keys: [] };
+        }
         const redis = await client(env);
         const [cursor, keys] = await redis.scan(listOptions.cursor ?? "0", {
           ...(listOptions.limit === undefined
@@ -318,6 +331,28 @@ function requireSecret(
   }
 }
 
+/**
+ * The `MATCH` glob for a `list`, or `undefined` when no key of this project can match.
+ *
+ * The caller's prefix is the one `client.key()` produced, so it already carries
+ * `KV_KEY_PREFIX`, the same as on `kv-memory` and `kv-cloudflare`. The glob is the
+ * longer of the two prefixes when one extends the other, so a `list({})` or a prefix
+ * shorter than `KV_KEY_PREFIX` still stays inside this project's keys. Two prefixes
+ * that diverge share no key.
+ */
+function scanMatch(
+  projectPrefix: string,
+  callerPrefix: string
+): string | undefined {
+  if (callerPrefix.startsWith(projectPrefix)) {
+    return `${escapeGlob(callerPrefix)}*`;
+  }
+  if (projectPrefix.startsWith(callerPrefix)) {
+    return `${escapeGlob(projectPrefix)}*`;
+  }
+  return undefined;
+}
+
 /** Escape the characters Redis `MATCH` reads as a glob, so a literal key matches itself. */
 function escapeGlob(value: string): string {
   return value.replace(GLOB_SPECIAL, (character) => `\\${character}`);
@@ -333,6 +368,12 @@ function readCounter(reply: unknown): [number, number] {
   }
   const count = Number(reply[0]);
   const pttl = Number(reply[1]);
+  if (!Number.isFinite(count) || !Number.isFinite(pttl)) {
+    throw new KvError(
+      "provider_error",
+      `The rate limit script returned ${JSON.stringify(reply)}, not two numbers.`
+    );
+  }
   return [count, Math.max(0, pttl)];
 }
 
@@ -345,6 +386,17 @@ function normalize(cause: unknown): KvError {
   const providerCode = readCode(message);
   const mapped = providerCode ? STATUS_CODES[providerCode] : undefined;
 
+  // No HTTP answer at all: DNS, a dropped connection, a timeout, an abort. Nothing
+  // reached Redis, so the same call can succeed on a retry.
+  const transport = mapped ? undefined : transportCode(cause, message);
+  if (transport !== undefined) {
+    return new KvError("provider_error", message, {
+      cause,
+      ...(transport === "" ? {} : { providerCode: transport }),
+      retryable: true,
+    });
+  }
+
   // Upstash reports an oversize record as a message, not always as a 413.
   const code =
     mapped?.code ??
@@ -355,6 +407,45 @@ function normalize(cause: unknown): KvError {
     ...(providerCode === undefined ? {} : { providerCode }),
     retryable: mapped?.retryable ?? false,
   });
+}
+
+/** Error names and Node `code` values a failed fetch carries, before any HTTP status. */
+const TRANSPORT_NAMES = new Set(["AbortError", "TimeoutError"]);
+const TRANSPORT_CODE =
+  /^(?:ECONNRESET|ECONNREFUSED|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH|UND_ERR_[A-Z_]+)$/;
+const TRANSPORT_MESSAGE =
+  /fetch failed|network (?:connection )?(?:error|lost)|timed? ?out|socket hang up|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i;
+
+/**
+ * Whether `cause` is a transport failure rather than an answer from Upstash. Returns the
+ * most specific code it carries (a Node `code` such as `ENOTFOUND`, else the error name),
+ * `""` when it is a transport failure with no code worth keeping, or `undefined` when it
+ * is not one. An `UpstashError` is an answer, never a transport failure.
+ */
+function transportCode(cause: unknown, message: string): string | undefined {
+  if (!(cause instanceof Error) || cause.name === "UpstashError") {
+    return undefined;
+  }
+  const inner = (cause as { cause?: unknown }).cause;
+  const codes = [cause, inner].map((error) =>
+    typeof error === "object" && error !== null && "code" in error
+      ? String((error as { code: unknown }).code)
+      : undefined
+  );
+  const code = codes.find((value) => value && TRANSPORT_CODE.test(value));
+  if (code) {
+    return code;
+  }
+  if (TRANSPORT_NAMES.has(cause.name)) {
+    return cause.name;
+  }
+  if (cause.name === "TypeError" && TRANSPORT_MESSAGE.test(message)) {
+    return "TypeError";
+  }
+  if (TRANSPORT_MESSAGE.test(message)) {
+    return "";
+  }
+  return undefined;
 }
 
 /**

@@ -221,7 +221,7 @@ KV_PROVIDER=upstash
 KV_KEY_PREFIX=app:
 ```
 
-The provider prepends the prefix to the `SCAN` glob and to every limiter bucket, and escapes the glob characters in both halves, so a key holding a `*` or a `[` matches itself and nothing else.
+A `list` prefix is the one `client.key()` produced, so it already carries `KV_KEY_PREFIX`, the same as on the other providers. The provider keeps the `SCAN` glob inside `KV_KEY_PREFIX`: a shorter prefix, or none, scans the project's keys only, and a prefix outside it returns no keys without a request. It prepends `KV_KEY_PREFIX` to every limiter bucket, and escapes the glob characters, so a key holding a `*` or a `[` matches itself and nothing else.
 
 **3. Know the two size numbers disagree.** The core refuses a value over 25 MiB. Upstash caps one record at 1 MB on the free plan and 100 MB on paid, so a value can pass the core and still be refused. The provider maps that refusal to `too_large`, so a caller sees one code either way.
 
