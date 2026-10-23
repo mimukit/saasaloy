@@ -69,6 +69,35 @@ Attended: the owner, or an agent the owner names, runs the first primeshopr rele
 
 Done when: primeshopr has one `v*` tag, one GitHub Release and one `deploy-*` tag whose message names the version, and this plan records the run.
 
+#### Phase 1 record (2026-10-23, primeshopr issue brainaloylabs/primeshopr#87)
+
+An agent ran the release, and the deploy after the owner's go-ahead in the same session.
+
+| Step | Result |
+| --- | --- |
+| `pnpm release:dry 0.1.0 --ci` | `0.0.0...0.1.0`, with `WARNING The recommended bump is "major", but is overridden with "0.1.0".` |
+| `pnpm release 0.1.0 --ci` | Commit `c75d4e1` `chore(release): v0.1.0` (root `package.json` and `CHANGELOG.md`), annotated tag `v0.1.0` with the message `Release v0.1.0`, push, and the GitHub Release [v0.1.0](https://github.com/brainaloylabs/primeshopr/releases/tag/v0.1.0). 8 seconds. |
+| CI on `c75d4e1` | Passed. |
+| `pnpm deploy:production` | Every gate passed and no release warning printed. The run printed `Branch main at c75d4e1 (v0.1.0).`, deployed api, admin and web, passed all 5 smoke checks, and pushed `deploy-20261023-0616`. |
+
+The deploy tag message is `Production deploy of c75d4e1 (v0.1.0): api, admin, web.`
+
+The `CHANGELOG.md` entry has this shape. A `# Changelog` header, then `## 0.1.0 (2026-10-23)`, then one `###` section per kind: `⚠ BREAKING CHANGES`, `Features`, `Bug Fixes`, `Performance Improvements`, `Miscellaneous Chores` and `Build System`. Each line reads `* **<scope>:** <subject> ([<short sha>](<commit url>))`, and a line gains `, references #N` or `, closes #N` when the commit body names an issue. The first entry holds 129 lines, because it covers every commit since the project start.
+
+Files primeshopr changed:
+
+- None during the run. The release commit wrote only the root `package.json` (`version`) and `CHANGELOG.md`.
+- Before the run, in `0fff95b` and `ba4eb87`: `.release-it.json`, `CHANGELOG.md` (the header only), the root `package.json` (the `release` and `release:dry` scripts and the two pins), `pnpm-lock.yaml`, `scripts/deploy-production.ts` and its test (the `release` fact, the warning, the version in the tag message), `docs/runbook-deploy.md` and the `primeshopr-deploy` skill.
+
+What the run teaches Phase 3:
+
+1. **A breaking commit under 1.0 asks for `1.0.0`.** primeshopr's history holds three `!` commits (dev database resets, a removed workspace), so release-it recommended a major bump and the owner overrode it with `0.1.0`. Q5's `preMajor: true` removes the need for the override.
+2. **A hidden type still shows when it is breaking.** The preset hides `chore` and `build`, but a breaking `chore(repo)!` and a breaking `build(api)!` produced the `Miscellaneous Chores` and `Build System` sections. Q6 should say so.
+3. **A dirty tree blocks the release, and turning the check off is unsafe.** release-it commits with `git add . --update`, so with `requireCleanWorkingDir` off, another session's uncommitted files would go into the release commit. `release.ts` must keep the check on.
+4. **The release pushes every local commit.** Two unpushed commits from another session went to `origin` with the release commit. CI on the release commit covered them. The skill should tell an agent to check `git status -sb` for unpushed commits before the release.
+5. **An agent needs `--ci`.** Without it release-it asks on a terminal no one reads. Q11 already makes `ci: true` the default.
+6. **`GitHub comment on resolved items` posts nothing by default.** The step prints `✔`, but `github.comments.submit` is `false`, so no issue got a comment. Keep it off: the first entry names 26 issues.
+
 ### Phase 2: decisions on record
 
 1. ADR 0049, "A release names each production deploy", citing 0048 and 0034.
