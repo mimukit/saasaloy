@@ -82,6 +82,9 @@ Three things the plugin owns, so do not hand-write them:
 - **`src/routeTree.gen.ts`.** `@tanstack/router-plugin` rewrites it whenever a file under
   `src/routes/` appears or disappears. It is committed rather than ignored, so `tsc --noEmit` and a
   fresh `pnpm build` work on a clean checkout before Vite has ever run. Edit routes, not the tree.
+  A module that drops a route file leaves the committed tree one route behind, so the `typecheck`
+  script runs `tsr generate` before `tsc`. `tsr.config.json` holds the generator options, and the
+  plugin and the CLI both read it, so the two write the same file.
 - **The route id string.** `createFileRoute("/widgets")` is derived from the file's path. Rename the
   file and let the plugin rewrite the call; changing one without the other breaks the build.
 - **Plugin order in `vite.config.ts`.** `tanstackRouter()` runs before `react()`. Reversed, the

@@ -97,6 +97,10 @@
           "target": "vite.config.ts"
         },
         {
+          "path": "files/tsr.config.json",
+          "target": "tsr.config.json"
+        },
+        {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
         },
