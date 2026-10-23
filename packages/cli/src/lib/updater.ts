@@ -342,6 +342,10 @@ export function recordRefRewrites(
  *   delete         — the new version dropped it and disk still matches → remove it
  *   delete-drift   — dropped upstream but hand-edited → keep it, say so (decision 5)
  *   delete-missing — dropped upstream and already gone → just untrack
+ *   resolved       — would have gone to the merge plan, but `--resolved <path>` says the
+ *                    merge is done: record the file as it stands (an untracked removal)
+ *                    and let the module's lock move (#223). Never classified, only set
+ *                    by `markResolved`.
  */
 export type UpdateFileAction =
   | "skip"
@@ -353,7 +357,8 @@ export type UpdateFileAction =
   | "conflict"
   | "delete"
   | "delete-drift"
-  | "delete-missing";
+  | "delete-missing"
+  | "resolved";
 
 /** `remove`'s verdicts for a tracked file, said in `update`'s vocabulary (same classifier). */
 const DELETE_ACTION: Record<FileRemoveAction, UpdateFileAction> = {
@@ -398,6 +403,11 @@ export interface PlannedUpdateFile {
   projectOwned?: boolean;
   /** The manifest hash was adopted off disk, so it does not prove the file is untouched. */
   adopted?: boolean;
+  /**
+   * The manifest records a merge (`update --resolved`) rather than a write, so the file
+   * holds a person's edits and a later upstream change goes to the merge plan (#223).
+   */
+  merged?: boolean;
   /**
    * Modules whose config patches also wrote to this file. A patched file's manifest
    * hash is deliberately not re-recorded (the patch belongs to another module, see
@@ -638,6 +648,58 @@ export async function buildUpdatePlan(
   };
 }
 
+/**
+ * Every project-relative path the plan routes to a merge: a drifted or colliding file,
+ * or a dropped file that was kept. What `update --resolved <path>` may name (#223).
+ */
+export function mergeTargets(plan: UpdatePlan): string[] {
+  return plan.modules.flatMap((mod) =>
+    [...mod.files, ...mod.removals]
+      .filter((file) => NEEDS_MERGE.has(file.action))
+      .map((file) => file.target)
+  );
+}
+
+/**
+ * Take the files `update --resolved` names out of the merge plan (#223). Each one's
+ * action becomes `resolved`, so `executeUpdatePlan` records it as it stands on disk and
+ * writes nothing to it, and each module's `needsMerge` is worked out again without it. A
+ * module with nothing else waiting is then clean, so its lock moves to the new SHA and
+ * the next `update` sees base === theirs for the merged file. A moved config patch still
+ * waits: `--resolved` names files, and a patch is not one.
+ *
+ * Returns the targets it marked. The command refuses a path this does not mark before
+ * anything is written, so a mistyped path cannot leave a merge unrecorded in silence.
+ */
+export function markResolved(
+  plan: UpdatePlan,
+  targets: ReadonlySet<string>
+): string[] {
+  const marked: string[] = [];
+  for (const mod of plan.modules) {
+    for (const file of [...mod.files, ...mod.removals]) {
+      if (NEEDS_MERGE.has(file.action) && targets.has(file.target)) {
+        file.action = "resolved";
+        marked.push(file.target);
+      }
+    }
+    mod.needsMerge = moduleNeedsMerge(mod);
+  }
+  plan.needsMerge = plan.modules.some((mod) => mod.needsMerge);
+  return marked;
+}
+
+/** Whether anything about one module still routes to the merge plan. */
+function moduleNeedsMerge(
+  mod: Pick<ModuleUpdatePlan, "files" | "removals" | "patches">
+): boolean {
+  return (
+    mod.files.some((f) => NEEDS_MERGE.has(f.action)) ||
+    mod.removals.some((f) => NEEDS_MERGE.has(f.action)) ||
+    mod.patches.some((p) => p.matched !== undefined)
+  );
+}
+
 interface PlanOneArgs {
   root: string;
   config: SaasaloyConfig;
@@ -714,14 +776,15 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     );
 
     const projectOwned = input.isOwned?.(ref.target) ?? false;
-    const action = classifyUpdate(
-      baseContent,
-      theirsContent,
-      compared,
-      owned?.hash,
-      owned?.adopted ?? false,
-      projectOwned
-    );
+    const action = classifyUpdate({
+      adopted: owned?.adopted ?? false,
+      base: baseContent,
+      managedHash: owned?.hash,
+      mergedWith: owned?.mergedWith,
+      mine: compared,
+      projectOwned,
+      theirs: theirsContent,
+    });
     const patchedBy = patchersOf(manifest, ref.target);
     files.push({
       module: name,
@@ -731,6 +794,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       action,
       ...(projectOwned ? { projectOwned: true } : {}),
       ...(owned?.adopted ? { adopted: true } : {}),
+      ...(owned?.mergedWith === undefined ? {} : { merged: true }),
       base: baseContent,
       theirs: written,
       mine,
@@ -759,7 +823,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     // same reason it is never overwritten: nothing here knows whose bytes those are.
     const keep =
       mine !== undefined &&
-      ((entry.adopted ?? false) || (input.isOwned?.(target) ?? false));
+      ((entry.adopted ?? false) ||
+        entry.mergedWith !== undefined ||
+        (input.isOwned?.(target) ?? false));
     removals.push({
       module: name,
       from: entry.from ?? baseRef?.from ?? target,
@@ -831,10 +897,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     }
   }
 
-  const needsMerge =
-    files.some((f) => NEEDS_MERGE.has(f.action)) ||
-    removals.some((f) => NEEDS_MERGE.has(f.action)) ||
-    patches.some((p) => p.matched !== undefined);
+  const needsMerge = moduleNeedsMerge({ files, patches, removals });
 
   return {
     name,
@@ -989,16 +1052,30 @@ function newEnvVars(
  * `projectOwned` says the template hands this file over once and never comes back for it.
  * Either one sends an existing file to the merge plan; neither blocks creating or
  * restoring a file that is not there, since an absent file carries no work to lose.
+ *
+ * `mergedWith` is the third (#223): `update --resolved` recorded a merge, so the hash is
+ * of a person's edits and is no licence to overwrite them either. It also stands in for
+ * the merge base where there is none (a working copy, the bundled template): while the
+ * module still ships the version the merge took in, there is nothing new to merge.
  */
-function classifyUpdate(
-  base: string | undefined,
-  theirs: string,
-  mine: string | undefined,
-  managedHash: string | undefined,
-  adopted: boolean,
-  projectOwned: boolean
-): UpdateFileAction {
+interface ClassifyArgs {
+  base: string | undefined;
+  theirs: string;
+  mine: string | undefined;
+  managedHash: string | undefined;
+  adopted: boolean;
+  projectOwned: boolean;
+  /** `ManagedEntry.mergedWith`: the hash of the version a recorded merge took in. */
+  mergedWith: string | undefined;
+}
+
+function classifyUpdate(args: ClassifyArgs): UpdateFileAction {
+  const { base, theirs, mine, managedHash, adopted, projectOwned, mergedWith } =
+    args;
   if (base !== undefined && base === theirs) {
+    return "skip";
+  }
+  if (mergedWith !== undefined && mergedWith === hashContent(theirs)) {
     return "skip";
   }
   if (mine === undefined) {
@@ -1010,7 +1087,7 @@ function classifyUpdate(
   if (managedHash === undefined) {
     return "conflict";
   }
-  if (adopted || projectOwned) {
+  if (adopted || projectOwned || mergedWith !== undefined) {
     return "drift";
   }
   return hashContent(mine) === managedHash ? "overwrite" : "drift";
@@ -1175,6 +1252,11 @@ export interface UpdateResult {
   driftSurvivors: PlannedUpdateFile[];
   /** Manifest entries dropped for files that were already gone. */
   untracked: PlannedUpdateFile[];
+  /**
+   * Files `--resolved` named (#223): a merged file recorded at its on-disk hash, or a kept
+   * removal untracked. Disk is untouched for every one.
+   */
+  resolved: PlannedUpdateFile[];
   patched: PlannedUpdatePatch[];
   /** Patches whose target file was absent — reported, not applied. */
   patchConflicts: PlannedUpdatePatch[];
@@ -1203,6 +1285,32 @@ async function stillMatches(file: PlannedUpdateFile): Promise<boolean> {
   return now === file.mine;
 }
 
+/**
+ * Record a file `--resolved` named as it stands on disk (#223, ADR 0006's model): its
+ * current hash becomes the manifest baseline, with no check of what the merge holds.
+ * `mergedWith` keeps the hash of the version the merge took in, which is what tells the
+ * next run there is nothing new to merge even with no merge base, and what keeps a later
+ * upstream change from overwriting the merge. A file the merge deleted is untracked.
+ * Read fresh, not from the plan: the merge may have finished after the plan was built.
+ */
+async function recordResolved(
+  manifest: Manifest,
+  file: PlannedUpdateFile
+): Promise<void> {
+  const now = await readIfPresent(file.targetAbs);
+  if (now === undefined) {
+    untrackManagedFile(manifest, file.target);
+    return;
+  }
+  recordManagedFile(manifest, {
+    from: file.from,
+    hash: hashContent(now),
+    module: file.module,
+    target: file.target,
+    ...(file.newHash === undefined ? {} : { mergedWith: file.newHash }),
+  });
+}
+
 export async function executeUpdatePlan(
   plan: UpdatePlan,
   args: ExecuteUpdateArgs
@@ -1215,6 +1323,7 @@ export async function executeUpdatePlan(
     deleted: [],
     driftSurvivors: [],
     untracked: [],
+    resolved: [],
     patched: [],
     patchConflicts: [],
     patchRefusals: [],
@@ -1240,6 +1349,11 @@ export async function executeUpdatePlan(
     let clean = !mod.needsMerge;
 
     for (const file of mod.files) {
+      if (file.action === "resolved") {
+        await recordResolved(manifest, file);
+        result.resolved.push(file);
+        continue;
+      }
       if (!WRITABLE.has(file.action) || file.theirs === undefined) {
         continue;
       }
@@ -1280,6 +1394,8 @@ export async function executeUpdatePlan(
         }
       } else if (file.action === "delete-drift") {
         result.driftSurvivors.push(file);
+      } else if (file.action === "resolved") {
+        result.resolved.push(file);
       } else {
         result.untracked.push(file);
       }

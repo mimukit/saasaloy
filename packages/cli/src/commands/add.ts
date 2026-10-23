@@ -46,6 +46,7 @@ import type { Coordinate, RegistrySource } from "../lib/registry.js";
 import {
   detectMissingRequirements,
   formatMissingRequirements,
+  formatUnansweredWith,
 } from "../lib/requires.js";
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import type { Graph } from "../lib/resolve.js";
@@ -74,6 +75,11 @@ export interface AddOptions {
   diff: boolean;
   yes: boolean;
   force: boolean;
+  /**
+   * `--with <module>`, repeatable: a module that answers a `requiresOneOf` choice, so a
+   * run with no terminal can pick a driver (#223). Command-line order.
+   */
+  with: string[];
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -88,7 +94,7 @@ const KNOWN_FLAGS = new Set([
   "-h",
 ]);
 const USAGE =
-  "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]";
+  "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--with <module>]... [--dry-run] [--diff] [--yes] [--force]";
 const HELP: CommandHelp = {
   name: "add",
   describe: DESCRIPTIONS.add,
@@ -98,6 +104,8 @@ const HELP: CommandHelp = {
     "--diff": "show a per-file diff and write nothing",
     "-y, --yes": "skip the confirmation prompt",
     "--force": "re-apply a module that is already installed",
+    "--with <module>":
+      "answer a `requiresOneOf` choice, e.g. `--with database-d1` (repeatable)",
   },
 };
 
@@ -110,8 +118,27 @@ const HELP: CommandHelp = {
 export function parseArgs(argv: string[]): AddOptions {
   const positional: string[] = [];
   const unknown: string[] = [];
-  for (const arg of argv) {
-    if (!arg.startsWith("-")) {
+  const withModules: string[] = [];
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    if (arg === "--with") {
+      // A value flag: the next argument is the module, never a positional. A missing or
+      // flag-shaped value is reported, so `--with --yes` cannot eat the `--yes`.
+      const value = argv[i + 1];
+      if (value === undefined || value === "" || value.startsWith("-")) {
+        unknown.push("--with (needs a module name)");
+      } else {
+        withModules.push(value);
+        i++;
+      }
+    } else if (arg.startsWith("--with=")) {
+      const value = arg.slice("--with=".length);
+      if (value === "") {
+        unknown.push("--with (needs a module name)");
+      } else {
+        withModules.push(value);
+      }
+    } else if (!arg.startsWith("-")) {
       positional.push(arg);
     } else if (!KNOWN_FLAGS.has(arg)) {
       // A typo'd flag (`--forse`) silently running without force is worse than an error.
@@ -125,6 +152,7 @@ export function parseArgs(argv: string[]): AddOptions {
     force: argv.includes("--force"),
     name: positional[0],
     unknown,
+    with: withModules,
     yes: argv.includes("--yes") || argv.includes("-y"),
   };
 }
@@ -763,6 +791,29 @@ export async function runAdd(argv: string[]): Promise<number> {
     // before the conflict check below, so that check reads the graph a picked driver is
     // already part of (#98).
     let unmet = detectMissingRequirements({ config, graph });
+    // `--with` answers those choices up front, so a run with no terminal can pick a
+    // driver (#223). Each one joins the graph only when it is an option of a requirement
+    // still unmet, re-checked after each merge: a picked module may declare a requirement
+    // that a later `--with` answers. One that answers nothing is refused rather than
+    // installed on the side — the flag picks a driver, it is not a second `add`.
+    // Deleting the current entry while iterating a Set is safe, and it keeps argv order.
+    const pending = new Set(opts.with);
+    for (let progressed = true; pending.size > 0 && progressed;) {
+      progressed = false;
+      for (const name of pending) {
+        if (!unmet.some((requirement) => requirement.options.includes(name))) {
+          continue;
+        }
+        graph = mergeGraph(graph, await resolveGraph(source, name));
+        pending.delete(name);
+        unmet = detectMissingRequirements({ config, graph });
+        progressed = true;
+      }
+    }
+    if (pending.size > 0) {
+      cancel(formatUnansweredWith([...pending], requested));
+      return EXIT_REFUSED;
+    }
     if (unmet.length > 0 && (!isInteractive() || opts.yes)) {
       // `--yes` means "don't ask me", not "choose a driver for my project", and a
       // pipeline has no terminal to answer in. Both refuse and name the options.
@@ -783,7 +834,7 @@ export async function runAdd(argv: string[]): Promise<number> {
         break;
       }
       const picked = await select({
-        answeredBy: `a driver first: \`saasaloy add <${requirement.options.join(" | ")}>\``,
+        answeredBy: `\`--with <${requirement.options.join(" | ")}>\``,
         message: `${pc.cyan(requirement.declaredBy)} needs one of these — pick one`,
         options: requirement.options.map((n) => ({ label: n, value: n })),
       });

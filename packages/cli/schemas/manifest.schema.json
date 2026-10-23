@@ -62,7 +62,12 @@
             "minLength": 1,
             "description": "Module-relative POSIX source path this file was copied from (e.g. `files/lib/email.ts`). `update` uses it to fetch the same file at the old and new commit SHAs. Optional — entries written before this field shipped fall back to re-deriving the target from the module descriptor."
           },
-          "when": { "$ref": "#/$defs/when" }
+          "when": { "$ref": "#/$defs/when" },
+          "mergedWith": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "sha256 of the module's version a merge took in, set by `saasaloy update --resolved <path>`. The entry's `hash` is then of the merged bytes. While the module still ships that version `update` skips the file; once it moves, the file goes to the merge plan rather than being overwritten. Cleared the first time the tool writes the file itself."
+          }
         }
       }
     },

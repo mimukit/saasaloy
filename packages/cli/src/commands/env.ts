@@ -7,8 +7,10 @@ import {
   appendVars,
   isSet,
   LOCAL_VALUES,
+  parseEnvFile,
   parseEnvValues,
   productionSecretCommands,
+  replaceVars,
 } from "../lib/env-vars.js";
 import type { Declaration } from "../lib/env-vars.js";
 import {
@@ -17,6 +19,7 @@ import {
   EXIT_REFUSED,
   exitCodeFor,
   formatFailure,
+  RefusalError,
 } from "../lib/exit.js";
 import {
   assertNoSymlinkPath,
@@ -53,34 +56,136 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // something the descriptor did not. It refuses to write at all unless git ignores the
 // target, and it prints the production commands rather than running them: putting a
 // secret into a live account is a deploy, and this is a scaffolding tool.
+//
+// `--set KEY=VALUE` and `--from-file <path>` answer the prompts on the command line, so an
+// agent with no terminal can fill the file (#223). A value passed that way is a value a
+// person chose, so it replaces what the file holds. A key no installed module declares is
+// refused before anything is written: a typo would otherwise land in a file no service
+// reads, and the run would report success.
 
 export interface Options {
   /** `--check`: report what is missing and exit non-zero, prompting for nothing. */
   check: boolean;
+  /** `--from-file <path>`, repeatable, in command-line order. Read relative to cwd. */
+  fromFiles: string[];
+  /** `--set KEY=VALUE`, repeatable, in command-line order. Beats a file's value. */
+  sets: [string, string][];
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
 
 const KNOWN_FLAGS = new Set(["--check", "--help", "-h"]);
-const USAGE = "saasaloy env [--check]";
+const USAGE =
+  "saasaloy env [--check] [--from-file <path>]... [--set KEY=VALUE]...";
 const HELP: CommandHelp = {
   name: "env",
   describe: DESCRIPTIONS.env,
   usage: USAGE,
   flags: {
     "--check": "report missing variables and exit non-zero, without prompting",
+    "--from-file <path>":
+      "write the KEY=VALUE lines of a dotenv file, with no prompt (repeatable)",
+    "--set KEY=VALUE":
+      "write one value, with no prompt (repeatable); it stays in your shell history, so prefer --from-file for a secret",
   },
 };
 
+// `--set` and `--from-file` take a value, as `--set KEY=VALUE` or `--set=KEY=VALUE`.
+const VALUE_FLAGS = ["--set", "--from-file"] as const;
+
+/** `KEY=VALUE` as one `--set` pair, or the reason it is not one. */
+function parseSet(raw: string): [string, string] | string {
+  const equals = raw.indexOf("=");
+  const name = equals === -1 ? "" : raw.slice(0, equals).trim();
+  const value = equals === -1 ? "" : raw.slice(equals + 1);
+  if (name === "") {
+    return `--set ${raw} (needs KEY=VALUE)`;
+  }
+  if (value.trim() === "") {
+    return `--set ${raw} (has no value)`;
+  }
+  // One line per key in the file: a newline in the value would write a second line that
+  // no check has looked at.
+  if (/[\r\n]/.test(value)) {
+    return `--set ${name}=… (the value spans more than one line)`;
+  }
+  return [name, value];
+}
+
 export function parseArgs(argv: string[]): Options {
   const unknown: string[] = [];
-  for (const arg of argv) {
+  const fromFiles: string[] = [];
+  const sets: [string, string][] = [];
+  const take = (flag: string, value?: string): void => {
+    if (value === undefined || value === "") {
+      unknown.push(`${flag} (needs a value)`);
+    } else if (flag === "--from-file") {
+      fromFiles.push(value);
+    } else {
+      const pair = parseSet(value);
+      if (typeof pair === "string") {
+        unknown.push(pair);
+      } else {
+        sets.push(pair);
+      }
+    }
+  };
+  for (let i = 0; i < argv.length; i++) {
+    const arg = argv[i] ?? "";
+    const flag = VALUE_FLAGS.find(
+      (name) => arg === name || arg.startsWith(`${name}=`)
+    );
+    if (flag !== undefined) {
+      if (arg === flag) {
+        // The next argument is the value, unless it is another flag: `--set --check`
+        // must not swallow the `--check`.
+        const next = argv[i + 1];
+        if (next !== undefined && !next.startsWith("-")) {
+          i++;
+          take(flag, next);
+        } else {
+          take(flag);
+        }
+      } else {
+        take(flag, arg.slice(flag.length + 1));
+      }
+      continue;
+    }
     // Every declared variable is covered; there is no single-variable form to name.
     if (!arg.startsWith("-") || !KNOWN_FLAGS.has(arg)) {
       unknown.push(arg);
     }
   }
-  return { check: argv.includes("--check"), unknown };
+  return { check: argv.includes("--check"), fromFiles, sets, unknown };
+}
+
+/**
+ * Every value the flags pass, in the order they apply: each `--from-file` in turn, then
+ * each `--set`, so a `--set` beats a file for the same key. One entry per key, at the
+ * position of its last value.
+ */
+async function readFlagValues(opts: Options): Promise<[string, string][]> {
+  const values = new Map<string, string>();
+  for (const file of opts.fromFiles) {
+    const abs = isAbsolute(file) ? file : resolve(process.cwd(), file);
+    let content: string;
+    try {
+      content = await readFile(abs, "utf-8");
+    } catch (error) {
+      throw new RefusalError(
+        `--from-file ${file} could not be read — ${error instanceof Error ? error.message : String(error)}`
+      );
+    }
+    for (const [name, value] of parseEnvFile(content)) {
+      values.delete(name);
+      values.set(name, value);
+    }
+  }
+  for (const [name, value] of opts.sets) {
+    values.delete(name);
+    values.set(name, value);
+  }
+  return [...values.entries()];
 }
 
 /** A variable that still needs an answer. Every one goes to the same file. */
@@ -217,6 +322,26 @@ export async function writeAnswers(
   return additions.length;
 }
 
+/**
+ * Write the values `--set` and `--from-file` passed into `packages/env/.env`, replacing
+ * any value the file holds for the same key (#223). `before` plays the same part it does
+ * in `writeAnswers`.
+ */
+export async function writeValues(
+  root: string,
+  values: [string, string][],
+  before?: string
+): Promise<number> {
+  if (values.length === 0) {
+    return 0;
+  }
+  const abs = resolveWithinRoot(root, LOCAL_VALUES);
+  await assertNoSymlinkPath(root, abs);
+  await mkdir(dirname(abs), { recursive: true });
+  await writeFile(abs, replaceVars(before, values), "utf-8");
+  return values.length;
+}
+
 async function readTarget(
   root: string,
   file: string
@@ -226,6 +351,90 @@ async function readTarget(
   // and the read that follows would still traverse a planted symlink out of it.
   await assertNoSymlinkPath(root, abs);
   return (await pathExists(abs)) ? readFile(abs, "utf-8") : undefined;
+}
+
+/** The production block, printed on every run that reaches the declarations. */
+function printSecretCommands(declarations: Declaration[]): void {
+  const secretCommands = productionSecretCommands(
+    declarations.map((declaration) => declaration.name)
+  );
+  if (secretCommands.length > 0) {
+    note(
+      wrapForNote(
+        `${secretCommands.join("\n")}\n\n${pc.dim("Printed, never run — copy these when you deploy.")}`
+      ),
+      "Production secrets"
+    );
+  }
+}
+
+interface FlagRun {
+  before: string | undefined;
+  declarations: Declaration[];
+  opts: Options;
+  root: string;
+}
+
+/**
+ * The `--set`/`--from-file` half of `env` (#223). No prompt opens, so it runs the same
+ * with or without a terminal. The gitignore check runs first, as it does before the
+ * prompts, then every passed key is checked against the declarations, and one unknown key
+ * refuses the whole run before a byte is written. A key still unset afterwards is a
+ * warning, not a failure: the agent filled what it was given, and `--check` is the gate.
+ */
+async function writeFlagValues(run: FlagRun): Promise<number> {
+  const { before, declarations, opts, root } = run;
+  const values = await readFlagValues(opts);
+
+  if (!(await isPathIgnored(root, LOCAL_VALUES))) {
+    cancel(
+      `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
+        "Add it to .gitignore (the base template already does) and run again."
+    );
+    return EXIT_REFUSED;
+  }
+
+  const declared = new Set(declarations.map((declaration) => declaration.name));
+  const unknown = values
+    .map(([name]) => name)
+    .filter((name) => !declared.has(name));
+  if (unknown.length > 0) {
+    cancel(
+      `No installed module declares ${unknown.join(", ")} — nothing written. ` +
+        `Check the spelling, or \`saasaloy add\` the module that reads ${unknown.length === 1 ? "it" : "them"}.`
+    );
+    return EXIT_REFUSED;
+  }
+
+  if (values.length === 0) {
+    log.warn("The files passed with `--from-file` set no value.");
+  }
+  const written = await writeValues(root, values, before);
+  if (written > 0) {
+    note(
+      wrapForNote(
+        `${pc.cyan(LOCAL_VALUES)} ${pc.dim(`— ${written} written`)}\n\n${pc.dim("Run `pnpm env:setup` to write each service's own .env from it.")}`
+      ),
+      "Written"
+    );
+  }
+
+  const after = parseEnvValues(replaceVars(before, values));
+  const unset = declarations.filter(
+    (declaration) => !isSet(after, declaration.name)
+  );
+  if (unset.length > 0) {
+    log.warn(
+      `Still unset: ${unset.map((declaration) => declaration.name).join(", ")}.`
+    );
+  }
+  printSecretCommands(declarations);
+  outro(
+    unset.length === 0
+      ? pc.green("Every declared variable is set.")
+      : pc.green("Values written.")
+  );
+  return EXIT_OK;
 }
 
 export async function runEnv(argv: string[]): Promise<number> {
@@ -245,6 +454,15 @@ export async function runEnv(argv: string[]): Promise<number> {
     return EXIT_REFUSED;
   }
 
+  const flagMode = opts.sets.length > 0 || opts.fromFiles.length > 0;
+  if (opts.check && flagMode) {
+    // `--check` promises to write nothing; `--set` and `--from-file` exist to write.
+    cancel(
+      "`--check` writes nothing, and `--set`/`--from-file` write values — pass one or the other."
+    );
+    return EXIT_REFUSED;
+  }
+
   const sources: RegistrySource[] = [];
   try {
     const root = await findProjectRoot();
@@ -259,6 +477,14 @@ export async function runEnv(argv: string[]): Promise<number> {
         log.warn(msg);
       }
     );
+    if (flagMode) {
+      return await writeFlagValues({
+        before: await readTarget(root, LOCAL_VALUES),
+        declarations,
+        opts,
+        root,
+      });
+    }
     if (declarations.length === 0) {
       outro(pc.dim("No module declares an environment variable."));
       return EXIT_OK;
@@ -290,18 +516,8 @@ export async function runEnv(argv: string[]): Promise<number> {
 
     // The production block is a report, so it prints on every run — a `--check` in CI is
     // exactly where someone wants the deploy commands to hand to an operator.
-    const secretCommands = productionSecretCommands(
-      declarations.map((declaration) => declaration.name)
-    );
     const printSecrets = (): void => {
-      if (secretCommands.length > 0) {
-        note(
-          wrapForNote(
-            `${secretCommands.join("\n")}\n\n${pc.dim("Printed, never run — copy these when you deploy.")}`
-          ),
-          "Production secrets"
-        );
-      }
+      printSecretCommands(declarations);
     };
 
     if (pending.length === 0) {
@@ -329,7 +545,7 @@ export async function runEnv(argv: string[]): Promise<number> {
       printSecrets();
       const count = pending.length;
       cancel(
-        `${count} variable${count === 1 ? "" : "s"} still unset — run \`saasaloy env\` to fill ${count === 1 ? "it" : "them"} in.`
+        `${count} variable${count === 1 ? "" : "s"} still unset — run \`saasaloy env\` in a terminal, or pass \`--from-file <path>\`, to fill ${count === 1 ? "it" : "them"} in.`
       );
       return EXIT_REFUSED;
     }
@@ -340,8 +556,7 @@ export async function runEnv(argv: string[]): Promise<number> {
       // module author wrote the sentence that explains what the value is for, and a
       // second wording here would drift from the one in the key list.
       const answer = await text({
-        answeredBy:
-          "nothing yet: run `saasaloy env` in a terminal (`--check` lists what is missing)",
+        answeredBy: "`--from-file <path>` (or `--set KEY=VALUE`)",
         defaultValue: entry.declaration.devValue ?? "",
         message: `${pc.cyan(entry.declaration.name)} ${pc.dim(`→ ${LOCAL_VALUES}`)}\n${entry.declaration.description}`,
         ...(entry.declaration.devValue === undefined

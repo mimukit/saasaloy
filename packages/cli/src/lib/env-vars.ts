@@ -113,6 +113,64 @@ export function appendVars(
 }
 
 /**
+ * The values a `--from-file` file sets, in file order (#223). Read the way
+ * `parseEnvValues` reads a `.env`: comments and blank lines are skipped, and so is a key
+ * with an empty value, because an empty value is a placeholder, not an answer. A later
+ * line for the same key wins, as it does when dotenv loads the file.
+ */
+export function parseEnvFile(text: string): [string, string][] {
+  return Object.entries(parseEnvValues(text)).filter(
+    ([, value]) => value.trim() !== ""
+  );
+}
+
+/** Is this line an assignment to `name`? A commented-out `# KEY=` is not one. */
+function assigns(line: string, name: string): boolean {
+  const equals = line.indexOf("=");
+  return equals !== -1 && line.slice(0, equals).trim() === name;
+}
+
+/**
+ * The file's new content, with `values` written in and an existing value replaced
+ * (#223). The flag half of `env`: a value passed with `--set` or `--from-file` is a value
+ * a person chose, so it is the answer, where `appendVars` only ever fills a blank.
+ *
+ * Every line that assigns a passed key is rewritten (a hand-edited file can carry a key
+ * twice, and leaving the second copy would let it win when dotenv loads the file). Every
+ * other line survives byte for byte, and a key the file has never held goes on the end.
+ */
+export function replaceVars(
+  existing: string | undefined,
+  values: [string, string][]
+): string {
+  if (values.length === 0) {
+    return existing ?? "";
+  }
+  if (!existing || existing.trim() === "") {
+    return `${values.map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
+  }
+
+  const lines = existing.split("\n");
+  const appended: string[] = [];
+  for (const [name, value] of values) {
+    let found = false;
+    for (const [index, line] of lines.entries()) {
+      if (assigns(line, name)) {
+        lines[index] = `${name}=${value}`;
+        found = true;
+      }
+    }
+    if (!found) {
+      appended.push(`${name}=${value}`);
+    }
+  }
+
+  const kept = lines.join("\n");
+  const head = kept.endsWith("\n") ? kept : `${kept}\n`;
+  return appended.length === 0 ? head : `${head}${appended.join("\n")}\n`;
+}
+
+/**
  * The production block: one `wrangler secret put` per secret.
  *
  * Printed, never run. Putting a secret into a live Cloudflare account is a deploy, and a

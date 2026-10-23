@@ -40,12 +40,13 @@ in, and the core's requirement is met by the driver arriving in the same run:
 saasaloy add database-d1        # or: saasaloy add database-postgres
 ```
 
-With `--yes`, or in a pipeline with no terminal, there is nothing to ask, so `add` refuses and names
-both options. That is a refusal by design, not a failure:
+With `--yes`, or in a pipeline with no terminal, there is nothing to ask. `--with` names the driver on
+the command line, as in `saasaloy add database --with database-d1 --yes`. Without it, `add` refuses
+and names both options. That is a refusal by design, not a failure:
 
 ```
 Cannot add database — unmet requirement:
-  database needs one of: database-d1, database-postgres, and none is installed. Run `saasaloy add database-d1` first, or pick another from that list.
+  database needs one of: database-d1, database-postgres, and none is installed. Re-run as `saasaloy add database --with database-d1`, or pick another from that list.
 ```
 
 Read the driver's skill for anything the tables themselves don't decide: how the connection reaches

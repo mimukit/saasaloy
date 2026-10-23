@@ -80,7 +80,7 @@ With no terminal, `init` refuses with exit 2 before it writes a file: with no `<
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]
+saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--with <module>]... [--dry-run] [--diff] [--yes] [--force]
 ```
 
 With no module named, `add` shows a picker over the source, listing only modules this
@@ -93,16 +93,17 @@ before any work happens, with exit 2.
 | `--diff` | print the plan plus a per-file diff, capped at 60 lines each, and stop. Nothing is written. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 | `--force` | re-apply the module you named even though it is already installed. Already-installed dependencies are left alone. |
+| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-d1 --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
 
 Without `--force`, a module whose graph is fully installed prints `Nothing to do` and
 exits 0.
 
 A successful `add` ends with a next-steps box: the `/saasaloy-<module>` skill it linked,
 which holds the module's own procedure, and the environment variables it needs, re-printed
-after the confirmation rather than before it. It also writes `apps/api/.dev.vars.example`
-from the installed descriptors' `envVars` maps, one commented entry per variable. A value already in the file is never overwritten, and no key is ever removed.
+after the confirmation rather than before it. It also writes `packages/env/.env.example`
+from the installed descriptors' `envVars` maps, the key list every service's `.env` is written from.
 
-The next-steps box no longer tells you to copy that file by hand. It names `saasaloy env` instead, with the line `Run saasaloy env — it prompts for each unset one and writes it to the .dev.vars or .env that reads it.` The example file stays as the checked-in record of what each variable means.
+The next-steps box names `saasaloy env`, with the line `Run saasaloy env — it prompts for each unset one and writes it to packages/env/.env.`, then `pnpm env:setup` to write each service's own `.env` from that file. The example file stays as the checked-in record of what each variable means.
 
 A module descriptor may declare `conflictsWith`, naming modules it refuses to sit beside.
 `add` checks that list before it writes anything and exits 2 with a message naming both
@@ -132,7 +133,7 @@ A descriptor may also declare `requiresOneOf`, naming modules exactly one of whi
 be present. `add` counts an option as present when it is already installed or arrives in
 the same resolved graph. When none is, an interactive run offers the list as a picker and
 adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and names the
-options instead of choosing for you. `database` declares it, so the core can never land on
+options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
 a project with no driver behind its `@repo/db/client` export.
 
 A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
@@ -168,24 +169,32 @@ See [Add a module](how-to/add-a-module.md) for the workflow.
 ## `saasaloy env`
 
 ```text
-saasaloy env [--check]
+saasaloy env [--check] [--from-file <path>]... [--set KEY=VALUE]...
 ```
 
-Fill in the variables the installed modules declare. `env` reads each installed module's descriptor at the SHA the lock resolved, flattens its `envVars` map into declarations, and prompts for every one that is not already set. A module with no lock entry, a module installed from a local checkout, or a descriptor that cannot be read is warned about and skipped, and the run continues with the modules it did read.
+Fill in the variables the installed modules declare. `env` reads each installed module's descriptor at the SHA the lock resolved and flattens its `envVars` map into declarations. A variable two modules declare is asked once. A module with no lock entry, a module installed from a local checkout, or a descriptor that cannot be read is warned about and skipped, and the run continues with the modules it did read.
+
+Every value lands in one gitignored file, `packages/env/.env`. `pnpm env:setup` then writes each service's own `.env` from it, and the descriptor's `envServices` decides which service reads which key. `env` also warns when `packages/env/.env.example` does not list a declared key, because no service would read it.
 
 | Flag | Effect |
 |---|---|
-| `--check` | report missing variables and exit non-zero, without prompting. |
+| `--check` | report missing variables and exit 2, without prompting and without writing. Exits 0 once every declared variable is set. |
+| `--from-file <path>` | write the `KEY=VALUE` lines of a dotenv file, with no prompt. Comments, blank lines and empty values are skipped. The path is read relative to the working directory. Repeatable. |
+| `--set KEY=VALUE` | write one value, with no prompt. Repeatable, and a later `--set` beats a `--from-file` value for the same key. |
 
-Each variable routes to a workspace and to a file inside it: a `PUBLIC_*` name lands in that workspace's `.env`, every other name lands in its `.dev.vars`. When routing finds several plausible workspaces, an interactive run asks which one reads the variable, and `--check` prints "several workspaces fit (…) — run `saasaloy env` to pick one". When routing finds none, the line reads "no target workspace found — this module wrote no files under a known alias".
+Use `--from-file` for a secret. A `--set` value stays in your shell history.
 
-A value already present is never rewritten, whatever the descriptor's `devVars` suggests. The prompt's message is the descriptor's own wording, and the descriptor's `devVars` entry becomes the prompt's default.
+With no flag, `env` fills blanks only. It prompts for every declared variable that has no value (a `KEY=` placeholder counts as no value) and never rewrites a value already in the file, whatever the descriptor's `devVars` suggests. The prompt's message is the descriptor's own wording, and its `devVars` entry becomes the default. A filled placeholder keeps its line, a new key goes on the end, and every other line stays byte for byte.
 
-Before it asks for a single secret, `env` proves every target file is gitignored. A tracked target is refused with exit 2 and the message "&lt;file&gt; isn't gitignored — refusing to write a secret into a tracked file. Add it to .gitignore (the base template already does) and run again."
+With `--set` or `--from-file`, `env` opens no prompt, with or without a terminal. A value passed this way replaces the value the file holds for that key, because you chose it. Each key is checked against the installed modules' declarations first: one key that no installed module declares refuses the whole run with exit 2, names every unknown key, and writes nothing. Any declared key still unset afterwards is listed as a warning, and the run exits 0. `--check` with either flag exits 2, because one promises to write nothing and the other writes.
 
-`env` never writes to a live account. It prints the production commands under a **Production secrets** note, one `wrangler secret put <NAME>` per non-`PUBLIC_` variable grouped by workspace, closing with "Printed, never run — copy these when you deploy." The note prints on every run, `--check` included.
+Before it writes or asks for a single value, `env` proves `packages/env/.env` is gitignored. A tracked file, or a project that is not a git repository, is refused with exit 2 and the message "packages/env/.env isn't gitignored — refusing to write a secret into a tracked file. Add it to .gitignore (the base template already does) and run again."
 
-Exit codes: 0 when every declared variable is set, when nothing declares one ("No module declares an environment variable."), or when the run filled the blanks in ("Environment filled in."). 2 when a target is tracked, when you cancel a prompt ("Cancelled — nothing written."), and when variables are still unset under `--check` or with no terminal, which reads "N variables still unset — run `saasaloy env` to fill them in." A session with no terminal takes the same path `--check` does, so the command never hangs on a prompt in CI.
+`env` never writes to a live account. It prints the production commands under a **Production secrets** note, one `wrangler secret put <NAME>` per non-`PUBLIC_` variable, to run from the Worker's workspace, closing with "Printed, never run — copy these when you deploy." The note prints on every run, `--check` included.
+
+With no terminal and no flag, `env` takes the `--check` path, so it never waits on a prompt in CI. The message reads "N variables still unset — run `saasaloy env` in a terminal, or pass `--from-file <path>`, to fill them in."
+
+Exit codes: 0 when every declared variable is set, when nothing declares one ("No module declares an environment variable."), when a prompt run filled the blanks in ("Environment filled in."), or when `--set`/`--from-file` wrote its values. 1 when you cancel a prompt ("Cancelled — nothing written.") or a write fails. 2 when the file is not gitignored, when a passed key is not declared, when a `--from-file` path cannot be read, for a bad flag, and when variables are still unset under `--check` or with no terminal.
 
 ## `saasaloy testing`
 
@@ -216,7 +225,7 @@ A base row reads `current`, `outdated`, or `untracked`. `untracked` means the pr
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--force] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--dry-run] [--diff] [--force] [--yes]
 saasaloy update --abort
 ```
 
@@ -230,6 +239,7 @@ Two cases stop before anything is applied. A project with no usable base record 
 |---|---|
 | `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
+| `--resolved <path>` | record a file you merged, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge). |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
 | `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
@@ -254,6 +264,20 @@ A module run also backfills: each installed module's entries whose `when` is now
 
 Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and
 left files waiting on a merge, 2 for a refusal, 1 for a failure.
+
+### Recording a merge
+
+`update` cannot tell a finished merge from an unfinished one, so a plain re-run offers the same files again against the same base. `--resolved <path>` is how you say a merge is done. It is part of an update run, not a separate command, so with no terminal it still needs `--yes`, and a dirty working tree still needs `--force`. The merge plan ends with the exact command for its files:
+
+```sh
+saasaloy update --resolved apps/api/src/routes/waitlist.ts --yes
+```
+
+Each named file leaves the merge plan. `update` records the file's current hash as its new baseline in `.saasaloy/manifest.json`, without checking what the file holds, and writes nothing to it. A dropped file the module no longer ships is untracked and left on disk. Once nothing else of a module waits on a merge, its lock entry moves to the new SHA, and the next `update` skips the file and exits 0 when nothing else is left. A config patch under "Config patches that moved" is not a file: it still waits, and the module's lock stays where it is.
+
+The manifest entry also records the hash of the module version the merge took in (`mergedWith`). While the module still ships that version, `update` skips the file even with no merge base, as under `SAASALOY_REGISTRY_DIR`. Once the module moves again, the file goes to the merge plan rather than being overwritten, because it holds your edits.
+
+A path may be relative to the working directory or to the project root, as the merge plan prints it. A path that this run does not send to a merge exits 2 before anything is written and names the path and the files that are waiting.
 
 ## `saasaloy remove`
 
@@ -361,8 +385,8 @@ Third-party module identity is expected to change with
 | Variable | Read by | Effect |
 |---|---|---|
 | `SAASALOY_REGISTRY_DIR` | `add`, `env`, `list`, `outdated`, `update` | resolve modules from a local `modules/` directory instead of GitHub. Takes precedence over any `owner/repo` in the coordinate, and `add` and `list` warn when you pass one anyway. A missing directory is an error. Under `outdated` every module row reads `local`. |
-| `GITHUB_TOKEN` | `add`, `list` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
-| `GIGET_AUTH` | `add`, `list` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
+| `GITHUB_TOKEN` | `add`, `env`, `list`, `outdated`, `update` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
+| `GIGET_AUTH` | `add`, `env`, `list`, `outdated`, `update` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
 | `SAASALOY_GITHUB_API` | every command that reaches GitHub | override the GitHub API base URL. A trailing slash is stripped. It is not a GitHub Enterprise switch: nothing else in the CLI reads it, and a real GHES base would need `GIGET_GITHUB_URL` set to match. |
 | `SAASALOY_DEBUG` | every command | any non-empty value prints the full `cause` chain and stack under a failure's message, instead of the message alone. Set it before you paste an error into a bug report. |
 

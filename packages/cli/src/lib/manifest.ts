@@ -35,6 +35,14 @@ export interface ManagedEntry {
    * to find another module's entries that only shipped because `X` was installed.
    */
   when?: When;
+  /**
+   * sha256 of the module's version a merge took in. Set by `saasaloy update --resolved`
+   * (#223), whose `hash` is then of the merged bytes, a person's edits included. While the
+   * module still ships that version there is nothing to merge; once it moves, the file
+   * goes to the merge plan rather than being overwritten. Dropped the first time the tool
+   * writes the file itself.
+   */
+  mergedWith?: string;
 }
 
 // A structural config patch that actually landed on disk, recorded so `remove` can undo
@@ -89,6 +97,8 @@ export interface ManagedFileRecord {
   adopted?: boolean;
   from?: string;
   hash: string;
+  /** See `ManagedEntry.mergedWith`. Left out on every write the tool makes itself. */
+  mergedWith?: string;
   module: string;
   /** Project-relative POSIX path of the file on disk. */
   target: string;
@@ -111,6 +121,9 @@ export function recordManagedFile(
     ...(record.adopted ? { adopted: true } : {}),
     ...(record.from === undefined ? {} : { from: record.from }),
     ...(record.when === undefined ? {} : { when: record.when }),
+    ...(record.mergedWith === undefined
+      ? {}
+      : { mergedWith: record.mergedWith }),
   };
 }
 

@@ -18,7 +18,8 @@ import { parseArgs, renderPending, runEnv, writeAnswers } from "./env.js";
 const LOCAL = "packages/env/.env";
 
 const ORIGINAL_CWD = process.cwd();
-const USAGE_LINE = "saasaloy env [--check]";
+const USAGE_LINE =
+  "saasaloy env [--check] [--from-file <path>]... [--set KEY=VALUE]...";
 
 /** The env stanza of the base template's `_gitignore`, which is what makes writing safe. */
 const GITIGNORE = [
@@ -148,7 +149,48 @@ async function run(args: string[]): Promise<{ code: number; out: string }> {
 
 describe(parseArgs, () => {
   it("reads --check", () => {
-    expect(parseArgs(["--check"])).toStrictEqual({ check: true, unknown: [] });
+    expect(parseArgs(["--check"])).toStrictEqual({
+      check: true,
+      fromFiles: [],
+      sets: [],
+      unknown: [],
+    });
+  });
+
+  it("reads --set and --from-file in both forms, repeatable (#223)", () => {
+    expect(
+      parseArgs([
+        "--set",
+        "A=1",
+        "--set=B=x=y",
+        "--from-file",
+        "one.env",
+        "--from-file=two.env",
+      ])
+    ).toStrictEqual({
+      check: false,
+      fromFiles: ["one.env", "two.env"],
+      sets: [
+        ["A", "1"],
+        ["B", "x=y"],
+      ],
+      unknown: [],
+    });
+  });
+
+  it("reports a --set with no key, no value, or no argument", () => {
+    expect(parseArgs(["--set", "A"]).unknown).toStrictEqual([
+      "--set A (needs KEY=VALUE)",
+    ]);
+    expect(parseArgs(["--set", "A="]).unknown).toStrictEqual([
+      "--set A= (has no value)",
+    ]);
+    expect(parseArgs(["--set", "--check"]).unknown).toStrictEqual([
+      "--set (needs a value)",
+    ]);
+    expect(parseArgs(["--from-file="]).unknown).toStrictEqual([
+      "--from-file (needs a value)",
+    ]);
   });
 
   it("reports an unknown flag and a stray positional", () => {
@@ -272,6 +314,100 @@ describe(runEnv, () => {
 
     expect(out).toContain("1 variable still unset");
     expect(out).toContain("declared by waitlist");
+  });
+});
+
+// #223: the flags that answer the prompts, so an agent with no terminal can fill the file.
+describe("runEnv — --set and --from-file (#223)", () => {
+  it("writes every --set value with no prompt and exits 0", async () => {
+    const { code, out } = await run([
+      "--set",
+      "PUBLIC_API_URL=https://api.example.com",
+      "--set",
+      "PLUNK_API_KEY=live-key",
+    ]);
+
+    expect(code).toBe(EXIT_OK);
+    expect(out).toContain("Every declared variable is set");
+    await expect(readProject(LOCAL)).resolves.toBe(
+      "PUBLIC_API_URL=https://api.example.com\nPLUNK_API_KEY=live-key\n"
+    );
+  });
+
+  it("reads a dotenv file, and a later --set beats the file", async () => {
+    await put(
+      "values.env",
+      "# from the vault\n\nPLUNK_API_KEY=file-key\nPUBLIC_API_URL=\n"
+    );
+
+    const { code } = await run([
+      "--from-file",
+      "values.env",
+      "--set",
+      "PLUNK_API_KEY=flag-key",
+    ]);
+
+    expect(code).toBe(EXIT_OK);
+    // The empty `PUBLIC_API_URL=` in the file is skipped, not written as a blank.
+    await expect(readProject(LOCAL)).resolves.toBe("PLUNK_API_KEY=flag-key\n");
+  });
+
+  it("replaces a value the file already holds and keeps every other line", async () => {
+    await put(LOCAL, "# mine\nPLUNK_API_KEY=old-key\nEXTRA=keep\n");
+
+    const { code } = await run(["--set", "PLUNK_API_KEY=new-key"]);
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readProject(LOCAL)).resolves.toBe(
+      "# mine\nPLUNK_API_KEY=new-key\nEXTRA=keep\n"
+    );
+  });
+
+  it("warns about a key still unset and still exits 0", async () => {
+    const { code, out } = await run(["--set", "PLUNK_API_KEY=k"]);
+
+    expect(code).toBe(EXIT_OK);
+    expect(out).toContain("Still unset: PUBLIC_API_URL");
+  });
+
+  it("refuses a key no installed module declares, names it, and writes nothing", async () => {
+    await put("values.env", "PLUNK_API_KEY=k\nTYPO_KEY=x\n");
+
+    const { code, out } = await run([
+      "--from-file",
+      "values.env",
+      "--set",
+      "OTHER_TYPO=y",
+    ]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(out).toContain("TYPO_KEY, OTHER_TYPO");
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
+  });
+
+  it("refuses when the target file is not gitignored, and writes nothing", async () => {
+    await put(".gitignore", "node_modules\n");
+
+    const { code, out } = await run(["--set", "PLUNK_API_KEY=k"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(out).toContain("isn't gitignored");
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
+  });
+
+  it("refuses --check beside --set", async () => {
+    const { code, out } = await run(["--check", "--set", "PLUNK_API_KEY=k"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(out).toContain("pass one or the other");
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
+  });
+
+  it("refuses a --from-file it cannot read", async () => {
+    const { code, out } = await run(["--from-file", "missing.env"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(out).toContain("--from-file missing.env could not be read");
   });
 });
 

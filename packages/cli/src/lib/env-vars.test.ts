@@ -3,8 +3,10 @@ import {
   appendVars,
   isPublicVar,
   isSet,
+  parseEnvFile,
   parseEnvValues,
   productionSecretCommands,
+  replaceVars,
 } from "./env-vars.js";
 
 describe(isPublicVar, () => {
@@ -82,6 +84,52 @@ describe(appendVars, () => {
 
   it("never rewrites a line that already carries a value", () => {
     expect(appendVars("A=keep-me\n", [["B", "2"]])).toBe("A=keep-me\nB=2\n");
+  });
+});
+
+describe(parseEnvFile, () => {
+  it("reads KEY=VALUE lines and skips comments, blanks and empty values", () => {
+    expect(
+      parseEnvFile("# comment\n\nA=1\nEMPTY=\nSPACES=   \nB=two words\n")
+    ).toStrictEqual([
+      ["A", "1"],
+      ["B", "two words"],
+    ]);
+  });
+
+  it("lets a later line for the same key win", () => {
+    expect(parseEnvFile("A=1\nA=2\n")).toStrictEqual([["A", "2"]]);
+  });
+});
+
+describe(replaceVars, () => {
+  it("replaces a set value and keeps every other line byte for byte", () => {
+    expect(
+      replaceVars("# note\nA=old\n\nKEEP_ME=yes  \n", [["A", "new"]])
+    ).toBe("# note\nA=new\n\nKEEP_ME=yes  \n");
+  });
+
+  it("fills a placeholder and appends a key the file never held", () => {
+    expect(
+      replaceVars("A=\n", [
+        ["A", "1"],
+        ["C", "3"],
+      ])
+    ).toBe("A=1\nC=3\n");
+  });
+
+  it("rewrites every copy of a key the file holds twice", () => {
+    expect(replaceVars("A=1\nB=2\nA=3\n", [["A", "9"]])).toBe(
+      "A=9\nB=2\nA=9\n"
+    );
+  });
+
+  it("leaves a commented-out assignment alone", () => {
+    expect(replaceVars("# A=old\n", [["A", "1"]])).toBe("# A=old\nA=1\n");
+  });
+
+  it("writes a fresh file when there was none", () => {
+    expect(replaceVars(undefined, [["A", "1"]])).toBe("A=1\n");
   });
 });
 

@@ -261,14 +261,34 @@ describe(renderMergePlan, () => {
     expect(doc).toMatch(/must not be lost/i);
   });
 
-  // There is no accept path: `update` can't tell a finished merge from an unfinished one,
-  // so a re-run re-offers the same files. The document has to say that rather than
-  // promise a terminal state it can't deliver.
-  it("never promises that a re-run will record the merge", () => {
+  // `update` can't tell a finished merge from an unfinished one, so a plain re-run
+  // re-offers the same files. The document says that, and names the one command that
+  // records a finished merge (#223).
+  it("never promises that a plain re-run will record the merge", () => {
     const doc = renderMergePlan(plan([modulePlan({ files: [file()] })]));
     expect(doc).not.toMatch(/record the result/i);
     expect(doc).toContain(`the lock stays on \`${OLD_SHA}\``);
-    expect(doc).toMatch(/offer the same files again/i);
+    expect(doc).toMatch(/offer the same\s+files again/i);
+  });
+
+  it("names the --resolved command for every file to merge (#223)", () => {
+    const doc = renderMergePlan(
+      plan([
+        modulePlan({
+          files: [file()],
+          removals: [
+            file({
+              action: "delete-drift",
+              target: "apps/api/src/old file.ts",
+            }),
+          ],
+        }),
+      ])
+    );
+    expect(doc).toContain(
+      "saasaloy update \\\n  --resolved apps/api/src/lib/email.ts \\\n  --resolved 'apps/api/src/old file.ts' --yes"
+    );
+    expect(doc).not.toMatch(/Nothing, and that is deliberate/);
   });
 
   it("names each module's own base when several drifted at once", () => {
