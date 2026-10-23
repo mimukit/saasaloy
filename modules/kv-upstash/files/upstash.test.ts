@@ -561,6 +561,12 @@ describe("upstash kv provider", () => {
         providerCode: "AbortError",
       },
       { error: new Error("socket hang up"), providerCode: undefined },
+      {
+        error: new Error(
+          "internal error; reference = cq2s681jn930r5ntghpjcfu3"
+        ),
+        providerCode: undefined,
+      },
     ];
 
     for (const row of transport) {

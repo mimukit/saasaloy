@@ -409,12 +409,16 @@ function normalize(cause: unknown): KvError {
   });
 }
 
-/** Error names and Node `code` values a failed fetch carries, before any HTTP status. */
+/**
+ * Error names, Node `code` values and messages a failed fetch carries, before any HTTP
+ * status. `internal error; reference = …` is what workerd throws from `fetch` when the
+ * host does not resolve or the connection drops; it carries no code.
+ */
 const TRANSPORT_NAMES = new Set(["AbortError", "TimeoutError"]);
 const TRANSPORT_CODE =
   /^(?:ECONNRESET|ECONNREFUSED|ECONNABORTED|ENOTFOUND|EAI_AGAIN|ETIMEDOUT|EPIPE|ENETUNREACH|EHOSTUNREACH|UND_ERR_[A-Z_]+)$/;
 const TRANSPORT_MESSAGE =
-  /fetch failed|network (?:connection )?(?:error|lost)|timed? ?out|socket hang up|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN/i;
+  /fetch failed|network (?:connection )?(?:error|lost)|timed? ?out|socket hang up|ECONNRESET|ECONNREFUSED|ENOTFOUND|EAI_AGAIN|^internal error; reference = /i;
 
 /**
  * Whether `cause` is a transport failure rather than an answer from Upstash. Returns the
