@@ -1,0 +1,16 @@
+{
+  "extends": "@repo/tsconfig/base.json",
+  "compilerOptions": {
+    // `prepare.ts` runs under plain Node, which resolves the real filename rather than a
+    // bundler's guess, so every relative import here carries its `.ts`, as in
+    // `packages/env` and `packages/tooling`. The base config already permits it.
+    "types": ["node"]
+  },
+  "include": [
+    "lib",
+    "specs",
+    "global-teardown.ts",
+    "playwright.config.ts",
+    "prepare.ts"
+  ]
+}
