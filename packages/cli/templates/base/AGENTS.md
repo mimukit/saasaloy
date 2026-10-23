@@ -541,6 +541,8 @@ hook (which is also how you keep hooks out of CI).
 - **A fix while `main` holds unreleased work goes on a `hotfix-<slug>` branch** cut from the last deploy tag: `git switch -c hotfix-<slug> "$(git describe --tags --match 'deploy-*' --abbrev=0)"`. Deploy from that branch, then merge it into `main` so the next deploy keeps the fix.
 - **No long-lived production branch.** The newest deploy tag marks the commit that is live, so no branch has to.
 - **Never move or delete a deploy tag.** Each successful deploy pushes an annotated `deploy-<UTC yyyymmdd-hhmm>` tag. `git log <tag>..main` lists what the next deploy ships, and a hotfix branches from the tag.
+- **Release before you deploy.** `pnpm release` bumps the root `package.json` version, writes `CHANGELOG.md`, and pushes an annotated `v<version>` tag and a GitHub Release. The `v*` tag names the release, and the `deploy-*` tag records when it went live. A deploy from a commit that is not a release warns and still runs. Never move or delete a release tag, and never edit `version` by hand.
+- **Merge a hotfix branch into `main`, never rebase it.** A rebase rewrites the commit its release tag names.
 - **An agent deploys only after the owner says so in the same session.** It runs `pnpm deploy:production --dry-run` and reports first. The `saasaloy-deploy` skill is the procedure, and `docs/runbook-deploy.md` holds this project's own deploy steps.
 
 ## Boundaries

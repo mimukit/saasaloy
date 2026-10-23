@@ -1,9 +1,11 @@
 ---
 name: saasaloy-deploy
-description: Runbook for an AI agent that deploys this project to production with pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "put this live", "hotfix production", "roll back production", "what is live", or "what will the next deploy ship", when a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, the dry-run report, the gates and what clears each one, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
+description: Runbook for an AI agent that releases and deploys this project to production with pnpm release and pnpm deploy:production. Use when the owner says "deploy", "ship this", "release", "cut a release", "bump the version", "update the changelog", "put this live", "hotfix production", "roll back production", "what is live", or "what will the next deploy ship", when a release or a deploy stops at a gate, or when editing packages/tooling/src/deploy.config.ts or targets.ts. Covers the go-ahead rule, the release and its changelog, the dry-run report, the gates and what clears each one, --migrate, --skip-ci and --only, smoke checks on a custom domain, the hotfix branch, and the rollback.
 ---
 
 # saasaloy-deploy
+
+A production deploy is two commands, in this order. `pnpm release` gives the commit a version and a changelog entry (see "The release"). `pnpm deploy:production` then puts it live.
 
 `pnpm deploy:production` runs `packages/tooling/src/deploy-production.ts`. It does every mechanical step, in this order, and stops at the first failure:
 
@@ -12,16 +14,19 @@ description: Runbook for an AI agent that deploys this project to production wit
 3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`.
 4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`. Each runs its own `deploy` script, `env-deploy <service>`.
 5. **Smoke checks.** Each `SMOKE_CHECKS` row is requested on every custom domain of its service, three tries, 5 seconds apart.
-6. **Tag.** HEAD gets an annotated `deploy-<UTC yyyymmdd-hhmm>` tag, pushed to origin. A run that fails any step writes no tag.
+6. **Tag.** HEAD gets an annotated `deploy-<UTC yyyymmdd-hhmm>` tag, pushed to origin. Its message names the release, such as `Production deploy of c75d4e1 (v0.1.0): api, admin, web.` A run that fails any step writes no tag.
+
+The deploy prints the release on HEAD before the gates. When HEAD is not a release commit, it prints a warning that lists the commits `CHANGELOG.md` does not cover, and it still deploys. That warning is never a gate, so an urgent hotfix goes out first.
 
 This skill covers what the command cannot decide: what the owner approves, what to read, and what to do when a step fails. `docs/runbook-deploy.md` holds this project's own steps: the first deploy, the hosting and the data restore.
 
 ## The rule
 
-**Never run a real deploy without the owner's go-ahead in this session.** A go-ahead is a message from the owner, after your dry-run report, that tells you to deploy. "Deploy" in the first request is not a go-ahead for a deploy you have not reported yet. A go-ahead covers one run. When a run fails and you change anything, report again and wait again.
+**Never run `pnpm release` or a real deploy without the owner's go-ahead in this session.** A go-ahead is a message from the owner, after your dry-run report, that tells you to release, to deploy, or both. "Deploy" in the first request is not a go-ahead for a run you have not reported yet. A go-ahead covers the commands your report named, once each. When a run fails and you change anything, report again and wait again.
 
 You may run these without asking:
 
+- `pnpm release:dry`, any number of times. It prints the next version and the changelog entry, and commits, tags and pushes nothing.
 - `pnpm deploy:production --dry-run`, any number of times. It runs the env check and builds, uploads, migrates and tags nothing.
 - Read-only git: `git describe --tags --match 'deploy-*' --abbrev=0`, `git log <tag>..HEAD`, `git show <tag>`.
 - `pnpm --filter <package> exec env-deploy --run <service> -- wrangler deployments list`, for each deploy target.
@@ -31,11 +36,14 @@ Only the owner decides these, each in its own message:
 - `--migrate`. The owner reads the SQL you show and says yes.
 - `--skip-ci "<reason>"`. Use it only when GitHub Actions itself is down, never for a red run. The owner gives the reason.
 - `--only <service>`.
+- `pnpm release major`, or an exact version. Below 1.0 a breaking change bumps the minor, so `1.0.0` is the owner's choice.
+- A deploy with no release first, for an urgent hotfix.
 - `wrangler rollback`, and the restore of a database dump.
 
 Never do these:
 
-- Move, delete or re-create a deploy tag.
+- Move, delete or re-create a deploy tag or a release tag.
+- Edit a released `CHANGELOG.md` entry, or the root `package.json` `version`, by hand. `pnpm release` writes both.
 - Edit `packages/env/.env.prod`, or print a value from it.
 - Commit with `--no-verify`, stash or discard files to pass the tree gate.
 - Deploy a Worker with `pnpm --filter <package> run deploy` or `wrangler deploy`. Both skip the gates, the order and the tag. Use `pnpm deploy:production --only <service>` for one Worker.
@@ -48,19 +56,30 @@ Never do these:
    git switch main && git pull --ff-only
    pnpm install
    ```
-2. Run the dry run:
+2. Check for unpushed commits and uncommitted files:
    ```sh
+   git status -sb
+   ```
+   `pnpm release` pushes every local commit with the release commit, so a commit from another session would go to origin unreviewed. When the first line shows `ahead`, or any file is listed, stop and ask the owner what to do with them.
+3. Run both dry runs:
+   ```sh
+   pnpm release:dry
    pnpm deploy:production --dry-run
    ```
-3. When the dry run lists migration files, print each `.sql` file it names and read it.
-4. Write the report. Use the template below.
-5. Stop. Wait for the owner's go-ahead.
-6. Run the deploy the owner approved, with exactly the flags in the report:
+4. When the deploy dry run lists migration files, print each `.sql` file it names and read it.
+5. Write the report. Use the template below.
+6. Stop. Wait for the owner's go-ahead.
+7. Run the release the owner approved, then wait for CI on the release commit when the config names a workflow:
+   ```sh
+   pnpm release                      # or pnpm release minor, major, <version>
+   gh run watch
+   ```
+8. Run the deploy the owner approved, with exactly the flags in the report:
    ```sh
    pnpm deploy:production            # or with --migrate, --skip-ci "<reason>", --only <service>
    ```
-7. Check what the smoke checks do not cover, such as a sign-in flow, in a browser. Use `playwright-cli` when `command -v playwright-cli` finds it. Otherwise list the pages for the owner.
-8. Report the result. Use the template below.
+9. Check what the smoke checks do not cover, such as a sign-in flow, in a browser. Use `playwright-cli` when `command -v playwright-cli` finds it. Otherwise list the pages for the owner.
+10. Report the result. Use the template below.
 
 ## The dry-run report
 
@@ -68,6 +87,8 @@ Never do these:
 **Deploy proposal** for <branch> at <short sha>
 
 Last deploy: <tag, or "none, this deploy writes the first tag">
+
+Release: <the version and the changelog entry pnpm release:dry printed | "none: an urgent hotfix, released after">
 
 Commits this deploy ships:
 - <sha> <subject>
@@ -83,12 +104,39 @@ Deploy order: <as the dry run printed it>
 
 Smoke checks: <the URLs | the services it skipped for want of a custom domain>
 
-Command I will run: `pnpm deploy:production <flags>`
+Commands I will run: `pnpm release <increment, when one>`, then `pnpm deploy:production <flags>`
 
 Risks: <a commit that changes sign-in, payment or an authorization check; a migration that is not additive; "none seen">
 ```
 
 Leave out a section only when it is empty. Do not claim a commit is safe without reading its diff. Name the files you read.
+
+## The release
+
+`pnpm release` runs `packages/tooling/src/release.ts`, which runs release-it with options it builds from `deploy.config.ts`. It reads no `.release-it.json`, and it never asks a question. In one run it:
+
+1. Reads the Conventional Commits since the last release tag and picks the next version: a `fix` bumps the patch, a `feat` the minor, a breaking change the major. Below 1.0 a breaking change bumps the minor (`preMajor`).
+2. Writes the version into the root `package.json` and a new entry at the top of `CHANGELOG.md`.
+3. Commits both as `chore(release): v<version>`, tags the commit `v<version>`, pushes, and creates a GitHub Release.
+
+The changelog shows `feat`, `fix`, `perf` and `revert` commits. A commit of any other type shows only when it is breaking, under its own heading, such as `Miscellaneous Chores` for a breaking `chore!`. The first release covers every commit since the project start, so its entry is long.
+
+| Command | What it does |
+| --- | --- |
+| `pnpm release:dry` | Prints the next version and the changelog entry. Changes nothing. |
+| `pnpm release` | The version the commits ask for. |
+| `pnpm release patch`, `minor`, `major` | That bump, whatever the commits ask for. |
+| `pnpm release 1.2.3` | That exact version. |
+
+It refuses to start, and changes nothing, when:
+
+| The run prints | Clear it with |
+| --- | --- |
+| `Must be on branch ...` | The release takes the deploy's `branches`. `git switch main`, or release from the hotfix branch. |
+| `Working dir must be clean` | Commit or ask the owner. Never turn the check off: release-it commits with `git add . --update`, so a dirty file would go into the release commit. |
+| `No upstream configured for current branch` | `git push -u origin <branch>`. |
+| `There are no commits since the latest tag` | Nothing to release. Deploy without one, or wait for a commit. |
+| `a GitHub Release needs a token and none was found` | `gh auth login`, or set `GITHUB_TOKEN`. The owner may set `release.githubRelease: false` instead. |
 
 ## The gates and what clears each one
 
@@ -141,6 +189,7 @@ A failure after the gates:
 - `tagPrefix`: the start of every deploy tag. Change it only before the first deploy, or the engine no longer finds the older tags.
 - `ciWorkflow`: the GitHub Actions workflow file that must pass on HEAD, such as `"ci.yml"`. `undefined` turns the CI gate off.
 - `migrations`: the git pathspec for migration files.
+- `release`: what `pnpm release` writes. `tagPrefix` (default `v`; change it only before the first release), `githubRelease` (default `true`), `preMajor` (default `true`), and `changelogSections`, the `conventionalcommits` preset's `types` list. Unset keeps the preset's sections. A key left out falls back to its default.
 
 `targets.ts` holds two arrays. Keep each in the shape `export const NAME: Type[] = [...]`, because `saasaloy add` appends its rows there with a `const-array` patch, and `saasaloy remove` takes them out again.
 
@@ -169,12 +218,18 @@ Use this when live code needs a fix and `main` holds commits that must not go li
    ```sh
    git push -u origin hotfix-<slug>
    ```
-4. Wait for CI on the branch when the config names a workflow. Then follow "Procedure" from step 2 on this branch.
-5. After the deploy, ask the owner to merge the fix into `main`, so the next deploy keeps it:
+4. Wait for CI on the branch when the config names a workflow. Then follow "Procedure" from step 2 on this branch. `pnpm release` on the branch makes a patch release such as `v0.3.1`. When the fix cannot wait for the release, the owner may deploy first and release after.
+5. After the deploy, ask the owner to merge the fix into `main`, so the next deploy keeps it. Merge, never rebase: a rebase rewrites the commit the release tag names.
    ```sh
-   git switch main && git merge hotfix-<slug> && git push
+   git switch main && git merge hotfix-<slug>
+   ```
+   When `main` has released since the hotfix branched, the merge conflicts in `CHANGELOG.md` and in the root `package.json` `version`. Keep both changelog entries, newest version first, and keep the higher version. Then commit the merge and push:
+   ```sh
+   git push
    git branch -d hotfix-<slug> && git push origin --delete hotfix-<slug>
    ```
+
+A release from a hotfix branch has not run on a real project yet. Read its `pnpm release:dry` output closely.
 
 ## Roll back
 
@@ -194,7 +249,8 @@ A code rollback does not undo a migration. A data restore loses every write sinc
 ```markdown
 **Deployed** <short sha> as <tag> (<UTC time>)
 
-Ran: `pnpm deploy:production <flags>`
+Release: <v-version, with its GitHub Release link | "none", and why>
+Ran: `pnpm release <increment>`, then `pnpm deploy:production <flags>`
 Migration: <none | the dump file it printed>
 Smoke checks: <pass | skipped for <services>, no custom domain>
 Browser checks: <each page and its result | "for the owner", with the list>
@@ -212,3 +268,13 @@ When the run failed, report the step that failed, the error lines, what is live 
 4. Run `saasaloy doctor`. Its Deploy warnings name a `turbo.json` that still has `db:migrate:prod`, and each deploying workspace with no `DEPLOY_TARGETS` row. Each warning prints its fix.
 5. Add a `custom_domain` route to each Worker that has a production host, so its smoke checks run.
 6. Copy `docs/runbook-deploy.md` from a new project if you want the runbook. `saasaloy update` does not create seed files.
+
+## A project made before the release step
+
+`saasaloy update` adds `packages/tooling/src/release.ts` and the two release-it pins in `packages/tooling/package.json`. Finish by hand:
+
+1. Merge the root `package.json` scripts: `release` is `node packages/tooling/src/release.ts`, and `release:dry` is `node packages/tooling/src/release.ts --dry-run`. `saasaloy doctor` warns while they are missing.
+2. Delete an older `.release-it.json`, and any `release-it` or `@release-it/conventional-changelog` in the root `package.json`. `release.ts` reads neither. Move a changelog choice into the `release` block of `deploy.config.ts`.
+3. Keep `CHANGELOG.md` and the `v*` tags. The next release reads the newest tag and adds its entry above the old ones.
+
+The root `package.json` `version` belongs to the project. `saasaloy update` compares the file as if it held the template's version and keeps yours when it writes, so a release alone never puts the file in a merge plan.
