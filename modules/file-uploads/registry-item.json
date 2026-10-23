@@ -3,21 +3,40 @@
   "name": "file-uploads",
   "type": "saasaloy:feature",
   "requires": {
-    "saasaloy": ">=0.5"
+    "saasaloy": ">=0.6.0"
   },
   "dependsOn": ["api", "auth", "admin", "database", "storage", "validators"],
   "dependencies": [],
   "envVars": {
-    "STORAGE_PUBLIC_URL": "Origin a public object is served from \u2014 an R2 custom domain in production (https://files.example.com), or this api's own origin in dev. The object key is appended to it verbatim, so it holds an origin and never a path. Leave it unset and `POST /files/uploads` refuses `visibility: \"public\"` with a message naming this variable; nothing falls back to private.",
+    "STORAGE_PUBLIC_URL": "Origin a public object is served from — an R2 custom domain in production (https://files.example.com), or this api's own origin in dev. The object key is appended to it verbatim, so it holds an origin and never a path. Leave it unset and `POST /files/uploads` refuses `visibility: \"public\"` with a message naming this variable; nothing falls back to private.",
     "STORAGE_IMAGE_TRANSFORMS": "Set to `true` when Cloudflare image transformations are enabled on the zone serving STORAGE_PUBLIC_URL. Default off, because the `/cdn-cgi/image/` prefix 404s on a zone that has not turned them on. With it off `publicImageUrl` returns the plain public URL and ignores its options, so every image still renders.",
     "STORAGE_PURGE_AFTER_DAYS": "Days a soft-deleted row is kept before the sweep drops it. Defaults to 30. Read only by the sweep job, so it does nothing in a project without the `queue` capability. A value that is not a positive whole number throws on the first tick."
   },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": [
+    "STORAGE_PUBLIC_URL",
+    "STORAGE_IMAGE_TRANSFORMS",
+    "STORAGE_PURGE_AFTER_DAYS"
+  ],
   "removeWarnings": [
     "The deployed storage_objects table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
     "The objects themselves survive it too. They have no lifecycle rule, so every key under t/<tenantId>/uploads/ and t/<tenantId>/public-uploads/ stays in the bucket until you delete it with `wrangler r2 object delete`.",
     "A public object's URL keeps working for as long as the bytes are there. Removing this module removes the record, not the access."
   ],
   "patches": [
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "fileUploadsEnv",
+      "import": {
+        "name": "fileUploadsEnv",
+        "from": "@repo/file-uploads/env-preset"
+      }
+    },
     {
       "file": "apps/api/src/index.ts",
       "kind": "chained-route",
@@ -94,6 +113,10 @@
       "target": "@db/repositories/objects.ts"
     },
     {
+      "path": "files/db/seed/storage-objects.ts",
+      "target": "@db/seed/slices/storage-objects.ts"
+    },
+    {
       "path": "files/validators/file-uploads.ts",
       "target": "@validators/file-uploads.ts"
     },
@@ -118,24 +141,28 @@
       },
       "files": [
         {
-          "path": "files/pkg/package.json",
+          "path": "files/package.json",
           "target": "package.json"
         },
         {
-          "path": "files/pkg/tsconfig.json",
+          "path": "files/tsconfig.json",
           "target": "tsconfig.json"
         },
         {
-          "path": "files/pkg/src/index.ts",
+          "path": "files/src/index.ts",
           "target": "src/index.ts"
         },
         {
-          "path": "files/pkg/src/sweep.ts",
+          "path": "files/src/sweep.ts",
           "target": "src/sweep.ts"
         },
         {
-          "path": "files/pkg/src/job.ts",
+          "path": "files/src/job.ts",
           "target": "src/job.ts"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
         }
       ]
     }

@@ -3,13 +3,16 @@
   "private": true,
   "type": "module",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./env-preset": "./src/env-preset.ts"
   },
   "scripts": {
     "clean": "rimraf -g \"*.tsbuildinfo\"",
     "typecheck": "tsc --noEmit"
   },
-  "dependencies": {},
+  "dependencies": {
+    "@repo/env": "workspace:*"
+  },
   "devDependencies": {
     "@repo/tsconfig": "workspace:*",
     "rimraf": "6.1.3",
