@@ -22,6 +22,37 @@ export interface DeployConfig {
    * last deploy tag needs `--migrate`. Default: `packages/db/migrations/*.sql`.
    */
   migrations?: string;
+  /** What `pnpm release` writes. Every key falls back to a default. */
+  release?: ReleaseConfig;
+}
+
+/** The release step that names each deploy. */
+export interface ReleaseConfig {
+  /** The prefix of every release tag, so `v` gives `v0.1.0`. Default: `v`. */
+  tagPrefix?: string;
+  /**
+   * Create a GitHub Release for each version. It needs `GITHUB_TOKEN` or a signed-in
+   * `gh`. Default: `true`.
+   */
+  githubRelease?: boolean;
+  /**
+   * Below 1.0, a breaking change bumps the minor, so `1.0.0` is a release you choose
+   * with `pnpm release major`. Default: `true`.
+   */
+  preMajor?: boolean;
+  /**
+   * The changelog sections, in the `conventionalcommits` preset's `types` shape. Unset
+   * keeps the preset's own list: `feat`, `fix`, `perf` and `revert` show, the rest hide.
+   * A breaking commit shows whatever its type.
+   */
+  changelogSections?: ChangelogSection[];
+}
+
+/** One commit type and the changelog heading it goes under. */
+export interface ChangelogSection {
+  type: string;
+  section: string;
+  hidden?: boolean;
 }
 
 /** One Worker the deploy uploads, and where it goes in the order. */
