@@ -24,13 +24,14 @@ import { Hono } from "hono";
 // `@repo/file-uploads` at load, and this route file is what puts it on the Worker's import
 // graph. Without the line the daily job throws rather than silently sweeping nothing.
 import "../lib/storage-sweep";
+import { apiEnv } from "../env";
 import {
   hasPublicUrl,
   imageTransformsEnabled,
   PRIVATE_SCOPE,
   PUBLIC_SCOPE,
   publicUrl,
-  resolveTenant,
+  resolveScope,
 } from "../lib/file-uploads";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
@@ -47,10 +48,12 @@ import type { FileUploadsEnv } from "../lib/file-uploads";
 //
 // Two rules run through every authenticated route, and they are what the feature promises:
 //
-//   **Every query goes through `@repo/db/repositories/objects`.** That file takes a tenant
-//   id on every call and filters on it. There is no `forTenant` wrapper here, because
-//   `file-uploads` does not depend on `multitenant`, so the repository being the only read
-//   path is the whole tenant boundary. A raw `db.select()` in this file would remove it.
+//   **Every query goes through `@repo/db/repositories/objects`.** That file takes an
+//   `ObjectScope` on every call and filters on it: the active organization, or, with none,
+//   the session user as owner under the shared `default` tenant (`resolveScope`). There is
+//   no `forTenant` wrapper here, because `file-uploads` does not depend on `multitenant`,
+//   so the repository being the only read path is the whole boundary. A raw `db.select()`
+//   in this file would remove it.
 //
 //   **The size cap is enforced twice, and the second time is the one that counts.**
 //   `POST /uploads` refuses a declared size over the cap, but a presigned PUT carries no
@@ -92,23 +95,24 @@ export const files = new Hono<{ Bindings: Bindings }>()
   .get("/", validateList, (c) =>
     withAuthScope(c, async () => {
       const session = await requireSession(c);
-      const tenantId = resolveTenant(session);
+      const scope = resolveScope(session);
+      const settings = apiEnv(c.env);
       const { cursor, limit } = c.req.valid("query");
 
       const page = await withDb(c, (db) =>
-        listObjects(db, tenantId, { limit, ...(cursor ? { cursor } : {}) })
+        listObjects(db, scope, { limit, ...(cursor ? { cursor } : {}) })
       );
 
       return c.json(
         {
-          objects: page.rows.map((row) => toPayload(c.env, row)),
+          objects: page.rows.map((row) => toPayload(settings, row)),
           // Two settings the screen cannot read for itself: it runs in a browser and
           // these live in the Worker environment. Sending them with the list is what lets
           // the upload form disable the public option, and say why, instead of letting a
           // submit fail.
           settings: {
-            imageTransforms: imageTransformsEnabled(c.env),
-            publicUploads: hasPublicUrl(c.env),
+            imageTransforms: imageTransformsEnabled(settings),
+            publicUploads: hasPublicUrl(settings),
           },
           ...(page.cursor === undefined ? {} : { cursor: page.cursor }),
         },
@@ -122,12 +126,12 @@ export const files = new Hono<{ Bindings: Bindings }>()
   .post("/uploads", validateUpload, (c) =>
     withAuthScope(c, async () => {
       const session = await requireSession(c);
-      const tenantId = resolveTenant(session);
+      const { tenantId } = resolveScope(session);
       const input = c.req.valid("json");
 
       // `STORAGE_PUBLIC_URL` gates a public upload, not the provider. Refusing by name is
       // the point: the operator reads the message and knows exactly which variable to set.
-      if (input.visibility === "public" && !hasPublicUrl(c.env)) {
+      if (input.visibility === "public" && !hasPublicUrl(apiEnv(c.env))) {
         return c.json(
           errorBody(
             "invalid_input",
@@ -206,16 +210,16 @@ export const files = new Hono<{ Bindings: Bindings }>()
   .post("/uploads/:id/complete", (c) =>
     withAuthScope(c, async () => {
       const session = await requireSession(c);
-      const tenantId = resolveTenant(session);
+      const scope = resolveScope(session);
       const id = c.req.param("id");
 
-      const row = await withDb(c, (db) => findObject(db, tenantId, id));
+      const row = await withDb(c, (db) => findObject(db, scope, id));
       if (!row) {
         return c.json(errorBody("not_found", "no such object"), 404);
       }
       if (row.status !== "pending") {
         return c.json(
-          errorBody("invalid_input", `object is already ${row.status}`),
+          errorBody("conflict", `object is already ${row.status}`),
           409
         );
       }
@@ -241,7 +245,7 @@ export const files = new Hono<{ Bindings: Bindings }>()
           // `pending` row with no object, which the sweep removes; the other order would
           // leave bytes nothing points at.
           await storage.delete(row.key);
-          await withDb(c, (db) => markRejected(db, tenantId, id));
+          await withDb(c, (db) => markRejected(db, scope, id));
           return c.json(
             errorBody(
               "rejected",
@@ -252,13 +256,13 @@ export const files = new Hono<{ Bindings: Bindings }>()
         }
 
         await withDb(c, (db) =>
-          markReady(db, tenantId, id, {
+          markReady(db, scope, id, {
             contentType: actualType,
             size: object.size,
           })
         );
         return c.json(
-          toPayload(c.env, {
+          toPayload(apiEnv(c.env), {
             ...row,
             completedAt: new Date(),
             contentType: actualType,
@@ -280,10 +284,10 @@ export const files = new Hono<{ Bindings: Bindings }>()
   .get("/:id/download", (c) =>
     withAuthScope(c, async () => {
       const session = await requireSession(c);
-      const tenantId = resolveTenant(session);
+      const scope = resolveScope(session);
 
       const row = await withDb(c, (db) =>
-        findObject(db, tenantId, c.req.param("id"))
+        findObject(db, scope, c.req.param("id"))
       );
       if (!row || row.status !== "ready") {
         return c.json(errorBody("not_found", "no such object"), 404);
@@ -321,18 +325,18 @@ export const files = new Hono<{ Bindings: Bindings }>()
   .delete("/:id", (c) =>
     withAuthScope(c, async () => {
       const session = await requireSession(c);
-      const tenantId = resolveTenant(session);
+      const scope = resolveScope(session);
       const id = c.req.param("id");
 
-      const row = await withDb(c, (db) => findObject(db, tenantId, id));
+      const row = await withDb(c, (db) => findObject(db, scope, id));
       if (!row) {
         return c.json(errorBody("not_found", "no such object"), 404);
       }
 
       try {
-        await withDb(c, (db) => markDeleting(db, tenantId, id));
+        await withDb(c, (db) => markDeleting(db, scope, id));
         await createStorage(c.env).delete(row.key);
-        await withDb(c, (db) => markDeleted(db, tenantId, id));
+        await withDb(c, (db) => markDeleted(db, scope, id));
         return c.body(null, 204);
       } catch (error) {
         return storageFailure(c, error);
@@ -403,9 +407,16 @@ function isPublicKey(key: string): boolean {
   return key.split("/")[2] === PUBLIC_SCOPE;
 }
 
-/** The row shape every route answers with. A public row carries the URL that serves it. */
+/**
+ * The row shape every route answers with. A ready public row carries the URL that serves
+ * it. A public row that is still pending, or was rejected, has no bytes behind that URL
+ * yet, so it gets none and a screen renders no broken tile for it.
+ */
 function toPayload(env: FileUploadsEnv, row: StorageObjectRow) {
-  const url = row.visibility === "public" ? publicUrl(env, row.key) : undefined;
+  const url =
+    row.visibility === "public" && row.status === "ready"
+      ? publicUrl(env, row.key)
+      : undefined;
   return {
     completedAt: row.completedAt?.toISOString() ?? null,
     contentType: row.contentType,

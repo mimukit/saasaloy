@@ -71,7 +71,9 @@ function sweepPort(): SweepPort {
     listPurgeable: (before, limit) =>
       withDb(scope, (db) => listPurgeableObjects(db, before, limit)),
     async markDeleted(row: SweepRow): Promise<void> {
-      await withDb(scope, (db) => markDeleted(db, row.tenantId, row.id));
+      await withDb(scope, (db) =>
+        markDeleted(db, { tenantId: row.tenantId }, row.id)
+      );
     },
     async purge(row: SweepRow): Promise<void> {
       await withDb(scope, (db) => purgeObject(db, row.id));

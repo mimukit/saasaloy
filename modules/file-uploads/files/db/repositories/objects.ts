@@ -8,16 +8,31 @@ import type { Db } from "../client";
 // Drizzle's query builder is neutral at call time — so this file ships once and
 // `apps/api` never branches on the driver.
 //
-// **This file is the tenant boundary.** `file-uploads` does not depend on `multitenant`,
+// **This file is the access boundary.** `file-uploads` does not depend on `multitenant`,
 // so there is no `forTenant` wrapper to make a cross-tenant read impossible. What carries
-// the guarantee instead is that every read below takes a tenant id and filters on it, and
-// that no route issues a raw query against the table. A route that builds its own
-// `db.select().from(storageObjects)` is a review failure, not a style preference.
+// the guarantee instead is that every request-path query below takes an `ObjectScope` and
+// filters on it, and that no route issues a raw query against the table. A route that
+// builds its own `db.select().from(storageObjects)` is a review failure, not a style
+// preference.
+//
+// The scope is a tenant, and an owner when there is no organization to share with. With
+// an active organization every member acts on the organization's objects. With none, the
+// tenant is the literal `default`, which every user of the project shares, so the owner
+// filter is what keeps one user's files away from the next.
 //
 // Two functions are deliberately not tenant-scoped, and both say so where they are
 // defined: `findPublicObjectByKey`, which serves an unauthenticated request that has no
 // tenant to scope by, and the three sweep queries, which are cross-tenant housekeeping
 // run by a scheduled job rather than by a request.
+
+/**
+ * Whose objects a request may see and act on. `ownerId` is set when the request has no
+ * active organization, and then only that user's rows match.
+ */
+export interface ObjectScope {
+  tenantId: string;
+  ownerId?: string;
+}
 
 /** What a row looks like coming back. Named so a route can annotate without `typeof`. */
 export type StorageObjectRow = typeof storageObjects.$inferSelect;
@@ -52,22 +67,16 @@ export function createObject(db: Db, input: NewObjectInput) {
   });
 }
 
-/** One live row, by id, inside one tenant. `undefined` when there is no such row. */
+/** One live row, by id, inside one scope. `undefined` when there is no such row. */
 export async function findObject(
   db: Db,
-  tenantId: string,
+  scope: ObjectScope,
   id: string
 ): Promise<StorageObjectRow | undefined> {
   const rows = await db
     .select()
     .from(storageObjects)
-    .where(
-      and(
-        eq(storageObjects.id, id),
-        eq(storageObjects.tenantId, tenantId),
-        isNull(storageObjects.deletedAt)
-      )
-    )
+    .where(scopedTo(scope, id))
     .limit(1);
   return rows[0];
 }
@@ -75,8 +84,9 @@ export async function findObject(
 /**
  * One live, ready, **public** row by its key.
  *
- * The one read with no tenant argument, because `GET /files/public/*` carries no session
- * and therefore has no tenant to scope by. Three filters stand in for that: the row has to
+ * The one read with no scope argument, because `GET /files/public/*` carries no session
+ * and therefore has no tenant or owner to scope by. A public object is readable by anyone
+ * who holds its key, whoever uploaded it. Three filters stand in for that: the row has to
  * be `public`, it has to be `ready`, and it has to be undeleted. The route additionally
  * refuses any key whose scope segment is not `public-uploads` before it calls this, so a
  * private key never reaches the table at all.
@@ -114,7 +124,7 @@ export interface ListObjectsResult {
 }
 
 /**
- * One tenant's live rows, newest first, one page at a time.
+ * One scope's live rows, newest first, one page at a time.
  *
  * The cursor is keyset, not an offset: it carries the last row's `createdAt` and `id`, so
  * a page never skips or repeats a row when one is uploaded mid-scroll. Both halves are
@@ -123,7 +133,7 @@ export interface ListObjectsResult {
  */
 export async function listObjects(
   db: Db,
-  tenantId: string,
+  scope: ObjectScope,
   options: ListObjectsOptions
 ): Promise<ListObjectsResult> {
   const after = decodeCursor(options.cursor);
@@ -132,7 +142,7 @@ export async function listObjects(
     .from(storageObjects)
     .where(
       and(
-        eq(storageObjects.tenantId, tenantId),
+        inScope(scope),
         isNull(storageObjects.deletedAt),
         after
           ? or(
@@ -163,7 +173,7 @@ export async function listObjects(
 /** Mark a `pending` row finished, with the size and type the real object turned out to have. */
 export function markReady(
   db: Db,
-  tenantId: string,
+  scope: ObjectScope,
   id: string,
   actual: { size: number; contentType: string }
 ) {
@@ -175,7 +185,7 @@ export function markReady(
       size: actual.size,
       status: "ready",
     })
-    .where(scopedTo(tenantId, id));
+    .where(scopedTo(scope, id));
 }
 
 /**
@@ -184,11 +194,11 @@ export function markReady(
  * The object itself is deleted by the route before this runs. The row stays, undeleted, so
  * the uploader sees why their file did not appear rather than watching it vanish.
  */
-export function markRejected(db: Db, tenantId: string, id: string) {
+export function markRejected(db: Db, scope: ObjectScope, id: string) {
   return db
     .update(storageObjects)
     .set({ completedAt: new Date(), status: "rejected" })
-    .where(scopedTo(tenantId, id));
+    .where(scopedTo(scope, id));
 }
 
 /**
@@ -197,19 +207,19 @@ export function markRejected(db: Db, tenantId: string, id: string) {
  * Written before the object delete, not after, so a Worker that dies mid-delete leaves a
  * row the sweep can finish rather than a row that still claims to have bytes behind it.
  */
-export function markDeleting(db: Db, tenantId: string, id: string) {
+export function markDeleting(db: Db, scope: ObjectScope, id: string) {
   return db
     .update(storageObjects)
     .set({ status: "deleting" })
-    .where(scopedTo(tenantId, id));
+    .where(scopedTo(scope, id));
 }
 
 /** Mark a row whose object is gone. `deletedAt` is what every read above filters on. */
-export function markDeleted(db: Db, tenantId: string, id: string) {
+export function markDeleted(db: Db, scope: ObjectScope, id: string) {
   return db
     .update(storageObjects)
     .set({ deletedAt: new Date(), status: "deleted" })
-    .where(scopedTo(tenantId, id));
+    .where(scopedTo(scope, id));
 }
 
 // The sweep's three queries. Cross-tenant on purpose: `@queue/jobs/storage-sweep.ts` runs
@@ -259,11 +269,21 @@ export function purgeObject(db: Db, id: string) {
   return db.delete(storageObjects).where(eq(storageObjects.id, id));
 }
 
-/** The write-side scope. Every update above goes through it, so none can miss the tenant. */
-function scopedTo(tenantId: string, id: string) {
+/** The tenant filter, plus the owner filter when the scope names one. */
+function inScope(scope: ObjectScope) {
+  return and(
+    eq(storageObjects.tenantId, scope.tenantId),
+    scope.ownerId === undefined
+      ? undefined
+      : eq(storageObjects.ownerId, scope.ownerId)
+  );
+}
+
+/** One live row inside a scope. Every request-path read and update by id goes through it. */
+function scopedTo(scope: ObjectScope, id: string) {
   return and(
     eq(storageObjects.id, id),
-    eq(storageObjects.tenantId, tenantId),
+    inScope(scope),
     isNull(storageObjects.deletedAt)
   );
 }
@@ -286,7 +306,7 @@ function decodeCursor(
   const at = Number(cursor.slice(0, separator));
   const id = cursor.slice(separator + 1);
   // A cursor is client-supplied text. An unreadable one falls back to the first page
-  // rather than throwing: the caller cannot forge anything with it (the tenant filter is
+  // rather than throwing: the caller cannot forge anything with it (the scope filter is
   // applied separately), so refusing buys nothing.
   if (!Number.isFinite(at) || id.length === 0) {
     return;

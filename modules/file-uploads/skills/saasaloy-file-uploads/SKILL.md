@@ -14,9 +14,9 @@ The capability can PUT an object and GET it back, and then knows nothing about i
 | File | What it owns |
 |---|---|
 | `packages/db/src/schema/file-uploads.ts` | The `storage_objects` table. One dialect variant landed; its twin is in the module. |
-| `packages/db/src/repositories/objects.ts` | Every query against that table, and the tenant boundary. |
+| `packages/db/src/repositories/objects.ts` | Every query against that table, and the access boundary. |
 | `packages/validators/src/file-uploads.ts` | The upload request and list query schemas. |
-| `apps/api/src/lib/file-uploads.ts` | `resolveTenant`, the two key scopes, `publicUrl`, `publicImageUrl`. |
+| `apps/api/src/lib/file-uploads.ts` | `resolveTenant`, `resolveScope`, the two key scopes, `publicUrl`, `publicImageUrl`. |
 | `apps/api/src/routes/files.ts` | Five authenticated routes and one deliberately unauthenticated one. |
 | `packages/ui/src/blocks/file-uploads.tsx` | The screen's markup. Presentational, as every block is. |
 | `packages/ui/src/lib/public-image.ts` | `imageUrl(url, options, enabled)`, the browser half of the image path. |
@@ -29,7 +29,7 @@ The capability can PUT an object and GET it back, and then knows nothing about i
 
 | Route | Auth | What it does |
 |---|---|---|
-| `GET /files` | session | The tenant's list, newest first, keyset-paginated. A public row carries `url`. |
+| `GET /files` | session | The scope's list, newest first, keyset-paginated. A ready public row carries `url`. |
 | `POST /files/uploads` | session | Records a `pending` row and returns an upload target. |
 | `POST /files/uploads/:id/complete` | session | Heads the real object, verifies it, marks `ready` or `rejected`. |
 | `GET /files/:id/download` | session | A signed link for a **private** object. Refuses a public id. |
@@ -46,13 +46,15 @@ The row is written first, not last, so an upload abandoned halfway leaves a `pen
 
 ## Tenant scoping
 
-Every key is `t/<tenantId>/<scope>/<id>/<filename>`, and every query filters on the tenant.
+Every key is `t/<tenantId>/<scope>/<id>/<filename>`, and every request-path query filters on an `ObjectScope`: the tenant, plus the owner when no organization is active.
 
 `resolveTenant(session)` in `apps/api/src/lib/file-uploads.ts` is the only place that knows where the tenant id comes from. It reads the session's `activeOrganizationId` — the column `auth` declares on `sessions` whether or not `multitenant` is installed — and falls back to the literal `default`. There is no import of `multitenant`, no dynamic import, and no branch on what is installed, because there is nothing to branch on: the column is always there and it is always nullable.
 
-**This is weaker than `forTenant`, on purpose.** `multitenant` wraps the query builder so a cross-tenant read cannot be written; depending on it would make organizations a precondition for uploading a file. What carries the guarantee here instead is that `packages/db/src/repositories/objects.ts` is the only read path and every function in it takes a tenant id. A route that writes its own `db.select().from(storageObjects)` removes the boundary. Treat one as a review failure, not a style preference.
+`resolveScope(session)` turns that into the query scope. With an active organization the scope is the organization, and every member lists, downloads and deletes all of its objects. With none, the tenant is `default`, which every user of the project shares, so the scope adds the session user as owner and a user acts only on the objects they uploaded. The public route takes no scope: a public object is readable by anyone who holds its key, whoever uploaded it.
 
-A project that adds `multitenant` later keeps its existing objects under `t/default/`. Nothing migrates them: a key cannot be rewritten, and any other choice orphans the bytes.
+**This is weaker than `forTenant`, on purpose.** `multitenant` wraps the query builder so a cross-tenant read cannot be written; depending on it would make organizations a precondition for uploading a file. What carries the guarantee here instead is that `packages/db/src/repositories/objects.ts` is the only read path and every request-path function in it takes an `ObjectScope`. A route that writes its own `db.select().from(storageObjects)` removes the boundary. Treat one as a review failure, not a style preference.
+
+A project that adds `multitenant` later keeps its existing objects under `t/default/`. Nothing migrates them: a key cannot be rewritten, and any other choice orphans the bytes. Each one stays reachable by its owner with no organization active.
 
 ## Public objects
 

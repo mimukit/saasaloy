@@ -7,6 +7,7 @@ import {
   imageTransformsEnabled,
   publicImageUrl,
   publicUrl,
+  resolveScope,
   resolveTenant,
 } from "./file-uploads";
 
@@ -44,6 +45,29 @@ describe("resolveTenant", () => {
         user: { id: "u1" },
       }),
       DEFAULT_TENANT
+    );
+  });
+});
+
+describe("resolveScope", () => {
+  it("scopes to the organization alone when one is active", () => {
+    assert.deepEqual(
+      resolveScope({
+        session: { id: "s1", activeOrganizationId: "org_123" },
+        user: { id: "u1" },
+      }),
+      { tenantId: "org_123" }
+    );
+  });
+
+  // With no organization every user shares `default`, so the owner is what separates them.
+  it("scopes to the session user under `default` with no organization", () => {
+    assert.deepEqual(
+      resolveScope({
+        session: { id: "s1", activeOrganizationId: null },
+        user: { id: "u1" },
+      }),
+      { ownerId: "u1", tenantId: DEFAULT_TENANT }
     );
   });
 });

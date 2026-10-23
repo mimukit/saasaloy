@@ -65,8 +65,8 @@ export interface TenantSession {
  * The tenant id this request acts for.
  *
  * The active organization under `multitenant`, and the literal `default` otherwise. This
- * is the only place in the module that knows the difference, and every key and every query
- * takes its answer.
+ * is the only place in the module that knows the difference. Every key takes its answer,
+ * and every query takes it through `resolveScope`.
  *
  * A project that adds `multitenant` later keeps its existing objects under `t/default/`,
  * where they still resolve. Nothing migrates them: a key cannot be rewritten, and any
@@ -82,6 +82,26 @@ export function resolveTenant(session: TenantSession): string {
   return typeof active === "string" && active.length > 0
     ? active
     : DEFAULT_TENANT;
+}
+
+/**
+ * Whose objects this request may see and act on: the shape of `ObjectScope` in
+ * `@repo/db/repositories/objects`, which every request-path query takes.
+ *
+ * With an active organization, the organization's: every member lists, downloads and
+ * deletes every object the organization holds. With none, the tenant is `default`, which
+ * every user of the project shares, so the scope adds the session user as owner and a user
+ * acts only on the objects they uploaded. The public route takes no scope at all: a public
+ * object is readable by anyone who holds its key.
+ */
+export function resolveScope(session: TenantSession): {
+  tenantId: string;
+  ownerId?: string;
+} {
+  const tenantId = resolveTenant(session);
+  return tenantId === DEFAULT_TENANT
+    ? { ownerId: session.user.id, tenantId }
+    : { tenantId };
 }
 
 /** True when `STORAGE_IMAGE_TRANSFORMS` says the zone can serve `/cdn-cgi/image/`. */

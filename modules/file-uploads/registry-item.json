@@ -91,6 +91,10 @@
       "target": "@api/routes/files.ts"
     },
     {
+      "path": "files/api/routes/files.vitest.ts",
+      "target": "@api/routes/files.test.ts"
+    },
+    {
       "path": "files/api/lib/file-uploads.ts",
       "target": "@api/lib/file-uploads.ts"
     },
