@@ -55,7 +55,7 @@ The default bills the signed-in user: `customerType` is `"user"`, `referenceId` 
 
 Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPlugin()` maps this list into the plugin's own shape: `providerIds.stripe.monthly` → `priceId`, `.yearly` → `annualDiscountPriceId`, `trialDays` → `freeTrial.days`.
 
-**Tier ids and names are shared; prices are not.** Both `src/plans.ts` and the base's `pricing-table` block read `config.plans.tiers.*` for a tier's `id` and `name`, so rename a tier in `packages/config/src/project.ts` and both follow. A price is still written twice — marketing copy in `content/landing.ts`, a Stripe price id here — and nothing reconciles them, so change both.
+**The landing page keeps its own copy.** The base's `pricing-table` block reads `content/landing.ts`, and nothing patches one file from the other. Change a price and change both.
 
 ## The routes
 

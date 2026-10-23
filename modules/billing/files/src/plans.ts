@@ -1,4 +1,3 @@
-import { config } from "@repo/config";
 import { definePlans } from "./define";
 
 // The project's plans, in code. This is the file you edit: add a tier, add a feature flag,
@@ -13,22 +12,20 @@ import { definePlans } from "./define";
 // `trialDays` as the free-trial length. Fill them in from your Stripe dashboard; the empty
 // strings below are placeholders and checkout refuses an empty price id.
 //
-// The tier ids and names come from `config.plans`, which the landing page's pricing table
-// reads too — so an id can no longer drift between the marketing page and the biller.
-// Prices still live in both places and nothing reconciles them: a marketing price is copy in
-// `content/landing.ts`, a charged price is a Stripe price id below.
+// The landing page's `pricing-table` block keeps its own copy in `content/landing.ts`.
+// Nothing patches one from the other, so change both when a price changes.
 export const plans = definePlans([
   {
     features: { export: false, prioritySupport: false },
-    id: config.plans.tiers.free.id,
+    id: "free",
     limits: { projects: 1, seats: 1 },
-    name: config.plans.tiers.free.name,
+    name: "Free",
   },
   {
     features: { export: true, prioritySupport: true },
-    id: config.plans.tiers.pro.id,
+    id: "pro",
     limits: { projects: -1, seats: 10 },
-    name: config.plans.tiers.pro.name,
+    name: "Pro",
     providerIds: {
       stripe: { monthly: "", yearly: "" },
     },

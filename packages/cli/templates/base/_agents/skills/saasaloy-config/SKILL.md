@@ -13,7 +13,7 @@ import { config } from "@repo/config";
 
 config.app.name;
 config.app.locale;
-config.plans.tiers.pro.id;
+config.auth.adminRole; // once `auth` is installed
 ```
 
 There is no factory, no `env` argument, no async and no I/O. The object is built once at
@@ -24,7 +24,7 @@ module load and frozen, so a bundler can inline it.
 - **`env`** owns a value the platform supplies per deployment, secret or not. A database
   URL, an API origin, a Stripe key, a provider selection.
 - **`config`** owns a value checked into the repo that is the same in every deployment. The
-  product name, the locale, a role string, a tier id.
+  product name, the locale, a role string.
 
 **The test.** Two deployments of *this* project — production and staging. If the value can
 differ between them, it is `env`. If it cannot, it is `config`. A value that differs between
@@ -33,12 +33,12 @@ two *different* projects but not between one project's environments is `config`.
 `packages/config` imports nothing, `@repo/env` included, so a section cannot read an env
 var. A value derived from both channels is derived where it is used, not in a section file.
 
-## The other split: numbers versus sentences
+## Not the landing copy
 
-A number, an id or a path lives in `packages/config`. A sentence a reader sees lives in
-`packages/ui/src/content/`. So `config.app.currencySymbol` and `config.plans.tiers.pro.id`
-are config, and "Start free trial" is content. The content files read their ids and numbers
-back from config, never the other way around.
+Everything on the landing page, prices and tier ids included, lives in
+`packages/ui/src/content/landing.ts`, and `saasaloy-landing-copy` owns it. `config` holds
+the facts more than one workspace reads: the product name, the locale, the legal paths, and
+whatever an installed module's section adds.
 
 ## The four files
 
@@ -46,7 +46,7 @@ back from config, never the other way around.
 |------|-------------|
 | `src/project.ts` | **You.** The only file here you are expected to edit. Nothing overwrites it. |
 | `src/sections.ts` | The registry. `saasaloy add` patches one line into it; do not hand-edit the array. |
-| `src/sections/<key>.ts` | The module that installed it (`app` and `plans` belong to the base template). |
+| `src/sections/<key>.ts` | The module that installed it (`app` belongs to the base template). |
 | `src/define.ts` | The base template. The composition core. |
 
 ## Changing a value

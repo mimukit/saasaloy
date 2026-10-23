@@ -125,15 +125,14 @@ split, blank-on-purpose keys, and the offline rule.
 ### The `@repo/config` Value Layer
 
 `packages/config` (`@repo/config`) owns the values this project checks into its repo and ships
-identically to every environment: the product name, the locale, the currency symbol, the legal
-paths, the plan tier ids. Read it with a plain import, from any app or package:
+identically to every environment: the product name, the locale, the legal paths, and each
+installed module's section. Read it with a plain import, from any app or package:
 
 ```ts
 import { config } from "@repo/config";
 
 config.app.name; // `siteName` in @repo/ui re-exports this
 config.app.locale; // the shared layout's <html lang>
-config.plans.tiers.pro.id;
 ```
 
 It is a frozen plain object, built once at module load. It has **zero runtime dependencies and
@@ -143,8 +142,8 @@ imports nothing**, which is what lets every app, every package and every browser
 differ between them it is an env var, secret or not. If it cannot, it is config. A database URL is
 env; the product's name is config.
 
-**Numbers and ids here, sentences in `@repo/ui/content`.** The content files read their ids and
-numbers back from config, never the other way around.
+**The landing copy is not config.** Prices, tier ids and every sentence on the page stay in
+`@repo/ui/content/landing.ts`.
 
 Four files, and only one is yours:
 
@@ -152,7 +151,7 @@ Four files, and only one is yours:
 |------|-------------|
 | `src/project.ts` | **You.** The only file here you edit. Nothing overwrites it. |
 | `src/sections.ts` | The section registry. `saasaloy add` patches one line in; don't hand-edit the array. |
-| `src/sections/<key>.ts` | The module that installed it (`app` and `plans` are the base's). |
+| `src/sections/<key>.ts` | The module that installed it (`app` is the base's). |
 | `src/define.ts` | The base template. The composition core. |
 
 The merge goes **one level below the section**: `app: { name: "..." }` replaces the name and keeps

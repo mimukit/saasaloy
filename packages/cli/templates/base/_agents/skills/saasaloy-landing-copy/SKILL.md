@@ -256,9 +256,7 @@ The brief's **Pricing** section decides this, and it has already been through
 `saasaloy-setup`'s "extracted, never invented" rule. Your job is to carry it across without
 softening it.
 
-- **Real prices** — write them. If the currency is not USD, the symbol is
-  `config.app.currencySymbol` in `packages/config/src/project.ts`; change it there and say
-  so.
+- **Real prices** — write them, and set `currencySymbol` if it is not USD.
 - **Placeholder** — leave the shipped tiers exactly as they are and say so in the draft.
 - **None yet** — offer to drop the pricing block. That is a
   [block removal](#dropping-a-block-is-its-own-confirmation), with its own confirmation.

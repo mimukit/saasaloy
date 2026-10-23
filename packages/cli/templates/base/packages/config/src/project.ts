@@ -7,7 +7,7 @@ import type { ProjectOverride } from "./sections";
 // override written here survives every update.
 //
 // What belongs here: a value your project checks into its repo and ships identically to
-// every environment — the product name, the locale, a tier's display name, a role string.
+// every environment — the product name, the locale, a role string.
 //
 // What does not: anything that differs between two deployments of this same project. An
 // API origin, a database url, a Stripe key, a provider selection. Those are `.env` values,
@@ -21,13 +21,5 @@ export const project: ProjectOverride = {
   app: {
     // name: "Ledgerly",
     // locale: "en-GB",
-    // currencySymbol: "£",
   },
-  // plans: {
-  //   tiers: {
-  //     free: { id: "free", name: "Starter" },
-  //     pro: { id: "pro", name: "Studio" },
-  //     enterprise: { id: "enterprise", name: "Enterprise" },
-  //   },
-  // },
 };

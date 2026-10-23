@@ -1,7 +1,6 @@
 import type { Composed, ConfigOverride } from "./define";
 import { defineSections } from "./define";
 import { app } from "./sections/app";
-import { plans } from "./sections/plans";
 
 // The section registry, and the one patch point in this package. `saasaloy add auth` adds
 // an import of `./sections/auth` and appends `authConfig()` to the array below; `remove`
@@ -17,7 +16,7 @@ import { plans } from "./sections/plans";
 // capability's own package. `@repo/config` is the leaf of the dependency graph: it imports
 // nothing, so that every app and every capability can import it — including the ones it
 // would otherwise have to import back.
-export const sections = defineSections({ sections: [app(), plans()] });
+export const sections = defineSections({ sections: [app()] });
 
 /** What `./project.ts` may override: any leaf of any registered section. */
 export type ProjectOverride = ConfigOverride<Composed<typeof sections>>;

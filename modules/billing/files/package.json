@@ -15,7 +15,6 @@
     "./env-preset": "./src/env-preset.ts"
   },
   "dependencies": {
-    "@repo/config": "workspace:*",
     "@repo/env": "workspace:*"
   },
   "devDependencies": {
