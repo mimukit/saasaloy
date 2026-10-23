@@ -8,7 +8,6 @@ import {
   ASTRO_CONFIG_FILE,
   checkBase,
   checkConfigValues,
-  CONFIG_PROJECT_FILE,
   checkDeploy,
   checkModule,
   checkPartialInstalls,
@@ -1039,31 +1038,22 @@ describe(readDeployState, () => {
 });
 
 // ---------------------------------------------------------------------------
-// The `config` rules (#154): the name placeholder, the placeholder site origin,
-// and the env var `config.app.name` superseded.
+// The `config` rules (#154): the placeholder site origin, and the env var
+// `config.app.name` superseded.
 // ---------------------------------------------------------------------------
 
 describe(checkConfigValues, () => {
-  it("passes a project that edited all three", () => {
+  it("passes a project that edited both", () => {
     expect(
       checkConfigValues({
-        project: 'export const project = { app: { name: "Ledgerly" } };',
         astroConfig:
           'export default defineConfig({ site: "https://ledger.ly" });',
-        envFiles: { "apps/api/.dev.vars": "BILLING_APP_URL=https://ledger.ly" },
+        envFiles: { "apps/api/.env": "BILLING_APP_URL=https://ledger.ly" },
       })
     ).toStrictEqual([]);
   });
 
-  it("reports the unsubstituted project name", () => {
-    const [found] = checkConfigValues({
-      project: 'export const project = { app: { name: "{{PROJECT_NAME}}" } };',
-    });
-    expect(found?.where).toBe("/config/app/name");
-    expect(found?.message).toContain(CONFIG_PROJECT_FILE);
-  });
-
-  it("says nothing when the project has no override file", () => {
+  it("says nothing when it has nothing to read", () => {
     expect(checkConfigValues({})).toStrictEqual([]);
   });
 
@@ -1085,18 +1075,18 @@ describe(checkConfigValues, () => {
 
   it("reports a set BILLING_APP_NAME, naming the file", () => {
     const [found] = checkConfigValues({
-      envFiles: { "apps/api/.dev.vars": 'BILLING_APP_NAME="Acme"' },
+      envFiles: { "apps/api/.env": 'BILLING_APP_NAME="Acme"' },
     });
     expect(found?.module).toBe("billing");
     expect(found?.where).toBe("/env/BILLING_APP_NAME");
-    expect(found?.message).toContain("apps/api/.dev.vars");
+    expect(found?.message).toContain("apps/api/.env");
   });
 
   it("ignores a commented or empty assignment", () => {
     expect(
       checkConfigValues({
         envFiles: {
-          "apps/api/.dev.vars": "# BILLING_APP_NAME=Acme\nBILLING_APP_NAME=\n",
+          "apps/api/.env": "# BILLING_APP_NAME=Acme\nBILLING_APP_NAME=\n",
         },
       })
     ).toStrictEqual([]);
@@ -1105,38 +1095,36 @@ describe(checkConfigValues, () => {
   it("reports one finding per file that sets it, in path order", () => {
     const found = checkConfigValues({
       envFiles: {
-        "apps/web/.env": "BILLING_APP_NAME=Acme",
-        ".env": "BILLING_APP_NAME=Acme",
+        "packages/env/.env": "BILLING_APP_NAME=Acme",
+        "apps/api/.env": "BILLING_APP_NAME=Acme",
       },
     });
     expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
-      ".env",
-      "apps/web/.env",
+      "apps/api/.env",
+      "packages/env/.env",
     ]);
   });
 });
 
 describe(readConfigState, () => {
-  it("reads the two files and every env file a project carries", async () => {
+  it("reads the Astro config, the values file and every service .env", async () => {
     const root = await mkdtemp(join(tmpdir(), "saasaloy-config-state-"));
     try {
-      await mkdir(join(root, "packages/config/src"), { recursive: true });
+      await mkdir(join(root, "packages/env"), { recursive: true });
       await mkdir(join(root, "apps/api"), { recursive: true });
-      await writeFile(
-        join(root, CONFIG_PROJECT_FILE),
-        'export const project = { app: { name: "{{PROJECT_NAME}}" } };'
-      );
+      await writeFile(join(root, "packages/env/.env"), "BILLING_APP_NAME=Acme");
+      await writeFile(join(root, "apps/api/.env"), "BILLING_APP_URL=x");
       await writeFile(
         join(root, "apps/api/.dev.vars"),
         "BILLING_APP_NAME=Acme"
       );
       const state = await readConfigState(root);
-      expect(state.project).toContain("{{PROJECT_NAME}}");
       expect(state.astroConfig).toBeUndefined();
-      expect(Object.keys(state.envFiles ?? {})).toStrictEqual([
-        "apps/api/.dev.vars",
+      expect(Object.keys(state.envFiles ?? {}).toSorted()).toStrictEqual([
+        "apps/api/.env",
+        "packages/env/.env",
       ]);
-      expect(checkConfigValues(state)).toHaveLength(2);
+      expect(checkConfigValues(state)).toHaveLength(1);
     } finally {
       await rm(root, { force: true, recursive: true });
     }

@@ -1198,42 +1198,31 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
 export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
 /** The base app's Astro config, which carries the canonical site origin. */
 export const ASTRO_CONFIG_FILE = "apps/web/astro.config.mjs";
-/** The placeholder `saasaloy init` substitutes. Left in place, it means nothing ran. */
-const PROJECT_NAME_PLACEHOLDER = "{{PROJECT_NAME}}";
 /** The origin the template ships. A deploy on it is somebody else's domain. */
 const PLACEHOLDER_SITE = "example.com";
 /** The env var `config.app.name` superseded. Read by nothing; still warned about. */
 const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
 
 export interface ConfigCheckArgs {
-  /** Source of `packages/config/src/project.ts`, or undefined when the project has none. */
-  project?: string;
   /** Source of `apps/web/astro.config.mjs`, or undefined. */
   astroConfig?: string;
-  /** Project-relative path → contents, for every `.env`/`.dev.vars` on disk. */
+  /** Project-relative path → contents, for `packages/env/.env` and every service `.env`. */
   envFiles?: Record<string, string>;
 }
 
 /**
- * Three things a scaffolded project is expected to change and nothing else checks (#154):
- * the product name, the site origin, and one env var `config` replaced.
+ * Two things nothing else checks (#154): the site origin a scaffolded project is expected
+ * to change, and one env var `config` replaced.
  *
- * All three read a file rather than the composed object, because `doctor` never executes
+ * Both read a file rather than the composed object, because `doctor` never executes
  * project code. A regex over the one line each value is written on is enough, and it stays
  * true whatever the rest of the file grows into.
+ *
+ * The product name is not checked. The base ships it as "Saasaloy" on purpose, so it
+ * agrees with the shipped landing copy, and an unchanged name is not a defect.
  */
 export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   const findings: Finding[] = [];
-
-  if (args.project?.includes(PROJECT_NAME_PLACEHOLDER)) {
-    findings.push(
-      finding(
-        BASE_MODULE,
-        "/config/app/name",
-        `${CONFIG_PROJECT_FILE} still holds the ${PROJECT_NAME_PLACEHOLDER} placeholder — every page, email and title reads it. Set config.app.name to the product's real name.`
-      )
-    );
-  }
 
   if (args.astroConfig !== undefined && siteIsPlaceholder(args.astroConfig)) {
     findings.push(
@@ -1283,20 +1272,21 @@ function assignsVar(contents: string, name: string): boolean {
   return false;
 }
 
-/** Every `.env` and `.dev.vars` a project may carry, read off disk. */
+/**
+ * Every `.env` a project carries, read off disk: the values file `saasaloy env` writes,
+ * then each service's own copy that `pnpm env:setup` writes from it (ADR 0040). A leftover
+ * `.dev.vars` is `checkEnv`'s finding, not this one's.
+ */
 async function readEnvFiles(root: string): Promise<Record<string, string>> {
   const out: Record<string, string> = {};
-  const dirs = ["."];
+  const targets = ["packages/env/.env"];
   for (const app of await readDirNames(join(root, "apps"))) {
-    dirs.push(posix.join("apps", app));
+    targets.push(posix.join("apps", app, ".env"));
   }
-  for (const dir of dirs) {
-    for (const name of [".env", ".dev.vars"]) {
-      const target = posix.join(dir, name).replace(/^\.\//, "");
-      const contents = await readIfPresent(resolveWithinRoot(root, target));
-      if (contents !== undefined) {
-        out[target] = contents;
-      }
+  for (const target of targets) {
+    const contents = await readIfPresent(resolveWithinRoot(root, target));
+    if (contents !== undefined) {
+      out[target] = contents;
     }
   }
   return out;
@@ -1305,7 +1295,6 @@ async function readEnvFiles(root: string): Promise<Record<string, string>> {
 /** Read what `checkConfigValues` needs off a project on disk. */
 export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
   return {
-    project: await readIfPresent(resolveWithinRoot(root, CONFIG_PROJECT_FILE)),
     astroConfig: await readIfPresent(
       resolveWithinRoot(root, ASTRO_CONFIG_FILE)
     ),
