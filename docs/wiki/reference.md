@@ -15,6 +15,7 @@ saasaloy <command> [options]
 | `init` | scaffold a new Saasaloy project (base: Astro landing + ui + config) |
 | `add` | apply a module into the current project (resolves `dependsOn`) |
 | `env` | fill in the environment variables the installed modules declare (`--check` gates a deploy) |
+| `testing` | print the project's testing mode, or set it to `off`, `tests-after` or `tdd` |
 | `outdated` | report the base template and each installed module, current vs latest (`--check` gates CI) |
 | `update` | re-apply the base template and modules at a newer version, with a merge plan for anything you edited |
 | `remove` | undo a module's applied files via the manifest (offline) |
@@ -28,7 +29,7 @@ and exits 0 when there is no terminal to answer it — a pipe, or CI.
 `saasaloy --version`, `-v` and `version` print the installed version.
 Every command also answers its own `--help` with its usage and flags.
 
-`add`, `env`, `outdated`, `update` and `remove` are run from inside a project: they find the project root by
+`add`, `env`, `testing`, `outdated`, `update` and `remove` are run from inside a project: they find the project root by
 walking up from your working directory looking for `saasaloy.json`. `list` marks what the
 current project has installed when it is run inside one, and works anywhere.
 
@@ -49,7 +50,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--no-install] [--no-git]
+saasaloy init [<name>] [--force] [--no-install] [--no-git] [--testing=<off|tests-after|tdd>]
 ```
 
 `<name>` may be a bare name (`my-app`), `.` for the current directory, or a path
@@ -61,6 +62,9 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | `--force` | scaffold into a directory that already has files in it. Without it, a non-empty target cancels with exit 2. A `.git` directory alone does not count as non-empty. |
 | `--no-install` | skip the "Install dependencies now?" prompt and never run `pnpm install`. |
 | `--no-git` | do not run `git init` in the new project. |
+| `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
+
+`init` always writes `testing.mode` into `saasaloy.json`, and fills the testing block in the root `AGENTS.md` for that mode. With no `--testing` flag, an attended run (a terminal on stdin and stdout) asks once, and a run with no terminal writes `off`. `off` is the opt-in default, not a guess.
 
 `init` runs `git init` in the scaffolded project before the install, because husky's
 `prepare` script installs its hooks during `pnpm install` and needs a repository to install
@@ -152,6 +156,10 @@ prints which source it chose. Because that choice is made at install time, switc
 later means removing and re-adding those modules too. See ADR 0026's 2026-08-31 amendment
 and [ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md).
 
+An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `when`, which decides whether it ships at all. `{ "testing": true }` ships it only while the project's testing mode is `tests-after` or `tdd`, and every test file a module ships carries it. `{ "installed": ["e2e"] }` ships it only while every named module is installed, which is how a feature module ships its Playwright journey spec beside `e2e`. Both keys together mean both. `add` checks `when` before `onlyWith`, and a target whose every entry `when` drops is skipped rather than refused. `when` decides the first write only: once a gated file or patch is in the manifest it stays managed, and `update` keeps it current in every mode. The manifest records the `when` beside the entry.
+
+Two more descriptor fields belong to testing. `untested` on a file entry is a one-line reason the file ships with no test beside it, and the test guards print it instead of failing. `enablesTesting: true` marks a module whose whole point is tests: adding it to a project whose mode is `off` sets `tests-after` once the apply lands, prints one line saying so, and backfills. It leaves `tdd` alone, and `remove` never changes the mode ([ADR 0054](../adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
+
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
 ## `saasaloy env`
@@ -175,6 +183,22 @@ Before it asks for a single secret, `env` proves every target file is gitignored
 `env` never writes to a live account. It prints the production commands under a **Production secrets** note, one `wrangler secret put <NAME>` per non-`PUBLIC_` variable grouped by workspace, closing with "Printed, never run — copy these when you deploy." The note prints on every run, `--check` included.
 
 Exit codes: 0 when every declared variable is set, when nothing declares one ("No module declares an environment variable."), or when the run filled the blanks in ("Environment filled in."). 2 when a target is tracked, when you cancel a prompt ("Cancelled — nothing written."), and when variables are still unset under `--check` or with no terminal, which reads "N variables still unset — run `saasaloy env` to fill them in." A session with no terminal takes the same path `--check` does, so the command never hangs on a prompt in CI.
+
+## `saasaloy testing`
+
+```text
+saasaloy testing [off|tests-after|tdd]
+```
+
+With no argument, prints the project's mode as a bare word on stdout (`off`), so a script can read it. A project whose `saasaloy.json` has no `testing` key reads as `off`.
+
+With a mode, saves it to `saasaloy.json` under `testing.mode` and rewrites the testing block in the root `AGENTS.md`, the text between `<!-- saasaloy:testing -->` and `<!-- /saasaloy:testing -->`. Nothing outside the markers changes. The new `AGENTS.md` hash is recorded only when the file was clean, so an edited file still reads as edited to `update`. When the markers are gone, the mode is still saved, and the command warns with the file name and exits 0.
+
+Turning a mode on (`tests-after` or `tdd`) **backfills**: it writes every entry of the installed modules whose `when` is now true and whose target is untracked, reading each module at the SHA in `saasaloy-lock.json`. The collision, ownership and merge rules of `add` apply unchanged, and running the same mode again recovers a partial backfill. `off` deletes nothing: a test file already written stays, and stays managed.
+
+The `saasaloy-testing` skill, which every project ships in `.agents/skills/`, tells an agent what each mode asks and which test each kind of change needs ([ADR 0053](../adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
+
+Exit codes: 0 when the mode was printed or saved, 2 for an unknown mode or an extra argument.
 
 ## `saasaloy outdated`
 
@@ -223,6 +247,8 @@ Before it writes anything, `update` copies every file the plan will touch — pl
 `.saasaloy/backups/<timestamp>/`, and prints the path. `saasaloy update --abort` puts that
 copy back, including deleting the files the run created. The directory is gitignored.
 
+A module run also backfills: each installed module's entries whose `when` is now true and whose target is untracked are written at the locked SHA, after the dirty-tree and confirmation checks. `--dry-run` and `--diff` only list them, and `update base` reads no module, so it backfills nothing. A project with no `testing` key and a module-owned `*.test.ts` in its manifest gets one line suggesting `saasaloy testing tests-after`.
+
 Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and
 left files waiting on a merge, 2 for a refusal, 1 for a failure.
 
@@ -242,6 +268,8 @@ positionals are rejected with exit 2.
 | `--diff` | print the plan plus a deletion diff per file and a reversal diff per reversible patch, and stop. Nothing is removed. |
 | `--yes`, `-y` | skip every prompt, including the per-file drift confirmation. Drifted files then survive on disk, untracked. |
 | `--force` | remove the module even though other installed modules depend on it. |
+
+`remove X` also takes every file and patch another module wrote under a `when.installed` that names X, such as a journey spec gated on `e2e`. The plan line names the owner, as in `delete  packages/e2e/specs/auth-sign-in.spec.ts (auth, ships only with e2e)`. The owner stays installed, and a drifted file is kept untracked, as with the module's own files.
 
 See [Remove a module](how-to/remove-a-module.md), and read
 [Known limitations](#known-limitations) before assuming `remove` undoes `add`.
