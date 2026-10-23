@@ -98,7 +98,9 @@ describe(defineConfig, () => {
     expect(() =>
       defineConfig({
         sections: defineSections({ sections: [app()] }),
-        // Only reachable by hand-editing: `ProjectOverride` rejects this at typecheck.
+        // Only reachable by hand-editing: `ProjectOverride` rejects this at typecheck, so
+        // the cast is the only way to reach the runtime guard.
+        // oxlint-disable-next-line typescript/no-unsafe-type-assertion
         overrides: { billing: { appName: "Acme" } } as never,
       })
     ).toThrow(/overrides the section "billing"/);
