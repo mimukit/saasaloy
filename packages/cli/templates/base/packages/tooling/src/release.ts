@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { execFileSync } from "node:child_process";
+import { readFileSync } from "node:fs";
 import { deployConfig } from "./deploy.config.ts";
 import { resolveConfig } from "./deploy-production.ts";
 import type { ResolvedConfig } from "./deploy-production.ts";
@@ -48,12 +49,55 @@ export function parseReleaseArgs(argv: string[]): ReleaseArgs {
   return args;
 }
 
+/** One parsed commit, as the changelog plugin hands it to `whatBump`. */
+export interface BumpCommit {
+  type?: string | null | undefined;
+  notes: readonly unknown[];
+}
+
+/** `level` 1 is a minor bump and 2 a patch, in conventional-recommended-bump's terms. */
+export interface Bump {
+  level: 1 | 2;
+  reason: string;
+}
+
+const PATCH_TYPES = new Set(["fix", "perf", "revert"]);
+
+/**
+ * The bump below 1.0 (`preMajor`): a breaking change or a `feat` bumps the minor, and a
+ * `fix`, `perf` or `revert` bumps the patch. The preset's own `preMajor` flag shifts every
+ * bump down one level, which would turn the first `feat` into `0.0.1`, so the wrapper
+ * decides the level itself.
+ */
+export function preMajorBump(commits: readonly BumpCommit[]): Bump | null {
+  const breaking = commits.filter((commit) => commit.notes.length > 0).length;
+  const features = commits.filter((commit) => commit.type === "feat").length;
+  if (breaking > 0 || features > 0) {
+    return {
+      level: 1,
+      reason: `Below 1.0: ${breaking} breaking change(s) and ${features} feature(s) bump the minor.`,
+    };
+  }
+  if (commits.some((commit) => PATCH_TYPES.has(commit.type ?? ""))) {
+    return { level: 2, reason: "Below 1.0: fixes bump the patch." };
+  }
+  // oxlint-disable-next-line unicorn/no-null -- the plugin reads null as "no bump"
+  return null;
+}
+
+/** Whether `version` is below 1.0, where `preMajor` decides the bump. */
+export function belowOne(version?: string): boolean {
+  return (version ?? "0.0.0").startsWith("0.");
+}
+
 /** The options release-it runs with. `config: false` keeps any config file out of it. */
 export function releaseItOptions(
   config: ResolvedConfig,
-  args: ReleaseArgs
+  args: ReleaseArgs,
+  version?: string
 ): Record<string, unknown> {
   const { release } = config;
+  const ownBump = release.preMajor && belowOne(version);
   const tag = `${release.tagPrefix}\${version}`;
   return {
     config: false,
@@ -81,11 +125,11 @@ export function releaseItOptions(
       "@release-it/conventional-changelog": {
         preset: {
           name: "conventionalcommits",
-          preMajor: release.preMajor,
           ...(release.changelogSections === undefined
             ? {}
             : { types: release.changelogSections }),
         },
+        ...(ownBump ? { whatBump: preMajorBump } : {}),
         infile: "CHANGELOG.md",
         header: "# Changelog",
       },
@@ -130,6 +174,12 @@ function readGhToken(): string | undefined {
   }
 }
 
+type Release = (options: Record<string, unknown>) => Promise<unknown>;
+
+function isRelease(value: unknown): value is Release {
+  return typeof value === "function";
+}
+
 async function main(): Promise<void> {
   const args = parseReleaseArgs(process.argv.slice(2));
   const config = resolveConfig(deployConfig);
@@ -147,9 +197,23 @@ async function main(): Promise<void> {
       encoding: "utf-8",
     }).trim()
   );
+  const manifest: unknown = JSON.parse(readFileSync("package.json", "utf-8"));
+  const version =
+    typeof manifest === "object" &&
+    manifest !== null &&
+    "version" in manifest &&
+    typeof manifest.version === "string"
+      ? manifest.version
+      : undefined;
   // Loaded here, not at the top, so a test of the functions above loads no release-it.
-  const { default: release } = await import("release-it");
-  await release(releaseItOptions(config, args));
+  // Its type file declares no default export, so the guard below gives the call a type.
+  const loaded: { default?: unknown } = await import("release-it");
+  if (!isRelease(loaded.default)) {
+    throw new Error(
+      "release-it has no default export. Run pnpm install, then pnpm release again."
+    );
+  }
+  await loaded.default(releaseItOptions(config, args, version));
 }
 
 if (import.meta.main) {

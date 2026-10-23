@@ -1,8 +1,10 @@
 import { describe, expect, it } from "vitest";
 import { resolveConfig } from "./deploy-production.ts";
 import {
+  belowOne,
   findToken,
   parseReleaseArgs,
+  preMajorBump,
   releaseItOptions,
   tokenProblem,
 } from "./release.ts";
@@ -82,14 +84,31 @@ describe(releaseItOptions, () => {
     });
   });
 
-  it("writes CHANGELOG.md with the conventionalcommits preset and preMajor", () => {
-    expect(releaseItOptions(config, { dryRun: false }).plugins).toStrictEqual({
+  it("writes CHANGELOG.md with the conventionalcommits preset, and its own bump below 1.0", () => {
+    expect(
+      releaseItOptions(config, { dryRun: false }, "0.0.0").plugins
+    ).toStrictEqual({
       "@release-it/conventional-changelog": {
-        preset: { name: "conventionalcommits", preMajor: true },
+        preset: { name: "conventionalcommits" },
+        whatBump: preMajorBump,
         infile: "CHANGELOG.md",
         header: "# Changelog",
       },
     });
+  });
+
+  it("keeps the preset's own bump at 1.0 and above, or with preMajor off", () => {
+    const plugin = "@release-it/conventional-changelog";
+    expect(
+      releaseItOptions(config, { dryRun: false }, "1.2.0").plugins
+    ).not.toHaveProperty([plugin, "whatBump"]);
+    expect(
+      releaseItOptions(
+        resolveConfig({ release: { preMajor: false } }),
+        { dryRun: false },
+        "0.3.0"
+      ).plugins
+    ).not.toHaveProperty([plugin, "whatBump"]);
   });
 
   it("passes the project's own changelog sections, prefix and choices", () => {
@@ -109,13 +128,41 @@ describe(releaseItOptions, () => {
     expect(options.github).toMatchObject({ release: false });
     expect(options.plugins).toMatchObject({
       "@release-it/conventional-changelog": {
-        preset: {
-          name: "conventionalcommits",
-          preMajor: false,
-          types: sections,
-        },
+        preset: { name: "conventionalcommits", types: sections },
       },
     });
+  });
+});
+
+describe(preMajorBump, () => {
+  it("bumps the minor for a feat, so the first release is 0.1.0", () => {
+    expect(
+      preMajorBump([
+        { type: "feat", notes: [] },
+        { type: "fix", notes: [] },
+      ])
+    ).toMatchObject({ level: 1 });
+  });
+
+  it("bumps the minor, never the major, for a breaking change", () => {
+    expect(
+      preMajorBump([{ type: "chore", notes: ["dropped x"] }])
+    ).toMatchObject({ level: 1 });
+  });
+
+  it("bumps the patch for fixes only, and nothing for chores", () => {
+    expect(preMajorBump([{ type: "perf", notes: [] }])).toMatchObject({
+      level: 2,
+    });
+    expect(preMajorBump([{ type: "chore", notes: [] }])).toBeNull();
+  });
+});
+
+describe(belowOne, () => {
+  it("is true below 1.0 and for a project with no version", () => {
+    expect(belowOne("0.3.0")).toBeTruthy();
+    expect(belowOne()).toBeTruthy();
+    expect(belowOne("1.0.0")).toBeFalsy();
   });
 });
 
