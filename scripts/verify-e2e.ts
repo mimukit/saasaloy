@@ -215,7 +215,10 @@ function main(): void {
         )
       : example
   );
-  run("pnpm", ["install"], "pnpm install", playground);
+  // `--no-frozen-lockfile`, because pnpm freezes the lockfile by default when `CI` is set. The
+  // lockfile `play:init` wrote predates the workspaces `saasaloy add` just made, such as
+  // `apps/admin`, so a frozen install refuses it.
+  run("pnpm", ["install", "--no-frozen-lockfile"], "pnpm install", playground);
   run("pnpm", ["run", "env:setup"], "env:setup", playground);
 
   // `play:reset` threw the old playground away, but not the database it made: that lives on
