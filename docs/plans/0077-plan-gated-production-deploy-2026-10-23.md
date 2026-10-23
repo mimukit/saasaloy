@@ -67,13 +67,13 @@ Each row names the grill question that settled it, and whether the owner answere
 
 ## Approach
 
-### Phase 1: decisions on record (#234)
+### Phase 1: decisions on record (#234) (built 2026-10-23)
 
 1. Grill this plan (grillkit). Record the result at the top.
 2. Write ADR 0048, "Production deploy is gated, ordered and tagged", amending ADR 0043.
 3. Add `deploy tag`, `deploy target` and `smoke check` to `CONTEXT.md`.
 
-### Phase 2: `packages/tooling` and the deploy engine (#234)
+### Phase 2: `packages/tooling` and the deploy engine (#234) (built 2026-10-23)
 
 1. Create `packages/cli/templates/base/packages/tooling/` with `package.json` (clean, typecheck, rimraf, no Vitest script), `tsconfig.json`, `src/deploy-production.ts`, `src/deploy.config.ts`, `src/targets.ts`.
 2. Port primeshopr's pure functions and tests (`parseArgs`, `ciState`, `gateProblems`, `tagName`, `tagMessage`, `smokeProblem`) to Vitest. Add `orderTargets` and `smokeUrls(service, wranglerConfig)`.
@@ -82,7 +82,7 @@ Each row names the grill question that settled it, and whether the owner answere
 5. Change the root `deploy:production` and `prepare` scripts. Add `packages/tooling/src` to `lint:types`.
 6. Remove `^db:migrate:prod` and the `db:migrate:prod` task from `turbo.json`.
 
-### Phase 3: module rows and the database commands (#234)
+### Phase 3: module rows and the database commands (#234) (built 2026-10-23)
 
 1. api, admin: append `DEPLOY_TARGETS` and `SMOKE_CHECKS` rows through `const-array` patches.
 2. database: `/health/db` route and its smoke row.
@@ -90,27 +90,27 @@ Each row names the grill question that settled it, and whether the owner answere
 4. database-d1: rename to `db:prod:migrate`, add `db:prod:dump`.
 5. `saasaloy doctor`: warn while `turbo.json` still names `db:migrate:prod`, and while a deployable workspace has no `DEPLOY_TARGETS` row.
 
-### Phase 4: generated route tree (#234)
+### Phase 4: generated route tree (#234) (built 2026-10-23)
 
 1. Set the two generator options in `modules/admin/files/vite.config.ts`.
 2. Regenerate `modules/admin/files/src/routeTree.gen.ts` in a `.dev` playground and copy it back.
 3. Add `**/routeTree.gen.ts` to the base `_prettierignore` and to saasaloy's `.prettierignore`.
 4. Check: in `.dev`, build admin twice, then `git status --porcelain` prints nothing.
 
-### Phase 5: skill links (#234)
+### Phase 5: skill links (#234) (built 2026-10-23)
 
 1. Write `packages/tooling/src/link-skills.ts` with the same link states as `classifyLink` (create, correct, conflict).
 2. Make `init`, `add` and `update` link every `.agents/skills/` folder.
 3. Check in `.dev`: add a project skill folder, run `pnpm install`, and see its link. Clone the playground fresh, run `pnpm install`, and see every link.
 
-### Phase 6: docs and skills (#234)
+### Phase 6: docs and skills (#234) (built 2026-10-23)
 
 1. Base `AGENTS.md`: the deploy bullet in the `@repo/env` section, the new "Branches and deploys" section, the "no code at the root" rule, and the testing line for `packages/tooling`.
 2. New base skill `saasaloy-deploy`, and `docs/runbook-deploy.md` as a seed file.
 3. Update every file in finding #8 to the new flow.
 4. `packages/cli/CHANGELOG.md` entry with the D1 behaviour change and the merge steps for an existing project.
 
-### Phase 7: verification (#234)
+### Phase 7: verification (#234) (built 2026-10-23)
 
 1. `pnpm lint`, `pnpm typecheck`, `pnpm test` in saasaloy.
 2. In `.dev`: `saasaloy init`, add api, admin and database-postgres, run `pnpm deploy:production --dry-run`. Check the gate report, the order api → admin → web, and the smoke list.
