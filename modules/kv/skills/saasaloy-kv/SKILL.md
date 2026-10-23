@@ -199,7 +199,6 @@ Each `namespace_id` must be a unique positive integer **per Cloudflare account**
 
 **5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter billing with it.
 
-
 ## Setting up `kv-upstash`
 
 `saasaloy add kv-upstash` adds `@upstash/redis` to `packages/kv/package.json` and registers the provider. It writes nothing into `apps/api/wrangler.jsonc`, because an HTTP provider has no binding. Three things need a human.
@@ -207,19 +206,19 @@ Each `namespace_id` must be a unique positive integer **per Cloudflare account**
 **1. Create the database and copy its REST credentials.** Create a Redis database at <https://console.upstash.com>, open the REST API panel, and copy the URL and the **read-write** token. The read-only token cannot `SET`, `DEL`, or run the limiter's `EVAL`.
 
 ```sh
-echo 'UPSTASH_REDIS_REST_URL=https://<name>-<id>.upstash.io' >> apps/api/.dev.vars
-echo 'UPSTASH_REDIS_REST_TOKEN=<token>' >> apps/api/.dev.vars
-wrangler secret put UPSTASH_REDIS_REST_URL
-wrangler secret put UPSTASH_REDIS_REST_TOKEN
+# packages/env/.env, then pnpm env:setup writes them into apps/api/.env
+UPSTASH_REDIS_REST_URL=https://<name>-<id>.upstash.io
+UPSTASH_REDIS_REST_TOKEN=<token>
 ```
 
-The token is a secret. Never put it in `apps/api/wrangler.jsonc`; that file is committed.
+Put the production values in `packages/env/.env.prod`, and `pnpm deploy:production` ships them as Worker secrets. The token is a secret. Never put it in `apps/api/wrangler.jsonc`; that file is committed.
 
 **2. Set `KV_KEY_PREFIX`, which this provider requires.** One Redis database is one flat keyspace. Without a prefix, `list({})` scans every key in the database and hands back keys the project does not own, so an empty or unset value throws `provider_error` before any request leaves.
 
-```jsonc
-// apps/api/wrangler.jsonc
-"vars": { "KV_PROVIDER": "upstash", "KV_KEY_PREFIX": "app:" }
+```sh
+# packages/env/.env (and packages/env/.env.prod for a deploy)
+KV_PROVIDER=upstash
+KV_KEY_PREFIX=app:
 ```
 
 The provider prepends the prefix to the `SCAN` glob and to every limiter bucket, and escapes the glob characters in both halves, so a key holding a `*` or a `[` matches itself and nothing else.

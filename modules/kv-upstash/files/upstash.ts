@@ -293,8 +293,8 @@ function keyPrefix(env: KvEnv): string {
       "provider_error",
       "KV_KEY_PREFIX is empty or unset, and kv-upstash requires it. One Redis " +
         "database is one flat keyspace, so without a prefix `list` scans every key in " +
-        "it, including keys this project does not own. Set it in apps/api/.dev.vars " +
-        'and in apps/api/wrangler.jsonc under "vars" (e.g. "app:" or "staging:").'
+        "it, including keys this project does not own. Set it in packages/env/.env, " +
+        'run pnpm env:setup, and set it in packages/env/.env.prod for a deploy (e.g. "app:").'
     );
   }
   return prefix;
@@ -311,8 +311,8 @@ function requireSecret(
       "provider_error",
       `No \`${name}\` on this Worker's env, so kv-upstash cannot reach Upstash. Copy ` +
         `${where} from https://console.upstash.com, then:\n\n` +
-        `  echo "${name}=<value>" >> apps/api/.dev.vars   # local\n` +
-        `  wrangler secret put ${name}                    # deployed\n\n` +
+        `  set ${name} in packages/env/.env, run pnpm env:setup   # local\n` +
+        `  set ${name} in packages/env/.env.prod         # pnpm deploy:production\n\n` +
         "Never put the token in apps/api/wrangler.jsonc; that file is committed."
     );
   }
