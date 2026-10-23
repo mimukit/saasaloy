@@ -165,7 +165,7 @@ export async function initGitRepo(
       return { created: false };
     }
   }
-  const result = await run("git", ["init"], cwd);
+  const result = await run("git", ["init", "--initial-branch=main"], cwd);
   if (!result.ok) {
     return { created: false, message: result.message ?? "git init failed" };
   }
