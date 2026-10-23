@@ -1,6 +1,8 @@
 # Plan: A gated, ordered, tagged production deploy in the base
 
-Not grilled. Drafted: 2026-10-23
+Grilled: 2026-10-23
+
+Drafted: 2026-10-23
 
 ## Context
 
@@ -28,26 +30,37 @@ Success: a new project runs `pnpm deploy:production --dry-run` and sees every ga
 | 10 | Branch guidance | Real | Base `AGENTS.md` has no branch or hotfix text. |
 | new | CI gate needs a workflow | Real | The base ships no `.github/workflows/`. A CI gate that reads `ci.yml` fails on every new project. |
 
-## Design decisions (proposed, for the grill)
+## Design decisions (settled 2026-10-23)
 
-| Decision | Proposal |
-|----------|----------|
-| Where the flow lives | A new base workspace, `packages/tooling` (`@repo/tooling`). It holds the repo's own tooling: the deploy command and the skill linker. The engine files are managed. The project's choices sit in owned files (below). Rejected: growing `packages/env` (it owns environment values, and git, CI, smoke and tags are not values); a root `scripts/` folder (no tsconfig, no test, no lint coverage, see #7); a module (ADR 0043 puts deploy in the base, and every project deploys). |
-| Root script | `"deploy:production": "node packages/tooling/src/deploy-production.ts"`. The line never changes again, so a project never forks it. |
-| Project config | `packages/tooling/src/deploy.config.ts`, in `ownedFiles`: allowed branches (`["main", "hotfix-*"]`), tag prefix (`deploy-`), CI workflow file (`undefined` by default, which turns the CI gate off and the dry run says so), migration glob (`packages/db/migrations/*.sql`). |
-| Deploy order | `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`, owned, shaped for the `const-array` patch: `{ service, order }`. The base seeds `web` (30). The api module appends `api` (10), the admin module `admin` (20). Rejected: turbo `dependsOn` between apps (`api#deploy` fails when the api is not installed, `turbo.json` is a managed file every module would have to patch, and turbo cannot run a gate or a smoke check); an `order` field on `SERVICES` (that table describes env files, and the `deploy` row has no Worker). A deployable workspace with no `DEPLOY_TARGETS` row stops the deploy with a message that names it (ADR 0046: refuse, never guess). |
-| Smoke checks | `SMOKE_CHECKS` in the same owned file, `const-array` keyed by `id`: `{ id, service, path, status, body? }`. The host comes from the service's `wrangler.jsonc` `routes[]` entries with `custom_domain: true`, read with `readWorkerConfig`. A service with no custom domain gets no smoke check, and the run says so. Seeds: web `/` 200, web `/__saasaloy-smoke-404` 404, web `/wrangler.json` 404 (from base); api `/health` 200 with `"ok"` (api module); admin `/` 200 (admin module). Three tries, 5 s apart, as in primeshopr. |
-| Database readiness check | The core `database` module adds `GET /health/db` through a `chained-route` patch. It runs one `select 1` through the request's db client and answers `{"status":"ok"}`. It appends a smoke check row. This replaces primeshopr's "404 envelope proves Hyperdrive" check with one that says what it proves. Open: whether the route needs a rate limit. |
-| Production migration name | `db:prod:migrate` and `db:prod:dump`, the names primeshopr already uses. `database-postgres` adds both: target check, then `pg_dump --format=custom` (Docker `postgres:<major from compose.yaml>`, or `PG_DUMP=local`), then `drizzle-kit migrate`. `database-d1` renames `db:migrate:prod` to `db:prod:migrate` and adds `db:prod:dump` (`wrangler d1 export --remote`). Rejected: `db:migrate:prod` for postgres, because a project that has not merged the new `turbo.json` would then migrate production on every `turbo run deploy`, a dry run included. |
-| Postgres target check | The production database is always named `<project>_production`, never `<project>_prod` (owner decision, 2026-10-23). The check requires that name, derived from `databasePrefix` with `_dev` replaced by `_production`, as primeshopr's `productionDatabaseName` does. It also refuses the dev host from `apps/api/.env`. The skill, the runbook and every comment spell the name in full. |
-| `turbo.json` | Remove `^db:migrate:prod` from `deploy`, and the `db:migrate:prod` task. The engine runs each Worker with `pnpm --filter <pkg> run deploy`, so turbo has no deploy role left. Keep the `deploy` task with `passThroughEnv` for a project that runs `turbo run deploy` by hand. |
-| D1 behaviour change | A D1 project no longer migrates on every deploy. The migration gate names the new files and asks for `--migrate`. This amends ADR 0043, so it needs a new ADR (0048). |
-| Generated files | Admin `vite.config.ts` sets `quoteStyle: "double", semicolons: true`. The committed `routeTree.gen.ts` is regenerated from the plugin. The base `_prettierignore` and saasaloy's `.prettierignore` list `**/routeTree.gen.ts`. The engine does not restore rewritten files: a build that dirties the tree is a bug to fix, and the clean-tree gate reports it. |
-| Skill links | `link-skills` in `packages/tooling` links every folder in `.agents/skills/` into `.claude/skills/`, and never touches a path that is not its own link. The root `prepare` becomes `husky && node packages/tooling/src/link-skills.ts`, so `pnpm install` on a fresh clone creates the links. `init`, `add` and `update` use the same rule: every folder, not only descriptor skills. |
-| Root code | Base `AGENTS.md` says: no code at the repository root, put a tool in a workspace. `packages/tooling` is that workspace for repo tooling. Its tests run on Vitest through the root config, and it has a `typecheck` script. |
-| Runbook and skill | Base seed file `docs/runbook-deploy.md` (owned by the project after init) and base skill `saasaloy-deploy`. The skill carries the go-ahead rule, the dry-run report template, the gate table, the hotfix steps and the rollback. Project-specific steps (first deploy, hosting, data restore) stay in the project's copy of the runbook. |
-| Branches | Base `AGENTS.md` gets a "Branches and deploys" section: deploy from `main`, a `hotfix-<slug>` branch cut from the last deploy tag for a fix while `main` holds unreleased work, no long-lived production branch, never move or delete a deploy tag. The config's branch list enforces it. |
-| `--only` | Kept. One Worker, its smoke checks, no tag. |
+Each row names the grill question that settled it, and whether the owner answered it (asked) or took the default.
+
+| Decision | Settled |
+|----------|---------|
+| Where the flow lives | A new base workspace, `packages/tooling` (`@repo/tooling`). It holds the repo's own tooling: the deploy command and the skill linker. The engine files are managed. The project's choices sit in owned files (below). Rejected: growing `packages/env` (it owns environment values, and git, CI, smoke and tags are not values); a root `scripts/` folder (no tsconfig, no test, no lint coverage, see #7); a module (ADR 0043 puts deploy in the base, and every project deploys); `packages/deploy` (the skill linker would need another home). Q14, asked. |
+| Root script | `"deploy:production": "node packages/tooling/src/deploy-production.ts"`. The line never changes again, so a project never forks it. Q20, asked. |
+| Project config | `packages/tooling/src/deploy.config.ts`, in `ownedFiles`: allowed branches (`["main", "hotfix-*"]`), tag prefix (`deploy-`), CI workflow file (`undefined` by default, which turns the CI gate off and the dry run says so), migration glob (`packages/db/migrations/*.sql`). An owned file never changes after init, so the engine reads each key with a default and accepts an older file. Q1, defaulted. |
+| Deploy order | `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`, owned, shaped for the `const-array` patch: `{ service, order }`. The base seeds `web` (30). The api module appends `api` (10), the admin module `admin` (20). Rejected: turbo `dependsOn` between apps (`api#deploy` fails when the api is not installed, `turbo.json` is a managed file every module would have to patch, and turbo cannot run a gate or a smoke check); an `order` field on `SERVICES` (that table describes env files, and the `deploy` row has no Worker). A deployable workspace with no `DEPLOY_TARGETS` row stops the deploy with a message that names it (ADR 0046: refuse, never guess). Q2, defaulted. |
+| Smoke checks | `SMOKE_CHECKS` in the same owned file, `const-array` keyed by `id`: `{ id, service, path, status, body? }`. The host comes from the service's `wrangler.jsonc` `routes[]` entries with `custom_domain: true`, read with `readWorkerConfig`. A service with no custom domain gets no smoke check, and the run says so. Seeds: web `/` 200, web `/__saasaloy-smoke-404` 404, web `/wrangler.json` 404 (from base); api `/health` 200 with `"ok"` (api module); admin `/` 200 (admin module). Three tries, 5 s apart, as in primeshopr. Q3, defaulted. No custom domain: skip and say so, never parse the `workers.dev` URL and never add a `host` field (Q16, asked). |
+| Database readiness check | The core `database` module adds `GET /health/db` through a `chained-route` patch. It runs one `select 1` through the request's db client and answers `{"status":"ok"}`. It appends a smoke check row. This replaces primeshopr's "404 envelope proves Hyperdrive" check with one that says what it proves. It lives in a new `routes/health-db.ts` mounted at `/health/db`, so the api module's `health.ts` stays untouched (Q22, defaulted). A failure answers `503` `{ error: { code: "database_unavailable", message } }` with a fixed message, and the driver error goes only to the logger (Q23, defaulted). One route in the core module, not per driver (Q15, asked). No rate limit: `select 1` costs about the same as a 404, and the `saasaloy-database` skill names a WAF rule as the project's option (Q29, asked). |
+| Production migration name | `db:prod:migrate` and `db:prod:dump`, the names primeshopr already uses. `database-postgres` adds both: target check, then `pg_dump --format=custom` (Docker `postgres:<major from compose.yaml>`, or `PG_DUMP=local`), then `drizzle-kit migrate`. `database-d1` renames `db:migrate:prod` to `db:prod:migrate` and adds `db:prod:dump` (`wrangler d1 export --remote`). Rejected: `db:migrate:prod` for postgres, because a project that has not merged the new `turbo.json` would then migrate production on every `turbo run deploy`, a dry run included. Both commands run through `env-deploy --run deploy`, so the production values stay in memory (Q24, defaulted). No other `prod` spelling (`.env.prod`, `Environment = "prod"`, `--env prod`) is renamed. Q19, asked. |
+| Postgres target check | The production database is always named `<project>_production`, never `<project>_prod` (owner decision, 2026-10-23). The check requires that name, derived from `databasePrefix` with `_dev` replaced by `_production`, as primeshopr's `productionDatabaseName` does. It also refuses the dev host from `apps/api/.env`. The skill, the runbook and every comment spell the name in full. Q4, defaulted (owner decision before the grill). |
+| `turbo.json` | Remove `^db:migrate:prod` from `deploy`, and the `db:migrate:prod` task. The engine runs each Worker with `pnpm --filter <pkg> run deploy`, so turbo has no deploy role left. Keep the `deploy` task with `passThroughEnv` for a project that runs `turbo run deploy` by hand. Q5, defaulted. |
+| D1 behaviour change | A D1 project no longer migrates on every deploy. The migration gate names the new files and asks for `--migrate`. This amends ADR 0043, so it needs a new ADR (0048). Q18, asked. ADR 0048 covers the gated, ordered and tagged deploy, the owned config and targets, and the D1 change (Q26, defaulted). |
+| Generated files | Admin `vite.config.ts` sets `quoteStyle: "double", semicolons: true`. The committed `routeTree.gen.ts` is regenerated from the plugin. The base `_prettierignore` and saasaloy's `.prettierignore` list `**/routeTree.gen.ts`. The engine does not restore rewritten files: a build that dirties the tree is a bug to fix, and the clean-tree gate reports it. Q6, defaulted. |
+| Skill links | `link-skills` in `packages/tooling` links every folder in `.agents/skills/` into `.claude/skills/`, and never touches a path that is not its own link. The root `prepare` becomes `husky && node packages/tooling/src/link-skills.ts`, so `pnpm install` on a fresh clone creates the links. `init`, `add` and `update` use the same rule: every folder, not only descriptor skills. The `prepare` change is approved (Q20, asked). |
+| Root code | Base `AGENTS.md` says: no code at the repository root, put a tool in a workspace. `packages/tooling` is that workspace for repo tooling. Its tests run on Vitest through the root config, and it has a `typecheck` script. Q7, defaulted. |
+| Runbook and skill | Base seed file `docs/runbook-deploy.md` (owned by the project after init) and base skill `saasaloy-deploy`. The skill carries the go-ahead rule, the dry-run report template, the gate table, the hotfix steps and the rollback. Project-specific steps (first deploy, hosting, data restore) stay in the project's copy of the runbook. Q8, defaulted. |
+| Branches | Base `AGENTS.md` gets a "Branches and deploys" section: deploy from `main`, a `hotfix-<slug>` branch cut from the last deploy tag for a fix while `main` holds unreleased work, no long-lived production branch, never move or delete a deploy tag. The config's branch list enforces it. Q9, defaulted. |
+| `--only` | Kept. One Worker, its smoke checks, no tag. The tag means "this commit is live everywhere". Q10, defaulted. |
+| `--skip-ci "<reason>"` | Kept. The reason goes into the tag message. Q17, asked. |
+| First deploy, no tag yet | Every migration file counts as new, so a first deploy that has migrations needs `--migrate`. Q11, defaulted. |
+| Failed smoke check | No tag, exit 1, and the run prints `wrangler rollback` for each Worker it deployed. Q12, defaulted. |
+| Tag push fails | The tag stays local. The run prints `git push origin <tag>` and exits 1. The Workers stay live. Q13, defaulted. |
+| `doctor` checks | Both findings are warnings with the fix printed, not errors. Q25, defaulted. |
+| Files a project owns or merges | The owner approved the whole table in "Files a generated project owns..." below. Q20, asked. |
+| Test runner | Vitest through the root `vitest.config.ts` `packages/*` project. `prod.ts` tests mock `spawnSync` and need no Docker. Q27, defaulted. |
+| Attended phases | None. The plan changes no UI, and the agent runs the Phase 7 `.dev` checks. Q28, defaulted. |
+| Outward actions | Commit each phase on the issue branch, push it, and open a PR after Phase 7 passes. Tick the issue checkboxes. Nothing merges and no deploy runs. Q30, asked. |
 
 ## Approach
 
@@ -103,7 +116,7 @@ Success: a new project runs `pnpm deploy:production --dry-run` and sees every ga
 
 ## Files a generated project owns, or that `saasaloy update` puts in a merge plan
 
-These need the owner's go-ahead before implementation.
+The owner approved every row of this table in the grill (Q20, 2026-10-23).
 
 | File | Status in a project | What `update` does |
 |------|---------------------|--------------------|
@@ -133,7 +146,9 @@ These need the owner's go-ahead before implementation.
 
 ## Open questions
 
-1. `packages/tooling` as the name, or `packages/deploy` with the skill linker elsewhere.
-2. Whether `/health/db` ships in the core `database` module or per driver.
-3. The smoke host for a Worker with no custom domain. Skip (proposed), or read the `workers.dev` URL from `wrangler deploy` output.
-4. Whether `--skip-ci` stays, given the CI gate is off by default.
+All four are settled (grill, 2026-10-23).
+
+1. `packages/tooling`, holding the deploy engine and the skill linker (Q14).
+2. The core `database` module, one route for both drivers (Q15).
+3. Skip the smoke check and say so (Q16).
+4. `--skip-ci` stays, and the reason goes into the tag message (Q17).
