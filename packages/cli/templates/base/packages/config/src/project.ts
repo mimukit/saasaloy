@@ -19,7 +19,7 @@ import type { ProjectOverride } from "./sections";
 // is a `typecheck` error, which is the whole reason this file is typed.
 export const project: ProjectOverride = {
   app: {
-    name: "{{PROJECT_NAME}}",
+    // name: "Ledgerly",
     // locale: "en-GB",
     // currencySymbol: "£",
   },

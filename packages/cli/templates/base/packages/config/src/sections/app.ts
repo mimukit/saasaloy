@@ -11,8 +11,12 @@ import { defineSection } from "../define";
 /** The base's `app` section. Override any leaf of it in `../project.ts`. */
 export function app() {
   return defineSection("app", {
-    /** The product name. `siteName` in `@repo/ui` re-exports it, and emails read it. */
-    name: "Acme",
+    /**
+     * The product name. `siteName` in `@repo/ui` re-exports it, and emails read it. It
+     * ships as "Saasaloy" because the default landing page describes Saasaloy itself, so
+     * the name and the copy agree on a fresh project. Set yours in `../project.ts`.
+     */
+    name: "Saasaloy",
     /** The BCP 47 tag `<html lang>` declares. One string; translation is a separate job. */
     locale: "en",
     /** Prefixed to every price the pricing table renders. */

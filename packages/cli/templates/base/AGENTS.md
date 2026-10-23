@@ -493,7 +493,7 @@ the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: t
 inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 
 **The default copy is Saasaloy's own.** A fresh project's page describes Saasaloy, and
-`siteName` in `packages/ui/src/index.ts` defaults to `"Saasaloy"`, so the brand and the
+`config.app.name` in `packages/config/src/sections/app.ts` defaults to `"Saasaloy"`, so the brand and the
 words agree until you replace both. The two skills below replace them in one pass.
 
 **Making this project yours.** Four skills ship with the base (linked at

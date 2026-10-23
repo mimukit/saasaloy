@@ -1,12 +1,12 @@
 ---
 name: saasaloy-setup
-description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when config.app.name is still the scaffold's directory name, when another skill needs product context and no brief exists yet, and when re-running to update the brief after something changed.
+description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, and when re-running to update the brief after something changed.
 ---
 
 # saasaloy-setup — find out what this project is, once
 
-A scaffolded project knows nothing about the product it is going to become. Its name is a
-directory name, its language is English because nobody asked, and every skill that follows
+A scaffolded project knows nothing about the product it is going to become. Its name is
+`Saasaloy`, because the shipped landing page describes Saasaloy itself, its language is English because nobody asked, and every skill that follows
 has to either interview the owner again or guess.
 
 So this skill asks once and writes the answers down. The deliverable is
@@ -29,10 +29,10 @@ block.
 
 1. **Read `docs/product-brief.md`.** If it exists, someone has already been through this.
    Read it fully and jump to [Re-running](#re-running).
-2. **Read `packages/config/src/project.ts`** for the current `app.name`. `saasaloy init`
-   sets it to the directory name, so it is usually a slug like `my-saas` rather than a
-   brand. It is still the best opening guess you have, and it belongs in question 1's
-   samples.
+2. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships
+   commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When
+   it is set, it is the best opening guess you have, and it belongs in question 1's
+   samples. The project's directory name is the next best guess.
 3. **Look at git, and treat it as advice.** `git status --short` if there is a repo. A dirty
    tree or no repo at all is worth one sentence — "your changes aren't committed, so you
    can't undo this with git; every write here is previewed and confirmed anyway" — and then
@@ -223,7 +223,7 @@ Both are leaves of the `app` section in `packages/config/src/project.ts`, the on
 
 1. **`app.name`** — the brand as it appears in the header, the footer, the browser tab and
    every email. `siteName` in `@repo/ui` re-exports it, so nothing else needs editing. It
-   is not translated.
+   is not translated. It ships commented out: uncomment the line and set it.
 2. **`app.locale`** — the brief's language code. `apps/web`'s shared layout reads it as
    `<html lang>`. Set it whenever it differs from the brief, including back to `en` on a
    re-run that returns to English. Getting this wrong tells screen readers to pronounce

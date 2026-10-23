@@ -8,7 +8,7 @@ Run the first two in order. The third runs whenever you want the look changed.
 
 The setup skill interviews you once — ten questions, starting with the product's name, each with sample answers you can take, edit, or ignore — and writes the answers to `docs/product-brief.md`. That brief is the shared context every other skill reads instead of interviewing you again.
 
-It also sets the two facts that live in code rather than prose: `siteName` in `packages/ui/src/index.ts` and the page's `lang` attribute in `apps/web/src/layouts/Layout.astro`. It writes no landing copy.
+It also sets the two facts that live in code rather than prose: `app.name` and `app.locale` in `packages/config/src/project.ts`. `siteName` and the page's `lang` attribute read them. It writes no landing copy.
 
 Re-running it is how you update the brief later: it summarises what it has, asks only about what changed, and re-asks anything it recorded as weak.
 
