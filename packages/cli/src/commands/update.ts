@@ -1,14 +1,6 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
 import { basename, dirname, isAbsolute, join, resolve } from "node:path";
-import {
-  cancel,
-  confirm,
-  intro,
-  isCancel,
-  log,
-  note,
-  outro,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import {
   detectCliMismatches,
@@ -50,6 +42,7 @@ import type { Lockfile } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
+import { confirm } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   detectMissingRequirements,
@@ -1233,7 +1226,11 @@ async function confirmProceed(yes: boolean): Promise<number | undefined> {
   if (yes) {
     return undefined;
   }
-  const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
+  const proceed = await confirm({
+    answeredBy: "`--yes` to apply, or `--dry-run` to preview",
+    message: "Proceed?",
+    ...TUI_ON_STDERR,
+  });
   if (isCancel(proceed)) {
     cancel("update cancelled", TUI_ON_STDERR);
     return EXIT_FAILURE;

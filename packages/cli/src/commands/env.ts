@@ -1,14 +1,6 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, isAbsolute, resolve } from "node:path";
-import {
-  cancel,
-  intro,
-  isCancel,
-  log,
-  note,
-  outro,
-  text,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import { ENV_EXAMPLE, parseEnvExample } from "../lib/env-example.js";
 import {
@@ -20,6 +12,7 @@ import {
 } from "../lib/env-vars.js";
 import type { Declaration } from "../lib/env-vars.js";
 import {
+  EXIT_FAILURE,
   EXIT_OK,
   EXIT_REFUSED,
   exitCodeFor,
@@ -34,6 +27,7 @@ import { isPathIgnored } from "../lib/gitignore.js";
 import { loadLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
 import { findProjectRoot } from "../lib/project.js";
+import { text } from "../lib/prompts.js";
 import {
   LocalRegistrySource,
   REGISTRY_ENV,
@@ -346,6 +340,8 @@ export async function runEnv(argv: string[]): Promise<number> {
       // module author wrote the sentence that explains what the value is for, and a
       // second wording here would drift from the one in the key list.
       const answer = await text({
+        answeredBy:
+          "nothing yet: run `saasaloy env` in a terminal (`--check` lists what is missing)",
         defaultValue: entry.declaration.devValue ?? "",
         message: `${pc.cyan(entry.declaration.name)} ${pc.dim(`→ ${LOCAL_VALUES}`)}\n${entry.declaration.description}`,
         ...(entry.declaration.devValue === undefined
@@ -354,7 +350,7 @@ export async function runEnv(argv: string[]): Promise<number> {
       });
       if (isCancel(answer)) {
         cancel("Cancelled — nothing written.");
-        return EXIT_REFUSED;
+        return EXIT_FAILURE;
       }
       answers.push([entry.declaration.name, answer]);
     }

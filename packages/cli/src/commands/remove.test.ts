@@ -192,4 +192,45 @@ describe("runRemove — a ui block leaves its wire-up behind (#62)", () => {
     expect(output).toContain(BLOCK);
     expect(output).toContain("not reversed");
   });
+
+  // #223, ADR 0046. The drift and "Proceed?" confirms used to open with no TTY check, so
+  // `remove widget` with no terminal waited on stdin. It now refuses before it plans.
+  it("refuses with no terminal and no --yes, naming --yes and --dry-run, and removes nothing", async () => {
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["widget"]);
+    } finally {
+      captured.restore();
+    }
+    const output = captured.lines.join("");
+
+    expect(code).toBe(2);
+    // The upfront refusal, not the guarded "Proceed?" confirm: it comes before the plan.
+    expect(output).toContain("No terminal to confirm in");
+    expect(output).toContain("`--yes`");
+    expect(output).toContain("`--dry-run`");
+    await expect(
+      pathExists(join(project, ...BLOCK.split("/")))
+    ).resolves.toBeTruthy();
+  });
+
+  it("still previews with no terminal under --dry-run", async () => {
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["widget", "--dry-run"]);
+    } finally {
+      captured.restore();
+    }
+
+    expect(code).toBe(0);
+    await expect(
+      pathExists(join(project, ...BLOCK.split("/")))
+    ).resolves.toBeTruthy();
+  });
 });

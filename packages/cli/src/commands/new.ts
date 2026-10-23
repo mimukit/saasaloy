@@ -1,17 +1,10 @@
 import { join, relative, resolve } from "node:path";
-import {
-  cancel,
-  intro,
-  isCancel,
-  note,
-  outro,
-  select,
-  text,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import { checkTarget, resolveDoctorTarget } from "../lib/doctor.js";
 import type { Finding } from "../lib/doctor.js";
 import {
+  EXIT_FAILURE,
   EXIT_OK,
   EXIT_REFUSED,
   exitCodeFor,
@@ -30,6 +23,7 @@ import {
 } from "../lib/new-module.js";
 import type { ModuleSpec, ModuleType } from "../lib/new-module.js";
 import { findProjectRoot } from "../lib/project.js";
+import { select, text } from "../lib/prompts.js";
 import { CONFIG_FILE } from "../lib/saasaloy-config.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
@@ -60,7 +54,7 @@ export interface Options {
   name?: string;
   /** `--type <tier>`: skips the two-tier prompt, for a non-interactive run. */
   type?: string;
-  /** `--depends-on <a,b>`: skips the dependency prompt. */
+  /** `--depends-on <a,b>`: skips the dependency prompt. An empty value means none. */
   dependsOn?: string;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
@@ -68,6 +62,9 @@ export interface Options {
 
 const KNOWN_FLAGS = new Set(["--help", "-h"]);
 const VALUE_FLAGS = new Set(["--type", "--depends-on"]);
+// A flag whose empty value is an answer: `--depends-on=` says "no dependencies", which is
+// how a run with no terminal answers the prompt that defaults to none (ADR 0046).
+const EMPTY_OK = new Set(["--depends-on"]);
 const USAGE = "saasaloy new module <name> [--type <tier>] [--depends-on <a,b>]";
 const HELP: CommandHelp = {
   name: "new",
@@ -76,7 +73,7 @@ const HELP: CommandHelp = {
   flags: {
     "--type <tier>": `${MODULE_TYPES.join(" | ")} — skips the prompt`,
     "--depends-on <a,b>":
-      "comma-separated capabilities this module needs — skips the prompt",
+      "comma-separated capabilities this module needs — skips the prompt (`--depends-on=` for none)",
   },
 };
 
@@ -98,7 +95,12 @@ export function parseArgs(argv: string[]): Options {
     const flag = eq === -1 ? arg : arg.slice(0, eq);
     if (VALUE_FLAGS.has(flag)) {
       const next = eq === -1 ? argv[i + 1] : arg.slice(eq + 1);
-      if (!next || (eq === -1 && next.startsWith("-"))) {
+      const empty = next === "" && EMPTY_OK.has(flag);
+      if (
+        next === undefined ||
+        (!next && !empty) ||
+        (eq === -1 && next.startsWith("-"))
+      ) {
         unknown.push(`${flag} (missing value)`);
         continue;
       }
@@ -180,12 +182,13 @@ export async function runNew(argv: string[]): Promise<number> {
         return EXIT_REFUSED;
       }
       const answer = await text({
+        answeredBy: "`<name>`",
         message: "Module name (lowercase, digits, hyphens)",
         validate: (value) => nameProblem((value ?? "").trim()),
       });
       if (isCancel(answer)) {
         cancel("Cancelled — nothing written.");
-        return EXIT_REFUSED;
+        return EXIT_FAILURE;
       }
       name = answer.trim();
     }
@@ -219,6 +222,9 @@ export async function runNew(argv: string[]): Promise<number> {
       type = opts.type;
     } else if (isInteractive()) {
       const picked = await select({
+        answeredBy: MODULE_TYPES.map((tier) => `\`--type ${tier}\``).join(
+          " or "
+        ),
         message: "Which tier is this?",
         options: MODULE_TYPES.map((value) => ({
           hint: TYPE_HINTS[value],
@@ -228,7 +234,7 @@ export async function runNew(argv: string[]): Promise<number> {
       });
       if (isCancel(picked)) {
         cancel("Cancelled — nothing written.");
-        return EXIT_REFUSED;
+        return EXIT_FAILURE;
       }
       type = picked;
     } else {
@@ -245,15 +251,23 @@ export async function runNew(argv: string[]): Promise<number> {
       dependsOn = parseDependsOn(opts.dependsOn);
     } else if (isInteractive()) {
       const answer = await text({
+        answeredBy: "`--depends-on <a,b>`, or `--depends-on=` for none",
         defaultValue: "",
         message: `Capabilities it depends on ${pc.dim("(comma-separated, blank for none)")}`,
         placeholder: "api, database",
       });
       if (isCancel(answer)) {
         cancel("Cancelled — nothing written.");
-        return EXIT_REFUSED;
+        return EXIT_FAILURE;
       }
       dependsOn = parseDependsOn(answer);
+    } else {
+      // This used to fall through to "no dependencies" with nobody asked. A default
+      // chosen with no terminal is a guess (ADR 0046), so name the flag instead.
+      cancel(
+        "No dependencies given and no terminal to ask — pass `--depends-on <a,b>`, or `--depends-on=` for none. Nothing was written."
+      );
+      return EXIT_REFUSED;
     }
 
     const requires = requiresRange(await readVersion());

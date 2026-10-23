@@ -1,6 +1,8 @@
 import {
+  chmod,
   mkdir,
   mkdtemp,
+  readdir,
   readFile,
   readlink,
   rm,
@@ -8,7 +10,7 @@ import {
 } from "node:fs/promises";
 import { execFileSync } from "node:child_process";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { delimiter, join } from "node:path";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { BASE_MODULE, baseEntries, templateHash } from "../lib/base.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
@@ -82,6 +84,18 @@ describe("init — parseArgs", () => {
       force: false,
       noGit: false,
       noInstall: false,
+      yes: false,
+    });
+  });
+
+  it("reads --yes and its -y short form (#223)", () => {
+    expect(parseArgs(["my-app", "--yes"])).toMatchObject({
+      unknown: [],
+      yes: true,
+    });
+    expect(parseArgs(["my-app", "-y"])).toMatchObject({
+      unknown: [],
+      yes: true,
     });
   });
 
@@ -498,4 +512,92 @@ describe("initGitRepo — the nesting guard (ADR 0024)", () => {
 
 afterEach(() => {
   process.chdir(dir);
+});
+
+// #223, ADR 0046: with no terminal, init refuses and names the flag before it writes a
+// file, and `--yes` answers the install prompt. The install itself runs a fake `pnpm` put
+// first on PATH, so these stay offline and never touch the real store.
+describe("runInit — no terminal (#223)", () => {
+  const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
+  const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
+  const ORIGINAL_PATH = process.env.PATH;
+  let bin: string;
+
+  beforeAll(async () => {
+    bin = await mkdtemp(join(tmpdir(), "saasaloy-init-bin-"));
+  });
+
+  afterEach(() => {
+    process.stdin.isTTY = ORIGINAL_STDIN_TTY;
+    process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
+    process.env.PATH = ORIGINAL_PATH;
+  });
+
+  afterAll(async () => {
+    await rm(bin, { recursive: true, force: true });
+  });
+
+  function noTerminal(): void {
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+  }
+
+  // A `pnpm` that records it ran, prints what a real failure would, and exits `code`.
+  async function fakePnpm(code: number): Promise<void> {
+    await writeFile(
+      join(bin, "pnpm"),
+      `#!/bin/sh\necho ran > "$PWD/.fake-pnpm-ran"\necho "ERR_PNPM_FAKE the registry said no"\nexit ${code}\n`,
+      "utf-8"
+    );
+    await chmod(join(bin, "pnpm"), 0o755);
+    process.env.PATH = `${bin}${delimiter}${ORIGINAL_PATH ?? ""}`;
+  }
+
+  it("refuses with no name, names `<name>`, and writes nothing", async () => {
+    noTerminal();
+    const before = await readdir(dir);
+    const { code, out } = await run(["--no-install"]);
+    expect(code).toBe(2);
+    expect(out).toContain("`<name>`");
+    await expect(readdir(dir)).resolves.toStrictEqual(before);
+  });
+
+  it("refuses with neither --yes nor --no-install, naming both, before it writes", async () => {
+    noTerminal();
+    const { code, out } = await run(["undecided", "--no-git"]);
+    expect(code).toBe(2);
+    expect(out).toContain("`--yes`");
+    expect(out).toContain("`--no-install`");
+    await expect(pathExists(join(dir, "undecided"))).resolves.toBeFalsy();
+  });
+
+  it("refuses --yes with --no-install as contradictory", async () => {
+    const { code, out } = await run(["both", "--yes", "--no-install"]);
+    expect(code).toBe(2);
+    expect(out).toContain("not both");
+    await expect(pathExists(join(dir, "both"))).resolves.toBeFalsy();
+  });
+
+  it("installs under --yes with no prompt", async () => {
+    noTerminal();
+    await fakePnpm(0);
+    const { code, out } = await run(["installs", "--yes", "--no-git"]);
+    expect(code).toBe(0);
+    expect(out).toContain("Installed dependencies");
+    await expect(
+      pathExists(join(dir, "installs", ".fake-pnpm-ran"))
+    ).resolves.toBeTruthy();
+  });
+
+  it("exits 1 when pnpm install fails, prints its output, and keeps the scaffold", async () => {
+    noTerminal();
+    await fakePnpm(1);
+    const { code, out } = await run(["install-fails", "--yes", "--no-git"]);
+    expect(code).toBe(1);
+    expect(out).toContain("ERR_PNPM_FAKE the registry said no");
+    expect(out).toContain("pnpm install failed");
+    await expect(
+      pathExists(join(dir, "install-fails", "package.json"))
+    ).resolves.toBeTruthy();
+  });
 });

@@ -1,13 +1,4 @@
-import {
-  cancel,
-  confirm,
-  intro,
-  isCancel,
-  log,
-  note,
-  outro,
-  select,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import { posix } from "node:path";
 import pc from "picocolors";
 import { buildPlan, executePlan } from "../lib/applier.js";
@@ -42,6 +33,7 @@ import type { Lockfile } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
 import type { Manifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
+import { confirm, select } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   createRegistrySource,
@@ -736,6 +728,7 @@ export async function runAdd(argv: string[]): Promise<number> {
         return EXIT_OK;
       }
       const picked = await select({
+        answeredBy: "a module name",
         message: `Pick a module to add ${pc.dim(`(from ${source.label}, ${installed.size} already installed)`)}`,
         options: available.map((n) => ({ label: n, value: n })),
       });
@@ -790,6 +783,7 @@ export async function runAdd(argv: string[]): Promise<number> {
         break;
       }
       const picked = await select({
+        answeredBy: `a driver first: \`saasaloy add <${requirement.options.join(" | ")}>\``,
         message: `${pc.cyan(requirement.declaredBy)} needs one of these — pick one`,
         options: requirement.options.map((n) => ({ label: n, value: n })),
       });
@@ -910,7 +904,10 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
 
     if (!opts.yes) {
-      const proceed = await confirm({ message: "Proceed?" });
+      const proceed = await confirm({
+        answeredBy: "`--yes` to apply, or `--dry-run` to preview",
+        message: "Proceed?",
+      });
       if (isCancel(proceed)) {
         cancel("add cancelled");
         return EXIT_FAILURE;

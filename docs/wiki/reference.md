@@ -50,7 +50,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--no-install] [--no-git] [--testing=<off|tests-after|tdd>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>]
 ```
 
 `<name>` may be a bare name (`my-app`), `.` for the current directory, or a path
@@ -60,6 +60,7 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | Flag | Effect |
 |---|---|
 | `--force` | scaffold into a directory that already has files in it. Without it, a non-empty target cancels with exit 2. A `.git` directory alone does not count as non-empty. |
+| `--yes`, `-y` | answer the "Install dependencies now?" prompt with yes: run `pnpm install` with no prompt. Passing it with `--no-install` exits 2. |
 | `--no-install` | skip the "Install dependencies now?" prompt and never run `pnpm install`. |
 | `--no-git` | do not run `git init` in the new project. |
 | `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
@@ -73,6 +74,8 @@ them into. It is skipped when the target already sits inside a working tree that
 than aborting the scaffold.
 
 Like every other command, `init` rejects a flag it does not know with exit 2.
+
+With no terminal, `init` refuses with exit 2 before it writes a file: with no `<name>` it names `<name>`, and with neither `--yes` nor `--no-install` it names both. A `pnpm install` that fails prints pnpm's output and exits 1. The scaffold stays on disk, so run `pnpm install` in it once the cause is fixed.
 
 ## `saasaloy add`
 
@@ -271,6 +274,8 @@ positionals are rejected with exit 2.
 
 `remove X` also takes every file and patch another module wrote under a `when.installed` that names X, such as a journey spec gated on `e2e`. The plan line names the owner, as in `delete  packages/e2e/specs/auth-sign-in.spec.ts (auth, ships only with e2e)`. The owner stays installed, and a drifted file is kept untracked, as with the module's own files.
 
+With no terminal, a named module, and no `--yes`, `remove` refuses with exit 2 before it plans: "No terminal to confirm in — re-run with `--yes` to remove, or `--dry-run` to preview." `--dry-run` and `--diff` ask nothing, so they still run.
+
 See [Remove a module](how-to/remove-a-module.md), and read
 [Known limitations](#known-limitations) before assuming `remove` undoes `add`.
 
@@ -306,15 +311,15 @@ Scaffold a module in a registry repo. `module` is the only noun there is, and th
 | Flag | Effect |
 |---|---|
 | `--type <tier>` | `saasaloy:capability` or `saasaloy:feature`. Skips the tier prompt. A value that is neither exits 2. |
-| `--depends-on <a,b>` | comma-separated capabilities this module needs. Skips the dependency prompt. |
+| `--depends-on <a,b>` | comma-separated capabilities this module needs. Skips the dependency prompt. `--depends-on=` or `--depends-on ""` means none. |
 
-Both value flags take `--type feature` and `--type=feature`. A value flag with nothing usable after it is a usage error, not a silently empty value.
+Both value flags take `--type feature` and `--type=feature`. A value flag with nothing usable after it is a usage error, not a silently empty value. The one exception is an empty `--depends-on`, which answers "no dependencies".
 
 It writes three paths under `modules/<name>/`: `registry-item.json`, `files/.gitkeep`, and `skills/saasaloy-<name>/SKILL.md`. The descriptor declares a `requires.saasaloy` range floored at the running CLI's own minor. The name must match `^[a-z0-9][a-z0-9-]*$`, and the folder must not already exist; either problem refuses before anything is written.
 
 After the write, `new` runs the same checks `saasaloy doctor` runs, in process. Findings are reported, not refused: the run still exits 0 with "Scaffolded with N findings — fix <dir>/registry-item.json, then `saasaloy doctor <dir>`." A clean scaffold ends with "<name> is ready — put its payload in <dir>/files/ and write its runbook in <dir>/skills/."
 
-Exit 2 covers an unknown argument, an unknown noun, a bad name, an existing folder, a bad `--type`, a cancelled prompt, and a missing name or tier with no terminal to ask on. It also refuses inside a generated project, because `saasaloy.json` there means a project that installs modules rather than a registry that hosts them, and nothing is written.
+Exit 2 covers an unknown argument, an unknown noun, a bad name, an existing folder, a bad `--type`, and a missing name, tier or `--depends-on` with no terminal to ask on. A cancelled prompt exits 1. It also refuses inside a generated project, because `saasaloy.json` there means a project that installs modules rather than a registry that hosts them, and nothing is written.
 
 ## `saasaloy doctor`
 
