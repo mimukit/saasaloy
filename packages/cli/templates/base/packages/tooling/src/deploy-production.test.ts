@@ -490,6 +490,7 @@ interface FakeSetup {
   runExit?: (line: string) => number;
   answer?: (url: string) => { status: number; body: string };
   pushFails?: boolean;
+  noCommit?: boolean;
 }
 
 const WEB: Workspace = { service: "web", packageName: "@repo/web" };
@@ -505,6 +506,9 @@ function fake(setup: FakeSetup = {}): Fake {
     git(args) {
       const line = args.join(" ");
       gits.push(line);
+      if (setup.noCommit === true && line.startsWith("rev-parse")) {
+        throw new Error("fatal: ambiguous argument 'HEAD': unknown revision");
+      }
       if (line === "rev-parse --abbrev-ref HEAD") {
         return setup.branch ?? "main";
       }
@@ -595,6 +599,24 @@ describe(deployProduction, () => {
     expect(run.gits).toContain("push --quiet origin deploy-20261023-1430");
     expect(run.said.join("\n")).toMatch(/api has no custom domain/);
   });
+
+  it.each([false, true])(
+    "stops with the fix, not a raw git error, in a repository with no commit (dry run: %s)",
+    async (preview) => {
+      const run = fake({ noCommit: true, workspaces: [WEB, API] });
+      const thrown = await deployProduction(
+        { ...plain, dryRun: preview },
+        run.io,
+        project
+      ).catch((error: unknown) => error);
+
+      expect(thrown).toBeInstanceOf(Error);
+      expect(String(thrown)).toMatch(/has no commit yet/);
+      expect(String(thrown)).toMatch(/Run: git add -A && git commit/);
+      expect(String(thrown)).not.toMatch(/ambiguous argument/);
+      expect(run.runs).toStrictEqual([]);
+    }
+  );
 
   async function dryRun(): Promise<Fake> {
     const run = fake({

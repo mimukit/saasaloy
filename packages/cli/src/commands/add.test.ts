@@ -2,6 +2,7 @@ import {
   mkdir,
   mkdtemp,
   readFile,
+  readlink,
   rm,
   symlink,
   writeFile,
@@ -210,6 +211,27 @@ describe("runAdd — dependency write ordering (#98)", () => {
       await readFile(join(project, "package.json"), "utf-8")
     ) as { dependencies: Record<string, string> };
     expect(pkg.dependencies.zod).toBe("4.4.3");
+  });
+
+  it("links every .agents/skills folder, a project's own skill included (#234)", async () => {
+    await rm(join(project, "apps", "web"));
+    await mkdir(join(project, "apps", "web"), { recursive: true });
+    await mkdir(join(project, ".agents", "skills", "project-own"), {
+      recursive: true,
+    });
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runAdd(["widget", "--yes"]);
+    } finally {
+      captured.restore();
+    }
+
+    expect(code).toBe(0);
+    await expect(
+      readlink(join(project, ".claude", "skills", "project-own"))
+    ).resolves.toBe(join("..", "..", ".agents", "skills", "project-own"));
+    expect(captured.lines.join("")).toContain(".claude/skills/project-own");
   });
 });
 

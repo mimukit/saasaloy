@@ -524,8 +524,16 @@ function readCi(io: Io, workflow: string, head: string): CiState {
 }
 
 function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
+  // A repository with no commit has no HEAD, and every git read below would fail with
+  // git's own "ambiguous argument 'HEAD'". Name the gate and its fix instead.
+  const head = tryGit(io, ["rev-parse", "HEAD"]);
+  if (head === undefined) {
+    const first = config.branches[0] ?? "main";
+    throw new Error(
+      `The deploy did not start, because this repository has no commit yet, so there is nothing to deploy or tag. Run: git add -A && git commit -m "chore: first commit", then git push -u origin ${first}`
+    );
+  }
   const branch = io.git(["rev-parse", "--abbrev-ref", "HEAD"]);
-  const head = io.git(["rev-parse", "HEAD"]);
   tryGit(io, ["fetch", "--quiet", "origin", branch]);
   const lastTag = tryGit(io, [
     "describe",

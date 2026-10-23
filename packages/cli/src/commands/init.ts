@@ -1,6 +1,6 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
-import { basename, join, resolve } from "node:path";
+import { basename, resolve } from "node:path";
 import {
   cancel,
   intro,
@@ -12,14 +12,9 @@ import {
   text,
 } from "@clack/prompts";
 import pc from "picocolors";
-import type { LinkState } from "../lib/fs-utils.js";
-import {
-  classifyLink,
-  createDirLink,
-  hashContent,
-  pathExists,
-  readDirNames,
-} from "../lib/fs-utils.js";
+import { hashContent, pathExists } from "../lib/fs-utils.js";
+import type { SkillLinkResult } from "../lib/skill-links.js";
+import { linkAgentSkills } from "../lib/skill-links.js";
 import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
 import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
@@ -41,7 +36,7 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // + @repo/tsconfig) and print next steps. The base ships committed AGENTS.md/CLAUDE.md
 // (fixed common rules); nothing is generated. Two things are written rather than copied:
 // the `.claude/skills/*` link for the skills the base carries — a per-machine symlink, not
-// a file (see linkAgentSkills) — and the base's provenance, one manifest entry per rendered
+// a file (see linkBaseSkills) — and the base's provenance, one manifest entry per rendered
 // file plus the lock's `base` record, so `outdated`/`update`/`doctor` can speak about the
 // base afterwards (#120, ADR 0032). Churny modules (api, database, auth, admin, features)
 // are added later via `saasaloy add`, which copies their own skills in.
@@ -177,16 +172,6 @@ export async function initGitRepo(
   return { created: true };
 }
 
-interface SkillLinkResult {
-  linked: string[];
-  conflicts: string[];
-  failures: { name: string; message: string }[];
-  // `.agents/skills` itself couldn't be read, so no per-skill result is meaningful.
-  // A *missing* directory isn't this: that's the ordinary "template ships no skills" case
-  // and comes back as an empty result.
-  unreadable?: string;
-}
-
 function errorMessage(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
 }
@@ -209,58 +194,13 @@ function bySkillOrder(a: string, b: string): number {
 // Point `.claude/skills/<name>` at each skill the base ships, so Claude Code discovers it
 // the moment scaffolding finishes rather than after the owner reads AGENTS.md.
 //
-// The real files travel in `.agents/skills/` — readable by every agent, and committed,
+// The real files travel in `.agents/skills/`, readable by every agent, and committed,
 // because the template's .gitignore ignores `.claude/skills/` (the link is a per-machine
-// artefact, and a skill shipped there would land ignored and never reach the owner's repo).
-// ADR 0015 is the same arrangement `saasaloy add` uses for module skills; `init` calls the
-// two helpers directly rather than going through the applier, because the base has no
-// descriptor to plan from — its files are recorded straight off the render (ADR 0032).
-//
-// Never throws, and never fails `init`: a link is a convenience, and losing it costs
-// discovery, not files. A path already occupied by something that isn't ours is reported
-// and left exactly as it was.
-async function linkAgentSkills(target: string): Promise<SkillLinkResult> {
-  const result: SkillLinkResult = { linked: [], conflicts: [], failures: [] };
-  const skillsDir = join(target, ".agents", "skills");
-  let names: string[];
-  try {
-    names = await readDirNames(skillsDir);
-  } catch (error) {
-    // readDirNames returns [] when the directory is simply absent, so reaching here means
-    // it exists and we couldn't read it. Say so: the alternative is init printing no links
-    // and no reason, which reads exactly like a template that ships no skills.
-    result.unreadable = errorMessage(error);
-    return result;
-  }
-  for (const name of names.toSorted(bySkillOrder)) {
-    const linkAbs = join(target, ".claude", "skills", name);
-    const targetAbs = join(skillsDir, name);
-    // classifyLink can reject after its lstat succeeds (the readlink behind it), so it
-    // belongs inside the non-fatal path too — a link is a convenience, and no failure
-    // here may take `init` down after the scaffold already landed.
-    let state: LinkState;
-    try {
-      state = await classifyLink(linkAbs, targetAbs);
-    } catch (error) {
-      result.failures.push({ name, message: errorMessage(error) });
-      continue;
-    }
-    if (state === "conflict") {
-      result.conflicts.push(name);
-      continue;
-    }
-    if (state === "correct") {
-      result.linked.push(name);
-      continue;
-    }
-    try {
-      await createDirLink(linkAbs, targetAbs);
-      result.linked.push(name);
-    } catch (error) {
-      result.failures.push({ name, message: errorMessage(error) });
-    }
-  }
-  return result;
+// artefact). `linkAgentSkills` is the one rule `init`, `add` and `update` share (ADR 0015),
+// and it never fails `init`: a path already occupied by something that isn't ours is
+// reported and left exactly as it was.
+function linkBaseSkills(target: string): Promise<SkillLinkResult> {
+  return linkAgentSkills(target, bySkillOrder);
 }
 
 export async function runInit(argv: string[]): Promise<number> {
@@ -399,7 +339,7 @@ export async function runInit(argv: string[]): Promise<number> {
     }
   }
 
-  const skills = await linkAgentSkills(target);
+  const skills = await linkBaseSkills(target);
   if (skills.linked.length > 0) {
     const lines = skills.linked.map(
       (name) =>
