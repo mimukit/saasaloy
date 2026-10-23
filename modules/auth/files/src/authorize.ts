@@ -57,6 +57,38 @@ export const ADMIN_APP_ROLES: readonly string[] = [
   ...config.auth.adminAppExtraRoles,
 ];
 
+/** The two role strings `siteRoleMap` keys the `admin()` plugin's statements by. */
+export interface SiteRoleNames {
+  adminRole: string;
+  superadminRole: string;
+}
+
+/**
+ * The `roles` map for better-auth's `admin()` plugin, keyed by the role strings in
+ * `config.auth` rather than by the plugin's own built-in `admin` key.
+ *
+ * The plugin grants a role its `/admin/*` permissions by looking the role's name up in
+ * this map, and it refuses to start when an entry of `adminRoles` has no key here. So the
+ * keys have to be whatever `config.auth.adminRole` and `config.auth.superadminRole` say:
+ * a project that renames `admin` to `staff` in `project.ts` must hand `staff` the admin
+ * statements, or every plugin endpoint refuses its own admins. Both site-admin roles get
+ * the admin grant, because they differ in rank, not in what they may do to a client, and
+ * `user` keeps the plugin's user grant.
+ *
+ * It takes the grants as arguments so this file stays free of `better-auth`, and the role
+ * names as an argument so a test can prove a rename.
+ */
+export function siteRoleMap<A, U>(
+  grants: { admin: A; user: U },
+  names: SiteRoleNames = config.auth
+): Record<string, A | U> {
+  return {
+    user: grants.user,
+    [names.adminRole]: grants.admin,
+    [names.superadminRole]: grants.admin,
+  };
+}
+
 /**
  * Who a session belongs to. A project has two user groups, and each signs in on its own
  * Better Auth instance: `client` on `/auth` and `admin` on `/admin/auth`. The instance

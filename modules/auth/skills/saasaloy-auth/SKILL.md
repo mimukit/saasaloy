@@ -248,7 +248,7 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 Better Auth's `admin` plugin is on from the start, on both instances (`siteRoles()` in `auth.ts`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), refuses a banned account at sign-in, and treats the roles in `adminRoles` as privileged. Its `/admin/*` endpoints answer only on `adminAuth`.
 
-**The role strings live in `packages/config/src/sections/auth.ts`, which this module installs, and they have exactly one home.** `packages/auth/src/authorize.ts` reads `config.auth.adminRole`, `config.auth.superadminRole` and `config.auth.adminAppExtraRoles`, and `apps/admin/src/lib/auth.ts` reads the same three — a browser bundle cannot import `@repo/auth/server`, but `@repo/config` has no dependencies at all, so both sides read one copy. Rename either role in `packages/config/src/project.ts`; rows already written keep the old string, so an existing project needs the `update users set role = ...` to match.
+**The role strings live in `packages/config/src/sections/auth.ts`, which this module installs, and they have exactly one home.** `packages/auth/src/authorize.ts` reads `config.auth.adminRole`, `config.auth.superadminRole` and `config.auth.adminAppExtraRoles`, and `apps/admin/src/lib/auth.ts` reads the same three — a browser bundle cannot import `@repo/auth/server`, but `@repo/config` has no dependencies at all, so both sides read one copy. `siteRoleMap` in `authorize.ts` keys the `admin()` plugin's statements by the same strings, so a renamed role keeps its `/admin/*` permissions. Rename either role in `packages/config/src/project.ts`; rows already written keep the old string, so an existing project needs the `update users set role = ...` to match.
 
 There are two site roles, and they are not interchangeable. `admin` runs `apps/admin` for the client accounts. `superadmin` does everything `admin` does, owns the admin group (see "Rank" below), and is the only role that may act inside an organization it does not belong to, through the `x-organization-id` header the `multitenant` module reads. That bypass needs the superadmin signed in on the admin session; a superadmin's client session gets the ordinary 403. Inside an organization an `admin` is an ordinary member: the site role grants nothing on a tenant route, which asks `requireTenant` and reads the caller's membership instead.
 
@@ -290,7 +290,7 @@ function siteRoles() {
   return admin({
     ac,
     adminRoles: [...ADMIN_ROLES],
-    roles: { ...defaultRoles, [SUPERADMIN_ROLE]: adminAc, support },
+    roles: { ...siteRoleMap({ admin: adminAc, user: defaultRoles.user }), support },
   });
 }
 ```

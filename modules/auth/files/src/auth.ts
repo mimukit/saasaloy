@@ -10,6 +10,7 @@ import {
   ADMIN_ROLES,
   CLIENT_AUDIENCE,
   SUPERADMIN_ROLE,
+  siteRoleMap,
 } from "./authorize";
 import type { Audience } from "./authorize";
 import { authDb, provider } from "./db-provider";
@@ -203,17 +204,19 @@ function sharedOptions(group: Audience) {
 // refused, which is the one disagreement the pair must not have. The list comes from
 // `./authorize.ts`, so the gate and the plugin read one source.
 //
-// `roles` has to name `superadmin` too. The plugin checks every entry of `adminRoles`
-// against the keys of `roles` (falling back to its own `defaultRoles`, which are `admin`
-// and `user`) and throws `Invalid admin roles: superadmin` while the Worker initializes
-// when one is missing. `superadmin` gets `adminAc` — the same site-wide statements `admin`
-// holds — because the two differ in rank, not in what they may do to a client. The rank
+// `roles` has to name both site-admin roles, by the strings `config.auth` holds. The
+// plugin checks every entry of `adminRoles` against the keys of `roles` and throws
+// `Invalid admin roles: <role>` while the Worker initializes when one is missing, and it
+// grants a role its permissions by that key. `siteRoleMap` in `./authorize.ts` keys
+// `adminAc` by `ADMIN_ROLE` and `SUPERADMIN_ROLE`, so a role renamed in `project.ts`
+// keeps the admin statements; the two roles differ in rank, not in what they may do to a
+// client. The rank
 // itself is `./plugins/rank-guard.ts`'s job, and the organization-level split is
 // `packages/auth/src/access.ts`'s.
 function siteRoles() {
   return admin({
     adminRoles: [...ADMIN_ROLES],
-    roles: { ...defaultRoles, [SUPERADMIN_ROLE]: adminAc },
+    roles: siteRoleMap({ admin: adminAc, user: defaultRoles.user }),
   });
 }
 
