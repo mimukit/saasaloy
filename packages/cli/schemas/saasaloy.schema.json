@@ -33,6 +33,18 @@
       "pattern": "^[a-z0-9][a-z0-9-]*$",
       "description": "The base app `saasaloy init` scaffolded (e.g. `web`). It is not a module: the tool never applied it, it has no descriptor and no lock entry, so it never takes part in dependsOn resolution or conflict checks. Absent in a project scaffolded before this field existed; `saasaloy` migrates such a project on its next write."
     },
+    "testing": {
+      "type": "object",
+      "description": "The project's testing mode (#242, ADR 0052). `off` ships no module tests, `tests-after` ships each module's tests and asks for a test with every change, `tdd` asks for the failing test first. `saasaloy init` writes it and `saasaloy testing <mode>` changes it, together with the marked block in the root `AGENTS.md`. Absent in a project scaffolded before this field existed; the tool then reads `off`.",
+      "additionalProperties": false,
+      "required": ["mode"],
+      "properties": {
+        "mode": {
+          "type": "string",
+          "enum": ["off", "tests-after", "tdd"]
+        }
+      }
+    },
     "installed": {
       "type": "array",
       "description": "Modules present in this project. Grows as `saasaloy add` runs; drives dependsOn resolution.",

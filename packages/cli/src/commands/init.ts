@@ -26,7 +26,13 @@ import {
   copyTemplate,
   templateVars,
 } from "../lib/scaffold.js";
-import { stripAnsi, wrapForNote } from "../lib/tui.js";
+import {
+  DEFAULT_TESTING_MODE,
+  parseTestingMode,
+  TESTING_MODES,
+} from "../lib/testing.js";
+import type { TestingMode } from "../lib/testing.js";
+import { isInteractive, stripAnsi, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
@@ -49,6 +55,11 @@ export interface InitOptions {
   force: boolean;
   noInstall: boolean;
   noGit: boolean;
+  /**
+   * `--testing=<mode>`, raw (#242). `runInit` parses it before anything is written, so a
+   * bad value is a refusal rather than a scaffold with a guessed mode.
+   */
+  testing?: string;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -60,7 +71,8 @@ const KNOWN_FLAGS = new Set([
   "--help",
   "-h",
 ]);
-const USAGE = "saasaloy init [<name>] [--force] [--no-install] [--no-git]";
+const TESTING_FLAG = "--testing=";
+const USAGE = `saasaloy init [<name>] [--force] [--no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>]`;
 const HELP: CommandHelp = {
   name: "init",
   describe: DESCRIPTIONS.init,
@@ -69,6 +81,8 @@ const HELP: CommandHelp = {
     "--force": "scaffold into a directory that is not empty",
     "--no-install": "never run pnpm install, and never ask",
     "--no-git": "do not run git init in the new project",
+    "--testing=<mode>":
+      "the testing mode: off (default), tests-after or tdd; asked on a terminal when absent",
   },
 };
 
@@ -76,9 +90,12 @@ const HELP: CommandHelp = {
 export function parseArgs(argv: string[]): InitOptions {
   const positional: string[] = [];
   const unknown: string[] = [];
+  let testing: string | undefined;
   for (const arg of argv) {
     if (!arg.startsWith("-")) {
       positional.push(arg);
+    } else if (arg.startsWith(TESTING_FLAG)) {
+      testing = arg.slice(TESTING_FLAG.length);
     } else if (!KNOWN_FLAGS.has(arg)) {
       unknown.push(arg);
     }
@@ -91,8 +108,58 @@ export function parseArgs(argv: string[]): InitOptions {
     // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
     noInstall: argv.includes("--no-install"),
     noGit: argv.includes("--no-git"),
+    ...(testing === undefined ? {} : { testing }),
     unknown,
   };
+}
+
+export interface TestingPrompt {
+  /** Whether a person can answer: stdin and stdout are terminals (`isInteractive`). */
+  interactive: boolean;
+  /** Ask for the mode. Resolves to clack's cancel symbol when the person backs out. */
+  ask: () => Promise<TestingMode | symbol>;
+}
+
+/**
+ * The mode `init` records (#242). A flag wins. With no flag, a terminal gets one question;
+ * no terminal reads `off`, the opt-in default rather than a guess (ADR 0046). Exported with
+ * the prompt injected, so the attended path is tested without a terminal.
+ */
+export async function resolveInitTestingMode(
+  flag: TestingMode | undefined,
+  prompt: TestingPrompt
+): Promise<TestingMode | symbol> {
+  if (flag !== undefined) {
+    return flag;
+  }
+  if (!prompt.interactive) {
+    return DEFAULT_TESTING_MODE;
+  }
+  return prompt.ask();
+}
+
+function askTestingMode(): Promise<TestingMode | symbol> {
+  return select<TestingMode>({
+    message: "Testing mode?",
+    options: [
+      {
+        value: "off",
+        label: "Off",
+        hint: "no module tests; turn them on later with `saasaloy testing`",
+      },
+      {
+        value: "tests-after",
+        label: "Tests after",
+        hint: "each change ships with its test",
+      },
+      {
+        value: "tdd",
+        label: "TDD",
+        hint: "write the failing test first",
+      },
+    ],
+    initialValue: DEFAULT_TESTING_MODE,
+  });
 }
 
 interface RunResult {
@@ -216,6 +283,17 @@ export async function runInit(argv: string[]): Promise<number> {
 
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
 
+  // A bad mode is caught before the name prompt and before a byte is written (#242).
+  let testingFlag: TestingMode | undefined;
+  if (opts.testing !== undefined) {
+    try {
+      testingFlag = parseTestingMode(opts.testing);
+    } catch (error) {
+      cancel(`${errorMessage(error)} Usage: \`${USAGE}\`.`);
+      return EXIT_REFUSED;
+    }
+  }
+
   // `init` ignored every flag it did not know, while `add`/`remove`/`update` rejected
   // theirs — so `saasaloy init app --forse` scaffolded into a non-empty directory and
   // said nothing. One rule now (#98).
@@ -275,13 +353,25 @@ export async function runInit(argv: string[]): Promise<number> {
     }
   }
 
+  const testingMode = await resolveInitTestingMode(testingFlag, {
+    interactive: isInteractive(),
+    ask: askTestingMode,
+  });
+  if (isCancel(testingMode)) {
+    cancel("init cancelled");
+    return EXIT_FAILURE;
+  }
+
   const s = spinner();
   s.start(`Scaffolding ${pc.cyan(projectName)}`);
   const templateDir = await baseTemplateDir();
+  // The mode fills the root AGENTS.md testing block, so the recorded hash is of the
+  // filled bytes and `update` compares against what this project really holds (#242).
   const written = await copyTemplate(
     templateDir,
     target,
-    templateVars(projectName)
+    templateVars(projectName),
+    { testingMode }
   );
   s.stop(
     `Scaffolded ${pc.cyan(projectName)} ${pc.dim("(apps/web · packages/ui · packages/tsconfig)")}`
@@ -295,15 +385,23 @@ export async function runInit(argv: string[]): Promise<number> {
   // it fell back to the directory name, and a git worktree or a CI checkout path then
   // rewrote `package.json` `name`, `wrangler.jsonc` `name` and `siteName` (#144). The
   // template ships the file without a name so the file it ships stays schema-valid.
+  // `testing.mode` is written in the same pass, always, so a new project never reads the
+  // absent key that `update` treats as a project from before the switch (#242).
   try {
     const config = await loadConfig(target);
-    await saveConfig(target, { ...config, name: projectName });
+    await saveConfig(target, {
+      ...config,
+      name: projectName,
+      testing: { mode: testingMode },
+    });
     const entry = written.find((file) => file.target === CONFIG_FILE);
     if (entry) {
       entry.hash = hashContent(await readFile(entry.path, "utf-8"));
     }
   } catch (error) {
-    cancel(`Couldn't record the project name: ${errorMessage(error)}`);
+    cancel(
+      `Couldn't record the project name and testing mode: ${errorMessage(error)}`
+    );
     return EXIT_FAILURE;
   }
 

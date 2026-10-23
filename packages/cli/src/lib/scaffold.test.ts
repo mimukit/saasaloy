@@ -5,6 +5,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import cliPackage from "../../package.json" with { type: "json" };
 import { hashContent, pathExists } from "./fs-utils.js";
 import { BASE_DECLARATION, copyTemplate, templateVars } from "./scaffold.js";
+import {
+  TESTING_BLOCK_END,
+  TESTING_BLOCK_START,
+  TESTING_BLOCKS,
+} from "./testing.js";
 
 describe("init template variables", () => {
   it("includes the CLI package version", () => {
@@ -165,6 +170,48 @@ describe("copyTemplate — the two conventions it applies", () => {
       join(dest, "_gitignore"),
     ]);
     expect(written[0]?.target).toBe(".gitignore");
+  });
+
+  // #242: the root AGENTS.md carries a marked block the render fills for the project's
+  // mode, so `init --testing=tdd` writes the tdd text and `update` never puts `off` back.
+  const block = (text: string): string =>
+    `# {{PROJECT_NAME}}\n\n${TESTING_BLOCK_START}\n${text}\n${TESTING_BLOCK_END}\n`;
+
+  it("fills the root AGENTS.md block for the testing mode, hashing the filled bytes (#242)", async () => {
+    await write("AGENTS.md", block("placeholder"));
+
+    const written = await copyTemplate(
+      src,
+      dest,
+      { PROJECT_NAME: "app" },
+      { testingMode: "tdd" }
+    );
+
+    const expected = `# app\n\n${TESTING_BLOCK_START}\n${TESTING_BLOCKS.tdd}\n${TESTING_BLOCK_END}\n`;
+    await expect(readFile(join(dest, "AGENTS.md"), "utf-8")).resolves.toBe(
+      expected
+    );
+    expect(written[0]?.hash).toBe(hashContent(expected));
+  });
+
+  it("leaves a nested AGENTS.md block as authored (#242)", async () => {
+    await write("apps/web/AGENTS.md", block("placeholder"));
+
+    await copyTemplate(src, dest, {}, { testingMode: "tdd" });
+
+    await expect(
+      readFile(join(dest, "apps", "web", "AGENTS.md"), "utf-8")
+    ).resolves.toContain("placeholder");
+  });
+
+  it("leaves the block as authored when no mode is given (#242)", async () => {
+    await write("AGENTS.md", block("placeholder"));
+
+    await copyTemplate(src, dest, {});
+
+    await expect(readFile(join(dest, "AGENTS.md"), "utf-8")).resolves.toContain(
+      "placeholder"
+    );
   });
 
   it("overwrites a file already at the destination", async () => {

@@ -5,6 +5,7 @@ import AjvDefault from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { pathExists } from "./fs-utils.js";
 import type { Patch } from "./patch/index.js";
+import type { TestingMode } from "./testing.js";
 
 // ajv is CJS (`module.exports = Ajv2020`); under NodeNext the default import is typed
 // as the module namespace, so re-point it to the class it actually is at runtime.
@@ -124,6 +125,11 @@ export interface SaasaloyConfig {
    * before the field existed still validates; `loadConfig` migrates it.
    */
   base?: string;
+  /**
+   * The project's testing mode (#242). Optional so a project scaffolded before the field
+   * existed still validates; `readTestingMode` reads an absent key as `off`.
+   */
+  testing?: { mode: TestingMode };
   installed: string[];
 }
 

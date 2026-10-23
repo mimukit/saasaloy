@@ -19,6 +19,7 @@ import {
   templateVars,
 } from "./scaffold.js";
 import type { WrittenFile } from "./scaffold.js";
+import type { TestingMode } from "./testing.js";
 import type { ModuleComparison, ModuleUpdateInput } from "./updater.js";
 
 export { BASE_DECLARATION } from "./scaffold.js";
@@ -333,11 +334,16 @@ export interface RenderedTemplate {
  * or a CI checkout path all differ from the name `init` rendered with, and substituting
  * one of those rewrites `package.json` `name`, `wrangler.jsonc` `name` and `siteName` to
  * a name the project never chose.
+ *
+ * `testingMode` is the project's own mode, read from `saasaloy.json` (#242). The render
+ * fills the root `AGENTS.md` testing block with it, so a render compares against the
+ * bytes `init` or `saasaloy testing` wrote and `update` never puts the `off` text back.
  */
 export async function renderTemplate(
   root: string,
   templateDir: string,
-  projectName: string
+  projectName: string,
+  testingMode: TestingMode
 ): Promise<RenderedTemplate> {
   const dir = await mkdtemp(join(tmpdir(), "saasaloy-base-render-"));
   const files = await copyTemplate(
@@ -346,6 +352,7 @@ export async function renderTemplate(
     templateVars(projectName),
     {
       keepNames: true,
+      testingMode,
     }
   );
   return {
@@ -361,6 +368,8 @@ export interface AdoptBaseArgs {
   cliVersion: string;
   /** The project's own name, from `saasaloy.json` — never the directory's. */
   projectName: string;
+  /** The project's testing mode, from `saasaloy.json` (#242). */
+  testingMode: TestingMode;
   /** Loaded state, mutated in place and saved unless `dryRun`. */
   manifest: Manifest;
   lock: Lockfile;
@@ -397,12 +406,18 @@ export async function adoptBase(args: AdoptBaseArgs): Promise<AdoptBaseResult> {
     root,
     cliVersion,
     projectName,
+    testingMode,
     manifest,
     lock,
     dryRun = false,
   } = args;
   const templateDir = args.templateDir ?? (await baseTemplateDir());
-  const render = await renderTemplate(root, templateDir, projectName);
+  const render = await renderTemplate(
+    root,
+    templateDir,
+    projectName,
+    testingMode
+  );
   try {
     const files: BaseFileRecord[] = [];
     const adopted: string[] = [];
@@ -449,6 +464,8 @@ export interface BaseUpdateArgs {
   cliVersion: string;
   /** The project's own name, from `saasaloy.json` — never the directory's. */
   projectName: string;
+  /** The project's testing mode, from `saasaloy.json` (#242). */
+  testingMode: TestingMode;
   /** The `outdated` row from `compareBase`, carried into the plan for the summary. */
   comparison: ModuleComparison;
 }
@@ -481,9 +498,15 @@ export async function baseUpdateInput(
     templateDir,
     cliVersion,
     projectName,
+    testingMode,
     comparison,
   } = args;
-  const render = await renderTemplate(root, templateDir, projectName);
+  const render = await renderTemplate(
+    root,
+    templateDir,
+    projectName,
+    testingMode
+  );
   const declaration = await readBaseDeclaration(templateDir);
   const seed = new Set(declaration.seedFiles);
   const shipped = render.files.filter((file) => !seed.has(file.target));

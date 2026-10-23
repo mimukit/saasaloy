@@ -26,6 +26,12 @@ import { emptyManifest, loadManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import { baseTemplateDir, copyTemplate, templateVars } from "./scaffold.js";
+import {
+  TESTING_BLOCK_END,
+  TESTING_BLOCK_START,
+  TESTING_BLOCKS,
+} from "./testing.js";
+import type { TestingMode } from "./testing.js";
 import { buildUpdatePlan, compareBase, executeUpdatePlan } from "./updater.js";
 import type { ModuleUpdatePlan } from "./updater.js";
 
@@ -234,6 +240,7 @@ describe(adoptBase, () => {
       root,
       cliVersion: "0.0.0",
       projectName: basename(root),
+      testingMode: "off",
       manifest,
       lock,
       templateDir: template,
@@ -260,6 +267,7 @@ describe(adoptBase, () => {
       root,
       cliVersion: "0.0.0",
       projectName: basename(root),
+      testingMode: "off",
       manifest,
       lock: emptyLock(),
       templateDir: template,
@@ -281,6 +289,7 @@ describe(adoptBase, () => {
       root,
       cliVersion: "0.0.0",
       projectName: basename(root),
+      testingMode: "off",
       manifest,
       lock: emptyLock(),
       templateDir: template,
@@ -297,6 +306,7 @@ describe(adoptBase, () => {
       root,
       cliVersion: "0.0.0",
       projectName: basename(root),
+      testingMode: "off",
       manifest: emptyManifest(),
       lock: emptyLock(),
       templateDir: template,
@@ -311,6 +321,7 @@ describe(adoptBase, () => {
       root,
       cliVersion: "0.0.0",
       projectName: basename(root),
+      testingMode: "off",
       manifest: emptyManifest(),
       lock: emptyLock(),
       templateDir: template,
@@ -569,7 +580,8 @@ describe("baseUpdateInput — classifying base files through the module engine",
 
   async function planAgainst(
     next: string,
-    state: { manifest: Manifest; lock: Lockfile }
+    state: { manifest: Manifest; lock: Lockfile },
+    testingMode: TestingMode = "off"
   ) {
     const handle = await baseUpdateInput({
       root,
@@ -578,6 +590,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       templateDir: next,
       cliVersion: CLI,
       projectName: basename(root),
+      testingMode,
       comparison: compareBase({
         ...state,
         runningHash: await templateHash(next),
@@ -779,6 +792,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       root,
       cliVersion: CLI,
       projectName: basename(root),
+      testingMode: "off",
       manifest,
       lock,
       templateDir: template,
@@ -800,6 +814,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       templateDir: template,
       cliVersion: CLI,
       projectName: basename(root),
+      testingMode: "off",
       comparison,
     });
     const config = { aliases: {}, installed: [] };
@@ -821,6 +836,71 @@ describe("baseUpdateInput — classifying base files through the module engine",
       missingBaseTargets(root, manifest, template)
     ).resolves.toStrictEqual([]);
     await handle.cleanup();
+  });
+
+  // #242: the base render fills the AGENTS.md testing block for the project's mode. Were
+  // it to render the template's `off` text, every template change would overwrite a `tdd`
+  // project's block with `off`, and the recorded hash would describe the wrong bytes.
+  it("keeps the project's testing mode in the AGENTS.md block across a template change (#242)", async () => {
+    const block = (version: string) =>
+      `${version}\n${TESTING_BLOCK_START}\noff\n${TESTING_BLOCK_END}\n`;
+    await write(template, "AGENTS.md", block("v1"));
+    const written = await copyTemplate(
+      template,
+      root,
+      templateVars(basename(root)),
+      { testingMode: "tdd" }
+    );
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, written);
+    const state = {
+      manifest,
+      lock: {
+        ...emptyLock(),
+        base: baseRecord(CLI, await templateHash(template)),
+      },
+    };
+    const next = await bumped({ "AGENTS.md": block("v2") });
+
+    const { plan, base, cleanup } = await planAgainst(next, state, "tdd");
+    expect(actionOf(base, "AGENTS.md")).toBe("overwrite");
+    await executeUpdatePlan(plan, {
+      root,
+      config: { aliases: {}, installed: [] },
+      ...state,
+    });
+
+    const now = await readFile(join(root, "AGENTS.md"), "utf-8");
+    expect(now).toBe(
+      `v2\n${TESTING_BLOCK_START}\n${TESTING_BLOCKS.tdd}\n${TESTING_BLOCK_END}\n`
+    );
+    expect(state.manifest.managed["AGENTS.md"]?.hash).toBe(hashContent(now));
+    await cleanup();
+  });
+
+  it("restores an adopted-absent AGENTS.md with the project's testing mode (#242)", async () => {
+    await write(
+      template,
+      "AGENTS.md",
+      `${TESTING_BLOCK_START}\noff\n${TESTING_BLOCK_END}\n`
+    );
+    const manifest = emptyManifest();
+
+    await adoptBase({
+      root,
+      cliVersion: CLI,
+      projectName: basename(root),
+      testingMode: "tests-after",
+      manifest,
+      lock: emptyLock(),
+      templateDir: template,
+    });
+
+    expect(manifest.managed["AGENTS.md"]?.hash).toBe(
+      hashContent(
+        `${TESTING_BLOCK_START}\n${TESTING_BLOCKS["tests-after"]}\n${TESTING_BLOCK_END}\n`
+      )
+    );
   });
 
   it("re-applies a module's recorded patch after overwriting the file it patched", async () => {
@@ -948,6 +1028,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       templateDir: next,
       cliVersion: CLI,
       projectName: basename(root),
+      testingMode: "off",
       comparison: compareBase({
         ...state,
         runningHash: await templateHash(next),

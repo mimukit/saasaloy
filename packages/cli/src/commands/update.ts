@@ -52,6 +52,7 @@ import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
+import { readTestingMode, suggestsTestingMode } from "../lib/testing.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
@@ -588,6 +589,17 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const manifest = await loadManifest(root);
     const lock = await loadLock(root);
     const registryOverride = !!process.env[REGISTRY_ENV];
+
+    // A project made before `testing.mode` existed reads as `off`, yet may already hold a
+    // module's test file (#242). One line names the switch; a project with the key, at any
+    // value, has chosen and hears nothing.
+    if (suggestsTestingMode(config, manifest)) {
+      log.info(
+        `This project holds module tests and no testing mode in ${CONFIG_FILE} — run ` +
+          `${pc.cyan("saasaloy testing tests-after")} to turn module tests on.`,
+        TUI_ON_STDERR
+      );
+    }
     const cliVersion = await readVersion();
 
     // The base first (#120): adopt an unrecorded project and stop, refuse a downgrade,
@@ -611,6 +623,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
           root,
           cliVersion,
           projectName: project.name,
+          testingMode: readTestingMode(config),
           manifest,
           lock,
           templateDir,
@@ -782,6 +795,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
         templateDir,
         cliVersion,
         projectName: project.name,
+        testingMode: readTestingMode(config),
         comparison: baseComparison,
       });
       cleanups.push(handle.cleanup);

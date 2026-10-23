@@ -38,6 +38,7 @@ import {
   copyTemplate,
   templateVars,
 } from "../lib/scaffold.js";
+import { TESTING_BLOCKS } from "../lib/testing.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
 import { runUpdate } from "./update.js";
@@ -687,6 +688,58 @@ describe("runUpdate — the base template (#120)", () => {
     await expect(readFile(join(project, owned), "utf-8")).resolves.toBe(
       ":root { --mine: 1; }\n"
     );
+  });
+
+  /** Merge `extra` into the project's saasaloy.json. */
+  async function setConfig(extra: Record<string, unknown>): Promise<void> {
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as Record<string, unknown>;
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ ...config, ...extra }),
+      "utf-8"
+    );
+  }
+
+  it("renders the project's testing mode into AGENTS.md, never the template's off text (#242)", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await setConfig({ testing: { mode: "tdd" } });
+
+    const { code } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    const now = await readFile(join(project, "AGENTS.md"), "utf-8");
+    expect(now).toContain(TESTING_BLOCKS.tdd);
+    expect(now).not.toContain(TESTING_BLOCKS.off);
+  });
+
+  it("suggests a testing mode when a module ships a test and the key is absent (#242)", async () => {
+    const state = await scaffolded();
+    state.manifest.managed["apps/api/src/routes/auth.test.ts"] = {
+      hash: "a".repeat(64),
+      module: "auth",
+    };
+    await saveManifest(project, state.manifest);
+
+    const { err } = await runBoth(["--yes"]);
+
+    expect(err.split("saasaloy testing tests-after")).toHaveLength(2);
+  });
+
+  it("prints no testing suggestion once the key is present (#242)", async () => {
+    const state = await scaffolded();
+    state.manifest.managed["apps/api/src/routes/auth.test.ts"] = {
+      hash: "a".repeat(64),
+      module: "auth",
+    };
+    await saveManifest(project, state.manifest);
+    await setConfig({ testing: { mode: "off" } });
+
+    const { err } = await runBoth(["--yes"]);
+
+    expect(err).not.toContain("saasaloy testing");
   });
 
   it("takes the project name from saasaloy.json, not from the directory", async () => {
