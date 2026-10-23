@@ -16,6 +16,7 @@
     "@astrojs/react": "7.0.0",
     "react": "19.3.0",
     "react-dom": "19.3.0",
+    "@repo/config": "workspace:*",
     "@repo/env": "workspace:*",
     "@repo/ui": "workspace:*"
   },

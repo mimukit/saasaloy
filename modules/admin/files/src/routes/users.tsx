@@ -18,6 +18,7 @@ import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
+import { ADMIN_ROLE } from "@admin/lib/auth";
 import { initialsOf } from "@admin/lib/initials";
 import { usersQuery } from "@admin/lib/users-query";
 import type { AdminUser } from "@admin/lib/users-query";
@@ -41,10 +42,14 @@ export const Route = createFileRoute("/users")({
   errorComponent: UsersError,
 });
 
-/** The chips above the table. `all` is the resting state, so it is listed first. */
+/**
+ * The chips above the table. `all` is the resting state, so it is listed first. The admin
+ * chip filters on `ADMIN_ROLE`, the string `config.auth.adminRole` holds, so a project
+ * that renames the role keeps a working chip.
+ */
 const ROLE_FILTERS = [
   { id: "all", label: "All" },
-  { id: "admin", label: "Admins" },
+  { id: ADMIN_ROLE, label: "Admins" },
   { id: "user", label: "Users" },
 ] as const;
 
@@ -98,7 +103,10 @@ const COLUMNS: readonly DataTableColumn<AdminUser>[] = [
       const role = roleOf(user);
 
       return (
-        <StatusPill label={role} tone={role === "admin" ? "open" : "neutral"} />
+        <StatusPill
+          label={role}
+          tone={role === ADMIN_ROLE ? "open" : "neutral"}
+        />
       );
     },
   },
@@ -193,7 +201,7 @@ function Users() {
                 value: (
                   <StatusPill
                     label={roleOf(selected)}
-                    tone={roleOf(selected) === "admin" ? "open" : "neutral"}
+                    tone={roleOf(selected) === ADMIN_ROLE ? "open" : "neutral"}
                   />
                 ),
               },
@@ -248,8 +256,8 @@ function Users() {
           selectedId={roleFilter}
           label="Filter users by role"
           onSelect={(id) => {
-            // The chips are literal ids, so this cast is over a value that came out of
-            // ROLE_FILTERS; FilterChips itself stays generic over plain strings.
+            // The chip ids all come out of ROLE_FILTERS, so this cast is over one of them;
+            // FilterChips itself stays generic over plain strings.
             setRoleFilter(id as RoleFilter);
           }}
         />

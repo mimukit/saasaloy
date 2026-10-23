@@ -1189,3 +1189,104 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
     seed: seed.toSorted(),
   };
 }
+
+// ---------------------------------------------------------------------------
+// The `config` rules (#154).
+// ---------------------------------------------------------------------------
+
+/** The one file a project owner edits in `@repo/config`. */
+export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
+/** The values file `saasaloy env` writes and `pnpm env:setup` copies from. */
+const ENV_VALUES_FILE = "packages/env/.env";
+/**
+ * The env var `config.app.name` superseded. Billing no longer declares it, so a fresh
+ * project never lists it; an older project's key list keeps the line, because `add` never
+ * removes one, and this is how its owner learns the value does nothing.
+ */
+const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
+
+export interface ConfigCheckArgs {
+  /** Project-relative path → contents, for `packages/env/.env` and every service `.env`. */
+  envFiles?: Record<string, string>;
+}
+
+/**
+ * The one thing nothing else checks (#154): `BILLING_APP_NAME`, the env var `config`
+ * replaced, still set in a `.env`, where it looks effective and is not.
+ *
+ * It reads the files rather than the composed object, because `doctor` never executes
+ * project code.
+ *
+ * The product name is not checked. The base ships it as "Saasaloy" on purpose, so it
+ * agrees with the shipped landing copy, and an unchanged name is not a defect. Neither is
+ * the site origin: the canonical origin is `PUBLIC_SITE_URL`, an `env` value per
+ * deployment, and `checkEnv` owns the env files.
+ */
+export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
+  const findings: Finding[] = [];
+
+  // `pnpm env:setup` copies the values file into each service's `.env`, so a key set in
+  // `packages/env/.env` would otherwise be reported once per copy. Report the source when
+  // it sets the key; a service file is reported only when the source does not, which is
+  // a value someone typed there by hand or a source other than the values file.
+  const setting = Object.entries(args.envFiles ?? {})
+    .filter(([, contents]) => assignsVar(contents, DEPRECATED_APP_NAME))
+    .map(([file]) => file)
+    .toSorted();
+  const reported = setting.includes(ENV_VALUES_FILE)
+    ? [ENV_VALUES_FILE]
+    : setting;
+  for (const file of reported) {
+    findings.push(
+      finding(
+        "billing",
+        `/env/${DEPRECATED_APP_NAME}`,
+        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
+      )
+    );
+  }
+
+  return findings;
+}
+
+/** Whether a dotenv-style file assigns `name` on an uncommented line with a value. */
+function assignsVar(contents: string, name: string): boolean {
+  for (const line of contents.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "" || trimmed.startsWith("#")) {
+      continue;
+    }
+    const [key, ...rest] = trimmed.replace(/^export\s+/, "").split("=");
+    if (key?.trim() === name && rest.join("=").trim() !== "") {
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Every `.env` a project carries, read off disk: the values file `saasaloy env` writes,
+ * then each service's own copy that `pnpm env:setup` writes from it (ADR 0040). A leftover
+ * `.dev.vars` is `checkEnv`'s finding, not this one's.
+ */
+async function readEnvFiles(root: string): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const targets = [ENV_VALUES_FILE];
+  for (const app of await readDirNames(join(root, "apps"))) {
+    targets.push(posix.join("apps", app, ".env"));
+  }
+  for (const target of targets) {
+    const contents = await readIfPresent(resolveWithinRoot(root, target));
+    if (contents !== undefined) {
+      out[target] = contents;
+    }
+  }
+  return out;
+}
+
+/** Read what `checkConfigValues` needs off a project on disk. */
+export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
+  return {
+    envFiles: await readEnvFiles(root),
+  };
+}

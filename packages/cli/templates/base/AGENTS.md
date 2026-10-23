@@ -122,6 +122,43 @@ command that distributes it, one typed gate in front of the capabilities.
 The `saasaloy-env` skill is the runbook: adding a key, the section rule, the server/client
 split, blank-on-purpose keys, and the offline rule.
 
+### The `@repo/config` Value Layer
+
+`packages/config` (`@repo/config`) owns the values this project checks into its repo and ships
+identically to every environment: the product name, the locale, the legal paths, and each
+installed module's section. Read it with a plain import, from any app or package:
+
+```ts
+import { config } from "@repo/config";
+
+config.app.name; // `siteName` in @repo/ui re-exports this
+config.app.locale; // the shared layout's <html lang>
+```
+
+It is a frozen plain object, built once at module load. It has **zero runtime dependencies and
+imports nothing**, which is what lets every app, every package and every browser bundle import it.
+
+**config or `.env`?** Two deployments of *this* project — production and staging. If the value can
+differ between them it is an env var, secret or not. If it cannot, it is config. A database URL is
+env; the product's name is config.
+
+**The landing copy is not config.** Prices, tier ids and every sentence on the page stay in
+`@repo/ui/content/landing.ts`.
+
+Four files, and only one is yours:
+
+| Path | Who owns it |
+|------|-------------|
+| `src/project.ts` | **You.** The only file here you edit. Nothing overwrites it. |
+| `src/sections.ts` | The section registry. `saasaloy add` patches one line in; don't hand-edit the array. |
+| `src/sections/<key>.ts` | The module that installed it (`app` is the base's). |
+| `src/define.ts` | The base template. The composition core. |
+
+The merge goes **one level below the section**: `app: { name: "..." }` replaces the name and keeps
+the rest of `app`, while a nested record or an array is replaced whole. A key no installed section
+defines is a `typecheck` error, which is the only validation there is — the values are literals in
+this repo. Run `/saasaloy-config` for the whole runbook.
+
 ### The `@repo/ui` Design Layer
 
 `packages/ui` owns the design layer: the Tailwind 4 theme in `src/styles/`, the `cn()` helper and the client-state stores in `src/lib/`, the vendored [shadcn](https://ui.shadcn.com) primitives in `src/components/`, the **blocks** in `src/blocks/`, the shells and layouts in `src/containers/`, and the copy in `src/content/`.
@@ -156,7 +193,7 @@ With the admin app installed, `apps/admin/DESIGN.md` records the admin tokens in
 
 Primitives, blocks and containers are reached by subpath — none is re-exported from the
 package root, so importing one never drags in the rest. The root export is project-wide
-constants only (`siteName`):
+constants only (`siteName`, which re-exports `config.app.name`):
 
 ```ts
 import { siteName } from "@repo/ui";
@@ -402,9 +439,11 @@ Blocks, like primitives, are source you own — they are meant to be edited, not
 every user-visible string on the landing page, in two namespaces:
 
 - **`landing.*`** — marketing copy. What the product is, who it is for, what it costs.
-  This is the whole surface a copy rewrite touches. The brand itself is not here: `siteName`
-  lives in `packages/ui/src/index.ts`, is not translated, and is set once by
-  `saasaloy-setup`.
+  This is the whole surface a copy rewrite touches. The brand itself is not here: it is
+  `config.app.name` in `packages/config/src/project.ts`, is not translated, and is set once
+  by `saasaloy-setup`. The currency symbol and the tier ids and names are read from
+  `@repo/config` for the same reason — they are ids and numbers, and `packages/billing`
+  charges against the same ids.
 - **`ui.*`** — chrome and accessibility labels (`Monthly`, `Most popular`, `Close menu`,
   `Billing period`). Nothing here says anything about the product, so a copy pass never
   rewrites it. It does get translated, key for key, when `landing.*` is written in some
@@ -453,27 +492,29 @@ the theme toggle's labels deliberately stay in `packages/ui/src/lib/theme.ts`: t
 inlined verbatim into a pre-paint `<script>` and is import-free on purpose.
 
 **The default copy is Saasaloy's own.** A fresh project's page describes Saasaloy, and
-`siteName` in `packages/ui/src/index.ts` defaults to `"Saasaloy"`, so the brand and the
+`config.app.name` in `packages/config/src/sections/app.ts` defaults to `"Saasaloy"`, so the brand and the
 words agree until you replace both. The two skills below replace them in one pass.
 
-**Making this project yours.** Three skills ship with the base (linked at
+**Making this project yours.** Four skills ship with the base (linked at
 `.claude/skills/`, real files in `.agents/skills/`). The first two run in order:
 
 1. **`saasaloy-setup`** asks ten questions about the product — starting with its name — and
    writes the answers to `docs/product-brief.md`. Every question carries sample answers you
-   can take, edit, or ignore. It also sets `siteName` and the page's `lang`. Nothing else
+   can take, edit, or ignore. It also sets `config.app.name` and `config.app.locale`. Nothing else
    reads your product knowledge out of your head, so run it first; other skills read the
    brief rather than interviewing you again.
 2. **`saasaloy-landing-copy`** turns that brief into the landing page's words. It drafts
    into `docs/landing-copy-draft.md` for you to review and edit, then writes
    `packages/ui/src/content/landing.ts` once you approve, then deletes the draft.
 
-The third has no place in that order, because it runs whenever the UI moves:
+The other two have no place in that order, because they run whenever the thing they own moves:
 
 3. **`saasaloy-design`** keeps `apps/web/DESIGN.md` true, and `apps/admin/DESIGN.md` when the admin app is installed. Its `theme` flow swaps the
    preset and re-derives the contract; `update` re-derives after you change `web.css` or
    add components; `audit` reports where the code and the contract disagree. It reads the
    product brief when one exists and never writes it.
+4. **`saasaloy-config`** covers `@repo/config`: the config-versus-`.env` rule, adding a
+   section, the merge rule, and why an override is not taking effect.
 
 Invoke them rather than editing thirteen blocks by hand — and if you do edit by hand, keep the
 strings in the content module so the next pass finds them.
@@ -555,7 +596,9 @@ hook (which is also how you keep hooks out of CI).
 - Run `pnpm lint` and fix all errors
 - Give every new app or package a `clean` script backed by `rimraf` (see above)
 - Use TypeScript strict mode (no `any` without explicit reason)
-- Use workspace package names (`@repo/ui`, `@repo/tsconfig`) for imports
+- Use workspace package names (`@repo/ui`, `@repo/config`, `@repo/tsconfig`) for imports
+- Put a value you would otherwise write twice in `@repo/config`, and a per-deployment value in
+  `.env`/`.dev.vars` — see above
 
 ### ⚠️ Ask First
 

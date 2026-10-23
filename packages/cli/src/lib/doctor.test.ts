@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { baseRecord } from "./base.js";
 import {
   checkBase,
+  checkConfigValues,
   checkDeploy,
   checkModule,
   checkPartialInstalls,
@@ -15,6 +16,7 @@ import {
   checkRetiredInfra,
   checkTarget,
   KV_INDEX_FILE,
+  readConfigState,
   readPolicyState,
   registryModuleNames,
   resolveDoctorTarget,
@@ -1031,5 +1033,92 @@ describe(readDeployState, () => {
       releaseWrapper: true,
       releaseScript: true,
     });
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The `config` rule (#154): the env var `config.app.name` superseded.
+// ---------------------------------------------------------------------------
+
+describe(checkConfigValues, () => {
+  it("passes a project that does not set it", () => {
+    expect(
+      checkConfigValues({
+        envFiles: { "apps/api/.env": "BILLING_APP_URL=https://ledger.ly" },
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("says nothing when it has nothing to read", () => {
+    expect(checkConfigValues({})).toStrictEqual([]);
+  });
+
+  it("reports a set BILLING_APP_NAME, naming the file", () => {
+    const [found] = checkConfigValues({
+      envFiles: { "apps/api/.env": 'BILLING_APP_NAME="Acme"' },
+    });
+    expect(found?.module).toBe("billing");
+    expect(found?.where).toBe("/env/BILLING_APP_NAME");
+    expect(found?.message).toContain("apps/api/.env");
+  });
+
+  it("ignores a commented or empty assignment", () => {
+    expect(
+      checkConfigValues({
+        envFiles: {
+          "apps/api/.env": "# BILLING_APP_NAME=Acme\nBILLING_APP_NAME=\n",
+        },
+      })
+    ).toStrictEqual([]);
+  });
+
+  it("reports the values file once, not each copy env:setup made of it", () => {
+    const found = checkConfigValues({
+      envFiles: {
+        "packages/env/.env": "BILLING_APP_NAME=Acme",
+        "apps/api/.env": "BILLING_APP_NAME=Acme",
+      },
+    });
+    expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
+      "packages/env/.env",
+    ]);
+  });
+
+  it("reports each service file, in path order, when the values file is clean", () => {
+    const found = checkConfigValues({
+      envFiles: {
+        "packages/env/.env": "BILLING_APP_URL=x",
+        "apps/web/.env": "BILLING_APP_NAME=Acme",
+        "apps/api/.env": "BILLING_APP_NAME=Acme",
+      },
+    });
+    expect(found.map((f) => f.message.split(" ")[0])).toStrictEqual([
+      "apps/api/.env",
+      "apps/web/.env",
+    ]);
+  });
+});
+
+describe(readConfigState, () => {
+  it("reads the values file and every service .env", async () => {
+    const root = await mkdtemp(join(tmpdir(), "saasaloy-config-state-"));
+    try {
+      await mkdir(join(root, "packages/env"), { recursive: true });
+      await mkdir(join(root, "apps/api"), { recursive: true });
+      await writeFile(join(root, "packages/env/.env"), "BILLING_APP_NAME=Acme");
+      await writeFile(join(root, "apps/api/.env"), "BILLING_APP_URL=x");
+      await writeFile(
+        join(root, "apps/api/.dev.vars"),
+        "BILLING_APP_NAME=Acme"
+      );
+      const state = await readConfigState(root);
+      expect(Object.keys(state.envFiles ?? {}).toSorted()).toStrictEqual([
+        "apps/api/.env",
+        "packages/env/.env",
+      ]);
+      expect(checkConfigValues(state)).toHaveLength(1);
+    } finally {
+      await rm(root, { force: true, recursive: true });
+    }
   });
 });

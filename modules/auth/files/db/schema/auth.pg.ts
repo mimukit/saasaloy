@@ -67,7 +67,7 @@ export const users = pgTable("users", {
   // --- admin plugin (`admin()` in packages/auth/src/auth.ts) ---
   // Nullable on purpose: the plugin writes the default role `"user"` in its own
   // create hook, so a DB-level default would only mask a plugin that got removed.
-  // `role` is the single field the admin app's guard reads (`role === "admin"`).
+  // `role` is the single field the admin app's guard reads, against `ADMIN_APP_ROLES`.
   role: text("role"),
   banned: boolean("banned").default(false),
   banReason: text("ban_reason"),

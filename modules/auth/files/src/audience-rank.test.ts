@@ -32,6 +32,7 @@ import {
   grantedRoles,
   parseAudience,
   rankDenial,
+  siteRoleMap,
   takesSuperadmin,
 } from "./authorize.ts";
 import type { RankCall } from "./authorize.ts";
@@ -48,6 +49,33 @@ describe("the two role lists", () => {
     // A project adds `support` to ADMIN_APP_ROLES only. If the two names held one
     // array, that edit would also make `support` pass every `requireAdmin` route.
     assert.notEqual(ADMIN_APP_ROLES, ADMIN_ROLES);
+  });
+});
+
+describe("siteRoleMap", () => {
+  const grants = { admin: "admin statements", user: "user statements" };
+
+  it("keys the admin grant by both configured role strings", () => {
+    const roles = siteRoleMap(grants);
+    for (const role of ADMIN_ROLES) {
+      // better-auth refuses to start when an `adminRoles` entry is not a key here.
+      assert.equal(roles[role], "admin statements", role);
+    }
+    assert.equal(roles.user, "user statements");
+  });
+
+  it("gives a renamed admin role the /admin/* permissions", () => {
+    const roles = siteRoleMap(grants, {
+      adminRole: "staff",
+      superadminRole: "owner",
+    });
+    assert.deepEqual(roles, {
+      user: "user statements",
+      staff: "admin statements",
+      owner: "admin statements",
+    });
+    // The plugin's built-in key does not linger: a stale "admin" row gets nothing.
+    assert.equal(Object.hasOwn(roles, "admin"), false);
   });
 });
 
@@ -378,6 +406,14 @@ describe("instance wiring", () => {
       auth,
       /plugins: \[\s*audience\(ADMIN_AUDIENCE, \{ roles: ADMIN_APP_ROLES \}\),\s*siteRoles\(\),\s*rankGuard\(\),\s*\]/
     );
+  });
+
+  it("builds the admin() plugin's roles from config's role strings", () => {
+    assert.match(
+      auth,
+      /roles: siteRoleMap\(\{ admin: adminAc, user: defaultRoles\.user \}\)/
+    );
+    assert.doesNotMatch(auth, /\.\.\.defaultRoles/);
   });
 
   it("matches the guards on the /admin/ path prefix, not on a list", () => {

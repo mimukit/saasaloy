@@ -71,7 +71,7 @@ Components land in `packages/ui/src/components/` as source you own and can edit.
 
 `apps/web/src/pages/index.astro` composes thirteen blocks from `packages/ui/src/blocks/`: `navbar`, `hero`, `logo-cloud`, `pain-points`, `how-it-works`, `feature-grid`, `showcase`, `audience`, `testimonials`, `pricing-table`, `faq`, `cta` and `footer`. The page ships describing Saasaloy itself, so it reads as a finished product on day one. You make it yours with two edits and no others:
 
-1. **Rewrite the words** in `packages/ui/src/content/landing.ts`: every heading, link, price and icon name. The `saasaloy-landing-copy` skill drafts it from your product brief. The brand is `siteName` in `packages/ui/src/index.ts`, which `saasaloy-setup` sets.
+1. **Rewrite the words** in `packages/ui/src/content/landing.ts`: every heading, link, price and icon name. The `saasaloy-landing-copy` skill drafts it from your product brief. The brand is `app.name` in `packages/config/src/project.ts`, which `saasaloy-setup` sets and `siteName` re-exports.
 2. **Choose the sections** in `index.astro`. Each section is one import and one line.
 
 ### The section recipe

@@ -1,3 +1,4 @@
+import { config } from "@repo/config";
 import { sessions } from "@repo/db/schema/auth";
 import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
@@ -296,7 +297,7 @@ describe("the admin instance", () => {
       "/admin/auth/admin/set-role",
       admin,
       {
-        role: "admin",
+        role: config.auth.adminRole,
         userId: MEMBER,
       }
     );
@@ -315,7 +316,7 @@ describe("the admin instance", () => {
       "/admin/auth/admin/set-role",
       superadmin,
       {
-        role: "admin",
+        role: config.auth.adminRole,
         userId: SUPERADMIN,
       }
     );

@@ -1,4 +1,4 @@
-// The gate's decision core: who may act, expressed with zero imports.
+// The gate's decision core: who may act.
 //
 // `./server.ts` owns the api-facing half — it reads the session and throws Hono's
 // `HTTPException` — and this file owns the rule it throws on. The split is what makes
@@ -6,18 +6,23 @@
 // resolves only inside a scaffolded project, so the rule would otherwise ship untested.
 //
 // Nothing here talks to the network or the database. A caller passes a session it
-// already has and gets an answer.
+// already has and gets an answer. The one import is `@repo/config`, which is a frozen
+// object of checked-in literals with no dependencies of its own, so the rule stays as
+// testable as it was when the two role strings were written here.
+import { config } from "@repo/config";
 
 /**
  * The site-admin role. `./auth.ts` registers better-auth's `admin()` plugin with
  * `adminRoles: [ADMIN_ROLE, SUPERADMIN_ROLE]`, and every new account gets `"user"`.
- * `apps/admin` keeps its own copy in `src/lib/auth.ts`, because a browser bundle cannot
- * import from `@repo/auth/server`; the strings have to agree.
+ *
+ * The string itself lives in `packages/config/src/sections/auth.ts` and has exactly one
+ * home. `apps/admin` reads the same section in the browser, where it cannot import from
+ * `@repo/auth/server`, so the two sides can no longer disagree.
  *
  * An `admin` runs `apps/admin`. Inside an organization it is an ordinary member: the
  * site role grants nothing on a tenant route.
  */
-export const ADMIN_ROLE = "admin";
+export const ADMIN_ROLE = config.auth.adminRole;
 
 /**
  * The role above `admin`. The first account to sign up wins it (the hook in
@@ -25,7 +30,7 @@ export const ADMIN_ROLE = "admin";
  * through the `x-organization-id` header the `multitenant` module reads. Everything
  * `admin` may do, `superadmin` may do, which is why `requireAdmin` admits either.
  */
-export const SUPERADMIN_ROLE = "superadmin";
+export const SUPERADMIN_ROLE = config.auth.superadminRole;
 
 /**
  * The privilege list: the roles that may do admin-only work. `requireAdmin` demands one
@@ -37,14 +42,52 @@ export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 /**
  * The group list: every role in the admin group, which is who may sign in on the admin
  * session and open `apps/admin`. `requireAdminApp` demands one of these, and
- * `apps/admin/src/lib/auth.ts` keeps its own copy for the browser guard.
+ * `apps/admin/src/lib/auth.ts` builds the same list from the same config section for the
+ * browser guard, so the two sides cannot disagree.
  *
- * It holds the same two roles as `ADMIN_ROLES` today, and the two lists stay separate on
- * purpose. A project that adds a `support` role adds it here only: support can then sign
- * in and open the admin app, and every `requireAdmin` route still refuses it. The
- * `saasaloy-auth` skill carries that recipe.
+ * It holds the same two roles as `ADMIN_ROLES` by default, and the two lists stay separate
+ * on purpose. A project that adds a `support` role adds it to `auth.adminAppExtraRoles` in
+ * `packages/config/src/project.ts` only: support can then sign in and open the admin app,
+ * and every `requireAdmin` route still refuses it. The `saasaloy-auth` skill carries that
+ * recipe.
  */
-export const ADMIN_APP_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
+export const ADMIN_APP_ROLES: readonly string[] = [
+  ADMIN_ROLE,
+  SUPERADMIN_ROLE,
+  ...config.auth.adminAppExtraRoles,
+];
+
+/** The two role strings `siteRoleMap` keys the `admin()` plugin's statements by. */
+export interface SiteRoleNames {
+  adminRole: string;
+  superadminRole: string;
+}
+
+/**
+ * The `roles` map for better-auth's `admin()` plugin, keyed by the role strings in
+ * `config.auth` rather than by the plugin's own built-in `admin` key.
+ *
+ * The plugin grants a role its `/admin/*` permissions by looking the role's name up in
+ * this map, and it refuses to start when an entry of `adminRoles` has no key here. So the
+ * keys have to be whatever `config.auth.adminRole` and `config.auth.superadminRole` say:
+ * a project that renames `admin` to `staff` in `project.ts` must hand `staff` the admin
+ * statements, or every plugin endpoint refuses its own admins. Both site-admin roles get
+ * the admin grant, because they differ in rank, not in what they may do to a client, and
+ * `user` keeps the plugin's user grant.
+ *
+ * It takes the grants as arguments so this file stays free of `better-auth`, and the role
+ * names as an argument so a test can prove a rename.
+ */
+export function siteRoleMap<A, U>(
+  grants: { admin: A; user: U },
+  names: SiteRoleNames = config.auth
+): Record<string, A | U> {
+  return {
+    user: grants.user,
+    [names.adminRole]: grants.admin,
+    [names.superadminRole]: grants.admin,
+  };
+}
 
 /**
  * Who a session belongs to. A project has two user groups, and each signs in on its own

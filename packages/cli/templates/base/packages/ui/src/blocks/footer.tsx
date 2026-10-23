@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 
+import { config } from "@repo/config";
 import { siteName as defaultSiteName } from "@repo/ui";
 import { landing, ui } from "@repo/ui/content/landing";
 import { externalLinkProps, newTabHint } from "@repo/ui/lib/external-link";
@@ -15,7 +16,8 @@ import { interpolate } from "@repo/ui/lib/interpolate";
 // here so deleting the footer deletes it, and it needs no island.
 //
 // Words and outbound links come from ../content/landing.ts. The legal links point at this
-// site's own pages, so their hrefs stay here; an empty label in content drops a link.
+// site's own pages, and `apps/web` has to agree with them page for page, so their paths
+// come from `config.app.legal`. An empty label in content drops a link.
 
 export interface FooterLink {
   label: string;
@@ -24,8 +26,8 @@ export interface FooterLink {
 
 const defaultLinks: FooterLink[] = [
   ...landing.footer.links.map(({ label, href }) => ({ label, href })),
-  { label: landing.footer.linkTerms, href: "/terms" },
-  { label: landing.footer.linkPrivacy, href: "/privacy" },
+  { label: landing.footer.linkTerms, href: config.app.legal.termsPath },
+  { label: landing.footer.linkPrivacy, href: config.app.legal.privacyPath },
 ].filter((link) => link.label !== "" && link.href !== "");
 
 // CC0 marks from simple-icons (https://simpleicons.org). Each draws in `currentColor`.

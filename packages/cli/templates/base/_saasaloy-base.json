@@ -5,7 +5,8 @@
     "saasaloy.json",
     "apps/web/src/pages/index.astro",
     "packages/ui/src/content/landing.ts",
-    "docs/runbook-deploy.md"
+    "docs/runbook-deploy.md",
+    "packages/config/src/project.ts"
   ],
   "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [

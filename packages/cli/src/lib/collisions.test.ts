@@ -1,11 +1,23 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  BASE_SECTION_KEYS,
+  baseSectionClaims,
+  declaredSectionKey,
+  formatSectionKeyMismatches,
+  sectionFileOf,
+  CONFIG_SECTIONS_FILE,
   describeStaleOwner,
   detectCollisions,
   detectOwnedCollisions,
+  detectSectionCollisions,
   formatCollisions,
   formatOwnedCollisions,
+  formatSectionCollisions,
   mayShareTarget,
+  sectionClaims,
+  sectionKeyOf,
 } from "./collisions.js";
 import type {
   FileCollision,
@@ -14,6 +26,7 @@ import type {
   StaleOwner,
 } from "./collisions.js";
 import type { LoadedModule } from "./registry.js";
+import type { RegistryPatch } from "./schema.js";
 
 // The rule under test: two modules in one run may share a file target only when one of
 // them reaches the other through `dependsOn`. Core-plus-driver stays legal, an unrelated
@@ -429,5 +442,220 @@ describe(describeStaleOwner, () => {
     expect(message).toContain("database-d1");
     expect(message).toContain("packages/db/src/client.ts");
     expect(message).toContain("leave it installed");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Config section keys (#154). Unlike a file target, a section key has no legal
+// overlap — `dependsOn` cannot express consent to losing your values.
+// ---------------------------------------------------------------------------
+
+function sectionPatch(
+  from: string,
+  file = CONFIG_SECTIONS_FILE
+): RegistryPatch {
+  return {
+    file,
+    kind: "plugin-array",
+    exportName: "sections",
+    arrayProp: "sections",
+    call: "someConfig",
+    import: { name: "someConfig", from },
+  };
+}
+
+describe(sectionKeyOf, () => {
+  it("reads the key off the import specifier", () => {
+    expect(sectionKeyOf(sectionPatch("./sections/auth"))).toBe("auth");
+  });
+
+  it("tolerates an explicit extension", () => {
+    expect(sectionKeyOf(sectionPatch("./sections/billing.ts"))).toBe("billing");
+  });
+
+  it("ignores a plugin-array patch on any other file", () => {
+    expect(
+      sectionKeyOf(
+        sectionPatch("./providers/memory", "packages/kv/src/index.ts")
+      )
+    ).toBeUndefined();
+  });
+
+  it("ignores a patch of another kind on the sections file", () => {
+    expect(
+      sectionKeyOf({
+        file: CONFIG_SECTIONS_FILE,
+        kind: "package-json-dependency",
+        section: "dependencies",
+        name: "@repo/config",
+        range: "workspace:*",
+      })
+    ).toBeUndefined();
+  });
+});
+
+describe(detectSectionCollisions, () => {
+  it("passes two modules claiming different keys", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "billing", key: "billing" },
+      ])
+    ).toStrictEqual([]);
+  });
+
+  it("reports the pair claiming one key, first claimant first", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "shop", key: "auth" },
+      ])
+    ).toStrictEqual([{ key: "auth", module: "auth", other: "shop" }]);
+  });
+
+  it("reports one pair per earlier claimant", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "a", key: "app" },
+        { module: "b", key: "app" },
+        { module: "c", key: "app" },
+      ])
+    ).toHaveLength(3);
+  });
+
+  it("is not a collision when one module claims its own key twice", () => {
+    expect(
+      detectSectionCollisions([
+        { module: "auth", key: "auth" },
+        { module: "auth", key: "auth" },
+      ])
+    ).toStrictEqual([]);
+  });
+});
+
+describe(sectionClaims, () => {
+  it("picks the section patches out of a descriptor's patches", () => {
+    expect(
+      sectionClaims("auth", [
+        sectionPatch("./providers/memory", "packages/kv/src/index.ts"),
+        sectionPatch("./sections/auth"),
+      ])
+    ).toStrictEqual([{ module: "auth", key: "auth" }]);
+  });
+
+  it("reads a module with no patches as claiming nothing", () => {
+    expect(sectionClaims("waitlist")).toStrictEqual([]);
+  });
+});
+
+describe(formatSectionCollisions, () => {
+  it("names both modules, the key, and the two ways out", () => {
+    const message = formatSectionCollisions(
+      [{ key: "auth", module: "auth", other: "shop" }],
+      "shop"
+    );
+    expect(message).toContain("Cannot add shop");
+    expect(message).toContain("config.auth");
+    expect(message).toContain("auth and shop");
+  });
+
+  it("pluralises the heading on more than one key", () => {
+    const message = formatSectionCollisions([
+      { key: "auth", module: "auth", other: "shop" },
+      { key: "app", module: "a", other: "b" },
+    ]);
+    expect(message).toContain("section keys claimed twice");
+  });
+});
+
+describe("the base template's section keys", () => {
+  it("lists exactly the files in the template's sections folder", () => {
+    const dir = fileURLToPath(
+      new URL(
+        "../../templates/base/packages/config/src/sections",
+        import.meta.url
+      )
+    );
+    const keys = readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => name.replace(/\.ts$/, ""))
+      .toSorted();
+    expect([...BASE_SECTION_KEYS].toSorted()).toStrictEqual(keys);
+  });
+
+  it("claims each key under the reserved name base", () => {
+    expect(baseSectionClaims()).toStrictEqual([{ module: "base", key: "app" }]);
+  });
+});
+
+describe(declaredSectionKey, () => {
+  it("reads a string-literal key in any quote style", () => {
+    expect(declaredSectionKey('defineSection("auth", {})')).toBe("auth");
+    expect(declaredSectionKey("defineSection(\n  'shop',\n  {})")).toBe("shop");
+    expect(declaredSectionKey("defineSection(`kv`, {})")).toBe("kv");
+  });
+
+  it("gives up on a key it cannot read without running the file", () => {
+    expect(declaredSectionKey("defineSection(KEY, {})")).toBeUndefined();
+    // A template literal with a placeholder, built so the source holds no `${` itself.
+    const interpolated = ["defineSection(`", "{name}`, {})"].join("$");
+    expect(declaredSectionKey(interpolated)).toBeUndefined();
+    expect(declaredSectionKey("export const x = 1;")).toBeUndefined();
+  });
+});
+
+describe(sectionFileOf, () => {
+  it("finds the files entry that targets the claimed section", () => {
+    const files = [
+      { path: "files/a.ts", target: "@api/a.ts" },
+      { path: "files/config/auth.ts", target: "@config/sections/auth.ts" },
+    ];
+    expect(sectionFileOf(files, "auth")?.path).toBe("files/config/auth.ts");
+    expect(sectionFileOf(files, "shop")).toBeUndefined();
+    expect(sectionFileOf(undefined, "auth")).toBeUndefined();
+  });
+});
+
+describe(formatSectionKeyMismatches, () => {
+  it("names the module, both keys, and the fix", () => {
+    expect(
+      formatSectionKeyMismatches(
+        [{ module: "shop", claimed: "shop", declared: "store" }],
+        "shop"
+      )
+    ).toBe(
+      'Cannot add shop — a config section file and its patch disagree on the key:\n  shop registers ./sections/shop but the file calls defineSection("store"). The file name is the key; rename one so both say the same.'
+    );
+  });
+});
+
+describe("every module's section file", () => {
+  it("declares the key its patch claims", () => {
+    const modulesDir = fileURLToPath(
+      new URL("../../../../modules", import.meta.url)
+    );
+    let checked = 0;
+    for (const name of readdirSync(modulesDir)) {
+      const descriptor = `${modulesDir}/${name}/registry-item.json`;
+      if (!existsSync(descriptor)) {
+        continue;
+      }
+      const item = JSON.parse(readFileSync(descriptor, "utf-8")) as {
+        patches?: RegistryPatch[];
+        files?: { path: string; target: string }[];
+      };
+      for (const { key } of sectionClaims(name, item.patches)) {
+        const file = sectionFileOf(item.files, key);
+        // A section patch with no file to back it is its own failure, named here.
+        expect(file?.target).toBe(`@config/sections/${key}.ts`);
+        const source = readFileSync(
+          `${modulesDir}/${name}/${file?.path}`,
+          "utf-8"
+        );
+        expect(declaredSectionKey(source)).toBe(key);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(2);
   });
 });

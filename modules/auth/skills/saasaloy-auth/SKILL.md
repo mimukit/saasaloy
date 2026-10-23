@@ -248,6 +248,8 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 Better Auth's `admin` plugin is on from the start, on both instances (`siteRoles()` in `auth.ts`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), refuses a banned account at sign-in, and treats the roles in `adminRoles` as privileged. Its `/admin/*` endpoints answer only on `adminAuth`.
 
+**The role strings live in `packages/config/src/sections/auth.ts`, which this module installs, and they have exactly one home.** `packages/auth/src/authorize.ts` reads `config.auth.adminRole`, `config.auth.superadminRole` and `config.auth.adminAppExtraRoles`, and `apps/admin/src/lib/auth.ts` reads the same three — a browser bundle cannot import `@repo/auth/server`, but `@repo/config` has no dependencies at all, so both sides read one copy. `siteRoleMap` in `authorize.ts` keys the `admin()` plugin's statements by the same strings, so a renamed role keeps its `/admin/*` permissions. Rename either role in `packages/config/src/project.ts`; rows already written keep the old string, so an existing project needs the `update users set role = ...` to match.
+
 There are two site roles, and they are not interchangeable. `admin` runs `apps/admin` for the client accounts. `superadmin` does everything `admin` does, owns the admin group (see "Rank" below), and is the only role that may act inside an organization it does not belong to, through the `x-organization-id` header the `multitenant` module reads. That bypass needs the superadmin signed in on the admin session; a superadmin's client session gets the ordinary 403. Inside an organization an `admin` is an ordinary member: the site role grants nothing on a tenant route, which asks `requireTenant` and reads the caller's membership instead.
 
 `adminRoles` names both, so the plugin's own endpoints admit a `superadmin` as well as an `admin`. Leaving it at the default `["admin"]` would let `requireAdmin` pass a caller the plugin then refused.
@@ -261,7 +263,7 @@ There are two site roles, and they are not interchangeable. `admin` runs `apps/a
 | `ADMIN_APP_ROLES` | Who is in the admin group: who may sign in on the admin session and open `apps/admin`? | `requireAdminApp` | `admin`, `superadmin` |
 | `ADMIN_ROLES` | Who may do admin-only work? | `requireAdmin` | `admin`, `superadmin` |
 
-They hold the same roles today and stay separate on purpose. `adminAuth`'s sign-in hook and the rank guard read `ADMIN_APP_ROLES`; the `admin()` plugin's `adminRoles` reads `ADMIN_ROLES`. `apps/admin/src/lib/auth.ts` keeps a browser copy of `ADMIN_APP_ROLES`, because a bundle cannot import from `@repo/auth/server`, and its guard reads that copy:
+They hold the same roles today and stay separate on purpose. `adminAuth`'s sign-in hook and the rank guard read `ADMIN_APP_ROLES`; the `admin()` plugin's `adminRoles` reads `ADMIN_ROLES`. `apps/admin/src/lib/auth.ts` builds its own `ADMIN_APP_ROLES` from the same `config.auth` section, because a bundle cannot import from `@repo/auth/server`, and its guard reads that list:
 
 ```ts
 const { data } = await auth.getSession();
@@ -274,9 +276,8 @@ if (!ADMIN_APP_ROLES.some((role) => data?.user.role === role)) { /* denied */ }
 
 A support agent who may sign in on the admin app but may not run admin-only routes is one role added to the group list only:
 
-1. In `packages/auth/src/authorize.ts`, add `"support"` to `ADMIN_APP_ROLES`. Leave `ADMIN_ROLES` alone.
-2. In `apps/admin/src/lib/auth.ts`, add `"support"` to the browser copy of `ADMIN_APP_ROLES`. The two lists must agree, or the SPA and the api disagree about who gets in.
-3. If support should reach an `admin()` plugin endpoint (for example `list-users`), give it a statement set in `siteRoles()` in `packages/auth/src/auth.ts`. Without one, the plugin refuses every `/admin/*` call from support. Do not add `support` to `adminRoles`, which would give it every plugin permission. A read-only set looks like this; check the statement names against the pinned better-auth's `better-auth/plugins/admin/access`:
+1. In `packages/config/src/project.ts`, set `auth: { adminAppExtraRoles: ["support"] }`. `ADMIN_APP_ROLES` on the api and in `apps/admin` both pick it up. Leave `ADMIN_ROLES` alone.
+2. If support should reach an `admin()` plugin endpoint (for example `list-users`), give it a statement set in `siteRoles()` in `packages/auth/src/auth.ts`. Without one, the plugin refuses every `/admin/*` call from support. Do not add `support` to `adminRoles`, which would give it every plugin permission. A read-only set looks like this; check the statement names against the pinned better-auth's `better-auth/plugins/admin/access`:
 
 ```ts
 import { createAccessControl } from "better-auth/plugins/access";
@@ -289,13 +290,13 @@ function siteRoles() {
   return admin({
     ac,
     adminRoles: [...ADMIN_ROLES],
-    roles: { ...defaultRoles, [SUPERADMIN_ROLE]: adminAc, support },
+    roles: { ...siteRoleMap({ admin: adminAc, user: defaultRoles.user }), support },
   });
 }
 ```
 
-4. Open each api route support may call with `requireAdminApp(c)`. Every `requireAdmin` route keeps refusing support with 403.
-5. Grant the role as a superadmin: `auth.admin.setRole({ userId, role: "support" })` from the admin app. Only a superadmin may grant a role in `ADMIN_APP_ROLES`.
+3. Open each api route support may call with `requireAdminApp(c)`. Every `requireAdmin` route keeps refusing support with 403.
+4. Grant the role as a superadmin: `auth.admin.setRole({ userId, role: "support" })` from the admin app. Only a superadmin may grant a role in `ADMIN_APP_ROLES`.
 
 Support is then in the admin group for the rank guard too: an `admin` may not change a support account, and only a superadmin may.
 

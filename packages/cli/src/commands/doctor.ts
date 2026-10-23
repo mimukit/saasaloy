@@ -6,6 +6,7 @@ import {
   checkBase,
   checkDeploy,
   checkEnv,
+  checkConfigValues,
   checkPartialInstalls,
   checkPolicyBindings,
   checkProject,
@@ -14,6 +15,7 @@ import {
   hasRetiredInfra,
   readDeployState,
   readEnvState,
+  readConfigState,
   readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
@@ -155,6 +157,8 @@ async function reportProject(path: string): Promise<number> {
   // resolves to (#129)?
   // A fourth: is there a leftover `.dev.vars` hiding `.env` from wrangler (#153)?
   // A fifth: is the retired Pulumi `infra/` workspace still there (ADR 0043)?
+  // A sixth, asked of every project: is the superseded `BILLING_APP_NAME` still set in a
+  // `.env` (#154)?
   const policyState = await readPolicyState(path, config.installed);
   const envState = await readEnvState(path);
   const findings = [
@@ -163,6 +167,7 @@ async function reportProject(path: string): Promise<number> {
     ...(policyState ? checkPolicyBindings(policyState) : []),
     ...checkEnv(envState),
     ...checkRetiredInfra(await hasRetiredInfra(path)),
+    ...checkConfigValues(await readConfigState(path)),
   ];
   if (findings.length === 0) {
     const count = config.installed.length;

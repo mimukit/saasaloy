@@ -31,10 +31,6 @@ export const billingPreset = definePreset({
       .describe(
         "How many days a subscription may stay past_due before the lockout job runs. 14 when unset."
       ),
-    BILLING_APP_NAME: z
-      .string()
-      .default("your app")
-      .describe("What the three billing emails call your project."),
     BILLING_APP_URL: z
       .url()
       .default("http://localhost:3001/billing")
