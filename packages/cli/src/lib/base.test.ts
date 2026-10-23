@@ -372,6 +372,8 @@ describe("the shipped declaration", () => {
       "packages/ui/src/lib/icons.ts",
       "apps/web/src/layouts/Layout.astro",
       "apps/web/public/favicon.svg",
+      "packages/tooling/src/deploy.config.ts",
+      "packages/tooling/src/targets.ts",
     ]) {
       expect(shipped, `${target} is claimed but not shipped`).toContain(target);
       expect(isOwned(target), `${target} should be owned`).toBeTruthy();
@@ -380,6 +382,8 @@ describe("the shipped declaration", () => {
       "package.json",
       "AGENTS.md",
       "apps/web/wrangler.jsonc",
+      "packages/tooling/src/deploy-production.ts",
+      "packages/tooling/src/types.ts",
     ]) {
       expect(
         isOwned(target),

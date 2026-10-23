@@ -21,6 +21,8 @@
     "packages/ui/src/index.ts",
     "packages/ui/src/lib/icons.ts",
     "apps/web/src/layouts/Layout.astro",
-    "apps/web/public/favicon.*"
+    "apps/web/public/favicon.*",
+    "packages/tooling/src/deploy.config.ts",
+    "packages/tooling/src/targets.ts"
   ]
 }

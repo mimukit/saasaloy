@@ -1,3 +1,4 @@
+import { readFile } from "node:fs/promises";
 import { describe, expect, it } from "vitest";
 import { format } from "prettier";
 import {
@@ -77,5 +78,47 @@ describe(removeFromConstArray, () => {
 
   it("is a no-op when the keyed entry is already absent", () => {
     expect(removeFromConstArray(NAV, TEAMS)).toBe(NAV);
+  });
+});
+
+// The base ships `packages/tooling/src/targets.ts` as an owned file, and the api and
+// admin modules append their deploy order and smoke rows to it with this patch kind.
+// A reshaped array there makes `saasaloy add api` add nothing.
+describe("the base deploy targets file", () => {
+  const targets = new URL(
+    "../../../templates/base/packages/tooling/src/targets.ts",
+    import.meta.url
+  );
+  const API_TARGET = {
+    constName: "DEPLOY_TARGETS",
+    key: "service",
+    entry: { service: "api", order: 10 },
+  };
+  const API_SMOKE = {
+    constName: "SMOKE_CHECKS",
+    key: "id",
+    entry: {
+      id: "api-health",
+      service: "api",
+      path: "/health",
+      status: 200,
+      body: '"ok"',
+    },
+  };
+
+  it("takes a DEPLOY_TARGETS row and a SMOKE_CHECKS row, once each", async () => {
+    const source = await readFile(targets, "utf-8");
+    const once = insertIntoConstArray(
+      insertIntoConstArray(source, API_TARGET),
+      API_SMOKE
+    );
+    expect(once).toContain('service: "api"');
+    expect(once).toContain('id: "api-health"');
+    expect(
+      insertIntoConstArray(insertIntoConstArray(once, API_TARGET), API_SMOKE)
+    ).toBe(once);
+    expect(
+      removeFromConstArray(removeFromConstArray(once, API_SMOKE), API_TARGET)
+    ).toBe(source);
   });
 });

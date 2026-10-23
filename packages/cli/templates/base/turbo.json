@@ -21,11 +21,7 @@
       "outputs": ["coverage/**"]
     },
     "deploy": {
-      "dependsOn": ["^build", "^db:migrate:prod"],
-      "cache": false,
-      "passThroughEnv": ["*"]
-    },
-    "db:migrate:prod": {
+      "dependsOn": ["^build"],
       "cache": false,
       "passThroughEnv": ["*"]
     }
