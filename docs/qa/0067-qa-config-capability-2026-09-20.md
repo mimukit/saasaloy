@@ -1,29 +1,28 @@
 # QA Plan: the `config` capability
 
-_Generated 2026-09-20 · against `6cce5b5` plus the uncommitted working tree · covers `@repo/config` in the base, the `auth` and `billing` sections, the `add`-time section guard, and the three `doctor` checks_
+_Generated 2026-09-20 · rewritten 2026-10-23 for the rescoped PR #163 on top of main `da9c08c` (`packages/env` setup, the #191 landing page, the two auth instances) · covers `@repo/config` in the base, the `auth` and `billing` sections, the `add`-time section guard, and the two `doctor` checks_
 
 ## Summary
 
-- `@repo/config` is a new base package holding the values a project checks into its repo: the product name, the locale, the currency symbol, the legal paths and the plan tier ids. A capability adds a section; a project owner edits one file.
-- Working means one rename in `packages/config/src/project.ts` changes the name everywhere, the roles and tier ids have one home, and `saasaloy add` refuses two modules claiming one section key.
+- `@repo/config` is a new base package holding the values a project checks into its repo: the product name, the locale and the legal paths. A capability adds a section; a project owner edits one file, `packages/config/src/project.ts`.
+- Working means one rename in `project.ts` changes the name on every page, the admin roles have one home on the api and in the browser, and `saasaloy add` refuses two modules claiming one section key.
+- The landing page's pricing is out of scope on purpose. It stays in `packages/ui/src/content/landing.ts`, unchanged from main.
 
 ## Environment
 
 True for the whole plan. Do this once, before Scenario 1.
 
-- Branch under test: `issue-154-add-a-config-capability-for-shared-project-configuration`, working tree included.
-- Work from the repo root of this worktree. Every path below is relative to it.
-- No credentials, no auth token, no feature flag.
-- A browser on your own machine. This box is headless, so open `http://localhost:3000` from a machine that can reach it over the tailnet, or run the scenario locally.
+- Branch under test: `issue-154-add-a-config-capability-for-shared-project-configuration`.
+- Work from the repo root of this worktree. The playground is `.dev/playground`.
+- No credentials and no vendor account. Every provider below is a local one.
+- Every environment value goes into `packages/env/.env`, and `pnpm env:setup` writes each service's own `.env` from it. There is no `.dev.vars`.
+- Dev ports: web on 3000, admin on 3001, api on 4000.
+- A browser on your own machine for the visual checks. This box is headless, so open the pages over the tailnet, or run the scenario locally.
 
-Build the CLI and set the two variables the plan uses.
+Set the two variables the plan uses:
 
 ```sh
 export QA_ROOT="$PWD" && export PLAY="$PWD/.dev/playground"
-```
-
-```sh
-pnpm --filter saasaloy build
 ```
 
 - [ ] Environment ready
@@ -34,58 +33,63 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 | # | Scenario | Test case | Priority |
 |------|----------|-----------|----------|
-| TC-1.1 | 1: fresh scaffold, base only | The scaffold names itself, everywhere | 🔴 Critical |
-| TC-1.2 | 1: fresh scaffold, base only | A rename in `project.ts` reaches every surface | 🔴 Critical |
+| TC-1.1 | 1: fresh scaffold, base only | A fresh scaffold ships as Saasaloy | 🔴 Critical |
+| TC-1.2 | 1: fresh scaffold, base only | A rename in `project.ts` reaches every page | 🔴 Critical |
 | TC-1.3 | 1: fresh scaffold, base only | The locale and the legal paths follow config | 🟡 Normal |
 | TC-1.4 | 1: fresh scaffold, base only | A bad override fails `typecheck`, readably | 🟡 Normal |
-| TC-1.5 | 1: fresh scaffold, base only | `doctor` names the two unedited values | 🟡 Normal |
+| TC-1.5 | 1: fresh scaffold, base only | `doctor` reports the site origin, not the name | 🟡 Normal |
+| TC-1.6 | 1: fresh scaffold, base only | The merge tests run and lint in the project | 🟡 Normal |
 | TC-2.1 | 2: auth, admin and billing added | Two modules compose two sections | 🔴 Critical |
-| TC-2.2 | 2: auth, admin and billing added | The role strings have one home | 🔴 Critical |
-| TC-2.3 | 2: auth, admin and billing added | A tier rename reaches the page and the biller | 🟡 Normal |
-| TC-2.4 | 2: auth, admin and billing added | `doctor` reports a stale `BILLING_APP_NAME` | 🟡 Normal |
-| TC-2.5 | 2: auth, admin and billing added | `remove` takes a section back out | 🟡 Normal |
+| TC-2.2 | 2: auth, admin and billing added | The admin roles have one home | 🔴 Critical |
+| TC-2.3 | 2: auth, admin and billing added | `doctor` reports a stale `BILLING_APP_NAME` | 🟡 Normal |
+| TC-2.4 | 2: auth, admin and billing added | `remove` takes a section back out | 🟡 Normal |
 | TC-3.1 | 3: a registry with a colliding descriptor | `add` refuses a claimed section key, readably | 🟢 Low |
 
 ## Scenario 1: fresh scaffold, base only
 
-**Setup.** Run once, for every case in this scenario.
+**Setup.** Run once, for every case in this scenario. `play:reset` builds the CLI, scaffolds, installs and commits a baseline.
 
 ```sh
-cd "$QA_ROOT" && pnpm play:reset && cd "$PLAY" && pnpm install
+cd "$QA_ROOT" && pnpm play:reset
 ```
 
 ```sh
-cd "$PLAY" && git init -q .
+cd "$PLAY" && cp packages/env/.env.example packages/env/.env && pnpm env:setup
 ```
 
 - [ ] Setup complete
 
-### TC-1.1: The scaffold names itself, everywhere · 🔴 Critical
+### TC-1.1: A fresh scaffold ships as Saasaloy · 🔴 Critical
 
-**Goal.** `saasaloy init` substitutes the project name into `config.app.name`, and every surface that used to hold its own copy reads it.
+**Goal.** The default name is `"Saasaloy"`, so it agrees with the shipped landing copy, and the override file ships with every value commented out.
 
 **Steps**
 
-1. Read the override file.
+1. Read the override file and the base section.
 
    ```sh
-   cd "$PLAY" && cat packages/config/src/project.ts
+   cd "$PLAY" && cat packages/config/src/project.ts && grep -n "name:" packages/config/src/sections/app.ts
    ```
 
-   - [ ] `app.name` is `"playground"`, not `{{PROJECT_NAME}}`
-     - the comments above it say what belongs here and what belongs in `.env`
-2. Start the site.
+   - [ ] `project.ts` has `// name:` and `// locale:` commented out, and no `{{PROJECT_NAME}}`
+   - [ ] `sections/app.ts` sets `name: "Saasaloy"`
+2. Confirm the landing copy is main's, untouched.
 
    ```sh
-   cd "$PLAY" && pnpm --filter @repo/web dev
+   cd "$QA_ROOT" && diff <(git show origin/main:packages/cli/templates/base/packages/ui/src/content/landing.ts) "$PLAY/packages/ui/src/content/landing.ts" && echo identical
    ```
 
-3. Open `http://localhost:3000` in a browser.
-   - [ ] The name reads `playground` in the browser tab, the navbar and the footer
-   - [ ] The page renders as it did before this change, with no missing block
-     - navbar, hero, feature grid, pricing table, FAQ, closing call to action, footer
-4. Open `http://localhost:3000/terms`, then `/privacy`.
-   - [ ] Both pages render and name the project
+   - [ ] The command prints `identical`
+3. Start the site and open `http://localhost:3000`.
+
+   ```sh
+   cd "$PLAY" && ASTRO_DEV_BACKGROUND=1 pnpm --filter @repo/web dev
+   ```
+
+   - [ ] The browser tab, the navbar and the footer read `Saasaloy`
+   - [ ] The pricing section shows the three hosting tiers from #191, unchanged
+4. Open `/terms`, then `/privacy`.
+   - [ ] Both pages render and name `Saasaloy`
 
 **Result**
 
@@ -95,25 +99,22 @@ cd "$PLAY" && git init -q .
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-1.2: A rename in `project.ts` reaches every surface · 🔴 Critical
+### TC-1.2: A rename in `project.ts` reaches every page · 🔴 Critical
 
-**Goal.** One edit in one file renames the product everywhere, which is the defect this capability exists to fix.
+**Goal.** One edit in one file renames the product everywhere.
 
 **Steps**
 
-1. Set the name. Edit `packages/config/src/project.ts` and change `app.name` to `Ledgerly`.
-2. Reload `http://localhost:3000`.
-   - [ ] The navbar, the hero copy, the closing call to action and the footer all read `Ledgerly`
-   - [ ] The browser tab reads `Ledgerly`
-3. Reload `http://localhost:3000/terms`.
-   - [ ] The heading and the body read `Ledgerly`
-4. Search the tree for a second copy of the old name.
+1. In `packages/config/src/project.ts`, uncomment `name` and set it to `"Ledgerly"`.
+2. Build and count the names.
 
    ```sh
-   cd "$PLAY" && grep -rn "playground" packages apps --include="*.ts" --include="*.tsx" --include="*.astro"
+   cd "$PLAY" && pnpm --filter @repo/web build && for f in index terms/index privacy/index; do echo "$f Ledgerly=$(grep -o Ledgerly apps/web/dist/client/$f.html | wc -l) Saasaloy=$(grep -o Saasaloy apps/web/dist/client/$f.html | wc -l)"; done
    ```
 
-   - [ ] The search finds nothing, so no file kept its own copy of the name
+   - [ ] Every page has `Saasaloy=0` and a non-zero `Ledgerly` count
+3. Reload `http://localhost:3000` in the browser.
+   - [ ] The browser tab, the navbar, the hero, the closing call to action and the footer read `Ledgerly`
 
 **Result**
 
@@ -129,16 +130,18 @@ cd "$PLAY" && git init -q .
 
 **Steps**
 
-1. Set `app.locale` to `"en-GB"` in `packages/config/src/project.ts`. Reload the page.
-2. Open the browser's element inspector on the `<html>` tag.
+1. In `project.ts`, set `locale: "en-GB"` and `legal: { termsPath: "/legal/terms", privacyPath: "/legal/privacy" }` inside `app`.
+2. Build and read the attributes.
+
+   ```sh
+   cd "$PLAY" && pnpm --filter @repo/web build && grep -o '<html lang="[^"]*"' apps/web/dist/client/index.html && grep -o 'href="/legal/[a-z]*"' apps/web/dist/client/index.html
+   ```
+
    - [ ] `lang` reads `en-GB`
-3. Set `app.legal` to `{ termsPath: "/legal/terms", privacyPath: "/legal/privacy" }` in the same file. Reload the page.
-   - [ ] The footer's Terms and Privacy links point at `/legal/terms` and `/legal/privacy`
-     - hover each link and read the status bar, or inspect the `href`
-   - [ ] Both links 404, because the pages have not been renamed
-     - this is the coupling the comment in `apps/web/src/pages/terms.astro` warns about
-4. Put both values back to `/terms` and `/privacy`, and `locale` back to `"en"`. Reload.
-   - [ ] Both links work again
+   - [ ] The footer links point at `/legal/terms` and `/legal/privacy`
+3. In the browser, click the footer's Terms link.
+   - [ ] It 404s, because the pages were not renamed. The comment in `apps/web/src/pages/terms.astro` warns about this coupling.
+4. Remove the `locale` and `legal` lines again.
 
 **Result**
 
@@ -150,28 +153,25 @@ cd "$PLAY" && git init -q .
 
 ### TC-1.4: A bad override fails `typecheck`, readably · 🟡 Normal
 
-**Goal.** A typo in the one file a project owner edits is a compile error, because `typecheck` is the only validation there is.
+**Goal.** A typo in the one file a project owner edits is a compile error.
 
 **Steps**
 
-1. Stop the dev server.
-2. Add a misspelled key to `packages/config/src/project.ts`, inside `app`: `nmae: "Ledgerly",`.
-3. Run the typecheck.
+1. Stop the dev server. Add `nmae: "Ledgerly",` inside `app` in `project.ts`.
 
    ```sh
    cd "$PLAY" && pnpm typecheck
    ```
 
-   - [ ] The run fails, and the message names `project.ts` and the key you misspelled
-     - a reader who has never seen this package can tell what to fix
-4. Delete the bad line. Add a whole section nothing defines instead: `billing: { appName: "x" },`.
+   - [ ] The run fails, and the message names `project.ts` and `nmae`
+2. Replace that line with a section nothing defines, at the top level: `billing: { appName: "x" },`.
 
    ```sh
    cd "$PLAY" && pnpm typecheck
    ```
 
-   - [ ] The run fails again, because `billing` is not installed in this scenario
-5. Delete that line too.
+   - [ ] The run fails, because `billing` is not installed in this scenario
+3. Delete the line.
 
    ```sh
    cd "$PLAY" && pnpm typecheck
@@ -187,29 +187,21 @@ cd "$PLAY" && git init -q .
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-1.5: `doctor` names the two unedited values · 🟡 Normal
+### TC-1.5: `doctor` reports the site origin, not the name · 🟡 Normal
 
-**Goal.** `doctor` tells a project owner which template values they have not set yet, in words that say what to do.
+**Goal.** `doctor` reports the placeholder origin and stays quiet about the deliberate default name.
 
 **Steps**
 
 1. Run the check.
 
    ```sh
-   cd "$PLAY" && "$QA_ROOT/packages/cli/dist/index.js" doctor .
+   cd "$PLAY" && ./saasaloy doctor .
    ```
 
-   - [ ] The Project state box reports the unedited `site: "https://example.com"`, and the sentence says where to set it
-   - [ ] The Base box lists `packages/config/src/project.ts` under "seed, not checked", so an update will not overwrite it
-   - [ ] Nothing reports the product name, because `init` substituted it
-2. Put the placeholder back. Set `app.name` to `"{{PROJECT_NAME}}"` in `packages/config/src/project.ts`.
-
-   ```sh
-   cd "$PLAY" && "$QA_ROOT/packages/cli/dist/index.js" doctor .
-   ```
-
-   - [ ] A second finding now names the placeholder and the file
-3. Set the name back to `playground`.
+   - [ ] Project state holds one finding, the unedited `site: "https://example.com"` in `apps/web/astro.config.mjs`
+   - [ ] Nothing reports the product name
+   - [ ] The Base box lists `packages/config/src/project.ts` under "seed, not checked"
 
 **Result**
 
@@ -219,60 +211,74 @@ cd "$PLAY" && git init -q .
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-**Reset.** Run after every case above, before moving to Scenario 2.
+### TC-1.6: The merge tests run and lint in the project · 🟡 Normal
 
-```sh
-cd "$QA_ROOT" && pnpm play:destroy
-```
+**Goal.** `packages/config/src/define.test.ts` ships with the package, runs on the project's Vitest, and passes the project's type-aware lint.
+
+**Steps**
+
+1. Run the project's tests and lint.
+
+   ```sh
+   cd "$PLAY" && pnpm test && pnpm lint
+   ```
+
+   - [ ] Vitest collects `packages/config/src/define.test.ts` and all its cases pass
+   - [ ] `pnpm lint` passes all four steps
+
+**Result**
+
+- [ ] Pass
+- [ ] Fail
+- [ ] Skipped
+
+**Notes.** _what actually happened on a fail; why it was skipped_
 
 ## Scenario 2: auth, admin and billing added
 
-**Setup.** Run once, for every case in this scenario. The last command takes a few minutes.
+**Setup.** Run once, for every case in this scenario. The build takes a few minutes.
 
 ```sh
-cd "$QA_ROOT" && pnpm play:reset && cd "$PLAY" && git init -q .
+cd "$QA_ROOT" && pnpm play:reset
 ```
 
 ```sh
-cd "$PLAY" && for m in database-d1 auth admin billing; do ./saasaloy add $m --yes; done
+cd "$PLAY" && for m in database-d1 auth admin billing billing-console; do ./saasaloy add $m --yes; done && pnpm install
+```
+
+Copy the key list, then fill in the keys this module set needs. `saasaloy env` prompts for them; the values below are local ones.
+
+```sh
+cd "$PLAY" && cp packages/env/.env.example packages/env/.env && sed -i 's/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=qa-secret-0123456789abcdef0123456789abcdef/; s/^BILLING_PROVIDER=$/BILLING_PROVIDER=console/; s/^EMAIL_PROVIDER=$/EMAIL_PROVIDER=console/; s/^LOGGER_PROVIDER=$/LOGGER_PROVIDER=console/; s/^QUEUE_PROVIDER=$/QUEUE_PROVIDER=memory/; s/^EMAIL_FROM=$/EMAIL_FROM=qa@example.com/' packages/env/.env && pnpm env:setup
 ```
 
 ```sh
-cd "$PLAY" && pnpm install && pnpm build
+cd "$PLAY" && pnpm build && pnpm typecheck
 ```
 
 - [ ] Setup complete
 
 ### TC-2.1: Two modules compose two sections · 🔴 Critical
 
-**Goal.** Each module ships one section file and one patched line, and the composed object carries both keys.
+**Goal.** Each module ships one section file and one patched line, and re-running an install changes nothing.
 
 **Steps**
 
 1. Read the registry and the section folder.
 
    ```sh
-   cd "$PLAY" && tail -3 packages/config/src/sections.ts && ls packages/config/src/sections/
+   cd "$PLAY" && sed -n '/export const sections/,/});/p' packages/config/src/sections.ts && ls packages/config/src/sections/
    ```
 
-   - [ ] The array holds four calls: `app()`, `plans()`, `authConfig()` and `billingConfigSection()`
-   - [ ] The folder holds `app.ts`, `plans.ts`, `auth.ts` and `billing.ts`
-   - [ ] Each of the two module files imports `@repo/config/define`, not a relative path
-2. Add the same module a second time.
+   - [ ] The array holds `app()`, `authConfig()` and `billingConfigSection()`
+   - [ ] The folder holds `app.ts`, `auth.ts` and `billing.ts`, and each module file imports `@repo/config/define`
+2. Add `auth` a second time.
 
    ```sh
-   cd "$PLAY" && ./saasaloy add auth --force --yes
+   cd "$PLAY" && ./saasaloy add auth --force --yes && sed -n '/export const sections/,/});/p' packages/config/src/sections.ts
    ```
 
-   - [ ] The run succeeds, and the array still holds `authConfig()` exactly once
-     - re-running an install must change nothing
-3. Format the tree, because the patched line is now longer than Prettier's width.
-
-   ```sh
-   cd "$PLAY" && pnpm format
-   ```
-
-   - [ ] Prettier rewrites `packages/config/src/sections.ts` and the file still holds the four calls
+   - [ ] The array still holds `authConfig()` exactly once
 
 **Result**
 
@@ -282,34 +288,40 @@ cd "$PLAY" && pnpm install && pnpm build
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-2.2: The role strings have one home · 🔴 Critical
+### TC-2.2: The admin roles have one home · 🔴 Critical
 
-**Goal.** The api and the browser read one copy of `admin` and `superadmin`, which is the second duplication this capability removes.
+**Goal.** The api and the admin bundle both build `ADMIN_APP_ROLES` from `config.auth`, so a rename or a `support` role is one edit.
 
 **Steps**
 
-1. Search for a redeclared role literal.
+1. Search for a role literal in the code that decides access.
 
    ```sh
-   cd "$PLAY" && grep -rn '"admin"\|"superadmin"' packages/auth/src apps/admin/src packages/config/src
+   cd "$PLAY" && grep -rn '"superadmin"' packages/auth/src apps/admin/src packages/config/src | grep -v test
    ```
 
-   - [ ] Only `packages/config/src/sections/auth.ts` holds the two literals
-     - `packages/auth/src/authorize.ts` and `apps/admin/src/lib/auth.ts` both read `config.auth.*`
-2. Rename both roles. In `packages/config/src/project.ts`, add `auth: { adminRole: "staff", superadminRole: "owner" },`.
+   - [ ] Only `packages/config/src/sections/auth.ts` holds the literal as a value
+2. Rename both roles and add a group role. In `project.ts`, add `auth: { adminRole: "staff", superadminRole: "owner", adminAppExtraRoles: ["support"] },`.
 
    ```sh
-   cd "$PLAY" && pnpm typecheck && grep -rn "staff" packages/config/src/project.ts
-   ```
-
-   - [ ] The typecheck passes, so both readers accept the new strings
-3. Remove that override again.
-
-   ```sh
-   cd "$PLAY" && pnpm typecheck
+   cd "$PLAY" && pnpm typecheck && pnpm --filter @repo/admin build && grep -o 'adminAppExtraRoles:\[[^]]*\]' -r apps/admin/dist/assets | head -2
    ```
 
    - [ ] The typecheck passes
+   - [ ] The admin bundle carries `adminAppExtraRoles:[`support`]` and builds the list from `config.auth`
+3. Start the api and the admin app, then open `http://localhost:3001` and sign in.
+
+   ```sh
+   cd "$PLAY" && pnpm --filter @repo/api dev
+   ```
+
+   ```sh
+   cd "$PLAY" && pnpm --filter @repo/admin dev
+   ```
+
+   - [ ] A `support` account can sign in on the admin app and opens the shell
+   - [ ] A `support` account gets 403 on an admin-only page, such as Users
+4. Stop both servers. Remove the `auth` override.
 
 **Result**
 
@@ -319,76 +331,27 @@ cd "$PLAY" && pnpm install && pnpm build
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-2.3: A tier rename reaches the page and the biller · 🟡 Normal
+### TC-2.3: `doctor` reports a stale `BILLING_APP_NAME` · 🟡 Normal
 
-**Goal.** One tier id and name serve the marketing page and `packages/billing`, so the two can no longer drift.
-
-**Steps**
-
-1. Rename the middle tier. In `packages/config/src/project.ts`, add:
-
-   ```ts
-   plans: {
-     tiers: {
-       free: { id: "free", name: "Starter" },
-       pro: { id: "studio", name: "Studio" },
-       enterprise: { id: "enterprise", name: "Enterprise" },
-     },
-   },
-   ```
-
-   - [ ] You had to write all three tiers, because an override replaces a nested record whole
-2. Confirm both readers took it.
-
-   ```sh
-   cd "$PLAY" && pnpm typecheck && grep -rn "config.plans" packages/billing/src/plans.ts packages/ui/src/content/landing.ts
-   ```
-
-   - [ ] Both files read `config.plans.tiers.*`, and neither holds a tier id of its own
-3. Start the site.
-
-   ```sh
-   cd "$PLAY" && pnpm --filter @repo/web dev
-   ```
-
-4. Open `http://localhost:3000` and look at the pricing table.
-   - [ ] The three plans read `Starter`, `Studio` and `Enterprise`
-   - [ ] The prices, the feature bullets and the buttons are unchanged, because only ids and names moved
-5. Stop the server. Remove the `plans` override.
-
-**Result**
-
-- [ ] Pass
-- [ ] Fail
-- [ ] Skipped
-
-**Notes.** _what actually happened on a fail; why it was skipped_
-
-### TC-2.4: `doctor` reports a stale `BILLING_APP_NAME` · 🟡 Normal
-
-**Goal.** The deprecated env var is no longer read, and `doctor` says so rather than leaving it to look effective.
+**Goal.** The deprecated env var is no longer read, and `doctor` says so.
 
 **Steps**
 
 1. Confirm nothing reads it.
 
    ```sh
-   cd "$PLAY" && grep -rn "BILLING_APP_NAME" apps packages
+   cd "$PLAY" && grep -rn "BILLING_APP_NAME" apps/*/src packages/*/src
    ```
 
-   - [ ] No source file reads the variable
-     - `apps/api/src/billing-store.ts` reads `config.billing.appName || config.app.name`
-2. Set it anyway.
+   - [ ] No source file reads the variable. `apps/api/src/billing-store.ts` reads `config.billing.appName || config.app.name`.
+2. Set it in the values file, and distribute it.
 
    ```sh
-   cd "$PLAY" && echo 'BILLING_APP_NAME="Acme Billing"' >> apps/api/.dev.vars
+   cd "$PLAY" && sed -i 's/^BILLING_APP_NAME=$/BILLING_APP_NAME="Acme Billing"/' packages/env/.env && pnpm env:setup && ./saasaloy doctor .
    ```
 
-   ```sh
-   cd "$PLAY" && "$QA_ROOT/packages/cli/dist/index.js" doctor .
-   ```
-
-   - [ ] A finding names `apps/api/.dev.vars`, the variable, and the config value that replaced it
+   - [ ] A finding names `packages/env/.env`, the variable, and the config value that replaced it
+   - [ ] A second finding names `apps/api/.env`, which `env:setup` wrote
 3. Read the descriptor's own wording.
 
    ```sh
@@ -396,7 +359,7 @@ cd "$PLAY" && pnpm install && pnpm build
    ```
 
    - [ ] The description opens with `DEPRECATED:` and names the replacement
-4. Delete the line you added.
+4. Set the line back to `BILLING_APP_NAME=` and run `pnpm env:setup`.
 
 **Result**
 
@@ -406,31 +369,32 @@ cd "$PLAY" && pnpm install && pnpm build
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-2.5: `remove` takes a section back out · 🟡 Normal
+### TC-2.4: `remove` takes a section back out · 🟡 Normal
 
-**Goal.** A section is an ordinary module-owned file plus one reversible patch, so uninstalling the module leaves no trace of it.
+**Goal.** A section is a module-owned file plus one reversible patch.
 
 **Steps**
 
-1. Remove the module that ships the `billing` section. Answer the prompts.
+1. Remove the provider, then the module.
 
    ```sh
-   cd "$PLAY" && ./saasaloy remove billing
+   cd "$PLAY" && ./saasaloy remove billing-console --yes && ./saasaloy remove billing --yes
    ```
 
-   - [ ] The command reports it removed `packages/config/src/sections/billing.ts` and reversed the patch
+   - [ ] The command reports it removed `packages/config/src/sections/billing.ts`
+   - [ ] It warns that three `package-json-dependency` patches on `@repo/billing` are not reversed. This is existing `remove` behaviour, not part of this change.
 2. Read the registry.
 
    ```sh
-   cd "$PLAY" && tail -3 packages/config/src/sections.ts && ls packages/config/src/sections/
+   cd "$PLAY" && sed -n '/export const sections/,/});/p' packages/config/src/sections.ts && head -3 packages/config/src/sections.ts && ls packages/config/src/sections/
    ```
 
    - [ ] `billingConfigSection()` and its import are gone, and `authConfig()` is untouched
-   - [ ] `billing.ts` is gone from the folder, and the other three files remain
-3. Typecheck what is left.
+   - [ ] Only `app.ts` and `auth.ts` remain
+3. Hand-revert the `@repo/billing` dependency in `apps/api`, `packages/auth` and `packages/queue`, as the warning says. Then typecheck.
 
    ```sh
-   cd "$PLAY" && pnpm typecheck
+   cd "$PLAY" && pnpm install && pnpm typecheck
    ```
 
    - [ ] The run passes, so nothing left behind reads `config.billing`
@@ -443,33 +407,27 @@ cd "$PLAY" && pnpm install && pnpm build
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-**Reset.** Run after every case above, before moving to Scenario 3.
-
-```sh
-cd "$QA_ROOT" && pnpm play:destroy
-```
-
 ## Scenario 3: a registry with a colliding descriptor
 
-**Setup.** Run once. It copies the registry so the repo's own descriptors are never edited.
-
-```sh
-cd "$QA_ROOT" && pnpm play:reset && cd "$PLAY" && git init -q . && pnpm install
-```
+**Setup.** Continue in the Scenario 2 playground, with `auth` installed. Copy the registry so the repo's own descriptors are never edited, and commit the playground so a stray write shows.
 
 ```sh
 rm -rf /tmp/qa-registry && cp -r "$QA_ROOT/modules" /tmp/qa-registry
+```
+
+```sh
+cd "$PLAY" && git add -A && git commit -qm "qa: before collision" --no-verify
 ```
 
 - [ ] Setup complete
 
 ### TC-3.1: `add` refuses a claimed section key, readably · 🟢 Low
 
-**Goal.** Two modules claiming one section key stop the install, and the refusal names both modules and the key.
+**Goal.** A second module claiming `config.auth` stops the install, and the refusal names both modules and the key.
 
 **Steps**
 
-1. Make a second module claim `config.auth`. Open `/tmp/qa-registry/waitlist/registry-item.json` and add this patch to its `patches` array.
+1. Open `/tmp/qa-registry/waitlist/registry-item.json` and add this patch to its `patches` array.
 
    ```jsonc
    {
@@ -482,22 +440,21 @@ rm -rf /tmp/qa-registry && cp -r "$QA_ROOT/modules" /tmp/qa-registry
    }
    ```
 
-2. Install both modules from that registry in one run.
+2. Install `waitlist` from that registry. Call the built CLI directly: the `./saasaloy` shim always sets `SAASALOY_REGISTRY_DIR` to this worktree's `modules/`.
 
    ```sh
-   cd "$PLAY" && SAASALOY_REGISTRY_DIR=/tmp/qa-registry ./saasaloy add waitlist --yes
+   cd "$PLAY" && SAASALOY_REGISTRY_DIR=/tmp/qa-registry node "$QA_ROOT/packages/cli/dist/index.js" add waitlist --yes; echo "exit=$?"
    ```
 
-   - [ ] The run refuses and writes nothing
+   - [ ] The run refuses with exit 2
    - [ ] The message names `auth` and `waitlist`, names `config.auth`, and says the two ways out
-     - a reader can act on it without opening the CLI source
 3. Confirm the project is untouched.
 
    ```sh
-   cd "$PLAY" && ls packages/config/src/sections/ && git status --short
+   cd "$PLAY" && git status --short && ls packages/config/src/sections/
    ```
 
-   - [ ] Only `app.ts` and `plans.ts` are present, and the tree holds no partial install
+   - [ ] `git status` prints nothing, and only `app.ts` and `auth.ts` are present
 
 **Result**
 
@@ -515,55 +472,23 @@ cd "$QA_ROOT" && pnpm play:destroy && rm -rf /tmp/qa-registry
 
 ## Automated verification (by AI agent)
 
-_Checks the agent ran itself. No action needed from the tester; listed here for context and sign-off._
+_Checks the agent ran itself on 2026-10-23, on the rebased branch. No action needed from the tester._
 
-```sh
-pnpm lint
-```
-
-```sh
-pnpm typecheck
-```
-
-```sh
-pnpm test
-```
-
-```sh
-pnpm verify:pins
-```
-
-```sh
-pnpm verify:content
-```
-
-```sh
-cd .dev/playground && pnpm install && pnpm build && pnpm typecheck
-```
-
-- ✅ `pnpm lint` → all four passes clean, including the type-aware pass over the new `collisions.ts`, `doctor.ts` and `scripts/` files, and Prettier over the whole tree.
-- ✅ `pnpm typecheck` → the scripts project and every workspace compile, `scripts/config-shim.ts` included.
-- ✅ `pnpm test` → 1311 CLI tests, 540 module-payload tests, 169 script tests, 0 failures. New coverage: 9 merge cases in `scripts/config-merge.test.ts` (leaf replace, nested record replaced whole, array replaced whole, explicit `undefined` ignored, freeze, no mutation of the declared section, duplicate key throws, unknown override throws), 15 in `collisions.test.ts` for the section guard, 4 in `applier.test.ts` for the refusal at plan time (same run, installed module, `--force` re-apply), 10 in `doctor.test.ts` for the three checks.
-- ✅ `pnpm verify:pins` → both pin rules agree across their manifests, with the new `packages/config/package.json` in scope.
-- ✅ `pnpm verify:content` → no prose literal escaped `content/landing.ts` when the tier ids moved.
-- ✅ A scaffold with `database-d1`, `auth`, `admin` and `billing`: `pnpm build` and `pnpm typecheck` both green, 11 workspaces. The section registry holds all four calls and `packages/config/src/sections/` holds all four files.
-- ✅ `saasaloy doctor .` on that scaffold → one finding, the unedited `site: "https://example.com"`, with `project.ts` correctly listed as a seed file.
-- ❌ `pnpm deps:check` reports 69 pending bumps, and `pnpm -C .dev/playground build` fails on the base template's `wrangler` pin (4.129.0) against `@cloudflare/vite-plugin`'s `^4.135.0` peer range. **Both are pre-existing on `main` and unrelated to this change**; `pnpm deps:update` owns them.
+- ✅ `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm --filter saasaloy build`, `pnpm --filter saasaloy test:matrix` (991 tests) all pass.
+- ✅ `pnpm --filter saasaloy test:e2e` → 44 passed, 4 failed. The four are the known failures on main (`apply.test.ts` x3, `partial-apply.test.ts` x1).
+- ✅ `pnpm verify:e2e --driver=d1` and `--driver=postgres` → 4 flows pass on each, the admin login flows included.
+- ✅ TC-1.1 steps 1 and 2, and the built HTML: title, `og:site_name`, footer and both legal pages read `Saasaloy`; `landing.ts` is identical to main's.
+- ✅ TC-1.2 step 2: after the rename, `Saasaloy=0` on all three pages and `Ledgerly` = 19, 4 and 4.
+- ✅ TC-1.3 step 2: `lang="en-GB"`, and the footer links read `/legal/terms` and `/legal/privacy`.
+- ✅ TC-1.4: both bad overrides fail with TS2353 naming `project.ts` and the key; the clean file passes.
+- ✅ TC-1.5: one finding, the `site` origin, and no name finding.
+- ✅ TC-1.6: 4 Vitest files, 109 tests pass. `pnpm lint` first failed on `no-unsafe-type-assertion` in `define.test.ts`; commit `50969d4` fixed it, and the run is now clean.
+- ✅ TC-2.1, TC-2.2 steps 1 and 2, TC-2.3, TC-2.4 and TC-3.1, as written. The api answered `{"status":"ok"}` on `:4000/health` and the admin app answered 200 on `:3001`.
 
 ## Not covered / needs human judgment
 
-- **Every browser check.** This box is headless, so Scenario 1 and TC-2.3 need a real browser on the tester's own machine.
-- **Dark mode, responsive layout and accessibility.** No block's markup changed — the footer's two `href` values and the layout's `lang` attribute are the whole visual diff — so the theme, the breakpoints and the focus order were considered and skipped.
-- **The database.** No migration, no schema file and no query changed, so the data layer is out of scope. Renaming a role in config does **not** rewrite the `users.role` values already stored; an existing project needs its own `update`, which the `saasaloy-auth` skill now says.
-- **Performance.** `config` is a frozen object built once at module load with no I/O, so there is nothing to measure.
-- **A real billing email.** Confirming `config.billing.appName` in a sent message needs a provider account. TC-2.4 checks the reader instead.
-- **`saasaloy update` over a project whose sections a module rewrote.** The override file is declared a seed, and `doctor` confirms it is not checked, but a full update run across a released version is its own pass.
-- **The patched line's width.** After two modules patch it, `packages/config/src/sections.ts` is longer than Prettier's width until the project runs `pnpm format`. `packages/queue/src/index.ts` already behaves this way, so the codemod's output is consistent rather than newly wrong.
-
-## Overall result
-
-_Tick one when you finish the run._
-
-- [ ] Pass: every case passed
-- [ ] Fail: at least one case failed
-- [ ] Partial: cases were skipped or not reached
+- **The visual checks.** TC-1.1 step 3, TC-1.2 step 3 and TC-1.3 step 3 need eyes on a real browser.
+- **A `support` account in the admin app.** TC-2.2 step 3 needs a signed-in account with that role and a judgment on what the shell shows it.
+- **A real billing email.** Confirming the app name in a sent message needs a provider account. TC-2.3 checks the reader instead.
+- **Stored roles.** Renaming a role in config does not rewrite the `users.role` values already stored, and the seed slice `packages/db/src/seed/slices/users.ts` still writes `"superadmin"`. An existing project needs its own `update`.
+- **`saasaloy update` across a released version.** The override file is a seed file, and `doctor` confirms it is not checked. A full update run is its own pass.
