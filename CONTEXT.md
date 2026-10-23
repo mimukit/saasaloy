@@ -107,6 +107,14 @@ _Avoid: model name for the SQL name. A model name is Better Auth's key (`user`, 
 The example rows for **one table**, in one file under `packages/db/src/seed/slices/`, named after the table in kebab-case. `defineSlice(table, { rows })` keys each row by a slug, and the slug makes the row's id: `seedId("<table>", "<slug>")`, a UUIDv5, which another slice writes to point at the row. `pnpm db:seed` upserts every row on the table's primary key, or on the unique `key` a slice names when the database generates the primary key. A module that ships a table ships its slice, and a slice holds one row for each state the UI shows differently ([plan 0072](docs/plans/0072-plan-seed-system-2026-10-20.md)).
 _Avoid: fixture, seed file, factory. A fixture suggests test-only data, and a factory makes random rows; a slice is hand-written, read by both `db:seed` and the route test harness, and keyed to one table._
 
+### Flow
+One user-visible path through a running project, driven end to end in a real browser by the `e2e` capability's Playwright suite. The base flows are `health`, `waitlist`, `admin-login` and `admin-unauthenticated`, and they live in `modules/e2e/files/specs/`. A flow crosses modules on purpose: the waitlist one touches `web`, `waitlist`, `api`, `database` and a driver ([ADR 0051](docs/adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md)). Which module ships a flow for a feature module is an open decision (issue #240).
+_Avoid: scenario, test case. A flow is a whole path through running apps; a unit test covers one function under Vitest and is not a flow._
+
+### Spec tag
+The Playwright tag a flow declares the modules it needs with: `test.describe("admin login", { tag: ["@admin", "@auth"] }, …)`. `playwright.config.ts` reads `installed` from `saasaloy.json` and turns every tag whose module is absent into `grepInvert`, so a flow for a module the project does not have is **never collected**, rather than skipped at run time on a 404. Every tag is a module name and nothing else; the base app has none, because it is always present. `scripts/e2e-tags.test.ts` asserts each one still names a real directory under `modules/` ([ADR 0051](docs/adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md)).
+_Avoid: label, marker. And never "skip" for what a tag does: a skip is a run-time decision that reports green on a broken route, which is the failure the tag exists to prevent._
+
 ### Proof module
 A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
 
