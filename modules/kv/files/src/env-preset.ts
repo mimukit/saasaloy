@@ -21,7 +21,7 @@ export const kvPreset = definePreset({
       .string()
       .min(1)
       .describe(
-        "Which installed provider stores values: cloudflare or memory. Always required — there is no default."
+        "Which installed provider stores values: cloudflare, upstash or memory. Always required — there is no default."
       ),
     KV_KEY_PREFIX: z
       .string()
