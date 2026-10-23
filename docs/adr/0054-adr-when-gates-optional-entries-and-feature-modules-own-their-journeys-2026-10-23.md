@@ -1,6 +1,6 @@
-# 0053: `when` gates optional entries, and a feature module owns its journey specs
+# 0054: `when` gates optional entries, and a feature module owns its journey specs
 
-[ADR 0052](0052-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md) put one testing mode in `saasaloy.json`. A mode is only useful if it decides which files a project receives: a project with testing `off` should hold no module test, and one that turns testing on should receive every test its modules ship. A journey spec has the same shape with a different trigger. It belongs in a project only when the `e2e` capability is there to run it. This record settles how a descriptor says "ship this entry only when", what a module that turns testing on declares, and which module ships a feature's journey spec. Issue [#242](https://github.com/mimukit/saasaloy/issues/242) builds it, from `docs/plans/0080-plan-opt-in-testing-2026-10-23.md`.
+[ADR 0053](0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md) put one testing mode in `saasaloy.json`. A mode is only useful if it decides which files a project receives: a project with testing `off` should hold no module test, and one that turns testing on should receive every test its modules ship. A journey spec has the same shape with a different trigger. It belongs in a project only when the `e2e` capability is there to run it. This record settles how a descriptor says "ship this entry only when", what a module that turns testing on declares, and which module ships a feature's journey spec. Issue [#242](https://github.com/mimukit/saasaloy/issues/242) builds it, from `docs/plans/0080-plan-opt-in-testing-2026-10-23.md`.
 
 ## Status
 

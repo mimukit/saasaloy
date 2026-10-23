@@ -2,7 +2,7 @@ import { RefusalError } from "./exit.js";
 import type { Manifest } from "./manifest.js";
 import type { SaasaloyConfig } from "./schema.js";
 
-// A project's testing mode (#242, ADR 0052). The value lives in `saasaloy.json` under
+// A project's testing mode (#242, ADR 0053). The value lives in `saasaloy.json` under
 // `testing.mode`; the root `AGENTS.md` carries a marked block that tells an agent what
 // the mode asks of it. The CLI writes both together, and it rewrites only the text
 // between the markers, so everything an owner wrote around the block survives.

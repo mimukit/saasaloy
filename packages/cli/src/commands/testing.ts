@@ -36,7 +36,7 @@ import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
-// `saasaloy testing [mode]` (#242, ADR 0052). With no argument it prints the project's
+// `saasaloy testing [mode]` (#242, ADR 0053). With no argument it prints the project's
 // mode as a bare word, so a script can read it. With a mode it saves the mode to
 // `saasaloy.json` and rewrites the testing block in the root `AGENTS.md` to match: the
 // value and the text an agent reads change together, or the agent follows the old rules.

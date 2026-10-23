@@ -14,7 +14,7 @@ import type { LoadedConfig } from "./saasaloy-config.js";
 import type { TestingMode } from "./testing.js";
 import { isPatchTracked } from "./when.js";
 
-// Backfill (#242, ADR 0053): write every gated entry of an installed module whose `when`
+// Backfill (#242, ADR 0054): write every gated entry of an installed module whose `when`
 // is now true and whose target the manifest does not track yet. A mode turned on, or a
 // module that a `when.installed` names arriving, makes entries true that were false when
 // their module landed; nothing else would ever write them.

@@ -35,7 +35,7 @@
     },
     "testing": {
       "type": "object",
-      "description": "The project's testing mode (#242, ADR 0052). `off` ships no module tests, `tests-after` ships each module's tests and asks for a test with every change, `tdd` asks for the failing test first. `saasaloy init` writes it and `saasaloy testing <mode>` changes it, together with the marked block in the root `AGENTS.md`. Absent in a project scaffolded before this field existed; the tool then reads `off`.",
+      "description": "The project's testing mode (#242, ADR 0053). `off` ships no module tests, `tests-after` ships each module's tests and asks for a test with every change, `tdd` asks for the failing test first. `saasaloy init` writes it and `saasaloy testing <mode>` changes it, together with the marked block in the root `AGENTS.md`. Absent in a project scaffolded before this field existed; the tool then reads `off`.",
       "additionalProperties": false,
       "required": ["mode"],
       "properties": {

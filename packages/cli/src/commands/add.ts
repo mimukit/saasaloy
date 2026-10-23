@@ -576,7 +576,7 @@ function printNextSteps(
   note(wrapForNote(lines.join("\n\n")), "Next steps");
 }
 
-/** The mode `add` of an `enablesTesting` module turns testing on to (#242, ADR 0053). */
+/** The mode `add` of an `enablesTesting` module turns testing on to (#242, ADR 0054). */
 const ENABLED_MODE: TestingMode = "tests-after";
 
 /**

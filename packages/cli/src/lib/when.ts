@@ -3,7 +3,7 @@ import type { Manifest } from "./manifest.js";
 import type { RegistryPatch, When } from "./schema.js";
 import type { TestingMode } from "./testing.js";
 
-// The `when` condition on a descriptor entry (#242, ADR 0053). `when` decides whether an
+// The `when` condition on a descriptor entry (#242, ADR 0054). `when` decides whether an
 // optional entry ships at all, and only on its first write: once a gated file sits in
 // `manifest.managed`, or a gated patch in `manifest.patches`, it stays managed in every
 // mode (#242 Q1). `onlyWith` is a different question, which variant of a required target

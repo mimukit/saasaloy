@@ -134,7 +134,7 @@ export interface SaasaloyConfig {
 }
 
 /**
- * The condition on an optional descriptor entry (#242, ADR 0053). The keys combine with
+ * The condition on an optional descriptor entry (#242, ADR 0054). The keys combine with
  * AND: `testing` ships the entry only when the project's testing mode is not `off`, and
  * `installed` only when every named module is in the resolved install set. The applier
  * tests it before `onlyWith`, and only for a target the manifest does not track yet.

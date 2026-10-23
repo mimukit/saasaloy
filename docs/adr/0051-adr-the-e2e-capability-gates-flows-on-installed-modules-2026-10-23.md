@@ -4,7 +4,7 @@ A generated project had no proof that its apps work together. Nothing signed in 
 
 ## Status
 
-accepted. It applies [ADR 0033](0033-adr-transient-state-capabilities-take-providers-2026-09-08.md) and [ADR 0037](0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md) and amends neither. It leaves one question open on purpose: which module ships the flow for a feature module. Issue [#240](https://github.com/mimukit/saasaloy/issues/240) holds that decision in its phase 1. **Amended by [ADR 0053](0053-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md):** that question is settled. A feature module ships its own journey spec under `when: { installed: ["e2e"] }`, a journey across three or more modules stays in `modules/e2e`, and `e2e` turns testing on through `enablesTesting`.
+accepted. It applies [ADR 0033](0033-adr-transient-state-capabilities-take-providers-2026-09-08.md) and [ADR 0037](0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md) and amends neither. It leaves one question open on purpose: which module ships the flow for a feature module. Issue [#240](https://github.com/mimukit/saasaloy/issues/240) holds that decision in its phase 1. **Amended by [ADR 0054](0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md):** that question is settled. A feature module ships its own journey spec under `when: { installed: ["e2e"] }`, a journey across three or more modules stays in `modules/e2e`, and `e2e` will turn testing on through `enablesTesting` once issue [#245](https://github.com/mimukit/saasaloy/issues/245) sets it.
 
 ## The shape
 

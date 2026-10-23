@@ -1,4 +1,4 @@
-# 0052: One testing mode, in `saasaloy.json` and a marked `AGENTS.md` block
+# 0053: One testing mode, in `saasaloy.json` and a marked `AGENTS.md` block
 
 A generated project had a test harness and almost no tests, and nothing told an agent working in it whether to write any. Testing is now opt-in per project. This record settles where the choice lives and how the agent learns it. Issue [#242](https://github.com/mimukit/saasaloy/issues/242) builds it, from `docs/plans/0080-plan-opt-in-testing-2026-10-23.md`.
 
