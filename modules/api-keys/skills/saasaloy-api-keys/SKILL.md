@@ -26,7 +26,7 @@ curl -s -H "Authorization: Bearer $KEY" https://api.example.com/tenant
 
 The header takes the request off the session path for good. A key that fails does **not** fall back to a cookie that happened to ride along, and a request carrying both is answered as a key request.
 
-`x-organization-id` beside a bearer header is 403 `forbidden` whatever it says. A key is bound to one organization; the superadmin bypass is a cookie-path power.
+`x-organization-id` beside a bearer header is 403 `forbidden` whatever it says. A key is bound to one organization; the superadmin bypass is a cookie-path power, and it needs the admin session.
 
 ## Where a key comes from
 
@@ -105,7 +105,7 @@ The snapshot is hand-authored against `@better-auth/api-key@1.7.7` and ships in 
 
 ## Removal
 
-`saasaloy remove api-keys` reverses five patches: the two server plugins, the client plugin, the bearer resolver, and the `/api-keys` nav entry.
+`saasaloy remove api-keys` reverses eight patches: the two server plugins on each of `auth` and `adminAuth`, the client plugin in each of `authClientPlugins` and `adminAuthClientPlugins`, the bearer resolver, and the `/api-keys` nav entry.
 
 Two things it does not do. The `api_keys` table survives, so run `db:generate` and read the drop migration before applying it — and tell the machine callers first, because every key stops working the moment the resolver goes. The `@better-auth/api-key` line in `packages/auth/package.json` also survives, because a `package-json-dependency` patch has no removal inverse; drop it by hand and run `pnpm install`.
 

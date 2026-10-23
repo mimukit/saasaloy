@@ -198,8 +198,24 @@ _Avoid: default role, built-in role._
 An organization role an operator creates at runtime, stored as an `organization_roles` row and resolved by `loadStatements` alongside the base roles. It carries only statements declared in `access.ts`, so a custom role can narrow or recombine the vocabulary and never extend it. Deleting one is refused while a member still holds it.
 
 ### `superadmin` against `admin`
-Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, and the only one that crosses organizations, by sending `x-organization-id`. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.
+Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, the only one that may change an account in the [admin group](#admin-session) (the [rank guard](#rank-guard)), and the only one that crosses organizations, by sending `x-organization-id` on the admin session. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.
 _Avoid: root, owner (an organization [base role](#base-role) is called owner)._
+
+### Client session
+The session a client holds: a shopper, a customer, an app user. It comes from the `auth` instance at `/auth`, lives in the `client.session_token` cookie, and its `sessions` row carries `audience = 'client'`. Client sign-up is open, and a client's only site role is `user`. A request with no `x-auth-audience` header reads it ([ADR 0050](docs/adr/0050-adr-client-and-admin-sessions-are-two-auth-instances-2026-10-23.md)).
+_Avoid: customer session, user session, shopper session._
+
+### Admin session
+The session the admin group holds, from the `adminAuth` instance at `/admin/auth`, in the `admin.session_token` cookie, with `audience = 'admin'`. It has no sign-up and opens only for an [admin-app role](#admin-app-role), so a client's email and password open no admin session. The admin app sends `x-auth-audience: admin`, and every `require*Admin*` gate reads this session whatever the header says. A browser can hold a client session and an admin session at once, and neither counts on the other side.
+_Avoid: staff session, back-office session._
+
+### Admin-app role
+A role in `ADMIN_APP_ROLES`, the group list: who may sign in on the [admin session](#admin-session) and open the admin app, checked by `requireAdminApp`. It is a separate list from `ADMIN_ROLES`, the privilege list `requireAdmin` checks, though both hold `superadmin` and `admin` today. A project adds a `support` role to the group list only, so support opens the admin app and every `requireAdmin` route still refuses it.
+_Avoid: staff role._
+
+### Rank guard
+The Better Auth plugin on the admin instance that keeps the admin group under `superadmin`. Before every `/admin/*` endpoint it asks `rankDenial()`: a caller who is not `superadmin` may not change an account that holds an [admin-app role](#admin-app-role), may not grant such a role, and may not call an `/admin/*` path its table does not name; nobody may take the role from the last `superadmin`; and impersonation is refused for everyone.
+_Avoid: role hierarchy, admin lock._
 
 ## Registry & applier
 

@@ -67,7 +67,7 @@ It reuses:
 
 Rejected: an instance only with `admin` (each auth patch would need an `onlyWith` twin, and `requireAdmin` would change source on add and on remove); per-instance signing keys in place of a column (shared encrypted data would break); waiting for #227 (the fault would stay in every new project until then).
 
-### Phase 1: the refusal page without the shell (#238)
+### Phase 1: the refusal page without the shell (#238) (built 2026-10-23)
 
 - `RootError` in `modules/admin/files/src/routes/__root.tsx` renders `AccessDenied` alone, on the login card layout. Update the comments that explain why the deny path sits inside the shell.
 - `modules/admin/files/src/components/access-denied.tsx` becomes a full page with its own `<main>`, and its comment says why it drops the shell.
@@ -76,7 +76,7 @@ Rejected: an instance only with `admin` (each auth patch would need an `onlyWith
 
 Done when: in a `.dev` project with `auth` and `admin`, a seeded plain user who opens the admin app sees the refusal card with the sign-out button and no sidebar, header or user menu, in light and dark, at 1280px and 360px.
 
-### Phase 2: two instances in the auth module (#238)
+### Phase 2: two instances in the auth module (#238) (built 2026-10-23)
 
 - Spike first: wrap the adapter, then prove with a route test that a copied token fails on `getSession`, on an `/admin/*` endpoint and inside a transaction. Stop and report if the transaction path skips the wrapper.
 - `auth.ts`: `sharedOptions()`, `auth` and `adminAuth`, cookie prefixes, `disableSignUp` on `adminAuth`, the admin sign-in hook, and both `plugins` arrays.
@@ -90,7 +90,7 @@ Done when: in a `.dev` project with `auth` and `admin`, a seeded plain user who 
 
 Done when: `pnpm test:modules` passes, and in a `.dev` project with `auth` the route tests above pass and `pnpm db:generate` writes one migration that adds `audience` with default `'client'`.
 
-### Phase 3: the admin app on the admin session (#238)
+### Phase 3: the admin app on the admin session (#238) (built 2026-10-23)
 
 - `apps/admin/src/lib/auth.ts` builds `auth` with `createAdminClient` and checks `ADMIN_APP_ROLES`.
 - `apps/admin/src/lib/api.ts` sends `x-auth-audience: admin` on every request.
@@ -98,7 +98,7 @@ Done when: `pnpm test:modules` passes, and in a `.dev` project with `auth` the r
 
 Done when: in a `.dev` project with `auth` and `admin`, a client signed in through `/auth` and an admin signed in on the admin app stay signed in together in two tabs of one browser, and a sign-out in one tab leaves the other signed in.
 
-### Phase 4: the modules that patch or read auth (#238)
+### Phase 4: the modules that patch or read auth (#238) (built 2026-10-23)
 
 - `teams`, `rbac`, `api-keys` and `billing-stripe` add the `adminAuth` and `adminAuthClientPlugins` patches.
 - `billing`, `entitlements` and `multitenant` use `authFor(c)`. The `x-organization-id` bypass needs an admin-audience session.
@@ -108,7 +108,7 @@ Done when: in a `.dev` project with `auth` and `admin`, a client signed in throu
 
 Done when: both CLI tests pass, and in a `.dev` project with every auth-dependent module installed, the teams, roles, keys, billing and payments screens of the admin app load for a seeded admin, and `pnpm check` passes.
 
-### Phase 5: docs, ADR and the full gate (#238)
+### Phase 5: docs, ADR and the full gate (#238) (built 2026-10-23)
 
 - ADR 0050 and the CONTEXT.md entries.
 - Skills: `saasaloy-auth` (two instances, the header, the role lists, the `support` recipe, rank, impersonation limit, reserved path), `saasaloy-admin`, `saasaloy-api`, `saasaloy-teams`, `saasaloy-rbac`, `saasaloy-api-keys`, `saasaloy-multitenant`, `saasaloy-billing` and `saasaloy-billing-stripe`.

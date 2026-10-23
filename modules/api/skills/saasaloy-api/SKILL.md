@@ -66,6 +66,20 @@ statement, the middleware would register *after* the catch-all it is meant to wr
 responses would come back with no CORS headers, and `c.get("log")` would be undefined inside that
 handler.
 
+### `/auth` and `/admin/auth` are the auth module's
+
+The `auth` module mounts two catch-all forwards on `base`, one per Better Auth instance: `authRoute` at `/auth` for the client session and `adminAuthRoute` at `/admin/auth` for the admin session. The second sits under `/admin` on purpose, so one edge rule (WAF, Access, a log filter) covers the whole admin group. That makes `/admin/auth/*` a reserved prefix. Do not mount a route under it, and a middleware a project adds on `/admin/*` (an IP allowlist, an audit log, a session check) must skip `/admin/auth/*`, or the admin sign-in endpoint itself demands what it exists to hand out:
+
+```ts
+.use("/admin/*", async (c, next) => {
+  if (c.req.path.startsWith("/admin/auth/")) return next();
+  // ... the project's own check
+  return next();
+})
+```
+
+An `/admin/*` route that `admin` or another module registers on the typed chain (`GET /admin/users`) is a normal route and goes through such a middleware. See the `saasaloy-auth` skill for the two sessions and the `x-auth-audience` header.
+
 ## Add a route
 
 Two steps. The handler is still a file; only its registration changed.
@@ -330,9 +344,7 @@ for no gain. Nothing in a route module needs miss plumbing.
 
 One mount is outside all of this, and it is worth knowing before you test a miss. A sub-app that
 mounts a catch-all answers every path under its prefix itself, so nothing under that prefix is ever
-a Hono miss and `base`'s `notFound` never runs there. The `auth` module is the case in the base:
-it mounts `.on(["GET", "POST"], "/*", ...)` and hands the whole subtree to better-auth, so
-`GET /auth/nope` comes back as a bare 404 with an empty body rather than the envelope. Every other
+a Hono miss and `base`'s `notFound` never runs there. The `auth` module is the case in the base: it mounts `.on(["GET", "POST"], "/*", ...)` at `/auth` and again at `/admin/auth`, and hands each subtree to better-auth, so `GET /auth/nope` and `GET /admin/auth/nope` come back as a bare 404 with an empty body rather than the envelope. Every other
 mount answers the envelope on a miss.
 
 ## Run it locally
@@ -390,6 +402,8 @@ reflects the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or
 unset, in `DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are
 incompatible.
 
+`cors()` sets no `allowHeaders`, so a preflight's `Access-Control-Request-Headers` is echoed back. That is what lets the admin app send `x-auth-audience: admin` with no CORS change. Keep it that way, or add `x-auth-audience` to the list if you ever pin `allowHeaders`.
+
 **Keep `server.cors: false` in `vite.config.ts`.** Vite's own dev CORS middleware otherwise
 intercepts CORS in two ways that both mislead: it reflects `Access-Control-Allow-Origin` for
 *every* loopback origin (Vite 8's default `server.cors.origin` is a localhost regex), so a
@@ -430,7 +444,8 @@ The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }
   uncorrelated, and it bypasses redaction.
 - **Inherit `base`'s `onError` and `notFound`.** A feature module registers neither of its own; a
   miss under a normally mounted sub-app already answers the 404 envelope. A mount with a catch-all
-  route (`auth`) answers its own misses and never reaches that handler.
+  route (`auth` at `/auth` and `/admin/auth`) answers its own misses and never reaches that handler.
+- **`/admin/auth/*` is reserved for the admin auth instance.** Mount nothing under it, and make any `/admin/*` middleware skip it.
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
 - **Test a route in Node with `app.request(path, init, env)`.** A setup step goes in `test/setup/`, not in `vitest.config.ts`.

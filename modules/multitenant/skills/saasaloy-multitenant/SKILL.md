@@ -26,6 +26,8 @@ export function listProjects(db: Db, tenantId: TenantId) {
 }
 ```
 
+On the cookie path, `requireTenant` reads the session the request's `x-auth-audience` header names, through `requireSession` and `authFor(c).api.getActiveMember`: the client session by default, the admin session when the admin app calls. A scoped screen in `apps/admin` therefore acts as the admin signed in there, with that admin's active organization, and the same route serves a client app unchanged.
+
 `requireTenant` is the only thing in the project that mints a `TenantId`, and `forTenant` accepts nothing else. A handler that skips the first line cannot call the second, and that is a compile error rather than a review note.
 
 The queries live in a repository, not in the route. `drizzle-orm` belongs to `@repo/db` and no other workspace imports it (ADR 0020), so a route cannot write `eq(...)` even when it wants to.
@@ -38,7 +40,7 @@ Do not reach for the wrong one.
 
 | Helper | Question |
 | --- | --- |
-| `requireAdmin(c)` | May this session open `apps/admin`? |
+| `requireAdmin(c)` | Does the admin session hold an admin role? (`requireAdminApp(c)` asks who may open `apps/admin`) |
 | `requireSuperadmin(c)` | Is this the one site role that crosses organizations? |
 | `requireTenant(c)` | Which organization is this request for, and as whom? |
 
@@ -79,13 +81,13 @@ It refuses, in order of how likely each is to be the bug:
 
 ## The header contract
 
-`x-organization-id` names an organization to act inside. It is honoured **only** on the cookie path and **only** when the session's role is `superadmin`.
+`x-organization-id` names an organization to act inside. It is honoured **only** on the cookie path and **only** for a `superadmin` on the admin session. `mayCrossOrganizations` in `tenant-rules.ts` checks both the role and `session.audience === "admin"`. The admin app's `api` client sends `x-auth-audience: admin`, which is what makes `requireTenant` read the admin session. A superadmin's client session, the one they use the product with, gets the 403 like any other caller.
 
-- A `superadmin` sending it gets that organization, with `principal: { kind: "superadmin", userId }`. The id is looked up first, so a typo is 404 `unknown organization` rather than a tenant that does not exist.
-- Any other signed-in caller sending it gets 403 `forbidden`. Refused, not ignored — a silently ignored header reads as "it worked" to whoever sent it.
+- A `superadmin` on the admin session sending it gets that organization, with `principal: { kind: "superadmin", userId }`. The id is looked up first, so a typo is 404 `unknown organization` rather than a tenant that does not exist.
+- Any other signed-in caller sending it gets 403 `forbidden`, a `superadmin` on the client session included. Refused, not ignored: a silently ignored header reads as "it worked" to whoever sent it.
 - Beside a bearer credential it is 403 whatever it says. A key is bound to one organization.
 
-There is no organization picker in `apps/admin` yet. Reach for the header with `curl` until the follow-up issue lands.
+There is no organization picker in `apps/admin` yet. Reach for the header with `curl` until the follow-up issue lands. Sign in on `/admin/auth/sign-in/email` and send `x-auth-audience: admin` beside `x-organization-id`, or the request reads the client session and gets 403.
 
 ## Failure codes
 
@@ -96,7 +98,7 @@ Every one of these renders through api's `ERROR_CODES` envelope, so a caller par
 | Signed out | 401 | `sign in first` |
 | No active organization, or membership revoked | 403 | `no active organization` |
 | `x-organization-id` from a caller who may not send it | 403 | `forbidden` |
-| `x-organization-id` from a `superadmin` naming no organization | 404 | `unknown organization` |
+| `x-organization-id` from a `superadmin` on the admin session naming no organization | 404 | `unknown organization` |
 | A claimed bearer credential that fails (`api-keys`) | 401 | `invalid api key` |
 | A `can()` refusal (`rbac`) | 403 | `permission required: <resource>:<action>` |
 
