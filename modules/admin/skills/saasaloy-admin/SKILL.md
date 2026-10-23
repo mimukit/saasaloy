@@ -430,6 +430,8 @@ runtime variable would arrive too late to matter.
 environment, so the bundle inlines the production `PUBLIC_API_URL` and the dev `.env` stays as it
 is. The app is assets-only, so it gets no secrets.
 
+`saasaloy add admin` appends `{ service: "admin", order: 20 }` to `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`, so the admin deploys after the api it calls and before the web. It also appends the `admin-home` smoke check, `GET /` with a 200, which runs once `apps/admin/wrangler.jsonc` has a `routes[]` entry with `custom_domain: true`. `pnpm deploy:production --only admin` deploys this app alone after the gates. See the `saasaloy-deploy` skill.
+
 ## Removing the module
 
 `saasaloy remove admin` deletes the files **this module** installed and prunes the directories that

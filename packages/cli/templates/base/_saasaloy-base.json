@@ -4,7 +4,8 @@
     "README.md",
     "saasaloy.json",
     "apps/web/src/pages/index.astro",
-    "packages/ui/src/content/landing.ts"
+    "packages/ui/src/content/landing.ts",
+    "docs/runbook-deploy.md"
   ],
   "retiredSeedFiles": ["DESIGN.md"],
   "ownedFiles": [
@@ -21,6 +22,8 @@
     "packages/ui/src/index.ts",
     "packages/ui/src/lib/icons.ts",
     "apps/web/src/layouts/Layout.astro",
-    "apps/web/public/favicon.*"
+    "apps/web/public/favicon.*",
+    "packages/tooling/src/deploy.config.ts",
+    "packages/tooling/src/targets.ts"
   ]
 }

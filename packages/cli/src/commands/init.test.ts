@@ -321,6 +321,19 @@ describe("initGitRepo — the nesting guard (ADR 0024)", () => {
     await expect(pathExists(join(target, ".git"))).resolves.toBeTruthy();
   });
 
+  // The deploy's branch gate allows `main`, so the first branch must be `main` whatever
+  // `init.defaultBranch` the machine sets.
+  it("starts the repository on main", async () => {
+    const target = join(dir, "on-main");
+    await mkdir(target, { recursive: true });
+    await initGitRepo(target);
+    const head = execFileSync("git", ["symbolic-ref", "HEAD"], {
+      cwd: target,
+      encoding: "utf-8",
+    });
+    expect(head.trim()).toBe("refs/heads/main");
+  });
+
   it("does not nest a repository where the outer one tracks the target", async () => {
     const target = join(outer, "tracked", "app");
     await expect(initGitRepo(target)).resolves.toStrictEqual({

@@ -6,7 +6,7 @@ One command deploys the whole project:
 pnpm deploy:production
 ```
 
-It checks every production value first, then builds and deploys each Worker with wrangler. The secrets go up with the code, and wrangler creates the D1, KV, R2 and queue resources the first time. There is no Pulumi stack, no extra module and no staging environment. Production is the only target.
+It checks the branch, the tree, origin, CI and new migrations, then every production value. Then it builds and deploys each Worker with wrangler, one at a time in a fixed order, requests the live hosts, and tags the commit. Preview all of it with `pnpm deploy:production --dry-run`, which builds, uploads, migrates and tags nothing. The secrets go up with the code, and wrangler creates the D1, KV, R2 and queue resources the first time. There is no Pulumi stack, no extra module and no staging environment. Production is the only target.
 
 ## Before you begin
 
@@ -17,13 +17,25 @@ It checks every production value first, then builds and deploys each Worker with
 
 ## What `pnpm deploy:production` does
 
-1. `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing. Nothing has built or uploaded at this point.
-2. `turbo run deploy` runs the `deploy` script of every workspace that has one. Each is `env-deploy <service>`, which:
-   - loads that service's production values and the Cloudflare credentials into memory,
-   - runs `pnpm run build` with them in the environment, so the bundle inlines the production `PUBLIC_*` values while `apps/*/.env` keeps its dev values,
-   - writes the Worker's secrets to a `0600` file under the OS temp directory,
-   - runs `wrangler deploy --secrets-file <file>`, and deletes the file whether that passed or failed.
-3. With `database-d1` installed, turbo runs `db:migrate:prod` before the api Worker uploads. It creates the D1 database when the account has none by that name, then applies the pending migrations.
+The command runs `packages/tooling/src/deploy-production.ts`. It stops at the first failure, and only a run where every step passed writes a tag ([ADR 0048](../../adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
+
+1. **Gates.** Each reads its setting from `packages/tooling/src/deploy.config.ts`, a file the project owns:
+   - the branch is on the `branches` list (`main` and `hotfix-*` by default),
+   - the tree is clean,
+   - HEAD is the same commit as its branch on origin,
+   - the `ciWorkflow` run on HEAD passed. The gate is off until the config names a workflow, and the run says so,
+   - no file matching `migrations` (`packages/db/migrations/*.sql`) changed since the last deploy tag, unless you pass `--migrate`. With no tag yet, every migration file counts as new.
+
+   A failed gate stops the run before anything builds, and every message ends with the command that clears it.
+2. **Env check.** `node packages/env/src/deploy.ts --check` loads the production values of every service and exits non-zero, naming each blank key, when one is missing.
+3. **Migration**, with `--migrate` only: `pnpm --filter @repo/db run db:prod:migrate`. With `database-postgres` it dumps the production database first. With `database-d1` it creates the D1 database when the account has none by that name, dumps an existing one with `wrangler d1 export --remote`, then applies the pending migrations. A failed or empty dump stops the migration with either driver. No deploy migrates without the flag.
+4. **Workers**, one at a time, lowest `order` first from `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`: `api` (10), `admin` (20), `web` (30). A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the run. Each Worker runs `pnpm --filter <package> run deploy`, which is `env-deploy <service>`:
+   - load that service's production values and the Cloudflare credentials into memory,
+   - run `pnpm run build` with them in the environment, so the bundle inlines the production `PUBLIC_*` values while `apps/*/.env` keeps its dev values,
+   - write the Worker's secrets to a `0600` file under the OS temp directory,
+   - run `wrangler deploy --secrets-file <file>`, and delete the file whether that passed or failed.
+5. **Smoke checks.** Each `SMOKE_CHECKS` row in `targets.ts` is requested on every custom domain of its service, three tries 5 seconds apart. The host comes from a `routes[]` entry with `custom_domain: true` in the Worker's `wrangler.jsonc`. A service with no custom domain gets no check, and the run says so.
+6. **Tag.** HEAD gets an annotated `deploy-<UTC yyyymmdd-hhmm>` tag, pushed to origin. The newest tag is what is live, and `git log <tag>..main` lists what the next deploy ships.
 
 A variable your shell exports wins over the value source, for both the check and the build. That is how CI passes values.
 
@@ -43,21 +55,25 @@ A project that only ran `saasaloy init` has one Worker, `<project-name>-web`, an
 
 **Rename the api Worker before your second project.** `modules/api/files/wrangler.jsonc` sets `"name": "api"` literally, so two projects in one account deploy over each other. Edit `apps/api/wrangler.jsonc` and give it a project-specific name. Issue #197 adds the project-name prefix to every module.
 
-## Deploy one Worker, or preview
+## Preview, deploy one Worker, and the other flags
 
 ```bash
-pnpm --filter @repo/api run deploy                  # one Worker, same flow as above
-pnpm --filter @repo/web run deploy -- --dry-run     # build with production values, upload nothing
-pnpm turbo run deploy -- -- --dry-run               # every Worker, upload nothing
+pnpm deploy:production --dry-run                    # every gate, the order, the smoke checks, the env check
+pnpm deploy:production --migrate                    # run the production migration before the first Worker
+pnpm deploy:production --skip-ci "<reason>"         # pass the CI gate while GitHub Actions is down
+pnpm deploy:production --only api                   # one Worker and its smoke checks, no tag
+pnpm --filter @repo/web run deploy -- --dry-run     # build one Worker with production values, upload nothing
 ```
 
-The single-Worker form skips the step-1 check for the other services. A dry run still runs `db:migrate:prod` through turbo, so preview with the `--filter` form when you have D1 migrations pending.
+The dry run prints the last deploy tag, the commits since it, every gate, the deploy order and the smoke URLs. It exits 0 and ends with the list of what would stop a real run. `--skip-ci` puts its reason in the tag message. `--only` writes no tag, because the tag means every Worker runs that commit. Deploying with `pnpm --filter <package> run deploy` alone skips the gates, the order and the tag.
+
+The generated project ships the `saasaloy-deploy` skill for an agent: it runs the dry run, reports, and deploys only after the owner says so in the same session. It also ships `docs/runbook-deploy.md`, a runbook the project fills in with its own first deploy, hosting and data restore steps.
 
 ## Resources
 
 Wrangler creates a missing resource on deploy and reuses it on the next one:
 
-- **`database-d1`**: the D1 database named in `database_name` (`app-db`). `db:migrate:prod` creates it first, and the deploy connects the binding to it by name.
+- **`database-d1`**: the D1 database named in `database_name` (`app-db`). `db:prod:migrate` creates it on the first `pnpm deploy:production --migrate`, and the deploy connects the binding to it by name.
 - **`kv-cloudflare`**: a namespace titled `<worker name>-kv`. A later deploy reuses the namespace the deployed Worker already holds.
 - **`storage-cloudflare`**: the R2 bucket named in `bucket_name` (`app-storage`).
 - **`queue-cloudflare`**: both queues, `app-jobs` and `app-jobs-dlq`. Queues need a Workers paid plan.
@@ -97,10 +113,18 @@ Two kinds of setup stay manual:
 
 ## When a deploy fails partway
 
-Turbo stops the tasks that have not started, and the ones that finished stay live. A run can leave the api on the new version and the web app on the old one, or the D1 migrations applied with the old api still serving. Two rules keep that survivable:
+The run stops at the failed step and writes no tag. A Worker that deployed before the failure stays live, so a run can leave the api on the new version and the web app on the old one, or a migration applied with the old api still serving. The run prints a rollback command for each Worker it deployed:
 
-- **Keep migrations backward compatible**, so the old api reads the new schema.
-- **Roll a Worker back with wrangler**: `pnpm --filter @repo/api exec wrangler rollback` returns it to the previous version. `wrangler deployments list` in the same workspace shows the history.
+```bash
+pnpm --filter @repo/api exec env-deploy --run api -- wrangler rollback
+```
+
+`wrangler deployments list` in the same form shows the history. A failed smoke check also prints these lines, after every Worker is live. Two rules keep a partial deploy survivable:
+
+- **Keep migrations backward compatible**, so the old api reads the new schema. A code rollback does not undo a migration.
+- **Never move or delete a deploy tag.** After a rollback the live code is the previous tag's commit again. Revert the bad commit on `main`, and the next deploy tags the revert.
+
+When the tag push fails, the Workers stay live and the tag stays local. Run `git push origin <tag>`.
 
 Fix the cause and run `pnpm deploy:production` again. Every Worker redeploys on every run.
 
@@ -140,4 +164,4 @@ A project scaffolded before this flow may still have an `infra/` workspace and a
 - [Add a module](add-a-module.md): installing `api` and `database` in the first place.
 - [Architecture](../architecture.md): why the CLI stops at copying files in.
 
-_Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, `database-d1`, `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._
+_The gated flow was checked against branch `issue-234-gate-order-and-tag-the-production-deploy` on 2026-10-23 with `pnpm deploy:production --dry-run` in a generated project; no live deploy ran. Checked against branch `issue-198` on 2026-10-21 with live deploys to a disposable Cloudflare account: the landing page, and a project with `api`, `database-d1`, `auth`, `kv-cloudflare` and `queue-cloudflare`. The teardown above ran in this order. R2 and the `infra` runbook were not run live._

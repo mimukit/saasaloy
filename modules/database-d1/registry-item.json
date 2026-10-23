@@ -26,8 +26,14 @@
     {
       "file": "packages/db/package.json",
       "kind": "package-json-script",
-      "name": "db:migrate:prod",
+      "name": "db:prod:migrate",
       "value": "env-deploy --run deploy -- node scripts/migrate-prod.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:dump",
+      "value": "env-deploy --run deploy -- node scripts/prod-dump.ts"
     },
     {
       "file": "packages/db/package.json",
@@ -76,6 +82,18 @@
       "kind": "package-json-script",
       "name": "db:seed",
       "value": "pnpm --filter @repo/db db:seed"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:dump",
+      "value": "pnpm --filter @repo/db db:prod:dump"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:migrate",
+      "value": "pnpm --filter @repo/db db:prod:migrate"
     },
     {
       "file": "packages/db/package.json",
@@ -155,6 +173,18 @@
         {
           "path": "files/scripts/migrate-prod.ts",
           "target": "scripts/migrate-prod.ts"
+        },
+        {
+          "path": "files/scripts/prod-dump.ts",
+          "target": "scripts/prod-dump.ts"
+        },
+        {
+          "path": "files/scripts/lib/dump.ts",
+          "target": "scripts/lib/dump.ts"
+        },
+        {
+          "path": "files/scripts/lib/dump.vitest.ts",
+          "target": "scripts/lib/dump.test.ts"
         }
       ]
     },

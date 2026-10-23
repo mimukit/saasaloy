@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
+  checkDeploy,
   checkEnv,
   checkPartialInstalls,
   checkPolicyBindings,
@@ -11,6 +12,7 @@ import {
   checkRetiredInfra,
   checkTarget,
   hasRetiredInfra,
+  readDeployState,
   readEnvState,
   readPolicyState,
   resolveDoctorTarget,
@@ -42,7 +44,7 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // `installed` against `.saasaloy/manifest.json` and report a module that owns no files
 // (#107), and a Base section says whether the template is recorded and which of its
 // files drifted (#120). Drift there is information, not a problem: it never fails the
-// run, and nothing here writes.
+// run, and nothing here writes. The deploy warnings (ADR 0048) follow the same rule.
 //
 // The rules live in `lib/doctor.ts`; this file is presentation and exit codes only. An
 // invalid descriptor is bad input, so a run with findings exits 2 (the refusal code),
@@ -129,6 +131,18 @@ async function reportProject(path: string): Promise<number> {
     seedFiles: (await readBaseDeclaration(await baseTemplateDir())).seedFiles,
   });
   note(wrapForNote(renderBase(base)), "Base");
+  // The deploy rules (ADR 0048) are warnings, like base drift: each prints its fix and
+  // none of them turns exit 0 into 2. `pnpm deploy:production` refuses the same state on
+  // its own, so this only says it sooner.
+  const warnings = checkDeploy(await readDeployState(path));
+  if (warnings.length > 0) {
+    note(
+      wrapForNote(
+        warnings.map((found) => `${pc.yellow("!")} ${found.message}`).join("\n")
+      ),
+      `${pc.yellow("Deploy warnings")} ${pc.dim(`(${warnings.length})`)}`
+    );
+  }
   // Two halves of the same question: a module installed that owns nothing (#107), and a
   // module that owns work but was never marked installed (#49).
   // A third question, asked only on a project running `kv-cloudflare`: does every rate

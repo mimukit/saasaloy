@@ -23,6 +23,11 @@ packages/cli/test/fixtures
 # reporter would drop third-party CSS and JS here.
 **/coverage
 
+# The TanStack Router plugin writes routeTree.gen.ts on every build. Its generator options
+# already match Prettier's style, but the file is generated output, so a format pass must
+# never touch it and a build must never fight a format pass.
+**/routeTree.gen.ts
+
 # Build output and dependencies.
 **/node_modules
 **/dist

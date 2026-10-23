@@ -344,6 +344,17 @@ describe("the shipped declaration", () => {
     }
   });
 
+  // #234: the deploy runbook is the project's from the first day. `update` must never
+  // overwrite a project's own runbook, and a project made earlier keeps its copy.
+  it("seeds the deploy runbook", async () => {
+    const dir = await baseTemplateDir();
+    const declaration = await readBaseDeclaration(dir);
+    const shipped = (await listTemplateFiles(dir)).map((f) => f.target);
+
+    expect(declaration.seedFiles).toContain("docs/runbook-deploy.md");
+    expect(shipped).toContain("docs/runbook-deploy.md");
+  });
+
   it("is not itself copied into a project", async () => {
     const dir = await baseTemplateDir();
     const shipped = (await listTemplateFiles(dir)).map((f) => f.target);
@@ -372,6 +383,8 @@ describe("the shipped declaration", () => {
       "packages/ui/src/lib/icons.ts",
       "apps/web/src/layouts/Layout.astro",
       "apps/web/public/favicon.svg",
+      "packages/tooling/src/deploy.config.ts",
+      "packages/tooling/src/targets.ts",
     ]) {
       expect(shipped, `${target} is claimed but not shipped`).toContain(target);
       expect(isOwned(target), `${target} should be owned`).toBeTruthy();
@@ -380,6 +393,8 @@ describe("the shipped declaration", () => {
       "package.json",
       "AGENTS.md",
       "apps/web/wrangler.jsonc",
+      "packages/tooling/src/deploy-production.ts",
+      "packages/tooling/src/types.ts",
     ]) {
       expect(
         isOwned(target),

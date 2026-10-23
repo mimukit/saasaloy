@@ -1,5 +1,12 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  mkdir,
+  mkdtemp,
+  readFile,
+  readlink,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import {
@@ -342,6 +349,29 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     expect(code).toBe(0);
     expect(output).toContain("WIDGET_TOKEN");
     expect(output).toContain("Signs widget callbacks");
+  });
+
+  it("links a project's own skill folder, not only the skills a module names (#234)", async () => {
+    await state(["widget"], { widget: localEntry });
+    await descriptor("widget", {});
+    await mkdir(join(project, ".agents", "skills", "project-own"), {
+      recursive: true,
+    });
+    await mkdir(join(project, ".claude", "skills", "taken"), {
+      recursive: true,
+    });
+    await mkdir(join(project, ".agents", "skills", "taken"), {
+      recursive: true,
+    });
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(0);
+    await expect(
+      readlink(join(project, ".claude", "skills", "project-own"))
+    ).resolves.toBe(join("..", "..", ".agents", "skills", "project-own"));
+    expect(output).toContain(".claude/skills/project-own");
+    expect(output).toContain("Skill link .claude/skills/taken left untouched");
   });
 });
 

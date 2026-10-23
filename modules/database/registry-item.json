@@ -13,9 +13,49 @@
       "section": "dependencies",
       "name": "@repo/db",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "drizzle-orm",
+      "range": "0.45.3"
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/health/db",
+      "call": "healthDb",
+      "import": {
+        "name": "healthDb",
+        "from": "./routes/health-db"
+      }
+    },
+    {
+      "file": "packages/tooling/src/targets.ts",
+      "kind": "const-array",
+      "constName": "SMOKE_CHECKS",
+      "key": "id",
+      "entry": {
+        "id": "api-health-db",
+        "service": "api",
+        "path": "/health/db",
+        "status": 200,
+        "body": "\"ok\""
+      }
     }
   ],
-  "files": [],
+  "files": [
+    {
+      "path": "files/api/routes/health-db.ts",
+      "target": "@api/routes/health-db.ts"
+    },
+    {
+      "path": "files/api/routes/health-db.vitest.ts",
+      "target": "@api/routes/health-db.test.ts"
+    }
+  ],
   "scaffolds": [
     {
       "workspace": "packages/db",

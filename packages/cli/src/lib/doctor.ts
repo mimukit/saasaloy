@@ -14,6 +14,8 @@ import {
 } from "./fs-utils.js";
 import type { LockBase, Lockfile } from "./lock.js";
 import type { Manifest } from "./manifest.js";
+import { entryValue, findConstArray } from "./patch/ts-array.js";
+import type { Program } from "./patch/ts-array.js";
 import type { ModuleImports } from "./patch/ts-ast.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
@@ -907,6 +909,136 @@ export function checkRetiredInfra(hasInfra: boolean): Finding[] {
 /** Whether the project still has the `infra/` directory `checkRetiredInfra` reports. */
 export function hasRetiredInfra(root: string): Promise<boolean> {
   return pathExists(resolveWithinRoot(root, "infra"));
+}
+
+// ---------------------------------------------------------------------------
+// The gated deploy rules (ADR 0048).
+// ---------------------------------------------------------------------------
+
+/** The owned file whose `DEPLOY_TARGETS` rows order `pnpm deploy:production`. */
+export const DEPLOY_TARGETS_FILE = "packages/tooling/src/targets.ts";
+
+/** The production migration task name the base and `database-d1` retired. */
+const RETIRED_MIGRATE_TASK = "db:migrate:prod";
+
+export interface DeployCheckArgs {
+  /** The project's `turbo.json`, or `undefined` when it has none. */
+  turbo: string | undefined;
+  /**
+   * Every service the deploy engine uploads: a directory under `apps/` whose
+   * `package.json` has a `name` and a `deploy` script, beside a `wrangler.jsonc` or
+   * `wrangler.json`. The same rule the engine applies, so the two never disagree.
+   */
+  deployable: string[];
+  /** The text of `packages/tooling/src/targets.ts`, or `undefined` when it is missing. */
+  targets: string | undefined;
+}
+
+/**
+ * The deploy rules (ADR 0048). Both are warnings with the fix printed: the project still
+ * builds and runs, and `pnpm deploy:production` stops on the same state with its own
+ * message. Doctor says so earlier.
+ *
+ * - `turbo.json` still names `db:migrate:prod`. A project that has not merged the new
+ *   `turbo.json` keeps a `deploy` task that waits on a task no module defines any more.
+ * - A deployable workspace has no `DEPLOY_TARGETS` row, so the engine cannot place it in
+ *   the order and refuses to deploy.
+ */
+export function checkDeploy(args: DeployCheckArgs): Finding[] {
+  const findings: Finding[] = [];
+  if (args.turbo?.includes(RETIRED_MIGRATE_TASK)) {
+    findings.push(
+      finding(
+        "deploy",
+        "/turbo.json",
+        `turbo.json still names ${RETIRED_MIGRATE_TASK}. The production migration is now db:prod:migrate, and it runs only when you ask for it with pnpm deploy:production --migrate. Remove "^${RETIRED_MIGRATE_TASK}" from the deploy task's dependsOn and delete the ${RETIRED_MIGRATE_TASK} task.`
+      )
+    );
+  }
+  if (args.deployable.length === 0) {
+    return findings;
+  }
+  const where = `/${DEPLOY_TARGETS_FILE}`;
+  if (args.targets === undefined) {
+    findings.push(
+      finding(
+        "deploy",
+        where,
+        `${DEPLOY_TARGETS_FILE} is missing, so pnpm deploy:production has no deploy order. Run \`saasaloy update\` to create it, then give each of ${args.deployable.map((service) => `apps/${service}`).join(", ")} a DEPLOY_TARGETS row.`
+      )
+    );
+    return findings;
+  }
+  const services = targetServices(args.targets);
+  if (typeof services === "string") {
+    findings.push(finding("deploy", where, services));
+    return findings;
+  }
+  for (const service of args.deployable.toSorted()) {
+    if (!services.includes(service)) {
+      findings.push(
+        finding(
+          "deploy",
+          where,
+          `apps/${service} deploys and has no DEPLOY_TARGETS row, so pnpm deploy:production stops before it builds anything. Add { service: "${service}", order: <number> } to ${DEPLOY_TARGETS_FILE}. A lower order deploys first.`
+        )
+      );
+    }
+  }
+  return findings;
+}
+
+/** The `service` of every `DEPLOY_TARGETS` row, or a message saying why there is none. */
+function targetServices(source: string): string[] | string {
+  let program: Program;
+  try {
+    program = parseModule(source).$ast as unknown as Program;
+  } catch {
+    return `${DEPLOY_TARGETS_FILE} could not be parsed, so its DEPLOY_TARGETS rows are unknown. Fix the syntax error, then run \`saasaloy doctor\` again.`;
+  }
+  const array = findConstArray(program, "DEPLOY_TARGETS");
+  if (!array) {
+    return `${DEPLOY_TARGETS_FILE} has no DEPLOY_TARGETS array literal. Keep it as export const DEPLOY_TARGETS: DeployTarget[] = [...], so saasaloy add can append a module's row.`;
+  }
+  return array.elements
+    .map((element) => entryValue(element, "service"))
+    .filter((service): service is string => typeof service === "string");
+}
+
+/** Read what `checkDeploy` needs off a project on disk. */
+export async function readDeployState(root: string): Promise<DeployCheckArgs> {
+  const deployable: string[] = [];
+  for (const name of (
+    await readDirNames(resolveWithinRoot(root, "apps"))
+  ).toSorted()) {
+    const dir = posix.join("apps", name);
+    const hasWrangler =
+      (await pathExists(resolveWithinRoot(root, `${dir}/wrangler.jsonc`))) ||
+      (await pathExists(resolveWithinRoot(root, `${dir}/wrangler.json`)));
+    const manifest = await readIfPresent(
+      resolveWithinRoot(root, `${dir}/package.json`)
+    );
+    if (!hasWrangler || manifest === undefined) {
+      continue;
+    }
+    let pkg: Record<string, unknown>;
+    try {
+      pkg = asRecord(JSON.parse(manifest));
+    } catch {
+      continue;
+    }
+    if (
+      typeof pkg.name === "string" &&
+      typeof asRecord(pkg.scripts).deploy === "string"
+    ) {
+      deployable.push(name);
+    }
+  }
+  return {
+    turbo: await readIfPresent(resolveWithinRoot(root, "turbo.json")),
+    deployable,
+    targets: await readIfPresent(resolveWithinRoot(root, DEPLOY_TARGETS_FILE)),
+  };
 }
 
 /** Read what `checkEnv` needs off a project on disk. */

@@ -62,6 +62,7 @@ import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { linkAgentSkills } from "../lib/skill-links.js";
 import { readVersion } from "../version.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
@@ -907,6 +908,37 @@ export async function runAdd(argv: string[]): Promise<number> {
     for (const link of result.linkConflicts) {
       log.warn(
         `Skill link ${pc.cyan(link.path)} left untouched — a non-saasaloy path already occupies it.`
+      );
+    }
+    // A module's own links are planned above and recorded for `remove`. Every other folder
+    // in `.agents/skills/` gets its link here too: a project's own skill, or a base skill
+    // that arrived after `init` (ADR 0015).
+    const moduleSkills = new Set(
+      [...result.links, ...result.linkConflicts].map((link) =>
+        posix.basename(link.path)
+      )
+    );
+    const projectSkills = await linkAgentSkills(root);
+    for (const name of projectSkills.created) {
+      log.step(
+        `${pc.green("link")}  .claude/skills/${name} ${pc.dim(`→ .agents/skills/${name}`)}`
+      );
+    }
+    for (const name of projectSkills.conflicts) {
+      if (!moduleSkills.has(name)) {
+        log.warn(
+          `Skill link ${pc.cyan(`.claude/skills/${name}`)} left untouched — a non-saasaloy path already occupies it.`
+        );
+      }
+    }
+    for (const failure of [
+      ...projectSkills.failures,
+      ...(projectSkills.unreadable === undefined
+        ? []
+        : [{ name: ".agents/skills", message: projectSkills.unreadable }]),
+    ]) {
+      log.warn(
+        `Couldn't link skill ${pc.cyan(failure.name)}: ${failure.message} ${pc.dim("(the skill files are still in `.agents/skills/`)")}.`
       );
     }
     for (const p of result.patched) {

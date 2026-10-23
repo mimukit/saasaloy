@@ -411,8 +411,8 @@ curl -i -H 'Origin: http://localhost:9999' http://localhost:4000/health # → no
 Cloudflare credentials from the value source, builds with them, and runs `wrangler deploy
 --secrets-file`, so the secrets land in the same Worker version as the code. A key the
 `wrangler.jsonc` `vars` block already sets stays a plain var and is not sent as a secret.
-`pnpm --filter @repo/api run deploy` deploys this Worker alone. With `database-d1` installed,
-`turbo run deploy` applies the D1 migrations first. See the `saasaloy-env` skill.
+
+The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }` to `DEPLOY_TARGETS` in `packages/tooling/src/targets.ts`, so a frontend never goes live ahead of the route it calls. It also appends the `api-health` smoke check: `GET /health` must answer 200 with `"ok"` in the body. The check runs only once `apps/api/wrangler.jsonc` has a `routes[]` entry with `custom_domain: true`, and the dry run says so while it has none. `pnpm deploy:production --only api` deploys this Worker alone after the gates, and writes no deploy tag. Do not deploy it with `pnpm --filter @repo/api run deploy`, which skips the gates and the smoke checks. No deploy migrates the database unless you pass `--migrate`. See the `saasaloy-deploy` and `saasaloy-env` skills.
 
 ## Conventions to honor
 

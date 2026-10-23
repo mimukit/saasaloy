@@ -53,6 +53,7 @@ import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
+import { linkAgentSkills } from "../lib/skill-links.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
@@ -1045,6 +1046,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const result: UpdateResult = outcome.value;
 
     reportResult(result);
+    await linkProjectSkills(root, result);
     await formatPatchedFiles(
       root,
       result.patched.map((p) => p.file),
@@ -1117,6 +1119,46 @@ function summarizeOutcome(plan: UpdatePlan, result: UpdateResult): string {
       : `${names} ${verb} a merge — see the plan above.`
   );
   return applied ? `${pc.green(applied)} ${merge}` : merge;
+}
+
+/**
+ * Link every folder in `.agents/skills/` after the apply, not only the skills a module
+ * names: a project's own skill and a skill a base update just wrote need the link too
+ * (ADR 0015). A module's own link conflict was already reported by `reportResult`.
+ */
+async function linkProjectSkills(
+  root: string,
+  result: UpdateResult
+): Promise<void> {
+  const reported = new Set(
+    result.linkConflicts.map((link) => basename(link.path))
+  );
+  const skills = await linkAgentSkills(root);
+  for (const name of skills.created) {
+    log.step(
+      `${pc.green("link")}  .claude/skills/${name} ${pc.dim(`→ .agents/skills/${name}`)}`,
+      TUI_ON_STDERR
+    );
+  }
+  for (const name of skills.conflicts) {
+    if (!reported.has(name)) {
+      log.warn(
+        `Skill link ${pc.cyan(`.claude/skills/${name}`)} left untouched — not ours to replace.`,
+        TUI_ON_STDERR
+      );
+    }
+  }
+  for (const failure of [
+    ...skills.failures,
+    ...(skills.unreadable === undefined
+      ? []
+      : [{ name: ".agents/skills", message: skills.unreadable }]),
+  ]) {
+    log.warn(
+      `Couldn't link skill ${pc.cyan(failure.name)}: ${failure.message} ${pc.dim("(the skill files are still in `.agents/skills/`)")}.`,
+      TUI_ON_STDERR
+    );
+  }
 }
 
 function reportResult(result: UpdateResult): void {
