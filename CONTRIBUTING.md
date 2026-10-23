@@ -418,6 +418,7 @@ repo's own workspace deps (root, `packages/cli`) stay on `pnpm outdated` / `pnpm
 | `pnpm deps:check` | read-only gate; non-zero exit iff a default `deps:update` would change something |
 | `pnpm deps:verify` | `verify-pins` → `play:init` (which runs `git init` and installs) → build → lint → `verify-css` → typecheck the generated project (post-update gate) |
 | `pnpm verify:a11y` | axe, overflow, reduced-motion, skip-link, island and metadata checks over the built playground at four widths in both themes (by hand, and nightly in `smoke.yml`) |
+| `pnpm verify:e2e` | scaffolds a clean playground with the `e2e` module and runs its Playwright suite against the running apps, under `--driver=d1` or `--driver=postgres` (by hand, and in `e2e.yml` on a path filter) |
 
 `verify-css` (`scripts/verify-css.ts`) covers the one template break that `build` and
 `typecheck` are both blind to: Tailwind silently dropping every utility class written in
@@ -475,6 +476,19 @@ pnpm verify:a11y
 ```
 
 The `a11y` job in `.github/workflows/smoke.yml` runs the same steps every night.
+
+`verify-e2e` (`scripts/verify-e2e.ts`, run with `pnpm verify:e2e`) is the gate for the **`e2e` module**. It runs `play:reset`, adds the driver plus `auth`, `admin`, `waitlist` and `e2e` through the local-registry shim, places the waitlist form the way a project owner would, writes every service's `.env` from the example's local defaults, generates the migrations, downloads Chromium, lints and typechecks `packages/e2e` in the project, and runs `pnpm e2e`. The suite migrates and seeds the database, starts the apps, signs the seeded superadmin in, submits the waitlist form and checks that a guarded route refuses an anonymous caller.
+
+`--driver=d1` is the default and `--driver=postgres` is the other half. Run both when the module, the base template or Playwright moves: a suite verified under one driver proves the opposite of what the driver split claims. Locally the postgres run starts the driver's own `compose.yaml` container, which needs a Docker daemon. That container is named after the playground directory, so every worktree's playground on one machine shares it. To keep a run off it, point the run at a server of your own:
+
+```sh
+pnpm verify:e2e --driver=d1
+E2E_DATABASE_SERVER=postgres://postgres:postgres@127.0.0.1:55432/postgres E2E_DB_SETUP_ARGS=--server pnpm verify:e2e --driver=postgres
+```
+
+It is **deliberately not part of `deps:verify`**: it downloads a browser and takes minutes. `.github/workflows/e2e.yml` runs it as a two-job matrix on a pull request that touches `modules/**`, the CLI or its templates, with Postgres from a service container.
+
+`scripts/e2e-tags.test.ts` is the cheap half of the same guard and runs in `pnpm test`. It asserts that every tag in the suite's `SPEC_TAGS` names a real directory under `modules/`, and that every tag a spec writes is declared. A tag naming no module is never in any project's `installed`, so its spec is uncollected everywhere and the suite still reports green, which is exactly what a module rename would cause.
 
 
 ## Releasing
