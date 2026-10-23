@@ -233,6 +233,11 @@ export interface PaymentRefundView {
   createdAt: string;
 }
 
+// The payment tables keep a user id as `text`, while a project's `users.id` may be `text`
+// or `uuid`. Postgres has no `uuid = text` operator, so every join casts the users side
+// to text. `CAST(... AS TEXT)` rather than `::text`, because D1 runs this file too.
+const userIdText = sql<string>`CAST(${users.id} AS TEXT)`;
+
 /** The staff queue: one page of payments, newest first, oldest first for `submitted`. */
 export async function listPayments(
   db: Db,
@@ -241,7 +246,7 @@ export async function listPayments(
   const query = db
     .select({ payment: payments, userEmail: users.email })
     .from(payments)
-    .leftJoin(users, eq(users.id, payments.userId));
+    .leftJoin(users, eq(userIdText, payments.userId));
   const filtered =
     status === undefined ? query : query.where(eq(payments.status, status));
   // A queue is worked from the front: the payer who submitted first has waited longest
@@ -284,7 +289,7 @@ export async function paymentDetail(db: Db, id: string) {
   const found = await db
     .select({ payment: payments, userEmail: users.email })
     .from(payments)
-    .leftJoin(users, eq(users.id, payments.userId))
+    .leftJoin(users, eq(userIdText, payments.userId))
     .where(eq(payments.id, id))
     .limit(1);
   const [row] = found;
@@ -295,7 +300,7 @@ export async function paymentDetail(db: Db, id: string) {
   const events = await db
     .select({ actorEmail: users.email, event: paymentEvents })
     .from(paymentEvents)
-    .leftJoin(users, eq(users.id, paymentEvents.actorUserId))
+    .leftJoin(users, eq(userIdText, paymentEvents.actorUserId))
     .where(eq(paymentEvents.paymentId, id))
     .orderBy(asc(paymentEvents.createdAt));
 
