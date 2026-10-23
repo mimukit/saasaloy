@@ -1,5 +1,5 @@
 import { useRef, useState } from "react";
-import type { ChangeEvent, FormEvent } from "react";
+import type { ChangeEvent, SubmitEvent } from "react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button, buttonVariants } from "@repo/ui/components/button";
@@ -88,7 +88,7 @@ export function FileUploads({
     setPicked(event.target.files?.[0] ?? null);
   }
 
-  function submit(event: FormEvent) {
+  function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!picked || busy) {
       return;
@@ -106,7 +106,7 @@ export function FileUploads({
 
   return (
     <div className="grid gap-6">
-      {error ? (
+      {typeof error === "string" && error.length > 0 ? (
         <p
           role="alert"
           className="border-destructive/40 text-destructive rounded-lg border px-3 py-2 text-sm"
@@ -146,7 +146,9 @@ export function FileUploads({
                     name="file-uploads-visibility"
                     value="private"
                     checked={visibility === "private"}
-                    onChange={() => setVisibility("private")}
+                    onChange={() => {
+                      setVisibility("private");
+                    }}
                     disabled={busy}
                   />
                   Private
@@ -157,7 +159,9 @@ export function FileUploads({
                     name="file-uploads-visibility"
                     value="public"
                     checked={visibility === "public"}
-                    onChange={() => setVisibility("public")}
+                    onChange={() => {
+                      setVisibility("public");
+                    }}
                     disabled={busy || !publicUploads}
                   />
                   Public
@@ -269,7 +273,9 @@ export function FileUploads({
                           variant="outline"
                           size="sm"
                           disabled={busy || file.status !== "ready"}
-                          onClick={() => onDownload(file.id)}
+                          onClick={() => {
+                            onDownload(file.id);
+                          }}
                         >
                           Download
                         </Button>
@@ -290,7 +296,9 @@ export function FileUploads({
                         variant="ghost"
                         size="sm"
                         disabled={busy}
-                        onClick={() => onDelete(file.id)}
+                        onClick={() => {
+                          onDelete(file.id);
+                        }}
                       >
                         Delete
                       </Button>

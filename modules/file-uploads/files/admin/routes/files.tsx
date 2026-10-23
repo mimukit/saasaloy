@@ -7,7 +7,7 @@ import {
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { ErrorState } from "@repo/ui/blocks/error-state";
+import { ErrorState } from "@repo/ui/blocks/admin/error-state";
 import { FileUploads } from "@repo/ui/blocks/file-uploads";
 import type { FileRow } from "@repo/ui/blocks/file-uploads";
 
@@ -187,7 +187,8 @@ function FilesError({ error, reset }: ErrorComponentProps) {
     <ErrorState
       code="500"
       title="Files did not load"
-      description={`${error.message} Check that the api is running, that STORAGE_PROVIDER names an installed provider, and that you are signed in.`}
+      description="Check that the api is running, that STORAGE_PROVIDER names an installed provider, and that you are signed in."
+      detail={error instanceof Error ? error.message : undefined}
       primaryAction={{ label: "Try again", onClick: reset }}
     />
   );
