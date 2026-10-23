@@ -7,7 +7,7 @@ This is a SaaS project scaffolded with Saasaloy.
 
 This is a **pnpm workspace monorepo** managed by **Turborepo**.
 
-- **Root**: Configuration files, shared tooling
+- **Root**: Configuration files only. Repository tooling lives in `packages/tooling` (see "Code at the Root")
 - **`apps/*`**: Applications (Next.js, Astro apps - currently empty, will be added)
 - **`packages/*`**: Shared packages
 
@@ -38,6 +38,12 @@ Rules for a new app or service:
   naming the key. A server-side caller reads its own key through `apiEnv(c.env)`.
 - **Update both allow-lists when you add a browser origin**: `DEV_ORIGINS` in
   `apps/api/src/index.ts` and `DEV_ORIGINS` in `packages/auth/src/auth.ts`.
+
+### Code at the Root
+
+No code lives at the repository root. The root holds configuration only: `package.json`, `turbo.json`, the lint and format configs, `vitest.config.ts`. A tool, a script or a codemod goes into a workspace, where it gets a `tsconfig.json`, a `typecheck` script, the type-aware lint pass and the root Vitest run. A root `scripts/` folder gets none of them.
+
+`packages/tooling` (`@repo/tooling`) is the workspace for the repository's own tooling. It holds the deploy command (`src/deploy-production.ts`) and the skill linker (`src/link-skills.ts`). A root script that runs one of them names the file: `node packages/tooling/src/<name>.ts`. Two of its files are yours: `src/deploy.config.ts` and `src/targets.ts`. `saasaloy update` never writes them again after `saasaloy init`. The other files are managed.
 
 ### Workspace Commands
 
@@ -102,11 +108,7 @@ command that distributes it, one typed gate in front of the capabilities.
   is a workspace that reads a `.env` — `api`, `web`, `admin` — and
   `packages/env/src/services.ts` is the table. The `deploy` row has no file: it holds the
   Cloudflare credentials a deploy loads in memory.
-- **`pnpm deploy:production` deploys every Worker.** It checks every service's production
-  values first, then runs `turbo run deploy`, where each deployable workspace runs
-  `env-deploy <service>`: build with the production values in the environment, then
-  `wrangler deploy --secrets-file`. The `local` source reads production values from the
-  gitignored `packages/env/.env.prod`. Nothing writes a production value under `apps/`.
+- **`pnpm deploy:production` deploys every Worker.** It checks the git gates and every service's production values first, then deploys each Worker one at a time in the order `packages/tooling/src/targets.ts` gives. Each Worker runs its own `env-deploy <service>`: build with the production values in the environment, then `wrangler deploy --secrets-file`. The `local` source reads production values from the gitignored `packages/env/.env.prod`. Nothing writes a production value under `apps/`. The `saasaloy-deploy` skill covers the gates, the flags and the rollback.
 - **`createEnv` is the gate.** `apiEnv(c.env)` on the server, `webEnv()` in a frontend.
   It validates on the first call and throws once naming every failing key, its module and
   what the key is for.
@@ -493,12 +495,12 @@ owning formatting. All four run from `oxlint.config.mjs`, `prettier.config.js` a
 cannot consume one (`extends` takes file paths, JSON only).
 
 - `pnpm lint` — the gate. Four passes, in order:
-  1. `lint:types` — oxlint with `--type-aware` over `packages/ui/src`
+  1. `lint:types` — oxlint with `--type-aware` over `packages/env/src`, `packages/tooling/src` and `packages/ui/src`
   2. `lint:code` — oxlint over everything, no type information
   3. `lint:css` — Stylelint over `**/*.css`
   4. `format:check` — `prettier --check .`
 - `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over
-  `packages/ui/src`, the plain one over everything, then Stylelint. **Never** add
+  the same three folders, the plain one over everything, then Stylelint. **Never** add
   `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
 - `pnpm format` — `prettier --write .`
 - `pnpm typecheck` — `tsc`, and it must pass before you commit.
@@ -513,8 +515,7 @@ including on a fresh clone. Do not merge the two passes.
 Prettier config sets `proseWrap: "never"`, which would collapse every hand-wrapped
 paragraph — this file included — into a single line.
 
-**Commit hooks are installed by husky** on your first `pnpm install` (`prepare: "husky"`),
-and they need a `.git` directory, which `saasaloy init` creates for you:
+**Commit hooks are installed by husky** on your first `pnpm install`, and they need a `.git` directory, which `saasaloy init` creates for you. The root `prepare` script is `husky && node packages/tooling/src/link-skills.ts`, so the same install also links every folder in `.agents/skills/` into `.claude/skills/`. pnpm skips `prepare` when an install changes nothing, so after you add a skill folder to a checkout that is already installed, run `pnpm skills:link`. The hooks:
 
 - `pre-commit` runs **lint-staged** over staged files only — oxlint `--fix`, Stylelint
   `--fix`, Prettier `--write`. It skips the type-aware pass on purpose: that one needs the
@@ -531,7 +532,16 @@ hook (which is also how you keep hooks out of CI).
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite
 - Run the tests: `pnpm test`. It runs `turbo run test` (each workspace's own `test` script), then `vitest run` from the root, whose `vitest.config.ts` treats every workspace under `apps/*` and `packages/*` as a project. Write new tests for Vitest: put a `*.test.ts` file beside the code, and give the workspace a `vitest.config.ts` only when it needs setup of its own. Do not add a per-workspace `test` script that calls Vitest, or the file runs twice. `packages/env` is the exception: its tests run on `node --test` through its own `test` script, and the root config leaves it out.
+- `packages/tooling` tests run on Vitest through the root `vitest.config.ts`, like every other workspace. The workspace has a `typecheck` script and no `test` script, so `pnpm test` runs each file once.
 - Before you hand over UI work, run `pnpm dev`, load the pages you changed, and read the dev server's terminal output. Fix every error and warning it prints. A clean build does not prove a clean dev server.
+
+## Branches and Deploys
+
+- **Deploy from `main`.** `pnpm deploy:production` starts only from a branch that `branches` in `packages/tooling/src/deploy.config.ts` allows: `main` and `hotfix-*` by default. Every other branch fails the branch gate.
+- **A fix while `main` holds unreleased work goes on a `hotfix-<slug>` branch** cut from the last deploy tag: `git switch -c hotfix-<slug> "$(git describe --tags --match 'deploy-*' --abbrev=0)"`. Deploy from that branch, then merge it into `main` so the next deploy keeps the fix.
+- **No long-lived production branch.** The newest deploy tag marks the commit that is live, so no branch has to.
+- **Never move or delete a deploy tag.** Each successful deploy pushes an annotated `deploy-<UTC yyyymmdd-hhmm>` tag. `git log <tag>..main` lists what the next deploy ships, and a hotfix branches from the tag.
+- **An agent deploys only after the owner says so in the same session.** It runs `pnpm deploy:production --dry-run` and reports first. The `saasaloy-deploy` skill is the procedure, and `docs/runbook-deploy.md` holds this project's own deploy steps.
 
 ## Boundaries
 

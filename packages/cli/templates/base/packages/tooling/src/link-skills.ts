@@ -13,7 +13,7 @@ import path from "node:path";
 // a link is a per-machine file, so the root `prepare` script runs this on `pnpm install`,
 // and a fresh clone gets its links with no extra step. pnpm skips `prepare` when it answers
 // "Already up to date", so after you add a skill folder to a checkout that is already
-// installed, run `pnpm run prepare`.
+// installed, run `pnpm skills:link`.
 //
 // It follows the same rule `saasaloy init`, `add` and `update` follow. A missing link is
 // created (relative on POSIX, a junction on Windows). A link that already points at its
@@ -119,7 +119,7 @@ export function reportLines(report: LinkReport): string[] {
     ),
     ...report.conflicts.map(
       (name) =>
-        `link-skills: .claude/skills/${name} is not a link to .agents/skills/${name}, left alone. Remove it and run \`pnpm run prepare\` to link the skill.`
+        `link-skills: .claude/skills/${name} is not a link to .agents/skills/${name}, left alone. Remove it and run \`pnpm skills:link\` to link the skill.`
     ),
     ...report.failures.map(
       ({ name, message: text }) =>

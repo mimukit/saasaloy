@@ -7,7 +7,7 @@ description: Runbook for env-infisical — the Infisical value source for pnpm e
 
 `saasaloy add env-infisical` registers a second value source in `packages/env/src/sources.ts`. Select it with `ENV_SOURCE=infisical`; leave the variable unset and `pnpm env:setup` keeps using the built-in `local` source.
 
-This source answers two commands. `pnpm env:setup` asks it for each service's `dev` values and writes them to the service's `.env`. `ENV_SOURCE=infisical pnpm deploy:production` asks it for the `prod` values and keeps them in memory: `env-deploy` builds each Worker with them and uploads its secrets with `wrangler deploy --secrets-file`. Nothing a Worker imports reads Infisical.
+This source answers two commands. `pnpm env:setup` asks it for each service's `dev` values and writes them to the service's `.env`. `ENV_SOURCE=infisical pnpm deploy:production` asks it for the `prod` values and keeps them in memory: its env check reads them before any build, then `env-deploy` builds each Worker with them and uploads its secrets with `wrangler deploy --secrets-file`. The production database commands, `pnpm db:prod:dump` and `pnpm db:prod:migrate`, read it the same way through `env-deploy --run`. Nothing a Worker imports reads Infisical.
 
 ## Setting it up
 

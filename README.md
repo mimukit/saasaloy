@@ -121,7 +121,7 @@ The default registry is this repo. `saasaloy add waitlist` fetches `modules/wait
 
 ## Deploy
 
-`pnpm deploy:production` deploys every Worker in the project with wrangler. It loads the production values from the value source in memory, checks every one of them before anything builds, and uploads each Worker's secrets with its code. Wrangler creates the D1, KV, R2 and queue resources on the first deploy. Each deployable workspace keeps its own `wrangler.jsonc` and a `deploy` script that runs `env-deploy <service>`. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
+`pnpm deploy:production` deploys every Worker in the project with wrangler. It starts only from `main` or a `hotfix-*` branch with a clean tree that matches origin, and it stops on a new migration until you pass `--migrate`. It loads the production values from the value source in memory, checks every one of them before anything builds, deploys the Workers one at a time with the api first, requests each live host's smoke checks, and tags the commit `deploy-<UTC time>`. `--dry-run` reports all of it and changes nothing. Each Worker's secrets upload with its code. Wrangler creates the D1, KV, R2 and queue resources on the first deploy. Each deployable workspace keeps its own `wrangler.jsonc` and a `deploy` script that runs `env-deploy <service>`. See [Deploy to Cloudflare](docs/wiki/how-to/deploy-to-cloudflare.md).
 
 ## Documentation
 

@@ -102,21 +102,22 @@ Each service row declares `dev` or `prod`. `pnpm env:setup --env prod` refuses t
 
 ## Deploying: `pnpm deploy:production` and `env-deploy`
 
-`pnpm deploy:production` deploys every Worker in the project with wrangler. It runs in two steps:
+`pnpm deploy:production` (`packages/tooling/src/deploy-production.ts`) deploys every Worker in the project with wrangler. The `saasaloy-deploy` skill covers its gates, its flags, the go-ahead an agent needs, the hotfix branch and the rollback. This section covers the environment half:
 
-1. `node packages/env/src/deploy.ts --check` loads every service's `prod` values from the selected source and exits non-zero, naming each blank key, when one is missing. It also stops when `CLOUDFLARE_API_TOKEN` is blank and wrangler holds no `wrangler login` session. Nothing builds before this passes.
-2. `turbo run deploy` runs each workspace's `deploy` script, which is `env-deploy <service>`. A workspace whose package depends on `@repo/db` waits for `db:migrate:prod` first.
+1. Before any build, it runs `node packages/env/src/deploy.ts --check`. That loads every service's `prod` values from the selected source and exits non-zero, naming each blank key, when one is missing. It also stops when `CLOUDFLARE_API_TOKEN` is blank and wrangler holds no `wrangler login` session. `pnpm deploy:production --dry-run` runs the same check and reports its result.
+2. It then runs each deploy target's `deploy` script, one at a time, in the order `packages/tooling/src/targets.ts` gives. That script is `env-deploy <service>`. No Worker deploy runs a migration. A production migration runs only through `pnpm deploy:production --migrate`.
 
 `env-deploy <service>` loads that service's `prod` values and the `deploy` credentials, runs `pnpm run build` with them in the environment, and runs `wrangler deploy --secrets-file <file>`. Code and secrets land in one Worker version, so a Worker that throws at module scope on a missing secret deploys cleanly the first time. The secrets file is JSON, mode `0600`, under the OS temp directory, and deleted when the deploy ends, passed or failed. It holds the service's values minus every `CLOUDFLARE_*` key, minus each key the Worker's `wrangler.jsonc` already sets in `vars`, minus empty values. An assets-only Worker, one with no `main`, gets no secrets file.
 
-**Where the production values come from.** The `local` source reads the gitignored `packages/env/.env.prod`, never `packages/env/.env`, so a deploy cannot ship a `localhost` URL by accident. Copy the keys from `packages/env/.env.example` into it and set each one. `env-infisical` reads its `prod` environment. A variable the shell already exports wins over both, which is how CI passes values. The base `turbo.json` sets `passThroughEnv` on `deploy`, because turbo's strict env mode would drop the exported variables otherwise.
+**Where the production values come from.** The `local` source reads the gitignored `packages/env/.env.prod`, never `packages/env/.env`, so a deploy cannot ship a `localhost` URL by accident. Copy the keys from `packages/env/.env.example` into it and set each one. `env-infisical` reads its `prod` environment. A variable the shell already exports wins over both, which is how CI passes values. The base `turbo.json` keeps a `deploy` task with `passThroughEnv` for a project that runs `turbo run deploy` by hand, because turbo's strict env mode would drop the exported variables otherwise. `pnpm deploy:production` does not use turbo for the deploy.
 
 **Why the dev `.env` stays out of the build.** Vite gives the environment priority over a `.env` file, but the Cloudflare adapters prerender inside workerd, and wrangler hands workerd the `.env` beside the workspace as its vars. So `env-deploy` builds with `CLOUDFLARE_LOAD_DEV_VARS_FROM_DOT_ENV=false`, and it sets a key the source leaves out to an empty string rather than leaving it unset. `apps/web/.env` keeps its dev values, and nothing writes a production value under `apps/`.
 
 Three more forms:
 
-- `pnpm --filter @repo/api run deploy` deploys one Worker. Pass wrangler flags after `--`: `pnpm --filter @repo/web run deploy -- --dry-run` builds with the production values and uploads nothing.
-- `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. `database-d1`'s `db:migrate:prod` uses it.
+- `pnpm deploy:production --only <service>` deploys one Worker after the same gates, and runs its smoke checks. It writes no deploy tag.
+- `pnpm --filter @repo/web run deploy -- --dry-run` builds one Worker with the production values and uploads nothing. Pass wrangler flags after `--`. Do not deploy with `pnpm --filter <package> run deploy` alone: it skips the gates, the order and the tag.
+- `env-deploy --run <service> -- <command> [args...]` runs one command with that service's `prod` values and the credentials. The `db:prod:migrate` and `db:prod:dump` scripts use it: `--run api` under `database-postgres`, because `DATABASE_URL` is an `api` key, and `--run deploy` under `database-d1`, which needs only the Cloudflare credentials.
 - `env-deploy --check` is step 1 on its own.
 
 Two things the flow does not do. `--secrets-file` only adds: a secret you removed from the value source stays on the Worker until you run `wrangler secret delete <KEY>` in its workspace. And a key marked `# Blank on purpose` passes the check even where production needs it, such as `BETTER_AUTH_SECRET`; the Worker's own `createEnv` gate is what refuses it.

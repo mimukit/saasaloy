@@ -118,7 +118,7 @@ describe("link-skills", () => {
 
       expect(lines).toStrictEqual([
         "link-skills: linked .claude/skills/a -> .agents/skills/a",
-        "link-skills: .claude/skills/b is not a link to .agents/skills/b, left alone. Remove it and run `pnpm run prepare` to link the skill.",
+        "link-skills: .claude/skills/b is not a link to .agents/skills/b, left alone. Remove it and run `pnpm skills:link` to link the skill.",
         "link-skills: could not link .claude/skills/d: EACCES",
       ]);
     });

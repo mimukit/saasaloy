@@ -51,19 +51,19 @@ saasaloy remove infra
 ## 5. Check before anything uploads
 
 ```bash
-node packages/env/src/deploy.ts --check
-pnpm turbo run deploy --filter @repo/web -- -- --dry-run
+pnpm deploy:production --dry-run
+pnpm --filter @repo/web run deploy -- --dry-run
 ```
 
-The first command names every blank production key. The second builds the web app with the production values and uploads nothing. Wrangler prints "Using redirected Wrangler configuration" for `apps/web`.
+The first command reports every deploy gate, the deploy order and the smoke checks, and runs the env check, which names every blank production key. It builds nothing. The second builds the web app with the production values and uploads nothing. Wrangler prints "Using redirected Wrangler configuration" for `apps/web`.
 
 ## 6. Deploy
 
 ```bash
-pnpm deploy:production
+pnpm deploy:production --migrate
 ```
 
-Each Worker prints its `workers.dev` URL. With `database-d1`, `db:migrate:prod` runs first and finds the existing database by name, so it creates nothing and applies only the pending migrations. Open the api and check that a request reading the database returns the data you had.
+Commit and push first: the deploy starts only from a clean tree that matches origin. The project has no deploy tag yet, so every migration file counts as new and the migration gate asks for `--migrate`. Each Worker prints its `workers.dev` URL. With `database-d1`, `db:prod:migrate` runs first and finds the existing database by name, so it creates nothing and applies only the pending migrations. Open the api and check that a request reading the database returns the data you had.
 
 ## 7. Delete what is left
 

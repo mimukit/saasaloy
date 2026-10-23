@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, seeding it with db:seed, writing route tests against the test database with testDatabase(), opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, dumping and migrating the production database with db:prod:dump and db:prod:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, seeding it with db:seed, writing route tests against the test database with testDatabase(), opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -188,19 +188,31 @@ pnpm --filter @repo/db db:generate   # core: diff schema → emit SQL under migr
 pnpm --filter @repo/db db:migrate    # apply pending migrations
 ```
 
-There is one script, not a `:local` / `:prod` pair, because the URL alone picks the target. Point it
-at production by exporting the production URL for that one command:
+`db:migrate` acts on the development database `apps/api/.env` names. Production has its own two commands:
 
 ```sh
-DATABASE_URL="postgres://…" pnpm --filter @repo/db db:migrate
+pnpm db:prod:dump      # pg_dump the production database into the backup folder
+pnpm db:prod:migrate   # dump first, then drizzle-kit migrate against production
 ```
 
 `drizzle-kit migrate` records what it applied in a `drizzle.__drizzle_migrations` table, so
 re-running it is a no-op. There is no `drizzle-kit push` script and nothing migrates on boot.
 Generate, review the SQL, commit it beside the schema change, then apply it as a command you run.
-`pnpm deploy:production` does not run this for you: the base `turbo.json` waits on a
-`db:migrate:prod` task, and this driver defines none, because the production `DATABASE_URL` is
-yours to manage. Apply migrations before you deploy code that reads them.
+
+### Production: `db:prod:dump` and `db:prod:migrate`
+
+Both run `node scripts/prod.ts` through `env-deploy --run api`, so `DATABASE_URL` is the production value from the value source (`packages/env/.env.prod` with the `local` source) and stays in memory. It is `--run api` because `DATABASE_URL` is an `api` key. Before anything connects, the script checks the target:
+
+- The database must be named `<project>_production`: `databasePrefix` with `_dev` replaced by `_production`, so `acme_shop_dev` becomes `acme_shop_production`. Any other name, `<project>_prod` included, is refused.
+- The host must differ from the development server that `apps/api/.env` names.
+
+A refused target stops the command with nothing dumped or migrated.
+
+`db:prod:dump` runs `pg_dump --format=custom` into a new `<project>_production-<UTC time>.dump` file, mode 0600, in `~/<project>-backups/` (mode 0700), or in `DB_DUMP_DIR` when it is set. The folder sits outside the repository, so `git add .` and `git clean` never reach a file of production rows. `pg_dump` runs from the `postgres:<major>` image the root `compose.yaml` names, through Docker, so its major version matches the server. Set `PG_DUMP=local` to use the `pg_dump` on `PATH` instead.
+
+`db:prod:migrate` takes that dump first and stops when it fails or comes out empty. Then it runs `drizzle-kit migrate`. When the migration fails, the message names the dump that holds the database as it was before.
+
+**A deploy migrates only when you ask.** `pnpm deploy:production` stops at its migration gate when a file in `packages/db/migrations/` changed since the last deploy tag, and names the files. Read the SQL, then run `pnpm deploy:production --migrate`, which runs `db:prod:migrate` once before any Worker uploads. The `saasaloy-deploy` skill covers the gate, and `docs/runbook-deploy.md` holds this project's restore steps.
 
 ## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 

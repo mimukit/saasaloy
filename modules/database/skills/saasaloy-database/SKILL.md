@@ -280,6 +280,19 @@ creates a database per branch over a chosen backend and records it in a state bl
 `database-d1` wraps wrangler, because its local state is already per worktree. The core adds none of
 those three names. Read the driver skill your project has.
 
+**In production** both drivers ship `db:prod:dump` and `db:prod:migrate`, and `pnpm deploy:production --migrate` is the one command that migrates during a deploy. A deploy without the flag never migrates, and its migration gate stops when a migration file changed since the last deploy tag. The driver skills cover the two commands, and the `saasaloy-deploy` skill covers the gate.
+
+## The database health check: `GET /health/db`
+
+`saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with a `chained-route` patch. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.
+
+- A reachable database answers `200 {"status":"ok"}`.
+- A failure answers `503 { "error": { "code": "database_unavailable", "message": "The api could not reach its database." } }`. The message is fixed. The driver's error can carry a host, a user name or a query, so it goes only to the request's logger (`c.get("log")`).
+
+The module also appends the `api-health-db` smoke check to `SMOKE_CHECKS` in `packages/tooling/src/targets.ts`: `GET /health/db` must answer 200 with `"ok"` in the body. After every deploy that check proves the live api reaches its database with the credentials it holds now. It runs only when `apps/api/wrangler.jsonc` has a `custom_domain` route.
+
+The route has no rate limit. One `select 1` costs about what a 404 costs. To limit it, add a WAF rate-limiting rule for the path `/health/db` on the api's zone in the Cloudflare dashboard (Security, WAF, Rate limiting rules). Allow at least the three tries a deploy's smoke check makes, 5 seconds apart.
+
 ## Seed data
 
 `pnpm db:seed` fills the development database with example rows. The rows live in **seed slices**: one file per table under `packages/db/src/seed/slices/`, named after the table in kebab-case (`organization_roles` → `organization-roles.ts`). Each module that ships a table ships its slice too, so `saasaloy add teams` brings the rows for its four tables.

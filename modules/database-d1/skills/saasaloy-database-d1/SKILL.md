@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-d1
-description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, removing the old "local" placeholder database_id, applying migrations with db:migrate:local and db:migrate:prod, preparing, reporting on and dropping the local database with db:setup, db:status and db:drop, seeding it with db:seed, or writing route tests against a local test database with testDatabase(). The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-d1 driver — Cloudflare D1 (SQLite at the edge) behind packages/db. Use when reading the DB from a route (withDb(c, …)), wiring or fixing the d1_databases binding, removing the old "local" placeholder database_id, applying migrations with db:migrate:local and db:prod:migrate, dumping production with db:prod:dump, preparing, reporting on and dropping the local database with db:setup, db:status and db:drop, seeding it with db:seed, or writing route tests against a local test database with testDatabase(). The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-d1 — the Cloudflare D1 driver
@@ -105,8 +105,7 @@ SQL the core's `db:generate` emits.
 **There is no `database_id`, and you do not need one.** Local dev serves from a miniflare SQLite
 file under `apps/api/.wrangler/state`, keyed by the binding, so a fresh clone runs with no
 Cloudflare account at all. In production the database is found by its `database_name`:
-`db:migrate:prod` creates it on the first deploy when the account has none by that name, and
-`wrangler deploy` then connects the binding to it. A later deploy reuses the same database.
+`db:prod:migrate` creates it on the first `pnpm deploy:production --migrate` when the account has none by that name, and `wrangler deploy` then connects the binding to it. A later deploy reuses the same database.
 
 A project made before this change carries `"database_id": "local"`. Delete that line, or replace
 it with the real id from `wrangler d1 info app-db`. Wrangler sends any id it finds, so `"local"`
@@ -120,19 +119,23 @@ The core generates the SQL; this driver applies it. Both migrate commands run
 ```sh
 pnpm --filter @repo/db db:generate       # core: diff schema → emit SQL under migrations/
 pnpm --filter @repo/db db:migrate:local  # apply pending migrations to LOCAL D1
-pnpm --filter @repo/db db:migrate:prod   # apply pending migrations to REMOTE (production) D1
+pnpm --filter @repo/db db:prod:dump      # export REMOTE (production) D1 to a SQL file
+pnpm --filter @repo/db db:prod:migrate   # apply pending migrations to REMOTE (production) D1
 ```
+
+The root has the same `pnpm db:prod:dump` and `pnpm db:prod:migrate`.
 
 `db:migrate:local` also passes `--persist-to ../../apps/api/.wrangler/state`, so the migrated
 SQLite is the same file `vite dev` serves from. Without it wrangler would migrate a different
 local database than the one your app reads.
 
-`db:migrate:prod` runs `node scripts/migrate-prod.ts` through `env-deploy --run deploy`, so it
-gets the Cloudflare credentials from the value source, the same ones `pnpm deploy:production`
-uses. The script creates the database when the account has none by that name, then applies the
-pending migrations. `pnpm deploy:production` runs it for you before the api Worker uploads,
-because the base `turbo.json` makes `deploy` depend on `^db:migrate:prod`. There is no
-`drizzle-kit push` and no auto-migrate on boot.
+`db:prod:migrate` runs `node scripts/migrate-prod.ts` through `env-deploy --run deploy`, so it gets the Cloudflare credentials from the value source, the same ones `pnpm deploy:production` uses, and keeps them in memory. The script creates the database when the account has none by that name, then applies the pending migrations. It takes no dump first.
+
+**A deploy migrates only when you ask.** `pnpm deploy:production` stops at its migration gate when a file in `packages/db/migrations/` changed since the last deploy tag, and names the files. Read the SQL, then run `pnpm deploy:production --migrate`, which runs `db:prod:migrate` once before any Worker uploads. A deploy without `--migrate` never migrates (ADR 0048). There is no `drizzle-kit push` and no auto-migrate on boot.
+
+`db:prod:dump` runs `node scripts/prod-dump.ts` through the same `env-deploy --run deploy`. It runs `wrangler d1 export --remote` into a new timestamped `<database_name>-<UTC time>.sql` file in `~/<project>-backups/` (mode 0700), or in `DB_DUMP_DIR` when it is set. The folder sits outside the repository, so `git add .` and `git clean` never reach a file of production rows. Run it before a migration you may need to undo. Restore one with `wrangler d1 execute <database_name> --remote --file <dump>`, or roll the database back in place with D1 Time Travel (`wrangler d1 time-travel restore`).
+
+A project made before this change has `db:migrate:prod` in `packages/db/package.json`, and its `turbo.json` still runs it on every `turbo run deploy`. Rename the script to `db:prod:migrate`, and take the base `turbo.json` from `saasaloy update`. `saasaloy doctor` warns while `turbo.json` still names `db:migrate:prod`.
 
 ## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 
@@ -272,7 +275,7 @@ There is no data migration in either direction; see ADR 0026.
 - **Migrations are manual** — generate, review, then apply local or prod explicitly.
 - **`db:seed` is local only.** It refuses `--remote` and `NODE_ENV=production`.
 - **Route tests use `testDatabase()`**, which works on a copy. Never point a test at `apps/api/.wrangler/state`.
-- **Keep migrations backward compatible.** `pnpm deploy:production` applies them before the new
+- **Keep migrations backward compatible.** `pnpm deploy:production --migrate` applies them before the new
   api Worker uploads, and the old Worker serves requests in between. A migration the old code
   cannot read is an outage until the upload finishes, and a failed upload leaves it that way.
 - **One driver per project.** Adding `database-postgres` beside this one is refused, by design.

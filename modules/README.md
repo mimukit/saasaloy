@@ -76,10 +76,10 @@ exactly one driver and the two runbooks share almost nothing. See ADR 0026.
 
 The `database` trio is the worked example. The core (`database`) scaffolds `packages/db` with the
 schema barrel, the repository layer and `db:generate`, and knows no dialect. `database-d1` adds the
-`d1_databases` binding, the `db:migrate:local` / `db:migrate:prod` scripts and the D1 client.
+`d1_databases` binding, the `db:migrate:local` script, the `db:prod:migrate` / `db:prod:dump` scripts and the D1 client.
 `database-postgres` adds `DATABASE_URL` to `envVars`, a `nodejs_compat` entry in the
-`compatibility_flags` of `apps/api/wrangler.jsonc`, a single `db:migrate` script, and a client that
-prefers a `HYPERDRIVE` binding over `DATABASE_URL` when one is bound.
+`compatibility_flags` of `apps/api/wrangler.jsonc`, a single `db:migrate` script for the development database, the `db:prod:migrate` / `db:prod:dump` scripts, and a client that
+prefers a `HYPERDRIVE` binding over `DATABASE_URL` when one is bound. Neither driver migrates production on a deploy unless `pnpm deploy:production --migrate` asks for it (ADR 0048).
 
 Tests create disposable registry fixtures. CLI development and manual QA use throwaway
 registries under `.dev/`, so example modules do not need to live in the default registry.

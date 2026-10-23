@@ -344,6 +344,17 @@ describe("the shipped declaration", () => {
     }
   });
 
+  // #234: the deploy runbook is the project's from the first day. `update` must never
+  // overwrite a project's own runbook, and a project made earlier keeps its copy.
+  it("seeds the deploy runbook", async () => {
+    const dir = await baseTemplateDir();
+    const declaration = await readBaseDeclaration(dir);
+    const shipped = (await listTemplateFiles(dir)).map((f) => f.target);
+
+    expect(declaration.seedFiles).toContain("docs/runbook-deploy.md");
+    expect(shipped).toContain("docs/runbook-deploy.md");
+  });
+
   it("is not itself copied into a project", async () => {
     const dir = await baseTemplateDir();
     const shipped = (await listTemplateFiles(dir)).map((f) => f.target);

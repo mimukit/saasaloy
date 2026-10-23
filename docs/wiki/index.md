@@ -25,7 +25,7 @@ You want a project scaffolded and features installed into it.
 - [Add a module](how-to/add-a-module.md) — install a feature and its prerequisites.
 - [Remove a module](how-to/remove-a-module.md) — take one back out, and what stays behind.
 - [Deploy to Cloudflare](how-to/deploy-to-cloudflare.md) — ship every Worker with
-  `pnpm deploy:production`, roll back, remove a secret, tear it down.
+  `pnpm deploy:production`: the gates, the order, the smoke checks and the deploy tag, roll back, remove a secret, tear it down.
 - [`saasaloy update` overwrote work you own](runbooks/update-overwrote-my-work.md) — the
   0.1.x overwrite bug: what it hit, how to get the files back, and what changed.
 - [Move off the `infra` module](runbooks/move-off-the-infra-module.md) — take a project that

@@ -23,6 +23,7 @@
     "lint:fix": "oxlint -c oxlint.config.mjs --type-aware --fix packages/env/src packages/tooling/src packages/ui/src && oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "skills:link": "node packages/tooling/src/link-skills.ts",
     "typecheck": "turbo run typecheck"
   },
   "devDependencies": {
