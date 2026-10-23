@@ -22,7 +22,7 @@ The first draft also gave the pricing tier ids one home, shared by the landing p
 - **The test.** Two deployments of the *same* project. If the value can differ between them, it is `env`. If it cannot, it is `config`. A value that differs between two *different* projects but not between one project's environments is `config`.
 - **`config` takes neither providers nor drivers.** ADR 0033 asks who owns the data and whether a swap moves it; ADR 0037 asks whether an alternate implementation replaces files or adds one. Both questions presume an external service, and `config` wraps none. There is no `CONFIG_PROVIDER`, and there never should be one.
 - **`packages/config` ships in the base and is the leaf of the graph.** It has zero runtime dependencies and imports nothing, `@repo/env` included. Everything may import it, which is the property the whole design rests on.
-- **A frozen plain object, read with a plain import.** `import { config } from "@repo/config"`. No factory over `env`, no async, no I/O. `env` takes the environment in whole because a Workers binding only exists per request; a checked-in literal has no such constraint, and forcing the symmetry would buy nothing.
+- **A frozen plain object, read with a plain import.** `import { config } from "@repo/config"`. It is frozen all the way down and shares no object with a declared section or with `project.ts`. There is no factory over `env`, no async, no I/O. `env` takes the environment in whole because a Workers binding only exists per request; a checked-in literal has no such constraint, and forcing the symmetry would buy nothing.
 - **The base owns one section, `app`.** It holds the product name, the locale and the two legal paths. The name ships as `"Saasaloy"`, because the shipped landing copy describes Saasaloy and the two must agree on a fresh project. Nothing substitutes `{{PROJECT_NAME}}` into it.
 - **The landing copy is not config.** Prices, tier ids, the currency symbol and every sentence on the page stay in `packages/ui/src/content/landing.ts`, which `saasaloy-landing-copy` owns.
 - **A module contributes a section.** The module ships one file into `packages/config/src/sections/<key>.ts` and registers it with a `plugin-array` patch into `defineSections({ sections: [] })` in `packages/config/src/sections.ts`, the same registry shape `defineKv` uses for providers. The section key is the module name, it is flat, and `saasaloy add` refuses two modules claiming one key, naming both.
@@ -40,15 +40,19 @@ So the module ships its section into the config package instead, as one more mod
 
 `config.auth` holds `adminRole`, `superadminRole` and `adminAppExtraRoles`, which is empty by default. Both `authorize.ts` and `apps/admin` build `ADMIN_APP_ROLES` as the two role strings followed by the extra roles. A full list in config would need a second edit after a rename, because the merge replaces an array whole. The extra-roles list keeps a rename to one leaf and a `support` role to one entry. `ADMIN_ROLES`, the privilege list from ADR 0050, stays the two role strings and is not configurable here.
 
+A rename has to reach every place a role name is a key or a value, not only the guards. `siteRoleMap` in `authorize.ts` keys the `admin()` plugin's statements by `ADMIN_ROLE` and `SUPERADMIN_ROLE`, so a renamed admin keeps its `/admin/*` permissions. The users seed slice, the admin users screen and the auth route test read the same strings. Rows already stored keep the old name; an existing project updates them itself.
+
 ## The section key is read off the patch
 
 `saasaloy add` has to refuse two modules claiming one key before it writes, and it has to do so from the descriptors alone, with no project code loaded. The key is therefore the basename of the section patch's `import.from`: `./sections/auth` claims `config.auth`. No descriptor field says it a second time, and nothing can disagree with the file the module ships.
 
 Unlike a file target, a section key has **no** legal overlap. Two modules writing one file is legal when one declares the other in `dependsOn`, because that edge is consent. A section key composes into one object, so the second claimant either loses its values or throws at module load, and `dependsOn` cannot consent to that.
 
+The base template's own `app` key is claimed first, under the name `base`, so a module cannot take it either. The runtime composes under the key the file passes to `defineSection`, so `add` also reads each section file a module ships and refuses when that key is not the one the patch claims. A key built from a variable cannot be read without running the file; that case stays with the runtime throw.
+
 ## Nothing here is breaking
 
-No env key is removed. `BILLING_APP_NAME` is deprecated in place: billing reads `config.billing.appName || config.app.name`, the descriptor's description gains a `DEPRECATED` prefix, and `saasaloy doctor` reports the key when `packages/env/.env` or a service's `.env` still sets it. `BILLING_LOCKOUT_DAYS`, `FLAGS_ISOLATE_TTL_SECONDS` and `STORAGE_MAX_UPLOAD_BYTES` stay in `envVars` for now; #162 moves them with the leaf-file tunables.
+`BILLING_APP_NAME` is retired. Billing reads `config.billing.appName || config.app.name`, and the descriptor and the env preset no longer declare the key, so a fresh project never lists it. An older project's key list keeps the line, because `add` never removes one, and nothing breaks: the value is simply unread. `saasaloy doctor` reports it when `packages/env/.env` sets it, or, when that file does not, each service `.env` that does. `BILLING_LOCKOUT_DAYS`, `FLAGS_ISOLATE_TTL_SECONDS` and `STORAGE_MAX_UPLOAD_BYTES` stay in `envVars` for now; #162 moves them with the leaf-file tunables.
 
 ## Consequences
 
@@ -57,4 +61,4 @@ No env key is removed. `BILLING_APP_NAME` is deprecated in place: billing reads 
 - `@repo/config` must stay import-free. A value derived from both channels is derived at the call site, which is why `apps/api/src/billing-store.ts` and not a section file applies the `config.billing.appName || config.app.name` fallback.
 - The merge tests ship with the package as `packages/config/src/define.test.ts` and run on the project's Vitest. In this repo, `pnpm test:tooling` runs them from the template.
 - A module that reads `config` in a file this repo unit-tests needs the composed object, which does not exist outside a scaffolded project. `scripts/config-shim.ts` builds it from the template's sections plus every module's, and `scripts/ts-resolve-hook.ts` maps the `@repo/config` specifier onto it. That shim composes *every* module's section, so a key collision fails `pnpm test` too.
-- `doctor` reports an unedited `site: "https://example.com"` in `apps/web/astro.config.mjs`. It does not report an unchanged product name, because `"Saasaloy"` is a deliberate default.
+- `doctor` does not report an unchanged product name, because `"Saasaloy"` is a deliberate default. It does not report the Astro `site` either: the canonical origin is `PUBLIC_SITE_URL`, which is `env` by this record's own rule.

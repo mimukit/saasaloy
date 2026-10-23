@@ -37,7 +37,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 | TC-1.2 | 1: fresh scaffold, base only | A rename in `project.ts` reaches every page | 🔴 Critical |
 | TC-1.3 | 1: fresh scaffold, base only | The locale and the legal paths follow config | 🟡 Normal |
 | TC-1.4 | 1: fresh scaffold, base only | A bad override fails `typecheck`, readably | 🟡 Normal |
-| TC-1.5 | 1: fresh scaffold, base only | `doctor` reports the site origin, not the name | 🟡 Normal |
+| TC-1.5 | 1: fresh scaffold, base only | `doctor` reports no config finding on a fresh project | 🟡 Normal |
 | TC-1.6 | 1: fresh scaffold, base only | The merge tests run and lint in the project | 🟡 Normal |
 | TC-2.1 | 2: auth, admin and billing added | Two modules compose two sections | 🔴 Critical |
 | TC-2.2 | 2: auth, admin and billing added | The admin roles have one home | 🔴 Critical |
@@ -187,9 +187,9 @@ cd "$PLAY" && cp packages/env/.env.example packages/env/.env && pnpm env:setup
 
 **Notes.** _what actually happened on a fail; why it was skipped_
 
-### TC-1.5: `doctor` reports the site origin, not the name · 🟡 Normal
+### TC-1.5: `doctor` reports no config finding on a fresh project · 🟡 Normal
 
-**Goal.** `doctor` reports the placeholder origin and stays quiet about the deliberate default name.
+**Goal.** `doctor` stays quiet about the deliberate default name and about the Astro `site`, whose job `PUBLIC_SITE_URL` now does.
 
 **Steps**
 
@@ -199,8 +199,8 @@ cd "$PLAY" && cp packages/env/.env.example packages/env/.env && pnpm env:setup
    cd "$PLAY" && ./saasaloy doctor .
    ```
 
-   - [ ] Project state holds one finding, the unedited `site: "https://example.com"` in `apps/web/astro.config.mjs`
-   - [ ] Nothing reports the product name
+   - [ ] Nothing reports the product name or `apps/web/astro.config.mjs`
+   - [ ] No Project state box appears, so a fresh project is clean
    - [ ] The Base box lists `packages/config/src/project.ts` under "seed, not checked"
 
 **Result**
@@ -301,6 +301,7 @@ cd "$PLAY" && pnpm build && pnpm typecheck
    ```
 
    - [ ] Only `packages/config/src/sections/auth.ts` holds the literal as a value
+   - [ ] `packages/db/src/seed/slices/users.ts` and `apps/admin/src/routes/users.tsx` read the role names from config, not as literals
 2. Rename both roles and add a group role. In `project.ts`, add `auth: { adminRole: "staff", superadminRole: "owner", adminAppExtraRoles: ["support"] },`.
 
    ```sh
@@ -309,6 +310,7 @@ cd "$PLAY" && pnpm build && pnpm typecheck
 
    - [ ] The typecheck passes
    - [ ] The admin bundle carries `adminAppExtraRoles:[`support`]` and builds the list from `config.auth`
+   - [ ] `packages/auth/src/auth.ts` passes `siteRoleMap(...)` as the `admin()` plugin's `roles`, so `staff` and `owner` hold the admin statements
 3. Start the api and the admin app, then open `http://localhost:3001` and sign in.
 
    ```sh
@@ -344,22 +346,22 @@ cd "$PLAY" && pnpm build && pnpm typecheck
    ```
 
    - [ ] No source file reads the variable. `apps/api/src/billing-store.ts` reads `config.billing.appName || config.app.name`.
-2. Set it in the values file, and distribute it.
+2. Set it in the values file, as an older project would have it, and distribute it.
 
    ```sh
-   cd "$PLAY" && sed -i 's/^BILLING_APP_NAME=$/BILLING_APP_NAME="Acme Billing"/' packages/env/.env && pnpm env:setup && ./saasaloy doctor .
+   cd "$PLAY" && echo 'BILLING_APP_NAME="Acme Billing"' >> packages/env/.env && pnpm env:setup && ./saasaloy doctor .
    ```
 
-   - [ ] A finding names `packages/env/.env`, the variable, and the config value that replaced it
-   - [ ] A second finding names `apps/api/.env`, which `env:setup` wrote
-3. Read the descriptor's own wording.
+   - [ ] One finding names `packages/env/.env`, the variable, and the config value that replaced it
+   - [ ] No second finding names `apps/api/.env`, the copy `env:setup` made
+3. Confirm the key is retired.
 
    ```sh
-   cd "$QA_ROOT" && grep -n "BILLING_APP_NAME" modules/billing/registry-item.json
+   cd "$QA_ROOT" && grep -c "BILLING_APP_NAME" modules/billing/registry-item.json modules/billing/files/src/env-preset.ts
    ```
 
-   - [ ] The description opens with `DEPRECATED:` and names the replacement
-4. Set the line back to `BILLING_APP_NAME=` and run `pnpm env:setup`.
+   - [ ] Both counts are 0, and `packages/env/.env.example` in the playground has no `BILLING_APP_NAME` line
+4. Delete the line you added to `packages/env/.env` and run `pnpm env:setup`.
 
 **Result**
 
@@ -490,5 +492,5 @@ _Checks the agent ran itself on 2026-10-23, on the rebased branch. No action nee
 - **The visual checks.** TC-1.1 step 3, TC-1.2 step 3 and TC-1.3 step 3 need eyes on a real browser.
 - **A `support` account in the admin app.** TC-2.2 step 3 needs a signed-in account with that role and a judgment on what the shell shows it.
 - **A real billing email.** Confirming the app name in a sent message needs a provider account. TC-2.3 checks the reader instead.
-- **Stored roles.** Renaming a role in config does not rewrite the `users.role` values already stored, and the seed slice `packages/db/src/seed/slices/users.ts` still writes `"superadmin"`. An existing project needs its own `update`.
+- **Stored roles.** Renaming a role in config does not rewrite the `users.role` values already stored. The seed slice writes the configured names, but an existing project needs its own `update`.
 - **`saasaloy update` across a released version.** The override file is a seed file, and `doctor` confirms it is not checked. A full update run is its own pass.

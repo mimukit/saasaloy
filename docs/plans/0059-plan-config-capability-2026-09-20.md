@@ -2,7 +2,7 @@
 
 Grilled: 2026-09-20
 
-Rescoped: 2026-10-23. The owner ruled on PR #163 after #191 rebuilt the landing page to describe Saasaloy itself. The base keeps the `app` section and drops the `plans` section and `currencySymbol`; `landing.ts` keeps its pricing as #191 wrote it, tier ids included. `config.app.name` defaults to `"Saasaloy"` and `project.ts` leaves `name` commented out. `doctor` drops the project-name check. `config.auth` grows `adminAppExtraRoles`, so both sides build `ADMIN_APP_ROLES` from it (ADR 0050). The merge tests move into the package as a Vitest file. The record is [ADR 0052](../adr/0052-adr-config-owns-checked-in-values-and-env-owns-per-deployment-ones-2026-09-20.md), the `config` half of [ADR 0039](../adr/0039-adr-env-owns-per-deployment-values-config-owns-checked-in-ones-2026-09-20.md). The phases below keep their original text, with each dropped item marked.
+Rescoped: 2026-10-23. The owner ruled on PR #163 after #191 rebuilt the landing page to describe Saasaloy itself. The base keeps the `app` section and drops the `plans` section and `currencySymbol`; `landing.ts` keeps its pricing as #191 wrote it, tier ids included. `config.app.name` defaults to `"Saasaloy"` and `project.ts` leaves `name` commented out. `doctor` drops the project-name check. `config.auth` grows `adminAppExtraRoles`, so both sides build `ADMIN_APP_ROLES` from it (ADR 0050). The merge tests move into the package as a Vitest file. A review round on the same day also dropped the `doctor` `site` check, retired `BILLING_APP_NAME` from billing's descriptor, keyed the `admin()` plugin's roles by config's strings, froze the config deeply, and made `add` guard the base `app` key and each section file's own key. The record is [ADR 0052](../adr/0052-adr-config-owns-checked-in-values-and-env-owns-per-deployment-ones-2026-09-20.md), the `config` half of [ADR 0039](../adr/0039-adr-env-owns-per-deployment-values-config-owns-checked-in-ones-2026-09-20.md). The phases below keep their original text, with each dropped item marked.
 
 Issue: [#154](https://github.com/mimukit/saasaloy/issues/154). Companion: [#153](https://github.com/mimukit/saasaloy/issues/153) (`env`, open as [PR #160](https://github.com/mimukit/saasaloy/pull/160)), which states the boundary rule this plan implements. The two branches run in parallel off `main`.
 
@@ -103,7 +103,7 @@ Verification: `pnpm lint`, and a `.dev` scaffold with `auth`, `admin` and `billi
 ### Phase 4: the guards (built 2026-09-20)
 
 - The `add`-time section collision check in the CLI, refusing the `add` and naming both modules.
-- `saasaloy doctor`: warn when `config.app.name` is still the literal `{{PROJECT_NAME}}`, when `astro.config.mjs`'s `site` is still `example.com`, and when `BILLING_APP_NAME` is set in a `.env`. **Rescoped: no project-name check.**
+- `saasaloy doctor`: warn when `config.app.name` is still the literal `{{PROJECT_NAME}}`, when `astro.config.mjs`'s `site` is still `example.com`, and when `BILLING_APP_NAME` is set in a `.env`. **Rescoped: no project-name check and no `site` check; the `BILLING_APP_NAME` check stays, and billing stops declaring the key.**
 - `modules/billing/registry-item.json`: the `DEPRECATED: superseded by config.app.name` prefix on that key's description.
 
 Verification: the CLI suite, including a fixture where two descriptors claim the same section key.

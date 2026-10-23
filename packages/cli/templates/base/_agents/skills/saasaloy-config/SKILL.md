@@ -99,7 +99,9 @@ export function shopConfig() {
 Four rules:
 
 - **The key is the module name**, flat, and unique. `saasaloy add` refuses two modules
-  claiming one key and names both; at runtime a duplicate throws at module load.
+  claiming one key and names both, and the base's own `app` is taken; at runtime a
+  duplicate throws at module load. The file name and the key passed to `defineSection`
+  must match, and `add` refuses a section file where they differ.
 - **The section file lives in `packages/config`, not in the capability.** `@repo/config` is
   the leaf of the dependency graph — it imports nothing, so everything may import it,
   including the capability whose values these are. A section inside the capability would
