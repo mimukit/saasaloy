@@ -1790,3 +1790,100 @@ describe("buildUpdatePlan — onlyWith (#99)", () => {
     expect(plan.modules[0]?.files).toStrictEqual([]);
   });
 });
+
+// #242 Phase 2. `when` decides a gated file's first write only. A test the project holds
+// stays managed in every mode, and one it never wrote is neither updated nor dropped.
+describe("buildUpdatePlan — when (#242)", () => {
+  const gated = {
+    path: "files/lib/email.vitest.ts",
+    target: "@api/lib/email.test.ts",
+    when: { testing: true as const },
+  };
+  const TARGET = "apps/api/src/lib/email.test.ts";
+
+  async function revisions(base: string, theirs: string) {
+    const item = { type: "saasaloy:feature" as const, files: [gated] };
+    return {
+      base: await writeModule("old", "email", item, {
+        "files/lib/email.vitest.ts": base,
+      }),
+      theirs: await writeModule("new", "email", item, {
+        "files/lib/email.vitest.ts": theirs,
+      }),
+    };
+  }
+
+  it("keeps a tracked gated file current with testing off, and records its when", async () => {
+    const { base, theirs } = await revisions("old\n", "new\n");
+    const manifest = emptyManifest();
+    await trackFile(manifest, TARGET, "old\n", gated.path);
+    const state = {
+      config: config({ testing: { mode: "off" } }),
+      lock: emailLock(),
+      manifest,
+    };
+
+    const plan = await build({ ...state, inputs: [input({ base, theirs })] });
+    await executeUpdatePlan(plan, { root, ...state });
+
+    expect(plan.modules[0]?.removals).toStrictEqual([]);
+    await expect(onDisk(TARGET)).resolves.toBe("new\n");
+    expect(manifest.managed[TARGET]?.when).toStrictEqual({ testing: true });
+  });
+
+  it("neither writes nor drops a gated file the project never held while testing is off", async () => {
+    const { base, theirs } = await revisions("old\n", "new\n");
+
+    const plan = await build({
+      config: config(),
+      inputs: [input({ base, theirs })],
+    });
+
+    expect(plan.modules[0]?.files).toStrictEqual([]);
+    expect(plan.modules[0]?.removals).toStrictEqual([]);
+  });
+
+  it("creates a gated file a new revision adds once testing is on", async () => {
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", files: [] },
+      {}
+    );
+    const { theirs } = await revisions("unused\n", "new\n");
+
+    const plan = await build({
+      config: config({ testing: { mode: "tdd" } }),
+      inputs: [input({ base, theirs })],
+    });
+
+    expect(
+      plan.modules[0]?.files.map((f) => [f.target, f.action])
+    ).toStrictEqual([[TARGET, "create"]]);
+  });
+
+  it("drops a false-when patch the module never applied", async () => {
+    await writeFile(join(root, "package.json"), '{ "name": "app" }\n');
+    const op = {
+      file: "package.json",
+      kind: "package-json-script" as const,
+      name: "db:check",
+      value: "drizzle-kit check",
+      when: { testing: true as const },
+    };
+    const item = { type: "saasaloy:feature" as const, patches: [op] };
+    const base = await writeModule("old", "email", item, {});
+    const theirs = await writeModule("new", "email", item, {});
+
+    const off = await build({ inputs: [input({ base, theirs })] });
+    const on = await build({
+      config: config({ testing: { mode: "tests-after" } }),
+      inputs: [input({ base, theirs })],
+    });
+
+    expect(off.modules[0]?.patches).toStrictEqual([]);
+    expect(on.modules[0]?.patches.map((p) => p.action)).toStrictEqual([
+      "apply",
+    ]);
+  });
+});

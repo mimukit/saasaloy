@@ -397,3 +397,47 @@ describe("applyPatch — matched", () => {
     ).toBeUndefined();
   });
 });
+
+// #242. A descriptor op may carry `when`, and the manifest keeps the op as authored, so
+// the engine sees it on apply and on reverse. Neither may read it as payload.
+describe("an op carrying when (#242)", () => {
+  const gate = { when: { testing: true } };
+
+  it.each([
+    ["wrangler-binding", WRANGLER, BINDING_PATCH, "wrangler.jsonc"],
+    [
+      "package-json-dependency",
+      API_PACKAGE_JSON,
+      DEPENDENCY_PATCH,
+      "package.json",
+    ],
+    ["package-json-script", API_PACKAGE_JSON, SCRIPT_PATCH, "package.json"],
+    ["plugin-array", AUTH, PLUGIN_PATCH, "auth.ts"],
+    ["const-array", NAV, CONST_ARRAY_PATCH, "nav.ts"],
+    ["chained-route", API_ENTRY, ROUTE_PATCH, "index.ts"],
+  ] as const)(
+    "applies %s as if when were absent",
+    (_kind, source, patch, file) => {
+      const withWhen = applyPatch(source, { ...patch, ...gate }, file);
+
+      expect(withWhen.content).toBe(applyPatch(source, patch, file).content);
+      expect(withWhen.changed).toBeTruthy();
+    }
+  );
+
+  it.each([
+    ["wrangler-binding", WRANGLER, BINDING_PATCH, "wrangler.jsonc"],
+    ["plugin-array", AUTH, PLUGIN_PATCH, "auth.ts"],
+    ["const-array", NAV, CONST_ARRAY_PATCH, "nav.ts"],
+    ["chained-route", API_ENTRY, ROUTE_PATCH, "index.ts"],
+  ] as const)(
+    "reverses %s as if when were absent",
+    (_kind, source, patch, file) => {
+      const applied = applyPatch(source, patch, file).content;
+
+      expect(reversePatch(applied, { ...patch, ...gate }, file)?.content).toBe(
+        reversePatch(applied, patch, file)?.content
+      );
+    }
+  );
+});

@@ -13,6 +13,7 @@ import {
   readIfPresent,
   resolveWithinRoot,
 } from "../lib/fs-utils.js";
+import { runBackfill } from "../lib/backfill.js";
 import { persistLedger } from "../lib/ledger.js";
 import { loadLock } from "../lib/lock.js";
 import { loadManifest, recordManagedFile } from "../lib/manifest.js";
@@ -32,6 +33,7 @@ import type { TestingMode } from "../lib/testing.js";
 import { TUI_ON_STDERR } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
+import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 
 // `saasaloy testing [mode]` (#242, ADR 0052). With no argument it prints the project's
@@ -80,14 +82,14 @@ export function parseArgs(argv: string[]): Options {
 }
 
 /** What happened to the `AGENTS.md` block when the mode was set. */
-type BlockOutcome = "rewritten" | "rewritten-edited" | "no-markers";
+export type BlockOutcome = "rewritten" | "rewritten-edited" | "no-markers";
 
 /**
  * Rewrite the block in `root`'s `AGENTS.md` for `mode`, and record the new hash on
  * `manifest` when the file on disk was the bytes the base last recorded. Returns what it
  * did; writes no state file.
  */
-async function rewriteAgents(
+export async function rewriteAgents(
   root: string,
   manifest: Manifest,
   mode: TestingMode
@@ -118,6 +120,21 @@ async function rewriteAgents(
     target: TESTING_BLOCK_FILE,
   });
   return "rewritten";
+}
+
+/** The line `testing` and `add` print for a block they could not keep current. */
+export function reportBlockOutcome(outcome: BlockOutcome): void {
+  if (outcome === "no-markers") {
+    log.warn(
+      `${pc.cyan(TESTING_BLOCK_FILE)} has no ${TESTING_BLOCK_START} … ${TESTING_BLOCK_END} block, ` +
+        `so only ${CONFIG_FILE} changed. Put the two markers back to let the CLI keep the block current.`
+    );
+  } else if (outcome === "rewritten-edited") {
+    log.info(
+      `Rewrote the testing block in ${pc.cyan(TESTING_BLOCK_FILE)}. The file has your own edits, ` +
+        `so its recorded hash is unchanged and ${pc.cyan("saasaloy update")} still treats it as edited.`
+    );
+  }
 }
 
 async function printMode(): Promise<number> {
@@ -160,8 +177,9 @@ export async function runTesting(argv: string[]): Promise<number> {
     const lock = await loadLock(root);
 
     const outcome = await rewriteAgents(root, manifest, mode);
+    const next = { ...config, testing: { mode } };
     const failures = await persistLedger({
-      config: { ...config, testing: { mode } },
+      config: next,
       lock,
       manifest,
       root,
@@ -171,21 +189,22 @@ export async function runTesting(argv: string[]): Promise<number> {
       throw failed.error;
     }
 
-    if (outcome === "no-markers") {
-      log.warn(
-        `${pc.cyan(TESTING_BLOCK_FILE)} has no ${TESTING_BLOCK_START} … ${TESTING_BLOCK_END} block, ` +
-          `so only ${CONFIG_FILE} changed. Put the two markers back to let the CLI keep the block current.`
-      );
-    } else if (outcome === "rewritten-edited") {
-      log.info(
-        `Rewrote the testing block in ${pc.cyan(TESTING_BLOCK_FILE)}. The file has your own edits, ` +
-          `so its recorded hash is unchanged and ${pc.cyan("saasaloy update")} still treats it as edited.`
+    reportBlockOutcome(outcome);
+
+    // An on-mode writes each gated entry whose `when` is now true and whose target is
+    // untracked (#242 Q8). `testing <same-mode>` runs it again, which is how a partial
+    // backfill is finished. `off` never calls it, and never deletes a written test.
+    if (mode !== "off") {
+      await reportBackfill(
+        root,
+        await runBackfill({
+          config: next,
+          lock,
+          manifest,
+          root,
+        })
       );
     }
-
-    // BACKFILL SEAM (#242 Phase 2): an on-mode (`tests-after`, `tdd`) runs the shared
-    // backfill step here, writing each gated entry whose `when` is now true and whose
-    // target is untracked. `off` never calls it, and never deletes a written test.
 
     outro(pc.green(`Testing mode: ${mode}.`));
     return EXIT_OK;

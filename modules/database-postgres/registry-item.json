@@ -2,7 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "database-postgres",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["database"],
   "conflictsWith": ["database-d1"],
   "dependencies": [],
@@ -211,7 +211,8 @@
         },
         {
           "path": "files/scripts/lib/production.vitest.ts",
-          "target": "scripts/lib/production.test.ts"
+          "target": "scripts/lib/production.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/scripts/prod.ts",

@@ -35,6 +35,7 @@ import { ENV_EXAMPLE, writeEnvExample } from "../lib/env-example.js";
 import { formatPatchedFiles } from "../lib/format.js";
 import { lineDiff } from "../lib/diff.js";
 import type { DiffLine } from "../lib/diff.js";
+import { runBackfill } from "../lib/backfill.js";
 import { persistLedger } from "../lib/ledger.js";
 import { loadLock, LOCK_FILE, upsertLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
@@ -56,15 +57,19 @@ import {
 } from "../lib/requires.js";
 import { mergeGraph, resolveGraph } from "../lib/resolve.js";
 import type { Graph } from "../lib/resolve.js";
-import { loadConfig } from "../lib/saasaloy-config.js";
+import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
+import { readTestingMode } from "../lib/testing.js";
+import type { TestingMode } from "../lib/testing.js";
 import { isInteractive, wrapForNote } from "../lib/tui.js";
 import { uiBlockFiles } from "../lib/ui-blocks.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
 import { readVersion } from "../version.js";
+import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
+import { reportBlockOutcome, rewriteAgents } from "./testing.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -571,6 +576,52 @@ function printNextSteps(
   note(wrapForNote(lines.join("\n\n")), "Next steps");
 }
 
+/** The mode `add` of an `enablesTesting` module turns testing on to (#242, ADR 0053). */
+const ENABLED_MODE: TestingMode = "tests-after";
+
+/**
+ * The first module this run applies that turns testing on, when the project's mode is
+ * `off` (#242 Q15). `tests-after` and `tdd` are left alone: the owner already chose, and a
+ * module has no business picking test-first for them.
+ */
+export function testingEnabler(
+  config: LoadedConfig,
+  install: string[],
+  graph: Pick<Graph, "modules">
+): string | undefined {
+  if (readTestingMode(config) !== "off") {
+    return undefined;
+  }
+  return install.find(
+    (name) => graph.modules.get(name)?.item.enablesTesting === true
+  );
+}
+
+/**
+ * Save the mode an `enablesTesting` module turned on, and rewrite the `AGENTS.md` block to
+ * match. Runs only after the apply succeeded, so a refused or failed `add` leaves the
+ * mode where it was (#242 Q11). Phase 1's block rewrite does the file half.
+ */
+async function saveEnabledMode(input: {
+  config: LoadedConfig;
+  enabler: string;
+  lock: Lockfile;
+  manifest: Manifest;
+  root: string;
+}): Promise<void> {
+  const { config, enabler, lock, manifest, root } = input;
+  config.testing = { mode: ENABLED_MODE };
+  const outcome = await rewriteAgents(root, manifest, ENABLED_MODE);
+  const failed = (await persistLedger({ config, lock, manifest, root }))[0];
+  if (failed) {
+    throw failed.error;
+  }
+  log.info(
+    `${pc.cyan(enabler)} turns testing on — ${CONFIG_FILE} now sets the testing mode to ${pc.cyan(ENABLED_MODE)}.`
+  );
+  reportBlockOutcome(outcome);
+}
+
 export async function runAdd(argv: string[]): Promise<number> {
   // Parse before anything answers, so `--help --forse` reports the typo instead of
   // printing help over it. Help is then answered before the intro rail opens, so it reads
@@ -789,6 +840,10 @@ export async function runAdd(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
+    // A module that turns testing on is planned in the mode it will leave behind, so its
+    // own gated files and every other module's land in this same run. The mode itself is
+    // saved only once the apply succeeds, and a preview saves nothing (#242 Q11).
+    const enabler = testingEnabler(config, install, graph);
     plan = await buildPlan({
       alreadyInstalled,
       config,
@@ -797,9 +852,15 @@ export async function runAdd(argv: string[]): Promise<number> {
       modules: graph.modules,
       requested,
       root,
+      ...(enabler === undefined ? {} : { testingMode: ENABLED_MODE }),
     });
 
     summarizePlan(plan, requested, prereqs);
+    if (enabler !== undefined && (opts.dryRun || opts.diff)) {
+      log.info(
+        `${pc.cyan(enabler)} turns testing on — applying this sets the testing mode to ${pc.cyan(ENABLED_MODE)}.`
+      );
+    }
 
     if (planWritesUi(plan)) {
       log.info(
@@ -1023,6 +1084,30 @@ export async function runAdd(argv: string[]): Promise<number> {
       // Best-effort, like the dependency merge: an unwritable example file must not
       // undo an apply that already landed.
       log.warn(`Couldn't write ${ENV_EXAMPLE} — ${formatFailure(error)}.`);
+    }
+
+    if (enabler !== undefined) {
+      await saveEnabledMode({ config, enabler, lock, manifest, root });
+    }
+    // Another installed module may ship an entry this add made true: a `when.installed`
+    // naming the module just added, or a test once the mode turned on (#242 Q8). The
+    // modules applied above were planned in the current mode already.
+    try {
+      await reportBackfill(
+        root,
+        await runBackfill({
+          config,
+          exclude: new Set(result.completed),
+          lock,
+          manifest,
+          root,
+        })
+      );
+    } catch (error) {
+      // The add itself landed. A backfill that stopped is finished by the next update.
+      log.warn(
+        `Backfill stopped — ${formatFailure(error)}. Run ${pc.cyan("saasaloy update")} to finish it.`
+      );
     }
 
     printNextSteps(plan, result, devVarsPath, config.aliases);

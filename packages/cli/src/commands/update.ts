@@ -37,6 +37,7 @@ import {
 } from "../lib/exit.js";
 import { workingTreeState } from "../lib/git-state.js";
 import { resolveProjectName } from "../lib/project-name.js";
+import { planBackfill, runBackfill } from "../lib/backfill.js";
 import { persistLedger } from "../lib/ledger.js";
 import { LOCK_FILE, loadLock } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
@@ -60,6 +61,7 @@ import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
+import { previewBackfill, reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import {
   buildUpdatePlan,
@@ -597,6 +599,27 @@ export async function runUpdate(argv: string[]): Promise<number> {
       log.info(
         `This project holds module tests and no testing mode in ${CONFIG_FILE} — run ` +
           `${pc.cyan("saasaloy testing tests-after")} to turn module tests on.`,
+        TUI_ON_STDERR
+      );
+    }
+
+    // Backfill once per run, before anything else is planned (#242 A4): an entry whose
+    // `when` turned true since its module landed is written at the module's locked SHA,
+    // so the update below sees it as tracked and moves it with its module. It writes only
+    // what the project's own mode and installed set call for, so it asks for no second
+    // confirmation. A preview lists what it would write. `update base` reads no module,
+    // so it leaves this to a run that does.
+    if (wantsModules && preview) {
+      const planned = await planBackfill({ config, lock, manifest, root });
+      try {
+        previewBackfill(planned.plan, planned.skipped, TUI_ON_STDERR);
+      } finally {
+        await planned.cleanup();
+      }
+    } else if (wantsModules) {
+      await reportBackfill(
+        root,
+        await runBackfill({ config, lock, manifest, root }),
         TUI_ON_STDERR
       );
     }

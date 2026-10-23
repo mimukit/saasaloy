@@ -198,3 +198,119 @@ describe("removal warnings", () => {
     ).resolves.toMatchObject({ valid: true });
   });
 });
+
+// #242 Phase 2. `when` rides on the same three entry shapes `onlyWith` does, plus
+// `patches`, and the descriptor gains `untested` on a file and `enablesTesting` on itself.
+describe("registry-item schema — when, untested and enablesTesting (#242)", () => {
+  it.each([
+    [{ testing: true }],
+    [{ installed: ["e2e"] }],
+    [{ installed: ["e2e", "ci"], testing: true }],
+  ])("accepts when %j on a files[] entry", async (when) => {
+    await expect(
+      validateRegistryItem(conditionalItem({ when }))
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it.each([
+    ["testing false", { testing: false }],
+    ["an unknown key", { always: true }],
+    ["no key at all", {}],
+    ["an empty installed list", { installed: [] }],
+    ["a bad module name", { installed: ["Not A Module"] }],
+  ])("rejects when with %s", async (_label, when) => {
+    await expect(
+      validateRegistryItem(conditionalItem({ when }))
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("accepts when on a scaffold files[] entry", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "database-d1",
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/db-d1",
+            files: [
+              {
+                path: "files/scripts/lib/dump.vitest.ts",
+                target: "scripts/lib/dump.test.ts",
+                when: { testing: true },
+              },
+            ],
+          },
+        ],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("accepts when on a patch, and the manifest keeps it inside the op and beside it", async () => {
+    const op = {
+      file: "package.json",
+      kind: "package-json-script",
+      name: "db:check",
+      value: "drizzle-kit check",
+      when: { testing: true },
+    };
+    await expect(
+      validateRegistryItem({
+        name: "database-d1",
+        type: "saasaloy:capability",
+        patches: [op],
+      })
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      validateManifest({
+        managed: {},
+        patches: [
+          { module: "database-d1", file: op.file, patch: op, when: op.when },
+        ],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("rejects when testing false on a patch", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "database-d1",
+        type: "saasaloy:capability",
+        patches: [
+          {
+            file: "package.json",
+            kind: "package-json-script",
+            name: "db:check",
+            value: "drizzle-kit check",
+            when: { testing: false },
+          },
+        ],
+      })
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("accepts an untested reason and rejects an empty one", async () => {
+    await expect(
+      validateRegistryItem(conditionalItem({ untested: "generated types" }))
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      validateRegistryItem(conditionalItem({ untested: "" }))
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("accepts enablesTesting true and rejects false", async () => {
+    await expect(
+      validateRegistryItem({
+        name: "e2e",
+        type: "saasaloy:capability",
+        enablesTesting: true,
+      })
+    ).resolves.toMatchObject({ valid: true });
+    await expect(
+      validateRegistryItem({
+        name: "e2e",
+        type: "saasaloy:capability",
+        enablesTesting: false,
+      })
+    ).resolves.toMatchObject({ valid: false });
+  });
+});

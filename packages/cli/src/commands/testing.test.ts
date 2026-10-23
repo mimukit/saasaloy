@@ -1,7 +1,7 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { emptyLock, saveLock } from "../lib/lock.js";
@@ -176,6 +176,81 @@ describe("runTesting — change", () => {
     await run(["off"]);
 
     await expect(pathExists(test)).resolves.toBeTruthy();
+  });
+});
+
+// #242 Phase 2. An on-mode backfills each gated entry whose `when` is now true; `off`
+// writes nothing and deletes nothing.
+describe("runTesting — backfill", () => {
+  const GATED = join("packages", "auth", "src", "auth.test.ts");
+  let registry: string;
+
+  beforeEach(async () => {
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-testing-reg-"));
+    const dir = join(registry, "auth");
+    await mkdir(join(dir, "files"), { recursive: true });
+    await writeFile(join(dir, "files", "auth.vitest.ts"), "test\n");
+    await writeFile(
+      join(dir, "registry-item.json"),
+      JSON.stringify({
+        name: "auth",
+        scaffolds: [
+          {
+            files: [
+              {
+                path: "files/auth.vitest.ts",
+                target: "src/auth.test.ts",
+                when: { testing: true },
+              },
+            ],
+            workspace: "packages/auth",
+          },
+        ],
+        type: "saasaloy:capability",
+      })
+    );
+    vi.stubEnv("SAASALOY_REGISTRY_DIR", registry);
+    const config = await readConfig();
+    await writeFile(
+      join(project, "saasaloy.json"),
+      `${JSON.stringify({ ...config, installed: ["auth"], testing: { mode: "off" } }, null, 2)}\n`
+    );
+  });
+
+  afterEach(async () => {
+    vi.unstubAllEnvs();
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  it("writes nothing when testing turns off", async () => {
+    await run(["off"]);
+
+    await expect(pathExists(join(project, GATED))).resolves.toBeFalsy();
+  });
+
+  it("writes the gated file and records its when once testing turns on", async () => {
+    const { code } = await run(["tests-after"]);
+
+    expect(code).toBe(0);
+    await expect(readFile(join(project, GATED), "utf-8")).resolves.toBe(
+      "test\n"
+    );
+    const manifest = await loadManifest(project);
+    expect(
+      manifest.managed["packages/auth/src/auth.test.ts"]?.when
+    ).toStrictEqual({ testing: true });
+  });
+
+  it("recovers a lost file when the same mode runs again, once untracked", async () => {
+    await run(["tdd"]);
+    await rm(join(project, GATED));
+    const manifest = await loadManifest(project);
+    delete manifest.managed["packages/auth/src/auth.test.ts"];
+    await saveManifest(project, manifest);
+
+    await run(["tdd"]);
+
+    await expect(pathExists(join(project, GATED))).resolves.toBeTruthy();
   });
 });
 

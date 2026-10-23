@@ -3,7 +3,9 @@ import { dirname, posix } from "node:path";
 import {
   buildPlan,
   executePlan,
+  gateFor,
   listModuleFiles,
+  patchShips,
   previewPatches,
 } from "./applier.js";
 import type { LinkAction, Plan, PlannedLink, PlannedPatch } from "./applier.js";
@@ -31,7 +33,8 @@ import type { DepChange, PackageJson } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
 import { classifyTrackedFile } from "./remover.js";
 import type { FileRemoveAction } from "./remover.js";
-import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
+import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
+import { readTestingMode } from "./testing.js";
 
 // The deterministic core of `saasaloy update` (issue #48), mirroring the buildPlan/
 // executePlan split of applier.ts and remover.ts. Two things live here:
@@ -403,6 +406,8 @@ export interface PlannedUpdateFile {
    * from the manifest record itself (#36); `update` still has no hash to compare against.
    */
   patchedBy?: string[];
+  /** The new revision's `when` for this entry, recorded in the manifest on write (#242). */
+  when?: When;
 }
 
 /**
@@ -668,9 +673,19 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     name,
   ]);
 
-  const theirsFiles = await listModuleFiles(theirs, aliasView, installedSet);
+  // `when` (#242) reads the project's mode and the manifest: a gated file this project
+  // holds stays in both lists in every mode, and one it never wrote is in neither, so it
+  // is neither updated nor reported as dropped.
+  const testingMode = readTestingMode(config);
+  const gate = gateFor(manifest, testingMode);
+  const theirsFiles = await listModuleFiles(
+    theirs,
+    aliasView,
+    installedSet,
+    gate
+  );
   const baseFiles = base
-    ? await listModuleFiles(base, aliasView, installedSet)
+    ? await listModuleFiles(base, aliasView, installedSet, gate)
     : undefined;
 
   const files: PlannedUpdateFile[] = [];
@@ -714,6 +729,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       mine,
       newHash: hashContent(theirsContent),
       ...(patchedBy.length > 0 ? { patchedBy } : {}),
+      ...(ref.when === undefined ? {} : { when: ref.when }),
     });
   }
 
@@ -754,7 +770,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   const patches = await planPatches(
     root,
     name,
-    theirs.item.patches ?? [],
+    (theirs.item.patches ?? []).filter((op) =>
+      patchShips(op, name, manifest, { installed: installedSet, testingMode })
+    ),
     files
   );
   await reapplyRecordedPatches(
@@ -1223,6 +1241,7 @@ export async function executeUpdatePlan(
         hash: file.newHash ?? hashContent(file.theirs),
         module: file.module,
         target: file.target,
+        ...(file.when === undefined ? {} : { when: file.when }),
       });
     }
 

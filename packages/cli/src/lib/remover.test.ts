@@ -1879,3 +1879,160 @@ describe("remove clears a stale manifest owner (#107)", () => {
     ).resolves.toBe("pg\n");
   });
 });
+
+// #242 Phase 2. `remove X` also takes every other module's entry whose recorded
+// `when.installed` names X: that entry only shipped because X was there.
+describe("remove takes the entries a when.installed names (#242)", () => {
+  const SPEC = "apps/e2e/specs/auth-sign-in.spec.ts";
+
+  async function gatedSpec(manifest: Manifest, content = "spec\n") {
+    await writeManaged(manifest, SPEC, content);
+    manifest.managed[SPEC] = {
+      ...manifest.managed[SPEC]!,
+      when: { installed: ["e2e"] },
+    };
+  }
+
+  it("plans the gated file under its owner, marked with the module it named", async () => {
+    const manifest = emptyManifest();
+    await gatedSpec(manifest);
+    await writeManaged(
+      manifest,
+      "apps/e2e/playwright.config.ts",
+      "cfg\n",
+      "e2e"
+    );
+    await writeManaged(manifest, "apps/api/src/routes/auth.ts", "auth\n");
+
+    const plan = await build(
+      "e2e",
+      { aliases: {}, installed: ["auth", "e2e"] },
+      manifest,
+      emptyLock()
+    );
+
+    expect(
+      plan.files.map((f) => [f.target, f.module, f.gatedOn])
+    ).toStrictEqual([
+      [SPEC, "auth", "e2e"],
+      ["apps/e2e/playwright.config.ts", "e2e", undefined],
+    ]);
+  });
+
+  it("deletes a clean gated file and untracks it, leaving its owner installed", async () => {
+    const manifest = emptyManifest();
+    await gatedSpec(manifest);
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "e2e"] };
+    const lock = emptyLock();
+
+    const plan = await build("e2e", config, manifest, lock);
+    const result = await executeRemovePlan(plan, {
+      config,
+      lock,
+      manifest,
+      root,
+    });
+
+    expect(result.deleted.map((f) => f.target)).toStrictEqual([SPEC]);
+    await expect(pathExists(join(root, SPEC))).resolves.toBeFalsy();
+    expect(manifest.managed[SPEC]).toBeUndefined();
+    expect(config.installed).toStrictEqual(["auth"]);
+  });
+
+  it("keeps a drifted gated file on disk, untracked", async () => {
+    const manifest = emptyManifest();
+    await gatedSpec(manifest);
+    await writeFile(join(root, SPEC), "edited\n");
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "e2e"] };
+    const lock = emptyLock();
+
+    const plan = await build("e2e", config, manifest, lock);
+    const result = await executeRemovePlan(plan, {
+      config,
+      lock,
+      manifest,
+      root,
+    });
+
+    expect(result.driftSurvivors.map((f) => f.target)).toStrictEqual([SPEC]);
+    await expect(readFile(join(root, SPEC), "utf-8")).resolves.toBe("edited\n");
+    expect(manifest.managed[SPEC]).toBeUndefined();
+  });
+
+  it("leaves a gated file whose when names a different module", async () => {
+    const manifest = emptyManifest();
+    await gatedSpec(manifest);
+
+    const plan = await build(
+      "ci",
+      { aliases: {}, installed: ["auth", "ci", "e2e"] },
+      manifest,
+      emptyLock()
+    );
+
+    expect(plan.files).toStrictEqual([]);
+  });
+
+  it("reverses a gated reversible patch and drops one with no inverse", async () => {
+    const entryFile = "apps/api/src/index.ts";
+    const source = `import { Hono } from "hono";
+
+const app = new Hono();
+
+export default app;
+`;
+    const route = {
+      file: entryFile,
+      kind: "chained-route" as const,
+      exportName: "default",
+      path: "/e2e-seed",
+      call: "seed",
+      import: { name: "seed", from: "./routes/seed.js" },
+      when: { installed: ["e2e"] },
+    };
+    const patched = applyPatch(source, route, entryFile).content;
+    await mkdir(join(root, "apps/api/src"), { recursive: true });
+    await writeFile(join(root, entryFile), patched);
+    await writeFile(
+      join(root, "package.json"),
+      '{ "scripts": { "e2e": "x" } }\n'
+    );
+    const script = {
+      file: "package.json",
+      kind: "package-json-script" as const,
+      name: "e2e",
+      value: "x",
+      when: { installed: ["e2e"] },
+    };
+    const manifest = emptyManifest();
+    manifest.patches.push(
+      { file: entryFile, module: "auth", patch: route, when: route.when },
+      { file: "package.json", module: "auth", patch: script, when: script.when }
+    );
+    const config: SaasaloyConfig = { aliases: {}, installed: ["auth", "e2e"] };
+    const lock = emptyLock();
+
+    const plan = await build("e2e", config, manifest, lock);
+    const result = await executeRemovePlan(plan, {
+      config,
+      lock,
+      manifest,
+      root,
+    });
+
+    expect(plan.patches.map((p) => [p.action, p.gatedOn])).toStrictEqual([
+      ["revert", "e2e"],
+      ["drop", "e2e"],
+    ]);
+    expect(result.patchesReversed.map((p) => p.file)).toStrictEqual([
+      entryFile,
+    ]);
+    expect(result.patchesDropped.map((p) => p.file)).toStrictEqual([
+      "package.json",
+    ]);
+    await expect(readFile(join(root, entryFile), "utf-8")).resolves.toBe(
+      source
+    );
+    expect(manifest.patches).toStrictEqual([]);
+  });
+});

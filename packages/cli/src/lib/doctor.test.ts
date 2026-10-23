@@ -198,6 +198,16 @@ describe("doctor — the conventions the schema cannot check", () => {
     ]);
   });
 
+  // #242. A `when.installed` name the registry does not offer makes an entry that never
+  // ships, and `when.testing` takes `true` alone.
+  it("reports a when that names an unknown module or a testing value other than true", async () => {
+    await expect(findingsFor("bad-when")).resolves.toStrictEqual([
+      '/files/0/when/installed/0 names "ghost", which this registry does not offer, so the entry never ships',
+      "/files/1/when/testing is false — the only value is true; leave the key out for an entry that ships in every mode",
+      '/patches/0/when/installed/0 names "phantom", which this registry does not offer, so the entry never ships',
+    ]);
+  });
+
   it("reports a descriptor whose name does not match its folder", async () => {
     const findings = await findingsFor("name-mismatch");
 

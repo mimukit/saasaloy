@@ -45,7 +45,13 @@ export function classifyTrackedFile(
 }
 
 export interface PlannedRemoveFile {
+  /** The module that owns the file: the one removed, or another one for a gated entry. */
   module: string;
+  /**
+   * Set on another module's file that only shipped because the removed module was
+   * installed: its recorded `when.installed` names it (#242). The summary names these.
+   */
+  gatedOn?: string;
   /** Project-relative POSIX path (manifest key). */
   target: string;
   /** Absolute path on disk. */
@@ -88,6 +94,8 @@ export interface PlannedRemovePatch {
   diff: string;
   /** Why the inverse refused — set only when `action` is `refused`. */
   reason?: string;
+  /** Set on another module's patch whose recorded `when.installed` names the removed module (#242). */
+  gatedOn?: string;
 }
 
 export interface RemovePlan {
@@ -135,6 +143,20 @@ function ownerOfLinkTarget(
   return undefined;
 }
 
+/**
+ * Whether an entry another module recorded only ships while `name` is installed: its
+ * recorded `when.installed` names it (#242 Q4). `remove` takes those entries with the
+ * module, and a later `add` of it backfills them again.
+ */
+function gatedOn(
+  entry: { module: string; when?: { installed?: string[] } },
+  name: string
+): boolean {
+  return (
+    entry.module !== name && (entry.when?.installed?.includes(name) ?? false)
+  );
+}
+
 export async function buildRemovePlan(
   args: BuildRemovePlanArgs
 ): Promise<RemovePlan> {
@@ -142,7 +164,8 @@ export async function buildRemovePlan(
 
   const files: PlannedRemoveFile[] = [];
   for (const [target, entry] of Object.entries(manifest.managed)) {
-    if (entry.module !== name) {
+    const gated = gatedOn(entry, name);
+    if (entry.module !== name && !gated) {
       continue;
     }
     const targetAbs = resolveWithinRoot(root, target);
@@ -150,11 +173,12 @@ export async function buildRemovePlan(
       ? await readFile(targetAbs, "utf-8")
       : undefined;
     files.push({
-      module: name,
+      module: entry.module,
       target,
       targetAbs,
       action: classifyTrackedFile(oldContent, entry.hash),
       oldContent,
+      ...(gated ? { gatedOn: name } : {}),
     });
   }
 
@@ -183,10 +207,12 @@ export async function buildRemovePlan(
 
   const patches: PlannedRemovePatch[] = [];
   for (const entry of manifest.patches) {
-    if (entry.module !== name) {
+    const gated = gatedOn(entry, name);
+    if (entry.module !== name && !gated) {
       continue;
     }
-    patches.push(await previewPatchRemoval(root, entry));
+    const planned = await previewPatchRemoval(root, entry);
+    patches.push(gated ? { ...planned, gatedOn: name } : planned);
   }
 
   // A reverse-dependency map over the lock's `dependsOn`, restricted to what's

@@ -1,0 +1,18 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "e2e",
+  "type": "saasaloy:capability",
+  "enablesTesting": true,
+  "scaffolds": [
+    {
+      "workspace": "apps/e2e",
+      "aliases": { "@e2e": "apps/e2e" },
+      "files": [
+        {
+          "path": "files/playwright.config.ts",
+          "target": "playwright.config.ts"
+        }
+      ]
+    }
+  ]
+}

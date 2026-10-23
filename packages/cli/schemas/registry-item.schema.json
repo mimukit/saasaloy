@@ -6,6 +6,30 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["name", "type"],
+  "$defs": {
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Ship this entry only while the condition holds (#242, ADR 0053). The keys combine with AND: `testing` ships it only when the project's testing mode is not `off`, and `installed` only when every named module is in the resolved install set. The applier tests it before `onlyWith`, and a target whose entries it drops is skipped, not refused. It decides the first write only: an entry already in the manifest stays managed in every mode. Backfill writes the entry once the condition turns true.",
+      "properties": {
+        "testing": {
+          "const": true,
+          "description": "Ship only when testing.mode is `tests-after` or `tdd`. The one allowed value is `true`; leave the key out for an entry that ships in every mode."
+        },
+        "installed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Ship only when every named module is installed. `remove` of a named module also removes the entry.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    }
+  },
   "properties": {
     "$schema": {
       "type": "string",
@@ -103,6 +127,12 @@
             "type": "string",
             "pattern": "^[a-z0-9][a-z0-9-]*$",
             "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Two entries may share one `target` when their conditions are disjoint: that is how a module ships a per-driver variant of a dialect-bound file. A target whose entries are all conditional and none matches is a plan-time refusal, not a silently missing file."
+          },
+          "when": { "$ref": "#/$defs/when" },
+          "untested": {
+            "type": "string",
+            "minLength": 1,
+            "description": "Why this file ships with no test beside it (#242). The test guards print the reason instead of failing."
           }
         }
       }
@@ -193,7 +223,8 @@
               "nav-entry"
             ],
             "description": "Which codemod applies this patch. `const-array`, `plugin-array`, `chained-route`, `wrangler-binding`, `drizzle-column` and `nav-entry` have removal inverses."
-          }
+          },
+          "when": { "$ref": "#/$defs/when" }
         },
         "allOf": [
           {
@@ -445,12 +476,17 @@
                   "type": "string",
                   "pattern": "^[a-z0-9][a-z0-9-]*$",
                   "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Same rule as a top-level files[] entry: two entries may share one `target` when their conditions are disjoint, and a target no candidate matches is a plan-time refusal. auth's per-driver db-provider.ts lives here rather than in files[], which is why both shapes carry the keyword."
-                }
+                },
+                "when": { "$ref": "#/$defs/when" }
               }
             }
           }
         }
       }
+    },
+    "enablesTesting": {
+      "const": true,
+      "description": "Adding this module turns testing on (#242, ADR 0053): on a project whose testing.mode is `off`, `add` plans with `tests-after`, saves it once the apply succeeds, and backfills every gated entry. It leaves `tdd` alone, and `remove` never changes the mode."
     },
     "agent": {
       "type": "object",

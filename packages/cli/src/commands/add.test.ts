@@ -463,6 +463,156 @@ describe("runAdd — onlyWith variants (#99)", () => {
   });
 });
 
+// #242 Phase 2. A module whose descriptor says `enablesTesting` turns an `off` project on
+// once its apply lands, and every `add` backfills what it made true in other modules.
+describe("runAdd — enablesTesting and backfill (#242)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    item: object,
+    files: Record<string, string>
+  ) {
+    const mod = join(registry, name);
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", ...item })
+    );
+    for (const [rel, content] of Object.entries(files)) {
+      await writeFile(join(mod, rel), content);
+    }
+  }
+
+  async function writeProject(mode: string, installed: string[] = []) {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        aliases: { "@web": "apps/web" },
+        installed,
+        testing: { mode },
+      })
+    );
+  }
+
+  async function readMode(): Promise<string> {
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as { testing: { mode: string } };
+    return config.testing.mode;
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-when-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-when-reg-"));
+    await writeFile(
+      join(project, "AGENTS.md"),
+      "# Rules\n<!-- saasaloy:testing -->\nold\n<!-- /saasaloy:testing -->\n"
+    );
+    await writeModule(
+      "auth",
+      {
+        files: [
+          { path: "files/auth.ts", target: "@web/auth.ts" },
+          {
+            path: "files/auth.vitest.ts",
+            target: "@web/auth.test.ts",
+            when: { testing: true },
+          },
+          {
+            path: "files/auth.spec.ts",
+            target: "@web/e2e/auth.spec.ts",
+            when: { installed: ["e2e"] },
+          },
+        ],
+      },
+      {
+        "files/auth.ts": "auth\n",
+        "files/auth.vitest.ts": "test\n",
+        "files/auth.spec.ts": "spec\n",
+      }
+    );
+    await writeModule(
+      "e2e",
+      {
+        enablesTesting: true,
+        files: [{ path: "files/config.ts", target: "@web/e2e/config.ts" }],
+      },
+      { "files/config.ts": "config\n" }
+    );
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("writes no gated test while the mode is off", async () => {
+    await writeProject("off");
+
+    expect((await run(["auth", "--yes"])).code).toBe(0);
+
+    await expect(
+      pathExists(join(project, "apps/web/auth.ts"))
+    ).resolves.toBeTruthy();
+    await expect(
+      pathExists(join(project, "apps/web/auth.test.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("turns an off project on, rewrites the block, and backfills the other module", async () => {
+    await writeProject("off");
+    await run(["auth", "--yes"]);
+
+    const { code, out } = await run(["e2e", "--yes"]);
+
+    expect(code).toBe(0);
+    await expect(readMode()).resolves.toBe("tests-after");
+    expect(out).toContain("turns testing on");
+    await expect(
+      readFile(join(project, "AGENTS.md"), "utf-8")
+    ).resolves.toContain("Testing mode: `tests-after`");
+    await expect(
+      pathExists(join(project, "apps/web/auth.test.ts"))
+    ).resolves.toBeTruthy();
+    await expect(
+      pathExists(join(project, "apps/web/e2e/auth.spec.ts"))
+    ).resolves.toBeTruthy();
+  });
+
+  it("saves nothing on --dry-run", async () => {
+    await writeProject("off");
+
+    const { code, out } = await run(["e2e", "--dry-run"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("turns testing on");
+    await expect(readMode()).resolves.toBe("off");
+  });
+
+  it("leaves tdd alone", async () => {
+    await writeProject("tdd");
+
+    await run(["e2e", "--yes"]);
+
+    await expect(readMode()).resolves.toBe("tdd");
+  });
+});
+
 // Argument parsing, on its own. Every rejection below is the difference between a typo
 // running as though it were nothing and a typo being reported, and reaching them through
 // a whole apply would need a registry these cases never get to.

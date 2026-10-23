@@ -1,0 +1,25 @@
+{
+  "name": "bad-when",
+  "type": "saasaloy:feature",
+  "files": [
+    {
+      "path": "files/a.ts",
+      "target": "@web/a.ts",
+      "when": { "installed": ["ghost"] }
+    },
+    {
+      "path": "files/a.ts",
+      "target": "@web/b.ts",
+      "when": { "testing": false }
+    }
+  ],
+  "patches": [
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "e2e",
+      "value": "playwright test",
+      "when": { "installed": ["phantom"] }
+    }
+  ]
+}

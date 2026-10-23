@@ -62,6 +62,9 @@ async function writeModule(
   return { dir, item: { name, ...item } };
 }
 
+// Testing off, nothing tracked: the gate a fresh project with no `when` entries reads.
+const NO_GATE = { isTracked: () => false, testingMode: "off" } as const;
+
 function emptyConfig(): SaasaloyConfig {
   return { aliases: {}, installed: [] };
 }
@@ -2639,7 +2642,8 @@ describe("listModuleFiles — onlyWith (#99)", () => {
     const files = await listModuleFiles(
       mod,
       aliases,
-      new Set(["waitlist", "database", "database-d1"])
+      new Set(["waitlist", "database", "database-d1"]),
+      NO_GATE
     );
 
     expect(files.get("packages/db/src/schema/waitlist.ts")?.from).toBe(SQLITE);
@@ -2659,7 +2663,8 @@ describe("listModuleFiles — onlyWith (#99)", () => {
     const files = await listModuleFiles(
       mod,
       aliases,
-      new Set(["waitlist", "database", "database-postgres"])
+      new Set(["waitlist", "database", "database-postgres"]),
+      NO_GATE
     );
 
     expect(files.get("packages/db/src/schema/waitlist.ts")?.from).toBe(PG);
@@ -2670,7 +2675,12 @@ describe("listModuleFiles — onlyWith (#99)", () => {
 
   it("leaves an unconditional file alone whatever is installed", async () => {
     const mod = await dialectModule();
-    const files = await listModuleFiles(mod, aliases, new Set(["waitlist"]));
+    const files = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["waitlist"]),
+      NO_GATE
+    );
 
     expect(files.get("apps/api/src/routes/waitlist.ts")?.from).toBe(
       "files/api/routes/waitlist.ts"
@@ -2682,7 +2692,8 @@ describe("listModuleFiles — onlyWith (#99)", () => {
     const files = await listModuleFiles(
       mod,
       aliases,
-      new Set(["waitlist", "database-d1"])
+      new Set(["waitlist", "database-d1"]),
+      NO_GATE
     );
 
     expect(files.get("packages/db/src/schema/waitlist.ts")?.onlyWith).toBe(
@@ -2698,7 +2709,8 @@ describe("listModuleFiles — onlyWith (#99)", () => {
     const { files, unmatched } = await selectModuleFiles(
       mod,
       aliases,
-      new Set(["waitlist"])
+      new Set(["waitlist"]),
+      NO_GATE
     );
 
     expect(files.has("packages/db/src/schema/waitlist.ts")).toBeFalsy();
@@ -2825,6 +2837,394 @@ describe("buildPlan — onlyWith (#99)", () => {
     ).rejects.toThrow(/no file variant matches/);
 
     await expect(pathExists(join(root, "packages", "db"))).resolves.toBeFalsy();
+  });
+});
+
+// #242 Phase 2. `when` decides whether an optional entry ships, before `onlyWith` decides
+// which variant. It decides the first write only: a target the manifest already tracks
+// keeps its entry in every mode.
+describe("when — conditional entries (#242)", () => {
+  const TEST = "files/api/routes/auth.vitest.ts";
+  const SPEC = "files/e2e/auth-sign-in.spec.ts";
+  const SQLITE_TEST = "files/db/seed.sqlite.vitest.ts";
+  const PG_TEST = "files/db/seed.pg.vitest.ts";
+
+  async function authModule(): Promise<LoadedModule> {
+    return writeModule(
+      "auth",
+      {
+        type: "saasaloy:capability",
+        files: [
+          { path: "files/api/routes/auth.ts", target: "@api/routes/auth.ts" },
+          {
+            path: TEST,
+            target: "@api/routes/auth.test.ts",
+            when: { testing: true },
+          },
+          {
+            path: SPEC,
+            target: "@e2e/specs/auth-sign-in.spec.ts",
+            when: { installed: ["e2e"] },
+          },
+          {
+            path: SQLITE_TEST,
+            target: "@api/seed.test.ts",
+            onlyWith: "database-d1",
+            when: { testing: true },
+          },
+          {
+            path: PG_TEST,
+            target: "@api/seed.test.ts",
+            onlyWith: "database-postgres",
+            when: { testing: true },
+          },
+        ],
+        scaffolds: [
+          {
+            workspace: "packages/auth",
+            files: [
+              {
+                path: "files/pkg/both.vitest.ts",
+                target: "src/both.test.ts",
+                when: { installed: ["e2e"], testing: true },
+              },
+            ],
+          },
+        ],
+      },
+      {
+        "files/api/routes/auth.ts": "export const auth = 1;\n",
+        [TEST]: "test('auth');\n",
+        [SPEC]: "test('sign in');\n",
+        [SQLITE_TEST]: "sqlite\n",
+        [PG_TEST]: "pg\n",
+        "files/pkg/both.vitest.ts": "both\n",
+      }
+    );
+  }
+
+  const aliases = { "@api": "apps/api/src" };
+
+  it("drops a testing entry while the mode is off, and keeps it once it is on", async () => {
+    const mod = await authModule();
+    const off = await listModuleFiles(mod, aliases, new Set(["auth"]), NO_GATE);
+    const on = await listModuleFiles(mod, aliases, new Set(["auth"]), {
+      isTracked: () => false,
+      testingMode: "tests-after",
+    });
+
+    expect(off.has("apps/api/src/routes/auth.test.ts")).toBeFalsy();
+    expect(on.get("apps/api/src/routes/auth.test.ts")).toMatchObject({
+      from: TEST,
+      when: { testing: true },
+    });
+  });
+
+  it("drops an installed entry, and an unknown alias with it, until the module is present", async () => {
+    const mod = await authModule();
+    const without = await selectModuleFiles(
+      mod,
+      aliases,
+      new Set(["auth"]),
+      NO_GATE
+    );
+    const withE2e = await listModuleFiles(
+      mod,
+      { ...aliases, "@e2e": "apps/e2e" },
+      new Set(["auth", "e2e"]),
+      NO_GATE
+    );
+
+    expect(without.unmatched).toStrictEqual([]);
+    expect(withE2e.has("apps/e2e/specs/auth-sign-in.spec.ts")).toBeTruthy();
+  });
+
+  it("combines testing and installed with AND", async () => {
+    const mod = await authModule();
+    const tdd = { isTracked: () => false, testingMode: "tdd" } as const;
+
+    const onlyMode = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["auth"]),
+      tdd
+    );
+    const onlyE2e = await listModuleFiles(
+      mod,
+      { ...aliases, "@e2e": "apps/e2e" },
+      new Set(["auth", "e2e"]),
+      NO_GATE
+    );
+    const both = await listModuleFiles(
+      mod,
+      { ...aliases, "@e2e": "apps/e2e" },
+      new Set(["auth", "e2e"]),
+      tdd
+    );
+
+    expect(onlyMode.has("packages/auth/src/both.test.ts")).toBeFalsy();
+    expect(onlyE2e.has("packages/auth/src/both.test.ts")).toBeFalsy();
+    expect(both.has("packages/auth/src/both.test.ts")).toBeTruthy();
+  });
+
+  it("skips a target whose every onlyWith variant when drops, rather than refusing it", async () => {
+    const mod = await authModule();
+    const { files, unmatched } = await selectModuleFiles(
+      mod,
+      aliases,
+      new Set(["auth"]),
+      NO_GATE
+    );
+
+    expect(files.has("apps/api/src/seed.test.ts")).toBeFalsy();
+    expect(unmatched).toStrictEqual([]);
+  });
+
+  it("checks when before onlyWith: with testing on, the matching variant ships", async () => {
+    const mod = await authModule();
+    const files = await listModuleFiles(
+      mod,
+      aliases,
+      new Set(["auth", "database-postgres"]),
+      { isTracked: () => false, testingMode: "tdd" }
+    );
+
+    expect(files.get("apps/api/src/seed.test.ts")?.from).toBe(PG_TEST);
+  });
+
+  it("keeps a false-when entry whose target is already tracked", async () => {
+    const mod = await authModule();
+    const files = await listModuleFiles(mod, aliases, new Set(["auth"]), {
+      isTracked: (target) => target === "apps/api/src/routes/auth.test.ts",
+      testingMode: "off",
+    });
+
+    expect(files.has("apps/api/src/routes/auth.test.ts")).toBeTruthy();
+  });
+
+  it("buildPlan reads the mode from saasaloy.json and records when on write", async () => {
+    const mod = await authModule();
+    // The driver is installed, so the tdd-mode seed test has a variant to pick.
+    const config: SaasaloyConfig = {
+      aliases,
+      installed: ["database-d1"],
+      testing: { mode: "tdd" },
+    };
+    const manifest = emptyManifest();
+    const p = await plan({
+      config,
+      install: ["auth"],
+      manifest,
+      modules: [mod],
+    });
+    await executePlan(p, root, config, manifest);
+
+    expect(manifest.managed["apps/api/src/routes/auth.test.ts"]).toMatchObject({
+      module: "auth",
+      when: { testing: true },
+    });
+    expect(manifest.managed["apps/api/src/routes/auth.ts"]).not.toHaveProperty(
+      "when"
+    );
+    await expect(validateManifest(manifest)).resolves.toMatchObject({
+      valid: true,
+    });
+  });
+
+  it("buildPlan writes no gated file for a project with no testing key", async () => {
+    const mod = await authModule();
+    const p = await plan({
+      config: { aliases, installed: [] },
+      install: ["auth"],
+      modules: [mod],
+    });
+
+    expect(p.files.map((f) => f.target)).toStrictEqual([
+      "apps/api/src/routes/auth.ts",
+    ]);
+  });
+
+  describe("patches", () => {
+    const script = {
+      file: "package.json",
+      kind: "package-json-script" as const,
+      name: "db:check",
+      value: "drizzle-kit check",
+      when: { testing: true as const },
+    };
+
+    async function scriptModule(): Promise<LoadedModule> {
+      await writeFile(join(root, "package.json"), '{ "name": "app" }\n');
+      return writeModule("database", {
+        type: "saasaloy:capability",
+        patches: [script],
+      });
+    }
+
+    it("drops a false-when patch, and plans it once the mode is on", async () => {
+      const mod = await scriptModule();
+      const off = await plan({ install: ["database"], modules: [mod] });
+      const on = await plan({
+        config: {
+          aliases: {},
+          installed: [],
+          testing: { mode: "tests-after" },
+        },
+        install: ["database"],
+        modules: [mod],
+      });
+
+      expect(off.patches).toStrictEqual([]);
+      expect(on.patches.map((p) => p.action)).toStrictEqual(["apply"]);
+    });
+
+    it("keeps a false-when patch the module already applied", async () => {
+      const mod = await scriptModule();
+      const manifest = emptyManifest();
+      manifest.patches.push({
+        file: "package.json",
+        module: "database",
+        patch: script,
+        when: script.when,
+      });
+
+      const p = await plan({ install: ["database"], manifest, modules: [mod] });
+
+      expect(p.patches).toHaveLength(1);
+    });
+
+    it("records the op's when on apply", async () => {
+      const mod = await scriptModule();
+      const config: SaasaloyConfig = {
+        aliases: {},
+        installed: [],
+        testing: { mode: "tdd" },
+      };
+      const manifest = emptyManifest();
+      const p = await plan({
+        config,
+        install: ["database"],
+        manifest,
+        modules: [mod],
+      });
+      await executePlan(p, root, config, manifest);
+
+      expect(manifest.patches).toStrictEqual([
+        {
+          file: "package.json",
+          module: "database",
+          patch: script,
+          when: { testing: true },
+        },
+      ]);
+    });
+  });
+
+  describe("a selector (backfill)", () => {
+    it("plans only the selected entries and no link, dependency, env var or alias", async () => {
+      const mod = await writeModule(
+        "auth",
+        {
+          type: "saasaloy:capability",
+          dependencies: ["zod@4.4.3"],
+          envVars: { AUTH_URL: "where" },
+          removeWarnings: ["Sessions stay in the database."],
+          files: [
+            { path: "files/a.ts", target: "@api/a.ts" },
+            {
+              path: "files/a.vitest.ts",
+              target: "@api/a.test.ts",
+              when: { testing: true },
+            },
+          ],
+          scaffolds: [
+            {
+              workspace: "packages/auth",
+              aliases: { "@auth": "packages/auth/src" },
+              files: [],
+            },
+          ],
+          agent: { skills: ["saasaloy-auth"] },
+        },
+        {
+          "files/a.ts": "a\n",
+          "files/a.vitest.ts": "test\n",
+          "saasaloy-auth/SKILL.md": "skill\n",
+        }
+      );
+      const config: SaasaloyConfig = {
+        aliases,
+        installed: ["auth"],
+        testing: { mode: "tests-after" },
+      };
+
+      const p = await buildPlan({
+        alreadyInstalled: [],
+        config,
+        install: ["auth"],
+        manifest: emptyManifest(),
+        modules: new Map([["auth", mod]]),
+        root,
+        select: {
+          file: (_module, ref) => ref.when !== undefined,
+          patch: () => true,
+        },
+      });
+
+      expect(p.files.map((f) => f.target)).toStrictEqual([
+        "apps/api/src/a.test.ts",
+      ]);
+      expect(p.links).toStrictEqual([]);
+      expect(p.dependencies).toStrictEqual([]);
+      expect(p.envVars).toStrictEqual({});
+      expect(p.aliases).toStrictEqual({});
+      expect(p.removeWarnings).toStrictEqual({
+        auth: ["Sessions stay in the database."],
+      });
+    });
+
+    it("holds back an untracked owner file at a selected target", async () => {
+      const mod = await writeModule(
+        "auth",
+        {
+          type: "saasaloy:capability",
+          files: [
+            {
+              path: "files/a.vitest.ts",
+              target: "@api/a.test.ts",
+              when: { testing: true },
+            },
+          ],
+        },
+        { "files/a.vitest.ts": "test\n" }
+      );
+      await mkdir(join(root, "apps/api/src"), { recursive: true });
+      await writeFile(join(root, "apps/api/src/a.test.ts"), "mine\n");
+      const config: SaasaloyConfig = {
+        aliases,
+        installed: ["auth"],
+        testing: { mode: "tdd" },
+      };
+      const manifest = emptyManifest();
+
+      const p = await buildPlan({
+        alreadyInstalled: [],
+        config,
+        install: ["auth"],
+        manifest,
+        modules: new Map([["auth", mod]]),
+        root,
+        select: { file: () => true, patch: () => true },
+      });
+      const result = await executePlan(p, root, config, manifest);
+
+      expect(result.heldBack.map((f) => f.target)).toStrictEqual([
+        "apps/api/src/a.test.ts",
+      ]);
+      await expect(
+        readFile(join(root, "apps/api/src/a.test.ts"), "utf-8")
+      ).resolves.toBe("mine\n");
+    });
   });
 });
 
