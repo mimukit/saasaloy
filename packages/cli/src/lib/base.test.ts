@@ -637,6 +637,73 @@ describe("baseUpdateInput — classifying base files through the module engine",
     await cleanup();
   });
 
+  describe("the root package.json version, which a release bumps (ADR 0049)", () => {
+    const manifestAt = (version: string, script: string) =>
+      `{\n  "name": "app",\n  "version": "${version}",\n  "scripts": {\n    "build": "${script}"\n  }\n}\n`;
+
+    it("overwrites the file a release bumped, and keeps the project's version", async () => {
+      await write(
+        template,
+        "package.json",
+        manifestAt("0.0.0", "turbo run build")
+      );
+      const state = await scaffold();
+      await write(root, "package.json", manifestAt("0.3.0", "turbo run build"));
+      const next = await bumped({
+        "package.json": manifestAt("0.0.0", "turbo run build --summarize"),
+      });
+
+      const { base, cleanup } = await planAgainst(next, state);
+
+      expect(actionOf(base, "package.json")).toBe("overwrite");
+      expect(base.files[0]?.theirs).toBe(
+        manifestAt("0.3.0", "turbo run build --summarize")
+      );
+      expect(base.needsMerge).toBeFalsy();
+      await cleanup();
+    });
+
+    it("leaves a bumped file alone when the template did not change it", async () => {
+      await write(
+        template,
+        "package.json",
+        manifestAt("0.0.0", "turbo run build")
+      );
+      await write(template, "AGENTS.md", "v1\n");
+      const state = await scaffold();
+      await write(root, "package.json", manifestAt("0.3.0", "turbo run build"));
+      const next = await bumped({
+        "package.json": manifestAt("0.0.0", "turbo run build"),
+        "AGENTS.md": "v2\n",
+      });
+
+      const { base, cleanup } = await planAgainst(next, state);
+
+      expect(actionOf(base, "package.json")).toBe("unchanged");
+      expect(base.needsMerge).toBeFalsy();
+      await cleanup();
+    });
+
+    it("still routes a hand-edited file into the merge plan", async () => {
+      await write(
+        template,
+        "package.json",
+        manifestAt("0.0.0", "turbo run build")
+      );
+      const state = await scaffold();
+      await write(root, "package.json", manifestAt("0.3.0", "my build"));
+      const next = await bumped({
+        "package.json": manifestAt("0.0.0", "turbo run build --summarize"),
+      });
+
+      const { base, cleanup } = await planAgainst(next, state);
+
+      expect(actionOf(base, "package.json")).toBe("drift");
+      expect(base.needsMerge).toBeTruthy();
+      await cleanup();
+    });
+  });
+
   it("skips every declared seed file, as a file and as a removal", async () => {
     await write(template, "README.md", "seed\n");
     await write(template, "AGENTS.md", "v1\n");

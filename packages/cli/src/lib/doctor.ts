@@ -17,6 +17,7 @@ import type { Manifest } from "./manifest.js";
 import { entryValue, findConstArray } from "./patch/ts-array.js";
 import type { Program } from "./patch/ts-array.js";
 import type { ModuleImports } from "./patch/ts-ast.js";
+import { ROOT_MANIFEST, withRootVersion } from "./root-version.js";
 import { loadConfig } from "./saasaloy-config.js";
 import { baseTemplateDir } from "./scaffold.js";
 import { isValidRange } from "./semver.js";
@@ -921,6 +922,9 @@ export const DEPLOY_TARGETS_FILE = "packages/tooling/src/targets.ts";
 /** The production migration task name the base and `database-d1` retired. */
 const RETIRED_MIGRATE_TASK = "db:migrate:prod";
 
+/** The managed wrapper behind `pnpm release` (ADR 0049). */
+export const RELEASE_WRAPPER = "packages/tooling/src/release.ts";
+
 export interface DeployCheckArgs {
   /** The project's `turbo.json`, or `undefined` when it has none. */
   turbo: string | undefined;
@@ -932,6 +936,10 @@ export interface DeployCheckArgs {
   deployable: string[];
   /** The text of `packages/tooling/src/targets.ts`, or `undefined` when it is missing. */
   targets: string | undefined;
+  /** Whether `packages/tooling/src/release.ts` exists. */
+  releaseWrapper?: boolean;
+  /** Whether the root `package.json` has a `release` script. */
+  releaseScript?: boolean;
 }
 
 /**
@@ -943,9 +951,21 @@ export interface DeployCheckArgs {
  *   `turbo.json` keeps a `deploy` task that waits on a task no module defines any more.
  * - A deployable workspace has no `DEPLOY_TARGETS` row, so the engine cannot place it in
  *   the order and refuses to deploy.
+ * - `release.ts` arrived through `update` and the root `package.json` has no `release`
+ *   script, because that file went to a merge plan (ADR 0049). The deploy then warns on
+ *   every run that no release names it.
  */
 export function checkDeploy(args: DeployCheckArgs): Finding[] {
   const findings: Finding[] = [];
+  if (args.releaseWrapper === true && args.releaseScript !== true) {
+    findings.push(
+      finding(
+        "deploy",
+        "/package.json",
+        `${RELEASE_WRAPPER} exists and the root package.json has no release script, so pnpm release does not run. Add "release": "node ${RELEASE_WRAPPER}" and "release:dry": "node ${RELEASE_WRAPPER} --dry-run" to its scripts.`
+      )
+    );
+  }
   if (args.turbo?.includes(RETIRED_MIGRATE_TASK)) {
     findings.push(
       finding(
@@ -1034,10 +1054,24 @@ export async function readDeployState(root: string): Promise<DeployCheckArgs> {
       deployable.push(name);
     }
   }
+  let releaseScript = false;
+  try {
+    const rootManifest = await readIfPresent(
+      resolveWithinRoot(root, ROOT_MANIFEST)
+    );
+    releaseScript =
+      rootManifest !== undefined &&
+      typeof asRecord(asRecord(JSON.parse(rootManifest)).scripts).release ===
+        "string";
+  } catch {
+    releaseScript = false;
+  }
   return {
     turbo: await readIfPresent(resolveWithinRoot(root, "turbo.json")),
     deployable,
     targets: await readIfPresent(resolveWithinRoot(root, DEPLOY_TARGETS_FILE)),
+    releaseWrapper: await pathExists(resolveWithinRoot(root, RELEASE_WRAPPER)),
+    releaseScript,
   };
 }
 
@@ -1083,6 +1117,12 @@ export interface BaseCheckArgs {
   manifest: Manifest;
   /** The seed paths the running template declares — listed, never hashed. */
   seedFiles: string[];
+  /**
+   * The root `package.json` `version` the running template ships. A file that matches
+   * its record once its version is set to this one is not drifted, because a release
+   * bumps the version (ADR 0049).
+   */
+  templateVersion?: string | undefined;
 }
 
 export interface BaseReport {
@@ -1129,7 +1169,12 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
     const mine = await readIfPresent(resolveWithinRoot(root, target));
     if (mine === undefined) {
       missing.push(target);
-    } else if (hashContent(mine) === entry.hash) {
+    } else if (
+      hashContent(mine) === entry.hash ||
+      (target === ROOT_MANIFEST &&
+        args.templateVersion !== undefined &&
+        hashContent(withRootVersion(mine, args.templateVersion)) === entry.hash)
+    ) {
       matching++;
     } else {
       drifted.push(target);

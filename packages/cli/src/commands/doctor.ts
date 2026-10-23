@@ -24,9 +24,10 @@ import {
   exitCodeFor,
   formatFailure,
 } from "../lib/exit.js";
-import { pathExists } from "../lib/fs-utils.js";
+import { pathExists, readIfPresent } from "../lib/fs-utils.js";
 import { loadLock } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
+import { ROOT_MANIFEST, rootVersion } from "../lib/root-version.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { wrapForNote } from "../lib/tui.js";
@@ -124,11 +125,15 @@ async function reportProject(path: string): Promise<number> {
   const config = await loadConfig(path);
   const manifest = await loadManifest(path);
   const lock = await loadLock(path);
+  const templateDir = await baseTemplateDir();
   const base = await checkBase({
     root: path,
     lock,
     manifest,
-    seedFiles: (await readBaseDeclaration(await baseTemplateDir())).seedFiles,
+    seedFiles: (await readBaseDeclaration(templateDir)).seedFiles,
+    templateVersion: rootVersion(
+      await readIfPresent(join(templateDir, ROOT_MANIFEST))
+    ),
   });
   note(wrapForNote(renderBase(base)), "Base");
   // The deploy rules (ADR 0048) are warnings, like base drift: each prints its fix and

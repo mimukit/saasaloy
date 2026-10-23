@@ -16,6 +16,7 @@ import {
   resolveWithinRoot,
 } from "./fs-utils.js";
 import { BASE_MODULE, isBaseTracked } from "./base.js";
+import { ROOT_MANIFEST, rootVersion, withRootVersion } from "./root-version.js";
 import type { LockBase, Lockfile, LockModule } from "./lock.js";
 import {
   recordLink,
@@ -683,12 +684,18 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     const managed = manifest.managed[ref.target];
     const owned = managed?.module === name ? managed : undefined;
     const mine = await readIfPresent(targetAbs);
+    const { compared, written } = keepRootVersion(
+      ref.target,
+      mine,
+      baseContent,
+      theirsContent
+    );
 
     const projectOwned = input.isOwned?.(ref.target) ?? false;
     const action = classifyUpdate(
       baseContent,
       theirsContent,
-      mine,
+      compared,
       owned?.hash,
       owned?.adopted ?? false,
       projectOwned
@@ -703,7 +710,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       ...(projectOwned ? { projectOwned: true } : {}),
       ...(owned?.adopted ? { adopted: true } : {}),
       base: baseContent,
-      theirs: theirsContent,
+      theirs: written,
       mine,
       newHash: hashContent(theirsContent),
       ...(patchedBy.length > 0 ? { patchedBy } : {}),
@@ -817,6 +824,30 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     removeWarnings: [...(theirs.item.removeWarnings ?? [])],
     newEnvVars: newEnvVars(base, theirs),
     needsMerge,
+  };
+}
+
+/**
+ * The root `package.json` with the project's `version` taken out of the comparison
+ * (ADR 0049). `pnpm release` bumps it on every release, so the file is compared as if it
+ * still held the version the base wrote, and the new render is written with the
+ * project's version kept. `newHash` stays the hash of the render itself, which is what
+ * the next run compares against after the same step. Every other file passes through.
+ */
+function keepRootVersion(
+  target: string,
+  mine: string | undefined,
+  base: string | undefined,
+  theirs: string
+): { compared: string | undefined; written: string } {
+  const kept = target === ROOT_MANIFEST ? rootVersion(mine) : undefined;
+  const wrote = rootVersion(base ?? theirs);
+  if (mine === undefined || kept === undefined || wrote === undefined) {
+    return { compared: mine, written: theirs };
+  }
+  return {
+    compared: withRootVersion(mine, wrote),
+    written: withRootVersion(theirs, kept),
   };
 }
 

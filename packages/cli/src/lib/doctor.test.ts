@@ -24,6 +24,7 @@ import {
   readEnvState,
   readDeployState,
   DEPLOY_TARGETS_FILE,
+  RELEASE_WRAPPER,
 } from "./doctor.js";
 import type { Finding, ModuleReport } from "./doctor.js";
 import { hashContent } from "./fs-utils.js";
@@ -423,6 +424,30 @@ describe("checkBase — the base's record and drift (#120)", () => {
       seed: ["README.md"],
     });
     expect(report.record?.cliVersion).toBe("0.0.0");
+  });
+
+  it("reads a root package.json a release bumped as matching, and an edited one as drifted (ADR 0049)", async () => {
+    const at = (version: string, build: string) =>
+      `{\n  "name": "app",\n  "version": "${version}",\n  "scripts": { "build": "${build}" }\n}\n`;
+    const state = await tracked({ "package.json": at("0.0.0", "turbo") });
+    await writeFile(join(root, "package.json"), at("0.3.0", "turbo"), "utf-8");
+
+    const bumped = await checkBase({
+      root,
+      ...state,
+      seedFiles: [],
+      templateVersion: "0.0.0",
+    });
+    await writeFile(join(root, "package.json"), at("0.3.0", "mine"), "utf-8");
+    const edited = await checkBase({
+      root,
+      ...state,
+      seedFiles: [],
+      templateVersion: "0.0.0",
+    });
+
+    expect(bumped).toMatchObject({ matching: 1, drifted: [] });
+    expect(edited).toMatchObject({ matching: 0, drifted: ["package.json"] });
   });
 
   it("never reads another module's files as base drift", async () => {
@@ -879,6 +904,32 @@ describe(checkDeploy, () => {
     expect(found?.message).toContain("saasaloy update");
   });
 
+  it("warns when the release wrapper exists and the root release script does not", () => {
+    const [found, ...rest] = checkDeploy({
+      turbo: undefined,
+      deployable: [],
+      targets: undefined,
+      releaseWrapper: true,
+      releaseScript: false,
+    });
+
+    expect(rest).toStrictEqual([]);
+    expect(found?.where).toBe("/package.json");
+    expect(found?.message).toContain(
+      '"release": "node packages/tooling/src/release.ts"'
+    );
+  });
+
+  it("says nothing about the release when the script is there, or the wrapper is not", () => {
+    const none = { turbo: undefined, deployable: [], targets: undefined };
+    expect(
+      checkDeploy({ ...none, releaseWrapper: true, releaseScript: true })
+    ).toStrictEqual([]);
+    expect(
+      checkDeploy({ ...none, releaseWrapper: false, releaseScript: false })
+    ).toStrictEqual([]);
+  });
+
   it("says nothing about a missing targets file when nothing deploys", () => {
     expect(
       checkDeploy({ turbo: undefined, deployable: [], targets: undefined })
@@ -949,6 +1000,8 @@ describe(readDeployState, () => {
       turbo: "{}",
       deployable: ["api", "web"],
       targets: undefined,
+      releaseWrapper: false,
+      releaseScript: false,
     });
   });
 
@@ -960,6 +1013,23 @@ describe(readDeployState, () => {
       turbo: undefined,
       deployable: [],
       targets: TARGETS,
+      releaseWrapper: false,
+      releaseScript: false,
+    });
+  });
+
+  it("reads whether the release wrapper and the root release script exist", async () => {
+    await mkdir(join(root, "packages", "tooling", "src"), { recursive: true });
+    await writeFile(join(root, RELEASE_WRAPPER), "", "utf-8");
+    await writeFile(
+      join(root, "package.json"),
+      JSON.stringify({ scripts: { release: "node x" } }),
+      "utf-8"
+    );
+
+    await expect(readDeployState(root)).resolves.toMatchObject({
+      releaseWrapper: true,
+      releaseScript: true,
     });
   });
 });
