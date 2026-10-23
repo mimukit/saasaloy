@@ -34,12 +34,18 @@ export const ADMIN_ROLE = config.auth.adminRole;
 export const SUPERADMIN_ROLE = config.auth.superadminRole;
 
 /**
- * The roles that open the shell: every role in the admin group. This is the browser's
- * copy of `ADMIN_APP_ROLES` in `packages/auth/src/authorize.ts`, because a bundle cannot
- * import from `@repo/auth/server`. Change one list and change the other, or the SPA and
- * the api disagree about who gets in. A project that adds `support` adds it to both.
+ * The roles that open the shell: every role in the admin group. A bundle cannot import
+ * `ADMIN_APP_ROLES` from `@repo/auth/server`, so this builds the same list from the same
+ * `config.auth` section `packages/auth/src/authorize.ts` reads. `@repo/config` has no
+ * dependencies, so the browser may import it, and there is no second copy to keep in step.
+ * A project that adds `support` adds it to `auth.adminAppExtraRoles` in
+ * `packages/config/src/project.ts`, and both sides follow.
  */
-export const ADMIN_APP_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
+export const ADMIN_APP_ROLES: readonly string[] = [
+  ADMIN_ROLE,
+  SUPERADMIN_ROLE,
+  ...config.auth.adminAppExtraRoles,
+];
 
 // The root route's `beforeLoad` runs on every navigation, and an unmemoised getSession()
 // there costs a blocking round trip per click. One promise is kept and handed to every

@@ -42,14 +42,20 @@ export const ADMIN_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
 /**
  * The group list: every role in the admin group, which is who may sign in on the admin
  * session and open `apps/admin`. `requireAdminApp` demands one of these, and
- * `apps/admin/src/lib/auth.ts` keeps its own copy for the browser guard.
+ * `apps/admin/src/lib/auth.ts` builds the same list from the same config section for the
+ * browser guard, so the two sides cannot disagree.
  *
- * It holds the same two roles as `ADMIN_ROLES` today, and the two lists stay separate on
- * purpose. A project that adds a `support` role adds it here only: support can then sign
- * in and open the admin app, and every `requireAdmin` route still refuses it. The
- * `saasaloy-auth` skill carries that recipe.
+ * It holds the same two roles as `ADMIN_ROLES` by default, and the two lists stay separate
+ * on purpose. A project that adds a `support` role adds it to `auth.adminAppExtraRoles` in
+ * `packages/config/src/project.ts` only: support can then sign in and open the admin app,
+ * and every `requireAdmin` route still refuses it. The `saasaloy-auth` skill carries that
+ * recipe.
  */
-export const ADMIN_APP_ROLES: readonly string[] = [ADMIN_ROLE, SUPERADMIN_ROLE];
+export const ADMIN_APP_ROLES: readonly string[] = [
+  ADMIN_ROLE,
+  SUPERADMIN_ROLE,
+  ...config.auth.adminAppExtraRoles,
+];
 
 /**
  * Who a session belongs to. A project has two user groups, and each signs in on its own

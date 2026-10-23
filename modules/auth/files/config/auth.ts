@@ -4,7 +4,7 @@ import { defineSection } from "@repo/config/define";
 //
 // It lands in `packages/config/src/sections/` rather than inside `packages/auth`, because
 // `@repo/config` is the leaf of the dependency graph: it imports nothing, so everything
-// may import it. That is what lets both sides read one copy of these two strings —
+// may import it. That is what lets both sides read one copy of these strings —
 // `packages/auth/src/authorize.ts` on the api, and `apps/admin/src/lib/auth.ts` in the
 // browser, which cannot import from `@repo/auth/server` at all.
 //
@@ -28,5 +28,13 @@ export function authConfig() {
      * inside an organization it does not belong to.
      */
     superadminRole: "superadmin",
+    /**
+     * Roles beyond the two above that join the admin group: they may sign in on the
+     * admin session and open `apps/admin`, and every `requireAdmin` route still refuses
+     * them. `ADMIN_APP_ROLES` is `adminRole`, `superadminRole`, then these, on the api and
+     * in the browser alike. Add `"support"` here in `project.ts`; the list is replaced
+     * whole, so name every extra role.
+     */
+    adminAppExtraRoles: [] as readonly string[],
   });
 }
