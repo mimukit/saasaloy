@@ -1,17 +1,26 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
-import { dirname, posix } from "node:path";
+import { dirname, join, posix } from "node:path";
 import { RefusalError } from "./exit.js";
 import {
   detectCollisions,
   detectOwnedCollisions,
+  baseSectionClaims,
+  declaredSectionKey,
   detectSectionCollisions,
   formatCollisions,
   formatOwnedCollisions,
   formatSectionCollisions,
+  formatSectionKeyMismatches,
   mayShareTarget,
   sectionClaims,
+  sectionFileOf,
 } from "./collisions.js";
-import type { OwnedCollision, SectionClaim, StaleOwner } from "./collisions.js";
+import type {
+  OwnedCollision,
+  SectionClaim,
+  SectionKeyMismatch,
+  StaleOwner,
+} from "./collisions.js";
 import { servicesFor } from "./env-example.js";
 import type { ServiceName } from "./env-example.js";
 import {
@@ -608,8 +617,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // compose into one object, so a contested key either loses a module's values or throws
   // at module load — and `dependsOn` cannot consent to that the way it can to a shared
   // file. Claims already on disk count: the manifest records each section patch with the
-  // module that applied it, so a module installed last month still holds its key.
-  const keyClaims: SectionClaim[] = [];
+  // module that applied it, so a module installed last month still holds its key. The
+  // base template's own sections claim their keys first, under the name `base`.
+  const keyClaims: SectionClaim[] = baseSectionClaims();
   const inRun = new Set(install);
   for (const entry of manifest.patches) {
     if (!inRun.has(entry.module)) {
@@ -624,6 +634,32 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     throw new RefusalError(
       formatSectionCollisions(sectionConflicts, requested)
     );
+  }
+
+  // The key above is read off the patch's import path; the runtime composes under the key
+  // the shipped file passes to `defineSection`. Read each section file and refuse when the
+  // two differ, or the guard checked one key and the project would get another.
+  const mismatches: SectionKeyMismatch[] = [];
+  for (const name of install) {
+    const mod = modules.get(name);
+    if (!mod) {
+      continue;
+    }
+    for (const { key } of sectionClaims(name, mod.item.patches)) {
+      const file = sectionFileOf(mod.item.files, key);
+      if (!file) {
+        continue;
+      }
+      const declared = declaredSectionKey(
+        await readFile(join(mod.dir, file.path), "utf-8")
+      );
+      if (declared !== undefined && declared !== key) {
+        mismatches.push({ module: name, claimed: key, declared });
+      }
+    }
+  }
+  if (mismatches.length > 0) {
+    throw new RefusalError(formatSectionKeyMismatches(mismatches, requested));
   }
 
   for (const name of install) {

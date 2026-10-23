@@ -2895,6 +2895,88 @@ describe("buildPlan — config section keys", () => {
     ).rejects.toThrow(/auth and shop both contribute config\.auth/);
   });
 
+  it("refuses a module claiming the base template's app key", async () => {
+    await expect(
+      plan({
+        install: ["shop"],
+        modules: [await sectionModule("shop", "app")],
+      })
+    ).rejects.toThrow(/base and shop both contribute config\.app/);
+  });
+
+  it("refuses a section file whose defineSection key is not its file name", async () => {
+    const shop = await writeModule(
+      "shop",
+      {
+        type: "saasaloy:feature",
+        files: [
+          { path: "files/config/shop.ts", target: "@config/sections/shop.ts" },
+        ],
+        patches: [
+          {
+            file: CONFIG_SECTIONS_FILE,
+            kind: "plugin-array",
+            exportName: "sections",
+            arrayProp: "sections",
+            call: "shopConfig",
+            import: { name: "shopConfig", from: "./sections/shop" },
+          },
+        ],
+      },
+      {
+        "files/config/shop.ts":
+          'export const shopConfig = () => defineSection("store", { limit: 5 });\n',
+      }
+    );
+    await expect(
+      plan({
+        install: ["shop"],
+        modules: [shop],
+        config: {
+          aliases: { "@config": "packages/config/src" },
+          installed: [],
+        },
+      })
+    ).rejects.toThrow(
+      /shop registers \.\/sections\/shop but the file calls defineSection\("store"\)/
+    );
+  });
+
+  it("plans a section file whose key matches its file name", async () => {
+    const shop = await writeModule(
+      "shop",
+      {
+        type: "saasaloy:feature",
+        files: [
+          { path: "files/config/shop.ts", target: "@config/sections/shop.ts" },
+        ],
+        patches: [
+          {
+            file: CONFIG_SECTIONS_FILE,
+            kind: "plugin-array",
+            exportName: "sections",
+            arrayProp: "sections",
+            call: "shopConfig",
+            import: { name: "shopConfig", from: "./sections/shop" },
+          },
+        ],
+      },
+      {
+        "files/config/shop.ts":
+          'export const shopConfig = () => defineSection("shop", { limit: 5 });\n',
+      }
+    );
+    const built = await plan({
+      install: ["shop"],
+      modules: [shop],
+      config: {
+        aliases: { "@config": "packages/config/src" },
+        installed: [],
+      },
+    });
+    expect(built.patches).toHaveLength(1);
+  });
+
   it("lets a --force re-apply keep its own key", async () => {
     const manifest = emptyManifest();
     manifest.patches.push({

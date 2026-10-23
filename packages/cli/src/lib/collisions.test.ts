@@ -1,5 +1,12 @@
+import { existsSync, readdirSync, readFileSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import {
+  BASE_SECTION_KEYS,
+  baseSectionClaims,
+  declaredSectionKey,
+  formatSectionKeyMismatches,
+  sectionFileOf,
   CONFIG_SECTIONS_FILE,
   describeStaleOwner,
   detectCollisions,
@@ -558,5 +565,97 @@ describe(formatSectionCollisions, () => {
       { key: "app", module: "a", other: "b" },
     ]);
     expect(message).toContain("section keys claimed twice");
+  });
+});
+
+describe("the base template's section keys", () => {
+  it("lists exactly the files in the template's sections folder", () => {
+    const dir = fileURLToPath(
+      new URL(
+        "../../templates/base/packages/config/src/sections",
+        import.meta.url
+      )
+    );
+    const keys = readdirSync(dir)
+      .filter((name) => name.endsWith(".ts") && !name.endsWith(".test.ts"))
+      .map((name) => name.replace(/\.ts$/, ""))
+      .toSorted();
+    expect([...BASE_SECTION_KEYS].toSorted()).toStrictEqual(keys);
+  });
+
+  it("claims each key under the reserved name base", () => {
+    expect(baseSectionClaims()).toStrictEqual([{ module: "base", key: "app" }]);
+  });
+});
+
+describe(declaredSectionKey, () => {
+  it("reads a string-literal key in any quote style", () => {
+    expect(declaredSectionKey('defineSection("auth", {})')).toBe("auth");
+    expect(declaredSectionKey("defineSection(\n  'shop',\n  {})")).toBe("shop");
+    expect(declaredSectionKey("defineSection(`kv`, {})")).toBe("kv");
+  });
+
+  it("gives up on a key it cannot read without running the file", () => {
+    expect(declaredSectionKey("defineSection(KEY, {})")).toBeUndefined();
+    // A template literal with a placeholder, built so the source holds no `${` itself.
+    const interpolated = ["defineSection(`", "{name}`, {})"].join("$");
+    expect(declaredSectionKey(interpolated)).toBeUndefined();
+    expect(declaredSectionKey("export const x = 1;")).toBeUndefined();
+  });
+});
+
+describe(sectionFileOf, () => {
+  it("finds the files entry that targets the claimed section", () => {
+    const files = [
+      { path: "files/a.ts", target: "@api/a.ts" },
+      { path: "files/config/auth.ts", target: "@config/sections/auth.ts" },
+    ];
+    expect(sectionFileOf(files, "auth")?.path).toBe("files/config/auth.ts");
+    expect(sectionFileOf(files, "shop")).toBeUndefined();
+    expect(sectionFileOf(undefined, "auth")).toBeUndefined();
+  });
+});
+
+describe(formatSectionKeyMismatches, () => {
+  it("names the module, both keys, and the fix", () => {
+    expect(
+      formatSectionKeyMismatches(
+        [{ module: "shop", claimed: "shop", declared: "store" }],
+        "shop"
+      )
+    ).toBe(
+      'Cannot add shop — a config section file and its patch disagree on the key:\n  shop registers ./sections/shop but the file calls defineSection("store"). The file name is the key; rename one so both say the same.'
+    );
+  });
+});
+
+describe("every module's section file", () => {
+  it("declares the key its patch claims", () => {
+    const modulesDir = fileURLToPath(
+      new URL("../../../../modules", import.meta.url)
+    );
+    let checked = 0;
+    for (const name of readdirSync(modulesDir)) {
+      const descriptor = `${modulesDir}/${name}/registry-item.json`;
+      if (!existsSync(descriptor)) {
+        continue;
+      }
+      const item = JSON.parse(readFileSync(descriptor, "utf-8")) as {
+        patches?: RegistryPatch[];
+        files?: { path: string; target: string }[];
+      };
+      for (const { key } of sectionClaims(name, item.patches)) {
+        const file = sectionFileOf(item.files, key);
+        // A section patch with no file to back it is its own failure, named here.
+        expect(file?.target).toBe(`@config/sections/${key}.ts`);
+        const source = readFileSync(
+          `${modulesDir}/${name}/${file?.path}`,
+          "utf-8"
+        );
+        expect(declaredSectionKey(source)).toBe(key);
+        checked += 1;
+      }
+    }
+    expect(checked).toBeGreaterThanOrEqual(2);
   });
 });

@@ -1,4 +1,4 @@
-import type { RegistryPatch } from "./schema.js";
+import type { RegistryFile, RegistryPatch } from "./schema.js";
 import type { LoadedModule } from "./registry.js";
 
 // Cross-module file collisions for `saasaloy add` — the deterministic core, kept beside
@@ -232,6 +232,19 @@ export function formatOwnedCollisions(
 /** The registry `@repo/config` keeps its sections in — the file a section patch writes. */
 export const CONFIG_SECTIONS_FILE = "packages/config/src/sections.ts";
 
+/**
+ * The section keys the base template registers itself, in
+ * `templates/base/packages/config/src/sections/`. They come from no descriptor patch, so
+ * they are claimed here under the name `base`, the same reserved name the manifest records
+ * base files under. `collisions.test.ts` checks this list against the template's folder.
+ */
+export const BASE_SECTION_KEYS: readonly string[] = ["app"];
+
+/** The claims the base template holds before any module is added. */
+export function baseSectionClaims(): SectionClaim[] {
+  return BASE_SECTION_KEYS.map((key) => ({ module: "base", key }));
+}
+
 /** One module's claim on a section key of `@repo/config`. */
 export interface SectionClaim {
   module: string;
@@ -323,6 +336,51 @@ export function formatSectionCollisions(
     ...collisions.map(
       ({ key, module, other }) =>
         `  ${module} and ${other} both contribute config.${key}. A section key is the module name and has to be unique — rename one module's section file and its patch, or drop one of the two.`
+    ),
+  ].join("\n");
+}
+
+/**
+ * The key a section file passes to `defineSection`, read off its source, or `undefined`
+ * when the first argument is not a string literal.
+ *
+ * The section guard derives a module's key from its patch's import path, and the runtime
+ * composes under the key the file declares. The two must agree, or `add` checks one key
+ * and the project gets another. A key built from a variable cannot be read without running
+ * the file, so that case is left to the runtime throw in `defineConfig`.
+ */
+export function declaredSectionKey(source: string): string | undefined {
+  const match = /defineSection\(\s*(["'`])([^"'`$]+)\1/.exec(source);
+  return match?.[2];
+}
+
+/** The `files[]` entry a module ships its section file through, for a claimed key. */
+export function sectionFileOf(
+  files: readonly RegistryFile[] | undefined,
+  key: string
+): RegistryFile | undefined {
+  return files?.find((file) => file.target === `@config/sections/${key}.ts`);
+}
+
+/** A module whose section file declares a key other than the one its patch claims. */
+export interface SectionKeyMismatch {
+  module: string;
+  /** The key read off the patch's import path. */
+  claimed: string;
+  /** The key the file passes to `defineSection`. */
+  declared: string;
+}
+
+/** The refusal `add` prints when a section file and its patch disagree on the key. */
+export function formatSectionKeyMismatches(
+  mismatches: SectionKeyMismatch[],
+  requested = "these modules"
+): string {
+  return [
+    `Cannot add ${requested} — a config section file and its patch disagree on the key:`,
+    ...mismatches.map(
+      ({ module, claimed, declared }) =>
+        `  ${module} registers ./sections/${claimed} but the file calls defineSection("${declared}"). The file name is the key; rename one so both say the same.`
     ),
   ].join("\n");
 }
