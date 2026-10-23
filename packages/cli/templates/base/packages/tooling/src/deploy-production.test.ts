@@ -664,6 +664,24 @@ describe(deployProduction, () => {
     expect(run.runs).toStrictEqual([]);
   });
 
+  it.each([
+    [" M AGENTS.md\n?? notes.txt", "AGENTS.md, notes.txt"],
+    ["M AGENTS.md\n?? notes.txt", "AGENTS.md, notes.txt"],
+    ["R  old.md -> new.md", "old.md -> new.md"],
+  ])(
+    "names each dirty file whole from git status output %j",
+    async (porcelain, named) => {
+      const run = fake({ dirty: porcelain });
+      await expect(
+        deployProduction(plain, run.io, {
+          config: {},
+          targets: [{ service: "web", order: 30 }],
+          smokeChecks: [],
+        })
+      ).rejects.toThrow(`uncommitted changes (${named})`);
+    }
+  );
+
   it("stops before anything builds when a deployable workspace has no row", async () => {
     const run = fake({ workspaces: [WEB, API] });
     await expect(

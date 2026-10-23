@@ -552,8 +552,10 @@ function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
   return {
     branch,
     // The status column starts with a space, so the path starts at the fourth character.
+    // Drop the status code by shape, not by width: a reader that trims the output takes
+    // the leading space off the first line (" M a" becomes "M a").
     dirty: splitLines(io.git(["status", "--porcelain"])).map((line) =>
-      line.slice(3)
+      line.replace(/^\s*\S{1,2}\s+/, "")
     ),
     head,
     remoteHead: tryGit(io, ["rev-parse", "--verify", `origin/${branch}`]),
@@ -867,7 +869,8 @@ function nodeIo(root: string): Io {
       stdio: ["ignore", "pipe", "pipe"],
     });
   return {
-    git: (args) => exec("git", args).trim(),
+    // Only the trailing newline goes: `status --porcelain` starts a line with a space.
+    git: (args) => exec("git", args).trimEnd(),
     gh: (args) => exec("gh", args),
     run: async (command, args) =>
       // `spawn` reports through events, not a promise, so this wraps it in one.

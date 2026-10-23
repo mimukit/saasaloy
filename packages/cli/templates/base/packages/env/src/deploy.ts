@@ -173,8 +173,9 @@ function loginProblem(
 
 /**
  * Every service's production values, before anything builds. An empty result means a
- * deploy can start. `pnpm deploy:production` runs this ahead of `turbo run deploy`, so a
- * blank key stops the run before the first Worker uploads.
+ * deploy can start. `pnpm deploy:production` (the engine in `packages/tooling`) runs this
+ * through `deploy.ts --check` after its gates and before the first Worker deploys, so a
+ * blank key stops the run before anything uploads.
  */
 export async function checkProduction(options: {
   root: string;
