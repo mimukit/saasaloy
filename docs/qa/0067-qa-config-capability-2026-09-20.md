@@ -474,18 +474,18 @@ cd "$QA_ROOT" && pnpm play:destroy && rm -rf /tmp/qa-registry
 
 ## Automated verification (by AI agent)
 
-_Checks the agent ran itself on 2026-10-23, on the rebased branch. No action needed from the tester._
+_Checks the agent ran itself on 2026-10-23, on the rebased branch after the review fixes. No action needed from the tester._
 
 - ✅ `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm --filter saasaloy build`, `pnpm --filter saasaloy test:matrix` (991 tests) all pass.
 - ✅ `pnpm --filter saasaloy test:e2e` → 44 passed, 4 failed. The four are the known failures on main (`apply.test.ts` x3, `partial-apply.test.ts` x1).
 - ✅ `pnpm verify:e2e --driver=d1` and `--driver=postgres` → 4 flows pass on each, the admin login flows included.
-- ✅ TC-1.1 steps 1 and 2, and the built HTML: title, `og:site_name`, footer and both legal pages read `Saasaloy`; `landing.ts` is identical to main's.
-- ✅ TC-1.2 step 2: after the rename, `Saasaloy=0` on all three pages and `Ledgerly` = 19, 4 and 4.
-- ✅ TC-1.3 step 2: `lang="en-GB"`, and the footer links read `/legal/terms` and `/legal/privacy`.
-- ✅ TC-1.4: both bad overrides fail with TS2353 naming `project.ts` and the key; the clean file passes.
-- ✅ TC-1.5: one finding, the `site` origin, and no name finding.
-- ✅ TC-1.6: 4 Vitest files, 109 tests pass. `pnpm lint` first failed on `no-unsafe-type-assertion` in `define.test.ts`; commit `50969d4` fixed it, and the run is now clean.
-- ✅ TC-2.1, TC-2.2 steps 1 and 2, TC-2.3, TC-2.4 and TC-3.1, as written. The api answered `{"status":"ok"}` on `:4000/health` and the admin app answered 200 on `:3001`.
+- ✅ TC-1.1 to TC-1.4, from the built HTML and `pnpm typecheck`: "Saasaloy" by default, then `Saasaloy=0` and `Ledgerly` = 19, 4 and 4 after the rename, `lang="en-GB"`, the `/legal/*` hrefs, and TS2353 on both bad overrides.
+- ✅ TC-1.5: "No problems found" on a fresh project.
+- ✅ TC-1.6: 4 Vitest files and 111 tests pass, and `pnpm lint` is clean. Both runs first failed on a type assertion in `define.ts` and `define.test.ts`; commits `104941f` and `b213310` fixed them.
+- ✅ TC-2.1 and TC-2.2 steps 1 and 2. With `adminRole: "staff"`, `superadminRole: "owner"` and `adminAppExtraRoles: ["support"]`, the project's own route tests pass (17 in `apps/api/src/routes/auth.test.ts`): the seeded `owner` signs in, a `staff` admin lists users and changes a client's role through `/admin/*`, and the rank guard still refuses a `staff` admin who touches an `owner`.
+- ✅ TC-2.3: one finding for `packages/env/.env`, none for the service copy; a value typed into `apps/api/.env` alone is reported there. The fresh `.env.example` has no `BILLING_APP_NAME`.
+- ✅ TC-3.1, plus two variants: a module claiming `config.app` is refused as "base and waitlist", and a section file calling `defineSection("signup")` under `./sections/waitlist` is refused with exit 2. Neither writes a file.
+- ⏭ TC-2.4 was not re-run after the review fixes; `remove` and the section registry did not change.
 
 ## Not covered / needs human judgment
 
