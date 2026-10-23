@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "sms",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "A packages/sms workspace with the provider interface and segment counting; add one sms provider.",
+  "stage": "scale",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {

@@ -2,6 +2,9 @@
 
 This is a SaaS project scaffolded with Saasaloy.
 
+## Find the right skill
+
+Every installed module ships a skill in `.agents/skills/<name>/SKILL.md`, linked into `.claude/skills/`. Before you change a module's code, list `.agents/skills/` or run `saasaloy list --installed --json`, which gives each installed module's `skill`, `description` and `stage`, and read that skill first.
 
 ## Project Structure
 

@@ -1,6 +1,7 @@
 {
   "name": "escape-path",
   "type": "saasaloy:feature",
+  "description": "Test fixture escape-path.",
   "files": [{ "path": "../outside.ts", "target": "@web/a.ts" }],
   "agent": { "skills": ["../saasaloy-outside"] }
 }

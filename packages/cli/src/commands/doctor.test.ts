@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, afterEach, describe, expect, it } from "vitest";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { stripAnsi } from "../lib/tui.js";
+import { runJson } from "../../test/support/json-run.js";
 import { parseArgs, runDoctor } from "./doctor.js";
 
 // `doctor` exists so a module author finds a broken descriptor before a stranger does, so
@@ -53,7 +54,16 @@ async function run(argv: string[]): Promise<{ code: number; out: string }> {
 describe("doctor — parseArgs", () => {
   it("reads the path off the first positional", () => {
     expect(parseArgs(["modules/waitlist"])).toStrictEqual({
+      json: false,
       path: "modules/waitlist",
+      unknown: [],
+    });
+  });
+
+  it("reads --json as a flag, not a path", () => {
+    expect(parseArgs(["modules", "--json"])).toStrictEqual({
+      json: true,
+      path: "modules",
       unknown: [],
     });
   });
@@ -344,5 +354,83 @@ describe("runDoctor — what it reports and what it exits with", () => {
 
     expect(code).toBe(0);
     expect(stripAnsi(logged.join("\n"))).toContain("saasaloy doctor [<path>]");
+  });
+});
+
+// `--json` (#223): the same findings as data, the exit code unchanged.
+describe("runDoctor --json (#223)", () => {
+  const original = process.cwd();
+
+  afterEach(() => {
+    process.chdir(original);
+  });
+
+  it("prints a clean registry as one document and exits 0", async () => {
+    const { code, doc, err } = await runJson(runDoctor, [CLEAN, "--json"]);
+
+    expect(code).toBe(0);
+    expect(doc).toStrictEqual({
+      mode: "registry",
+      modules: [
+        { findings: [], module: "alpha" },
+        { findings: [], module: "beta" },
+      ],
+      path: CLEAN,
+      problems: 0,
+      schemaVersion: 1,
+    });
+    expect(err).toContain("No problems found.");
+  });
+
+  it("prints every finding of a broken registry and still exits 2", async () => {
+    const { code, doc } = await runJson(runDoctor, [BROKEN, "--json"]);
+
+    expect(code).toBe(2);
+    const modules = doc.modules as {
+      module: string;
+      findings: { where: string; message: string }[];
+    }[];
+    const noDescription = modules.find((m) => m.module === "no-description");
+    expect(noDescription?.findings.map((f) => f.where)).toStrictEqual([
+      "/description",
+    ]);
+    expect(doc.problems).toBe(
+      modules.reduce((sum, m) => sum + m.findings.length, 0)
+    );
+  });
+
+  it("prints the project report in project mode", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-json-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    process.chdir(project);
+
+    const { code, doc } = await runJson(runDoctor, ["--json"]);
+
+    expect(code).toBe(0);
+    expect(doc).toMatchObject({
+      base: { status: "untracked" },
+      findings: [],
+      installed: [],
+      mode: "project",
+      problems: 0,
+      schemaVersion: 1,
+    });
+  });
+
+  it("prints an error document for a path that does not exist", async () => {
+    const { code, doc } = await runJson(runDoctor, [
+      join(tmpdir(), "saasaloy-doctor-absent"),
+      "--json",
+    ]);
+
+    expect(code).toBe(2);
+    expect(doc).toMatchObject({
+      error: { exitCode: 2, message: expect.stringContaining("No such path") },
+      schemaVersion: 1,
+    });
   });
 });

@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "email",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "A packages/email workspace with the provider interface, the escaping html tag and safeUrl; add one email provider.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {

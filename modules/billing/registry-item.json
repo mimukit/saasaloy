@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "billing",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "Subscriptions in a packages/billing workspace: the provider contract, plans.ts and the subscription projection.",
+  "stage": "money",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {

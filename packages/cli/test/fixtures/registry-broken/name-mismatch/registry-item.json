@@ -1,5 +1,6 @@
 {
   "name": "something-else",
   "type": "saasaloy:feature",
+  "description": "Test fixture something-else.",
   "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]
 }

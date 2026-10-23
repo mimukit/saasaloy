@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "email-plunk",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "An email provider on Plunk over plain HTTP, with no SDK and no binding; needs a Plunk API key.",
+  "stage": "mvp",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["email"],
   "dependencies": [],
   "envVars": {

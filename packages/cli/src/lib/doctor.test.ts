@@ -133,6 +133,36 @@ describe("doctor — schema violations", () => {
     );
   });
 
+  it("reports a descriptor with no description, which the schema allows (#223)", async () => {
+    const findings = await findingsFor("no-description");
+
+    expect(findings).toHaveLength(1);
+    expect(findings[0]).toMatch(/^\/description missing — add a one-line/);
+  });
+
+  it("reports an empty description once, as the schema's finding", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "saasaloy-doctor-desc-"));
+    try {
+      await mkdir(join(dir, "empty"));
+      await writeFile(
+        join(dir, "empty", "registry-item.json"),
+        JSON.stringify({
+          description: "",
+          name: "empty",
+          type: "saasaloy:feature",
+        }),
+        "utf-8"
+      );
+      const [report] = await check(dir);
+
+      expect(report?.findings.map((found) => found.where)).toStrictEqual([
+        "/description",
+      ]);
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
   it("reports a descriptor that is not valid JSON, and stops there", async () => {
     const findings = await findingsFor("bad-json");
 

@@ -1,5 +1,6 @@
 {
   "name": "bad-requires",
   "type": "saasaloy:feature",
+  "description": "Test fixture bad-requires.",
   "requires": { "saasaloy": ">=nope" }
 }

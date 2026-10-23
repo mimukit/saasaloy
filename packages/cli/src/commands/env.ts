@@ -17,8 +17,6 @@ import {
   EXIT_FAILURE,
   EXIT_OK,
   EXIT_REFUSED,
-  exitCodeFor,
-  formatFailure,
   RefusalError,
 } from "../lib/exit.js";
 import {
@@ -27,6 +25,8 @@ import {
   resolveWithinRoot,
 } from "../lib/fs-utils.js";
 import { isPathIgnored } from "../lib/gitignore.js";
+import { createOutput, printJson } from "../lib/json-output.js";
+import type { TuiOptions } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -62,10 +62,15 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // person chose, so it replaces what the file holds. A key no installed module declares is
 // refused before anything is written: a typo would otherwise land in a file no service
 // reads, and the run would report success.
+//
+// `--check --json` prints the report as one document on stdout (#223). `--json` without
+// `--check` refuses: the prompt and the flag paths write, and a write has no report.
 
 export interface Options {
   /** `--check`: report what is missing and exit non-zero, prompting for nothing. */
   check: boolean;
+  /** `--json` with `--check`: one JSON document on stdout, the TUI on stderr. */
+  json: boolean;
   /** `--from-file <path>`, repeatable, in command-line order. Read relative to cwd. */
   fromFiles: string[];
   /** `--set KEY=VALUE`, repeatable, in command-line order. Beats a file's value. */
@@ -74,15 +79,16 @@ export interface Options {
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--check", "--help", "-h"]);
+const KNOWN_FLAGS = new Set(["--check", "--json", "--help", "-h"]);
 const USAGE =
-  "saasaloy env [--check] [--from-file <path>]... [--set KEY=VALUE]...";
+  "saasaloy env [--check [--json]] [--from-file <path>]... [--set KEY=VALUE]...";
 const HELP: CommandHelp = {
   name: "env",
   describe: DESCRIPTIONS.env,
   usage: USAGE,
   flags: {
     "--check": "report missing variables and exit non-zero, without prompting",
+    "--json": "with --check, print the report as one JSON document on stdout",
     "--from-file <path>":
       "write the KEY=VALUE lines of a dotenv file, with no prompt (repeatable)",
     "--set KEY=VALUE":
@@ -156,7 +162,13 @@ export function parseArgs(argv: string[]): Options {
       unknown.push(arg);
     }
   }
-  return { check: argv.includes("--check"), fromFiles, sets, unknown };
+  return {
+    check: argv.includes("--check"),
+    fromFiles,
+    json: argv.includes("--json"),
+    sets,
+    unknown,
+  };
 }
 
 /**
@@ -354,7 +366,10 @@ async function readTarget(
 }
 
 /** The production block, printed on every run that reaches the declarations. */
-function printSecretCommands(declarations: Declaration[]): void {
+function printSecretCommands(
+  declarations: Declaration[],
+  tui: TuiOptions = {}
+): void {
   const secretCommands = productionSecretCommands(
     declarations.map((declaration) => declaration.name)
   );
@@ -363,9 +378,52 @@ function printSecretCommands(declarations: Declaration[]): void {
       wrapForNote(
         `${secretCommands.join("\n")}\n\n${pc.dim("Printed, never run — copy these when you deploy.")}`
       ),
-      "Production secrets"
+      "Production secrets",
+      tui
     );
   }
+}
+
+/** What `env --check --json` reports (#223). Pure and exported for its own test. */
+export interface CheckReport {
+  /** Every declared variable, first declaration wins, in install order. */
+  variables: {
+    name: string;
+    module: string;
+    description: string;
+    set: boolean;
+  }[];
+  /** The names still unset — the ones that make `--check` exit 2. */
+  missing: string[];
+  /** Declared names `packages/env/.env.example` does not list, so no service reads them. */
+  notInKeyList: string[];
+  /** Why a module's variables could not be read. */
+  skipped: string[];
+  /** The `wrangler secret put` lines the production block prints. */
+  productionSecrets: string[];
+}
+
+export function checkReport(args: {
+  declarations: Declaration[];
+  values: ReturnType<typeof parseEnvValues>;
+  notInKeyList: string[];
+  skipped: string[];
+}): CheckReport {
+  const variables = args.declarations.map((declaration) => ({
+    description: declaration.description,
+    module: declaration.module,
+    name: declaration.name,
+    set: isSet(args.values, declaration.name),
+  }));
+  return {
+    missing: variables.filter((v) => !v.set).map((v) => v.name),
+    notInKeyList: args.notInKeyList,
+    productionSecrets: productionSecretCommands(
+      args.declarations.map((declaration) => declaration.name)
+    ),
+    skipped: args.skipped,
+    variables,
+  };
 }
 
 interface FlagRun {
@@ -445,22 +503,30 @@ export async function runEnv(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  intro(pc.bgCyan(pc.black(" saasaloy env ")));
+  const out = createOutput(opts.json);
+  const { tui } = out;
+  intro(pc.bgCyan(pc.black(" saasaloy env ")), tui);
 
   if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    return out.refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
+  }
+  if (opts.json && !opts.check) {
+    return out.refuse(
+      "`--json` prints the `--check` report — pass `--check --json`. Filling values has no report to print.",
+      EXIT_REFUSED
+    );
   }
 
   const flagMode = opts.sets.length > 0 || opts.fromFiles.length > 0;
   if (opts.check && flagMode) {
     // `--check` promises to write nothing; `--set` and `--from-file` exist to write.
-    cancel(
-      "`--check` writes nothing, and `--set`/`--from-file` write values — pass one or the other."
+    return out.refuse(
+      "`--check` writes nothing, and `--set`/`--from-file` write values — pass one or the other.",
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
 
   const sources: RegistrySource[] = [];
@@ -469,12 +535,14 @@ export async function runEnv(argv: string[]): Promise<number> {
     const config = await loadConfig(root);
     const lock = await loadLock(root);
 
+    const skipped: string[] = [];
     const declarations = await loadDeclarations(
       config,
       lock,
       sources,
       (msg) => {
-        log.warn(msg);
+        skipped.push(msg);
+        log.warn(msg, tui);
       }
     );
     if (flagMode) {
@@ -486,7 +554,12 @@ export async function runEnv(argv: string[]): Promise<number> {
       });
     }
     if (declarations.length === 0) {
-      outro(pc.dim("No module declares an environment variable."));
+      if (opts.json) {
+        printJson(
+          checkReport({ declarations, notInKeyList: [], skipped, values: {} })
+        );
+      }
+      outro(pc.dim("No module declares an environment variable."), tui);
       return EXIT_OK;
     }
 
@@ -501,7 +574,8 @@ export async function runEnv(argv: string[]): Promise<number> {
       .map((declaration) => declaration.name);
     if (undeclared.length > 0) {
       log.warn(
-        `${ENV_EXAMPLE} does not list ${undeclared.join(", ")}, so no service reads ${undeclared.length === 1 ? "it" : "them"}. Re-run \`saasaloy add\` for the declaring module to regenerate the key list.`
+        `${ENV_EXAMPLE} does not list ${undeclared.join(", ")}, so no service reads ${undeclared.length === 1 ? "it" : "them"}. Re-run \`saasaloy add\` for the declaring module to regenerate the key list.`,
+        tui
       );
     }
 
@@ -517,12 +591,25 @@ export async function runEnv(argv: string[]): Promise<number> {
     // The production block is a report, so it prints on every run — a `--check` in CI is
     // exactly where someone wants the deploy commands to hand to an operator.
     const printSecrets = (): void => {
-      printSecretCommands(declarations);
+      printSecretCommands(declarations, tui);
+    };
+    const printReport = (): void => {
+      if (opts.json) {
+        printJson(
+          checkReport({
+            declarations,
+            notInKeyList: undeclared,
+            skipped,
+            values,
+          })
+        );
+      }
     };
 
     if (pending.length === 0) {
       printSecrets();
-      outro(pc.green("Every declared variable is set."));
+      printReport();
+      outro(pc.green("Every declared variable is set."), tui);
       return EXIT_OK;
     }
 
@@ -531,21 +618,24 @@ export async function runEnv(argv: string[]): Promise<number> {
     // the same refusal is the right answer under `--check`, where it says the deploy gate
     // would have written a secret into a tracked file.
     if (!(await isPathIgnored(root, LOCAL_VALUES))) {
-      cancel(
+      return out.refuse(
         `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
-          "Add it to .gitignore (the base template already does) and run again."
+          "Add it to .gitignore (the base template already does) and run again.",
+        EXIT_REFUSED
       );
-      return EXIT_REFUSED;
     }
 
     // `--check` and a session with no terminal take the same path. A prompt nobody can
     // answer is a hang, and a hang in CI is worse than a refusal.
     if (opts.check || !isInteractive()) {
-      note(wrapForNote(renderPending(pending).join("\n")), "Missing");
+      note(wrapForNote(renderPending(pending).join("\n")), "Missing", tui);
       printSecrets();
+      printReport();
       const count = pending.length;
+      // The report, not a refusal: under `--json` the document is already on stdout.
       cancel(
-        `${count} variable${count === 1 ? "" : "s"} still unset — run \`saasaloy env\` in a terminal, or pass \`--from-file <path>\`, to fill ${count === 1 ? "it" : "them"} in.`
+        `${count} variable${count === 1 ? "" : "s"} still unset — run \`saasaloy env\` in a terminal, or pass \`--from-file <path>\`, to fill ${count === 1 ? "it" : "them"} in.`,
+        tui
       );
       return EXIT_REFUSED;
     }
@@ -583,8 +673,7 @@ export async function runEnv(argv: string[]): Promise<number> {
     outro(pc.green("Environment filled in."));
     return EXIT_OK;
   } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
+    return out.fail(error);
   } finally {
     for (const source of sources) {
       await source.cleanup?.();

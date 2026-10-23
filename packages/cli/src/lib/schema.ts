@@ -187,9 +187,34 @@ export interface RegistryAgent {
 // included, so the structural match `remove` untracks with stays stable (A7).
 export type RegistryPatch = { file: string; when?: When } & Patch;
 
+/** The `stage` enum in registry-item.schema.json, in product order (#223). */
+export const MODULE_STAGES = [
+  "validate",
+  "mvp",
+  "teams",
+  "money",
+  "scale",
+] as const;
+export type ModuleStage = (typeof MODULE_STAGES)[number];
+
+/** The `needs` enum in registry-item.schema.json (#223). */
+export const MODULE_NEEDS = [
+  "cloudflare-paid",
+  "stripe",
+  "domain",
+  "vendor-account",
+] as const;
+export type ModuleNeed = (typeof MODULE_NEEDS)[number];
+
 export interface RegistryItem {
   name: string;
   type: "saasaloy:capability" | "saasaloy:feature";
+  /** One line on what the module gives a project. Optional in the schema; `doctor` on a registry requires it. */
+  description?: string;
+  /** The product stage that usually earns this module. */
+  stage?: ModuleStage;
+  /** What the module needs outside the repo before it works in production. Empty means nothing. */
+  needs?: ModuleNeed[];
   /**
    * Tool versions this descriptor needs. `saasaloy` is a semver range the running CLI has
    * to satisfy; a CLI outside it refuses the whole run before planning a single write,

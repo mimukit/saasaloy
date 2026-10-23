@@ -5,6 +5,7 @@ import { afterAll, afterEach, beforeEach, describe, expect, it } from "vitest";
 import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
 import { stripAnsi } from "../lib/tui.js";
+import { runJson } from "../../test/support/json-run.js";
 import { parseArgs, renderPending, runEnv, writeAnswers } from "./env.js";
 
 // `env` is driven here through a real project on disk and a local registry, which keeps
@@ -19,7 +20,7 @@ const LOCAL = "packages/env/.env";
 
 const ORIGINAL_CWD = process.cwd();
 const USAGE_LINE =
-  "saasaloy env [--check] [--from-file <path>]... [--set KEY=VALUE]...";
+  "saasaloy env [--check [--json]] [--from-file <path>]... [--set KEY=VALUE]...";
 
 /** The env stanza of the base template's `_gitignore`, which is what makes writing safe. */
 const GITIGNORE = [
@@ -152,6 +153,7 @@ describe(parseArgs, () => {
     expect(parseArgs(["--check"])).toStrictEqual({
       check: true,
       fromFiles: [],
+      json: false,
       sets: [],
       unknown: [],
     });
@@ -170,6 +172,7 @@ describe(parseArgs, () => {
     ).toStrictEqual({
       check: false,
       fromFiles: ["one.env", "two.env"],
+      json: false,
       sets: [
         ["A", "1"],
         ["B", "x=y"],
@@ -408,6 +411,66 @@ describe("runEnv — --set and --from-file (#223)", () => {
 
     expect(code).toBe(EXIT_REFUSED);
     expect(out).toContain("--from-file missing.env could not be read");
+  });
+});
+
+// `--check --json` (#223): the report as data, the exit code unchanged.
+describe("runEnv --check --json (#223)", () => {
+  it("prints every declared variable, the missing ones, and the secret commands", async () => {
+    await put(LOCAL, "PUBLIC_API_URL=https://api.example.com\n");
+
+    const { code, doc, err } = await runJson(runEnv, ["--check", "--json"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(doc).toStrictEqual({
+      missing: ["PLUNK_API_KEY"],
+      // The fixture project has no key list, so neither name reaches a service.
+      notInKeyList: ["PUBLIC_API_URL", "PLUNK_API_KEY"],
+      // The same lines the Production secrets note prints, its comment line included.
+      productionSecrets: [
+        "# from the Worker's workspace, e.g. apps/api",
+        "wrangler secret put PLUNK_API_KEY",
+      ],
+      schemaVersion: 1,
+      skipped: [],
+      variables: [
+        {
+          description: PUBLIC_DESCRIPTION,
+          module: "waitlist",
+          name: "PUBLIC_API_URL",
+          set: true,
+        },
+        {
+          description: SECRET_DESCRIPTION,
+          module: "email-plunk",
+          name: "PLUNK_API_KEY",
+          set: false,
+        },
+      ],
+    });
+    expect(err).toContain("1 variable still unset");
+  });
+
+  it("exits 0 with an empty missing list once everything is set", async () => {
+    await put(LOCAL, "PUBLIC_API_URL=https://a.example\nPLUNK_API_KEY=k\n");
+
+    const { code, doc } = await runJson(runEnv, ["--check", "--json"]);
+
+    expect(code).toBe(EXIT_OK);
+    expect(doc.missing).toStrictEqual([]);
+  });
+
+  it("refuses --json without --check, with an error document", async () => {
+    const { code, doc } = await runJson(runEnv, ["--json"]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(doc).toMatchObject({
+      error: {
+        exitCode: 2,
+        message: expect.stringContaining("--check --json"),
+      },
+    });
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
   });
 });
 

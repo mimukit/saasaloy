@@ -93,8 +93,10 @@ export interface ModuleSpec {
  * The descriptor as JSON text.
  *
  * Every optional field the scaffold has nothing to say about is left out rather than
- * written empty. `additionalProperties: false` means a placeholder is a lie the schema
- * cannot catch, and an author deleting `"envVars": {}` is work the scaffold created.
+ * written empty, except `needs`: `[]` is a claim ("nothing outside the repo") that the
+ * author checks along with `stage`. `additionalProperties: false` means a placeholder is
+ * a lie the schema cannot catch, and an author deleting `"envVars": {}` is work the
+ * scaffold created.
  * Key order follows the schema's own: identity, then requirements, then contents.
  */
 export function renderDescriptor(spec: ModuleSpec): string {
@@ -102,6 +104,13 @@ export function renderDescriptor(spec: ModuleSpec): string {
     $schema: "https://saasaloy.dev/schemas/registry-item.schema.json",
     name: spec.name,
     type: spec.type,
+    // `doctor` on a registry requires `description` (#223), so the scaffold writes a
+    // placeholder the author replaces, the same way the skill stub carries its TODOs.
+    // `stage` and `needs` are a starting point for the same edit: `mvp` with nothing
+    // outside the repo is the common case, and the create-module skill says to check both.
+    description: `TODO — one line on what ${spec.name} gives a project.`,
+    stage: "mvp",
+    needs: [],
   };
   if (spec.requires) {
     item.requires = { saasaloy: spec.requires };

@@ -1,12 +1,8 @@
 import { cancel, intro, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
-import {
-  EXIT_OK,
-  EXIT_REFUSED,
-  exitCodeFor,
-  formatFailure,
-} from "../lib/exit.js";
+import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { BASE_MODULE, missingBaseTargets, templateHash } from "../lib/base.js";
+import { createOutput, printJson } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -40,16 +36,21 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // the running CLI ships, with the two CLI versions as labels. An `untracked` base — a
 // project scaffolded before the record existed — is news, not drift, and `update` is
 // what records it; this command never writes.
+//
+// `--json` prints the same rows as one document on stdout (#223): `base`, `modules`, and
+// `drift`, the count `--check` gates on. The exit code does not change.
 
 export interface Options {
   /** `--check`: exit non-zero when any module has moved, for CI. */
   check: boolean;
+  /** `--json`: one JSON document on stdout, the TUI on stderr. */
+  json: boolean;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--check", "--help", "-h"]);
-const USAGE = "saasaloy outdated [--check]";
+const KNOWN_FLAGS = new Set(["--check", "--json", "--help", "-h"]);
+const USAGE = "saasaloy outdated [--check] [--json]";
 const HELP: CommandHelp = {
   name: "outdated",
   describe: DESCRIPTIONS.outdated,
@@ -57,6 +58,7 @@ const HELP: CommandHelp = {
   flags: {
     "--check":
       "exit non-zero when the base template or any module has moved (for CI)",
+    "--json": "print the rows as one JSON document on stdout",
   },
 };
 
@@ -68,7 +70,11 @@ export function parseArgs(argv: string[]): Options {
       unknown.push(arg);
     }
   }
-  return { check: argv.includes("--check"), unknown };
+  return {
+    check: argv.includes("--check"),
+    json: argv.includes("--json"),
+    unknown,
+  };
 }
 
 const SHA_PATTERN = /^[0-9a-f]{40}$/i;
@@ -219,13 +225,14 @@ export async function runOutdated(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  intro(pc.bgCyan(pc.black(" saasaloy outdated ")));
+  const out = createOutput(opts.json);
+  intro(pc.bgCyan(pc.black(" saasaloy outdated ")), out.tui);
 
   if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    return out.refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
 
   const sources: RegistrySource[] = [];
@@ -237,7 +244,8 @@ export async function runOutdated(argv: string[]): Promise<number> {
     const registryOverride = !!process.env[REGISTRY_ENV];
     if (registryOverride && config.installed.length > 0) {
       log.warn(
-        `${REGISTRY_ENV} is set, so every module reads as local — unset it to compare against the registry.`
+        `${REGISTRY_ENV} is set, so every module reads as local — unset it to compare against the registry.`,
+        out.tui
       );
     }
 
@@ -285,23 +293,34 @@ export async function runOutdated(argv: string[]): Promise<number> {
       moduleRows = registryOverride ? asLocalRows(compared) : compared;
     }
 
-    note(wrapForNote(renderComparisons([baseRow]).join("\n")), "Base");
-    note(wrapForNote(renderComparisons(moduleRows).join("\n")), "Modules");
+    note(wrapForNote(renderComparisons([baseRow]).join("\n")), "Base", out.tui);
+    note(
+      wrapForNote(renderComparisons(moduleRows).join("\n")),
+      "Modules",
+      out.tui
+    );
 
     const comparisons = [baseRow, ...moduleRows];
     const drift = countDrift(comparisons);
+    if (opts.json) {
+      printJson({ base: baseRow, drift, modules: moduleRows });
+    }
     if (drift === 0) {
       if (registryOverride && moduleRows.length > 0) {
         // Nothing was compared, so there is nothing to gate on — `--check` exits 0 too.
-        outro(pc.dim("Nothing to compare — every module reads as local."));
+        outro(
+          pc.dim("Nothing to compare — every module reads as local."),
+          out.tui
+        );
       } else if (baseRow.status === "untracked") {
         outro(
           pc.yellow(
             "Modules are up to date; the base is untracked — run `saasaloy update` to record it."
-          )
+          ),
+          out.tui
         );
       } else {
-        outro(pc.green("Everything is up to date."));
+        outro(pc.green("Everything is up to date."), out.tui);
       }
       return EXIT_OK;
     }
@@ -310,14 +329,14 @@ export async function runOutdated(argv: string[]): Promise<number> {
     // `--check` is the only thing that turns news into a non-zero exit. A bare run is a
     // report, and a report that failed the shell would be unusable interactively.
     if (opts.check) {
-      cancel(summary);
+      // The report is already on stdout under `--json`; this only closes the rail.
+      cancel(summary, out.tui);
       return EXIT_REFUSED;
     }
-    outro(pc.yellow(summary));
+    outro(pc.yellow(summary), out.tui);
     return EXIT_OK;
   } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
+    return out.fail(error);
   } finally {
     for (const source of sources) {
       await source.cleanup?.();

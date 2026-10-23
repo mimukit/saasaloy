@@ -38,9 +38,11 @@ import {
   parseArgs,
   persistState,
   pinToLock,
+  planDocument,
   runAdd,
   saveEnabledMode,
 } from "./add.js";
+import { runJson } from "../../test/support/json-run.js";
 
 // `add` with no module opens a picker. Without a terminal that prompt can never be
 // answered, so it has to fail fast instead of hanging a pipeline — and it has to do so
@@ -760,6 +762,15 @@ describe("add — parseArgs", () => {
       name: "waitlist",
       unknown: [],
       yes: true,
+    });
+  });
+
+  it("reads --json", () => {
+    expect(parseArgs(["waitlist"]).json).toBeFalsy();
+    expect(parseArgs(["waitlist", "--dry-run", "--json"])).toMatchObject({
+      dryRun: true,
+      json: true,
+      unknown: [],
     });
   });
 
@@ -1865,5 +1876,70 @@ describe("add — formatRecovery (#49)", () => {
 
     expect(line).toContain("Partial apply");
     expect(line).toContain("saasaloy add waitlist");
+  });
+});
+
+// `--json` belongs to the dry run only (#223). Both refusals fire before the project is
+// read, so these run anywhere.
+describe("runAdd --json (#223)", () => {
+  it("refuses --json without --dry-run, with an error document", async () => {
+    const { code, doc } = await runJson(runAdd, [
+      "waitlist",
+      "--json",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(doc).toMatchObject({
+      error: {
+        exitCode: 2,
+        message: expect.stringContaining("--dry-run --json"),
+      },
+      schemaVersion: 1,
+    });
+  });
+
+  it("refuses --json beside --diff", async () => {
+    const { code, doc } = await runJson(runAdd, [
+      "waitlist",
+      "--dry-run",
+      "--diff",
+      "--json",
+    ]);
+
+    expect(code).toBe(2);
+    expect(doc).toHaveProperty("error");
+  });
+
+  it("refuses to open the picker under --json, even with no module named", async () => {
+    const { code, doc } = await runJson(runAdd, ["--dry-run", "--json"]);
+
+    expect(code).toBe(2);
+    expect(doc).toMatchObject({
+      error: { message: expect.stringContaining("No module named") },
+    });
+  });
+});
+
+describe(planDocument, () => {
+  it("prints the same keys, empty, when everything is already installed", () => {
+    expect(
+      planDocument("waitlist", ["api"], undefined, ["api", "waitlist"])
+    ).toStrictEqual({
+      aliasConflicts: [],
+      aliases: {},
+      alreadyInstalled: ["api", "waitlist"],
+      dependencies: [],
+      devDependencies: [],
+      envVars: {},
+      files: [],
+      install: [],
+      links: [],
+      patches: [],
+      prerequisites: ["api"],
+      requested: "waitlist",
+      staleOwners: [],
+      writesUi: false,
+    });
   });
 });

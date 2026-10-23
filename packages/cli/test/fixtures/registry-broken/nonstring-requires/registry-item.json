@@ -1,5 +1,6 @@
 {
   "name": "nonstring-requires",
   "type": "saasaloy:feature",
+  "description": "Test fixture nonstring-requires.",
   "requires": { "saasaloy": 3 }
 }

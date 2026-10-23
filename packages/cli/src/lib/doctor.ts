@@ -209,6 +209,20 @@ export async function checkModule(
     );
   }
 
+  // The schema keeps `description` optional, so a project can still read an older
+  // descriptor. A registry author is held to it: `saasaloy list --json` hands it to an
+  // agent choosing modules, and a module with no line reads as one nobody explained
+  // (#223). A present-but-empty value is the schema's finding, not a second one here.
+  if (item.description === undefined) {
+    findings.push(
+      finding(
+        module,
+        "/description",
+        'missing — add a one-line "description" of what the module gives a project (`saasaloy list --json` prints it)'
+      )
+    );
+  }
+
   const known = { ...aliases.base, ...aliases.fromScaffolds };
   const knownList = Object.keys(known).toSorted().join(", ") || "(none)";
   for (const [index, entry] of asArray(item.files).entries()) {

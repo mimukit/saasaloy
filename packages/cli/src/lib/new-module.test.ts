@@ -135,6 +135,14 @@ describe(renderDescriptor, () => {
     });
   });
 
+  it("carries a description, a stage and needs, so doctor passes it (#223)", () => {
+    expect(descriptor()).toMatchObject({
+      description: expect.stringContaining("billing"),
+      needs: [],
+      stage: "mvp",
+    });
+  });
+
   it("ends with a newline, like every other file in the repo", () => {
     expect(renderDescriptor(spec()).endsWith("}\n")).toBeTruthy();
   });

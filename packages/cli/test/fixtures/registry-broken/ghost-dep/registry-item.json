@@ -1,6 +1,7 @@
 {
   "name": "ghost-dep",
   "type": "saasaloy:feature",
+  "description": "Test fixture ghost-dep.",
   "dependsOn": ["ghost"],
   "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]
 }

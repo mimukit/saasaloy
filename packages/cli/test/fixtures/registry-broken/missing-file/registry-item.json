@@ -1,6 +1,7 @@
 {
   "name": "missing-file",
   "type": "saasaloy:feature",
+  "description": "Test fixture missing-file.",
   "files": [
     { "path": "files/here.ts", "target": "@web/here.ts" },
     { "path": "files/gone.ts", "target": "@web/gone.ts" }

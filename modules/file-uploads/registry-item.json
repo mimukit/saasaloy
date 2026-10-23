@@ -2,6 +2,9 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "file-uploads",
   "type": "saasaloy:feature",
+  "description": "File uploads on storage: the storage_objects table, the /files routes, an upload block and a sweep job.",
+  "stage": "scale",
+  "needs": [],
   "requires": {
     "saasaloy": ">=0.7.0"
   },
