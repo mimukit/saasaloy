@@ -298,7 +298,7 @@ file where a capability already auto-discovers it.
   your own package, because `@repo/config` imports nothing and that is what lets every app and
   every capability — yours included — import it. And it never reads another section: sections
   compose side by side, so a value derived from two of them is derived where it is used. A value
-  that can differ between two deployments of one project is an `envVars` entry instead (ADR 0039).
+  that can differ between two deployments of one project is an `envVars` entry instead (ADR 0052).
 
 - **`database`** scaffolds `packages/db` with a **schema barrel** that auto-re-exports everything
   in `schema/`. Add a table = drop `files/db/schema/<feature>.ts` → `@db/schema/<feature>.ts`.
@@ -476,7 +476,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] `requiresOneOf` names the modules that complete this one, if it ships an extension point some
       other module has to fill (two names minimum).
 - [ ] `envVars` lists any required keys; no secrets baked into files. A key that cannot differ
-      between two deployments of one project is a config section, not an env var (ADR 0039).
+      between two deployments of one project is a config section, not an env var (ADR 0052).
 - [ ] `agent.skills[]` points at a `skills/saasaloy-<name>/SKILL.md` runbook, with matching
       `saasaloy-<name>` frontmatter `name` (prefixed to avoid skill-name collisions).
 - [ ] Any UI ships as a `@ui/blocks/<name>.tsx` block that imports React and ui primitives only;

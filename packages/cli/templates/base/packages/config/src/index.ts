@@ -3,7 +3,7 @@ import { project } from "./project";
 import { sections } from "./sections";
 
 // `@repo/config` — the values this project checks into its repo and ships identically to
-// every environment (ADR 0039).
+// every environment (ADR 0052).
 //
 // Read it with a plain import, from an app, a capability or a React island alike:
 //

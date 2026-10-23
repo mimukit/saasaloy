@@ -84,7 +84,7 @@ a second file (`files/config/<capability>-<provider>.ts` → `@config/sections/�
 `plugin-array` patch, on `packages/config/src/sections.ts`. Think twice first: a value that differs
 between two deployments of one project is an `envVars` entry, and a value the capability owns
 belongs in the *capability's* section, not the provider's. See `create-module`'s `config` bullet and
-ADR 0039.
+ADR 0052.
 
 Provider modules ship **no skill folder of their own**. The capability's skill is where a provider
 gets documented; add a row to its provider table and, if the provider needs out-of-band setup, a
@@ -711,7 +711,7 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
       `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
 - [ ] `envVars` declares every secret the provider reads; none baked into files. A value that
-      cannot differ between two deployments of one project is a config section (ADR 0039).
+      cannot differ between two deployments of one project is a config section (ADR 0052).
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.
 - [ ] No skill folder — the capability's skill gains a row (and a runbook section if it needs one).
 - [ ] Installed twice on a clean playground: second run changes nothing.

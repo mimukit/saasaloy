@@ -1,4 +1,4 @@
-// The composition core of `@repo/config` (ADR 0039). Three functions and two type
+// The composition core of `@repo/config` (ADR 0052). Three functions and two type
 // helpers, no runtime dependency and no I/O: a section is a plain object, the registry is
 // an array literal, and the composed config is frozen at module load.
 //

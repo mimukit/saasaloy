@@ -2,6 +2,8 @@
 
 Grilled: 2026-09-20
 
+Rescoped: 2026-10-23. The owner ruled on PR #163 after #191 rebuilt the landing page to describe Saasaloy itself. The base keeps the `app` section and drops the `plans` section and `currencySymbol`; `landing.ts` keeps its pricing as #191 wrote it, tier ids included. `config.app.name` defaults to `"Saasaloy"` and `project.ts` leaves `name` commented out. `doctor` drops the project-name check. `config.auth` grows `adminAppExtraRoles`, so both sides build `ADMIN_APP_ROLES` from it (ADR 0050). The merge tests move into the package as a Vitest file. The record is [ADR 0052](../adr/0052-adr-config-owns-checked-in-values-and-env-owns-per-deployment-ones-2026-09-20.md), the `config` half of [ADR 0039](../adr/0039-adr-env-owns-per-deployment-values-config-owns-checked-in-ones-2026-09-20.md). The phases below keep their original text, with each dropped item marked.
+
 Issue: [#154](https://github.com/mimukit/saasaloy/issues/154). Companion: [#153](https://github.com/mimukit/saasaloy/issues/153) (`env`, open as [PR #160](https://github.com/mimukit/saasaloy/pull/160)), which states the boundary rule this plan implements. The two branches run in parallel off `main`.
 
 ## Context
@@ -68,12 +70,12 @@ Success: one typed `@repo/config` object, readable from any app and any capabili
 Scaffold `packages/cli/templates/base/packages/config/`.
 
 - `src/define.ts` — `defineConfig({ sections })`, the shallow-per-section merge, `Object.freeze` on the result, and the deep-partial type helper.
-- `src/sections.ts` — the `sections: []` array literal, the `plugin-array` patch point. The base seeds the `app` and `plans` sections.
-- `src/project.ts` — the one file a project owner edits. Seeded with `name: "{{PROJECT_NAME}}"` and comments naming what belongs here and what belongs in `.env`.
+- `src/sections.ts` — the `sections: []` array literal, the `plugin-array` patch point. The base seeds the `app` and `plans` sections. **Rescoped: `app` only.**
+- `src/project.ts` — the one file a project owner edits. Seeded with `name: "{{PROJECT_NAME}}"` and comments naming what belongs here and what belongs in `.env`. **Rescoped: every value ships commented out, and the `app` section's default name is `"Saasaloy"`.**
 - `src/index.ts` — composes and exports the frozen `config` and its inferred type.
 - `package.json` with the exact-pinned `rimraf` `clean` and `test` on `node --test`, plus a `tsconfig.json`.
 
-The base `app` section carries `name`, `locale`, `legal.termsPath` and `legal.privacyPath`. The base `plans` section carries the tier ids and display names only.
+The base `app` section carries `name`, `locale`, `legal.termsPath` and `legal.privacyPath`. The base `plans` section carries the tier ids and display names only. **Rescoped: no `plans` section.**
 
 Verification: `node --test` over the merge, the freeze, the leaf-replace rule and the array-replaced-whole rule. `pnpm lint`. A `.dev` scaffold typechecks.
 
@@ -81,7 +83,7 @@ Verification: `node --test` over the merge, the freeze, the leaf-replace rule an
 
 - `packages/ui` gains `@repo/config` as a `workspace:*` dependency.
 - `packages/ui/src/index.ts`'s `siteName` re-exports `config.app.name` and keeps its name, so no consumer changes.
-- `landing.ts`'s `currencySymbol` moves to `config.app`, and its tier ids and names come from `config.plans`. The copy stays in `content/`.
+- `landing.ts`'s `currencySymbol` moves to `config.app`, and its tier ids and names come from `config.plans`. The copy stays in `content/`. **Dropped on 2026-10-23: `landing.ts` is unchanged.**
 - `Layout.astro` reads `config.app.locale` in place of the hardcoded `lang="en"`.
 - `privacy.astro`, `terms.astro` and `blocks/footer.tsx` read the legal paths in place of their hardcoded `/terms` and `/privacy`.
 
@@ -92,7 +94,7 @@ Verification: `pnpm lint`, and a `.dev` scaffold whose landing page, footer and 
 Each module gains `src/config.ts` and one `plugin-array` patch appending it, beside the provider patch it already ships.
 
 - **`auth`** contributes `config.auth` with `adminRole` and `superadminRole`. `modules/auth/files/src/authorize.ts` reads them, and `modules/admin/files/src/lib/auth.ts` stops redeclaring them. `admin` already declares `dependsOn: ["api", "auth"]`, so no dependency changes.
-- **`billing`** contributes `config.billing` with `appName`, defaulting to `config.app.name`. `billing-store.ts` reads it and the `?? "your app"` fallback goes away. `modules/billing/files/src/plans.ts` takes its ids and names from `config.plans`; the Stripe price ids stay where they are.
+- **`billing`** contributes `config.billing` with `appName`, defaulting to `config.app.name`. `billing-store.ts` reads it and the `?? "your app"` fallback goes away. `modules/billing/files/src/plans.ts` takes its ids and names from `config.plans`; the Stripe price ids stay where they are. **Rescoped: `plans.ts` keeps its own ids and names, and `auth` also gains `adminAppExtraRoles`.**
 
 Two sections from two modules prove the patch point and the collision guard against real descriptors.
 
@@ -101,7 +103,7 @@ Verification: `pnpm lint`, and a `.dev` scaffold with `auth`, `admin` and `billi
 ### Phase 4: the guards (built 2026-09-20)
 
 - The `add`-time section collision check in the CLI, refusing the `add` and naming both modules.
-- `saasaloy doctor`: warn when `config.app.name` is still the literal `{{PROJECT_NAME}}`, when `astro.config.mjs`'s `site` is still `example.com`, and when `BILLING_APP_NAME` is set in a `.env`.
+- `saasaloy doctor`: warn when `config.app.name` is still the literal `{{PROJECT_NAME}}`, when `astro.config.mjs`'s `site` is still `example.com`, and when `BILLING_APP_NAME` is set in a `.env`. **Rescoped: no project-name check.**
 - `modules/billing/registry-item.json`: the `DEPRECATED: superseded by config.app.name` prefix on that key's description.
 
 Verification: the CLI suite, including a fixture where two descriptors claim the same section key.
@@ -119,7 +121,7 @@ Verification: the CLI suite, including a fixture where two descriptors claim the
 None blocking. Two to watch during the build.
 
 - **The rebase against #160.** Four files are known to conflict. Rebase between phases rather than at the end, so the conflict stays small whichever branch merges first.
-- **`config.plans` as a base section.** The base seeds ids and names for tiers the project may not sell, and `billing` reads them. If a project's tiers diverge far from `free`/`pro`/`enterprise`, the base's seed becomes noise. Watch it in Phase 3 against a real scaffold.
+- **`config.plans` as a base section.** The base seeds ids and names for tiers the project may not sell, and `billing` reads them. If a project's tiers diverge far from `free`/`pro`/`enterprise`, the base's seed becomes noise. Watch it in Phase 3 against a real scaffold. **Closed on 2026-10-23: dropped, see the rescope note above.**
 
 ## Non-goals
 
