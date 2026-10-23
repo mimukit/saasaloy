@@ -5,7 +5,6 @@ import { fileURLToPath } from "node:url";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { baseRecord } from "./base.js";
 import {
-  ASTRO_CONFIG_FILE,
   checkBase,
   checkConfigValues,
   checkDeploy,
@@ -1038,16 +1037,13 @@ describe(readDeployState, () => {
 });
 
 // ---------------------------------------------------------------------------
-// The `config` rules (#154): the placeholder site origin, and the env var
-// `config.app.name` superseded.
+// The `config` rule (#154): the env var `config.app.name` superseded.
 // ---------------------------------------------------------------------------
 
 describe(checkConfigValues, () => {
-  it("passes a project that edited both", () => {
+  it("passes a project that does not set it", () => {
     expect(
       checkConfigValues({
-        astroConfig:
-          'export default defineConfig({ site: "https://ledger.ly" });',
         envFiles: { "apps/api/.env": "BILLING_APP_URL=https://ledger.ly" },
       })
     ).toStrictEqual([]);
@@ -1055,22 +1051,6 @@ describe(checkConfigValues, () => {
 
   it("says nothing when it has nothing to read", () => {
     expect(checkConfigValues({})).toStrictEqual([]);
-  });
-
-  it("reports the placeholder site origin", () => {
-    const [found] = checkConfigValues({
-      astroConfig: '  site: "https://example.com",',
-    });
-    expect(found?.where).toBe("/astro/site");
-    expect(found?.message).toContain(ASTRO_CONFIG_FILE);
-  });
-
-  it("accepts a real origin that merely mentions the placeholder in a comment", () => {
-    expect(
-      checkConfigValues({
-        astroConfig: '// was https://example.com\n  site: "https://ledger.ly",',
-      })
-    ).toStrictEqual([]);
   });
 
   it("reports a set BILLING_APP_NAME, naming the file", () => {
@@ -1107,7 +1087,7 @@ describe(checkConfigValues, () => {
 });
 
 describe(readConfigState, () => {
-  it("reads the Astro config, the values file and every service .env", async () => {
+  it("reads the values file and every service .env", async () => {
     const root = await mkdtemp(join(tmpdir(), "saasaloy-config-state-"));
     try {
       await mkdir(join(root, "packages/env"), { recursive: true });
@@ -1119,7 +1099,6 @@ describe(readConfigState, () => {
         "BILLING_APP_NAME=Acme"
       );
       const state = await readConfigState(root);
-      expect(state.astroConfig).toBeUndefined();
       expect(Object.keys(state.envFiles ?? {}).toSorted()).toStrictEqual([
         "apps/api/.env",
         "packages/env/.env",

@@ -1196,43 +1196,28 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
 
 /** The one file a project owner edits in `@repo/config`. */
 export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
-/** The base app's Astro config, which carries the canonical site origin. */
-export const ASTRO_CONFIG_FILE = "apps/web/astro.config.mjs";
-/** The origin the template ships. A deploy on it is somebody else's domain. */
-const PLACEHOLDER_SITE = "example.com";
 /** The env var `config.app.name` superseded. Read by nothing; still warned about. */
 const DEPRECATED_APP_NAME = "BILLING_APP_NAME";
 
 export interface ConfigCheckArgs {
-  /** Source of `apps/web/astro.config.mjs`, or undefined. */
-  astroConfig?: string;
   /** Project-relative path → contents, for `packages/env/.env` and every service `.env`. */
   envFiles?: Record<string, string>;
 }
 
 /**
- * Two things nothing else checks (#154): the site origin a scaffolded project is expected
- * to change, and one env var `config` replaced.
+ * The one thing nothing else checks (#154): `BILLING_APP_NAME`, the env var `config`
+ * replaced, still set in a `.env`, where it looks effective and is not.
  *
- * Both read a file rather than the composed object, because `doctor` never executes
- * project code. A regex over the one line each value is written on is enough, and it stays
- * true whatever the rest of the file grows into.
+ * It reads the files rather than the composed object, because `doctor` never executes
+ * project code.
  *
  * The product name is not checked. The base ships it as "Saasaloy" on purpose, so it
- * agrees with the shipped landing copy, and an unchanged name is not a defect.
+ * agrees with the shipped landing copy, and an unchanged name is not a defect. Neither is
+ * the site origin: the canonical origin is `PUBLIC_SITE_URL`, an `env` value per
+ * deployment, and `checkEnv` owns the env files.
  */
 export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   const findings: Finding[] = [];
-
-  if (args.astroConfig !== undefined && siteIsPlaceholder(args.astroConfig)) {
-    findings.push(
-      finding(
-        BASE_MODULE,
-        "/astro/site",
-        `${ASTRO_CONFIG_FILE} still declares site: "https://${PLACEHOLDER_SITE}" — canonical URLs and the sitemap point at a domain you do not own. Set it to the project's own origin.`
-      )
-    );
-  }
 
   for (const [file, contents] of Object.entries(args.envFiles ?? {}).toSorted(
     ([a], [b]) => (a < b ? -1 : 1)
@@ -1249,12 +1234,6 @@ export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   }
 
   return findings;
-}
-
-/** Whether the Astro config's `site` is still the template's placeholder origin. */
-function siteIsPlaceholder(source: string): boolean {
-  const match = /^\s*site:\s*["'`]([^"'`]*)["'`]/m.exec(source);
-  return match?.[1]?.includes(PLACEHOLDER_SITE) ?? false;
 }
 
 /** Whether a dotenv-style file assigns `name` on an uncommented line with a value. */
@@ -1295,9 +1274,6 @@ async function readEnvFiles(root: string): Promise<Record<string, string>> {
 /** Read what `checkConfigValues` needs off a project on disk. */
 export async function readConfigState(root: string): Promise<ConfigCheckArgs> {
   return {
-    astroConfig: await readIfPresent(
-      resolveWithinRoot(root, ASTRO_CONFIG_FILE)
-    ),
     envFiles: await readEnvFiles(root),
   };
 }
