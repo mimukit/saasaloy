@@ -18,8 +18,9 @@
 // side, and then a fresh project's dev server fails for everyone. Only a real install
 // finds that, so `.github/workflows/smoke.yml` runs this script on a schedule as well.
 // The second scaffolds a project with every module, one per database driver, and runs
-// that project's own `pnpm lint` (issue #152). Only there do imports between workspaces
-// resolve, the type-aware pass reach the installed blocks, and `add` format its patches.
+// that project's own `pnpm lint` (issue #152) and `pnpm typecheck` (issue #220). Only
+// there do imports between workspaces resolve, the type-aware pass reach the installed
+// blocks, `add` format its patches, and a module's files typecheck against each other.
 //
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
@@ -97,7 +98,15 @@ const TESTING_FLAG = "--testing=tests-after";
  */
 const FULL_SCAFFOLD_TESTS = ["apps/api/src/routes/auth.test.ts"];
 
-/** A registry module as the lint step reads it: its name and the modules it excludes. */
+/**
+ * What each full scaffold runs, in order, once every module is installed. `lint` came
+ * with issue #152. `typecheck` came with issue #220: a module's files only typecheck
+ * inside a project, so a route that read `error.message` off an `unknown`, and a route
+ * tree one module behind, passed every check in this repo. Exported for its own test.
+ */
+export const FULL_SCAFFOLD_CHECKS = ["lint", "typecheck"] as const;
+
+/** A registry module as the full-scaffold step reads it: its name and the modules it excludes. */
 export interface ModuleEntry {
   name: string;
   conflictsWith: string[];
@@ -105,7 +114,7 @@ export interface ModuleEntry {
   requiresOneOf?: string[];
 }
 
-/** One project the lint step scaffolds, and the modules it adds, in order. */
+/** One project the full-scaffold step scaffolds, and the modules it adds, in order. */
 export interface FullScaffold {
   name: string;
   modules: string[];
@@ -169,7 +178,7 @@ export function findRenderErrors(log: string): string[] {
 
 /**
  * The projects that together put every registry module through a real project's
- * `pnpm lint` (issue #152). Exported for its own test.
+ * `FULL_SCAFFOLD_CHECKS`. Exported for its own test.
  *
  * Each project takes a maximal compatible set of choices, then every conflict-free
  * module. Independent choices cross, so each API key owner runs with each database
@@ -364,16 +373,18 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
 }
 
 /**
- * Scaffold one project with every module in `scaffold`, then run the project's own
- * `pnpm lint`, in the order a user takes: install the base, add the modules, install
- * again. `add` formats the files it patches with the project's own Prettier, which only
- * exists after the first install.
+/**
+ * Scaffold one project with every module in `scaffold`, then run each of the project's
+ * own `FULL_SCAFFOLD_CHECKS`, in the order a user takes: install the base, add the
+ * modules, install again. `add` formats the files it patches with the project's own
+ * Prettier, which only exists after the first install. No `vite` or `astro` command runs
+ * first, so `typecheck` sees the project exactly as `add` left it.
  *
  * Testing is on (`--testing=tests-after`), because a module test ships only into a
  * project with testing on, and the project's Vitest rules reach it only here (issue
  * #266). `tdd` ships the same files.
  */
-async function lintFullScaffold(
+async function checkFullScaffold(
   bin: string,
   scaffold: FullScaffold,
   env: NodeJS.ProcessEnv
@@ -410,11 +421,15 @@ async function lintFullScaffold(
     cwd: dir,
   });
   await assertExists(dir, FULL_SCAFFOLD_TESTS, `add in ${scaffold.name}`);
-  step(`running \`pnpm lint\` in ${scaffold.name}`);
-  await runQuiet("pnpm", ["lint"], `pnpm lint in ${scaffold.name}`, {
-    cwd: dir,
-  });
-  step(`${scaffold.name} passes \`pnpm lint\` (${seconds(started)})`);
+  for (const check of FULL_SCAFFOLD_CHECKS) {
+    step(`running \`pnpm ${check}\` in ${scaffold.name}`);
+    await runQuiet("pnpm", [check], `pnpm ${check} in ${scaffold.name}`, {
+      cwd: dir,
+    });
+  }
+  step(
+    `${scaffold.name} passes ${FULL_SCAFFOLD_CHECKS.map((check) => `\`pnpm ${check}\``).join(" and ")} (${seconds(started)})`
+  );
 }
 
 /** The time since `started`, as `12s`. */
@@ -655,7 +670,7 @@ async function main(): Promise<void> {
     }
   });
 
-  // --- Lint a project that holds every module (needs the network) -------------------
+  // --- Lint and typecheck a project that holds every module (needs the network) ------
 
   // The repo lints each shipped file with the template's oxlint config, but only a real
   // project resolves the imports between workspaces, runs the type-aware pass over the
@@ -671,7 +686,9 @@ async function main(): Promise<void> {
   );
   const results = await Promise.allSettled([
     webDev,
-    ...scaffolds.map((scaffold) => lintFullScaffold(bin, scaffold, offlineEnv)),
+    ...scaffolds.map((scaffold) =>
+      checkFullScaffold(bin, scaffold, offlineEnv)
+    ),
   ]);
   const failures = results.flatMap((result) =>
     result.status === "rejected" ? [result.reason as unknown] : []
@@ -694,7 +711,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s).${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` and \`pnpm typecheck\` with every module and testing on in ${String(scaffolds.length)} project(s).${kept}`
   );
 }
 

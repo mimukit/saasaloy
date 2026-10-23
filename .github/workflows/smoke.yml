@@ -1,7 +1,7 @@
 # The tarball smoke on a timer. `pnpm release:smoke` packs the CLI, scaffolds a project
 # from the tarball, installs it from the network, and starts the web app's `astro dev`.
 # Then it scaffolds one project per database driver with every module and runs that
-# project's `pnpm lint` (issue #152).
+# project's `pnpm lint` (issue #152) and `pnpm typecheck` (issue #220).
 #
 # It runs on a schedule because the break it looks for arrives with no commit of ours.
 # The web template reaches `@cloudflare/vite-plugin` through a range in
