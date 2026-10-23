@@ -145,7 +145,15 @@ _Avoid: health check, which names the api's `/health` route. That route is one t
 
 ### Deploy tag
 The annotated git tag `pnpm deploy:production` pushes after every gate, Worker and smoke check passed: the prefix from `packages/tooling/src/deploy.config.ts` (`deploy-` by default) and the UTC time, `deploy-20261023-1430`. The newest one is the commit that is live. A hotfix branch starts from it, and the migration gate counts the migration files changed since it. `--only` and a failed smoke check write none. Never move or delete one.
-_Avoid: release tag. A release is a version; a deploy tag records what went live and when._
+_Avoid: [release tag](#release-tag). A release tag names a version; a deploy tag records what went live and when._
+
+### Release
+One run of `pnpm release` in a project: the root `package.json` version goes up, `CHANGELOG.md` gets an entry from the Conventional Commits since the last [release tag](#release-tag), and the commit `chore(release): v<version>` gets a release tag, a push and a GitHub Release. It runs before `pnpm deploy:production`, never instead of it, and it takes the same branch list. The first release is `0.1.0`, and below 1.0 a breaking change bumps the minor ([ADR 0049](docs/adr/0049-adr-a-release-names-each-production-deploy-2026-10-23.md)).
+_Avoid: deploy, for this. A release changes the repository and GitHub; only a deploy puts code live. Avoid publish too: nothing goes to npm._
+
+### Release tag
+The annotated `v<version>` tag a [release](#release) puts on its commit, with the prefix from the `release` block of `packages/tooling/src/deploy.config.ts`. The deploy names the release tag on HEAD in its output and in the [deploy tag](#deploy-tag) message, and warns when HEAD has none. Never move or delete one.
+_Avoid: version tag, and deploy tag for this._
 
 ## Object storage
 

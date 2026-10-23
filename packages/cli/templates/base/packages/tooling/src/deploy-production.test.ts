@@ -6,6 +6,8 @@ import {
   gateReport,
   orderTargets,
   parseArgs,
+  releaseLabel,
+  releaseWarning,
   resolveConfig,
   smokeProblem,
   smokeRowProblems,
@@ -17,6 +19,7 @@ import type {
   Facts,
   Io,
   Options,
+  ReleaseFacts,
   SmokeRequest,
   Workspace,
 } from "./deploy-production.ts";
@@ -36,6 +39,12 @@ function facts(overrides: Partial<Facts> = {}): Facts {
     lastTag: "deploy-20261023-1430",
     newMigrations: [],
     hasDb: true,
+    release: {
+      onHead: "v0.3.0",
+      latest: "v0.3.0",
+      after: [],
+      sinceDeploy: true,
+    },
     ...overrides,
   };
 }
@@ -126,6 +135,12 @@ describe(resolveConfig, () => {
       tagPrefix: "deploy-",
       ciWorkflow: undefined,
       migrations: "packages/db/migrations/*.sql",
+      release: {
+        tagPrefix: "v",
+        githubRelease: true,
+        preMajor: true,
+        changelogSections: undefined,
+      },
     });
   });
 
@@ -302,9 +317,12 @@ describe(tagMessage, () => {
     const message = tagMessage(
       HEAD,
       { ...plain, migrate: true, skipCi: "Actions outage" },
-      ["api", "web"]
+      ["api", "web"],
+      "v0.3.0"
     );
-    expect(message).toMatch(/Production deploy of 7812604: api, web\./);
+    expect(message).toMatch(
+      /Production deploy of 7812604 \(v0\.3\.0\): api, web\./
+    );
     expect(message).toMatch(
       /Ran pnpm --filter @repo\/db run db:prod:migrate first/
     );
@@ -312,8 +330,62 @@ describe(tagMessage, () => {
   });
 
   it("leaves out what did not happen", () => {
-    const message = tagMessage(HEAD, plain, ["web"]);
+    const message = tagMessage(HEAD, plain, ["web"], "v0.3.0");
     expect(message).not.toMatch(/migrate|skipped/);
+  });
+});
+
+const noRelease: ReleaseFacts = { after: [], sinceDeploy: false };
+const pastRelease: ReleaseFacts = {
+  latest: "v0.3.0",
+  after: [
+    "abc1234 fix(api): retry the webhook",
+    "def5678 feat(web): add the faq",
+  ],
+  sinceDeploy: true,
+};
+
+describe(releaseLabel, () => {
+  it("names the release tag on HEAD", () => {
+    expect(releaseLabel(facts().release)).toBe("v0.3.0");
+  });
+
+  it("says how far HEAD is past the newest release", () => {
+    expect(releaseLabel(pastRelease)).toBe("2 commit(s) after v0.3.0");
+  });
+
+  it("says when no release exists", () => {
+    expect(releaseLabel(noRelease)).toBe("no release tag");
+  });
+});
+
+describe(releaseWarning, () => {
+  it("is silent when HEAD is a release commit", () => {
+    expect(
+      releaseWarning(facts().release, "deploy-20261023-1430")
+    ).toBeUndefined();
+  });
+
+  it("names a project with no release yet", () => {
+    expect(releaseWarning(noRelease)).toMatch(
+      /HEAD has no release tag yet.*run pnpm release first, unless this is an urgent hotfix/
+    );
+  });
+
+  it("lists the commits after the release, so the changelog gap is visible", () => {
+    const warning = releaseWarning(pastRelease, "deploy-20261023-1430") ?? "";
+    expect(warning).toMatch(/HEAD is 2 commit\(s\) past v0\.3\.0/);
+    expect(warning).toMatch(/\n {2}abc1234 fix\(api\): retry the webhook/);
+    expect(warning).toMatch(/\n {2}def5678 feat\(web\): add the faq/);
+  });
+
+  it("names the last deploy tag when no release came after it", () => {
+    expect(
+      releaseWarning(
+        { ...pastRelease, sinceDeploy: false },
+        "deploy-20261023-1430"
+      )
+    ).toMatch(/No release since the last deploy tag \(deploy-20261023-1430\)/);
   });
 });
 
@@ -491,6 +563,14 @@ interface FakeSetup {
   answer?: (url: string) => { status: number; body: string };
   pushFails?: boolean;
   noCommit?: boolean;
+  /** The release tag on HEAD. */
+  releaseOnHead?: string;
+  /** The newest release tag HEAD descends from, when HEAD is not one. */
+  latestRelease?: string;
+  /** `git log --oneline <latestRelease>..HEAD`. */
+  afterRelease?: string;
+  /** Whether the last deploy tag already contains `latestRelease`. */
+  releaseDeployed?: boolean;
 }
 
 const WEB: Workspace = { service: "web", packageName: "@repo/web" };
@@ -523,6 +603,24 @@ function fake(setup: FakeSetup = {}): Fake {
       }
       if (line.startsWith("status --porcelain")) {
         return setup.dirty ?? "";
+      }
+      if (line.startsWith("describe") && line.includes("--match v*")) {
+        const tag = line.includes("--exact-match")
+          ? setup.releaseOnHead
+          : (setup.releaseOnHead ?? setup.latestRelease);
+        if (tag === undefined) {
+          throw new Error("no names found");
+        }
+        return tag;
+      }
+      if (line.startsWith("merge-base --is-ancestor")) {
+        if (setup.releaseDeployed !== true) {
+          throw new Error("not an ancestor");
+        }
+        return "";
+      }
+      if (line.startsWith("log --oneline v")) {
+        return setup.afterRelease ?? "";
       }
       if (line.startsWith("describe")) {
         if (lastTag === undefined) {
@@ -586,6 +684,7 @@ describe(deployProduction, () => {
     const run = fake({
       workspaces: [WEB, API],
       routes: webDomain,
+      releaseOnHead: "v0.3.0",
     });
     await deployProduction(plain, run.io, project);
     expect(run.runs).toStrictEqual([
@@ -594,10 +693,46 @@ describe(deployProduction, () => {
       "pnpm --filter @repo/web run deploy",
     ]);
     expect(run.gits).toContain(
-      "tag --annotate deploy-20261023-1430 --message Production deploy of 7812604: api, web."
+      "tag --annotate deploy-20261023-1430 --message Production deploy of 7812604 (v0.3.0): api, web."
     );
     expect(run.gits).toContain("push --quiet origin deploy-20261023-1430");
     expect(run.said.join("\n")).toMatch(/api has no custom domain/);
+  });
+
+  it("names the release on HEAD, and prints no release warning", async () => {
+    const run = fake({
+      workspaces: [WEB, API],
+      routes: webDomain,
+      releaseOnHead: "v0.3.0",
+    });
+    await deployProduction(plain, run.io, project);
+    const output = run.said.join("\n");
+    expect(output).toMatch(/Branch main at 7812604 \(v0\.3\.0\)\./);
+    expect(output).toMatch(/Deployed 7812604 \(v0\.3\.0\) and pushed/);
+    expect(output).not.toMatch(/Warning:/);
+  });
+
+  it("warns, lists the commits past the release, and still deploys and tags", async () => {
+    const run = fake({
+      workspaces: [WEB, API],
+      routes: webDomain,
+      latestRelease: "v0.3.0",
+      afterRelease: "abc1234 fix(api): retry the webhook",
+    });
+    await deployProduction(plain, run.io, project);
+    const output = run.said.join("\n");
+    expect(output).toMatch(/Warning: HEAD is 1 commit\(s\) past v0\.3\.0/);
+    expect(output).toMatch(/abc1234 fix\(api\): retry the webhook/);
+    expect(run.gits).toContain(
+      "tag --annotate deploy-20261023-1430 --message Production deploy of 7812604 (1 commit(s) after v0.3.0): api, web."
+    );
+  });
+
+  it("warns in a dry run when no release exists yet", async () => {
+    const run = fake({ workspaces: [WEB, API], routes: webDomain });
+    await deployProduction({ ...plain, dryRun: true }, run.io, project);
+    expect(run.said.join("\n")).toMatch(/Warning: HEAD has no release tag yet/);
+    expect(run.gits.some((line) => line.startsWith("tag"))).toBeFalsy();
   });
 
   it.each([false, true])(

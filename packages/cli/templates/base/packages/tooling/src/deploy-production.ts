@@ -6,7 +6,12 @@ import { setTimeout as delay } from "node:timers/promises";
 import { parseJsonc } from "@repo/env/deploy";
 import { deployConfig } from "./deploy.config.ts";
 import { DEPLOY_TARGETS, SMOKE_CHECKS } from "./targets.ts";
-import type { DeployConfig, DeployTarget, SmokeCheck } from "./types.ts";
+import type {
+  ChangelogSection,
+  DeployConfig,
+  DeployTarget,
+  SmokeCheck,
+} from "./types.ts";
 
 // `pnpm deploy:production`: the one command that puts a commit live.
 //
@@ -30,6 +35,10 @@ import type { DeployConfig, DeployTarget, SmokeCheck } from "./types.ts";
 // annotated `<prefix><UTC yyyymmdd-hhmm>` tag and pushes it. The newest tag is what is
 // live: a hotfix branches from it, and `git log <tag>..main` lists what the next deploy
 // ships.
+//
+// `pnpm release` runs before this command and tags the release commit `v<version>`. The
+// deploy names that version in its output and its tag message. A HEAD that is not a
+// release commit still deploys, with a warning, so a hotfix never waits on the changelog.
 
 export interface Options {
   dryRun: boolean;
@@ -82,11 +91,19 @@ export function parseArgs(argv: string[]): Options {
 
 // ---- Config --------------------------------------------------------------------------------
 
+export interface ResolvedRelease {
+  tagPrefix: string;
+  githubRelease: boolean;
+  preMajor: boolean;
+  changelogSections: ChangelogSection[] | undefined;
+}
+
 export interface ResolvedConfig {
   branches: string[];
   tagPrefix: string;
   ciWorkflow: string | undefined;
   migrations: string;
+  release: ResolvedRelease;
 }
 
 /**
@@ -99,6 +116,12 @@ export function resolveConfig(config: DeployConfig): ResolvedConfig {
     tagPrefix: config.tagPrefix ?? "deploy-",
     ciWorkflow: config.ciWorkflow,
     migrations: config.migrations ?? "packages/db/migrations/*.sql",
+    release: {
+      tagPrefix: config.release?.tagPrefix ?? "v",
+      githubRelease: config.release?.githubRelease ?? true,
+      preMajor: config.release?.preMajor ?? true,
+      changelogSections: config.release?.changelogSections,
+    },
   };
 }
 
@@ -145,6 +168,19 @@ export interface Facts {
   newMigrations: string[];
   /** Whether the project has a `@repo/db` workspace to migrate. */
   hasDb: boolean;
+  release: ReleaseFacts;
+}
+
+/** What git says about the release tags, which the deploy names and never gates on. */
+export interface ReleaseFacts {
+  /** The release tag on HEAD itself, when HEAD is a release commit. */
+  onHead?: string | undefined;
+  /** The newest release tag HEAD descends from. */
+  latest?: string | undefined;
+  /** The commits after `latest`, one `git log --oneline` row each. */
+  after: string[];
+  /** Whether `latest` is newer than the last deploy tag. */
+  sinceDeploy: boolean;
 }
 
 export interface Gate {
@@ -418,6 +454,43 @@ export function smokeProblem(
   return undefined;
 }
 
+// ---- Release -------------------------------------------------------------------------------
+
+/** The version a deploy names: the release tag on HEAD, or how far HEAD is past one. */
+export function releaseLabel(release: ReleaseFacts): string {
+  if (release.onHead !== undefined) {
+    return release.onHead;
+  }
+  if (release.latest === undefined) {
+    return "no release tag";
+  }
+  return `${release.after.length} commit(s) after ${release.latest}`;
+}
+
+/**
+ * The warning a deploy prints when HEAD is not a release commit, or undefined when it is.
+ * CHANGELOG.md then does not list everything the deploy ships. It never stops the
+ * deploy, so an urgent hotfix goes out first and gets its release after.
+ */
+export function releaseWarning(
+  release: ReleaseFacts,
+  lastTag?: string
+): string | undefined {
+  if (release.onHead !== undefined) {
+    return undefined;
+  }
+  const advice =
+    "Stop and run pnpm release first, unless this is an urgent hotfix.";
+  if (release.latest === undefined) {
+    return `HEAD has no release tag yet, so CHANGELOG.md does not list what this deploy ships. ${advice}`;
+  }
+  const what = release.sinceDeploy
+    ? `HEAD is ${release.after.length} commit(s) past ${release.latest}`
+    : `No release since the last deploy tag (${lastTag ?? "none"}), and HEAD is ${release.after.length} commit(s) past ${release.latest}`;
+  const rows = release.after.map((row) => `\n  ${row}`).join("");
+  return `${what}, so CHANGELOG.md does not list these commits:${rows}\n${advice}`;
+}
+
 // ---- Tag -----------------------------------------------------------------------------------
 
 /** `deploy-20261023-1430`, in UTC, so tags sort in the order the deploys happened. */
@@ -431,10 +504,11 @@ const MIGRATE = ["--filter", "@repo/db", "run", "db:prod:migrate"];
 export function tagMessage(
   head: string,
   options: Options,
-  services: readonly string[]
+  services: readonly string[],
+  release: string
 ): string {
   const lines = [
-    `Production deploy of ${head.slice(0, 7)}: ${services.join(", ")}.`,
+    `Production deploy of ${head.slice(0, 7)} (${release}): ${services.join(", ")}.`,
   ];
   if (options.migrate) {
     lines.push(`Ran pnpm ${MIGRATE.join(" ")} first.`);
@@ -550,6 +624,7 @@ function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
   const needsCi =
     config.ciWorkflow !== undefined && options.skipCi === undefined;
   return {
+    release: readRelease(io, config, lastTag),
     branch,
     // The status column starts with a space, so the path starts at the fourth character.
     // Drop the status code by shape, not by width: a reader that trims the output takes
@@ -566,6 +641,41 @@ function readFacts(io: Io, options: Options, config: ResolvedConfig): Facts {
     lastTag,
     newMigrations: splitLines(io.git(migrationArgs)),
     hasDb: io.hasDb(),
+  };
+}
+
+function readRelease(
+  io: Io,
+  config: ResolvedConfig,
+  lastTag: string | undefined
+): ReleaseFacts {
+  const match = `${config.release.tagPrefix}*`;
+  const onHead = tryGit(io, [
+    "describe",
+    "--tags",
+    "--exact-match",
+    "--match",
+    match,
+    "HEAD",
+  ]);
+  const latest =
+    onHead ??
+    tryGit(io, ["describe", "--tags", "--match", match, "--abbrev=0", "HEAD"]);
+  if (latest === undefined) {
+    return { onHead, latest, after: [], sinceDeploy: false };
+  }
+  // The release is new when the last deploy tag does not already contain it.
+  const sinceDeploy =
+    lastTag === undefined ||
+    tryGit(io, ["merge-base", "--is-ancestor", latest, lastTag]) === undefined;
+  return {
+    onHead,
+    latest,
+    after:
+      onHead === undefined
+        ? splitLines(tryGit(io, ["log", "--oneline", `${latest}..HEAD`]))
+        : [],
+    sinceDeploy,
   };
 }
 
@@ -682,7 +792,8 @@ export async function deployProduction(
   );
 
   const facts = readFacts(io, options, config);
-  io.say(`Branch ${facts.branch} at ${facts.head.slice(0, 7)}.`);
+  const release = releaseLabel(facts.release);
+  io.say(`Branch ${facts.branch} at ${facts.head.slice(0, 7)} (${release}).`);
   if (facts.lastTag === undefined) {
     io.say("No deploy tag yet. This deploy writes the first one.");
   } else {
@@ -698,6 +809,11 @@ export async function deployProduction(
     io.say(
       `Migration files since the last deploy:\n  ${facts.newMigrations.join("\n  ")}`
     );
+  }
+
+  const warning = releaseWarning(facts.release, facts.lastTag);
+  if (warning !== undefined) {
+    io.say(`\nWarning: ${warning}`);
   }
 
   const gates = gateReport(facts, options, config);
@@ -801,7 +917,7 @@ export async function deployProduction(
     "--annotate",
     tag,
     "--message",
-    tagMessage(facts.head, options, services),
+    tagMessage(facts.head, options, services, release),
   ]);
   try {
     io.git(["push", "--quiet", "origin", tag]);
@@ -811,7 +927,9 @@ export async function deployProduction(
       { cause: error }
     );
   }
-  io.say(`\nDeployed ${facts.head.slice(0, 7)} and pushed the tag ${tag}.`);
+  io.say(
+    `\nDeployed ${facts.head.slice(0, 7)} (${release}) and pushed the tag ${tag}.`
+  );
 }
 
 // ---- The real side effects -----------------------------------------------------------------
