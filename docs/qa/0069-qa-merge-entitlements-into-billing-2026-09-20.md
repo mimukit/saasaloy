@@ -171,7 +171,7 @@ cd "$REPO/.dev/playground" && ./saasaloy add database-d1 --yes
    grep -n -E '"(zod|@hono/zod-validator|@repo/validators)"' "$REPO/.dev/playground/apps/api/package.json"
    ```
 
-   - [ ] All three are present. `zod` is `4.5.4` and `@hono/zod-validator` is `0.9.1`.
+   - [ ] All three are present. `zod` is `4.6.5` and `@hono/zod-validator` is `0.9.1`.
 
 3. Install and typecheck.
 
@@ -200,19 +200,21 @@ rm -rf "$REPO/.dev/playground"
 **Setup.** Run once, for every case in this scenario.
 
 ```sh
-cd "$REPO" && pnpm play:init && cd .dev/playground && ./saasaloy add database-d1 --yes && ./saasaloy add billing --yes && ./saasaloy add billing-console --yes && pnpm install
+cd "$REPO" && pnpm play:init && cd .dev/playground && ./saasaloy add database-d1 --yes && ./saasaloy add billing --yes && ./saasaloy add billing-console --yes && ./saasaloy add email-console --yes && ./saasaloy add queue-memory --yes && pnpm install
 ```
 
-Set the two environment variables the capability needs.
+`billing` pulls in `email` and `queue` but no provider for either, so the api throws at construction without `email-console` and `queue-memory`.
+
+Fill the environment. Every value goes through `packages/env`, and nothing writes `.dev.vars`.
 
 ```sh
-cd "$REPO/.dev/playground" && printf 'BILLING_PROVIDER="console"\nBILLING_APP_URL="http://localhost:3001/billing"\n' >> apps/api/.dev.vars
+cd "$REPO/.dev/playground" && sed -e 's/^BETTER_AUTH_SECRET=$/BETTER_AUTH_SECRET=qa-secret-0123456789abcdef0123456789abcdef/' -e 's/^BILLING_PROVIDER=$/BILLING_PROVIDER=console/' -e 's#^BILLING_APP_URL=$#BILLING_APP_URL=http://localhost:3001/billing#' -e 's/^EMAIL_FROM=$/EMAIL_FROM=qa@example.com/' -e 's/^EMAIL_PROVIDER=$/EMAIL_PROVIDER=console/' -e 's/^QUEUE_PROVIDER=$/QUEUE_PROVIDER=memory/' packages/env/.env.example > packages/env/.env && pnpm env:setup
 ```
 
-Apply the local migrations, then start the app.
+Generate and apply the local migrations, then start the app.
 
 ```sh
-cd "$REPO/.dev/playground" && pnpm db:generate && pnpm --filter @repo/api db:migrate:local
+cd "$REPO/.dev/playground" && pnpm --filter @repo/db db:generate && pnpm db:setup
 ```
 
 ```sh
@@ -328,14 +330,14 @@ rm -rf "$REPO/.dev/playground"
 
 ## Scenario 3: project installed from the pre-change registry
 
-**Setup.** Run once, for every case in this scenario. This scenario needs a second checkout at `main`, so the CLI can install the module that this branch deletes.
+**Setup.** Run once, for every case in this scenario. This scenario needs a second checkout at `origin/main`, so the CLI can install the module that this branch deletes. The main checkout already holds `main`, so the second one is detached. The `./saasaloy` wrapper always sets `SAASALOY_REGISTRY_DIR` to this worktree's own `modules/`, so the old-registry calls run the built CLI directly.
 
 ```sh
-git -C "$REPO" worktree add /tmp/saasaloy-main main
+git -C "$REPO" worktree add --detach /tmp/saasaloy-main origin/main
 ```
 
 ```sh
-cd "$REPO" && pnpm play:init && cd .dev/playground && SAASALOY_REGISTRY_DIR=/tmp/saasaloy-main/modules ./saasaloy add database-d1 --yes && SAASALOY_REGISTRY_DIR=/tmp/saasaloy-main/modules ./saasaloy add entitlements --yes
+cd "$REPO" && pnpm play:init && cd .dev/playground && ./saasaloy add database-d1 --yes && SAASALOY_REGISTRY_DIR=/tmp/saasaloy-main/modules node "$REPO/packages/cli/dist/index.js" add entitlements --yes
 ```
 
 - [ ] Setup complete
@@ -390,10 +392,10 @@ cd "$REPO" && pnpm play:init && cd .dev/playground && SAASALOY_REGISTRY_DIR=/tmp
 6. Read the manifest.
 
    ```sh
-   grep -n "entitlements" "$REPO/.dev/playground/saasaloy.json"
+   grep -c '"entitlements"' "$REPO/.dev/playground/.saasaloy/manifest.json"
    ```
 
-   - [ ] The manifest holds no `entitlements` entry.
+   - [ ] The count is `0`. The manifest still tracks `packages/billing/src/entitlements.ts`, under `"module": "billing"`.
 
 **Result**
 
@@ -427,11 +429,11 @@ rm -rf "$REPO/.dev/playground" && git -C "$REPO" worktree remove /tmp/saasaloy-m
    ls -1d "$REPO"/modules/*/ | wc -l
    ```
 
-   - [ ] The count is **37**: 38 before this change, minus `entitlements`.
+   - [ ] The count is **43**: 44 on `main`, minus `entitlements`.
 
 2. Read the provider paragraph in `modules/README.md`.
 
-   - [ ] The provider list names all 14 provider modules, including `kv-cloudflare`, `kv-memory`, `storage-cloudflare` and `storage-memory`.
+   - [ ] The provider list names all 17 provider modules, including `kv-cloudflare`, `kv-memory`, `kv-upstash`, `storage-cloudflare`, `storage-memory`, `payment-console` and `payment-manual`.
    - [ ] `kv`, `storage`, `ratelimit` and `feature-flags` each have a paragraph, and each paragraph matches what that module's descriptor declares.
 
 3. Read the `billing` row of `docs/wiki/modules.md`.
@@ -511,6 +513,19 @@ Two typecheck failures appeared in the generated playground. Both predate this b
 
 - ❌ `packages/billing/src/providers/console.ts:129` → `error TS2322: Type 'Date | null | undefined' is not assignable to type 'Date | null'`. The source is `modules/billing-console/files/console.ts`, last changed in `c355f93`. The playground copy was patched by hand to let the rest of the typecheck run.
 - ❌ `apps/admin/src/routes/billing.tsx:59` → `error TS2345: Argument of type '"/billing"' is not assignable to parameter of type 'keyof FileRoutesByPath'`. The TanStack route tree is not generated before `typecheck` runs.
+
+### Re-run after the rebase onto `186d42d` (2026-10-23)
+
+The branch was rebased onto `origin/main` at `186d42d`, and the agent re-ran every case it can check in `.dev/playground` with the setup above.
+
+- ✅ Repository gate: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm --filter saasaloy build` and `pnpm --filter saasaloy test:matrix` (947 tests) pass. `pnpm --filter saasaloy test:e2e` fails only the four known pre-existing cases in `apply.test.ts` and `partial-apply.test.ts`. `pnpm verify:e2e --driver=d1` and `--driver=postgres` pass.
+- ✅ TC-1.1: both files land, `.agents/skills/` holds `saasaloy-billing` and no `saasaloy-entitlements`, `add entitlements` exits 2 with `Unknown module "entitlements"`, and `./entitlements` points at `./src/entitlements.ts`.
+- ✅ TC-1.2, the checks an agent can make: the "Entitlements — what a plan allows" section sits between "The plan file" and "The routes", the only "feature flag" hit is the sentence that forbids the term, the skill never names `saasaloy-entitlements`, and the description names `requireFeature` and `requireWithinLimit`.
+- ✅ TC-1.3: `apps/api/package.json` holds `zod` 4.6.5, `@hono/zod-validator` 0.9.1 and `@repo/validators`, and `@repo/api` typechecks clean.
+- ✅ TC-2.1, over HTTP with `curl` instead of the browser: anonymous gives 401 `unauthorized`, a new free-plan user gives 402 `feature_required` naming `export`, `POST /billing/checkout` for `pro` on the console provider moves `/billing/subscription` to Pro, and the same call then gives 200 `{"ok":true}`. `@repo/api` typechecks with the QA route mounted. The `billing-console` and admin-route typecheck failures listed above no longer occur.
+- ✅ TC-2.2: the dry run prints all three warnings and plans the delete of both moved files. Nothing is deleted.
+- ✅ TC-3.1: the old registry installs `entitlements` beside `saasaloy-billing`, this branch's `remove entitlements` deletes its 3 files and the skill, `add billing --yes --force` restores both files, both typechecks pass, and the manifest holds no `entitlements` module.
+- ✅ TC-4.1: 43 module directories, 17 providers listed, no `entitlements` row in the wiki, and every remaining doc hit describes a concept inside `billing`.
 
 ## Not covered / needs human judgment
 
