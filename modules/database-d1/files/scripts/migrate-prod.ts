@@ -1,19 +1,21 @@
 import { spawnSync } from "node:child_process";
 import { unstable_readConfig } from "wrangler";
 
-// `pnpm db:migrate:prod`: apply every migration to the production D1 database, and create
+// `pnpm db:prod:migrate`: apply every migration to the production D1 database, and create
 // the database first when the account has none by that name.
 //
-// `turbo run deploy` runs this before the api Worker uploads, so a new migration lands
-// before the code that reads it. On an empty account that order has a gap: wrangler
-// creates a missing D1 database when it deploys the Worker, but `d1 migrations apply`
-// runs first and fails with "Couldn't find a D1 DB named ...". So this script creates the
-// database by its `database_name`, and the deploy that follows connects to it by name.
+// Nothing runs this on its own. `pnpm deploy:production --migrate` runs it once, before any
+// Worker uploads, so a new migration lands before the code that reads it. A deploy without
+// `--migrate` never migrates, and `turbo run deploy` does not run it (ADR 0048). On an
+// empty account wrangler creates a missing D1 database only when it deploys the Worker,
+// which is after this step, and `d1 migrations apply` then fails with "Couldn't find a D1
+// DB named ...". So this script creates the database by its `database_name`, and the
+// deploy that follows connects to it by name.
 //
-// It reads the Cloudflare credentials from its environment. The `db:migrate:prod` script
-// runs it through `env-deploy --run deploy`, which loads them from the value source.
-// A `database_id` in apps/api/wrangler.jsonc means the database exists, and only the
-// migrations run.
+// It reads the Cloudflare credentials from its environment. The `db:prod:migrate` script
+// runs it through `env-deploy --run deploy`, which loads them from the value source and
+// keeps them in memory. A `database_id` in apps/api/wrangler.jsonc means the database
+// exists, and only the migrations run.
 
 const CONFIG = "../../apps/api/wrangler.jsonc";
 
@@ -35,7 +37,7 @@ function fail(message: string): number {
 
 function migrate(): number {
   const binding = unstable_readConfig({ config: CONFIG }).d1_databases.find(
-    (database) => database.binding === "DB"
+    (database: { binding: string }) => database.binding === "DB"
   );
   if (binding === undefined) {
     return fail(`${CONFIG} has no d1_databases entry bound as DB.`);
