@@ -213,7 +213,8 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
     async delete(env: KvEnv, key: string): Promise<void> {
       try {
         // `DEL` on an absent key returns 0 and is not an error.
-        await (await client(env)).del(key);
+        const redis = await client(env);
+        await redis.del(key);
       } catch (error) {
         throw normalize(error);
       }
@@ -221,7 +222,8 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
 
     async get(env: KvEnv, key: string): Promise<string | null> {
       try {
-        const value = await (await client(env)).get(key);
+        const redis = await client(env);
+        const value = await redis.get(key);
         return value ?? null;
       } catch (error) {
         throw normalize(error);
@@ -231,9 +233,8 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
     async list(env: KvEnv, listOptions: KvListOptions): Promise<KvListResult> {
       try {
         const match = `${escapeGlob(keyPrefix(env))}${escapeGlob(listOptions.prefix ?? "")}*`;
-        const [cursor, keys] = await (
-          await client(env)
-        ).scan(listOptions.cursor ?? "0", {
+        const redis = await client(env);
+        const [cursor, keys] = await redis.scan(listOptions.cursor ?? "0", {
           ...(listOptions.limit === undefined
             ? {}
             : { count: listOptions.limit }),
@@ -265,9 +266,8 @@ export function upstash(options: UpstashKvOptions = {}): KvProvider {
       try {
         // The options object is omitted entirely for a no-expiry write: `{ ex: undefined }`
         // is how a value silently loses its TTL on a rewrite.
-        await (
-          await client(env)
-        ).set(
+        const redis = await client(env);
+        await redis.set(
           key,
           value,
           setOptions.ttlSeconds === undefined
