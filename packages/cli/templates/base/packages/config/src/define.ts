@@ -64,6 +64,10 @@ export type ConfigOverride<C> = {
  * value; a nested record or an array is replaced whole. That keeps the rule explainable
  * in one sentence, which matters more here than saving an owner a few keystrokes.
  *
+ * The result is frozen all the way down, and it shares no object with a declared section or
+ * with `project.ts`: every record and array is copied before it is frozen, so neither a
+ * reader of `config` nor a later edit of the declaration can change the other.
+ *
  * Two sections claiming one key throw at module load. `saasaloy add` refuses that pair
  * before it writes, so reaching this throw means the files were edited by hand.
  */
@@ -105,12 +109,27 @@ export function defineConfig<const S extends readonly AnySection[]>(args: {
     }
   }
 
-  for (const values of Object.values(composed)) {
-    Object.freeze(values);
-  }
   // The loop above builds exactly the shape `Composed<S>` describes, one property per
   // section key, and no narrower type can be proved from a `Record` the compiler watched
   // being filled. The assertion is the seam between the two, and it is the only one.
   // oxlint-disable-next-line typescript/no-unsafe-type-assertion
-  return Object.freeze(composed) as unknown as Composed<S>;
+  return frozenCopy(composed) as unknown as Composed<S>;
+}
+
+/**
+ * A deep copy of a config value, frozen at every level. Arrays and plain records are
+ * copied; anything else (a string, a number, a boolean) is a value already.
+ */
+function frozenCopy(value: unknown): unknown {
+  if (Array.isArray(value)) {
+    return Object.freeze(value.map(frozenCopy));
+  }
+  if (typeof value === "object" && value !== null) {
+    const copy: Record<string, unknown> = {};
+    for (const [key, entry] of Object.entries(value)) {
+      copy[key] = frozenCopy(entry);
+    }
+    return Object.freeze(copy);
+  }
+  return value;
 }

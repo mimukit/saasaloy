@@ -75,6 +75,32 @@ describe(defineConfig, () => {
     }).toThrow(TypeError);
   });
 
+  it("freezes nested records and arrays too", () => {
+    const config = defineConfig({
+      sections: defineSections({ sections: [app()] }),
+    });
+    expect(Object.isFrozen(config.app.legal)).toBeTruthy();
+    expect(Object.isFrozen(config.app.tags)).toBeTruthy();
+    expect(() => {
+      (config.app.legal as { termsPath: string }).termsPath = "/nope";
+    }).toThrow(TypeError);
+  });
+
+  it("shares no object with the declared section or the overrides", () => {
+    const section = app();
+    const legal = { termsPath: "/legal", privacyPath: "/legal/privacy" };
+    const config = defineConfig({
+      sections: defineSections({ sections: [section] }),
+      overrides: { app: { legal } },
+    });
+    expect(config.app.legal).not.toBe(legal);
+    expect(config.app.tags).not.toBe(section.values.tags);
+    expect(Object.isFrozen(section.values.legal)).toBeFalsy();
+    expect(Object.isFrozen(legal)).toBeFalsy();
+    legal.termsPath = "/changed";
+    expect(config.app.legal.termsPath).toBe("/legal");
+  });
+
   it("a section never mutates the values it was declared with", () => {
     const section = app();
     defineConfig({
