@@ -22,6 +22,9 @@ export interface LockModule extends ModuleProvenance {
   /** The module's declared `conflictsWith`, so `add` can refuse a conflicting module
    *  that goes in second — the descriptor is gone by then, the lock is not. */
   conflictsWith?: string[];
+  /** The module's declared `requiresOneOf`, so `doctor` can name an unmet one offline
+   *  once the descriptor is gone (#229). */
+  requiresOneOf?: string[];
 }
 
 /**
@@ -101,7 +104,8 @@ export async function saveLock(root: string, lock: Lockfile): Promise<void> {
 // already-installed dependency keeps the SHA it was fetched at, so the lock never
 // misstates the provenance of bytes on disk. `graph` supplies each module's declared
 // `dependsOn` and `conflictsWith` — the two lists `remove` and `add` need to read back
-// offline, once the descriptor they came from is gone.
+// offline, once the descriptor they came from is gone — and `requiresOneOf`, which
+// `doctor` reads back the same way (#229).
 export function upsertLock(
   lock: Lockfile,
   provenance: ModuleProvenance,
@@ -112,10 +116,12 @@ export function upsertLock(
     const item = graph.modules.get(name)?.item;
     const dependsOn = item?.dependsOn;
     const conflictsWith = item?.conflictsWith;
+    const requiresOneOf = item?.requiresOneOf;
     lock.modules[name] = {
       ...provenance,
       ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
       ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
+      ...(requiresOneOf && requiresOneOf.length > 0 ? { requiresOneOf } : {}),
     };
   }
 }

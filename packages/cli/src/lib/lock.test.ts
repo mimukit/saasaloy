@@ -96,6 +96,27 @@ describe(upsertLock, () => {
     });
   });
 
+  it("records requiresOneOf so `doctor` can check it after the descriptor is gone (#229)", async () => {
+    const lock = emptyLock();
+    const core: LoadedModule = {
+      dir: "/tmp/database",
+      item: {
+        name: "database",
+        type: "saasaloy:capability",
+        requiresOneOf: ["database-d1", "database-postgres"],
+      },
+    };
+    upsertLock(lock, PROVENANCE, ["database"], {
+      order: ["database"],
+      modules: new Map([["database", core]]),
+    });
+    expect(lock.modules.database).toStrictEqual({
+      ...PROVENANCE,
+      requiresOneOf: ["database-d1", "database-postgres"],
+    });
+    await expect(validateLock(lock)).resolves.toMatchObject({ valid: true });
+  });
+
   it("omits conflictsWith for a module that declares none", () => {
     const lock = emptyLock();
     upsertLock(lock, PROVENANCE, ALL, graph());

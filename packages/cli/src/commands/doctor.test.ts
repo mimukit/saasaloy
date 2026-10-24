@@ -164,6 +164,48 @@ describe("runDoctor — what it reports and what it exits with", () => {
     });
   });
 
+  // #229: a core installed without any of the owners its `requiresOneOf` names.
+  it("reports an installed module whose requiresOneOf is unmet, and exits 2", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-requires-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: ["api-keys"] })
+    );
+    await mkdir(join(project, ".saasaloy"));
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: {
+          "keys.ts": { module: "api-keys", hash: hashContent("k\n") },
+        },
+      })
+    );
+    await writeFile(join(project, "keys.ts"), "k\n");
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: {
+          "api-keys": {
+            source: "local",
+            ref: "local",
+            resolved: "local",
+            requiresOneOf: ["api-keys-organization", "api-keys-user"],
+          },
+        },
+      })
+    );
+
+    const { code, out } = await run([project]);
+
+    expect(code).toBe(2);
+    // The note box wraps the line, so the second command may straddle a border.
+    expect(out).toContain("api-keys  needs one of");
+    expect(out).toContain("saasaloy add api-keys-organization");
+    expect(out).toMatch(/saasaloy add[\s│]+api-keys-user/);
+  });
+
   // #120: the Base box in project mode. Drift is information, so it never turns exit 0
   // into 2, and an unrecorded base is reported and left alone.
   describe("the Base section of a project", () => {

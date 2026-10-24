@@ -120,6 +120,75 @@ describe("runAdd without a module name", () => {
   });
 });
 
+// #229 QA (A1). With no terminal and no `--yes`, a module whose `requiresOneOf` is
+// unmet used to get the generic "no terminal to confirm in" refusal, which names a flag
+// that cannot help: `--yes` never picks an owner. The requirement refusal names the
+// options, so it comes first. A module with nothing to pick still gets the confirm one.
+describe("runAdd with no terminal and no --yes (#229)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    await mkdir(join(registry, name, "files"), { recursive: true });
+    await writeFile(
+      join(registry, name, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", ...item }),
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-notty-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-notty-reg-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeModule("core", { requiresOneOf: ["owner-a", "owner-b"] });
+    await writeModule("owner-a", { dependsOn: ["core"] });
+    await writeModule("owner-b", { dependsOn: ["core"] });
+    await writeModule("plain", {});
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(argv: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      const code = await runAdd(argv);
+      return { code, out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  it("names the owners of an unmet requiresOneOf, not the --yes flag", async () => {
+    const { code, out } = await run(["core"]);
+    expect(code).toBe(2);
+    expect(out).toContain("core needs one of: owner-a, owner-b");
+    expect(out).not.toContain("No terminal to confirm in");
+  });
+
+  it("still refuses a module with nothing to pick for want of a terminal", async () => {
+    const { code, out } = await run(["plain"]);
+    expect(code).toBe(2);
+    expect(out).toContain("No terminal to confirm in");
+  });
+});
+
 // #98 Phase 4. `add` used to merge npm deps into package.json *before* executePlan ran,
 // so a mid-plan write failure left a project whose package.json advertised packages no
 // module had actually installed. The write now trails a successful apply. The rollback
@@ -955,6 +1024,104 @@ describe("runAdd — --force and the already-installed early return", () => {
     expect(code).toBe(0);
     expect(out).toContain("diff only — nothing applied");
     await expect(pathExists(widgetFile())).resolves.toBeFalsy();
+  });
+});
+
+// #229. A module split: the core's new version stops listing a patch, and the owner the
+// project now adds ships that same patch. The project already carries the edit, so the
+// owner's patch is a no-op, and the manifest has to move the record to the owner rather
+// than leave it under the core, or `remove` reverses it with the wrong module.
+describe("runAdd — an already-applied patch moves to the module that depends on its owner (#229)", () => {
+  let project: string;
+  let registry: string;
+
+  const scriptPatch = {
+    file: "package.json",
+    kind: "package-json-script",
+    name: "keys:check",
+    value: "echo keys",
+  };
+
+  async function descriptor(
+    name: string,
+    item: Record<string, unknown>
+  ): Promise<void> {
+    await mkdir(join(registry, name), { recursive: true });
+    await writeFile(
+      join(registry, name, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", files: [], ...item }),
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-repatch-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-repatch-reg-"));
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeFile(
+      join(project, "package.json"),
+      '{\n  "name": "app",\n  "scripts": {}\n}\n',
+      "utf-8"
+    );
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<number> {
+    const captured = capture();
+    try {
+      return await runAdd(args);
+    } finally {
+      captured.restore();
+    }
+  }
+
+  async function patchOwners(): Promise<string[]> {
+    const manifest = JSON.parse(
+      await readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+    ) as Manifest;
+    return manifest.patches.map((p) => p.module);
+  }
+
+  it("records the patch under the new module when its owner is a dependency", async () => {
+    await descriptor("keys", { patches: [scriptPatch] });
+    await expect(run(["keys", "--yes"])).resolves.toBe(0);
+    await expect(patchOwners()).resolves.toStrictEqual(["keys"]);
+    const before = await readFile(join(project, "package.json"), "utf-8");
+
+    // The split: the core drops the patch and the owner carries it.
+    await descriptor("keys", {});
+    await descriptor("keys-owner", {
+      dependsOn: ["keys"],
+      patches: [scriptPatch],
+    });
+    await expect(run(["keys-owner", "--yes"])).resolves.toBe(0);
+
+    await expect(patchOwners()).resolves.toStrictEqual(["keys-owner"]);
+    await expect(
+      readFile(join(project, "package.json"), "utf-8")
+    ).resolves.toBe(before);
+  });
+
+  it("keeps the patch under an unrelated module that recorded it", async () => {
+    await descriptor("keys", { patches: [scriptPatch] });
+    await expect(run(["keys", "--yes"])).resolves.toBe(0);
+
+    await descriptor("stranger", { patches: [scriptPatch] });
+    await expect(run(["stranger", "--yes"])).resolves.toBe(0);
+
+    await expect(patchOwners()).resolves.toStrictEqual(["keys"]);
   });
 });
 

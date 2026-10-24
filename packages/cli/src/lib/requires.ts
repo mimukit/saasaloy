@@ -89,3 +89,26 @@ export function formatMissingRequirements(
     "\n"
   );
 }
+
+/**
+ * The refusal `update` prints when a module's new version declares a `requiresOneOf`
+ * nothing installed or arriving meets (#229). A module split is the case: the new core
+ * stops listing the files its owner now ships, and the updater would delete every
+ * unchanged one before the project had picked an owner. Each option is named as the
+ * command that settles it, since the user has to choose one and run it before updating.
+ */
+export function formatUpdateRequirements(
+  missing: MissingRequirement[]
+): string {
+  const lines = [
+    `Cannot update — unmet requirement${missing.length > 1 ? "s" : ""}:`,
+  ];
+  for (const { declaredBy, options } of missing) {
+    lines.push(
+      `  ${declaredBy} now needs one of: ${options.join(", ")}, and none is installed. Run one of:`,
+      ...options.map((option) => `    saasaloy add ${option}`)
+    );
+  }
+  lines.push("Then run `saasaloy update` again. Nothing was changed.");
+  return lines.join("\n");
+}

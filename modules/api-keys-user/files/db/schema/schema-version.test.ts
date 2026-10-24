@@ -3,13 +3,14 @@
 // that skips the re-verification has to fail something. This is the twin of
 // `modules/auth/files/src/schema-version.test.ts`, and it exists for the same reason.
 //
-// It is NOT in the descriptor's `files` list, so `add api-keys` never copies it into a
-// user's project. It runs here only, under `pnpm test:modules`.
+// It is NOT in the descriptor's `files` list, so `add api-keys-user` never copies
+// it into a user's project. It runs here only, under `pnpm test:modules`.
 //
 // The pinned version does not live in a `package.json` this repo ships. `packages/auth`
-// exists only inside a scaffolded project, and the dependency lands there through this
-// module's `package-json-dependency` patch. So the descriptor's patch `range` is the
-// source of truth, and that is what the header is checked against.
+// exists only inside a scaffolded project, and the dependency lands there through the
+// core `api-keys` module's `package-json-dependency` patch, not through this owner's. So
+// the core descriptor's patch `range` is the source of truth, and that is what the header
+// is checked against.
 //
 // It reads the schema files as text rather than importing them. Both variants import
 // `drizzle-orm`, which this repo's root `node_modules` does not carry, so an import would
@@ -34,7 +35,10 @@ interface Descriptor {
   }[];
 }
 
-const descriptor: Descriptor = JSON.parse(read("../../../registry-item.json"));
+// `api-keys`, the core this owner depends on. It pins the package for both owners.
+const descriptor: Descriptor = JSON.parse(
+  read("../../../../api-keys/registry-item.json")
+);
 const pinned = descriptor.patches?.find(
   (patch) => patch.kind === "package-json-dependency" && patch.name === PACKAGE
 )?.range;
@@ -69,7 +73,7 @@ for (const variant of VARIANTS) {
       assert.equal(
         header,
         pinned,
-        `the snapshot says it was verified against @better-auth/api-key@${header}, but registry-item.json patches in ${pinned}. Re-verify every column against the pinned version's apiKeySchema() and its Drizzle type mapping, fix any column that moved, then update the header.`
+        `the snapshot says it was verified against @better-auth/api-key@${header}, but modules/api-keys/registry-item.json patches in ${pinned}. Re-verify every column against the pinned version's apiKeySchema() and its Drizzle type mapping, fix any column that moved, then update the header.`
       );
     });
 

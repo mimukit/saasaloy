@@ -62,6 +62,7 @@ function modulePlan(
     prereqNames: [],
     prereqDependsOn: {},
     prereqConflictsWith: {},
+    prereqRequiresOneOf: {},
     removeWarnings: [],
     newEnvVars: {},
     needsMerge: true,

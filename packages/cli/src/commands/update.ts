@@ -52,6 +52,10 @@ import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
+  detectMissingRequirements,
+  formatUpdateRequirements,
+} from "../lib/requires.js";
+import {
   createRegistrySource,
   REGISTRY_ENV,
   RemoteRegistrySource,
@@ -943,16 +947,16 @@ export async function runUpdate(argv: string[]): Promise<number> {
     // outdated module's new version pulls in one driver, another's pulls in the other,
     // and neither graph alone holds both. Union every resolved graph and check once more,
     // before any plan is built or written (#98).
-    if (conflictRefusals.length === 0 && resolvedGraphs.length > 1) {
-      const merged: Graph = { order: [], modules: new Map() };
-      for (const graph of resolvedGraphs) {
-        for (const [name, mod] of graph.modules) {
-          if (!merged.modules.has(name)) {
-            merged.modules.set(name, mod);
-            merged.order.push(name);
-          }
+    const merged: Graph = { order: [], modules: new Map() };
+    for (const graph of resolvedGraphs) {
+      for (const [name, mod] of graph.modules) {
+        if (!merged.modules.has(name)) {
+          merged.modules.set(name, mod);
+          merged.order.push(name);
         }
       }
+    }
+    if (conflictRefusals.length === 0 && resolvedGraphs.length > 1) {
       const report = detectConflicts({ graph: merged, config, lock });
       for (const name of report.missingLockEntries) {
         missingLockEntries.add(name);
@@ -984,6 +988,16 @@ export async function runUpdate(argv: string[]): Promise<number> {
     }
     if (conflictRefusals.length > 0) {
       cancel(conflictRefusals.join("\n"), TUI_ON_STDERR);
+      return EXIT_REFUSED;
+    }
+    // `requiresOneOf` on a new version (#229). A module split leaves the core needing an
+    // owner the project never picked, and the new core no longer lists the files that
+    // owner now ships — so `executeUpdatePlan` would delete each unchanged one. Checked
+    // over every resolved graph at once, so an owner arriving through another module's
+    // update still counts, and refused before any plan, and so any delete, exists.
+    const unmet = detectMissingRequirements({ graph: merged, config });
+    if (unmet.length > 0) {
+      cancel(formatUpdateRequirements(unmet), TUI_ON_STDERR);
       return EXIT_REFUSED;
     }
 

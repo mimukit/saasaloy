@@ -342,6 +342,59 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     expect(output).not.toContain("module conflict");
   });
 
+  // #229. A module split moves files out of a core into an owner the project must pick.
+  // Without this check the new core lists fewer files, and the updater deletes every
+  // unchanged file it no longer lists — the project's schema with it.
+  it("refuses an update whose new version gains an unmet requiresOneOf, and deletes nothing", async () => {
+    await state(["widget"], { widget: localEntry });
+    const content = "export const widgets = 1;\n";
+    await mkdir(join(project, "src"), { recursive: true });
+    await writeFile(join(project, "src", "widget.ts"), content, "utf-8");
+    const manifest = JSON.parse(
+      await readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+    ) as { managed: Record<string, unknown> };
+    manifest.managed["src/widget.ts"] = {
+      module: "widget",
+      hash: hashContent(content),
+    };
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify(manifest),
+      "utf-8"
+    );
+    await descriptor("widget", {
+      requiresOneOf: ["widget-owner-a", "widget-owner-b"],
+    });
+    await descriptor("widget-owner-a", { dependsOn: ["widget"] });
+    await descriptor("widget-owner-b", { dependsOn: ["widget"] });
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+    expect(code).toBe(2);
+    expect(output).toContain("saasaloy add widget-owner-a");
+    expect(output).toContain("saasaloy add widget-owner-b");
+    await expect(
+      readFile(join(project, "src", "widget.ts"), "utf-8")
+    ).resolves.toBe(content);
+    const after = JSON.parse(
+      await readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+    ) as { managed: Record<string, unknown> };
+    expect(after.managed["src/widget.ts"]).toBeDefined();
+  });
+
+  it("lets an update through when an installed module meets the new requiresOneOf", async () => {
+    await state(["widget", "widget-owner-a"], {
+      widget: localEntry,
+      "widget-owner-a": localEntry,
+    });
+    await descriptor("widget", {
+      requiresOneOf: ["widget-owner-a", "widget-owner-b"],
+    });
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+    expect(code).toBe(0);
+    expect(output).not.toContain("saasaloy add widget-owner");
+  });
+
   it("names the env vars the new version requires before applying", async () => {
     await state(["widget"], { widget: localEntry });
     await descriptor("widget", {

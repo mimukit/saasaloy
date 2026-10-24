@@ -233,9 +233,36 @@ export async function buildRemovePlan(
     }
   }
 
+  // A core whose `requiresOneOf` this module was the last installed option for (#229).
+  // `remove` does not refuse: switching owners is remove-then-add, and a refusal would
+  // block it. It says what is left broken and what fixes it, and `doctor` reports the
+  // same state until then.
+  const ownerless: string[] = [];
+  for (const installedName of config.installed) {
+    if (installedName === name) {
+      continue;
+    }
+    const options = lock.modules[installedName]?.requiresOneOf ?? [];
+    if (
+      options.includes(name) &&
+      !options.some(
+        (option) => option !== name && config.installed.includes(option)
+      )
+    ) {
+      const others = options.filter((option) => option !== name);
+      ownerless.push(
+        `${installedName} needs one of: ${options.join(", ")}, and this removal leaves none installed. Files it patched still import what ${name} ships, so the project does not compile until you run ${
+          others.length > 0
+            ? others.map((option) => `\`saasaloy add ${option}\``).join(" or ")
+            : `\`saasaloy add ${name}\``
+        }${others.length > 0 ? `, or \`saasaloy remove ${installedName}\`` : ""}.`
+      );
+    }
+  }
+
   return {
     module: name,
-    warnings: [...(manifest.removeWarnings[name] ?? [])],
+    warnings: [...(manifest.removeWarnings[name] ?? []), ...ownerless],
     files,
     links,
     patches,

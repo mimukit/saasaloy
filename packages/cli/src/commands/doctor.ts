@@ -11,6 +11,7 @@ import {
   checkPolicyBindings,
   checkProject,
   checkRetiredInfra,
+  checkUnmetRequirements,
   checkTarget,
   hasRetiredInfra,
   readDeployState,
@@ -151,7 +152,8 @@ async function reportProject(path: string): Promise<number> {
     );
   }
   // Two halves of the same question: a module installed that owns nothing (#107), and a
-  // module that owns work but was never marked installed (#49).
+  // module that owns work but was never marked installed (#49). A core whose
+  // `requiresOneOf` no installed module meets is one more (#229).
   // A third question, asked only on a project running `kv-cloudflare`: does every rate
   // limit policy registered in `packages/kv` have the `RL_<NAME>` binding its `consume`
   // resolves to (#129)?
@@ -164,6 +166,7 @@ async function reportProject(path: string): Promise<number> {
   const findings = [
     ...checkProject({ config, manifest }),
     ...checkPartialInstalls({ installed: config.installed, manifest }),
+    ...checkUnmetRequirements({ installed: config.installed, lock }),
     ...(policyState ? checkPolicyBindings(policyState) : []),
     ...checkEnv(envState),
     ...checkRetiredInfra(await hasRetiredInfra(path)),

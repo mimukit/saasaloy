@@ -78,6 +78,15 @@
               "type": "string",
               "pattern": "^[a-z0-9][a-z0-9-]*$"
             }
+          },
+          "requiresOneOf": {
+            "type": "array",
+            "description": "The module's declared `requiresOneOf` list, recorded because descriptors aren't kept after install — this is what lets `doctor` report a module none of whose options is installed.",
+            "uniqueItems": true,
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z0-9][a-z0-9-]*$"
+            }
           }
         }
       }
