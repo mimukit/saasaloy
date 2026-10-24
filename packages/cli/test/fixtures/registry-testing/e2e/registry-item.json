@@ -2,6 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "e2e",
   "type": "saasaloy:capability",
+  "description": "Test fixture e2e.",
   "enablesTesting": true,
   "scaffolds": [
     {

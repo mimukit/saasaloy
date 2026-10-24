@@ -47,10 +47,22 @@ current project has installed when it is run inside one, and works anywhere.
 A wrapper script reads `2` as "the input is wrong, retrying will not help" and `1` as
 "transient, a retry may work".
 
+### JSON output
+
+`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with `"schemaVersion": 1`. A breaking change to a document's shape bumps that number, and a new field does not.
+
+`--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
+
+```json
+{ "schemaVersion": 1, "error": { "exitCode": 2, "message": "Unknown argument(s): --nope — usage: …" } }
+```
+
+`--json` on `add` without `--dry-run`, beside `--diff`, or on `env` without `--check` exits 2 with that error document. Each command's section below lists its document's fields.
+
 ## `saasaloy init`
 
 ```text
-saasaloy init [<name>] [--force] [--no-install] [--no-git] [--testing=<off|tests-after|tdd>]
+saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<off|tests-after|tdd>]
 ```
 
 `<name>` may be a bare name (`my-app`), `.` for the current directory, or a path
@@ -60,6 +72,7 @@ match `^[a-z0-9][a-z0-9-]*$`. Omit it and the CLI prompts.
 | Flag | Effect |
 |---|---|
 | `--force` | scaffold into a directory that already has files in it. Without it, a non-empty target cancels with exit 2. A `.git` directory alone does not count as non-empty. |
+| `--yes`, `-y` | answer the "Install dependencies now?" prompt with yes: run `pnpm install` with no prompt. Passing it with `--no-install` exits 2. |
 | `--no-install` | skip the "Install dependencies now?" prompt and never run `pnpm install`. |
 | `--no-git` | do not run `git init` in the new project. |
 | `--testing=<mode>` | the project's [testing mode](#saasaloy-testing): `off`, `tests-after` or `tdd`. An unknown value exits 2 before anything is written. |
@@ -74,10 +87,12 @@ than aborting the scaffold.
 
 Like every other command, `init` rejects a flag it does not know with exit 2.
 
+With no terminal, `init` refuses with exit 2 before it writes a file: with no `<name>` it names `<name>`, and with neither `--yes` nor `--no-install` it names both. A `pnpm install` that fails prints pnpm's output and exits 1. The scaffold stays on disk, so run `pnpm install` in it once the cause is fixed.
+
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--dry-run] [--diff] [--yes] [--force]
+saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
 ```
 
 With no module named, `add` shows a picker over the source, listing only modules this
@@ -90,16 +105,20 @@ before any work happens, with exit 2.
 | `--diff` | print the plan plus a per-file diff, capped at 60 lines each, and stop. Nothing is written. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 | `--force` | re-apply the module you named even though it is already installed. Already-installed dependencies are left alone. |
+| `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-d1 --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
+| `--json` | with `--dry-run`, print the plan as one JSON document on stdout (see [JSON output](#json-output)). It never opens the picker or the driver prompt: name the module, and pass `--with` for an unmet `requiresOneOf`. |
+
+The `--dry-run --json` document carries `requested`, `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `from`, `module`, `onlyWith` and `skill`), `patches` (each with `file`, `kind`, `action` and `module`), `dependencies`, `devDependencies`, `envVars` (name → description), `aliases`, `aliasConflicts`, `links` (the skill links, each with `path`, `target`, `action` and `module`), `staleOwners` and `writesUi`. Every file and every patch the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
 
 Without `--force`, a module whose graph is fully installed prints `Nothing to do` and
 exits 0.
 
 A successful `add` ends with a next-steps box: the `/saasaloy-<module>` skill it linked,
 which holds the module's own procedure, and the environment variables it needs, re-printed
-after the confirmation rather than before it. It also writes `apps/api/.dev.vars.example`
-from the installed descriptors' `envVars` maps, one commented entry per variable. A value already in the file is never overwritten, and no key is ever removed.
+after the confirmation rather than before it. It also writes `packages/env/.env.example`
+from the installed descriptors' `envVars` maps, the key list every service's `.env` is written from.
 
-The next-steps box no longer tells you to copy that file by hand. It names `saasaloy env` instead, with the line `Run saasaloy env — it prompts for each unset one and writes it to the .dev.vars or .env that reads it.` The example file stays as the checked-in record of what each variable means.
+The next-steps box names `saasaloy env`, with the line `Run saasaloy env — it prompts for each unset one and writes it to packages/env/.env.`, then `pnpm env:setup` to write each service's own `.env` from that file. The example file stays as the checked-in record of what each variable means.
 
 A module descriptor may declare `conflictsWith`, naming modules it refuses to sit beside.
 `add` checks that list before it writes anything and exits 2 with a message naming both
@@ -129,7 +148,7 @@ A descriptor may also declare `requiresOneOf`, naming modules exactly one of whi
 be present. `add` counts an option as present when it is already installed or arrives in
 the same resolved graph. When none is, an interactive run offers the list as a picker and
 adds what you choose to the plan; `--yes` or a run with no terminal exits 2 and names the
-options instead of choosing for you. `database` declares it, so the core can never land on
+options instead of choosing for you, with the flag that answers it: "Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list." `--with` picks on the command line. `database` declares it, so the core can never land on
 a project with no driver behind its `@repo/db/client` export.
 
 A file entry — in `files[]` or in a scaffold's `files[]` — may declare `onlyWith`, naming
@@ -165,24 +184,33 @@ See [Add a module](how-to/add-a-module.md) for the workflow.
 ## `saasaloy env`
 
 ```text
-saasaloy env [--check]
+saasaloy env [--check [--json]] [--from-file <path>]... [--set KEY=VALUE]...
 ```
 
-Fill in the variables the installed modules declare. `env` reads each installed module's descriptor at the SHA the lock resolved, flattens its `envVars` map into declarations, and prompts for every one that is not already set. A module with no lock entry, a module installed from a local checkout, or a descriptor that cannot be read is warned about and skipped, and the run continues with the modules it did read.
+Fill in the variables the installed modules declare. `env` reads each installed module's descriptor at the SHA the lock resolved and flattens its `envVars` map into declarations. A variable two modules declare is asked once. A module with no lock entry, a module installed from a local checkout, or a descriptor that cannot be read is warned about and skipped, and the run continues with the modules it did read.
+
+Every value lands in one gitignored file, `packages/env/.env`. `pnpm env:setup` then writes each service's own `.env` from it, and the descriptor's `envServices` decides which service reads which key. `env` also warns when `packages/env/.env.example` does not list a declared key, because no service would read it.
 
 | Flag | Effect |
 |---|---|
-| `--check` | report missing variables and exit non-zero, without prompting. |
+| `--check` | report missing variables and exit 2, without prompting and without writing. Exits 0 once every declared variable is set. |
+| `--from-file <path>` | write the `KEY=VALUE` lines of a dotenv file, with no prompt. Comments, blank lines and empty values are skipped. The path is read relative to the working directory. Repeatable. |
+| `--set KEY=VALUE` | write one value, with no prompt. Repeatable, and a later `--set` beats a `--from-file` value for the same key. |
+| `--json` | with `--check`, print the report as one JSON document on stdout (see [JSON output](#json-output)): `variables` (each with `name`, `module`, `description` and `set`), `missing`, `notInKeyList` (declared keys `packages/env/.env.example` does not list), `skipped` (the modules it could not read, as warnings) and `productionSecrets` (the lines of the Production secrets note). Without `--check` it exits 2. |
 
-Each variable routes to a workspace and to a file inside it: a `PUBLIC_*` name lands in that workspace's `.env`, every other name lands in its `.dev.vars`. When routing finds several plausible workspaces, an interactive run asks which one reads the variable, and `--check` prints "several workspaces fit (…) — run `saasaloy env` to pick one". When routing finds none, the line reads "no target workspace found — this module wrote no files under a known alias".
+Use `--from-file` for a secret. A `--set` value stays in your shell history.
 
-A value already present is never rewritten, whatever the descriptor's `devVars` suggests. The prompt's message is the descriptor's own wording, and the descriptor's `devVars` entry becomes the prompt's default.
+With no flag, `env` fills blanks only. It prompts for every declared variable that has no value (a `KEY=` placeholder counts as no value) and never rewrites a value already in the file, whatever the descriptor's `devVars` suggests. The prompt's message is the descriptor's own wording, and its `devVars` entry becomes the default. A filled placeholder keeps its line, a new key goes on the end, and every other line stays byte for byte.
 
-Before it asks for a single secret, `env` proves every target file is gitignored. A tracked target is refused with exit 2 and the message "&lt;file&gt; isn't gitignored — refusing to write a secret into a tracked file. Add it to .gitignore (the base template already does) and run again."
+With `--set` or `--from-file`, `env` opens no prompt, with or without a terminal. A value passed this way replaces the value the file holds for that key, because you chose it. Each key is checked against the installed modules' declarations first: one key that no installed module declares refuses the whole run with exit 2, names every unknown key, and writes nothing. Any declared key still unset afterwards is listed as a warning, and the run exits 0. `--check` with either flag exits 2, because one promises to write nothing and the other writes.
 
-`env` never writes to a live account. It prints the production commands under a **Production secrets** note, one `wrangler secret put <NAME>` per non-`PUBLIC_` variable grouped by workspace, closing with "Printed, never run — copy these when you deploy." The note prints on every run, `--check` included.
+Before it writes or asks for a single value, `env` proves `packages/env/.env` is gitignored. A tracked file, or a project that is not a git repository, is refused with exit 2 and the message "packages/env/.env isn't gitignored — refusing to write a secret into a tracked file. Add it to .gitignore (the base template already does) and run again."
 
-Exit codes: 0 when every declared variable is set, when nothing declares one ("No module declares an environment variable."), or when the run filled the blanks in ("Environment filled in."). 2 when a target is tracked, when you cancel a prompt ("Cancelled — nothing written."), and when variables are still unset under `--check` or with no terminal, which reads "N variables still unset — run `saasaloy env` to fill them in." A session with no terminal takes the same path `--check` does, so the command never hangs on a prompt in CI.
+`env` never writes to a live account. It prints the production commands under a **Production secrets** note, one `wrangler secret put <NAME>` per non-`PUBLIC_` variable, to run from the Worker's workspace, closing with "Printed, never run — copy these when you deploy." The note prints on every run, `--check` included.
+
+With no terminal and no flag, `env` takes the `--check` path, so it never waits on a prompt in CI. The message reads "N variables still unset — run `saasaloy env` in a terminal, or pass `--from-file <path>`, to fill them in."
+
+Exit codes: 0 when every declared variable is set, when nothing declares one ("No module declares an environment variable."), when a prompt run filled the blanks in ("Environment filled in."), or when `--set`/`--from-file` wrote its values. 1 when you cancel a prompt ("Cancelled — nothing written.") or a write fails. 2 when the file is not gitignored, when a passed key is not declared, for `--json` without `--check`, when a `--from-file` path cannot be read, for a bad flag, and when variables are still unset under `--check` or with no terminal.
 
 ## `saasaloy testing`
 
@@ -203,17 +231,19 @@ Exit codes: 0 when the mode was printed or saved, 2 for an unknown mode or an ex
 ## `saasaloy outdated`
 
 ```text
-saasaloy outdated [--check]
+saasaloy outdated [--check] [--json]
 ```
 
 Report whether anything has moved, without touching a file. The first row is the base template: the template hash `saasaloy-lock.json` recorded against the one the running CLI ships, with the recorded and running CLI versions beside it. One row per installed module follows, comparing the lock's commit SHA with what its ref resolves to now.
 
 A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record, which includes every project scaffolded before the record existed and a project whose lock has a `base` object but whose manifest has no tracked base entries. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` adopts or re-adopts the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table. An unreachable source is a row, not a throw, and it does not fail `--check` either. With `SAASALOY_REGISTRY_DIR` set, every module row reads `local` and the run warns that nothing was compared, so `--check` exits 0.
 
+`--json` prints the same rows as one document on stdout (see [JSON output](#json-output)): `base`, the base row, `modules`, one row per installed module, and `drift`, the count `--check` exits 2 on. Each row carries `name`, `source`, `ref`, `current`, `latest` and `status`, plus `detail` when the table prints a note under it. The exit code is the one the same run without `--json` returns.
+
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--force] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--dry-run] [--diff] [--force] [--yes]
 saasaloy update --abort
 ```
 
@@ -227,6 +257,7 @@ Two cases stop before anything is applied. A project with no usable base record 
 |---|---|
 | `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
+| `--resolved <path>` | record a file you merged, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge). |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
 | `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
@@ -252,6 +283,20 @@ A module run also backfills: each installed module's entries whose `when` is now
 Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and
 left files waiting on a merge, 2 for a refusal, 1 for a failure.
 
+### Recording a merge
+
+`update` cannot tell a finished merge from an unfinished one, so a plain re-run offers the same files again against the same base. `--resolved <path>` is how you say a merge is done. It is part of an update run, not a separate command, so with no terminal it still needs `--yes`, and a dirty working tree still needs `--force`. The merge plan ends with the exact command for its files:
+
+```sh
+saasaloy update --resolved apps/api/src/routes/waitlist.ts --yes
+```
+
+Each named file leaves the merge plan. `update` records the file's current hash as its new baseline in `.saasaloy/manifest.json`, without checking what the file holds, and writes nothing to it. A dropped file the module no longer ships is untracked and left on disk. Once nothing else of a module waits on a merge, its lock entry moves to the new SHA, and the next `update` skips the file and exits 0 when nothing else is left. A config patch under "Config patches that moved" is not a file: it still waits, and the module's lock stays where it is.
+
+The manifest entry also records the hash of the module version the merge took in (`mergedWith`). While the module still ships that version, `update` skips the file even with no merge base, as under `SAASALOY_REGISTRY_DIR`. Once the module moves again, the file goes to the merge plan rather than being overwritten, because it holds your edits.
+
+A path may be relative to the working directory or to the project root, as the merge plan prints it. A path that this run does not send to a merge exits 2 before anything is written and names the path and the files that are waiting.
+
 ## `saasaloy remove`
 
 ```text
@@ -271,18 +316,21 @@ positionals are rejected with exit 2.
 
 `remove X` also takes every file and patch another module wrote under a `when.installed` that names X, such as a journey spec gated on `e2e`. The plan line names the owner, as in `delete  packages/e2e/specs/auth-sign-in.spec.ts (auth, ships only with e2e)`. The owner stays installed, and a drifted file is kept untracked, as with the module's own files.
 
+With no terminal, a named module, and no `--yes`, `remove` refuses with exit 2 before it plans: "No terminal to confirm in — re-run with `--yes` to remove, or `--dry-run` to preview." `--dry-run` and `--diff` ask nothing, so they still run.
+
 See [Remove a module](how-to/remove-a-module.md), and read
 [Known limitations](#known-limitations) before assuming `remove` undoes `add`.
 
 ## `saasaloy list`
 
 ```text
-saasaloy list [<owner/repo[@ref]>] [--installed] [--available]
+saasaloy list [<owner/repo[@ref]>] [--installed] [--available] [--json]
 ```
 
 One optional coordinate names a registry; with none it lists the default registry. Output
 is names only, read from one listing of the repo's git tree, which is why a module with an
-invalid descriptor still appears here and only fails at `add`.
+invalid descriptor still appears here and only fails at `add`. `--json` is the exception:
+it reads each listed module's descriptor, so an invalid one fails the run.
 
 Run inside a project, each name is marked installed or not, anything installed that this
 registry does not offer is named on its own line, and the closing line counts both.
@@ -292,8 +340,23 @@ Run outside one, nothing can be marked and every name is listed plain.
 |---|---|
 | `--installed` | list only the modules this project has installed |
 | `--available` | list only the modules this project has not installed |
+| `--json` | print one JSON document on stdout with each listed module's descriptor fields (see [JSON output](#json-output)) |
 
-The two exclude each other; passing both exits 2. Unknown flags are rejected the same way.
+The two filters exclude each other; passing both exits 2. Unknown flags are rejected the same way. `--json` combines with either filter: `saasaloy list --installed --json` is how an agent finds the installed modules and their skills.
+
+The `--json` document carries `registry` (the source label), `base` (the base app, or `null` outside a project), `notInRegistry` (installed modules this registry does not offer) and `modules`. Each module carries:
+
+| Field | Value |
+|---|---|
+| `name` | the module name |
+| `tier` | `capability` or `feature`, from the descriptor's `type` |
+| `description` | the descriptor's one line, or `null` when it has none |
+| `stage` | `validate`, `mvp`, `teams`, `money` or `scale`, or `null` |
+| `needs` | a list from `cloudflare-paid`, `stripe`, `domain` and `vendor-account`; `[]` means nothing outside the free tier, and `null` means the descriptor does not say |
+| `dependsOn`, `requiresOneOf`, `conflictsWith` | the descriptor's lists, `[]` when absent |
+| `envVars` | name → the descriptor's description of the variable |
+| `skill` | the skill folder the module ships, such as `saasaloy-waitlist`, or `null` |
+| `installed` | `true` when this project has it installed |
 
 ## `saasaloy new`
 
@@ -306,31 +369,33 @@ Scaffold a module in a registry repo. `module` is the only noun there is, and th
 | Flag | Effect |
 |---|---|
 | `--type <tier>` | `saasaloy:capability` or `saasaloy:feature`. Skips the tier prompt. A value that is neither exits 2. |
-| `--depends-on <a,b>` | comma-separated capabilities this module needs. Skips the dependency prompt. |
+| `--depends-on <a,b>` | comma-separated capabilities this module needs. Skips the dependency prompt. `--depends-on=` or `--depends-on ""` means none. |
 
-Both value flags take `--type feature` and `--type=feature`. A value flag with nothing usable after it is a usage error, not a silently empty value.
+Both value flags take `--type feature` and `--type=feature`. A value flag with nothing usable after it is a usage error, not a silently empty value. The one exception is an empty `--depends-on`, which answers "no dependencies".
 
-It writes three paths under `modules/<name>/`: `registry-item.json`, `files/.gitkeep`, and `skills/saasaloy-<name>/SKILL.md`. The descriptor declares a `requires.saasaloy` range floored at the running CLI's own minor. The name must match `^[a-z0-9][a-z0-9-]*$`, and the folder must not already exist; either problem refuses before anything is written.
+It writes three paths under `modules/<name>/`: `registry-item.json`, `files/.gitkeep`, and `skills/saasaloy-<name>/SKILL.md`. The descriptor declares a `requires.saasaloy` range floored at the running CLI's own minor, a `TODO` `description` for you to replace, `stage: "mvp"` and `needs: []`, so it passes `doctor` from the start. `doctor` warns on the `TODO` line until you replace it, and `new` prints that warning under **Still to write**. The name must match `^[a-z0-9][a-z0-9-]*$`, and the folder must not already exist; either problem refuses before anything is written.
 
 After the write, `new` runs the same checks `saasaloy doctor` runs, in process. Findings are reported, not refused: the run still exits 0 with "Scaffolded with N findings — fix <dir>/registry-item.json, then `saasaloy doctor <dir>`." A clean scaffold ends with "<name> is ready — put its payload in <dir>/files/ and write its runbook in <dir>/skills/."
 
-Exit 2 covers an unknown argument, an unknown noun, a bad name, an existing folder, a bad `--type`, a cancelled prompt, and a missing name or tier with no terminal to ask on. It also refuses inside a generated project, because `saasaloy.json` there means a project that installs modules rather than a registry that hosts them, and nothing is written.
+Exit 2 covers an unknown argument, an unknown noun, a bad name, an existing folder, a bad `--type`, and a missing name, tier or `--depends-on` with no terminal to ask on. A cancelled prompt exits 1. It also refuses inside a generated project, because `saasaloy.json` there means a project that installs modules rather than a registry that hosts them, and nothing is written.
 
 ## `saasaloy doctor`
 
 ```text
-saasaloy doctor [<path>]
+saasaloy doctor [<path>] [--json]
 ```
 
-Validate what is on disk. Nothing named checks the current directory. `doctor` picks its mode by what the path carries: a `saasaloy.json` means project mode, anything else means registry mode. It takes no flags beyond `--help` and `-h`, and it never writes.
+Validate what is on disk. Nothing named checks the current directory. `doctor` picks its mode by what the path carries: a `saasaloy.json` means project mode, anything else means registry mode. Its one flag is `--json`, and it never writes.
 
-Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
+Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. Besides the schema, it checks what the schema cannot, among them declared files on disk, known aliases, sibling module names, exact-pinned dependencies, the skill folder, and a `description` on every descriptor. The schema keeps `description` optional so a project can still read an older descriptor, but a registry without one fails here. A `description` that still starts with `TODO`, as `new module` writes it, is a warning: it prints in a **Warnings** box and never fails the run. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
 
 Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
 
 Below the base box, project mode asks three questions: a module in `installed` that owns no file in the manifest, a module that owns files but was never marked installed, and, on a project running `kv-cloudflare`, whether every registered rate limit policy has the `RL_<NAME>` binding its `consume` resolves to. No findings exits 0 with "No problems found."; findings exit 2 with "N problems in saasaloy.json."
 
 A path that does not exist exits 2, and so does a directory with no module folders in it.
+
+`--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module`, its `findings` and its `warnings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
 
 ## Module coordinates
 
@@ -356,8 +421,8 @@ Third-party module identity is expected to change with
 | Variable | Read by | Effect |
 |---|---|---|
 | `SAASALOY_REGISTRY_DIR` | `add`, `env`, `list`, `outdated`, `update` | resolve modules from a local `modules/` directory instead of GitHub. Takes precedence over any `owner/repo` in the coordinate, and `add` and `list` warn when you pass one anyway. A missing directory is an error. Under `outdated` every module row reads `local`. |
-| `GITHUB_TOKEN` | `add`, `list` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
-| `GIGET_AUTH` | `add`, `list` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
+| `GITHUB_TOKEN` | `add`, `env`, `list`, `outdated`, `update` | authenticate GitHub API calls. Raises the rate limit from 60 to 5000 requests an hour and allows private registries. Hitting the anonymous limit produces `GitHub API rate limit hit … Set GITHUB_TOKEN to raise it.` |
+| `GIGET_AUTH` | `add`, `env`, `list`, `outdated`, `update` | fallback for the same purpose; `GITHUB_TOKEN` wins if both are set. |
 | `SAASALOY_GITHUB_API` | every command that reaches GitHub | override the GitHub API base URL. A trailing slash is stripped. It is not a GitHub Enterprise switch: nothing else in the CLI reads it, and a real GHES base would need `GIGET_GITHUB_URL` set to match. |
 | `SAASALOY_DEBUG` | every command | any non-empty value prints the full `cause` chain and stack under a failure's message, instead of the message alone. Set it before you paste an error into a bug report. |
 

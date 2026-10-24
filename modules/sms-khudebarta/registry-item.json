@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "sms-khudebarta",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "An sms provider on the Khudebarta gateway for Bangladeshi numbers; needs a Khudebarta account.",
+  "stage": "scale",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["sms"],
   "dependencies": [],
   "envVars": {

@@ -105,7 +105,7 @@ describe("formatMissingRequirements — the refusal text", () => {
     expect(message).toContain("Cannot add database");
     expect(message).toContain("database needs one of");
     expect(message).toContain("database-d1, database-postgres");
-    expect(message).toContain("saasaloy add database-d1");
+    expect(message).toContain("saasaloy add database --with database-d1");
   });
 
   it("says which requested module dragged in the declaring prerequisite", () => {

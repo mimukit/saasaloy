@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "admin",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "An apps/admin TanStack Router SPA behind the auth session, for the site's staff.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api", "auth"],
   "dependencies": [],
   "envVars": {

@@ -1,13 +1,9 @@
-import { cancel, intro, note, outro } from "@clack/prompts";
-import { join } from "node:path";
+import { intro, note, outro } from "@clack/prompts";
+import { basename, join } from "node:path";
 import pc from "picocolors";
-import {
-  EXIT_OK,
-  EXIT_REFUSED,
-  exitCodeFor,
-  formatFailure,
-} from "../lib/exit.js";
+import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { pathExists } from "../lib/fs-utils.js";
+import { createOutput, printJson } from "../lib/json-output.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   createRegistrySource,
@@ -16,6 +12,7 @@ import {
 } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
+import type { RegistryItem } from "../lib/schema.js";
 import { wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
@@ -27,6 +24,10 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // third-party registry. Names only — matching the picker — so it stays a cheap, one-call
 // lookup (no per-module descriptor fetch).
 //
+// `--json` is the exception (#223): an agent picking modules needs what each one is, so
+// it reads every listed module's descriptor and prints one document on stdout. See
+// `lib/json-output.ts` for the contract.
+//
 // Run inside a project, each name is marked installed or not, and anything installed the
 // registry no longer offers is listed under its own heading. Before #98 the output was a
 // flat list a user had to diff against saasaloy.json by hand.
@@ -37,12 +38,21 @@ interface Options {
   installed: boolean;
   /** Show only what the registry offers and this project has not installed. */
   available: boolean;
+  /** `--json`: one JSON document on stdout, the TUI on stderr. */
+  json: boolean;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--installed", "--available", "--help", "-h"]);
-const USAGE = "saasaloy list [<owner/repo[@ref]>] [--installed] [--available]";
+const KNOWN_FLAGS = new Set([
+  "--installed",
+  "--available",
+  "--json",
+  "--help",
+  "-h",
+]);
+const USAGE =
+  "saasaloy list [<owner/repo[@ref]>] [--installed] [--available] [--json]";
 const HELP: CommandHelp = {
   name: "list",
   describe: DESCRIPTIONS.list,
@@ -50,6 +60,8 @@ const HELP: CommandHelp = {
   flags: {
     "--installed": "list only the modules this project has installed",
     "--available": "list only the modules this project has not installed",
+    "--json":
+      "print one JSON document with each module's descriptor fields on stdout",
   },
 };
 
@@ -67,6 +79,7 @@ function parseArgs(argv: string[]): Options {
   return {
     available: argv.includes("--available"),
     installed: argv.includes("--installed"),
+    json: argv.includes("--json"),
     source: positional[0],
     unknown,
   };
@@ -77,6 +90,51 @@ interface LocalProject {
   installed: Set<string>;
   /** The base app `init` scaffolded, which is not a module and is in no registry. */
   base?: string;
+}
+
+/** One module as `list --json` prints it (#223). */
+export interface ListedModule {
+  name: string;
+  /** The descriptor's `type` without its prefix: `capability` or `feature`. */
+  tier: "capability" | "feature";
+  /** `null` when the descriptor has none, which a third-party registry may still ship. */
+  description: string | null;
+  stage: RegistryItem["stage"] | null;
+  /** `null` when the descriptor does not say, which is not the same as `[]`. */
+  needs: NonNullable<RegistryItem["needs"]> | null;
+  dependsOn: string[];
+  requiresOneOf: string[];
+  conflictsWith: string[];
+  /** Name → the descriptor's description of the variable. */
+  envVars: Record<string, string>;
+  /** The skill folder the module ships, e.g. `saasaloy-waitlist`, or `null`. */
+  skill: string | null;
+  installed: boolean;
+}
+
+/**
+ * The `list --json` entry for one descriptor. Pure and exported so the field mapping is
+ * tested without a registry. Each module ships at most one skill folder today; the
+ * first is the one named.
+ */
+export function listedModule(
+  item: RegistryItem,
+  installed: boolean
+): ListedModule {
+  const skill = item.agent?.skills?.[0];
+  return {
+    conflictsWith: item.conflictsWith ?? [],
+    dependsOn: item.dependsOn ?? [],
+    description: item.description ?? null,
+    envVars: item.envVars ?? {},
+    installed,
+    name: item.name,
+    needs: item.needs ?? null,
+    requiresOneOf: item.requiresOneOf ?? [],
+    skill: skill === undefined ? null : basename(skill),
+    stage: item.stage ?? null,
+    tier: item.type === "saasaloy:capability" ? "capability" : "feature",
+  };
 }
 
 /**
@@ -110,19 +168,20 @@ export async function runList(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  intro(pc.bgCyan(pc.black(" saasaloy list ")));
+  const out = createOutput(opts.json);
+  intro(pc.bgCyan(pc.black(" saasaloy list ")), out.tui);
 
   if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    return out.refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
   if (opts.installed && opts.available) {
-    cancel(
-      `\`--installed\` and \`--available\` exclude each other — pass neither to see both.`
+    return out.refuse(
+      `\`--installed\` and \`--available\` exclude each other — pass neither to see both.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
 
   let source: RegistrySource | undefined;
@@ -132,7 +191,8 @@ export async function runList(argv: string[]): Promise<number> {
     if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
       note(
         `Ignoring source "${coord.owner}/${coord.repo}" — ${REGISTRY_ENV} override is set.`,
-        pc.yellow("Warning")
+        pc.yellow("Warning"),
+        out.tui
       );
     }
 
@@ -140,8 +200,16 @@ export async function runList(argv: string[]): Promise<number> {
     const installed = project.installed;
     const modules = await source.listModules();
     if (modules.length === 0) {
-      note(`No modules found in ${source.label}.`, "Registry");
-      outro(pc.dim("0 modules"));
+      note(`No modules found in ${source.label}.`, "Registry", out.tui);
+      outro(pc.dim("0 modules"), out.tui);
+      if (opts.json) {
+        printJson({
+          base: project.base ?? null,
+          modules: [],
+          notInRegistry: opts.available ? [] : [...installed].toSorted(),
+          registry: source.label,
+        });
+      }
       return EXIT_OK;
     }
 
@@ -191,9 +259,20 @@ export async function runList(argv: string[]): Promise<number> {
       );
     }
 
+    // Read before the TUI prints, so a descriptor that fails to load fails the run
+    // before a half-drawn list.
+    const listed: ListedModule[] = [];
+    if (opts.json) {
+      for (const name of shown) {
+        const { item } = await source.readModule(name);
+        listed.push(listedModule(item, installed.has(name)));
+      }
+    }
+
     note(
       wrapForNote(lines.join("\n")),
-      `Modules ${pc.dim(`(${source.label})`)}`
+      `Modules ${pc.dim(`(${source.label})`)}`,
+      out.tui
     );
     const total = shown.length;
     outro(
@@ -203,12 +282,22 @@ export async function runList(argv: string[]): Promise<number> {
             ? ""
             : ` · ${offeredAndInstalled.length} installed`
         }`
-      )
+      ),
+      out.tui
     );
+    if (opts.json) {
+      printJson({
+        base: project.base ?? null,
+        modules: listed,
+        // Installed here and absent from this registry, under the same rule the text
+        // list follows: `--available` hides it.
+        notInRegistry: opts.available ? [] : elsewhere,
+        registry: source.label,
+      });
+    }
     return EXIT_OK;
   } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
+    return out.fail(error);
   } finally {
     await source?.cleanup?.();
   }

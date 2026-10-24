@@ -2,9 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "payment",
   "type": "saasaloy:capability",
-  "requires": {
-    "saasaloy": ">=0.6.0"
-  },
+  "description": "One-off payments in a packages/payment workspace: the provider contract, the status machine and staff review routes.",
+  "stage": "money",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {

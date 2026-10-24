@@ -38,9 +38,11 @@ import {
   parseArgs,
   persistState,
   pinToLock,
+  planDocument,
   runAdd,
   saveEnabledMode,
 } from "./add.js";
+import { runJson } from "../../test/support/json-run.js";
 
 // `add` with no module opens a picker. Without a terminal that prompt can never be
 // answered, so it has to fail fast instead of hanging a pipeline — and it has to do so
@@ -763,6 +765,15 @@ describe("add — parseArgs", () => {
     });
   });
 
+  it("reads --json", () => {
+    expect(parseArgs(["waitlist"]).json).toBeFalsy();
+    expect(parseArgs(["waitlist", "--dry-run", "--json"])).toMatchObject({
+      dryRun: true,
+      json: true,
+      unknown: [],
+    });
+  });
+
   it("takes --yes and -y as the same flag", () => {
     expect(parseArgs(["waitlist", "--yes"]).yes).toBeTruthy();
     expect(parseArgs(["waitlist", "-y"]).yes).toBeTruthy();
@@ -783,6 +794,29 @@ describe("add — parseArgs", () => {
     expect(
       parseArgs(["waitlist", "--forse", "email", "--dr-run"]).unknown
     ).toStrictEqual(["--forse", "--dr-run", "email"]);
+  });
+
+  it("reads --with as a repeatable value flag in both forms (#223)", () => {
+    expect(
+      parseArgs(["waitlist", "--with", "database-d1", "--with=email-console"])
+    ).toMatchObject({
+      name: "waitlist",
+      unknown: [],
+      with: ["database-d1", "email-console"],
+    });
+    expect(parseArgs(["waitlist"]).with).toStrictEqual([]);
+  });
+
+  it("reports a --with with no module rather than eating the next flag", () => {
+    const opts = parseArgs(["waitlist", "--with", "--yes"]);
+    expect(opts.unknown).toStrictEqual(["--with (needs a module name)"]);
+    expect(opts.with).toStrictEqual([]);
+    expect(parseArgs(["waitlist", "--with="]).unknown).toStrictEqual([
+      "--with (needs a module name)",
+    ]);
+    expect(parseArgs(["waitlist", "--with"]).unknown).toStrictEqual([
+      "--with (needs a module name)",
+    ]);
   });
 
   it("keeps --help out of the unknown list, so help can answer it", () => {
@@ -1251,6 +1285,144 @@ describe("runAdd — a descriptor's requires.saasaloy", () => {
   });
 });
 
+// #223: `--with <module>` answers a `requiresOneOf` choice on the command line, so an
+// agent with no terminal can add a module whose capability needs a driver.
+describe("runAdd — --with answers a requiresOneOf choice (#223)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
+    const mod = join(registry, name);
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name,
+        type: "saasaloy:feature",
+        files: [{ path: "files/a.ts", target: `@web/${name}.ts` }],
+        ...extra,
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(mod, "files", "a.ts"),
+      `export const ${name.replaceAll("-", "_")} = 1;\n`,
+      "utf-8"
+    );
+  }
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-with-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-with-reg-"));
+    await mkdir(join(project, "apps", "web"), { recursive: true });
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeModule("core", { requiresOneOf: ["driver-a", "driver-b"] });
+    await writeModule("driver-a", {
+      conflictsWith: ["driver-b"],
+      dependsOn: ["core"],
+    });
+    await writeModule("driver-b", {
+      conflictsWith: ["driver-a"],
+      dependsOn: ["core"],
+    });
+    await writeModule("feature", { dependsOn: ["core"] });
+    await writeModule("other");
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+    // No terminal, as an agent runs it.
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return { code: await runAdd(args), out: captured.lines.join("") };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  async function installed(): Promise<string[]> {
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as { installed: string[] };
+    return config.installed;
+  }
+
+  it("installs the module and the picked driver in one run", async () => {
+    const { code } = await run(["feature", "--with", "driver-a", "--yes"]);
+
+    expect(code).toBe(0);
+    expect((await installed()).toSorted()).toStrictEqual([
+      "core",
+      "driver-a",
+      "feature",
+    ]);
+    await expect(
+      pathExists(join(project, "apps", "web", "driver-a.ts"))
+    ).resolves.toBeTruthy();
+  });
+
+  it("takes the --with=<module> form too", async () => {
+    const { code } = await run(["feature", "--with=driver-b", "--yes"]);
+
+    expect(code).toBe(0);
+    await expect(installed()).resolves.toContain("driver-b");
+  });
+
+  it("names --with in the refusal when no driver was picked", async () => {
+    const { code, out } = await run(["feature", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("saasaloy add feature --with driver-a");
+    await expect(installed()).resolves.toStrictEqual([]);
+  });
+
+  it("refuses a --with module that answers no requirement, and writes nothing", async () => {
+    const { code, out } = await run(["feature", "--with", "other", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("--with other answers no unmet requirement");
+    await expect(installed()).resolves.toStrictEqual([]);
+    await expect(
+      pathExists(join(project, "apps", "web", "feature.ts"))
+    ).resolves.toBeFalsy();
+    await expect(
+      pathExists(join(project, "apps", "web", "other.ts"))
+    ).resolves.toBeFalsy();
+  });
+
+  it("refuses a second --with for a choice the first one already answered", async () => {
+    const { code, out } = await run([
+      "feature",
+      "--with",
+      "driver-a",
+      "--with",
+      "driver-b",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("--with driver-b answers no unmet requirement");
+    await expect(installed()).resolves.toStrictEqual([]);
+  });
+});
+
 // #50: the next-steps note used to end at "copy .dev.vars.example and fill it in", which
 // was the only instruction and was wrong for a `PUBLIC_*` value. It now names the command
 // that does the work.
@@ -1704,5 +1876,70 @@ describe("add — formatRecovery (#49)", () => {
 
     expect(line).toContain("Partial apply");
     expect(line).toContain("saasaloy add waitlist");
+  });
+});
+
+// `--json` belongs to the dry run only (#223). Both refusals fire before the project is
+// read, so these run anywhere.
+describe("runAdd --json (#223)", () => {
+  it("refuses --json without --dry-run, with an error document", async () => {
+    const { code, doc } = await runJson(runAdd, [
+      "waitlist",
+      "--json",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(doc).toMatchObject({
+      error: {
+        exitCode: 2,
+        message: expect.stringContaining("--dry-run --json"),
+      },
+      schemaVersion: 1,
+    });
+  });
+
+  it("refuses --json beside --diff", async () => {
+    const { code, doc } = await runJson(runAdd, [
+      "waitlist",
+      "--dry-run",
+      "--diff",
+      "--json",
+    ]);
+
+    expect(code).toBe(2);
+    expect(doc).toHaveProperty("error");
+  });
+
+  it("refuses to open the picker under --json, even with no module named", async () => {
+    const { code, doc } = await runJson(runAdd, ["--dry-run", "--json"]);
+
+    expect(code).toBe(2);
+    expect(doc).toMatchObject({
+      error: { message: expect.stringContaining("No module named") },
+    });
+  });
+});
+
+describe(planDocument, () => {
+  it("prints the same keys, empty, when everything is already installed", () => {
+    expect(
+      planDocument("waitlist", ["api"], undefined, ["api", "waitlist"])
+    ).toStrictEqual({
+      aliasConflicts: [],
+      aliases: {},
+      alreadyInstalled: ["api", "waitlist"],
+      dependencies: [],
+      devDependencies: [],
+      envVars: {},
+      files: [],
+      install: [],
+      links: [],
+      patches: [],
+      prerequisites: ["api"],
+      requested: "waitlist",
+      staleOwners: [],
+      writesUi: false,
+    });
   });
 });

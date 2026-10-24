@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "storage-cloudflare",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "A storage provider on Cloudflare R2, with the BUCKET binding and signed URLs.",
+  "stage": "scale",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["storage"],
   "dependencies": [],
   "envVars": {

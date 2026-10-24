@@ -46,14 +46,14 @@ Every installable module in the default registry, in one place. This table is th
 | `payment-manual` | feature (provider) | a `payment` provider for bKash, Nagad, Rocket and bank transfers the shopper sends outside the site. `create` answers the account to pay, `submit` checks the transaction ID and the sender account, and staff confirm on the admin Payments page. Accounts are options in `manual({ methods })`. Nothing is verified automatically |
 | `feature-flags` | feature | a `packages/feature-flags` workspace with typed flags, per-tenant overrides and percentage rollouts, resolved through an isolate cache over a published `kv` document with the database as the source of truth, plus maintenance mode, kill switches and a `/flags` admin screen, on `api` + `database` + `validators` + `auth` + `admin` + `kv` |
 
-Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one and a `--yes` run stops and names the options:
+Dependencies install automatically: `saasaloy add waitlist` brings `api`, `logger`, `logger-console`, `validators` and `database` with it, prerequisites first. The one thing it will not choose for you is the database driver. `database` names both drivers in `requiresOneOf`, so on a project that has neither, an interactive run asks which one, `--with` names it on the command line, and a `--yes` run without `--with` stops and names the options:
 
 ```
 Cannot add waitlist — unmet requirement:
-  database (required by waitlist) needs one of: database-d1, database-postgres, and none is installed. Run `saasaloy add database-d1` first, or pick another from that list.
+  database (required by waitlist) needs one of: database-d1, database-postgres, and none is installed. Re-run as `saasaloy add waitlist --with database-d1`, or pick another from that list.
 ```
 
-Add a driver first and the second run goes through. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
+`saasaloy add waitlist --with database-d1 --yes` installs the module and the driver in one run, with no terminal needed. Adding the driver first and then the module works too. A capability brings its vendor SDK and encapsulates it, so nothing else in your project imports Hono, Drizzle or Better Auth directly ([ADR 0020](../adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)).
 
 To see what any module would actually do to your project before installing it:
 
@@ -61,6 +61,6 @@ To see what any module would actually do to your project before installing it:
 saasaloy add <name> --dry-run
 ```
 
-To list what a registry offers, including third-party ones, see [`saasaloy list`](reference.md#saasaloy-list). To publish a module of your own, start at [Contribute a module](how-to/contribute-a-module.md).
+To list what a registry offers, including third-party ones, see [`saasaloy list`](reference.md#saasaloy-list). `saasaloy list --json` gives each module's one-line `description`, its `stage` (`validate`, `mvp`, `teams`, `money` or `scale`) and its `needs` (`cloudflare-paid`, `stripe`, `domain`, `vendor-account`), read from the descriptor. To publish a module of your own, start at [Contribute a module](how-to/contribute-a-module.md).
 
 _Verified against `main`@`42cbf03` on 2026-09-11._

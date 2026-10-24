@@ -17,7 +17,7 @@ import type { SaasaloyConfig } from "./schema.js";
 // user naming it.
 //
 // The check reports; it never resolves. `add` refuses, or offers the list as a prompt on
-// an interactive terminal.
+// an interactive terminal. `--with <module>` answers the choice on the command line.
 
 export interface MissingRequirement {
   /** The module whose descriptor declared `requiresOneOf`. */
@@ -74,7 +74,7 @@ function describe(missing: MissingRequirement, requested: string): string {
       : `${declaredBy} (required by ${requested})`;
   const first = options[0];
   const suggestion = first
-    ? ` Run \`saasaloy add ${first}\` first, or pick another from that list.`
+    ? ` Re-run as \`saasaloy add ${requested} --with ${first}\`, or pick another from that list.`
     : "";
   return `${subject} needs one of: ${options.join(", ")}, and none is installed.${suggestion}`;
 }
@@ -111,4 +111,22 @@ export function formatUpdateRequirements(
   }
   lines.push("Then run `saasaloy update` again. Nothing was changed.");
   return lines.join("\n");
+}
+
+/**
+ * The refusal for a `--with` module that answers no unmet requirement (#223): it is
+ * already installed or already in the graph, it is no option of any requirement, or an
+ * earlier `--with` already answered the same choice. Installing it anyway would turn a
+ * driver pick into a second, silent `add`.
+ */
+export function formatUnansweredWith(
+  names: string[],
+  requested: string
+): string {
+  const flags = names.map((name) => `--with ${name}`).join(", ");
+  const verb = names.length === 1 ? "answers" : "answer";
+  return (
+    `Cannot add ${requested} — ${flags} ${verb} no unmet requirement. ` +
+    `\`--with\` picks one option of a \`requiresOneOf\` list; add any other module with its own \`saasaloy add\`.`
+  );
 }

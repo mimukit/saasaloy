@@ -1,14 +1,14 @@
 import { mkdir, realpath, writeFile } from "node:fs/promises";
-import { basename, dirname, isAbsolute, join, resolve } from "node:path";
 import {
-  cancel,
-  confirm,
-  intro,
-  isCancel,
-  log,
-  note,
-  outro,
-} from "@clack/prompts";
+  basename,
+  dirname,
+  isAbsolute,
+  join,
+  relative,
+  resolve,
+  sep,
+} from "node:path";
+import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import {
   detectCliMismatches,
@@ -50,6 +50,7 @@ import type { Lockfile } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
+import { confirm } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   detectMissingRequirements,
@@ -79,6 +80,8 @@ import {
   compareBase,
   compareInstalled,
   executeUpdatePlan,
+  markResolved,
+  mergeTargets,
   recordRefRewrites,
 } from "../lib/updater.js";
 import type {
@@ -121,6 +124,8 @@ interface Options {
   force: boolean;
   /** `--abort`: restore the newest pre-update backup and exit. */
   abort: boolean;
+  /** `--resolved <path>`, repeatable: files whose merge is done (#223). As typed. */
+  resolved: string[];
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
@@ -135,9 +140,9 @@ const KNOWN_FLAGS = new Set([
   "--help",
   "-h",
 ]);
-const VALUE_FLAGS = new Set(["--ref", "--out"]);
+const VALUE_FLAGS = new Set(["--ref", "--out", "--resolved"]);
 const USAGE =
-  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort";
+  "saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--dry-run] [--diff] [--force] [--yes] | saasaloy update --abort";
 const HELP: CommandHelp = {
   name: "update",
   describe: DESCRIPTIONS.update,
@@ -146,6 +151,8 @@ const HELP: CommandHelp = {
     "--ref <ref>":
       "update one module to this branch, tag, or SHA (not the base)",
     "--out <path>": "write the merge plan to a file instead of stdout",
+    "--resolved <path>":
+      "record a file you merged as it stands now, so the next update stops offering it (repeatable)",
     "--dry-run": "show the plan and write nothing",
     "--diff": "show a per-file diff and write nothing",
     "--force": "apply even with uncommitted changes in the working tree",
@@ -158,6 +165,7 @@ function parseArgs(argv: string[]): Options {
   const positional: string[] = [];
   const unknown: string[] = [];
   const values: Record<string, string> = {};
+  const resolved: string[] = [];
 
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i]!;
@@ -180,7 +188,11 @@ function parseArgs(argv: string[]): Options {
       if (eq === -1) {
         i++;
       }
-      values[flag] = next;
+      if (flag === "--resolved") {
+        resolved.push(next);
+      } else {
+        values[flag] = next;
+      }
       continue;
     }
     if (!KNOWN_FLAGS.has(arg)) {
@@ -198,6 +210,7 @@ function parseArgs(argv: string[]): Options {
     yes: argv.includes("--yes") || argv.includes("-y"),
     force: argv.includes("--force"),
     abort: argv.includes("--abort"),
+    resolved,
     unknown,
   };
 }
@@ -213,6 +226,7 @@ const ACTION_LABEL: Record<UpdateFileAction, string> = {
   delete: pc.red("delete"),
   "delete-drift": pc.yellow("dropped → kept"),
   "delete-missing": pc.dim("untrack"),
+  resolved: pc.green("merged → record"),
 };
 
 // Actions worth a line in the summary — `skip`/`unchanged` are counted, not listed, so
@@ -305,7 +319,8 @@ function summarizePlan(plan: UpdatePlan): void {
         (f) =>
           !QUIET.has(f.action) &&
           f.action !== "drift" &&
-          f.action !== "conflict"
+          f.action !== "conflict" &&
+          f.action !== "resolved"
       ).length,
     0
   );
@@ -461,6 +476,54 @@ function backupTargets(plan: UpdatePlan): string[] {
     }
   }
   return [...targets].toSorted();
+}
+
+/**
+ * The plan's merge targets that `--resolved <path>` names (#223), or the paths that name
+ * none. A path is read two ways, the cwd-relative one first: as typed from where the
+ * command runs, and as the project-relative path the merge plan prints. Either form may
+ * be absolute. A path outside the project names nothing.
+ */
+export function matchResolved(
+  root: string,
+  cwd: string,
+  paths: string[],
+  targets: readonly string[]
+): { matched: Set<string>; unmatched: string[] } {
+  const available = new Set(targets);
+  const matched = new Set<string>();
+  const unmatched: string[] = [];
+  for (const path of paths) {
+    const candidates = [resolve(cwd, path), resolve(root, path)].map((abs) =>
+      relative(root, abs).split(sep).join("/")
+    );
+    const hit = candidates.find(
+      (candidate) =>
+        candidate !== "" &&
+        !candidate.startsWith("../") &&
+        candidate !== ".." &&
+        available.has(candidate)
+    );
+    if (hit === undefined) {
+      unmatched.push(path);
+    } else {
+      matched.add(hit);
+    }
+  }
+  return { matched, unmatched };
+}
+
+/** The refusal for `--resolved` paths the plan sends to no merge (#223). */
+function formatUnmatchedResolved(
+  unmatched: string[],
+  targets: readonly string[]
+): string {
+  const named = unmatched.map((path) => pc.cyan(path)).join(", ");
+  const waiting =
+    targets.length === 0
+      ? "Nothing in this update is waiting on a merge."
+      : `Waiting on a merge: ${targets.join(", ")}.`;
+  return `\`--resolved\` names ${named}, which this update does not send to a merge. ${waiting} Nothing was written.`;
 }
 
 /** `owner/repo` → the two halves, or undefined when the lock's source isn't a remote slug. */
@@ -789,6 +852,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     const outdated = comparisons.filter((c) => c.status === "outdated");
     const skipped = comparisons.filter((c) => c.status !== "outdated");
+    if (outdated.length === 0 && opts.resolved.length > 0) {
+      cancel(formatUnmatchedResolved(opts.resolved, []), TUI_ON_STDERR);
+      return EXIT_REFUSED;
+    }
     if (outdated.length === 0) {
       const backfill = await planUpdateBackfill();
       for (const comparison of skipped) {
@@ -1003,6 +1070,10 @@ export async function runUpdate(argv: string[]): Promise<number> {
 
     // Everything outdated failed to fetch — there is no plan to summarize or confirm.
     if (inputs.length === 0) {
+      if (opts.resolved.length > 0) {
+        cancel(formatUnmatchedResolved(opts.resolved, []), TUI_ON_STDERR);
+        return EXIT_REFUSED;
+      }
       for (const comparison of skipped) {
         // Only a fetch failure is a warning here — a `current` module is just news.
         const line = `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison)}`)}`;
@@ -1034,6 +1105,24 @@ export async function runUpdate(argv: string[]): Promise<number> {
       skipped,
       pkg,
     });
+
+    // `--resolved` (#223): the named files leave the merge plan before it is summarized,
+    // so the summary, the confirmation and the exit code all describe what is left. A path
+    // the plan sends to no merge refuses the run here, before anything is written.
+    if (opts.resolved.length > 0) {
+      const waiting = mergeTargets(plan);
+      const { matched, unmatched } = matchResolved(
+        root,
+        process.cwd(),
+        opts.resolved,
+        waiting
+      );
+      if (unmatched.length > 0) {
+        cancel(formatUnmatchedResolved(unmatched, waiting), TUI_ON_STDERR);
+        return EXIT_REFUSED;
+      }
+      markResolved(plan, matched);
+    }
 
     summarizePlan(plan);
     const backfill = await planUpdateBackfill();
@@ -1233,7 +1322,11 @@ async function confirmProceed(yes: boolean): Promise<number | undefined> {
   if (yes) {
     return undefined;
   }
-  const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
+  const proceed = await confirm({
+    answeredBy: "`--yes` to apply, or `--dry-run` to preview",
+    message: "Proceed?",
+    ...TUI_ON_STDERR,
+  });
   if (isCancel(proceed)) {
     cancel("update cancelled", TUI_ON_STDERR);
     return EXIT_FAILURE;
@@ -1343,6 +1436,12 @@ function reportResult(result: UpdateResult): void {
   }
   for (const file of result.deleted) {
     log.step(`${pc.red("delete")}  ${file.target}`, TUI_ON_STDERR);
+  }
+  for (const file of result.resolved) {
+    log.step(
+      `${pc.green("record")}  ${file.target} ${pc.dim("(merged — recorded as it stands)")}`,
+      TUI_ON_STDERR
+    );
   }
   for (const file of result.untracked) {
     log.step(

@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "storage",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "File storage in a packages/storage workspace: the provider interface, signed links and an api proxy route.",
+  "stage": "scale",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {

@@ -1,6 +1,7 @@
 {
   "name": "unpinned-dep",
   "type": "saasaloy:feature",
+  "description": "Test fixture unpinned-dep.",
   "dependencies": ["zod", "hono@^4.0.0"],
   "devDependencies": ["typescript@latest"],
   "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }]

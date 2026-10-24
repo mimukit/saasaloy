@@ -1,6 +1,7 @@
 {
   "name": "bad-schema",
   "type": "saasaloy:widget",
+  "description": "Test fixture bad-schema.",
   "files": [{ "path": "files/a.ts" }],
   "unexpected": true
 }

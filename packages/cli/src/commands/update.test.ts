@@ -429,6 +429,101 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     expect(output).toContain(".claude/skills/project-own");
     expect(output).toContain("Skill link .claude/skills/taken left untouched");
   });
+
+  // #223: after a merge, `--resolved` records it, and the next run has nothing left to
+  // offer. A working copy has no merge base, which is the hard case: the recorded hash
+  // alone would read the merged file as clean and overwrite it.
+  describe("--resolved (#223)", () => {
+    const TARGET = "apps/web/widget.ts";
+
+    async function drifted(): Promise<void> {
+      await state(["widget"], { widget: localEntry });
+      await descriptor("widget", {
+        files: [{ path: "files/widget.ts", target: "@web/widget.ts" }],
+      });
+      await mkdir(join(registry, "widget", "files"), { recursive: true });
+      await writeFile(
+        join(registry, "widget", "files", "widget.ts"),
+        "export const retries = 3;\n",
+        "utf-8"
+      );
+      await mkdir(join(project, "apps", "web"), { recursive: true });
+      await writeFile(
+        join(project, ...TARGET.split("/")),
+        "export const retries = 1; // ours\n",
+        "utf-8"
+      );
+      // Tracked at the old version, and edited since: drift.
+      await writeFile(
+        join(project, ".saasaloy", "manifest.json"),
+        JSON.stringify({
+          links: {},
+          managed: {
+            "AGENTS.md": { hash: "a".repeat(64), module: "base" },
+            [TARGET]: {
+              from: "files/widget.ts",
+              hash: hashContent("export const retries = 1;\n"),
+              module: "widget",
+            },
+          },
+          patches: [],
+          removeWarnings: {},
+        }),
+        "utf-8"
+      );
+    }
+
+    it("records the merge, then the next update exits 0 and leaves the file alone", async () => {
+      await drifted();
+      const planPath = join(project, "merge-plan.md");
+
+      const [first] = await runCaptured(["widget", "--yes", "--out", planPath]);
+      expect(first).toBe(EXIT_MERGE_PENDING);
+      const plan = await readFile(planPath, "utf-8");
+      expect(plan).toContain(`--resolved ${TARGET}`);
+
+      const merged = "export const retries = 3; // ours\n";
+      await writeFile(join(project, ...TARGET.split("/")), merged, "utf-8");
+
+      // From a subdirectory, with the path relative to it.
+      process.chdir(join(project, "apps", "web"));
+      const [second, output] = await runCaptured([
+        "widget",
+        "--resolved",
+        "widget.ts",
+        "--yes",
+      ]);
+      process.chdir(project);
+      expect(second).toBe(0);
+      expect(output).toContain(`record  ${TARGET}`);
+      const manifest = await loadManifest(project);
+      expect(manifest.managed[TARGET]?.hash).toBe(hashContent(merged));
+
+      const [third] = await runCaptured(["widget", "--yes"]);
+      expect(third).toBe(0);
+      await expect(
+        readFile(join(project, ...TARGET.split("/")), "utf-8")
+      ).resolves.toBe(merged);
+    });
+
+    it("refuses a path the plan does not send to a merge, and records nothing", async () => {
+      await drifted();
+
+      const [code, output] = await runCaptured([
+        "widget",
+        "--resolved",
+        "apps/web/other.ts",
+        "--yes",
+      ]);
+      expect(code).toBe(2);
+      expect(output).toContain("apps/web/other.ts");
+      expect(output).toContain(`Waiting on a merge: ${TARGET}`);
+      const manifest = await loadManifest(project);
+      expect(manifest.managed[TARGET]?.hash).toBe(
+        hashContent("export const retries = 1;\n")
+      );
+    });
+  });
 });
 
 // #242. Backfill writes the gated entries an installed module now owes the project. It

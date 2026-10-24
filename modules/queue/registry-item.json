@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "queue",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "Background jobs and schedules in a packages/queue workspace, with a cron matcher and the provider registry.",
+  "stage": "scale",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {

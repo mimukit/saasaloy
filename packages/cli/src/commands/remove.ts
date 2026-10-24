@@ -1,13 +1,4 @@
-import {
-  cancel,
-  confirm,
-  intro,
-  isCancel,
-  log,
-  note,
-  outro,
-  select,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, log, note, outro } from "@clack/prompts";
 import pc from "picocolors";
 import { lineDiff } from "../lib/diff.js";
 import {
@@ -23,6 +14,7 @@ import { loadLock } from "../lib/lock.js";
 import { formatPatchedFiles } from "../lib/format.js";
 import { loadManifest } from "../lib/manifest.js";
 import { isReversibleKind } from "../lib/patch/index.js";
+import { confirm, select } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import { buildRemovePlan, executeRemovePlan } from "../lib/remover.js";
 import type {
@@ -236,6 +228,23 @@ export async function runRemove(argv: string[]): Promise<number> {
     return EXIT_REFUSED;
   }
 
+  // The confirms below read stdin, and with no terminal nobody can answer them. Refuse
+  // before the plan is built and name the two ways forward, the way `add` and `update`
+  // do. A preview writes nothing and asks nothing, so it is exempt. With no module named
+  // the picker's own refusal below is the more specific message, so leave that case to it.
+  if (
+    opts.name &&
+    !opts.yes &&
+    !opts.dryRun &&
+    !opts.diff &&
+    !isInteractive()
+  ) {
+    cancel(
+      "No terminal to confirm in — re-run with `--yes` to remove, or `--dry-run` to preview."
+    );
+    return EXIT_REFUSED;
+  }
+
   let root: string;
   let config: Awaited<ReturnType<typeof loadConfig>>;
   try {
@@ -263,6 +272,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         return EXIT_REFUSED;
       }
       const picked = await select({
+        answeredBy: "a module name",
         message: "Pick a module to remove",
         options: config.installed.map((n) => ({ value: n, label: n })),
       });
@@ -336,6 +346,7 @@ export async function runRemove(argv: string[]): Promise<number> {
           continue;
         }
         const proceed = await confirm({
+          answeredBy: "`--yes`, which keeps every hand-edited file",
           message: `${file.target} was hand-edited since it was applied — delete it anyway?`,
           initialValue: false,
         });
@@ -350,7 +361,10 @@ export async function runRemove(argv: string[]): Promise<number> {
     }
 
     if (!opts.yes) {
-      const proceed = await confirm({ message: "Proceed?" });
+      const proceed = await confirm({
+        answeredBy: "`--yes` to remove, or `--dry-run` to preview",
+        message: "Proceed?",
+      });
       if (isCancel(proceed)) {
         cancel("remove cancelled");
         return EXIT_FAILURE;

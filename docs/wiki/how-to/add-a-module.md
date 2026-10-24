@@ -52,11 +52,13 @@ you and for any agent in the project.
 
 Some capabilities cannot run without a driver, so their descriptor declares `requiresOneOf`. `database` declares `requiresOneOf: ["database-d1", "database-postgres"]`. When nothing in the run and nothing installed satisfies that list, `add` prompts you to pick one, resolves it, and folds it into the same plan. It re-checks after each pick, up to eight rounds, because one driver can settle two requirements and a picked module can raise a requirement of its own.
 
-There is no prompt in a non-interactive run or under `--yes`. Both refuse and name the options, exit 2:
+`--with <module>` answers the choice on the command line, so the run needs no prompt: `saasaloy add waitlist --with database-d1 --yes`. It is repeatable. A `--with` module that answers no unmet requirement exits 2 before anything is written, so it cannot install a module on the side.
+
+There is no prompt in a non-interactive run or under `--yes`. Without `--with`, both refuse and name the options, exit 2:
 
 ```text
 Cannot add database — unmet requirement:
-  database needs one of: database-d1, database-postgres, and none is installed. Run `saasaloy add database-d1` first, or pick another from that list.
+  database needs one of: database-d1, database-postgres, and none is installed. Re-run as `saasaloy add database --with database-d1`, or pick another from that list.
 ```
 
 Two modules that must never sit side by side declare `conflictsWith`. `database-d1` and `database-postgres` name each other. `add` checks that after the driver prompt, before it plans a single file, and `--force` does not bypass it:

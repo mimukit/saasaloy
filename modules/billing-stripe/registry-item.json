@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "billing-stripe",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "A billing provider on Stripe through stripe and @better-auth/stripe; needs a Stripe account.",
+  "stage": "money",
+  "needs": ["stripe"],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["billing"],
   "dependencies": [],
   "envVars": {

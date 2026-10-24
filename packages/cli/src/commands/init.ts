@@ -1,26 +1,24 @@
 import { spawn } from "node:child_process";
 import { readdir, readFile } from "node:fs/promises";
 import { basename, resolve } from "node:path";
-import {
-  cancel,
-  intro,
-  isCancel,
-  note,
-  outro,
-  select,
-  spinner,
-  text,
-} from "@clack/prompts";
+import { cancel, intro, isCancel, note, outro, spinner } from "@clack/prompts";
 import pc from "picocolors";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import type { SkillLinkResult } from "../lib/skill-links.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
 import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
-import { EXIT_FAILURE, EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
+import {
+  EXIT_FAILURE,
+  EXIT_OK,
+  EXIT_REFUSED,
+  exitCodeFor,
+  formatFailure,
+} from "../lib/exit.js";
 import { baseRecord, recordBaseFiles, templateHash } from "../lib/base.js";
 import { loadLock, saveLock } from "../lib/lock.js";
 import { logger } from "../lib/logger.js";
 import { loadManifest, saveManifest } from "../lib/manifest.js";
+import { select, text } from "../lib/prompts.js";
 import {
   baseTemplateDir,
   copyTemplate,
@@ -54,6 +52,8 @@ export interface InitOptions {
   name?: string;
   force: boolean;
   noInstall: boolean;
+  /** Install with no prompt — the answer `--no-install` is the opposite of. */
+  yes: boolean;
   noGit: boolean;
   /**
    * `--testing=<mode>`, raw (#242). `runInit` parses it before anything is written, so a
@@ -68,17 +68,20 @@ const KNOWN_FLAGS = new Set([
   "--force",
   "--no-install",
   "--no-git",
+  "--yes",
+  "-y",
   "--help",
   "-h",
 ]);
 const TESTING_FLAG = "--testing=";
-const USAGE = `saasaloy init [<name>] [--force] [--no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>]`;
+const USAGE = `saasaloy init [<name>] [--force] [--yes | --no-install] [--no-git] [--testing=<${TESTING_MODES.join("|")}>]`;
 const HELP: CommandHelp = {
   name: "init",
   describe: DESCRIPTIONS.init,
   usage: USAGE,
   flags: {
     "--force": "scaffold into a directory that is not empty",
+    "-y, --yes": "run pnpm install with no prompt",
     "--no-install": "never run pnpm install, and never ask",
     "--no-git": "do not run git init in the new project",
     "--testing=<mode>":
@@ -107,6 +110,7 @@ export function parseArgs(argv: string[]): InitOptions {
     // Skip the install prompt entirely and never run pnpm install — for scripted/CI
     // scaffolds (e.g. `pnpm play:init`) that manage installs themselves.
     noInstall: argv.includes("--no-install"),
+    yes: argv.includes("--yes") || argv.includes("-y"),
     noGit: argv.includes("--no-git"),
     ...(testing === undefined ? {} : { testing }),
     unknown,
@@ -140,6 +144,7 @@ export async function resolveInitTestingMode(
 
 function askTestingMode(): Promise<TestingMode | symbol> {
   return select<TestingMode>({
+    answeredBy: "`--testing=<mode>`",
     message: "Testing mode?",
     options: [
       {
@@ -278,10 +283,21 @@ export async function runInit(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  const { force, noInstall, noGit } = opts;
-  let nameArg = opts.name;
-
   intro(pc.bgCyan(pc.black(" saasaloy init ")));
+
+  // A prompt with no terminal throws a refusal (lib/prompts.ts), and so can a write.
+  // Either one lands on the rail with its exit code rather than escaping to index.ts.
+  try {
+    return await initProject(opts);
+  } catch (error) {
+    cancel(formatFailure(error));
+    return exitCodeFor(error);
+  }
+}
+
+async function initProject(opts: InitOptions): Promise<number> {
+  const { force, noInstall, noGit, yes } = opts;
+  let nameArg = opts.name;
 
   // A bad mode is caught before the name prompt and before a byte is written (#242).
   let testingFlag: TestingMode | undefined;
@@ -304,9 +320,32 @@ export async function runInit(argv: string[]): Promise<number> {
     return EXIT_REFUSED;
   }
 
+  // The two flags give opposite answers to the install prompt. Refuse rather than let
+  // one of them win (ADR 0046: refuse, never guess).
+  if (yes && noInstall) {
+    cancel(
+      `\`--yes\` installs and \`--no-install\` does not — pass one of them, not both.`
+    );
+    return EXIT_REFUSED;
+  }
+
+  // With no terminal, every question init would ask has to be answered by a flag, and
+  // each refusal comes before a single file is written: a refusal that leaves a half-made
+  // project behind is not a clean one. The guarded prompts would refuse too, but the
+  // install prompt only after the scaffold landed. This check runs first, because there
+  // is no name to check yet. The install check runs below, after the name and directory
+  // checks, so a bad name still gets its own message first.
+  if (!nameArg && !isInteractive()) {
+    cancel(
+      `No project name and no terminal to ask for one — pass \`<name>\` (usage: \`${USAGE}\`).`
+    );
+    return EXIT_REFUSED;
+  }
+
   // No name given — ask for it rather than erroring out.
   if (!nameArg) {
     const answer = await text({
+      answeredBy: "`<name>`",
       message: "Project name?",
       placeholder: "my-app (use `.` for the current directory)",
       validate: (value) => {
@@ -351,6 +390,13 @@ export async function runInit(argv: string[]): Promise<number> {
       );
       return EXIT_REFUSED;
     }
+  }
+
+  if (!yes && !noInstall && !isInteractive()) {
+    cancel(
+      "No terminal to ask whether to install dependencies — pass `--yes` to run pnpm install, or `--no-install` to skip it. Nothing was written."
+    );
+    return EXIT_REFUSED;
   }
 
   const testingMode = await resolveInitTestingMode(testingFlag, {
@@ -470,18 +516,21 @@ export async function runInit(argv: string[]): Promise<number> {
   }
 
   // Offer to install now; on decline (or cancel) fall back to the printed steps.
-  // `select` (not `confirm`) so each choice renders on its own line.
+  // `select` (not `confirm`) so each choice renders on its own line. `--yes` and
+  // `--no-install` each answer it ahead of time.
   let installed = false;
-  const wantsInstall = noInstall
-    ? false
-    : await select({
-        message: "Install dependencies now?",
-        options: [
-          { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
-          { value: false, label: "No, I'll run it later" },
-        ],
-        initialValue: true,
-      });
+  let wantsInstall: boolean | symbol = yes;
+  if (!yes && !noInstall) {
+    wantsInstall = await select({
+      answeredBy: "`--yes` to install, or `--no-install` to skip it",
+      message: "Install dependencies now?",
+      options: [
+        { value: true, label: `Yes, run ${pc.cyan("pnpm install")}` },
+        { value: false, label: "No, I'll run it later" },
+      ],
+      initialValue: true,
+    });
+  }
   if (!isCancel(wantsInstall) && wantsInstall) {
     const install = spinner();
     install.start(`Installing dependencies ${pc.dim("(pnpm install)")}`);
@@ -490,11 +539,10 @@ export async function runInit(argv: string[]): Promise<number> {
       installed = true;
       install.stop(`Installed dependencies ${pc.dim("(pnpm install)")}`);
     } else {
-      // Don't break the flow — report and let the user finish it by hand.
-      install.stop(pc.yellow("pnpm install did not finish"));
-      logger.warn(
-        `Couldn't install dependencies automatically — run ${pc.cyan("pnpm install")} yourself.`
-      );
+      // A failed install is a failed run (exit 1), so a script or an agent that asked
+      // for it can tell. The scaffold stays on disk: it is complete, and the install is
+      // the one step left to finish by hand.
+      install.stop(pc.red("pnpm install failed"));
       if (result.message) {
         // Show pnpm's own diagnostics inside a box, tail-trimmed and soft-wrapped to
         // the terminal width so a long line (e.g. a registry URL) can't break the rail.
@@ -509,6 +557,10 @@ export async function runInit(argv: string[]): Promise<number> {
           .join("\n");
         note(body, "pnpm install output");
       }
+      cancel(
+        `Scaffolded ${projectName}, but pnpm install failed — fix the error above, then run ${pc.cyan("pnpm install")} in ${nameArg}.`
+      );
+      return EXIT_FAILURE;
     }
   }
 

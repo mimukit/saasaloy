@@ -45,6 +45,25 @@
       "enum": ["saasaloy:capability", "saasaloy:feature"],
       "description": "`saasaloy:capability` scaffolds an app/package and establishes extension points; `saasaloy:feature` extends capabilities by dropping files into their conventions."
     },
+    "description": {
+      "type": "string",
+      "pattern": "^[^\\r\\n]+$",
+      "description": "One line on what the module gives a project. `saasaloy list --json` prints it, so an agent can pick a module without reading its skill. Optional in the schema; `saasaloy doctor` on a registry fails a descriptor without it (#223)."
+    },
+    "stage": {
+      "type": "string",
+      "enum": ["validate", "mvp", "teams", "money", "scale"],
+      "description": "The product stage that usually earns this module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage."
+    },
+    "needs": {
+      "type": "array",
+      "description": "What the module needs outside the repo before it works in production: `cloudflare-paid` (a paid Workers plan), `stripe` (a Stripe account), `domain` (a domain onboarded by hand) or `vendor-account` (an account with another vendor). An empty array means nothing beyond the free tier.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": ["cloudflare-paid", "stripe", "domain", "vendor-account"]
+      }
+    },
     "requires": {
       "type": "object",
       "additionalProperties": false,

@@ -20,14 +20,11 @@ import {
   readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
-import type { BaseReport, ModuleReport } from "../lib/doctor.js";
-import {
-  EXIT_OK,
-  EXIT_REFUSED,
-  exitCodeFor,
-  formatFailure,
-} from "../lib/exit.js";
+import type { BaseReport, Finding, ModuleReport } from "../lib/doctor.js";
+import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { pathExists, readIfPresent } from "../lib/fs-utils.js";
+import { createOutput, printJson } from "../lib/json-output.js";
+import type { Output } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
 import { ROOT_MANIFEST, rootVersion } from "../lib/root-version.js";
@@ -53,20 +50,27 @@ import { DESCRIPTIONS } from "./descriptions.js";
 // The rules live in `lib/doctor.ts`; this file is presentation and exit codes only. An
 // invalid descriptor is bad input, so a run with findings exits 2 (the refusal code),
 // which is what makes `doctor` usable as a pre-publish gate in CI.
+//
+// `--json` prints the same findings as one document on stdout, with the exit code
+// unchanged (#223). `mode` says which rule set ran: `registry` or `project`.
 
 interface Options {
   path?: string;
+  /** `--json`: one JSON document on stdout, the TUI on stderr. */
+  json: boolean;
   /** Flags we don't know and extra positionals — reported, never silently ignored. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--help", "-h"]);
-const USAGE = "saasaloy doctor [<path>]";
+const KNOWN_FLAGS = new Set(["--json", "--help", "-h"]);
+const USAGE = "saasaloy doctor [<path>] [--json]";
 const HELP: CommandHelp = {
   name: "doctor",
   describe: DESCRIPTIONS.doctor,
   usage: USAGE,
-  flags: {},
+  flags: {
+    "--json": "print the findings as one JSON document on stdout",
+  },
 };
 
 /** The directory checked when nothing is named — the current directory. */
@@ -83,7 +87,7 @@ export function parseArgs(argv: string[]): Options {
     }
   }
   unknown.push(...positional.slice(1));
-  return { path: positional[0], unknown };
+  return { json: argv.includes("--json"), path: positional[0], unknown };
 }
 
 function renderReport(report: ModuleReport, root: string): string {
@@ -123,8 +127,15 @@ function renderBase(report: BaseReport): string {
   return lines.join("\n");
 }
 
+/** A finding as `doctor --json` prints it: the module, the pointer and the sentence. */
+function findingJson(
+  found: Finding
+): Pick<Finding, "message" | "module" | "where"> {
+  return { message: found.message, module: found.module, where: found.where };
+}
+
 /** The project side of `doctor`: what `saasaloy.json` and the manifest say about each other. */
-async function reportProject(path: string): Promise<number> {
+async function reportProject(path: string, out: Output): Promise<number> {
   const config = await loadConfig(path);
   const manifest = await loadManifest(path);
   const lock = await loadLock(path);
@@ -138,7 +149,7 @@ async function reportProject(path: string): Promise<number> {
       await readIfPresent(join(templateDir, ROOT_MANIFEST))
     ),
   });
-  note(wrapForNote(renderBase(base)), "Base");
+  note(wrapForNote(renderBase(base)), "Base", out.tui);
   // The deploy rules (ADR 0048) are warnings, like base drift: each prints its fix and
   // none of them turns exit 0 into 2. `pnpm deploy:production` refuses the same state on
   // its own, so this only says it sooner.
@@ -148,7 +159,8 @@ async function reportProject(path: string): Promise<number> {
       wrapForNote(
         warnings.map((found) => `${pc.yellow("!")} ${found.message}`).join("\n")
       ),
-      `${pc.yellow("Deploy warnings")} ${pc.dim(`(${warnings.length})`)}`
+      `${pc.yellow("Deploy warnings")} ${pc.dim(`(${warnings.length})`)}`,
+      out.tui
     );
   }
   // Two halves of the same question: a module installed that owns nothing (#107), and a
@@ -172,6 +184,17 @@ async function reportProject(path: string): Promise<number> {
     ...checkRetiredInfra(await hasRetiredInfra(path)),
     ...checkConfigValues(await readConfigState(path)),
   ];
+  if (out.json) {
+    printJson({
+      base,
+      findings: findings.map(findingJson),
+      installed: config.installed,
+      mode: "project",
+      path,
+      problems: findings.length,
+      warnings: warnings.map(findingJson),
+    });
+  }
   if (findings.length === 0) {
     const count = config.installed.length;
     note(
@@ -179,9 +202,10 @@ async function reportProject(path: string): Promise<number> {
         config.installed.map((name) => `${pc.green("✔")} ${name}`).join("\n") ||
           pc.dim("No modules installed.")
       ),
-      `Checked ${count} installed module${count === 1 ? "" : "s"}`
+      `Checked ${count} installed module${count === 1 ? "" : "s"}`,
+      out.tui
     );
-    outro(pc.green("No problems found."));
+    outro(pc.green("No problems found."), out.tui);
     return EXIT_OK;
   }
 
@@ -191,10 +215,14 @@ async function reportProject(path: string): Promise<number> {
         .map((found) => `${pc.yellow(found.module)}  ${found.message}`)
         .join("\n")
     ),
-    `${pc.yellow("Project state")} ${pc.dim(`(${findings.length})`)}`
+    `${pc.yellow("Project state")} ${pc.dim(`(${findings.length})`)}`,
+    out.tui
   );
+  // The report, not a refusal: under `--json` the findings document is already on
+  // stdout, so this closes the rail without a second document.
   cancel(
-    `${findings.length} problem${findings.length === 1 ? "" : "s"} in ${CONFIG_FILE}.`
+    `${findings.length} problem${findings.length === 1 ? "" : "s"} in ${CONFIG_FILE}.`,
+    out.tui
   );
   return EXIT_REFUSED;
 }
@@ -206,42 +234,72 @@ export async function runDoctor(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  intro(pc.bgCyan(pc.black(" saasaloy doctor ")));
+  const out = createOutput(opts.json);
+  intro(pc.bgCyan(pc.black(" saasaloy doctor ")), out.tui);
 
   if (opts.unknown.length > 0) {
-    cancel(
-      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`
+    return out.refuse(
+      `Unknown argument(s): ${opts.unknown.join(", ")} — usage: \`${USAGE}\`.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
 
   const path = opts.path ?? DEFAULT_PATH;
   try {
     if (!(await pathExists(path))) {
-      cancel(
-        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.`
+      return out.refuse(
+        `No such path: ${path} — point \`doctor\` at a module folder or at a directory of them.`,
+        EXIT_REFUSED
       );
-      return EXIT_REFUSED;
     }
 
     // A path carrying a `saasaloy.json` is a project, not a registry, so the project
     // rules run instead of the descriptor ones (#107). The default path is the current
     // directory, so `saasaloy doctor` picks project or registry mode by what's there.
     if (await pathExists(join(path, CONFIG_FILE))) {
-      return await reportProject(path);
+      return await reportProject(path, out);
     }
 
     const target = await resolveDoctorTarget(path);
     if (target.names.length === 0) {
-      cancel(
-        `No module folders in ${path} — a module folder is one that carries a registry-item.json.`
+      return out.refuse(
+        `No module folders in ${path} — a module folder is one that carries a registry-item.json.`,
+        EXIT_REFUSED
       );
-      return EXIT_REFUSED;
     }
 
     const reports = await checkTarget(target);
     const bad = reports.filter((report) => report.findings.length > 0);
     const total = bad.reduce((sum, report) => sum + report.findings.length, 0);
+    if (opts.json) {
+      printJson({
+        mode: "registry",
+        modules: reports.map((report) => ({
+          findings: report.findings.map(findingJson),
+          module: report.module,
+          warnings: report.warnings.map(findingJson),
+        })),
+        path,
+        problems: total,
+      });
+    }
+
+    // Warnings print whatever the problems say, and none of them turns exit 0 into 2.
+    const warned = reports.flatMap((report) => report.warnings);
+    if (warned.length > 0) {
+      note(
+        wrapForNote(
+          warned
+            .map(
+              (found) =>
+                `${pc.yellow("!")} ${pc.cyan(found.module)} ${pc.yellow(found.where)}  ${found.message}`
+            )
+            .join("\n")
+        ),
+        `${pc.yellow("Warnings")} ${pc.dim(`(${warned.length})`)}`,
+        out.tui
+      );
+    }
 
     if (bad.length === 0) {
       const checked = reports.map((report) => report.module);
@@ -249,29 +307,32 @@ export async function runDoctor(argv: string[]): Promise<number> {
         wrapForNote(
           checked.map((name) => `${pc.green("✔")} ${name}`).join("\n")
         ),
-        `Checked ${checked.length} module${checked.length === 1 ? "" : "s"}`
+        `Checked ${checked.length} module${checked.length === 1 ? "" : "s"}`,
+        out.tui
       );
-      outro(pc.green("No problems found."));
+      outro(pc.green("No problems found."), out.tui);
       return EXIT_OK;
     }
 
     for (const report of bad) {
       note(
         wrapForNote(renderReport(report, target.registryDir)),
-        `${pc.yellow(report.module)} ${pc.dim(`(${report.findings.length})`)}`
+        `${pc.yellow(report.module)} ${pc.dim(`(${report.findings.length})`)}`,
+        out.tui
       );
     }
     log.info(
       pc.dim(
         `Checked ${reports.length} module${reports.length === 1 ? "" : "s"}; ${reports.length - bad.length} clean.`
-      )
+      ),
+      out.tui
     );
     cancel(
-      `${total} problem${total === 1 ? "" : "s"} in ${bad.length} module${bad.length === 1 ? "" : "s"}.`
+      `${total} problem${total === 1 ? "" : "s"} in ${bad.length} module${bad.length === 1 ? "" : "s"}.`,
+      out.tui
     );
     return EXIT_REFUSED;
   } catch (error) {
-    cancel(formatFailure(error));
-    return exitCodeFor(error);
+    return out.fail(error);
   }
 }

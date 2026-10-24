@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "api",
   "type": "saasaloy:capability",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "An apps/api Hono Worker on Cloudflare, registered as the @api alias, with structured logging.",
+  "stage": "validate",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {

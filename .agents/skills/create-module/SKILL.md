@@ -48,7 +48,7 @@ described by the descriptor.
 
 ```
 modules/<name>/
-  registry-item.json     # name, type, requires{}, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
+  registry-item.json     # name, type, description, stage, needs[], requires{}, dependsOn[], dependencies[], files[], envVars{}, patches, scaffolds[], agent{}
   files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
   skills/saasaloy-<name>/  # Claude skill folder (SKILL.md), copied verbatim into .claude/skills/saasaloy-<name>/
 ```
@@ -92,7 +92,8 @@ saasaloy new module billing --type saasaloy:feature --depends-on api,database
 ```
 
 It writes `modules/billing/registry-item.json` (schema-valid, `agent.skills[]` already
-pointing at the skill folder), an empty `modules/billing/files/`, and a
+pointing at the skill folder, and a `TODO` `description` with `stage: "mvp"` and `needs: []`
+for you to correct), an empty `modules/billing/files/`, and a
 `modules/billing/skills/saasaloy-billing/SKILL.md` stub with the frontmatter filled in and
 `TODO`s for the prose. Then it runs the `doctor` checks over what it wrote, so a fresh
 module starts green. Drop `--type` / `--depends-on` to be prompted for them instead, and
@@ -107,6 +108,9 @@ Use this annotated feature example (waitlist) as the field reference:
 {
   "name": "waitlist",
   "type": "saasaloy:feature",                 // or "saasaloy:capability"
+  "description": "A waitlist form on the landing page, with its API route and table, to collect early sign-ups.",
+  "stage": "validate",                        // validate | mvp | teams | money | scale
+  "needs": [],                                // cloudflare-paid | stripe | domain | vendor-account
   "requires": { "saasaloy": ">=0.3" },        // optional — semver range the consumer's CLI must satisfy
   "dependsOn": ["api", "database"],           // capabilities this needs; resolved recursively
   "dependencies": ["zod@4.0.5"],              // consumer `dependencies` — exact-pinned name@version
@@ -137,6 +141,9 @@ Field notes:
 
 - **`name`** — matches the directory (`modules/<name>/`).
 - **`type`** — `saasaloy:capability` or `saasaloy:feature`.
+- **`description`** — one line on what the module gives a project. `saasaloy list --json` prints it, and an agent picks modules from it, so name the thing the user gets, not the files. The schema keeps it optional, so a project still reads an older descriptor, but `saasaloy doctor` in registry mode fails a descriptor without it.
+- **`stage`** — the product stage that usually earns the module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage. The scaffold writes `mvp`; change it.
+- **`needs`** — what the module needs outside the repo before it works in production: `cloudflare-paid` (a paid Workers plan), `stripe` (a Stripe account), `domain` (a domain onboarded by hand) or `vendor-account` (an account with any other vendor). Write `[]` when the free tier and no account will do, which is what the scaffold writes.
 - **`requires`** — an optional `{ "saasaloy": "<semver range>" }` naming the CLI versions
   this descriptor works on. A consumer whose CLI falls outside the range gets one fatal,
   actionable message before anything is written, instead of an Ajv dump about a field the
@@ -472,6 +479,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - [ ] The skeleton came from `saasaloy new module <name>`, not from a hand-written file.
 - [ ] `modules/<name>/registry-item.json` present, `name` matches the directory.
 - [ ] `type` is `saasaloy:capability` or `saasaloy:feature` (capabilities carry `scaffolds`).
+- [ ] `description` is one real line, not the scaffold's `TODO`; `stage` and `needs` are checked, not left at the scaffold's `mvp` and `[]` by default.
 - [ ] `requires.saasaloy` is left out, or names a range you have actually run the module on.
 - [ ] Every needed capability is in `dependsOn`, named as the capability and never as one of its
       drivers; every npm import is exact-pinned in `dependencies`/`devDependencies` (`name@version`;

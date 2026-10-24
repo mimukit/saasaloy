@@ -2,7 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "feature-flags",
   "type": "saasaloy:feature",
-  "requires": { "saasaloy": ">=0.6.0" },
+  "description": "Typed feature flags with per-tenant overrides, percentage rollouts, kill switches and a flags admin screen.",
+  "stage": "scale",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api", "database", "validators", "auth", "admin", "kv"],
   "dependencies": [],
   "envVars": {

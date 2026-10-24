@@ -46,6 +46,21 @@ describe(parseArgs, () => {
     ).toStrictEqual(["--type (missing value)"]);
   });
 
+  // #223: an empty value is how a run with no terminal answers "no dependencies".
+  it("accepts an empty --depends-on in both forms, and still rejects an empty --type", () => {
+    expect(parseArgs(["module", "b", "--depends-on="])).toMatchObject({
+      dependsOn: "",
+      unknown: [],
+    });
+    expect(parseArgs(["module", "b", "--depends-on", ""])).toMatchObject({
+      dependsOn: "",
+      unknown: [],
+    });
+    expect(parseArgs(["module", "b", "--type="]).unknown).toStrictEqual([
+      "--type (missing value)",
+    ]);
+  });
+
   it("reports an unknown flag rather than ignoring it", () => {
     expect(parseArgs(["module", "b", "--force"]).unknown).toStrictEqual([
       "--force",
@@ -113,6 +128,7 @@ describe(runNew, () => {
       "billing",
       "--type",
       "saasaloy:feature",
+      "--depends-on=",
     ]);
 
     expect(code).toBe(0);
@@ -128,7 +144,13 @@ describe(runNew, () => {
   });
 
   it("writes a schema-valid descriptor", async () => {
-    await runCommand(["module", "billing", "--type", "saasaloy:capability"]);
+    await runCommand([
+      "module",
+      "billing",
+      "--type",
+      "saasaloy:capability",
+      "--depends-on=",
+    ]);
 
     const parsed = JSON.parse(
       await readFile(join(repo, "modules/billing/registry-item.json"), "utf-8")
@@ -147,6 +169,7 @@ describe(runNew, () => {
       "billing",
       "--type",
       "saasaloy:feature",
+      "--depends-on=",
     ]);
 
     const reports = await checkTarget(
@@ -156,6 +179,10 @@ describe(runNew, () => {
     expect(reports.flatMap((report) => report.findings)).toStrictEqual([]);
     expect(code).toBe(0);
     expect(out).not.toContain("Doctor");
+    // The TODO description is a warning: said, and the scaffold still passes.
+    expect(out).toContain("Still to write");
+    expect(out).toContain("/description");
+    expect(out).toContain("is ready");
   });
 
   it("records the dependencies the author named", async () => {
@@ -220,6 +247,7 @@ describe(runNew, () => {
       "billing",
       "--type",
       "saasaloy:feature",
+      "--depends-on=",
     ]);
 
     expect(code).toBe(2);
@@ -281,6 +309,37 @@ describe(runNew, () => {
 
     expect(code).toBe(2);
     expect(out).toContain("--type");
+  });
+
+  // #223, ADR 0046. With no terminal this used to take "no dependencies" silently.
+  it("refuses with no terminal and no --depends-on, naming the flag, and writes nothing", async () => {
+    const { code, out } = await runCommand([
+      "module",
+      "billing",
+      "--type",
+      "saasaloy:feature",
+    ]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("`--depends-on=`");
+    await expect(pathExists(join(repo, "modules"))).resolves.toBeFalsy();
+  });
+
+  it("scaffolds with no dependencies under an empty --depends-on", async () => {
+    const { code } = await runCommand([
+      "module",
+      "billing",
+      "--type",
+      "saasaloy:feature",
+      "--depends-on",
+      "",
+    ]);
+
+    expect(code).toBe(0);
+    const descriptor = JSON.parse(
+      await readFile(join(repo, "modules/billing/registry-item.json"), "utf-8")
+    ) as { dependsOn?: unknown };
+    expect(descriptor.dependsOn ?? []).toStrictEqual([]);
   });
 
   it("refuses rather than hanging when there is no terminal to ask for the name", async () => {

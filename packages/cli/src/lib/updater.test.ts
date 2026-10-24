@@ -21,6 +21,8 @@ import {
   buildUpdatePlan,
   compareInstalled,
   executeUpdatePlan,
+  markResolved,
+  mergeTargets,
   recordRefRewrites,
 } from "./updater.js";
 import type {
@@ -1405,6 +1407,171 @@ describe(executeUpdatePlan, () => {
 // One helper now serves both, and these assert the agreement rather than either engine
 // on its own. A third engine, `remove`, works from the manifest these two write, so it
 // agrees by construction.
+// #223: `update --resolved <path>` records a merge, so the next run stops offering the
+// file. The lock has to move with it, or the next run would read the merged file as
+// clean against the old base and overwrite it.
+describe("markResolved — update --resolved (#223)", () => {
+  const TARGET = "apps/api/src/lib/email.ts";
+
+  async function drifted() {
+    const revisions = await emailRevisions(
+      "const retries = 1;\n",
+      "const retries = 3;\n"
+    );
+    const manifest = emptyManifest();
+    await trackFile(
+      manifest,
+      TARGET,
+      "const retries = 1;\n",
+      "files/lib/email.ts"
+    );
+    // The user's own edit, then the module's version merged on top of it.
+    await writeFile(
+      join(root, ...TARGET.split("/")),
+      "const retries = 3; // ours\n",
+      "utf-8"
+    );
+    const lock = emailLock();
+    return { lock, manifest, revisions };
+  }
+
+  it("takes the file out of the merge plan and lets the lock move", async () => {
+    const { lock, manifest, revisions } = await drifted();
+    const state = { config: config(), lock, manifest };
+    const plan = await build({ ...state, inputs: [input(revisions)] });
+    expect(plan.needsMerge).toBeTruthy();
+    expect(mergeTargets(plan)).toStrictEqual([TARGET]);
+
+    markResolved(plan, new Set([TARGET]));
+    expect(plan.modules[0]?.files[0]?.action).toBe("resolved");
+    expect(mergeTargets(plan)).toStrictEqual([]);
+    expect(plan.needsMerge).toBeFalsy();
+    expect(plan.modules[0]?.needsMerge).toBeFalsy();
+
+    const result = await executeUpdatePlan(plan, { root, ...state });
+    expect(result.resolved.map((f) => f.target)).toStrictEqual([TARGET]);
+    expect(result.lockMoved).toContain("email");
+    expect(lock.modules.email?.resolved).toBe(NEW_SHA);
+    expect(manifest.managed[TARGET]).toStrictEqual({
+      from: "files/lib/email.ts",
+      hash: hashContent("const retries = 3; // ours\n"),
+      mergedWith: hashContent("const retries = 3;\n"),
+      module: "email",
+    });
+    await expect(onDisk(TARGET)).resolves.toBe("const retries = 3; // ours\n");
+  });
+
+  it("leaves the merged file alone on the next run, which has nothing to merge", async () => {
+    const { lock, manifest, revisions } = await drifted();
+    const state = { config: config(), lock, manifest };
+    const first = await build({ ...state, inputs: [input(revisions)] });
+    markResolved(first, new Set([TARGET]));
+    await executeUpdatePlan(first, { root, ...state });
+
+    // The lock now sits on the new SHA, so the merge base is the version merged in.
+    const next = await build({
+      ...state,
+      inputs: [
+        input({
+          base: revisions.theirs,
+          comparison: {
+            current: NEW_SHA,
+            latest: NEW_SHA,
+            name: "email",
+            ref: "main",
+            source: "mimukit/saasaloy",
+            status: "outdated",
+          },
+          theirs: revisions.theirs,
+        }),
+      ],
+    });
+    expect(next.needsMerge).toBeFalsy();
+    expect(next.modules[0]?.files[0]?.action).toBe("skip");
+  });
+
+  it("skips a merged file with no merge base while the module ships the same version", async () => {
+    const { lock, manifest, revisions } = await drifted();
+    const state = { config: config(), lock, manifest };
+    const first = await build({ ...state, inputs: [input(revisions)] });
+    markResolved(first, new Set([TARGET]));
+    await executeUpdatePlan(first, { root, ...state });
+
+    // A working copy: no base at all, the case the recorded hash alone would overwrite.
+    const next = await build({
+      ...state,
+      inputs: [input({ theirs: revisions.theirs })],
+    });
+    expect(next.modules[0]?.files[0]?.action).toBe("skip");
+  });
+
+  it("sends a merged file to the merge plan, not to a write, once the module moves again", async () => {
+    const { lock, manifest, revisions } = await drifted();
+    const state = { config: config(), lock, manifest };
+    const first = await build({ ...state, inputs: [input(revisions)] });
+    markResolved(first, new Set([TARGET]));
+    await executeUpdatePlan(first, { root, ...state });
+
+    const newer = await writeModule(
+      "newer",
+      "email",
+      {
+        files: [{ path: "files/lib/email.ts", target: "@api/lib/email.ts" }],
+        type: "saasaloy:feature",
+      },
+      { "files/lib/email.ts": "const retries = 5;\n" }
+    );
+    const next = await build({
+      ...state,
+      inputs: [input({ base: revisions.theirs, theirs: newer })],
+    });
+    expect(next.modules[0]?.files[0]?.action).toBe("drift");
+    expect(next.modules[0]?.files[0]?.merged).toBeTruthy();
+  });
+
+  it("untracks a dropped file it names and leaves it on disk", async () => {
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { files: [], type: "saasaloy:feature" },
+      {}
+    );
+    const manifest = emptyManifest();
+    await trackFile(
+      manifest,
+      TARGET,
+      "const retries = 1;\n",
+      "files/lib/email.ts"
+    );
+    await writeFile(join(root, ...TARGET.split("/")), "edited\n", "utf-8");
+    const lock = emailLock();
+    const state = { config: config(), lock, manifest };
+
+    const plan = await build({ ...state, inputs: [input({ theirs })] });
+    expect(plan.modules[0]?.removals[0]?.action).toBe("delete-drift");
+    markResolved(plan, new Set([TARGET]));
+    const result = await executeUpdatePlan(plan, { root, ...state });
+
+    expect(result.resolved.map((f) => f.target)).toStrictEqual([TARGET]);
+    expect(manifest.managed[TARGET]).toBeUndefined();
+    expect(lock.modules.email?.resolved).toBe(NEW_SHA);
+    await expect(onDisk(TARGET)).resolves.toBe("edited\n");
+  });
+
+  it("marks nothing for a path the plan does not send to a merge", async () => {
+    const { lock, manifest, revisions } = await drifted();
+    const plan = await build({
+      config: config(),
+      inputs: [input(revisions)],
+      lock,
+      manifest,
+    });
+    markResolved(plan, new Set(["apps/api/src/other.ts"]));
+    expect(mergeTargets(plan)).toStrictEqual([TARGET]);
+    expect(plan.needsMerge).toBeTruthy();
+  });
+});
+
 describe("add and update agree (#98)", () => {
   // Every enumeration rule at once: an aliased files[] entry, a scaffold workspace, and
   // an agent.skills folder.

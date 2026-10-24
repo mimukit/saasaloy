@@ -1,6 +1,7 @@
 {
   "name": "bad-skill",
   "type": "saasaloy:feature",
+  "description": "Test fixture bad-skill.",
   "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }],
   "agent": { "skills": ["helper", "saasaloy-absent"] }
 }

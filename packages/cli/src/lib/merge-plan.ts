@@ -178,6 +178,12 @@ function renderFile(file: PlannedUpdateFile): string[] {
         "from it. Nothing here was written.",
       ""
     );
+  } else if (file.merged) {
+    out.push(
+      "This file was merged before (`saasaloy update --resolved`), so it holds edits Saasaloy " +
+        "did not write. The module moved again since that merge, and the file was left alone.",
+      ""
+    );
   } else if (file.adopted) {
     out.push(
       "Saasaloy adopted this file rather than writing it, so the hash it records came off " +
@@ -271,6 +277,29 @@ function lockStaysOn(plan: UpdatePlan): string {
     : "each module's lock entry stays on the base SHA named in its Provenance section";
 }
 
+/**
+ * The command that records every file of this plan as merged (#223): one `--resolved`
+ * per file, in the order the plan lists them, then `--yes`, because an agent has no
+ * terminal to confirm in.
+ */
+function resolveCommand(plan: UpdatePlan): string {
+  const targets = plan.modules
+    .flatMap((m) => (m.needsMerge ? [...m.files, ...m.removals] : []))
+    .filter(isMergeFile)
+    .map((file) => file.target);
+  const flags = targets.map(
+    (target) => ` \\\n  --resolved ${shellQuote(target)}`
+  );
+  return `saasaloy update${flags.join("")} --yes\n`;
+}
+
+/** Quote a path for a POSIX shell only when it needs it. */
+function shellQuote(path: string): string {
+  return /^[\w@%+=:,./-]+$/.test(path)
+    ? path
+    : `'${path.replaceAll("'", "'\\''")}'`;
+}
+
 function renderInstructions(plan: UpdatePlan): string[] {
   const out: string[] = [
     "## Instructions",
@@ -286,18 +315,26 @@ function renderInstructions(plan: UpdatePlan): string[] {
       "conflict and you cannot preserve both, leave the user's version in place and say so " +
       "rather than choosing for them.",
     "4. Don't touch files that aren't listed here — everything else was already updated cleanly.",
-    "5. Don't edit `.saasaloy/manifest.json` or `saasaloy-lock.json` — Saasaloy owns both.",
+    "5. Don't edit `.saasaloy/manifest.json` or `saasaloy-lock.json` — Saasaloy owns both. " +
+      "Once the files are merged, record them with `saasaloy update --resolved`, below.",
     "",
     "### What Saasaloy records afterwards",
     "",
-    "Nothing, and that is deliberate. Saasaloy has no way to tell a finished merge from an " +
-      "unfinished one, so it does not mark this plan resolved: the files above stay tracked at " +
-      `the module's old version and ${lockStaysOn(plan)}. A later ` +
-      "`saasaloy update` will offer the same files again, against the same base, until a file " +
-      "either matches the new version byte for byte or the module stops shipping it. The old " +
-      "SHA is the only merge base that exists — advancing it would leave these files with " +
-      "nothing to diff against, which is why the merge is yours to keep, not Saasaloy's to " +
-      "record.",
+    "Nothing until you say a merge is done. Saasaloy has no way to tell a finished merge from " +
+      "an unfinished one, so until then the files above stay tracked at the module's old " +
+      `version and ${lockStaysOn(plan)}, and a later \`saasaloy update\` will offer the same ` +
+      "files again, against the same base.",
+    "",
+    "When the files are merged, record them:",
+    "",
+    ...fenced(resolveCommand(plan), "sh"),
+    "Pass `--resolved` once for each file you merged, with the path from its heading above. " +
+      "Saasaloy records each file's current hash as its new baseline without checking what it " +
+      "holds, so record a file only once its merge is finished. Once nothing else of a module " +
+      "waits on a merge, its lock moves to the new version, and the next `saasaloy update` " +
+      'stops offering those files. A config patch under "Config patches that moved" is not a ' +
+      "file: reconcile it by hand, and the module's lock stays where it is. `update` refuses a " +
+      "working tree with uncommitted changes, so commit the merge first or add `--force`.",
     "",
     "## Verification",
     "",

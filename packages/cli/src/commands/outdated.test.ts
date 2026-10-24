@@ -4,7 +4,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { startGithubFixture } from "../../test/support/github-fixture.js";
 import type { GithubFixture } from "../../test/support/github-fixture.js";
-import { templateHash } from "../lib/base.js";
+import { BASE_MODULE, templateHash } from "../lib/base.js";
 import { pathExists } from "../lib/fs-utils.js";
 import { emptyLock } from "../lib/lock.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
@@ -19,6 +19,7 @@ import {
   renderComparisons,
   runOutdated,
 } from "./outdated.js";
+import { runJson } from "../../test/support/json-run.js";
 
 /** The usage line the refusal quotes, kept here so a reworded flag list fails loudly. */
 const USAGE_LINE = "saasaloy outdated [--check]";
@@ -216,7 +217,11 @@ describe(describeDrift, () => {
 
 describe(parseArgs, () => {
   it("defaults to a report, not a gate", () => {
-    expect(parseArgs([])).toStrictEqual({ check: false, unknown: [] });
+    expect(parseArgs([])).toStrictEqual({
+      check: false,
+      json: false,
+      unknown: [],
+    });
   });
 
   it("reads --check", () => {
@@ -448,6 +453,48 @@ describe(runOutdated, () => {
       await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
         0
       );
+    });
+  });
+
+  // `--json` (#223): the rows as data, the exit code unchanged.
+  describe("--json", () => {
+    it("prints the base row, the module rows and the drift count", async () => {
+      await driftingProject();
+
+      const { code, doc, err } = await runJson(runOutdated, ["--json"]);
+
+      expect(code).toBe(0);
+      expect(doc).toMatchObject({
+        base: { name: BASE_MODULE },
+        drift: 1,
+        modules: [
+          {
+            current: SHA_A,
+            latest: SHA_B,
+            name: "email",
+            status: "outdated",
+          },
+        ],
+        schemaVersion: 1,
+      });
+      expect(err).toContain("moved");
+    });
+
+    it("keeps --check's exit 2 on drift, with the rows still on stdout", async () => {
+      await driftingProject();
+
+      const { code, doc } = await runJson(runOutdated, ["--check", "--json"]);
+
+      expect(code).toBe(2);
+      expect(doc.drift).toBe(1);
+      expect(doc).not.toHaveProperty("error");
+    });
+
+    it("prints an error document outside a project", async () => {
+      const { code, doc } = await runJson(runOutdated, ["--json"]);
+
+      expect(code).not.toBe(0);
+      expect(doc).toMatchObject({ error: { exitCode: code } });
     });
   });
 

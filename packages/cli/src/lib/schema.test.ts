@@ -3,7 +3,12 @@ import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 import { PATCH_KINDS } from "./patch/index.js";
 import type { PatchKind } from "./patch/index.js";
-import { validateManifest, validateRegistryItem } from "./schema.js";
+import {
+  MODULE_NEEDS,
+  MODULE_STAGES,
+  validateManifest,
+  validateRegistryItem,
+} from "./schema.js";
 
 // #98 fix round. Two schemas describe the same patch op: `registry-item.schema.json`
 // validates it as authored, `manifest.schema.json` validates it as recorded. The
@@ -312,5 +317,54 @@ describe("registry-item schema — when, untested and enablesTesting (#242)", ()
         enablesTesting: false,
       })
     ).resolves.toMatchObject({ valid: false });
+  });
+});
+
+// #223: three optional fields an agent reads through `saasaloy list --json`. The TS
+// constants mirror the schema's enums, so `list` and `new` cannot drift from what a
+// descriptor may declare.
+describe("description, stage and needs (#223)", () => {
+  const base = { name: "widget", type: "saasaloy:feature" };
+
+  it("mirrors the schema's stage and needs enums", async () => {
+    const schema = await readSchema("registry-item.schema.json");
+    expect(kindEnum(schema, ["properties", "stage"])).toStrictEqual(
+      [...MODULE_STAGES].toSorted()
+    );
+    expect(kindEnum(schema, ["properties", "needs", "items"])).toStrictEqual(
+      [...MODULE_NEEDS].toSorted()
+    );
+  });
+
+  it("accepts all three, and a descriptor with none of them", async () => {
+    await expect(
+      validateRegistryItem({
+        ...base,
+        description: "A widget for the landing page.",
+        needs: ["stripe", "domain"],
+        stage: "money",
+      })
+    ).resolves.toMatchObject({ valid: true });
+    await expect(validateRegistryItem(base)).resolves.toMatchObject({
+      valid: true,
+    });
+  });
+
+  it("refuses an empty or multi-line description", async () => {
+    for (const description of ["", "one\ntwo"]) {
+      const result = await validateRegistryItem({ ...base, description });
+      expect(result.valid).toBeFalsy();
+    }
+  });
+
+  it("refuses an unknown stage and an unknown or repeated need", async () => {
+    for (const extra of [
+      { stage: "growth" },
+      { needs: ["aws"] },
+      { needs: ["stripe", "stripe"] },
+    ]) {
+      const result = await validateRegistryItem({ ...base, ...extra });
+      expect(result.valid).toBeFalsy();
+    }
   });
 });

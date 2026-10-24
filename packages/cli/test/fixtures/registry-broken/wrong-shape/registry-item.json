@@ -1,6 +1,7 @@
 {
   "name": "wrong-shape",
   "type": "saasaloy:feature",
+  "description": "Test fixture wrong-shape.",
   "files": [{ "path": "files/a.ts", "target": "@web/a.ts" }],
   "scaffolds": {},
   "dependsOn": {},

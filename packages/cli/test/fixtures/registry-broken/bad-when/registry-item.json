@@ -1,6 +1,7 @@
 {
   "name": "bad-when",
   "type": "saasaloy:feature",
+  "description": "Test fixture bad-when.",
   "files": [
     {
       "path": "files/a.ts",

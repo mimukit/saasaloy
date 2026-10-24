@@ -2,9 +2,10 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "kv-upstash",
   "type": "saasaloy:feature",
-  "requires": {
-    "saasaloy": ">=0.6.0"
-  },
+  "description": "A kv provider on Upstash Redis over HTTPS; needs an Upstash account and two REST secrets.",
+  "stage": "scale",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["kv"],
   "dependencies": [],
   "envVars": {
