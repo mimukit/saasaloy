@@ -57,7 +57,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
      - the admin copy replaces the r2 copy: "Sign in to Saasaloy admin" and "Use an account with the admin role."
      - the card has no footer link, on purpose: admin has no sign-up
      - the canvas is the admin `bg-background`, not the `app` canvas
-     - screenshot: `docs/qa/assets/0001-qa-auth-blocks-reset-mail/login-light-1440.png` light 1440 px · `login-dark-1440.png` dark 1440 px · `login-light-360.png` light 360 px · `login-dark-360.png` dark 360 px
+     - screenshot: `docs/qa/assets/0077-qa-auth-blocks-reset-mail/login-light-1440.png` light 1440 px · `login-dark-1440.png` dark 1440 px · `login-light-360.png` light 360 px · `login-dark-360.png` dark 360 px
    - [ ] The site name beside the brand mark is acceptable on the admin login, where the old login showed the mark only
 
 **Result**
@@ -76,7 +76,7 @@ Priority legend: 🔴 Critical · 🟡 Normal · 🟢 Low
 
 1. Look at the error screenshot.
    - [ ] The red line above the button is legible and does not crowd the button
-     - screenshot: `docs/qa/assets/0001-qa-auth-blocks-reset-mail/login-error-light-1440.png` light 1440 px
+     - screenshot: `docs/qa/assets/0077-qa-auth-blocks-reset-mail/login-error-light-1440.png` light 1440 px
 
 **Result**
 
@@ -144,7 +144,7 @@ curl -s -X POST http://localhost:4000/auth/sign-up/email -H 'content-type: appli
 - ✅ C4 → `{"message":"Password too short","code":"PASSWORD_TOO_SHORT"}`. The same call with `twelve-chars` answers 200.
 
 ### Browser checks
-_Driven with `playwright-cli` against `http://localhost:3001` at `cbb8aceb`. Screenshots in `docs/qa/assets/0001-qa-auth-blocks-reset-mail/`._
+_Driven with `playwright-cli` against `http://localhost:3001` at `cbb8aceb`. Screenshots in `docs/qa/assets/0077-qa-auth-blocks-reset-mail/`._
 
 - ✅ `/login` · heading → `Sign in to Saasaloy admin`; description → `Use an account with the admin role.`; site name → `Saasaloy`.
 - ✅ `/login` · footer links in the card → none (no `signUpHref`).
