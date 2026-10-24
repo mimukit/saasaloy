@@ -417,7 +417,7 @@ await client.signIn.email({ email, password });
 
 The blocks do no IO, per the `@repo/ui` rule. They import no auth client, no router, no store and no env. The app renders a block on its own route and owns the call:
 
-- **`onSubmit(values)` returns `Promise<string | void>`.** Return a message and the card shows it in a `role="alert"` line above the button. Return nothing on success, after you navigate.
+- **`onSubmit(values)` returns `Promise<string | undefined>`.** Return a message and the card shows it in a `role="alert"` line above the button. Return `undefined` (or nothing) on success, after you navigate. Do not write `string | void`: the project lint rejects `void` in a union, and the type does not match.
 - **Catch your own network failure.** A throw resets the button and reaches the console, but the card shows nothing. Turn it into a returned message, as the example below does.
 - **`SignInCard` takes `signUpHref?`, `title?` and `description?`.** With no `signUpHref`, the card has no footer. `admin` passes its own title and description and no `signUpHref`.
 - **`SignUpCard` takes `signInHref`, `title?` and `description?`.** Its password field asks for 12 characters, the server's `minPasswordLength` (see "Password rules"). Change both together.
@@ -436,7 +436,7 @@ export const Route = createFileRoute("/sign-in")({ component: SignInScreen });
 function SignInScreen() {
   const router = useRouter();
 
-  async function handleSignIn(values: SignInValues): Promise<string | void> {
+  async function handleSignIn(values: SignInValues): Promise<string | undefined> {
     try {
       const { error } = await auth.signIn.email(values);
       if (error) {
