@@ -13,12 +13,14 @@
 
 import {
   confirm as clackConfirm,
+  multiselect as clackMultiselect,
   select as clackSelect,
   text as clackText,
 } from "@clack/prompts";
 import type {
   CommonOptions,
   ConfirmOptions,
+  MultiSelectOptions,
   SelectOptions,
   TextOptions,
 } from "@clack/prompts";
@@ -65,6 +67,16 @@ export function select<Value>(
     refuse(rest.message, answeredBy);
   }
   return clackSelect(rest);
+}
+
+export function multiselect<Value>(
+  opts: MultiSelectOptions<Value> & Answerable
+): Promise<Value[] | symbol> {
+  const { answeredBy, ...rest } = opts;
+  if (!canAsk(rest.output)) {
+    refuse(rest.message, answeredBy);
+  }
+  return clackMultiselect(rest);
 }
 
 export function confirm(

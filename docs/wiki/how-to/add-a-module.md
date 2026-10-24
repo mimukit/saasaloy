@@ -37,7 +37,17 @@ contract.
 
 Then it asks `Proceed?`. Answer no and nothing is written.
 
-Run `add` with no module name and you get a picker over the registry instead.
+Run `add` with no module name and you get a multi-select over the registry instead.
+
+## Install several at once
+
+```bash
+saasaloy add admin teams --with database-d1 --yes
+```
+
+Several names resolve into one graph, so you get one plan and one `Proceed?`. Every check that would refuse one module runs on the whole set before anything is written: a conflict between the first and the last name exits 2 with nothing on disk. A shell loop over `saasaloy add` gives you neither, because each run checks only its own graph and a refusal at the third module leaves the first two installed.
+
+Prerequisites install first, then the names in the order you typed them. A module you named that is already installed is skipped with a note, and the rest install. One `--with` answers a driver choice for every module in the set. All the names must come from one registry.
 
 ## The skill that comes with it
 
@@ -113,7 +123,7 @@ files:
 saasaloy add waitlist --force
 ```
 
-`--force` applies to the module you asked for. Dependencies that are already installed
+`--force` applies to the modules you asked for. Dependencies that are already installed
 stay as they are. It does not cross module file ownership: a module reapplies its own
 files and the files of any module the two reach through `dependsOn`, at any depth and in either direction, and `add` exits 2 when it
 reaches a file some unrelated module owns. To hand a file to a different module, remove the

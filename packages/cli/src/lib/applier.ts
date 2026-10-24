@@ -50,6 +50,8 @@ import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
 import { readTestingMode } from "./testing.js";
 import type { TestingMode } from "./testing.js";
 import { isPatchTracked, whenHolds } from "./when.js";
+import { requestedLabel } from "./requested.js";
+import type { RequestedInput } from "./requested.js";
 
 // The deterministic core of `saasaloy add`: turn the modules-to-install into a plan of
 // concrete file writes, classify each against the manifest's content hashes, then
@@ -608,10 +610,11 @@ export interface BuildPlanArgs {
   manifest: Manifest;
   /**
    * What the user asked for, named in a refusal so a collision raised by a transitive
-   * prerequisite still says which command hit it. Omitted by callers that plan a set with
-   * no single requested module (`update`'s prerequisite plan).
+   * prerequisite still says which command hit it: one name, or every name `add` was given
+   * (#233). Omitted by callers that plan a set with no requested module (`update`'s
+   * prerequisite plan).
    */
-  requested?: string;
+  requested?: RequestedInput;
   /**
    * The testing mode a `when` is tested against; defaults to the project's own (#242).
    * `add` of an `enablesTesting` module passes `tests-after` before it saves the mode.
@@ -633,16 +636,10 @@ export interface PlanSelector {
 }
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
-  const {
-    root,
-    install,
-    alreadyInstalled,
-    modules,
-    config,
-    manifest,
-    requested,
-    select,
-  } = args;
+  const { root, install, alreadyInstalled, modules, config, manifest, select } =
+    args;
+  const requested =
+    args.requested === undefined ? undefined : requestedLabel(args.requested);
   const testingMode = args.testingMode ?? readTestingMode(config);
   const gate = gateFor(manifest, testingMode);
   // Keyed by project-relative target, because two modules in one run can ship the same

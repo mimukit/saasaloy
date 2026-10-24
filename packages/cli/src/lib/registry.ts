@@ -150,6 +150,22 @@ export function createRegistrySource(coord: Coordinate): RegistrySource {
 
 // --- Shared descriptor loading ---------------------------------------------------
 
+/**
+ * The refusal for a name the registry has no descriptor for. Its own class so `add` can
+ * collect every unknown name in a run of several and refuse once (#233), rather than
+ * matching on the message.
+ */
+export class UnknownModuleError extends RefusalError {
+  override readonly name = "UnknownModuleError";
+
+  constructor(
+    readonly module: string,
+    message: string
+  ) {
+    super(message);
+  }
+}
+
 /** Read + validate `<dir>/registry-item.json`, asserting it declares `name`. */
 export async function loadModuleFolder(
   dir: string,
@@ -161,7 +177,8 @@ export async function loadModuleFolder(
     const because = requiredBy ? ` (required by ${requiredBy})` : "";
     // Refused, not failed: the coordinate names something the registry does not have,
     // so a retry cannot help (#98's 0/1/2 scheme).
-    throw new RefusalError(
+    throw new UnknownModuleError(
+      name,
       `Unknown module "${name}"${because} — no ${name}/registry-item.json in the registry.`
     );
   }

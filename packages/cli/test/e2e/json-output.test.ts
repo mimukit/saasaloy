@@ -105,7 +105,7 @@ describe("e2e — --json (#223)", () => {
     assertOk(human);
     assertOk(json);
     const doc = parsed(json);
-    expect(doc).toMatchObject({ requested: "waitlist", schemaVersion: 1 });
+    expect(doc).toMatchObject({ requested: ["waitlist"], schemaVersion: 2 });
     expect(doc.install).toContain("database-d1");
 
     const files = doc.files as PlanFile[];
@@ -180,7 +180,7 @@ describe("e2e — --json (#223)", () => {
         exitCode: 2,
         message: expect.stringContaining("--dry-run --json"),
       },
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
   });
 

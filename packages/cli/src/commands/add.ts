@@ -19,6 +19,7 @@ import {
   EXIT_OK,
   EXIT_REFUSED,
   formatFailure,
+  RefusalError,
 } from "../lib/exit.js";
 import { planWritesUi } from "../lib/design.js";
 import { createOutput, printJson } from "../lib/json-output.js";
@@ -34,7 +35,7 @@ import type { Lockfile } from "../lib/lock.js";
 import { loadManifest } from "../lib/manifest.js";
 import type { Manifest } from "../lib/manifest.js";
 import { planDeps, readRootPackageJson, writeDeps } from "../lib/pkg-json.js";
-import { confirm, select } from "../lib/prompts.js";
+import { confirm, multiselect, select } from "../lib/prompts.js";
 import { findProjectRoot } from "../lib/project.js";
 import {
   createRegistrySource,
@@ -49,7 +50,9 @@ import {
   formatMissingRequirements,
   formatUnansweredWith,
 } from "../lib/requires.js";
-import { mergeGraph, resolveGraph } from "../lib/resolve.js";
+import { listLabel, requestedArgv } from "../lib/requested.js";
+import type { Requested, RequestedInput } from "../lib/requested.js";
+import { mergeGraph, resolveGraph, resolveGraphs } from "../lib/resolve.js";
 import type { Graph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import type { LoadedConfig } from "../lib/saasaloy-config.js";
@@ -65,15 +68,18 @@ import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import { reportBlockOutcome, setTestingMode } from "./testing.js";
 
-// `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
+// `saasaloy add <module>...` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
 // targets, record them in .saasaloy/manifest.json with content hashes, and merge npm
 // deps (build spec §2.4/§2.7/§2.9). `--dry-run`/`--diff` preview without mutating.
 // `--dry-run --json` prints the plan as one document on stdout and nothing else (#223);
 // `--json` without `--dry-run` refuses, because an apply has no plan document to print.
+// Several names resolve into one graph, print one plan, ask once, and refuse before the
+// first write when any module in the set would refuse on its own (#233).
 
 export interface AddOptions {
-  name?: string;
+  /** Every positional, in argv order and unparsed: a module name or a coordinate. */
+  names: string[];
   dryRun: boolean;
   diff: boolean;
   yes: boolean;
@@ -85,7 +91,7 @@ export interface AddOptions {
    * run with no terminal can pick a driver (#223). Command-line order.
    */
   with: string[];
-  /** Flags we don't know and extra positionals — reported, never silently ignored. */
+  /** Flags we don't know — reported, never silently ignored. */
   unknown: string[];
 }
 
@@ -100,7 +106,7 @@ const KNOWN_FLAGS = new Set([
   "-h",
 ]);
 const USAGE =
-  "saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]";
+  "saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]";
 const HELP: CommandHelp = {
   name: "add",
   describe: DESCRIPTIONS.add,
@@ -109,7 +115,7 @@ const HELP: CommandHelp = {
     "--dry-run": "show the plan and write nothing",
     "--diff": "show a per-file diff and write nothing",
     "-y, --yes": "skip the confirmation prompt",
-    "--force": "re-apply a module that is already installed",
+    "--force": "re-apply the named modules that are already installed",
     "--with <module>":
       "answer a `requiresOneOf` choice, e.g. `--with database-d1` (repeatable)",
     "--json": "with --dry-run, print the plan as one JSON document on stdout",
@@ -117,10 +123,10 @@ const HELP: CommandHelp = {
 };
 
 /**
- * Split `add`'s argv into options. Exported for its own tests: the rejection rules here
- * (an unknown flag, a second positional) are the difference between `--forse` doing
- * nothing and `--forse` being reported, and they are worth pinning without driving a
- * whole apply to reach them.
+ * Split `add`'s argv into options. Exported for its own tests: the rejection rule here
+ * (an unknown flag) is the difference between `--forse` doing nothing and `--forse` being
+ * reported, and it is worth pinning without driving a whole apply to reach it. Every
+ * positional is a name (#233); `requestedModules` parses and checks them.
  */
 export function parseArgs(argv: string[]): AddOptions {
   const positional: string[] = [];
@@ -152,39 +158,113 @@ export function parseArgs(argv: string[]): AddOptions {
       unknown.push(arg);
     }
   }
-  unknown.push(...positional.slice(1));
   return {
     diff: argv.includes("--diff"),
     dryRun: argv.includes("--dry-run"),
     force: argv.includes("--force"),
     json: argv.includes("--json"),
-    name: positional[0],
+    names: positional,
     unknown,
     with: withModules,
     yes: argv.includes("--yes") || argv.includes("-y"),
   };
 }
 
+// The registry a coordinate reads from, as a message names it: a bare name and
+// `mimukit/saasaloy/<name>` are the same source.
+function sourceLabel(coord: Coordinate): string {
+  const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
+  return coord.ref ? `${slug}@${coord.ref}` : slug;
+}
+
+/** The positionals of one `add` run, parsed: one source, and the modules to add. */
+export interface ModuleRequest {
+  /** The registry every name resolves from, with the first name as `module`. */
+  source: Coordinate;
+  /** The named modules, in argv order, de-duplicated. Empty means "show a picker". */
+  names: string[];
+}
+
 /**
- * Pin a coordinate to the SHA the lock recorded for it, so a re-install reproduces
- * identical bytes (ADR 0012). Three conditions hold it back, and each one means the user
- * asked for something else: `SAASALOY_REGISTRY_DIR` points at a working copy, an explicit
- * `@ref` names the ref to move to, or the entry was installed from a local checkout and
- * carries no SHA to pin to. Returns `coord` unchanged when none applies.
+ * Parse every positional and check that the set reads from one registry (#233). Each
+ * goes through `parseCoordinate`, so a malformed one refuses as it always did. Two
+ * coordinates naming different owners, repos or refs refuse and say which two, because
+ * one run resolves one graph from one source. `owner/repo` with no module asks for the
+ * picker, which only makes sense alone, so mixed with other positionals it refuses with
+ * the usage line. A repeated name is dropped without a message.
+ */
+export function requestedModules(inputs: readonly string[]): ModuleRequest {
+  const coords = inputs.map((input) => parseCoordinate(input));
+  const [first] = coords;
+  if (!first) {
+    return { names: [], source: {} };
+  }
+  if (coords.length === 1) {
+    return { names: first.module ? [first.module] : [], source: first };
+  }
+  const bare = inputs.find((_, i) => !coords[i]?.module);
+  if (bare !== undefined) {
+    throw new RefusalError(
+      `"${bare}" names a registry and no module, and it cannot be mixed with other names — usage: \`${USAGE}\`.`
+    );
+  }
+  const firstLabel = sourceLabel(first);
+  const other = coords.findIndex((coord) => sourceLabel(coord) !== firstLabel);
+  const otherCoord = coords[other];
+  if (otherCoord) {
+    throw new RefusalError(
+      `Cannot add modules from two sources in one run — "${inputs[0]}" reads ${firstLabel} and ` +
+        `"${inputs[other]}" reads ${sourceLabel(otherCoord)}. Add them in separate runs.`
+    );
+  }
+  const names = [
+    ...new Set(coords.map((coord) => coord.module ?? "").filter(Boolean)),
+  ];
+  // A coordinate that spells the source out keeps it, so the override warning below
+  // still fires for `acme/kit/widget waitlist`.
+  const spelled = coords.find((coord) => coord.owner) ?? first;
+  return { names, source: { ...spelled, module: names[0] } };
+}
+
+/**
+ * Pin a coordinate to the SHA the lock recorded for its modules, so a re-install
+ * reproduces identical bytes (ADR 0012). Three conditions hold it back, and each one means
+ * the user asked for something else: `SAASALOY_REGISTRY_DIR` points at a working copy, an
+ * explicit `@ref` names the ref to move to, or the entry was installed from a local
+ * checkout and carries no SHA to pin to. Returns `coord` unchanged when none applies.
+ *
+ * `modules` are the lock entries the run reads: the one named module, or under several
+ * names the installed ones `--force` re-applies (#233). They share one source, so they
+ * must share one SHA. When their pins differ the run refuses rather than pick one, since
+ * either choice moves the other module off its pin, and only `@ref` and `update` do that.
  *
  * A separate function from `runAdd` because reaching this branch through the command
  * means resolving a remote source, and the rule is worth testing on its own.
  */
-export function pinToLock(coord: Coordinate, lock: Lockfile): Coordinate {
-  if (process.env[REGISTRY_ENV] || !coord.module || coord.ref) {
+export function pinToLock(
+  coord: Coordinate,
+  lock: Lockfile,
+  modules: readonly string[] = coord.module ? [coord.module] : []
+): Coordinate {
+  if (process.env[REGISTRY_ENV] || coord.ref) {
     return coord;
   }
   const slug = `${coord.owner ?? DEFAULT_OWNER}/${coord.repo ?? DEFAULT_REPO}`;
-  const pinned = lock.modules[coord.module];
-  if (!pinned || pinned.source !== slug || pinned.resolved === "local") {
-    return coord;
+  const pins = modules.flatMap((name) => {
+    const pinned = lock.modules[name];
+    return pinned && pinned.source === slug && pinned.resolved !== "local"
+      ? [{ name, sha: pinned.resolved }]
+      : [];
+  });
+  if (new Set(pins.map((pin) => pin.sha)).size > 1) {
+    const named = pins.map((pin) => `${pin.name} (${pin.sha.slice(0, 7)})`);
+    throw new RefusalError(
+      `Cannot re-apply ${listLabel(named)} together, they are pinned to different commits. ` +
+        `Re-apply them in separate runs, or pass @<ref>.`
+    );
   }
-  return { ...coord, ref: pinned.resolved };
+  const [pin] = pins;
+  return pin ? { ...coord, ref: pin.sha } : coord;
 }
 
 const ACTION_LABEL: Record<FileAction, string> = {
@@ -194,6 +274,12 @@ const ACTION_LABEL: Record<FileAction, string> = {
   overwrite: pc.cyan("overwrite"),
   unchanged: pc.dim("unchanged"),
 };
+
+/**
+ * The `schemaVersion` of every document `add --json` prints. 2 since `requested` became
+ * a list (#233); the other commands are still at `JSON_SCHEMA_VERSION`.
+ */
+export const ADD_JSON_SCHEMA_VERSION = 2;
 
 // Cap a single file's diff so a big generated file can't flood the terminal.
 const MAX_DIFF_LINES = 60;
@@ -235,18 +321,22 @@ function fileLabel(file: PlannedFile): string {
 
 function summarizePlan(
   plan: Plan,
-  requested: string,
+  requested: Requested,
   prereqs: string[],
   tui: TuiOptions = {}
 ): void {
-  if (prereqs.length > 0) {
-    note(
-      wrapForNote(
-        `${pc.bold(requested)} requires: ${prereqs.map((p) => pc.cyan(p)).join(", ")}`
-      ),
-      "Dependencies",
-      tui
+  // One line per named root, listing the prerequisites that root pulled in (#233). With
+  // one name every prerequisite is its own, and the line reads as it always did.
+  const dependencyLines = requested.names.flatMap((root) => {
+    const own = prereqs.filter(
+      (p) => (requested.rootOf.get(p) ?? requested.names[0]) === root
     );
+    return own.length === 0
+      ? []
+      : [`${pc.bold(root)} requires: ${own.map((p) => pc.cyan(p)).join(", ")}`];
+  });
+  if (dependencyLines.length > 0) {
+    note(wrapForNote(dependencyLines.join("\n")), "Dependencies", tui);
   }
   const willInstall = plan.install.map((m) => pc.cyan(m)).join(pc.dim(" → "));
   const lines = [`will install: ${willInstall}`];
@@ -357,15 +447,18 @@ function summarizePlan(
  * aliases and skill links. `plan` is undefined when everything is already installed,
  * which prints the same keys, empty. Pure and exported so the shape is pinned without a
  * registry.
+ *
+ * `requested` lists the named modules in argv order, also for one name. It was a string
+ * until #233, so the document is `ADD_JSON_SCHEMA_VERSION`, 2.
  */
 export function planDocument(
-  requested: string,
+  requested: readonly string[],
   prereqs: string[],
   plan: Plan | undefined,
   alreadyInstalled: string[] = plan?.alreadyInstalled ?? []
 ): Record<string, unknown> {
   return {
-    requested,
+    requested: [...requested],
     prerequisites: prereqs,
     install: plan?.install ?? [],
     alreadyInstalled,
@@ -494,19 +587,19 @@ export function envSteps(
  * name the command that finishes the job — a plain re-run, because they are absent from
  * `config.installed` and so get planned again, drift and all, for a fresh approval.
  *
- * `requested` is the module the user typed, not each incomplete name: re-running it
- * re-plans the whole graph, including an incomplete dependency.
+ * `requested` is what the user typed, not each incomplete name: re-running it re-plans
+ * the whole graph, including an incomplete dependency.
  */
 export function formatIncomplete(
   incomplete: string[],
-  requested: string
+  requested: RequestedInput
 ): string {
   const names = incomplete.map((name) => pc.cyan(name)).join(", ");
   const verb = incomplete.length === 1 ? "is" : "are";
   const object = incomplete.length === 1 ? "it" : "them";
   return (
     `${names} ${verb} not installed — files changed while the plan was open. ` +
-    `Re-run ${pc.cyan(`saasaloy add ${requested}`)} to complete ${object}.`
+    `Re-run ${pc.cyan(`saasaloy add ${requestedArgv(requested)}`)} to complete ${object}.`
   );
 }
 
@@ -517,10 +610,10 @@ export function formatIncomplete(
  * command that finishes the job — the same plain re-run an incomplete run asks for,
  * since the module never reached `config.installed`.
  */
-export function formatRecovery(requested: string): string {
+export function formatRecovery(requested: RequestedInput): string {
   return (
     "Partial apply — the manifest, config and lock describe what landed. " +
-    `Re-run ${pc.cyan(`saasaloy add ${requested}`)} to complete it.`
+    `Re-run ${pc.cyan(`saasaloy add ${requestedArgv(requested)}`)} to complete it.`
   );
 }
 
@@ -735,7 +828,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     return EXIT_OK;
   }
 
-  const out = createOutput(opts.json);
+  const out = createOutput(opts.json, ADD_JSON_SCHEMA_VERSION);
   const { tui } = out;
   intro(pc.bgCyan(pc.black(" saasaloy add ")), tui);
 
@@ -754,9 +847,10 @@ export async function runAdd(argv: string[]): Promise<number> {
     );
   }
 
-  let coord: ReturnType<typeof parseCoordinate>;
+  let coord: Coordinate;
+  let names: string[];
   try {
-    coord = parseCoordinate(opts.name);
+    ({ names, source: coord } = requestedModules(opts.names));
   } catch (error) {
     return out.fail(error);
   }
@@ -771,7 +865,7 @@ export async function runAdd(argv: string[]): Promise<number> {
   // check: an unmet requirement names the modules to pick from, and `--yes` would not
   // have answered it anyway (#229).
   const cannotConfirm =
-    Boolean(coord.module) &&
+    names.length > 0 &&
     !opts.yes &&
     !opts.dryRun &&
     !opts.diff &&
@@ -789,16 +883,24 @@ export async function runAdd(argv: string[]): Promise<number> {
   let plan: Plan;
   let prereqs: string[];
   let source: RegistrySource | undefined;
-  // Set to the requested module once the apply starts. It tells the catch below whether
+  // Set to the requested modules once the apply starts. It tells the catch below whether
   // a failure could have left files on disk, so only those failures carry the re-run
   // instruction — a bad coordinate or a missing descriptor writes nothing (#49).
-  let partial: string | undefined;
+  let partial: Requested | undefined;
   try {
     // Load the lock up front so a named remote add can pin to the SHA it recorded — a
     // re-install then reproduces identical bytes (ADR 0012). Explicit `@ref` or the
-    // `update` flow (#17) are the sanctioned ways to move off the lock.
+    // `update` flow (#17) are the sanctioned ways to move off the lock. Under several
+    // names only the installed ones `--force` re-applies are read (#233): a skipped
+    // module is not re-fetched, so its pin does not count.
     const lock = await loadLock(root);
-    coord = pinToLock(coord, lock);
+    coord = pinToLock(
+      coord,
+      lock,
+      names.length === 1
+        ? names
+        : names.filter((n) => opts.force && config.installed.includes(n))
+    );
 
     source = createRegistrySource(coord);
     if (process.env[REGISTRY_ENV] && (coord.owner || coord.repo)) {
@@ -809,8 +911,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
 
     // No module named (bare `add`, or `owner/repo` with no module) → pick from the source.
-    let requested = coord.module;
-    if (!requested) {
+    if (names.length === 0) {
       // No terminal to pick in (CI, piped stdin, `saasaloy add | cat`) means the prompt
       // below could never be answered — it would hang the pipeline. Say what was missing
       // instead, before the registry is even fetched.
@@ -839,19 +940,40 @@ export async function runAdd(argv: string[]): Promise<number> {
         outro(pc.dim("use `saasaloy add <module> --force` to re-apply one"));
         return EXIT_OK;
       }
-      const picked = await select({
-        answeredBy: "a module name",
-        message: `Pick a module to add ${pc.dim(`(from ${source.label}, ${installed.size} already installed)`)}`,
+      const picked = await multiselect({
+        answeredBy: "one or more module names",
+        message: `Pick modules to add ${pc.dim(`(from ${source.label}, ${installed.size} already installed)`)}`,
         options: available.map((n) => ({ label: n, value: n })),
+        required: true,
       });
       if (isCancel(picked)) {
         cancel("add cancelled");
         return EXIT_FAILURE;
       }
-      requested = picked;
+      names = picked;
     }
 
-    let graph = await resolveGraph(source, requested);
+    // One walk over every named root (#233): prerequisites first, then argv order between
+    // independent roots, and every unknown name refused in one message.
+    const rooted = await resolveGraphs(source, names);
+    let graph: Graph = rooted;
+    const requested: Requested = { names, rootOf: rooted.rootOf };
+    // A driver picked below joins the graph on behalf of whichever root pulled in the
+    // module declaring the choice, so a later message attributes it to that root.
+    const registry = source;
+    const mergePicked = async (
+      name: string,
+      declaredBy: string
+    ): Promise<void> => {
+      const picked = await resolveGraph(registry, name);
+      const owner = rooted.rootOf.get(declaredBy) ?? names[0] ?? name;
+      for (const module of picked.order) {
+        if (!rooted.rootOf.has(module)) {
+          rooted.rootOf.set(module, owner);
+        }
+      }
+      graph = mergeGraph(graph, picked);
+    };
 
     // `requires.saasaloy` — the descriptor's floor on the CLI reading it (#50). Checked
     // before the driver prompt and before a single file is planned, because a CLI too old
@@ -882,16 +1004,21 @@ export async function runAdd(argv: string[]): Promise<number> {
     // driver (#223). Each one joins the graph only when it is an option of a requirement
     // still unmet, re-checked after each merge: a picked module may declare a requirement
     // that a later `--with` answers. One that answers nothing is refused rather than
-    // installed on the side — the flag picks a driver, it is not a second `add`.
+    // installed on the side — the flag picks a driver, it is not a second `add`. The
+    // requirements are the whole set's, so one `--with` answers the choice for every
+    // named module that declares it (#233).
     // Deleting the current entry while iterating a Set is safe, and it keeps argv order.
     const pending = new Set(opts.with);
     for (let progressed = true; pending.size > 0 && progressed;) {
       progressed = false;
       for (const name of pending) {
-        if (!unmet.some((requirement) => requirement.options.includes(name))) {
+        const answered = unmet.find((requirement) =>
+          requirement.options.includes(name)
+        );
+        if (!answered) {
           continue;
         }
-        graph = mergeGraph(graph, await resolveGraph(source, name));
+        await mergePicked(name, answered.declaredBy);
         pending.delete(name);
         unmet = detectMissingRequirements({ config, graph });
         progressed = true;
@@ -934,7 +1061,7 @@ export async function runAdd(argv: string[]): Promise<number> {
         cancel("add cancelled");
         return EXIT_FAILURE;
       }
-      graph = mergeGraph(graph, await resolveGraph(source, picked));
+      await mergePicked(picked, requirement.declaredBy);
       unmet = detectMissingRequirements({ config, graph });
     }
     if (unmet.length > 0) {
@@ -956,7 +1083,7 @@ export async function runAdd(argv: string[]): Promise<number> {
       return EXIT_REFUSED;
     }
 
-    prereqs = graph.order.filter((n) => n !== requested);
+    prereqs = graph.order.filter((n) => !names.includes(n));
 
     // Mutually exclusive modules are refused before anything is written, and `--force`
     // doesn't bypass it — force means "re-apply this module", not "install it anyway".
@@ -977,7 +1104,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     }
 
     const install = graph.order.filter(
-      (n) => !config.installed.includes(n) || (opts.force && n === requested)
+      (n) => !config.installed.includes(n) || (opts.force && names.includes(n))
     );
     // Installed and not being (re-)applied — a forced module belongs to `install`, not here.
     const alreadyInstalled = graph.order.filter(
@@ -987,11 +1114,12 @@ export async function runAdd(argv: string[]): Promise<number> {
     if (install.length === 0) {
       if (opts.json) {
         printJson(
-          planDocument(requested, prereqs, undefined, alreadyInstalled)
+          planDocument(names, prereqs, undefined, alreadyInstalled),
+          ADD_JSON_SCHEMA_VERSION
         );
       }
       note(
-        `${pc.cyan(requested)} and its dependencies are already installed.`,
+        `${listLabel(names.map((n) => pc.cyan(n)))} and ${names.length === 1 ? "its" : "their"} dependencies are already installed.`,
         "Nothing to do",
         tui
       );
@@ -1014,6 +1142,18 @@ export async function runAdd(argv: string[]): Promise<number> {
       ...(enabler === undefined ? {} : { testingMode: ENABLED_MODE }),
     });
 
+    // A named module that is installed is skipped, and the rest install (#233). With one
+    // name the plan's own "already installed (skipped)" line says it, as it always did.
+    if (names.length > 1) {
+      for (const name of names) {
+        if (config.installed.includes(name) && !install.includes(name)) {
+          log.info(
+            `${pc.cyan(name)} is already installed — skipped ${pc.dim("(pass --force to re-apply it)")}.`,
+            tui
+          );
+        }
+      }
+    }
     summarizePlan(plan, requested, prereqs, tui);
     if (enabler !== undefined && (opts.dryRun || opts.diff)) {
       log.info(
@@ -1050,7 +1190,7 @@ export async function runAdd(argv: string[]): Promise<number> {
     // --dry-run and --diff both preview only; nothing is written.
     if (opts.dryRun || opts.diff) {
       if (opts.json) {
-        printJson(planDocument(requested, prereqs, plan));
+        printJson(planDocument(names, prereqs, plan), ADD_JSON_SCHEMA_VERSION);
       }
       outro(
         pc.dim(

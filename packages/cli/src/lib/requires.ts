@@ -1,5 +1,7 @@
 import type { Graph } from "./resolve.js";
 import type { SaasaloyConfig } from "./schema.js";
+import { requestedArgv, requestedLabel, subjectOf } from "./requested.js";
+import type { RequestedInput } from "./requested.js";
 
 // `requiresOneOf` enforcement for `saasaloy add` — the deterministic core, kept out of
 // commands/add.ts so it can be unit-tested, mirroring conflicts.ts.
@@ -66,15 +68,15 @@ export function detectMissingRequirements(
 // One unmet requirement as a sentence. `requested` is what the user typed, so a
 // requirement raised by a transitive prerequisite says so rather than naming a module the
 // user never mentioned — same shape as conflicts.ts's `describe`.
-function describe(missing: MissingRequirement, requested: string): string {
+function describe(
+  missing: MissingRequirement,
+  requested: RequestedInput
+): string {
   const { declaredBy, options } = missing;
-  const subject =
-    declaredBy === requested
-      ? declaredBy
-      : `${declaredBy} (required by ${requested})`;
+  const subject = subjectOf(declaredBy, requested);
   const first = options[0];
   const suggestion = first
-    ? ` Re-run as \`saasaloy add ${requested} --with ${first}\`, or pick another from that list.`
+    ? ` Re-run as \`saasaloy add ${requestedArgv(requested)} --with ${first}\`, or pick another from that list.`
     : "";
   return `${subject} needs one of: ${options.join(", ")}, and none is installed.${suggestion}`;
 }
@@ -82,9 +84,9 @@ function describe(missing: MissingRequirement, requested: string): string {
 /** The refusal `add` prints. One line per unmet requirement, under a heading. */
 export function formatMissingRequirements(
   missing: MissingRequirement[],
-  requested: string
+  requested: RequestedInput
 ): string {
-  const heading = `Cannot add ${requested} — unmet requirement${missing.length > 1 ? "s" : ""}:`;
+  const heading = `Cannot add ${requestedLabel(requested)} — unmet requirement${missing.length > 1 ? "s" : ""}:`;
   return [heading, ...missing.map((m) => `  ${describe(m, requested)}`)].join(
     "\n"
   );
@@ -121,12 +123,12 @@ export function formatUpdateRequirements(
  */
 export function formatUnansweredWith(
   names: string[],
-  requested: string
+  requested: RequestedInput
 ): string {
   const flags = names.map((name) => `--with ${name}`).join(", ");
   const verb = names.length === 1 ? "answers" : "answer";
   return (
-    `Cannot add ${requested} — ${flags} ${verb} no unmet requirement. ` +
+    `Cannot add ${requestedLabel(requested)} — ${flags} ${verb} no unmet requirement. ` +
     `\`--with\` picks one option of a \`requiresOneOf\` list; add any other module with its own \`saasaloy add\`.`
   );
 }

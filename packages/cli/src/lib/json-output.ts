@@ -18,15 +18,20 @@ import { stripAnsi, TUI_ON_STDERR } from "./tui.js";
 //   on every exit, not only on success.
 // - `--json` never prompts. A command that would ask refuses instead and names the flag.
 //
-// A breaking change to any document shape bumps `JSON_SCHEMA_VERSION`; a new field does
-// not.
+// A breaking change to a command's document shape bumps that command's version; a new
+// field does not. Every command starts at `JSON_SCHEMA_VERSION`. `add --dry-run` is at 2
+// since `requested` became a list of names (#233); its error document carries 2 as well,
+// so one command reports one version.
 
 export const JSON_SCHEMA_VERSION = 1;
 
 /** Write one JSON document to stdout, `schemaVersion` first. */
-export function printJson(document: object): void {
+export function printJson(
+  document: object,
+  schemaVersion: number = JSON_SCHEMA_VERSION
+): void {
   process.stdout.write(
-    `${JSON.stringify({ schemaVersion: JSON_SCHEMA_VERSION, ...document }, null, 2)}\n`
+    `${JSON.stringify({ schemaVersion, ...document }, null, 2)}\n`
   );
 }
 
@@ -43,12 +48,18 @@ export interface Output {
   fail(error: unknown): number;
 }
 
-export function createOutput(json: boolean): Output {
+export function createOutput(
+  json: boolean,
+  schemaVersion: number = JSON_SCHEMA_VERSION
+): Output {
   const tui: TuiOptions = json ? TUI_ON_STDERR : {};
   const refuse = (message: string, code: number): number => {
     cancel(message, tui);
     if (json) {
-      printJson({ error: { exitCode: code, message: stripAnsi(message) } });
+      printJson(
+        { error: { exitCode: code, message: stripAnsi(message) } },
+        schemaVersion
+      );
     }
     return code;
   };

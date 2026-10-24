@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
+import { RefusalError } from "./exit.js";
+import { UnknownModuleError } from "./registry.js";
 import type { LoadedModule, RegistrySource } from "./registry.js";
-import { mergeGraph, resolveGraph } from "./resolve.js";
+import { mergeGraph, resolveGraph, resolveGraphs } from "./resolve.js";
 import type { Graph } from "./resolve.js";
 
 function mod(name: string, dependsOn: string[] = []): LoadedModule {
@@ -89,7 +91,9 @@ function sourceOf(
       reads.push(requiredBy ? `${name}<-${requiredBy}` : name);
       const dependsOn = edges[name];
       if (!dependsOn) {
-        return Promise.reject(new Error(`Unknown module "${name}"`));
+        return Promise.reject(
+          new UnknownModuleError(name, `Unknown module "${name}"`)
+        );
       }
       return Promise.resolve(mod(name, dependsOn));
     },
@@ -203,5 +207,109 @@ describe("resolveGraph — cycle detection", () => {
     );
 
     expect(resolved.order).toStrictEqual(["base", "left", "right", "top"]);
+  });
+});
+
+// The error a promise rejects with; the test fails when it resolves.
+async function rejection(promise: Promise<unknown>): Promise<unknown> {
+  try {
+    await promise;
+  } catch (error) {
+    return error;
+  }
+  throw new Error("expected the promise to reject");
+}
+
+// #233: several named roots resolve into one graph, in one walk.
+describe("resolveGraphs — several named roots", () => {
+  const edges = {
+    admin: ["api", "auth"],
+    api: [],
+    auth: ["api", "database"],
+    database: ["api"],
+    teams: ["api", "auth", "admin"],
+    waitlist: ["api"],
+  };
+
+  it("keeps prerequisites first, then argv order between independent roots", async () => {
+    const resolved = await resolveGraphs(sourceOf(edges), [
+      "waitlist",
+      "admin",
+    ]);
+
+    expect(resolved.order).toStrictEqual([
+      "api",
+      "waitlist",
+      "database",
+      "auth",
+      "admin",
+    ]);
+  });
+
+  it("records the first root in argv order that pulled each module in", async () => {
+    const resolved = await resolveGraphs(sourceOf(edges), [
+      "waitlist",
+      "admin",
+    ]);
+
+    expect(Object.fromEntries(resolved.rootOf)).toStrictEqual({
+      admin: "admin",
+      api: "waitlist",
+      auth: "admin",
+      database: "admin",
+      waitlist: "waitlist",
+    });
+  });
+
+  it("attributes a named root to an earlier root that already pulled it in", async () => {
+    const resolved = await resolveGraphs(sourceOf(edges), ["teams", "admin"]);
+
+    expect(resolved.rootOf.get("admin")).toBe("teams");
+    expect(resolved.order.indexOf("admin")).toBeLessThan(
+      resolved.order.indexOf("teams")
+    );
+  });
+
+  it("visits a repeated or shared name once", async () => {
+    const source = sourceOf(edges);
+    const resolved = await resolveGraphs(source, ["admin", "teams", "admin"]);
+
+    expect(resolved.order).toStrictEqual([
+      "api",
+      "database",
+      "auth",
+      "admin",
+      "teams",
+    ]);
+    expect(source.reads.filter((read) => read === "admin")).toHaveLength(1);
+  });
+
+  it("names every unknown root in one refusal", async () => {
+    const error = await rejection(
+      resolveGraphs(sourceOf(edges), ["waitlist", "nosuch", "other"])
+    );
+
+    expect(error).toBeInstanceOf(RefusalError);
+    expect((error as Error).message).toContain('"nosuch", "other"');
+  });
+
+  it("keeps the registry's own message for one unknown root", async () => {
+    const error = await rejection(
+      resolveGraphs(sourceOf(edges), ["waitlist", "nosuch"])
+    );
+
+    expect(error).toBeInstanceOf(UnknownModuleError);
+    expect((error as Error).message).toBe('Unknown module "nosuch"');
+  });
+
+  it("throws an unknown prerequisite as it always did", async () => {
+    const error = await rejection(
+      resolveGraphs(sourceOf({ ...edges, broken: ["gone"] }), [
+        "broken",
+        "nosuch",
+      ])
+    );
+
+    expect((error as Error).message).toBe('Unknown module "gone"');
   });
 });

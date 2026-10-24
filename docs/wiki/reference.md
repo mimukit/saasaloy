@@ -49,7 +49,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 
 ### JSON output
 
-`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with `"schemaVersion": 1`. A breaking change to a document's shape bumps that number, and a new field does not.
+`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated` and `env --check` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 2`, because its `requested` field changed from a string to a list of names, and its error document carries 2 as well.
 
 `--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
 
@@ -92,23 +92,23 @@ With no terminal, `init` refuses with exit 2 before it writes a file: with no `<
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>|<owner/repo[@ref]/module>|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
 ```
 
-With no module named, `add` shows a picker over the source, listing only modules this
-project has not installed. Unknown flags and extra positional arguments are rejected
-before any work happens, with exit 2.
+With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
+
+Name several modules to add them in one run: `saasaloy add admin teams --with database-d1 --yes`. `add` resolves every name into one graph, prints one plan, asks once, and runs every refusal (`requires.saasaloy`, `requiresOneOf`, `conflictsWith`, file collisions and owned files) on the whole set before it writes the first file. Prerequisites install first, and argv order decides between modules that do not depend on each other. A repeated name counts once. Every name reads from one registry: two coordinates that differ in owner, repo or ref exit 2 and name the two, and an `owner/repo` with no module cannot be mixed with names. When the registry has none of several names, one message lists them all. A named module that is already installed is skipped with a note, and the rest install. A message about a prerequisite says which named module pulled it in, `lefty (required by needs-lefty)`.
 
 | Flag | Effect |
 |---|---|
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff, capped at 60 lines each, and stop. Nothing is written. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
-| `--force` | re-apply the module you named even though it is already installed. Already-installed dependencies are left alone. |
+| `--force` | re-apply the modules you named even though they are already installed. Already-installed dependencies are left alone. Several forced modules re-apply at the commit the lock recorded for them, and exit 2 when the lock pins them to different commits: re-apply them in separate runs, or pass `@<ref>`. |
 | `--with <module>` | answer a `requiresOneOf` choice with this module, so the run needs no picker: `saasaloy add waitlist --with database-d1 --yes`. Repeatable, and `--with=<module>` works too. Each one joins the plan only when it is an option of a requirement still unmet; one that answers no requirement exits 2 before anything is written. |
 | `--json` | with `--dry-run`, print the plan as one JSON document on stdout (see [JSON output](#json-output)). It never opens the picker or the driver prompt: name the module, and pass `--with` for an unmet `requiresOneOf`. |
 
-The `--dry-run --json` document carries `requested`, `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `from`, `module`, `onlyWith` and `skill`), `patches` (each with `file`, `kind`, `action` and `module`), `dependencies`, `devDependencies`, `envVars` (name → description), `aliases`, `aliasConflicts`, `links` (the skill links, each with `path`, `target`, `action` and `module`), `staleOwners` and `writesUi`. Every file and every patch the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
+The `--dry-run --json` document carries `requested` (the named modules in argv order, a list also for one name), `prerequisites`, `install` (the install order), `alreadyInstalled`, `files` (each with `target`, `action`, `from`, `module`, `onlyWith` and `skill`), `patches` (each with `file`, `kind`, `action` and `module`), `dependencies`, `devDependencies`, `envVars` (name → description), `aliases`, `aliasConflicts`, `links` (the skill links, each with `path`, `target`, `action` and `module`), `staleOwners` and `writesUi`. Every file and every patch the text plan shows is in it. A module whose graph is already installed prints the same keys with empty lists.
 
 Without `--force`, a module whose graph is fully installed prints `Nothing to do` and
 exits 0.
