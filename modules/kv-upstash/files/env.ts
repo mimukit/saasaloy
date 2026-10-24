@@ -7,10 +7,10 @@ import { z } from "@repo/env/zod";
 //
 // `KV_KEY_PREFIX` is optional in the kv preset, because `kv-cloudflare` and `kv-memory` do
 // not need it. It is required here: one Redis database is one flat keyspace, so a `list`
-// with no prefix would scan every key in it. This preset lands after the kv core's own in
-// `kvPreset.extends`, and the last declaration of a key wins, so this one is the rule
-// once kv-upstash is installed. The provider still refuses an empty prefix at its first
-// call, for a caller that builds the client without the env gate.
+// with no prefix would scan every key in it. This preset lands after the kv core's own
+// preset (`kvCorePreset`) in `kvPreset.extends`, and the last declaration of a key wins,
+// so this one is the rule once kv-upstash is installed. The provider still refuses an
+// empty prefix at its first call, for a caller that builds the client without the env gate.
 
 export const upstashEnvPreset = definePreset({
   module: "kv-upstash",

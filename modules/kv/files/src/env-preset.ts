@@ -26,7 +26,7 @@ const kvCorePreset = definePreset({
       .string()
       .default("")
       .describe(
-        "Prefix put in front of every key buildKey produces. Empty by default; kv-upstash requires one."
+        "Prefix put in front of every key buildKey produces. Empty by default."
       ),
   },
 });
