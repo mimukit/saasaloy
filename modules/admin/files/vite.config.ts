@@ -17,15 +17,14 @@ export default defineConfig({
     // The generated tree is committed rather than ignored, so `tsc --noEmit` and a
     // fresh `pnpm build` work on a clean checkout before Vite has ever run. Do not
     // hand-edit it — add or delete a file under src/routes/ and let the plugin rewrite it.
-    // `quoteStyle` and `semicolons` match Prettier's output. The generator defaults to single
-    // quotes and no semicolons, which made every build rewrite the committed file and dirty
-    // the tree. `.prettierignore` lists the file too, so a format pass leaves it alone.
-    tanstackRouter({
-      target: "react",
-      autoCodeSplitting: true,
-      quoteStyle: "double",
-      semicolons: true,
-    }),
+    //
+    // The generator options live in tsr.config.json, not here, because two writers share
+    // them: this plugin and `tsr generate`, which the `typecheck` script runs first so a
+    // route a module adds typechecks before Vite has run. `quoteStyle` and `semicolons`
+    // there match Prettier's output. The generator defaults to single quotes and no
+    // semicolons, which made every build rewrite the committed file and dirty the tree.
+    // `.prettierignore` lists the file too, so a format pass leaves it alone.
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
     // Tailwind 4 is a Vite plugin. The theme lives in packages/ui: the @source globs in
     // src/styles/globals.css, this app's tokens in src/styles/admin.css, which

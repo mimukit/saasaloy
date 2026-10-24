@@ -53,11 +53,12 @@ scoped.insert(notScoped, { id: "x" });
 //
 // `forTenant` forces `organizationId` itself. Passing one is rejected rather than
 // ignored, so a request body spread into `values` cannot smuggle another organization's
-// id past the guard.
-// @ts-expect-error organizationId is supplied by forTenant, never by the caller
+// id past the guard. The directive sits on the property, because that is the line
+// `tsc` reports an excess property on; above the call it would match nothing.
 scoped.insert(projects, {
   id: "p_1",
   name: "one",
+  // @ts-expect-error organizationId is supplied by forTenant, never by the caller
   organizationId: "org_other",
 });
 
