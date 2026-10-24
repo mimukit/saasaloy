@@ -1,3 +1,10 @@
+import type {
+  ExecutionContext,
+  Message,
+  MessageBatch,
+  Queue,
+  ScheduledController,
+} from "@cloudflare/workers-types";
 import { createQueue, dispatch, dueSchedules } from "../index";
 import { QueueError } from "../provider";
 import type {
@@ -19,8 +26,11 @@ import type {
 // that registers in the `handlers` array in apps/api/src/worker.ts.
 //
 // `Queue`, `Message`, `MessageBatch`, `ScheduledController` and `ExecutionContext` are
-// ambient globals from @cloudflare/workers-types, which packages/queue already carries as
-// a devDependency — nothing is imported and there is no npm dependency to add.
+// imported from @cloudflare/workers-types, never read as ambient globals. The barrel
+// imports this file, so every workspace that imports `@repo/queue` compiles it, and none
+// of them should need Worker types of its own. packages/queue already carries the
+// devDependency, because its job registry compiles Workers-only feature code (see its
+// tsconfig.json). Nothing is imported at runtime.
 //
 // The import of `../index` above is circular: the barrel imports this file to register
 // the provider. It is safe because every binding used here is a hoisted function
