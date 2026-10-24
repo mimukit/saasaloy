@@ -41,7 +41,7 @@ Close the gap in both places, in the repo config first so a payload fails here b
 
 Rejected: rename the payloads to `.test.ts` and exclude them from `test:modules` by glob. `node --test` takes no negated glob, and plan 0080 already settled the `.vitest.ts` name (ADR 0054 gate, Phase 4).
 
-### Phase 1: apply the scaffold's test rules to `.vitest.ts` payloads
+### Phase 1: apply the scaffold's test rules to `.vitest.ts` payloads (built 2026-10-24)
 
 - In `oxlint.config.mjs`, add an override block built from the Ultracite overrides whose `files` match a test glob, with `files: ["modules/*/files/**/*.vitest.ts"]` and `plugins: ["vitest"]`.
 - Write its comment in the file's style: why the name is `.vitest.ts`, why the glob misses it, and the plant-and-check step below.
