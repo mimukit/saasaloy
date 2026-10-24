@@ -77,7 +77,7 @@ Six rules hold for every mode:
    `package-json-dependency` patch — never the descriptor's `dependencies[]` (which merges into the
    project root) and never another workspace. Only the capability's own workspace may import a
    provider SDK (ADR 0020).
-6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). `queue` is the one exception: its `jobs` array imports feature barrels whose files import `cloudflare:workers`, a module only the ambient declarations name, so `packages/queue` keeps the package and the `types` entry, and `queue-cloudflare` adds no patch. Its provider still imports its types explicitly.
+6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). Two cores are exceptions, and both for one reason: `cloudflare:workers` is a module only the ambient declarations name, so no `import type` can replace it. `packages/billing` keeps the package and the `types` entry because `billing-stripe` imports `cloudflare:workers`. `packages/queue` keeps them because its `jobs` array imports the `@repo/billing` barrel, and `queue-cloudflare` adds no patch. Both providers still import their own types explicitly.
 
 A provider that carries a **checked-in constant** — a page size, a default the vendor does not
 supply — puts it in a config section rather than in its one runtime file or in an env var. That is
@@ -713,6 +713,8 @@ every file is written). Then run it **a second time** and confirm it is a no-op:
       `apps/api/src/worker.ts` with a second `plugin-array` patch, and gated on the capability's
       `<CAP>_PROVIDER` variable.
 - [ ] Any npm dependency patched into the **capability's** `package.json`, exact-pinned.
+- [ ] Vendor types named with `import type`, and the types package pinned as a devDependency of
+      the capability (rule 6).
 - [ ] `envVars` declares every secret the provider reads; none baked into files. A value that
       cannot differ between two deployments of one project is a config section (ADR 0052).
 - [ ] Failures normalized into the capability's error type, `retryable` set honestly.

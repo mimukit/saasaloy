@@ -19,7 +19,7 @@ import type {
 // `SendEmail` is imported from @cloudflare/workers-types, never read as an ambient
 // global. The barrel in packages/email/src/index.ts imports this file, so every
 // workspace that imports `@repo/email` compiles it, packages/email-react included, and
-// none of them lists Worker types of its own. A type-only import resolves from this
+// none of them should need Worker types of its own. A type-only import resolves from this
 // file's package, which this module's descriptor gives the devDependency. Nothing is
 // imported at runtime.
 
