@@ -19,7 +19,7 @@ The step arrived with commit `596b0580` (`ci(repo): lint every module in a real 
 
 Goal: the daily smoke job reaches the checks it exists for, `pnpm lint` and later the full-scaffold typecheck from #220, so it warns again about breaks that arrive with no commit of ours.
 
-Target: a `workflow_dispatch` run of `smoke` on `main` logs `release-smoke: running \`pnpm lint\` in full-database-d1` (and the same line for `full-database-postgres`). #267 closes on that line. The job may stay red after it, and a failure after the install belongs to the issue that owns it, not to #267.
+Target: a `workflow_dispatch` run of `smoke` on the PR branch logs `` release-smoke: running `pnpm lint` in full-database-d1 `` (and the same line for `full-database-postgres`). #267 closes on that line. The job may stay red after it, and a failure after the install belongs to the issue that owns it, not to #267.
 
 ## Design decisions (settled)
 
@@ -29,7 +29,7 @@ Target: a `workflow_dispatch` run of `smoke` on `main` logs `release-smoke: runn
 | How to unfreeze | Pass `--no-frozen-lockfile` to the scaffold installs. Each scaffold is a fresh project with no committed lockfile, the state a developer is in on their own machine. Removing `CI` from the child env is the rejected alternative: it also changes how turbo, vitest and the other tools in `pnpm lint` behave, and the smoke wants those to run the CI way. |
 | Which installs take the flag | All three scaffold installs: the two in `lintFullScaffold` and the one in `projectDir` (`run("pnpm", ["install"], ...)` near line 623). Only the second `lintFullScaffold` install fails today, but the other two pass only because no lockfile exists yet. One rule for every scaffold install keeps the next added step from failing the same way. One shared constant holds the argument list, with a comment that names `CI=true` as the reason. |
 | Test approach | No new unit test. The fix is an argument list, and the check that proves it is the run itself, locally with `CI=true` and on the runner. `scripts/release-smoke.test.ts` covers the pure helpers only and stays as it is. |
-| When #267 closes | When the runner gets past the install and logs `running \`pnpm lint\`` in both full scaffolds. A green job is not required. |
+| When #267 closes | When the runner gets past the install and logs `` running `pnpm lint` `` in both full scaffolds. A green job is not required. |
 | Where the runner proof comes from | A `workflow_dispatch` run of `smoke` on the PR branch, before the merge: `gh workflow run smoke.yml --ref <branch>`. Approved outward action, so an unattended build runs it without a stop. The PR body links the run ID. |
 | Install error output | No change to `runQuiet`. The frozen-lockfile line was in its last 30 lines. Only the issue body cut it off. |
 | The auth lint failure from #220 | #266 owns it. `71e5badb` (PR #261) already fixed the 9 errors in `modules/auth/files/api/routes/auth.vitest.ts`, and plan 0086 closes the `*.vitest.ts` lint gap. The dispatched run in Phase 2 is the first CI evidence for #266 too. |
@@ -46,15 +46,15 @@ Change the install argument list in `scripts/release-smoke.ts`, then prove it wi
 - Leave `.github/workflows/smoke.yml` unchanged. Its own `pnpm install --frozen-lockfile` is for this repo, which commits its lockfile.
 - Run the repo gate: `pnpm lint`, `pnpm typecheck`, `pnpm test`.
 
-Done when: `CI=true pnpm release:smoke` on the dev box prints `release-smoke: running \`pnpm lint\` in full-database-d1` and the same line for `full-database-postgres`, and prints no `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`. The same command without the fix fails at `pnpm install in full-database-d1`, which shows the local run reproduces the CI fault.
+Done when: `CI=true pnpm release:smoke` on the dev box prints `` release-smoke: running `pnpm lint` in full-database-d1 `` and the same line for `full-database-postgres`, and prints no `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`. The same command without the fix fails at `pnpm install in full-database-d1`, which shows the local run reproduces the CI fault.
 
 ### Phase 2: prove it on the runner
 
 - Push the branch, then run `gh workflow run smoke.yml --ref <branch>`.
-- Wait for the run. Read its log for the two `running \`pnpm lint\`` lines.
+- Wait for the run. Read its log for the two `` running `pnpm lint` `` lines.
 - Put the run ID and its result in the PR body. Name any failure after the install and the issue that owns it.
 
-Done when: the dispatched run on the PR branch logs `release-smoke: running \`pnpm lint\` in full-database-d1` and the same line for `full-database-postgres`, and logs no `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`. The PR body links that run.
+Done when: the dispatched run on the PR branch logs `` release-smoke: running `pnpm lint` in full-database-d1 `` and the same line for `full-database-postgres`, and logs no `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`. The PR body links that run.
 
 ## Open questions
 
