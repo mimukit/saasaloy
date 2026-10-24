@@ -39,7 +39,7 @@ Target: a `workflow_dispatch` run of `smoke` on the PR branch logs `` release-sm
 
 Change the install argument list in `scripts/release-smoke.ts`, then prove it with `CI=true` on the dev box and with one dispatched run. It reuses `runQuiet`, `run` and `lintFullScaffold` as they are.
 
-### Phase 1: unfreeze the scaffold installs
+### Phase 1: unfreeze the scaffold installs (built 2026-10-24)
 
 - Add a constant near the top of `scripts/release-smoke.ts`, for example `const SCAFFOLD_INSTALL = ["install", "--no-frozen-lockfile"] as const;`, with a comment: the runner sets `CI=true`, pnpm then freezes the lockfile, and a scaffold's lockfile is never committed, so `add` outgrows it.
 - Use the constant in the three scaffold installs.
@@ -48,7 +48,7 @@ Change the install argument list in `scripts/release-smoke.ts`, then prove it wi
 
 Done when: `CI=true pnpm release:smoke` on the dev box prints `` release-smoke: running `pnpm lint` in full-database-d1 `` and the same line for `full-database-postgres`, and prints no `ERR_PNPM_PACKAGE_MANAGER_NO_IMPORTER`. The same command without the fix fails at `pnpm install in full-database-d1`, which shows the local run reproduces the CI fault.
 
-### Phase 2: prove it on the runner
+### Phase 2: prove it on the runner (built 2026-10-24)
 
 - Push the branch, then run `gh workflow run smoke.yml --ref <branch>`.
 - Wait for the run. Read its log for the two `` running `pnpm lint` `` lines.

@@ -46,6 +46,15 @@ const DEPENDENCY_BLOCKS = [
   "optionalDependencies",
 ] as const;
 
+/**
+ * The arguments for every install in a scaffolded project. A runner sets `CI=true`, and
+ * pnpm then installs with `--frozen-lockfile` unless told otherwise. A scaffold commits no
+ * lockfile, and the install after a run of `add` meets workspaces the first install never
+ * wrote into it, so a frozen install fails on the runner and passes on a dev box (issue
+ * #267). A developer installs a fresh project unfrozen, and so does this script.
+ */
+const SCAFFOLD_INSTALL = ["install", "--no-frozen-lockfile"] as const;
+
 /** Files `init` must have written, relative to the scaffolded project. */
 const INIT_FILES = ["package.json", "saasaloy.json", "pnpm-workspace.yaml"];
 
@@ -373,7 +382,7 @@ async function lintFullScaffold(
   await runQuiet("git", ["init", "--quiet"], `git init in ${scaffold.name}`, {
     cwd: dir,
   });
-  await runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+  await runQuiet("pnpm", SCAFFOLD_INSTALL, `pnpm install in ${scaffold.name}`, {
     cwd: dir,
   });
   for (const name of scaffold.modules) {
@@ -384,7 +393,7 @@ async function lintFullScaffold(
       { cwd: dir, env }
     );
   }
-  await runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+  await runQuiet("pnpm", SCAFFOLD_INSTALL, `pnpm install in ${scaffold.name}`, {
     cwd: dir,
   });
   step(`running \`pnpm lint\` in ${scaffold.name}`);
@@ -620,7 +629,7 @@ async function main(): Promise<void> {
   // --- Start the web app's dev server (needs the network) ---------------------------
 
   step("installing the scaffolded project with pnpm");
-  run("pnpm", ["install"], "pnpm install", { cwd: projectDir });
+  run("pnpm", SCAFFOLD_INSTALL, "pnpm install", { cwd: projectDir });
 
   step(`starting \`astro dev\` in apps/web and requesting ${WEB_DEV_URL}`);
   const webDev = checkWebDev(join(projectDir, "apps/web")).then((failure) => {
