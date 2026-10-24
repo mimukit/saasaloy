@@ -3,7 +3,7 @@
   "name": "file-uploads",
   "type": "saasaloy:feature",
   "requires": {
-    "saasaloy": ">=0.6.0"
+    "saasaloy": ">=0.7.0"
   },
   "dependsOn": ["api", "auth", "admin", "database", "storage", "validators"],
   "dependencies": [],
@@ -92,7 +92,8 @@
     },
     {
       "path": "files/api/routes/files.vitest.ts",
-      "target": "@api/routes/files.test.ts"
+      "target": "@api/routes/files.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/api/lib/file-uploads.ts",

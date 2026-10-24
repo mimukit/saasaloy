@@ -569,6 +569,14 @@ hook (which is also how you keep hooks out of CI).
 
 ## Testing Instructions
 
+The block below states this project's testing mode, which `saasaloy.json` records under `testing.mode`. Change the mode with `saasaloy testing <off|tests-after|tdd>`, never by hand: the command rewrites the block and the file together. The `saasaloy-testing` skill says what each mode asks and which test each kind of change needs: a unit test, a route test, a seed slice or a Playwright spec. Once `auth` is installed with testing on, `apps/api/src/routes/auth.test.ts` is the route test to copy.
+
+<!-- saasaloy:testing -->
+Testing mode: `off`. This project ships no module tests, and `saasaloy add` writes none. Do not add tests unless the owner asks for them.
+
+- Turn module tests on with `saasaloy testing tests-after`, or `saasaloy testing tdd` to work test-first.
+<!-- /saasaloy:testing -->
+
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes)
 - Check formatting: `pnpm format:check`, or `pnpm format` to rewrite

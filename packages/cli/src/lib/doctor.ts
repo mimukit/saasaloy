@@ -241,6 +241,55 @@ export async function checkModule(
   }
 
   const siblingSet = new Set(siblings);
+
+  // Every `when` (#242): each `installed` name is a module this registry offers, or the
+  // entry can never ship; and `testing` is only `true`. The schema rejects any other
+  // `testing` value too, as a bare "must be equal to constant", so this says it plainly.
+  const whens: [string, unknown][] = [
+    ...asArray(item.files).map((entry, index): [string, unknown] => [
+      `/files/${index}/when`,
+      asRecord(entry).when,
+    ]),
+    ...asArray(item.scaffolds).flatMap((scaffold, index) =>
+      asArray(asRecord(scaffold).files).map(
+        (entry, fileIndex): [string, unknown] => [
+          `/scaffolds/${index}/files/${fileIndex}/when`,
+          asRecord(entry).when,
+        ]
+      )
+    ),
+    ...asArray(item.patches).map((entry, index): [string, unknown] => [
+      `/patches/${index}/when`,
+      asRecord(entry).when,
+    ]),
+  ];
+  for (const [where, when] of whens) {
+    if (when === undefined) {
+      continue;
+    }
+    const testing = asRecord(when).testing;
+    if (testing !== undefined && testing !== true) {
+      findings.push(
+        finding(
+          module,
+          `${where}/testing`,
+          `is ${JSON.stringify(testing)} — the only value is true; leave the key out for an entry that ships in every mode`
+        )
+      );
+    }
+    for (const [index, name] of asArray(asRecord(when).installed).entries()) {
+      if (typeof name === "string" && !siblingSet.has(name)) {
+        findings.push(
+          finding(
+            module,
+            `${where}/installed/${index}`,
+            `names "${name}", which this registry does not offer, so the entry never ships`
+          )
+        );
+      }
+    }
+  }
+
   for (const [field, names] of [
     ["dependsOn", item.dependsOn],
     ["requiresOneOf", item.requiresOneOf],

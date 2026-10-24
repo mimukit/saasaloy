@@ -142,6 +142,17 @@ function renderDeleteDiff(file: PlannedRemoveFile): string {
   return shown.join("\n");
 }
 
+/**
+ * The plan line's suffix for another module's entry that only shipped because the module
+ * being removed was installed (#242 Q4), so the user sees why `remove e2e` touches a file
+ * `auth` owns.
+ */
+function gatedNote(module: string, gatedOn: string | undefined): string {
+  return gatedOn === undefined
+    ? ""
+    : ` ${pc.dim(`(${module}, ships only with ${gatedOn})`)}`;
+}
+
 function summarizeRemovePlan(
   plan: RemovePlan,
   name: string,
@@ -149,7 +160,9 @@ function summarizeRemovePlan(
 ): void {
   const lines = [`will remove: ${pc.cyan(name)}`, ""];
   for (const file of plan.files) {
-    lines.push(`  ${fileActionLabel(file.action, yes)}  ${file.target}`);
+    lines.push(
+      `  ${fileActionLabel(file.action, yes)}  ${file.target}${gatedNote(file.module, file.gatedOn)}`
+    );
   }
   const toDelete = plan.files.filter((f) => f.action === "delete").length;
   const drifted = plan.files.filter((f) => f.action === "drift").length;
@@ -192,7 +205,7 @@ function summarizeRemovePlan(
   if (reversible.length > 0) {
     const patchLines = reversible.map(
       (p) =>
-        `  ${PATCH_ACTION_LABEL[p.action]}  ${p.entry.file} ${pc.dim(`(${p.entry.patch.kind})`)}${p.reason === undefined ? "" : `\n    ${pc.dim(p.reason)}`}`
+        `  ${PATCH_ACTION_LABEL[p.action]}  ${p.entry.file} ${pc.dim(`(${p.entry.patch.kind})`)}${gatedNote(p.entry.module, p.gatedOn)}${p.reason === undefined ? "" : `\n    ${pc.dim(p.reason)}`}`
     );
     note(wrapForNote(patchLines.join("\n")), "Config patches");
   }
@@ -201,7 +214,7 @@ function summarizeRemovePlan(
       continue;
     }
     log.warn(
-      `Config patch on ${pc.cyan(p.entry.file)} ${pc.dim(`(${p.entry.patch.kind})`)} is not reversed by \`remove\` — hand-revert it if needed.`
+      `Config patch on ${pc.cyan(p.entry.file)} ${pc.dim(`(${p.entry.patch.kind})`)}${gatedNote(p.entry.module, p.gatedOn)} is not reversed by \`remove\` — hand-revert it if needed.`
     );
   }
 }

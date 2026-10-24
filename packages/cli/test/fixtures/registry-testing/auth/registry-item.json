@@ -1,0 +1,19 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "auth",
+  "type": "saasaloy:feature",
+  "dependsOn": ["api"],
+  "files": [
+    { "path": "files/routes/auth.ts", "target": "@api/routes/auth.ts" },
+    {
+      "path": "files/routes/auth.vitest.ts",
+      "target": "@api/routes/auth.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/e2e/auth-sign-in.ts",
+      "target": "@e2e/specs/auth-sign-in.spec.ts",
+      "when": { "installed": ["e2e"] }
+    }
+  ]
+}

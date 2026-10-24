@@ -17,7 +17,14 @@ import { loadManifest } from "../lib/manifest.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { readVersion } from "../version.js";
 import { stripAnsi } from "../lib/tui.js";
-import { initGitRepo, parseArgs, runInit } from "./init.js";
+import { TESTING_BLOCKS } from "../lib/testing.js";
+import type { TestingMode } from "../lib/testing.js";
+import {
+  initGitRepo,
+  parseArgs,
+  resolveInitTestingMode,
+  runInit,
+} from "./init.js";
 
 // `init` is the one command that copies the bundled template rather than fetching
 // anything, so it is testable offline end to end. The scaffold cases below run it with
@@ -98,6 +105,18 @@ describe("init — parseArgs", () => {
     expect(parseArgs(["my-app", "other"]).unknown).toStrictEqual(["other"]);
   });
 
+  it("reads --testing=<mode> raw, leaving the check to runInit (#242)", () => {
+    expect(parseArgs(["my-app", "--testing=tdd"])).toMatchObject({
+      testing: "tdd",
+      unknown: [],
+    });
+    expect(parseArgs(["my-app", "--testing=bogus"]).testing).toBe("bogus");
+  });
+
+  it("leaves testing unset when the flag is absent (#242)", () => {
+    expect(parseArgs(["my-app"]).testing).toBeUndefined();
+  });
+
   it("keeps --help out of the unknown list, so help can answer it", () => {
     expect(parseArgs(["--help"]).unknown).toStrictEqual([]);
     expect(parseArgs(["-h"]).unknown).toStrictEqual([]);
@@ -138,6 +157,19 @@ describe("runInit — refusals before anything is written", () => {
     expect(code).toBe(2);
     expect(out).toContain("is not empty");
     await expect(pathExists(join(target, "package.json"))).resolves.toBeFalsy();
+  });
+
+  it("refuses a bad --testing value and scaffolds nothing (#242)", async () => {
+    const { code, out } = await run([
+      "testing-bogus",
+      "--testing=bogus",
+      "--no-install",
+      "--no-git",
+    ]);
+
+    expect(code).toBe(2);
+    expect(out).toContain('Unknown testing mode "bogus"');
+    await expect(pathExists(join(dir, "testing-bogus"))).resolves.toBeFalsy();
   });
 
   it("prints help without scaffolding", async () => {
@@ -271,6 +303,120 @@ describe("runInit — the template copy", () => {
     await expect(
       pathExists(join(target, "package.json"))
     ).resolves.toBeTruthy();
+  });
+});
+
+// #242: `init` writes `testing.mode` into saasaloy.json and fills the AGENTS.md block for
+// it. The hash test above covers the default run; this one covers a non-default mode, where
+// both rewritten files must still be recorded at their bytes on disk.
+describe("runInit — the testing mode (#242)", () => {
+  const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
+  const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
+
+  afterEach(() => {
+    process.stdin.isTTY = ORIGINAL_STDIN_TTY;
+    process.stdout.isTTY = ORIGINAL_STDOUT_TTY;
+  });
+
+  async function scaffold(
+    project: string,
+    flags: string[]
+  ): Promise<{ code: number; target: string; mode: unknown; agents: string }> {
+    const target = join(dir, project);
+    const { code } = await run([project, "--no-install", "--no-git", ...flags]);
+    const config = JSON.parse(
+      await readFile(join(target, "saasaloy.json"), "utf-8")
+    ) as { testing?: { mode: string } };
+    const agents = await readFile(join(target, "AGENTS.md"), "utf-8");
+    return { code, target, mode: config.testing?.mode, agents };
+  }
+
+  it("writes --testing=tdd into saasaloy.json and the tdd text into AGENTS.md", async () => {
+    const result = await scaffold("testing-tdd", ["--testing=tdd"]);
+    try {
+      expect(result.code).toBe(0);
+      expect(result.mode).toBe("tdd");
+      expect(result.agents).toContain(TESTING_BLOCKS.tdd);
+      expect(result.agents).not.toContain(TESTING_BLOCKS.off);
+      const entries = baseEntries(await loadManifest(result.target));
+      for (const rel of ["saasaloy.json", "AGENTS.md"]) {
+        const onDisk = await readFile(join(result.target, rel), "utf-8");
+        expect(entries[rel]?.hash, `${rel} hash`).toBe(hashContent(onDisk));
+      }
+    } finally {
+      await rm(result.target, { recursive: true, force: true });
+    }
+  });
+
+  it("writes off when no terminal can answer and no flag was given", async () => {
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    const result = await scaffold("testing-unattended", []);
+    try {
+      expect(result.code).toBe(0);
+      expect(result.mode).toBe("off");
+      expect(result.agents).toContain(TESTING_BLOCKS.off);
+    } finally {
+      await rm(result.target, { recursive: true, force: true });
+    }
+  });
+});
+
+describe("resolveInitTestingMode — the attended prompt (#242)", () => {
+  function asker(answer: TestingMode | symbol) {
+    const calls: number[] = [];
+    return {
+      calls,
+      ask: () => {
+        calls.push(1);
+        return Promise.resolve(answer);
+      },
+    };
+  }
+
+  it("asks once on a terminal with no flag, and takes the answer", async () => {
+    const prompt = asker("tests-after");
+
+    await expect(
+      resolveInitTestingMode(undefined, {
+        interactive: true,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("tests-after");
+    expect(prompt.calls).toHaveLength(1);
+  });
+
+  it("never asks when the flag names the mode", async () => {
+    const prompt = asker("off");
+
+    await expect(
+      resolveInitTestingMode("tdd", { interactive: true, ask: prompt.ask })
+    ).resolves.toBe("tdd");
+    expect(prompt.calls).toHaveLength(0);
+  });
+
+  it("never asks without a terminal, and reads off", async () => {
+    const prompt = asker("tdd");
+
+    await expect(
+      resolveInitTestingMode(undefined, {
+        interactive: false,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe("off");
+    expect(prompt.calls).toHaveLength(0);
+  });
+
+  it("passes a cancelled prompt back to the caller", async () => {
+    const cancelled = Symbol("cancel");
+    const prompt = asker(cancelled);
+
+    await expect(
+      resolveInitTestingMode(undefined, {
+        interactive: true,
+        ask: prompt.ask,
+      })
+    ).resolves.toBe(cancelled);
   });
 });
 

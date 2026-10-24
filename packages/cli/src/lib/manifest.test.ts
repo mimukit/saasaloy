@@ -334,3 +334,67 @@ describe("recordLink and untrackLink", () => {
     expect(manifest.links).toStrictEqual({});
   });
 });
+
+// #242 Phase 2. A gated entry records the `when` it was written under, so `remove` can
+// find another module's entries that only shipped because the removed module was there.
+describe("the recorded when (#242)", () => {
+  it("records a file's when and round-trips it through the schema", async () => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, {
+      from: "files/api/routes/auth.vitest.ts",
+      hash: HASH,
+      module: "auth",
+      target: "apps/api/src/routes/auth.test.ts",
+      when: { testing: true },
+    });
+    await saveManifest(root, manifest);
+
+    expect(
+      manifest.managed["apps/api/src/routes/auth.test.ts"]?.when
+    ).toStrictEqual({
+      testing: true,
+    });
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
+  it("omits when for an unconditional file", () => {
+    const manifest = emptyManifest();
+
+    recordManagedFile(manifest, { hash: HASH, module: "auth", target: "x.ts" });
+
+    expect(manifest.managed["x.ts"]).not.toHaveProperty("when");
+  });
+
+  it("repeats a patch op's when at the top level, keeping the op as authored", async () => {
+    const manifest = emptyManifest();
+    const patch = {
+      file: "package.json",
+      kind: "package-json-script",
+      name: "e2e",
+      value: "playwright test",
+      when: { installed: ["e2e"] },
+    } as ManifestPatch["patch"];
+
+    recordPatch(manifest, { file: "package.json", module: "auth", patch });
+    await saveManifest(root, manifest);
+
+    expect(manifest.patches[0]).toStrictEqual({
+      file: "package.json",
+      module: "auth",
+      patch,
+      when: { installed: ["e2e"] },
+    });
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
+  it("refuses a recorded when with an unknown key", async () => {
+    await writeManifest({
+      managed: {
+        "x.ts": { hash: HASH, module: "auth", when: { always: true } },
+      },
+    });
+
+    await expect(loadManifest(root)).rejects.toThrow(/"always"/);
+  });
+});

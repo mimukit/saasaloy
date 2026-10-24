@@ -37,8 +37,16 @@ import {
 } from "../lib/exit.js";
 import { workingTreeState } from "../lib/git-state.js";
 import { resolveProjectName } from "../lib/project-name.js";
+import {
+  backfillTargets,
+  isEmptyBackfill,
+  planBackfill,
+  runBackfill,
+} from "../lib/backfill.js";
+import type { BackfillPlan } from "../lib/backfill.js";
 import { persistLedger } from "../lib/ledger.js";
 import { LOCK_FILE, loadLock } from "../lib/lock.js";
+import type { Lockfile } from "../lib/lock.js";
 import { loadManifest, MANIFEST_FILE } from "../lib/manifest.js";
 import { renderMergePlan } from "../lib/merge-plan.js";
 import { readRootPackageJson } from "../lib/pkg-json.js";
@@ -52,6 +60,7 @@ import type { LoadedModule, RegistrySource } from "../lib/registry.js";
 import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
+import { readTestingMode, suggestsTestingMode } from "../lib/testing.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
@@ -59,6 +68,7 @@ import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
 import type { CommandHelp } from "../lib/usage.js";
 import { printCommandHelp, wantsHelp } from "../lib/usage.js";
 import { readVersion } from "../version.js";
+import { previewBackfill, reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import {
   buildUpdatePlan,
@@ -588,6 +598,47 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const manifest = await loadManifest(root);
     const lock = await loadLock(root);
     const registryOverride = !!process.env[REGISTRY_ENV];
+
+    // A project made before `testing.mode` existed reads as `off`, yet may already hold a
+    // module's test file (#242). One line names the switch; a project with the key, at any
+    // value, has chosen and hears nothing.
+    if (suggestsTestingMode(config, manifest)) {
+      log.info(
+        `This project holds module tests and no testing mode in ${CONFIG_FILE} — run ` +
+          `${pc.cyan("saasaloy testing tests-after")} to turn module tests on.`,
+        TUI_ON_STDERR
+      );
+    }
+
+    // Backfill (#242 A4): an entry whose `when` turned true since its module landed. It is
+    // planned at the run's decision point, against the disk the confirmation describes,
+    // and listed with the rest of the plan. It is written only once the run has passed
+    // its refusals, its confirmation and its backup, so one approval covers it and
+    // `--abort` takes it back. `update base` reads no module, so it leaves this to a run
+    // that does.
+    const planUpdateBackfill = async (): Promise<BackfillPlan | undefined> => {
+      if (!wantsModules) {
+        return undefined;
+      }
+      const planned = await planBackfill({ config, lock, manifest, root });
+      cleanups.push(planned.cleanup);
+      previewBackfill(planned.plan, planned.skipped, TUI_ON_STDERR);
+      return isEmptyBackfill(planned.plan) ? undefined : planned;
+    };
+    // After the apply, re-planned against the disk the update left, and held to the
+    // targets the user saw and the backup copied. The skips were reported at plan time.
+    const writeUpdateBackfill = async (
+      planned: BackfillPlan
+    ): Promise<void> => {
+      const outcome = await runBackfill({
+        config,
+        lock,
+        manifest,
+        root,
+        within: new Set(backfillTargets(planned.plan)),
+      });
+      await reportBackfill(root, { ...outcome, skipped: [] }, TUI_ON_STDERR);
+    };
     const cliVersion = await readVersion();
 
     // The base first (#120): adopt an unrecorded project and stop, refuse a downgrade,
@@ -611,6 +662,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
           root,
           cliVersion,
           projectName: project.name,
+          testingMode: readTestingMode(config),
           manifest,
           lock,
           templateDir,
@@ -734,23 +786,33 @@ export async function runUpdate(argv: string[]): Promise<number> {
     const outdated = comparisons.filter((c) => c.status === "outdated");
     const skipped = comparisons.filter((c) => c.status !== "outdated");
     if (outdated.length === 0) {
-      // `--ref` onto a tag that already points at the SHA the lock records moves no
-      // files, but it is still the explicit unpin — record it here or the module stays
-      // pinned forever. `--dry-run`/`--diff` preview only, so they write nothing.
-      // Only the lock changed here, but the write still goes through the ledger: `update`
-      // writes state through one door, so a second door can't drift from the rule (#150).
-      if (!preview && recordRefRewrites(lock, comparisons).length > 0) {
-        const failures = await persistLedger({ config, lock, manifest, root });
-        const failedSave = failures[0];
-        if (failedSave) {
-          throw failedSave.error;
-        }
-      }
+      const backfill = await planUpdateBackfill();
       for (const comparison of skipped) {
         log.info(
           `${pc.cyan(comparison.name)} ${pc.dim(`— ${skipReason(comparison, preview)}`)}`,
           TUI_ON_STDERR
         );
+      }
+      if (!preview) {
+        const declined = await finishUpToDate({
+          backfill,
+          backUp: (paths) => backUp(root, paths, cliVersion),
+          comparisons,
+          confirm: () => confirmProceed(opts.yes),
+          lock,
+          persist: async () => {
+            const failed = (
+              await persistLedger({ config, lock, manifest, root })
+            )[0];
+            if (failed) {
+              throw failed.error;
+            }
+          },
+          writeBackfill: writeUpdateBackfill,
+        });
+        if (declined !== undefined) {
+          return declined;
+        }
       }
       outro(pc.green("Everything is up to date."), TUI_ON_STDERR);
       return EXIT_OK;
@@ -782,6 +844,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
         templateDir,
         cliVersion,
         projectName: project.name,
+        testingMode: readTestingMode(config),
         comparison: baseComparison,
       });
       cleanups.push(handle.cleanup);
@@ -959,6 +1022,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
     });
 
     summarizePlan(plan);
+    const backfill = await planUpdateBackfill();
 
     if (opts.diff) {
       for (const file of [
@@ -994,28 +1058,20 @@ export async function runUpdate(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
-    if (!opts.yes) {
-      const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
-      if (isCancel(proceed)) {
-        cancel("update cancelled", TUI_ON_STDERR);
-        return EXIT_FAILURE;
-      }
-      if (!proceed) {
-        outro(pc.dim("aborted — nothing applied"), TUI_ON_STDERR);
-        return EXIT_OK;
-      }
+    const declined = await confirmProceed(opts.yes);
+    if (declined !== undefined) {
+      return declined;
     }
 
-    // Copy everything the plan will touch, plus the state files, before a byte moves.
-    // `saasaloy update --abort` puts this back — the undo this command shipped without.
-    const backupDir = await writeBackup({
+    // Copy everything the plan will touch, the backfill's targets and the state files,
+    // before a byte moves. `saasaloy update --abort` puts this back.
+    await backUp(
       root,
-      targets: backupTargets(plan),
-      cliVersion,
-    });
-    log.info(
-      `Pre-update copies in ${pc.cyan(backupDir)} ${pc.dim("— `saasaloy update --abort` restores them")}`,
-      TUI_ON_STDERR
+      [
+        ...backupTargets(plan),
+        ...(backfill ? backfillTargets(backfill.plan) : []),
+      ],
+      cliVersion
     );
 
     // Capture the outcome rather than letting it throw, so the ledger writes below
@@ -1071,6 +1127,20 @@ export async function runUpdate(argv: string[]): Promise<number> {
       );
     }
 
+    // The backfill comes last, once the update's files, report and merge plan are out.
+    // The update has landed by now, so a backfill that stops is a warning: the run keeps
+    // the update's exit code, and the next `update` writes what is left (#242).
+    if (backfill) {
+      try {
+        await writeUpdateBackfill(backfill);
+      } catch (error) {
+        log.warn(
+          `Backfill stopped — ${formatFailure(error)}. Run ${pc.cyan("saasaloy update")} to finish it.`,
+          TUI_ON_STDERR
+        );
+      }
+    }
+
     // Drift routing to a merge plan is the designed outcome, not a failure — but the run
     // is unfinished, and a CI job that reads only the exit code has to be able to see
     // that. 3 says "applied what it could, files are waiting on a merge"; 0 still means
@@ -1089,6 +1159,92 @@ export async function runUpdate(argv: string[]): Promise<number> {
       await cleanup();
     }
   }
+}
+
+/** What {@link finishUpToDate} writes with; each step is injected so a test can watch the order. */
+export interface UpToDateSteps {
+  /** The backfill owed, or `undefined` when there is none. */
+  backfill: BackfillPlan | undefined;
+  backUp: (targets: string[]) => Promise<void>;
+  comparisons: ModuleComparison[];
+  /** `undefined` to go on, or the exit code to stop with. */
+  confirm: () => Promise<number | undefined>;
+  lock: Lockfile;
+  /** Write the ledger; throws on a failed save. */
+  persist: () => Promise<void>;
+  writeBackfill: (planned: BackfillPlan) => Promise<void>;
+}
+
+/**
+ * The writes of a real run that found nothing outdated. Returns the exit code to stop
+ * with when the user declined, or `undefined` once done.
+ *
+ * `--ref` onto a tag that already points at the SHA the lock records moves no files, but
+ * it is still the explicit unpin, so it is recorded here or the module stays pinned
+ * forever. Only the lock changes, but the write still goes through the ledger: `update`
+ * writes state through one door (#150). With no backfill owed that is the whole job, and
+ * it needs no confirmation.
+ *
+ * A backfill owed here is how a partial one gets finished (#242). It takes the update's
+ * confirmation and backup, and the ref rewrite moves behind them too, so a declined run
+ * writes nothing at all and `--abort` puts the lock back.
+ */
+export async function finishUpToDate(
+  steps: UpToDateSteps
+): Promise<number | undefined> {
+  const { backfill } = steps;
+  if (backfill === undefined) {
+    if (recordRefRewrites(steps.lock, steps.comparisons).length > 0) {
+      await steps.persist();
+    }
+    return undefined;
+  }
+  const declined = await steps.confirm();
+  if (declined !== undefined) {
+    return declined;
+  }
+  await steps.backUp(backfillTargets(backfill.plan));
+  if (recordRefRewrites(steps.lock, steps.comparisons).length > 0) {
+    await steps.persist();
+  }
+  await steps.writeBackfill(backfill);
+  return undefined;
+}
+
+/**
+ * Ask "Proceed?" unless `--yes` answered it. Returns the exit code to stop with, or
+ * `undefined` to go on.
+ */
+async function confirmProceed(yes: boolean): Promise<number | undefined> {
+  if (yes) {
+    return undefined;
+  }
+  const proceed = await confirm({ message: "Proceed?", ...TUI_ON_STDERR });
+  if (isCancel(proceed)) {
+    cancel("update cancelled", TUI_ON_STDERR);
+    return EXIT_FAILURE;
+  }
+  if (!proceed) {
+    outro(pc.dim("aborted — nothing applied"), TUI_ON_STDERR);
+    return EXIT_OK;
+  }
+  return undefined;
+}
+
+/**
+ * Copy `targets` and the state files before a byte moves, and name the directory.
+ * `saasaloy update --abort` puts this back — the undo this command shipped without.
+ */
+async function backUp(
+  root: string,
+  targets: string[],
+  cliVersion: string
+): Promise<void> {
+  const backupDir = await writeBackup({ root, targets, cliVersion });
+  log.info(
+    `Pre-update copies in ${pc.cyan(backupDir)} ${pc.dim("— `saasaloy update --abort` restores them")}`,
+    TUI_ON_STDERR
+  );
 }
 
 /** The closing line: what landed, and what is still waiting on a merge. */

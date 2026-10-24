@@ -40,7 +40,10 @@ import { applyPatch } from "./patch/index.js";
 import type { PatchMatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
 import { resolveTarget } from "./saasaloy-config.js";
-import type { RegistryPatch, SaasaloyConfig } from "./schema.js";
+import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
+import { readTestingMode } from "./testing.js";
+import type { TestingMode } from "./testing.js";
+import { isPatchTracked, whenHolds } from "./when.js";
 
 // The deterministic core of `saasaloy add`: turn the modules-to-install into a plan of
 // concrete file writes, classify each against the manifest's content hashes, then
@@ -92,6 +95,8 @@ export interface PlannedFile {
   isSkill: boolean;
   /** The `onlyWith` condition that chose this variant — the plan names it (#99). */
   onlyWith?: string;
+  /** The descriptor `when` this entry carries, recorded in the manifest on write (#242). */
+  when?: When;
 }
 
 // How a skill's `.claude/skills/<name>` symlink relates to what's already on disk:
@@ -191,6 +196,48 @@ export interface ModuleFileRef {
   abs: string;
   /** The `onlyWith` condition that selected this variant; absent on an unconditional file. */
   onlyWith?: string;
+  /** The entry's `when`, carried so the manifest records it on write (#242). */
+  when?: When;
+}
+
+/**
+ * What a `when` condition needs beyond the install set (#242): the project's testing mode,
+ * and whether a target is already managed. A gated entry whose target is tracked ships
+ * whatever its `when` now says, because `when` decides the first write only (#242 Q1).
+ */
+export interface EntryGate {
+  testingMode: TestingMode;
+  /** True when `manifest.managed` already tracks this project-relative target. */
+  isTracked: (target: string) => boolean;
+}
+
+/** The gate a plan reads off the project: its mode, and the manifest's managed set. */
+export function gateFor(
+  manifest: Pick<Manifest, "managed">,
+  testingMode: TestingMode
+): EntryGate {
+  return {
+    isTracked: (target) => manifest.managed[target] !== undefined,
+    testingMode,
+  };
+}
+
+/**
+ * Whether a module's config patch ships: its `when` holds, or the module already applied
+ * this op or an earlier revision of it, which keeps a written gated patch managed in every
+ * mode (#242 Q1). `siblings` is the module's whole patch list, which `isPatchTracked`
+ * needs to tell a revision from a new op.
+ */
+export function patchShips(
+  op: RegistryPatch,
+  module: string,
+  manifest: Pick<Manifest, "patches">,
+  ctx: { installed: ReadonlySet<string>; testingMode: TestingMode },
+  siblings: readonly RegistryPatch[]
+): boolean {
+  return (
+    whenHolds(op.when, ctx) || isPatchTracked(manifest, module, op, siblings)
+  );
 }
 
 /** One `onlyWith` entry that could have filled a target, as the refusal names it. */
@@ -233,11 +280,18 @@ export interface ModuleFileSelection {
  * A target whose entries are *all* conditional and none matches is not an error here —
  * this stays a pure lister, and a project that predates a variant must not make `update`
  * throw. It comes back in `unmatched`, and `buildPlan` alone refuses on it.
+ *
+ * `when` (#242) is asked first, and only of an untracked target: an entry whose `when` is
+ * false and whose target the manifest does not track is dropped before `onlyWith` sees
+ * it, so a target whose entries `when` drops is skipped rather than reported unmatched. A
+ * tracked target keeps its entry, so `update` keeps a written test current in every mode
+ * and never lists it as dropped.
  */
 export async function selectModuleFiles(
   mod: LoadedModule,
   aliases: Record<string, string>,
-  installed: ReadonlySet<string>
+  installed: ReadonlySet<string>,
+  gate: EntryGate
 ): Promise<ModuleFileSelection> {
   // Gather every entry per target first, then resolve: a target is only unmatched once
   // all of its candidates are known, and the last eligible entry still wins, which is the
@@ -246,7 +300,31 @@ export async function selectModuleFiles(
     string,
     { chosen?: ModuleFileRef; candidates: FileCandidate[] }
   >();
-  const record = (from: string, target: string, onlyWith?: string): void => {
+  const ctx = { installed, testingMode: gate.testingMode };
+  // The target an entry fills, or `undefined` when `when` drops it. A false `when` still
+  // resolves the target to ask whether it is tracked; an alias this project lacks cannot
+  // be tracked, so that entry is dropped rather than refused.
+  const gated = (
+    when: When | undefined,
+    resolve: () => string
+  ): string | undefined => {
+    if (whenHolds(when, ctx)) {
+      return resolve();
+    }
+    let target: string;
+    try {
+      target = resolve();
+    } catch {
+      return undefined;
+    }
+    return gate.isTracked(target) ? target : undefined;
+  };
+  const record = (
+    from: string,
+    target: string,
+    onlyWith?: string,
+    when?: When
+  ): void => {
     let slot = byTarget.get(target);
     if (!slot) {
       slot = { candidates: [] };
@@ -263,19 +341,24 @@ export async function selectModuleFiles(
       target,
       abs: joinModulePath(mod.dir, from),
       ...(onlyWith === undefined ? {} : { onlyWith }),
+      ...(when === undefined ? {} : { when }),
     };
   };
 
   for (const file of mod.item.files ?? []) {
-    record(file.path, resolveTarget(aliases, file.target), file.onlyWith);
+    const target = gated(file.when, () => resolveTarget(aliases, file.target));
+    if (target !== undefined) {
+      record(file.path, target, file.onlyWith, file.when);
+    }
   }
   for (const scaffold of mod.item.scaffolds ?? []) {
     for (const file of scaffold.files) {
-      record(
-        file.path,
-        posix.join(scaffold.workspace, file.target),
-        file.onlyWith
+      const target = gated(file.when, () =>
+        posix.join(scaffold.workspace, file.target)
       );
+      if (target !== undefined) {
+        record(file.path, target, file.onlyWith, file.when);
+      }
     }
   }
   // A skill folder is expanded from disk, not declared file by file, so there is no entry
@@ -312,9 +395,10 @@ export async function selectModuleFiles(
 export async function listModuleFiles(
   mod: LoadedModule,
   aliases: Record<string, string>,
-  installed: ReadonlySet<string>
+  installed: ReadonlySet<string>,
+  gate: EntryGate
 ): Promise<Map<string, ModuleFileRef>> {
-  return (await selectModuleFiles(mod, aliases, installed)).files;
+  return (await selectModuleFiles(mod, aliases, installed, gate)).files;
 }
 
 /**
@@ -494,6 +578,7 @@ async function planModuleFile(
       oldContent,
       isSkill: isSkillTarget(ref.target),
       ...(ref.onlyWith === undefined ? {} : { onlyWith: ref.onlyWith }),
+      ...(ref.when === undefined ? {} : { when: ref.when }),
     },
     ...(ownedBy === undefined ? {} : { ownedBy }),
     ...(staleOwner === undefined ? {} : { staleOwner }),
@@ -513,6 +598,24 @@ export interface BuildPlanArgs {
    * no single requested module (`update`'s prerequisite plan).
    */
   requested?: string;
+  /**
+   * The testing mode a `when` is tested against; defaults to the project's own (#242).
+   * `add` of an `enablesTesting` module passes `tests-after` before it saves the mode.
+   */
+  testingMode?: TestingMode;
+  /**
+   * Keep only these entries (#242, backfill). With a selector the plan holds the selected
+   * files and patches alone, and plans no skill link, dependency, env var or alias: those
+   * landed with the module. Its `removeWarnings` are still planned, so `executePlan`
+   * keeps them rather than deleting them.
+   */
+  select?: PlanSelector;
+}
+
+/** Which of an installed module's entries a backfill plan keeps (#242). */
+export interface PlanSelector {
+  file: (module: string, ref: ModuleFileRef) => boolean;
+  patch: (module: string, op: RegistryPatch) => boolean;
 }
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
@@ -524,7 +627,10 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     config,
     manifest,
     requested,
+    select,
   } = args;
+  const testingMode = args.testingMode ?? readTestingMode(config);
+  const gate = gateFor(manifest, testingMode);
   // Keyed by project-relative target, because two modules in one run can ship the same
   // file: `database` and its driver `database-d1`/`database-postgres` both scaffold
   // `packages/db/tsconfig.json`. Planned as two entries they both classify `create` off
@@ -594,9 +700,24 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     if (!mod) {
       continue;
     }
-    const selection = await selectModuleFiles(mod, aliasView, installedSet);
+    const selection = await selectModuleFiles(
+      mod,
+      aliasView,
+      installedSet,
+      gate
+    );
+    const refs = [...selection.files.values()];
+    if (select) {
+      // A backfill plans only what its selector names. A target left unmatched was
+      // refused when the module was added, and is not this plan's to refuse again.
+      refsByModule.set(
+        name,
+        refs.filter((ref) => select.file(name, ref))
+      );
+      continue;
+    }
     unmatched.push(...selection.unmatched);
-    refsByModule.set(name, [...selection.files.values()]);
+    refsByModule.set(name, refs);
   }
 
   // Two modules writing the same target is legal only when one reaches the other through
@@ -619,6 +740,13 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // file. Claims already on disk count: the manifest records each section patch with the
   // module that applied it, so a module installed last month still holds its key. The
   // base template's own sections claim their keys first, under the name `base`.
+  // A gated section patch claims its key only when it ships (#242): a false `when` that
+  // the module never applied writes nothing, so it contests nothing.
+  const whenCtx = { installed: installedSet, testingMode };
+  const shippedPatches = (name: string): RegistryPatch[] =>
+    (modules.get(name)?.item.patches ?? []).filter((op, _index, siblings) =>
+      patchShips(op, name, manifest, whenCtx, siblings)
+    );
   const keyClaims: SectionClaim[] = baseSectionClaims();
   const inRun = new Set(install);
   for (const entry of manifest.patches) {
@@ -627,7 +755,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     }
   }
   for (const name of install) {
-    keyClaims.push(...sectionClaims(name, modules.get(name)?.item.patches));
+    keyClaims.push(...sectionClaims(name, shippedPatches(name)));
   }
   const sectionConflicts = detectSectionCollisions(keyClaims);
   if (sectionConflicts.length > 0) {
@@ -645,7 +773,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     if (!mod) {
       continue;
     }
-    for (const { key } of sectionClaims(name, mod.item.patches)) {
+    for (const { key } of sectionClaims(name, shippedPatches(name))) {
       const file = sectionFileOf(mod.item.files, key);
       if (!file) {
         continue;
@@ -697,6 +825,14 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       // the module that actually writes it.
       byTarget.delete(planned.target);
       byTarget.set(planned.target, planned);
+    }
+
+    if (item.removeWarnings && item.removeWarnings.length > 0) {
+      removeWarnings[name] = [...item.removeWarnings];
+    }
+    // A backfill writes files and patches only; the rest landed with the module.
+    if (select) {
+      continue;
     }
 
     // The skill files themselves are real, committed files under `.agents/skills/<folder>/…`,
@@ -753,9 +889,6 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
         ]),
       ];
     }
-    if (item.removeWarnings && item.removeWarnings.length > 0) {
-      removeWarnings[name] = [...item.removeWarnings];
-    }
   }
 
   // A module may take a file another one owns only when it reaches that owner through
@@ -811,13 +944,13 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   );
   const patches: PlannedPatch[] = [];
   for (const name of install) {
+    // The file rule, for patches (#242): a false `when` drops an op this module never
+    // applied, and a selector keeps only the ops it names.
+    const ops = shippedPatches(name).filter(
+      (op) => select === undefined || select.patch(name, op)
+    );
     patches.push(
-      ...(await previewPatches({
-        root,
-        module: name,
-        ops: modules.get(name)?.item.patches ?? [],
-        planned,
-      }))
+      ...(await previewPatches({ root, module: name, ops, planned }))
     );
   }
 
@@ -833,8 +966,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     envServices,
     envServicesGuessed: [...envServicesGuessed].toSorted(),
     envVars,
-    aliases,
-    aliasConflicts,
+    // A backfill registers no alias: the module registered its own when it landed.
+    aliases: select ? {} : aliases,
+    aliasConflicts: select ? [] : aliasConflicts,
     staleOwners,
     patches,
     removeWarnings,
@@ -930,6 +1064,7 @@ export async function executePlan(
       hash: file.newHash,
       module: file.module,
       target: file.target,
+      ...(file.when === undefined ? {} : { when: file.when }),
     });
   }
 

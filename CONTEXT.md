@@ -108,7 +108,7 @@ The example rows for **one table**, in one file under `packages/db/src/seed/slic
 _Avoid: fixture, seed file, factory. A fixture suggests test-only data, and a factory makes random rows; a slice is hand-written, read by both `db:seed` and the route test harness, and keyed to one table._
 
 ### Flow
-One user-visible path through a running project, driven end to end in a real browser by the `e2e` capability's Playwright suite. The base flows are `health`, `waitlist`, `admin-login` and `admin-unauthenticated`, and they live in `modules/e2e/files/specs/`. A flow crosses modules on purpose: the waitlist one touches `web`, `waitlist`, `api`, `database` and a driver ([ADR 0051](docs/adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md)). Which module ships a flow for a feature module is an open decision (issue #240).
+One user-visible path through a running project, driven end to end in a real browser by the `e2e` capability's Playwright suite. The base flows are `health`, `waitlist`, `admin-login` and `admin-unauthenticated`, and they live in `modules/e2e/files/specs/`. A flow crosses modules on purpose: the waitlist one touches `web`, `waitlist`, `api`, `database` and a driver ([ADR 0051](docs/adr/0051-adr-the-e2e-capability-gates-flows-on-installed-modules-2026-10-23.md)). A feature module ships its own flow as `files/e2e/<module>-<journey>.spec.ts`, gated by `when: { installed: ["e2e"] }`, and a journey that crosses three or more modules stays in `modules/e2e` ([ADR 0054](docs/adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
 _Avoid: scenario, test case. A flow is a whole path through running apps; a unit test covers one function under Vitest and is not a flow._
 
 ### Spec tag
@@ -265,6 +265,10 @@ The consumer manifest in a generated project: the alias map plus the list of ins
 ### `.saasaloy/manifest.json`
 Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries. An entry means those bytes are on disk ([ADR 0006](docs/adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)), which is why entries for a module that `saasaloy.json` does not list as installed mean a partial apply, and `saasaloy doctor` reports it as one ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
 
+### Testing mode
+The one value in `saasaloy.json` under `testing.mode` that says how much testing a project wants: `off`, `tests-after` or `tdd`. An absent key reads as `off`, so testing is opt-in. `off` ships no module test file; `tests-after` ships them and asks each change for its test; `tdd` ships them and asks for the test first. `init --testing=<mode>` sets it, and `saasaloy testing <mode>` changes it, rewriting the marked block in the root `AGENTS.md` in the same run. The base skill `saasaloy-testing` maps each kind of change to its test ([ADR 0053](docs/adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
+_Avoid: test level, TDD flag. There is one mode, never a separate TDD switch._
+
 ### `saasaloy-lock.json`
 Machine-owned provenance at the consumer root: per installed module, its [registry source](#registry-source) + ref + resolved commit **SHA** + resolved `dependsOn` graph. The npm-style lock to `saasaloy.json`'s intent — it makes remote installs reproducible (the SHA *is* the integrity anchor), so the default ref can be a live branch rather than a hand-pinned tag.
 _Avoid: putting resolved SHAs in `saasaloy.json`._
@@ -274,7 +278,11 @@ The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin`.
 
 ### Conditional file entry (`onlyWith`)
 A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.
-_Avoid: file variant, dialect flag, conditional patch (patches carry no condition)._
+_Avoid: file variant, dialect flag. A patch carries no `onlyWith`; it may carry a [`when`](#conditional-entry-when)._
+
+### Conditional entry (`when`)
+A `files[]`, `scaffolds[].files[]` or `patches` entry that ships **only while its condition holds**: `{ "testing": true }` needs a [testing mode](#testing-mode) other than `off`, `{ "installed": ["e2e"] }` needs every named module installed, and both keys together mean both. `when` decides the first write only: once the target is in the manifest it stays managed in every mode, so `saasaloy testing off` then `update` deletes nothing. When a condition turns true later, `saasaloy testing <on-mode>`, `add` and `update` **backfill** the untracked entries at each module's locked SHA, and `remove X` takes every entry whose `installed` names X. `untested` on a file entry gives the reason a file ships with no test, and `enablesTesting: true` on a descriptor turns an `off` project to `tests-after` when the module is added ([ADR 0054](docs/adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
+_Avoid: optional file, test flag. `onlyWith` picks one variant of a target; `when` decides whether an entry ships at all._
 
 ### Config-patch engine
 The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings.
@@ -303,7 +311,7 @@ The structured, agent-consumable merge plan `--diff` emits for a drifted file �
 A generated project that ships its agent context committed, so any agent tool opens it with context immediately — present on a fresh clone, no generation step.
 
 ### `AGENTS.md` / `CLAUDE.md`
-Committed **static** base files carrying the fixed common project rules; `CLAUDE.md` is a one-line `@AGENTS.md` import. Neither is generated.
+Committed **static** base files carrying the fixed common project rules; `CLAUDE.md` is a one-line `@AGENTS.md` import. Neither is generated. The one exception is the marked testing block in `AGENTS.md`, whose text the CLI fills for the project's [testing mode](#testing-mode) ([ADR 0053](docs/adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
 
 ### `DESIGN.md`
 The committed design contract for one app, in that app's folder: `apps/web/DESIGN.md` for the web app. It pairs machine-readable tokens with the rationale and rules that agents use when they change UI. Each app with its own theme file in `packages/ui/src/styles/` has its own `DESIGN.md`.

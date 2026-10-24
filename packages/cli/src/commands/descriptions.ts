@@ -11,6 +11,8 @@ export const DESCRIPTIONS = {
   init: "scaffold a new Saasaloy project (base: Astro landing + ui + config)",
   add: "apply a module into the current project (resolves dependsOn)",
   env: "fill in the environment variables the installed modules declare (--check gates a deploy)",
+  testing:
+    "print the project's testing mode, or set it to off, tests-after or tdd",
   outdated:
     "report the base template and each installed module, current vs latest (--check gates CI)",
   update:

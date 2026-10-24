@@ -6,6 +6,30 @@
   "type": "object",
   "additionalProperties": false,
   "required": ["managed"],
+  "$defs": {
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "The descriptor `when` the entry was written under (#242). `remove X` reads it offline to also remove another module's entries whose `installed` names X.",
+      "properties": {
+        "testing": {
+          "const": true,
+          "description": "Ship only when testing.mode is `tests-after` or `tdd`. The one allowed value is `true`; leave the key out for an entry that ships in every mode."
+        },
+        "installed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Ship only when every named module is installed. `remove` of a named module also removes the entry.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    }
+  },
   "properties": {
     "$schema": {
       "type": "string",
@@ -37,7 +61,8 @@
             "type": "string",
             "minLength": 1,
             "description": "Module-relative POSIX source path this file was copied from (e.g. `files/lib/email.ts`). `update` uses it to fetch the same file at the old and new commit SHAs. Optional — entries written before this field shipped fall back to re-deriving the target from the module descriptor."
-          }
+          },
+          "when": { "$ref": "#/$defs/when" }
         }
       }
     },
@@ -105,7 +130,8 @@
               }
             },
             "description": "The op as authored (kind + payload + file), re-applicable at execute time."
-          }
+          },
+          "when": { "$ref": "#/$defs/when" }
         }
       }
     }

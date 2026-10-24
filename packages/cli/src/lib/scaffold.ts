@@ -3,6 +3,8 @@ import { join, posix } from "node:path";
 import { fileURLToPath } from "node:url";
 import cliPackage from "../../package.json" with { type: "json" };
 import { hashContent, pathExists } from "./fs-utils.js";
+import { rewriteTestingBlock, TESTING_BLOCK_FILE } from "./testing.js";
+import type { TestingMode } from "./testing.js";
 
 // Copy a template tree into a target dir, applying two conventions:
 //   - files named `_foo` become `.foo` (npm refuses to publish literal dotfiles
@@ -69,6 +71,13 @@ export interface CopyTemplateOptions {
    * still says where it lands in the project.
    */
   keepNames?: boolean;
+  /**
+   * The project's testing mode (#242). When set, the root `AGENTS.md` gets that mode's
+   * text between its testing markers, so the rendered bytes and their hash are what the
+   * project holds. `init` and every base render pass it; without it `update` would
+   * re-render the template's `off` text over a `tdd` project's block.
+   */
+  testingMode?: TestingMode;
 }
 
 export async function copyTemplate(
@@ -116,7 +125,7 @@ async function copyTree(
       );
     } else if (entry.isFile()) {
       const raw = await readFile(srcPath, "utf-8");
-      const rendered = applyVars(raw, vars);
+      const rendered = fillTestingBlock(target, applyVars(raw, vars), options);
       await writeFile(destPath, rendered, "utf-8");
       written.push({
         path: destPath,
@@ -134,4 +143,18 @@ function applyVars(content: string, vars: TemplateVars): string {
     /\{\{(\w+)\}\}/g,
     (match, key: string) => vars[key] ?? match
   );
+}
+
+// Only the root `AGENTS.md` carries the project's block. A template with no markers renders
+// as authored: the render is not the place to warn about a block someone removed.
+function fillTestingBlock(
+  target: string,
+  content: string,
+  options: CopyTemplateOptions
+): string {
+  if (options.testingMode === undefined || target !== TESTING_BLOCK_FILE) {
+    return content;
+  }
+  const result = rewriteTestingBlock(content, options.testingMode);
+  return result.found ? result.content : content;
 }

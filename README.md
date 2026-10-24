@@ -117,7 +117,7 @@ The default registry is this repo. `saasaloy add waitlist` fetches `modules/wait
 
 ## Commands
 
-`init`, `add`, `remove`, `update`, `outdated`, `env`, `list`, `new` and `doctor`. Every command answers `--help`. Flags, exit codes, the coordinate grammar and the project files are in the [Reference](docs/wiki/reference.md).
+`init`, `add`, `remove`, `update`, `outdated`, `env`, `testing`, `list`, `new` and `doctor`. Every command answers `--help`. Flags, exit codes, the coordinate grammar and the project files are in the [Reference](docs/wiki/reference.md).
 
 ## Deploy
 

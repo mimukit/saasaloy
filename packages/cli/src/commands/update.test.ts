@@ -5,6 +5,7 @@ import {
   readFile,
   readlink,
   rm,
+  symlink,
   writeFile,
 } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -38,9 +39,11 @@ import {
   copyTemplate,
   templateVars,
 } from "../lib/scaffold.js";
+import { TESTING_BLOCKS } from "../lib/testing.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
-import { runUpdate } from "./update.js";
+import { finishUpToDate, runUpdate } from "./update.js";
+import type { UpToDateSteps } from "./update.js";
 
 // Both guards here reject bad input *before* the command reaches the registry, which is
 // what keeps these tests offline. A value flag that swallowed the next flag would carry
@@ -375,6 +378,285 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
   });
 });
 
+// #242. Backfill writes the gated entries an installed module now owes the project. It
+// runs under the update's own approval: after every refusal and the confirmation, and
+// after the backup, so a refused run writes nothing and `--abort` takes a backfilled
+// file back out. Offline, off a SAASALOY_REGISTRY_DIR checkout.
+describe("runUpdate — backfill (#242)", () => {
+  let project: string;
+  let registry: string;
+  const GADGET_TEST = join("apps", "web", "gadget.test.ts");
+
+  async function module(
+    name: string,
+    item: Record<string, unknown>,
+    files: Record<string, string> = {}
+  ): Promise<void> {
+    const modDir = join(registry, name);
+    await mkdir(join(modDir, "files"), { recursive: true });
+    await writeFile(
+      join(modDir, "registry-item.json"),
+      JSON.stringify({ name, type: "saasaloy:feature", files: [], ...item }),
+      "utf-8"
+    );
+    for (const [rel, content] of Object.entries(files)) {
+      await writeFile(join(modDir, rel), content, "utf-8");
+    }
+  }
+
+  /** `gadget` is installed with testing on, and its gated test was never written. */
+  async function state(
+    installed: string[],
+    modules: Record<string, unknown>
+  ): Promise<void> {
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        aliases: { "@web": "apps/web" },
+        installed,
+        testing: { mode: "tests-after" },
+      }),
+      "utf-8"
+    );
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules,
+        base: {
+          name: "web",
+          cliVersion: await readVersion(),
+          templateHash: await templateHash(await baseTemplateDir()),
+        },
+      }),
+      "utf-8"
+    );
+    await mkdir(join(project, ".saasaloy"), { recursive: true });
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+      }),
+      "utf-8"
+    );
+    await module(
+      "gadget",
+      {
+        files: [
+          {
+            path: "files/gadget.vitest.ts",
+            target: "@web/gadget.test.ts",
+            when: { testing: true },
+          },
+        ],
+      },
+      { "files/gadget.vitest.ts": "test\n" }
+    );
+  }
+
+  const localEntry = { source: "local", ref: "local", resolved: "local" };
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-update-backfill-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-update-backfill-reg-"));
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  it("writes no backfilled file when the update is refused", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    await module("widget", { requires: { saasaloy: ">=99.0.0" } });
+
+    const [code] = await runCaptured(["widget", "--yes"]);
+
+    expect(code).toBe(2);
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeFalsy();
+  });
+
+  it("backs up a backfilled file, so --abort removes it", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    await module("widget", {});
+
+    const [code, output] = await runCaptured(["widget", "--yes"]);
+    expect(code).toBe(0);
+    expect(output).toContain("backfill");
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeTruthy();
+
+    expect((await runCaptured(["--abort"]))[0]).toBe(0);
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeFalsy();
+  });
+
+  // The update landed before the backfill ran, so a backfill that stops must not hide
+  // the update's merge plan or its exit code. Here a symlinked directory makes the
+  // backfill's write refuse, after the update held one of widget's files for a merge.
+  it("keeps the merge plan and exit 3 when the backfill fails after the update", async () => {
+    await state(["widget", "gadget"], {
+      widget: localEntry,
+      gadget: localEntry,
+    });
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as Record<string, unknown>;
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({
+        ...config,
+        aliases: { "@web": "apps/web", "@lib": "lib" },
+      }),
+      "utf-8"
+    );
+    await module(
+      "widget",
+      { files: [{ path: "files/widget.ts", target: "@lib/widget.ts" }] },
+      { "files/widget.ts": "theirs\n" }
+    );
+    await mkdir(join(project, "lib"), { recursive: true });
+    await writeFile(join(project, "lib", "widget.ts"), "mine\n", "utf-8");
+    await mkdir(join(project, "elsewhere"), { recursive: true });
+    await mkdir(join(project, "apps"), { recursive: true });
+    await symlink(join(project, "elsewhere"), join(project, "apps", "web"));
+
+    const [code, output] = await runCaptured([
+      "widget",
+      "--yes",
+      "--out",
+      "plan.md",
+    ]);
+
+    expect(output).toContain("Backfill stopped");
+    expect(code).toBe(EXIT_MERGE_PENDING);
+    await expect(pathExists(join(project, "plan.md"))).resolves.toBeTruthy();
+    expect(output).toContain("saasaloy update");
+  });
+
+  // Nothing is outdated (gadget has no lock entry to compare, and naming it leaves the
+  // base out), yet the backfill still runs: it is how a partial backfill is finished.
+  it("backfills when everything is up to date, under a backup", async () => {
+    await state(["gadget"], {});
+
+    const [code, output] = await runCaptured(["gadget", "--yes"]);
+    expect(code).toBe(0);
+    expect(output).toContain("Everything is up to date");
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeTruthy();
+
+    expect((await runCaptured(["--abort"]))[0]).toBe(0);
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeFalsy();
+  });
+
+  it("lists the backfill under --dry-run and writes nothing", async () => {
+    await state(["gadget"], {});
+
+    const [code, output] = await runCaptured(["gadget", "--dry-run"]);
+
+    expect(code).toBe(0);
+    expect(output).toContain("apps/web/gadget.test.ts");
+    await expect(pathExists(join(project, GADGET_TEST))).resolves.toBeFalsy();
+  });
+});
+
+// #242. With nothing outdated, a `--ref` rewrite and an owed backfill are the only
+// writes. The rewrite stays unconfirmed on its own, and moves behind the confirmation
+// and the backup once a backfill is owed, so a declined run writes nothing.
+describe("finishUpToDate (#242)", () => {
+  const SHA = "a".repeat(40);
+
+  function steps(
+    backfill: boolean,
+    answer?: number
+  ): { calls: string[]; lock: Lockfile; steps: UpToDateSteps } {
+    const calls: string[] = [];
+    const lock: Lockfile = {
+      ...emptyLock(),
+      modules: {
+        widget: { ref: "main", resolved: SHA, source: "acme/registry" },
+      },
+    };
+    return {
+      calls,
+      lock,
+      steps: {
+        backfill: backfill
+          ? ({
+              cleanup: async () => {},
+              plan: { files: [{ target: "a.test.ts" }], patches: [] },
+              skipped: [],
+            } as unknown as NonNullable<UpToDateSteps["backfill"]>)
+          : undefined,
+        backUp: async (targets) => {
+          calls.push(
+            `backup ${targets.join(",")} ref=${lock.modules.widget?.ref}`
+          );
+        },
+        comparisons: [
+          {
+            current: SHA,
+            latest: SHA,
+            name: "widget",
+            ref: "v2",
+            refRewrite: true,
+            source: "acme/registry",
+            status: "current",
+          },
+        ],
+        confirm: async () => {
+          calls.push("confirm");
+          return answer;
+        },
+        lock,
+        persist: async () => {
+          calls.push(`persist ref=${lock.modules.widget?.ref}`);
+        },
+        writeBackfill: async () => {
+          calls.push("backfill");
+        },
+      },
+    };
+  }
+
+  it("writes the ref rewrite unconfirmed when no backfill is owed", async () => {
+    const run = steps(false);
+
+    await expect(finishUpToDate(run.steps)).resolves.toBeUndefined();
+
+    expect(run.calls).toStrictEqual(["persist ref=v2"]);
+  });
+
+  it("writes nothing, the ref rewrite included, when the backfill is declined", async () => {
+    const run = steps(true, 0);
+
+    await expect(finishUpToDate(run.steps)).resolves.toBe(0);
+
+    expect(run.calls).toStrictEqual(["confirm"]);
+    expect(run.lock.modules.widget?.ref).toBe("main");
+  });
+
+  it("backs up before the ref rewrite and the backfill once confirmed", async () => {
+    const run = steps(true);
+
+    await finishUpToDate(run.steps);
+
+    expect(run.calls).toStrictEqual([
+      "confirm",
+      "backup a.test.ts ref=main",
+      "persist ref=v2",
+      "backfill",
+    ]);
+  });
+});
+
 // #120. The base rides the module engine. These run offline: the template ships with the
 // CLI, so a "newer template" is simply a project whose lock records another hash and
 // whose files differ from today's render.
@@ -687,6 +969,58 @@ describe("runUpdate — the base template (#120)", () => {
     await expect(readFile(join(project, owned), "utf-8")).resolves.toBe(
       ":root { --mine: 1; }\n"
     );
+  });
+
+  /** Merge `extra` into the project's saasaloy.json. */
+  async function setConfig(extra: Record<string, unknown>): Promise<void> {
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as Record<string, unknown>;
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ ...config, ...extra }),
+      "utf-8"
+    );
+  }
+
+  it("renders the project's testing mode into AGENTS.md, never the template's off text (#242)", async () => {
+    const state = await scaffolded();
+    await fromOlderTemplate(state);
+    await setConfig({ testing: { mode: "tdd" } });
+
+    const { code } = await runBoth(["--yes"]);
+
+    expect(code).toBe(0);
+    const now = await readFile(join(project, "AGENTS.md"), "utf-8");
+    expect(now).toContain(TESTING_BLOCKS.tdd);
+    expect(now).not.toContain(TESTING_BLOCKS.off);
+  });
+
+  it("suggests a testing mode when a module ships a test and the key is absent (#242)", async () => {
+    const state = await scaffolded();
+    state.manifest.managed["apps/api/src/routes/auth.test.ts"] = {
+      hash: "a".repeat(64),
+      module: "auth",
+    };
+    await saveManifest(project, state.manifest);
+
+    const { err } = await runBoth(["--yes"]);
+
+    expect(err.split("saasaloy testing tests-after")).toHaveLength(2);
+  });
+
+  it("prints no testing suggestion once the key is present (#242)", async () => {
+    const state = await scaffolded();
+    state.manifest.managed["apps/api/src/routes/auth.test.ts"] = {
+      hash: "a".repeat(64),
+      module: "auth",
+    };
+    await saveManifest(project, state.manifest);
+    await setConfig({ testing: { mode: "off" } });
+
+    const { err } = await runBoth(["--yes"]);
+
+    expect(err).not.toContain("saasaloy testing");
   });
 
   it("takes the project name from saasaloy.json, not from the directory", async () => {

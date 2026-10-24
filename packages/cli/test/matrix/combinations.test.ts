@@ -181,7 +181,12 @@ async function fileCollisions(graph: Graph): Promise<string> {
     if (!mod) {
       continue;
     }
-    const files = await listModuleFiles(mod, aliases, installed);
+    // Testing on, so a gated test file is checked for collisions too (#242): `tdd` ships
+    // the largest set a project can hold.
+    const files = await listModuleFiles(mod, aliases, installed, {
+      isTracked: () => false,
+      testingMode: "tdd",
+    });
     planned.push({ module: name, targets: [...files.keys()] });
   }
   const collisions = detectCollisions({ modules: graph.modules, planned });

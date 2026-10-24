@@ -5,6 +5,7 @@ import AjvDefault from "ajv/dist/2020.js";
 import type { ErrorObject, ValidateFunction } from "ajv";
 import { pathExists } from "./fs-utils.js";
 import type { Patch } from "./patch/index.js";
+import type { TestingMode } from "./testing.js";
 
 // ajv is CJS (`module.exports = Ajv2020`); under NodeNext the default import is typed
 // as the module namespace, so re-point it to the class it actually is at runtime.
@@ -124,12 +125,36 @@ export interface SaasaloyConfig {
    * before the field existed still validates; `loadConfig` migrates it.
    */
   base?: string;
+  /**
+   * The project's testing mode (#242). Optional so a project scaffolded before the field
+   * existed still validates; `readTestingMode` reads an absent key as `off`.
+   */
+  testing?: { mode: TestingMode };
   installed: string[];
+}
+
+/**
+ * The condition on an optional descriptor entry (#242, ADR 0054). The keys combine with
+ * AND: `testing` ships the entry only when the project's testing mode is not `off`, and
+ * `installed` only when every named module is in the resolved install set. The applier
+ * tests it before `onlyWith`, and only for a target the manifest does not track yet.
+ */
+export interface When {
+  testing?: true;
+  installed?: string[];
 }
 
 export interface RegistryFile {
   path: string;
   target: string;
+  /** Ship this entry only while the condition holds; see {@link When} (#242). */
+  when?: When;
+  /**
+   * Why this file ships with no test beside it (#242). Nothing reads it yet: a later
+   * descriptor guard (#243) is to print the reason rather than fail. Top-level `files[]`
+   * only.
+   */
+  untested?: string;
   /**
    * Install this file only when the named module is in the resolved install set (#99).
    * Two entries may share one `target` under disjoint conditions, which is how a module
@@ -158,7 +183,9 @@ export interface RegistryAgent {
 // A structural config patch as authored in registry-item.json: an engine `Patch`
 // (kind + payload) plus the project-relative `file` it targets. Serialized as a flat
 // array so one module can patch several files, each op self-describing (ADR 0019).
-export type RegistryPatch = { file: string } & Patch;
+// `when` gates the op like a file entry (#242). The op is recorded "as authored", `when`
+// included, so the structural match `remove` untracks with stays stable (A7).
+export type RegistryPatch = { file: string; when?: When } & Patch;
 
 export interface RegistryItem {
   name: string;
@@ -191,6 +218,11 @@ export interface RegistryItem {
   patches?: RegistryPatch[];
   scaffolds?: RegistryScaffold[];
   agent?: RegistryAgent;
+  /**
+   * Adding this module turns testing on: a project whose mode is `off` moves to
+   * `tests-after` once the apply succeeds, and its gated files are backfilled (#242).
+   */
+  enablesTesting?: true;
 }
 
 export function validateSaasaloyConfig(

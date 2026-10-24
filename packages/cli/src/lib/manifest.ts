@@ -3,7 +3,7 @@ import { dirname, join } from "node:path";
 import { RefusalError } from "./exit.js";
 import { pathExists } from "./fs-utils.js";
 import { validateManifest } from "./schema.js";
-import type { RegistryPatch } from "./schema.js";
+import type { RegistryPatch, When } from "./schema.js";
 
 // `.saasaloy/manifest.json` records every file a module applied — copied source
 // files and copied skill files — by owning module and content hash. On update the
@@ -30,6 +30,11 @@ export interface ManagedEntry {
    * `update` falls back to re-deriving the target from the descriptor (issue #48).
    */
   from?: string;
+  /**
+   * The descriptor `when` this file was written under (#242). `remove X` reads it offline
+   * to find another module's entries that only shipped because `X` was installed.
+   */
+  when?: When;
 }
 
 // A structural config patch that actually landed on disk, recorded so `remove` can undo
@@ -43,8 +48,10 @@ export interface ManifestPatch {
   module: string;
   /** Project-relative POSIX path of the file that was patched. */
   file: string;
-  /** The op as authored (kind + payload + file). */
+  /** The op as authored (kind + payload + file, and its `when` when it has one). */
   patch: RegistryPatch;
+  /** The op's `when`, repeated at the top level so `remove` reads it like a file's (#242). */
+  when?: When;
 }
 
 export interface Manifest {
@@ -85,6 +92,8 @@ export interface ManagedFileRecord {
   module: string;
   /** Project-relative POSIX path of the file on disk. */
   target: string;
+  /** The descriptor `when` the file was written under; omitted for an unconditional one. */
+  when?: When;
 }
 
 /**
@@ -101,6 +110,7 @@ export function recordManagedFile(
     module: record.module,
     ...(record.adopted ? { adopted: true } : {}),
     ...(record.from === undefined ? {} : { from: record.from }),
+    ...(record.when === undefined ? {} : { when: record.when }),
   };
 }
 
@@ -118,7 +128,15 @@ export function recordPatch(manifest: Manifest, entry: ManifestPatch): void {
   if (manifest.patches.some((existing) => samePatchEntry(existing, entry))) {
     return;
   }
-  manifest.patches.push(entry);
+  // The top-level `when` is copied from the op, so a caller cannot record one that
+  // disagrees with the op it describes (#242, A7).
+  const when = entry.patch.when;
+  manifest.patches.push({
+    file: entry.file,
+    module: entry.module,
+    patch: entry.patch,
+    ...(when === undefined ? {} : { when }),
+  });
 }
 
 /** Drop every patch entry structurally equal to `entry`. */

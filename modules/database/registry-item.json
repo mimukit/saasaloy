@@ -2,6 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "database",
   "type": "saasaloy:capability",
+  "requires": { "saasaloy": ">=0.7.0" },
   "dependsOn": ["api"],
   "requiresOneOf": ["database-d1", "database-postgres"],
   "dependencies": [],
@@ -53,7 +54,8 @@
     },
     {
       "path": "files/api/routes/health-db.vitest.ts",
-      "target": "@api/routes/health-db.test.ts"
+      "target": "@api/routes/health-db.test.ts",
+      "when": { "testing": true }
     }
   ],
   "scaffolds": [
@@ -103,7 +105,8 @@
         },
         {
           "path": "files/src/seed/completeness.vitest.ts",
-          "target": "src/seed/completeness.test.ts"
+          "target": "src/seed/completeness.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/seed/slices/.gitkeep",

@@ -7,6 +7,7 @@ import { runList } from "./list.js";
 import { runNew } from "./new.js";
 import { runOutdated } from "./outdated.js";
 import { runRemove } from "./remove.js";
+import { runTesting } from "./testing.js";
 import { runUpdate } from "./update.js";
 
 // The command registry. It is the single source both consumers in `../cli.ts` read —
@@ -24,13 +25,15 @@ export type CommandRegistry = Record<string, Command>;
 // configure → inspect → refresh → undo → browse), then the author-facing `new` and
 // `doctor` — the pair a registry author uses and a consumer never does — and it
 // is the order both help and the picker render. `env` sits directly after `add` because
-// it is the step `add`'s own next-steps note sends you to, and `outdated` sits directly
-// before `update` because it is the question `update` is the answer to. Append with that
-// in mind. No explicit `order`/`group` field until the list outgrows a single screen.
+// it is the step `add`'s own next-steps note sends you to, `testing` sits directly after
+// `env` because it is the other per-project setting a user configures after composing
+// (#242), and `outdated` sits directly before `update` because it is the question `update`
+// is the answer to. Append with that in mind. No explicit `order`/`group` field until the list outgrows a single screen.
 export const COMMANDS: CommandRegistry = {
   init: { describe: DESCRIPTIONS.init, run: runInit },
   add: { describe: DESCRIPTIONS.add, run: runAdd },
   env: { describe: DESCRIPTIONS.env, run: runEnv },
+  testing: { describe: DESCRIPTIONS.testing, run: runTesting },
   outdated: { describe: DESCRIPTIONS.outdated, run: runOutdated },
   update: { describe: DESCRIPTIONS.update, run: runUpdate },
   remove: { describe: DESCRIPTIONS.remove, run: runRemove },
