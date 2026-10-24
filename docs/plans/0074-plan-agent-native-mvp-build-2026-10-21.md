@@ -30,8 +30,13 @@ Success: a headless agent starts in an empty folder that holds a complete produc
 | Product UI home | A new `app` capability module: a customer SPA at `apps/app` on port 3002, open to every signed-in user. The `web` app holds only public pages. |
 | Module name | `app`, at `apps/app`. Docs write it as the code span `app` to keep it apart from the plain word. |
 | Shared shell | A new `shell` capability owns the layout, nav, user menu and theme toggle under `@repo/ui/*/shell`, and the primitives and blocks they and the apps render (see "`shell` owns"). `admin` and `app` both depend on it. It holds no auth logic: `admin` guards on the role, `app` guards on the session. The work moves #204's shell paths after #204 merges, and does not reopen #204. |
-| Sign-in and sign-up | `auth` writes `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` into `@repo/ui`. Each takes an `onSubmit`, per the no-IO rule. Each app renders them on its own route and calls `authClient` there. `admin`'s `login.tsx` renders the block. The blocks import the `shell` primitives and install with `onlyWith: shell`, so `auth` gets no new dependency and a project with no SPA gets no unused blocks (#226 grill, 2026-10-24). If #225 lands before #226, it uses `components/admin/*` with `onlyWith: admin`, and #226 moves both to `shell`. |
-| Password reset mail | `auth` ships an `onlyWith: email` file that sets Better Auth's `sendResetPassword` through `@repo/email`. Email verification stays off. |
+| Sign-in and sign-up | `auth` writes `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` into `@repo/ui`. Each takes an `onSubmit`, per the no-IO rule. Each app renders them on its own route and calls `authClient` there. `admin`'s `login.tsx` renders the block. The blocks import the `shell` primitives (`components/shell/{button,field,input}`, `blocks/shell/brand-mark`) and ship with `when: { installed: ["shell"] }`, so `auth` gets no new dependency and a project with no SPA gets no unused blocks. `when`, not `onlyWith`: per ADR 0054 `onlyWith` refuses the `add` when no variant matches, and `when` skips the entry, backfills it on `add shell` and removes it on `remove shell`. Settled in the #226 grill and the #225 grill on 2026-10-24. |
+| Auth block API | `SignInCard({ onSubmit, signUpHref?, title?, description? })` and `SignUpCard({ onSubmit, signInHref, title?, description? })`, with `SignInValues` and `SignUpValues`, the names the approved mockup used. `onSubmit(values)` returns `Promise<string \| void>`: a returned string renders in a `role="alert"` line, and the block resets its pending state itself. A thrown error stays the app's job. The block renders the card only. Each app renders the page around it, so `app` keeps the mockup's `bg-sidebar` canvas and `admin` keeps `bg-background`. With no `signUpHref`, the card has no footer. The card renders the approved r2 design: the brand mark with the site name, the title, the description, the fields and the footer link. Settled in the #225 grill on 2026-10-24. |
+| Admin sign-in | `admin`'s `/login` renders `SignInCard` with its own title and description and no `signUpHref`. It gains the site name beside the brand mark. No new mockup round: the #225 PR carries `/login` screenshots at 1440 and 360 in both themes, and the owner may reject them there. Settled in the #225 grill on 2026-10-24. |
+| Password length | `auth.ts` sets `emailAndPassword.minPasswordLength: 12` on both instances, so the server enforces the "At least 12 characters" hint the approved sign-up card shows. Better Auth's default is 8. The seed password `saasaloy-dev-password` has 21 characters. The changelog names `saasaloy update auth`. Settled in the #225 grill on 2026-10-24. |
+| Order of #225 and #226 | #225 builds the reset mail first, on its own branch from `main`, because it needs nothing from #226. It builds the blocks and the admin `login.tsx` change after #226 has moved the primitives, rebased on #226's branch, so only one branch edits `modules/admin` at a time. The #225 PR opens after #226 merges and targets `main`. Settled in the #225 grill on 2026-10-24. |
+| Password reset mail | `auth` ships `src/plugins/reset-password-mail.ts`, a Better Auth plugin whose `init()` returns `emailAndPassword.sendResetPassword`. Better Auth merges a plugin's `init().options` into the config (`runPluginInit`, better-auth 1.7.7), so one `plugin-array` patch into `auth`'s `plugins` adds it and `auth.ts` keeps no email code. The plugin file, the patch, a `@repo/email` dependency patch on `packages/auth/package.json`, and the template `@email/templates/reset-password.ts` all carry `when: { installed: ["email"] }`, not `onlyWith`, for the ADR 0054 reason above. Only the client `auth` sends it: `adminAuth` reads the same `accounts` table and has no reset link. The mail carries Better Auth's `url` as-is, checked by `safeUrl`; the `redirectTo` the caller sends decides where the link lands, and #230 owns that screen. The template is a plain `html` template like `welcome.ts`. Email verification stays off. Settled in the #225 grill on 2026-10-24. |
+| Auth tests | A render test for the reset template, and a reset route test beside `auth.test.ts` with `when: { testing: true, installed: ["email"] }`. The blocks get no DOM tests, per "Test runners". |
 | Human input contract | The human writes a complete `docs/product-brief.md` through the attended `saasaloy-setup` interview, and supplies the env values in a file. After the agent starts, it never asks. |
 | Complete brief | All ten `saasaloy-setup` sections are present and filled, and none is marked weak. With an incomplete brief, the unattended run stops before the first module and lists the missing sections under "Blocked" in `docs/build-log.md`. |
 | AFK signal | `autonomy: afk` in the frontmatter of `docs/product-brief.md`. The human sets it: `saasaloy-setup` asks "Run the build unattended?" as the last interview question. Every skill with an interview checks the field. |
@@ -83,7 +88,7 @@ What it reuses:
 - `docs/wiki/modules.md` and `docs/wiki/reference.md` as the source text for each module's `description`, `stage` and `needs`.
 - PR #204's shell under `modules/admin/files/ui/{components,blocks,containers}/admin` as the content of `shell`.
 - The `admin` module (descriptor, `login.tsx`, the "Add a screen" recipe in `saasaloy-admin`) as the base for the `app` module.
-- The `onlyWith` mechanism for the password reset file.
+- The `when` mechanism (ADR 0054) for the password reset file and the auth blocks.
 - Plan 0072's seed slices and route test harness for the feature recipe and the MVP bar.
 - `scripts/saasaloy-shim.sh`, `SAASALOY_REGISTRY_DIR` and the `.dev/` convention, so the benchmark runs the local CLI and the local modules.
 - The add command's skill pointer (`add.ts:328-354`) for the "next skill" handoff.
@@ -154,12 +159,16 @@ Done when: `wc -l` on the base `AGENTS.md` prints 250 or fewer, a scaffolded pro
 
 ### Phase 7: auth blocks and the password reset mail (#225)
 
-- Add `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` to the `auth` module's files, written into `@repo/ui`. Each takes an `onSubmit` and does no IO. They import the `shell` primitives and install with `onlyWith: shell`.
-- Change `admin`'s `login.tsx` to render the sign-in block.
-- Add an `onlyWith: email` file to `auth` that sets `sendResetPassword` through `@repo/email`, with a template in the email module's convention.
-- Document both in `saasaloy-auth`, with a "Wire-up" section for the blocks.
+Waits on: Phase 8 for the blocks and the admin change, per "Order of #225 and #226". The reset mail does not wait.
 
-Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POST to the api's password reset endpoint writes a reset mail to the api's stdout, and the admin sign-in still works with a seeded admin.
+- Add `src/plugins/reset-password-mail.ts` and `@email/templates/reset-password.ts` to `auth`, with the `plugin-array` and `package-json-dependency` patches, all gated by `when: { installed: ["email"] }`, per "Password reset mail".
+- Set `minPasswordLength: 12` on both auth instances, per "Password length".
+- After the rebase on #226: add `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` to the `auth` module's files, written into `@repo/ui` with `when: { installed: ["shell"] }`, per "Auth block API". Add `packages/ui/src/blocks/auth/**` to the base `oxlint.config.mjs` twin-primitive rule.
+- Change `admin`'s `login.tsx` to render `SignInCard`, per "Admin sign-in".
+- Add the template render test and the gated reset route test, per "Auth tests".
+- Document both in `saasaloy-auth`, with a "Wire-up" section for the blocks and a "Password reset mail" section. Add the changelog lines for the password length and for the reset mail on `add email`.
+
+Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POST to the api's password reset endpoint writes a reset mail to the api's stdout; in a project with no `email`, `add auth` installs no reset file and `auth` still builds; `add email` afterwards backfills the reset file; and the admin sign-in still signs in a seeded admin through the block.
 
 ### Phase 8: the `shell` capability (#226)
 
@@ -225,7 +234,7 @@ Done when: one benchmark run prints PASS on every MVP bar line, and the report l
 
 ## Open questions
 
-None. The grill on 2026-10-21 settled every question in the draft, the #227 grill on 2026-10-22 settled the `app` details, and the #226 grill on 2026-10-24 settled the `shell` details.
+None. The grill on 2026-10-21 settled every question in the draft, the #227 grill on 2026-10-22 settled the `app` details, the #226 grill on 2026-10-24 settled the `shell` details, and the #225 grill on 2026-10-24 settled the auth blocks and the reset mail.
 
 ## Non-goals
 
