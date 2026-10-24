@@ -259,7 +259,7 @@ Cannot update — unmet requirement:
 Then run `saasaloy update` again. Nothing was changed.
 ```
 
-1. Upgrade the `saasaloy` CLI. The new `api-keys` descriptor declares `requires.saasaloy`, and an older CLI refuses it.
+1. Upgrade the `saasaloy` CLI to 0.7.0 or later. `api-keys` and both owners declare `requires.saasaloy: ">=0.7.0"`, and an older CLI refuses them in `add` and `update` before it writes anything.
 2. Run `saasaloy add api-keys-organization`. The schema, the resolver, the screen and the plugin keep their bytes, so `add` adopts them, moves their ownership to the new module, and records the resolver patch again under it.
 3. Run `saasaloy update`. It writes the new `packages/auth/src/plugins/api-key-options.ts` under `api-keys`.
 4. Run `pnpm db:generate`. It reports no schema changes, because the table is the same.
