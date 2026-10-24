@@ -1,3 +1,4 @@
+import type { SendEmail } from "@cloudflare/workers-types";
 import { EmailError } from "../provider";
 import type {
   EmailEnv,
@@ -15,9 +16,12 @@ import type {
 // dashboard (Compute → Email Service → Email Sending). Neither is something the CLI
 // can do or check for you; `email-console` exists so local dev needs neither.
 //
-// `SendEmail` and `EmailMessageBuilder` are ambient globals from
-// @cloudflare/workers-types, which packages/email already carries as a devDependency —
-// nothing is imported, and there is no npm dependency to add.
+// `SendEmail` is imported from @cloudflare/workers-types, never read as an ambient
+// global. The barrel in packages/email/src/index.ts imports this file, so every
+// workspace that imports `@repo/email` compiles it, packages/email-react included, and
+// none of them lists Worker types of its own. A type-only import resolves from this
+// file's package, which this module's descriptor gives the devDependency. Nothing is
+// imported at runtime.
 
 export interface CloudflareEmailOptions {
   /** Binding name in wrangler.jsonc. The module's own patch writes `EMAIL`. */
