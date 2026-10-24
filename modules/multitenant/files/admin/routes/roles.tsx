@@ -4,9 +4,9 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import { allows } from "@repo/auth/permission-rules";
 import type { PrincipalLike } from "@repo/auth/permission-rules";
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { PageSkeleton } from "@repo/ui/blocks/shell/page-skeleton";
 import { errors } from "@repo/ui/content/errors";
 
 import { RoleWorkspace } from "@admin/components/role-workspace";

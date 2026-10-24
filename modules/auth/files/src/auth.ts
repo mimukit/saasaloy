@@ -49,6 +49,10 @@ function trustedOrigins(): string[] {
 
 const cookieDomain = deriveCookieDomain(authEnv);
 
+// One rule for both instances: they share the `accounts` table, so a password set on one
+// side has to pass on the other. Better Auth's default is 8.
+const MIN_PASSWORD_LENGTH = 12;
+
 // Read at module scope on purpose: a missing secret outside local dev throws here, so
 // the Worker fails on its first request rather than serving sessions signed with Better
 // Auth's published development key. See ./env.ts for the rule and the escape hatch.
@@ -230,12 +234,18 @@ export const auth = betterAuth({
   basePath: "/auth",
   emailAndPassword: {
     enabled: true,
+    // The sign-up card in `@repo/ui/blocks/auth` says "At least 12 characters", and this
+    // is the check behind it. Better Auth applies it on sign-up, reset and change, never
+    // on sign-in, so an account with an older, shorter password still signs in.
+    minPasswordLength: MIN_PASSWORD_LENGTH,
     requireEmailVerification: false, // needs the `email` capability; auth deliberately doesn't depend on it
+    // No `sendResetPassword` here. With `email` installed, `resetPasswordMail()` in the
+    // array below sets it; without `email`, a reset request answers 400.
   },
   // The patch point for feature capabilities (`billing` pushing `stripe()`, `teams` pushing
-  // `organization()`). Keep this an array literal (never omit it, never hoist it to a named
-  // const) — `insertIntoPluginArray` needs a real array to push into. A feature module
-  // patches `adminAuth`'s array below as well.
+  // `organization()`, `email` bringing `resetPasswordMail()`). Keep this an array literal
+  // (never omit it, never hoist it to a named const) — `insertIntoPluginArray` needs a
+  // real array to push into. A feature module patches `adminAuth`'s array below as well.
   //
   // `audience(...)` comes first, so the session it writes carries its name before any other
   // plugin reads the row.
@@ -252,6 +262,7 @@ export const adminAuth = betterAuth({
   emailAndPassword: {
     enabled: true,
     disableSignUp: true,
+    minPasswordLength: MIN_PASSWORD_LENGTH,
     requireEmailVerification: false,
   },
   // The second patch point, with the same rules as `auth`'s. A feature module that adds a

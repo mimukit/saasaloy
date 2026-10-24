@@ -211,18 +211,18 @@ import { landing, ui } from "@repo/ui/content/landing";
 import { cn } from "@repo/ui/lib/utils";
 ```
 
-**The admin app has its own primitive set.** `saasaloy add admin` writes it into `src/components/admin/`, with its blocks in `src/blocks/admin/` and its shell and layouts in `src/containers/admin/`. Admin code imports only those, and a lint rule makes a base primitive under `apps/admin/**` an error, because both sets have a `button` and the wrong one renders with no complaint:
+**The signed-in apps share their own primitive set.** `saasaloy add shell` writes it into `src/components/shell/`, with its blocks in `src/blocks/shell/`, its shell and layouts in `src/containers/shell/`, and its tokens and motion in `src/styles/shell.css`. `admin` and `app` install `shell` for you. Their code imports only that set, and a lint rule makes a base primitive under `apps/admin/**` or `apps/app/**` an error, because both sets have a `button` and the wrong one renders with no complaint:
 
 ```ts
-import { Button } from "@repo/ui/components/admin/button";
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { Button } from "@repo/ui/components/shell/button";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 ```
 
-The `saasaloy-admin` skill lists the whole set and how a page composes it.
+The `saasaloy-shell` skill lists the whole set and how a page composes it.
 
-**Seven top-level folders, and no app folder at the root of `src/`.** A folder may hold `admin/`, `web/` or `shared/` children where one app owns the files, for example `src/blocks/admin/` or `src/containers/admin/`, which `saasaloy add admin` writes. A project without that app carries none of them.
+**Seven top-level folders, and no app folder at the root of `src/`.** A folder may hold `shell/`, `admin/`, `web/` or `shared/` children where one module owns the files, for example `src/blocks/shell/` or `src/containers/shell/`, which `saasaloy add shell` writes. A project without that module carries none of them.
 
 1. **`src/assets/`** holds images, SVGs and icons. The base ships no asset, so the folder does not exist until the first one lands, together with an `assets.d.ts` that types its imports.
 2. **`src/components/`** holds the vendored shadcn primitives, official and custom. No stores, no copy.
@@ -437,7 +437,7 @@ The rules below are not stylistic — each one prevents a real failure:
 
 Blocks, like primitives, are source you own — they are meant to be edited, not wrapped.
 
-**Containers — the shells and the layouts.** `src/containers/` holds the compositions that place blocks and components on a page: an app shell, a page layout, a page frame. The base ships none; `saasaloy add admin` writes the admin app's into `src/containers/admin/`.
+**Containers — the shells and the layouts.** `src/containers/` holds the compositions that place blocks and components on a page: an app shell, a page layout, a page frame. The base ships none; `saasaloy add shell` writes the signed-in apps' into `src/containers/shell/`.
 
 - **A container places, a block renders.** It decides where the panels, the header and the detail view go, and it adds no copy a block could hold.
 - **No router, no session.** A container takes the nav data, the current area, a link component and the account as props. The app reads its router and its session and passes them in, so a container never depends on one app's routes.

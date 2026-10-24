@@ -15,13 +15,13 @@ import {
   AlertDialogHeader,
   AlertDialogPopup,
   AlertDialogTitle,
-} from "@repo/ui/components/admin/alert-dialog";
-import { Badge } from "@repo/ui/components/admin/badge";
-import { Button } from "@repo/ui/components/admin/button";
-import { Field, FieldLabel } from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
-import { Skeleton } from "@repo/ui/components/admin/skeleton";
-import { toastManager } from "@repo/ui/components/admin/toast";
+} from "@repo/ui/components/shell/alert-dialog";
+import { Badge } from "@repo/ui/components/shell/badge";
+import { Button } from "@repo/ui/components/shell/button";
+import { Field, FieldLabel } from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
+import { Skeleton } from "@repo/ui/components/shell/skeleton";
+import { toastManager } from "@repo/ui/components/shell/toast";
 
 import { auth } from "@admin/lib/auth";
 

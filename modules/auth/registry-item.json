@@ -77,6 +77,26 @@
         "name": "authEnv",
         "from": "@repo/auth/env-preset"
       }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "resetPasswordMail",
+      "import": {
+        "name": "resetPasswordMail",
+        "from": "./plugins/reset-password-mail"
+      },
+      "when": { "installed": ["email"] }
+    },
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/email",
+      "range": "workspace:*",
+      "when": { "installed": ["email"] }
     }
   ],
   "files": [
@@ -88,6 +108,11 @@
       "path": "files/api/routes/auth.vitest.ts",
       "target": "@api/routes/auth.test.ts",
       "when": { "testing": true }
+    },
+    {
+      "path": "files/api/routes/reset-password.vitest.ts",
+      "target": "@api/routes/reset-password.test.ts",
+      "when": { "testing": true, "installed": ["email"] }
     },
     {
       "path": "files/config/auth.ts",
@@ -122,6 +147,26 @@
     {
       "path": "files/db/seed/verifications.ts",
       "target": "@db/seed/slices/verifications.ts"
+    },
+    {
+      "path": "files/ui/blocks/auth/auth-card.tsx",
+      "target": "@ui/blocks/auth/auth-card.tsx",
+      "when": { "installed": ["shell"] }
+    },
+    {
+      "path": "files/ui/blocks/auth/sign-in.tsx",
+      "target": "@ui/blocks/auth/sign-in.tsx",
+      "when": { "installed": ["shell"] }
+    },
+    {
+      "path": "files/ui/blocks/auth/sign-up.tsx",
+      "target": "@ui/blocks/auth/sign-up.tsx",
+      "when": { "installed": ["shell"] }
+    },
+    {
+      "path": "files/email/templates/reset-password.ts",
+      "target": "@email/templates/reset-password.ts",
+      "when": { "installed": ["email"] }
     }
   ],
   "scaffolds": [
@@ -180,6 +225,11 @@
         {
           "path": "files/src/plugins/rank-guard.ts",
           "target": "src/plugins/rank-guard.ts"
+        },
+        {
+          "path": "files/src/plugins/reset-password-mail.ts",
+          "target": "src/plugins/reset-password-mail.ts",
+          "when": { "installed": ["email"] }
         },
         {
           "path": "files/src/server.ts",

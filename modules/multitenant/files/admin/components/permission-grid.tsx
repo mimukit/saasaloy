@@ -1,6 +1,6 @@
 import { statements } from "@repo/auth/access";
-import { Checkbox } from "@repo/ui/components/admin/checkbox";
-import { Label } from "@repo/ui/components/admin/label";
+import { Checkbox } from "@repo/ui/components/shell/checkbox";
+import { Label } from "@repo/ui/components/shell/label";
 
 // The resource-by-action grid, in one component used two ways: read-only for a base role,
 // editable for a custom one. Both render the same rows in the same order, so a reader

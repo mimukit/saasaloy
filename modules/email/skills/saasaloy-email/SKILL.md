@@ -376,12 +376,9 @@ Contract notes:
 - Any npm dependency belongs in `packages/email/package.json`, not in another workspace — only this
   package touches provider SDKs (ADR 0020).
 
-## Wiring recipes (manual, for now)
+## Wiring recipes
 
-Nothing depends on `email` automatically: `dependsOn` is a hard prerequisite list with no way to
-say *"use `email` if it's installed"*, so `waitlist` and `auth` ship without it rather than forcing
-it on every project. Wire it yourself with one of these; an optional-dependency mechanism is a
-tracked follow-up that will make them unnecessary.
+`dependsOn` is a hard prerequisite list, so `waitlist` and `auth` do not depend on `email`. A module says *"use `email` if it is installed"* with `when: { installed: ["email"] }` on a file or a patch (ADR 0054). `auth` does that for its password reset mail. `waitlist` does not yet, so wire it yourself with the recipe below.
 
 ### `waitlist` — confirm a signup
 
@@ -402,47 +399,41 @@ c.executionCtx.waitUntil(
 `waitUntil` on purpose: the row is already saved, so a mail outage must not turn a successful
 signup into an error for the user.
 
-### `auth` — email verification and password reset
+### `auth` — password reset (shipped) and email verification (manual)
 
-In `packages/auth/src/auth.ts`, flip the flag and supply the sender. Better Auth calls these with
-the user and a pre-built URL:
+**Password reset needs no wiring.** With `auth` and `email` both installed, `auth` ships `packages/auth/src/plugins/reset-password-mail.ts`, the template `src/templates/reset-password.ts` in this package, and the `plugins` and `package.json` patches that connect them. Each one carries `when: { installed: ["email"] }`, so `saasaloy add email` writes them in a project that already has `auth`, and `saasaloy remove email` takes them away. The `saasaloy-auth` skill, section "Password reset mail", covers the endpoint, the link and the failure modes. Edit the template here like `welcome.ts`.
+
+**Email verification is still yours to wire.** Follow the reset plugin's pattern: a Better Auth plugin whose `init()` returns the sender, pushed into `auth`'s `plugins` array in `packages/auth/src/auth.ts`, so `auth.ts` itself names no email code.
 
 ```ts
-import { createEmail, html, layout } from "@repo/email";
 import { env } from "cloudflare:workers";
+import type { BetterAuthPlugin } from "better-auth";
+import { createEmail, html, layout } from "@repo/email";
+import type { EmailEnv } from "@repo/email";
 
-export const auth = betterAuth({
-  // …
-  emailAndPassword: {
-    enabled: true,
-    requireEmailVerification: true, // was false — off until email existed
-    sendResetPassword: async ({ user, url }) => {
-      await createEmail(env).send({
-        to: user.email,
-        subject: "Reset your password",
-        html: layout({ title: "Reset your password", content: html`<p><a href="${url}">Choose a new password</a></p>` }),
-      });
-    },
-  },
-  emailVerification: {
-    sendVerificationEmail: async ({ user, url }) => {
-      await createEmail(env).send({
-        to: user.email,
-        subject: "Verify your email",
-        html: layout({ title: "Verify your email", content: html`<p><a href="${url}">Confirm this address</a></p>` }),
-      });
-    },
-  },
-});
+export function verificationMail() {
+  return {
+    id: "verification-mail",
+    init: () => ({
+      options: {
+        emailVerification: {
+          sendVerificationEmail: async ({ user, url }: { user: { email: string }; url: string }) => {
+            await createEmail(env as unknown as EmailEnv).send({
+              to: user.email,
+              subject: "Verify your email",
+              html: layout({ title: "Verify your email", content: html`<p><a href="${url}">Confirm this address</a></p>` }),
+            });
+          },
+        },
+      },
+    }),
+  } satisfies BetterAuthPlugin;
+}
 ```
 
-`packages/auth` reads `cloudflare:workers`' importable `env` because its `auth` export is a
-module-scope singleton — that's the one place `createEmail` isn't handed a request's `c.env`. Add
-`"@repo/email": "workspace:*"` to `packages/auth/package.json` when you do this, and don't turn
-`requireEmailVerification` on before a provider is installed and `EMAIL_PROVIDER` is set: sign-up
-will appear to hang.
+Then set `requireEmailVerification: true` in `auth`'s `emailAndPassword`. `packages/auth` reads `cloudflare:workers`' importable `env` because its `auth` export is a module-scope singleton, which is the one place `createEmail` is not handed a request's `c.env`. Do not turn `requireEmailVerification` on before a provider is installed and `EMAIL_PROVIDER` is set: sign-up will appear to hang.
 
-`auth.ts` builds two instances: `auth` for the client session at `/auth` and `adminAuth` for the admin session at `/admin/auth`. The block above goes on `auth`, where clients sign up. Both read one `users` and one `accounts` table, so a verified email and a new password count on both. If admins should reset a password from the admin app, add the same `sendResetPassword` to `adminAuth`'s `emailAndPassword` and keep its `disableSignUp: true`; the reset link then points at `/admin/auth`. See the `saasaloy-auth` skill.
+`auth.ts` builds two instances: `auth` for the client session at `/auth` and `adminAuth` for the admin session at `/admin/auth`. Both mails go on `auth`, where clients sign up. Both instances read one `users` and one `accounts` table, so a verified email and a new password count on both. See the `saasaloy-auth` skill.
 
 ## Boundaries to honor
 

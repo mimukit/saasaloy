@@ -15,17 +15,17 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
-import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
-import { FilterChips } from "@repo/ui/blocks/admin/filter-chips";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
+import { DetailPanel } from "@repo/ui/blocks/shell/detail-panel";
+import { FilterChips } from "@repo/ui/blocks/shell/filter-chips";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
-} from "@repo/ui/components/admin/alert";
-import { Button } from "@repo/ui/components/admin/button";
+} from "@repo/ui/components/shell/alert";
+import { Button } from "@repo/ui/components/shell/button";
 import {
   Dialog,
   DialogClose,
@@ -35,21 +35,21 @@ import {
   DialogPanel,
   DialogPopup,
   DialogTitle,
-} from "@repo/ui/components/admin/dialog";
-import { Field, FieldLabel } from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
+} from "@repo/ui/components/shell/dialog";
+import { Field, FieldLabel } from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
 import {
   Select,
   SelectItem,
   SelectPopup,
   SelectTrigger,
   SelectValue,
-} from "@repo/ui/components/admin/select";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import type { StatusTone } from "@repo/ui/components/admin/status-pill";
-import { Textarea } from "@repo/ui/components/admin/textarea";
-import { toastManager } from "@repo/ui/components/admin/toast";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+} from "@repo/ui/components/shell/select";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import type { StatusTone } from "@repo/ui/components/shell/status-pill";
+import { Textarea } from "@repo/ui/components/shell/textarea";
+import { toastManager } from "@repo/ui/components/shell/toast";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 
 import { api } from "@admin/lib/api";
 

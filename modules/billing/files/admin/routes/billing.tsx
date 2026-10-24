@@ -15,14 +15,14 @@ import {
 } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
-import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
-import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { Badge } from "@repo/ui/components/admin/badge";
-import { Button, buttonVariants } from "@repo/ui/components/admin/button";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
+import { DetailPanel } from "@repo/ui/blocks/shell/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/shell/empty-state";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { Badge } from "@repo/ui/components/shell/badge";
+import { Button, buttonVariants } from "@repo/ui/components/shell/button";
 import {
   Card,
   CardAction,
@@ -30,12 +30,12 @@ import {
   CardHeader,
   CardPanel,
   CardTitle,
-} from "@repo/ui/components/admin/card";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import type { StatusTone } from "@repo/ui/components/admin/status-pill";
-import { toastManager } from "@repo/ui/components/admin/toast";
-import { PageBody } from "@repo/ui/containers/admin/page-body";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+} from "@repo/ui/components/shell/card";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import type { StatusTone } from "@repo/ui/components/shell/status-pill";
+import { toastManager } from "@repo/ui/components/shell/toast";
+import { PageBody } from "@repo/ui/containers/shell/page-body";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
 import { api } from "@admin/lib/api";

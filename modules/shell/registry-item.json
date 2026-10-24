@@ -1,0 +1,283 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "shell",
+  "type": "saasaloy:capability",
+  "description": "The frame, primitives and blocks every signed-in SPA renders: layout, nav, user menu, theme toggle, data table and the coss primitive set under @repo/ui/*/shell.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.7.0"
+  },
+  "dependsOn": [],
+  "dependencies": [],
+  "patches": [
+    {
+      "file": "packages/ui/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@tanstack/react-table",
+      "range": "9.2.4"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/ui/assets/shell/assets.d.ts",
+      "target": "@ui/assets/shell/assets.d.ts"
+    },
+    {
+      "path": "files/ui/assets/shell/brand-mark.svg",
+      "target": "@ui/assets/shell/brand-mark.svg"
+    },
+    {
+      "path": "files/ui/blocks/shell/attribute-list.tsx",
+      "target": "@ui/blocks/shell/attribute-list.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/brand-mark.tsx",
+      "target": "@ui/blocks/shell/brand-mark.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/data-table-cards.ts",
+      "target": "@ui/blocks/shell/data-table-cards.ts"
+    },
+    {
+      "path": "files/ui/blocks/shell/data-table.tsx",
+      "target": "@ui/blocks/shell/data-table.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/detail-panel.tsx",
+      "target": "@ui/blocks/shell/detail-panel.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/empty-state.tsx",
+      "target": "@ui/blocks/shell/empty-state.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/error-state.tsx",
+      "target": "@ui/blocks/shell/error-state.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/filter-chips.tsx",
+      "target": "@ui/blocks/shell/filter-chips.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/page-header.tsx",
+      "target": "@ui/blocks/shell/page-header.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/page-skeleton.tsx",
+      "target": "@ui/blocks/shell/page-skeleton.tsx"
+    },
+    {
+      "path": "files/ui/blocks/shell/theme-toggle.tsx",
+      "target": "@ui/blocks/shell/theme-toggle.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/NOTICE.md",
+      "target": "@ui/components/shell/NOTICE.md"
+    },
+    {
+      "path": "files/ui/components/shell/alert-dialog.tsx",
+      "target": "@ui/components/shell/alert-dialog.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/alert.tsx",
+      "target": "@ui/components/shell/alert.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/avatar.tsx",
+      "target": "@ui/components/shell/avatar.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/badge.tsx",
+      "target": "@ui/components/shell/badge.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/breadcrumb.tsx",
+      "target": "@ui/components/shell/breadcrumb.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/button.tsx",
+      "target": "@ui/components/shell/button.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/card.tsx",
+      "target": "@ui/components/shell/card.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/checkbox.tsx",
+      "target": "@ui/components/shell/checkbox.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/collapsible.tsx",
+      "target": "@ui/components/shell/collapsible.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/combobox.tsx",
+      "target": "@ui/components/shell/combobox.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/dialog.tsx",
+      "target": "@ui/components/shell/dialog.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/empty.tsx",
+      "target": "@ui/components/shell/empty.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/field.tsx",
+      "target": "@ui/components/shell/field.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/fieldset.tsx",
+      "target": "@ui/components/shell/fieldset.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/form.tsx",
+      "target": "@ui/components/shell/form.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/group.tsx",
+      "target": "@ui/components/shell/group.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/input-group.tsx",
+      "target": "@ui/components/shell/input-group.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/input.tsx",
+      "target": "@ui/components/shell/input.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/kbd.tsx",
+      "target": "@ui/components/shell/kbd.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/label.tsx",
+      "target": "@ui/components/shell/label.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/menu.tsx",
+      "target": "@ui/components/shell/menu.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/meter.tsx",
+      "target": "@ui/components/shell/meter.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/popover.tsx",
+      "target": "@ui/components/shell/popover.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/radio-group.tsx",
+      "target": "@ui/components/shell/radio-group.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/scroll-area.tsx",
+      "target": "@ui/components/shell/scroll-area.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/select.tsx",
+      "target": "@ui/components/shell/select.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/separator.tsx",
+      "target": "@ui/components/shell/separator.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/sheet.tsx",
+      "target": "@ui/components/shell/sheet.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/sidebar.tsx",
+      "target": "@ui/components/shell/sidebar.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/skeleton.tsx",
+      "target": "@ui/components/shell/skeleton.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/spinner.tsx",
+      "target": "@ui/components/shell/spinner.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/status-pill.tsx",
+      "target": "@ui/components/shell/status-pill.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/switch.tsx",
+      "target": "@ui/components/shell/switch.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/table.tsx",
+      "target": "@ui/components/shell/table.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/tabs.tsx",
+      "target": "@ui/components/shell/tabs.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/textarea.tsx",
+      "target": "@ui/components/shell/textarea.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/toast.tsx",
+      "target": "@ui/components/shell/toast.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/toggle-group.tsx",
+      "target": "@ui/components/shell/toggle-group.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/toggle.tsx",
+      "target": "@ui/components/shell/toggle.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/tooltip.tsx",
+      "target": "@ui/components/shell/tooltip.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/page-body.tsx",
+      "target": "@ui/containers/shell/page-body.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/page-frame.tsx",
+      "target": "@ui/containers/shell/page-frame.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/page-layout.tsx",
+      "target": "@ui/containers/shell/page-layout.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/shell-layout.tsx",
+      "target": "@ui/containers/shell/shell-layout.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/shell-nav.tsx",
+      "target": "@ui/containers/shell/shell-nav.tsx"
+    },
+    {
+      "path": "files/ui/containers/shell/shell-sidebar.tsx",
+      "target": "@ui/containers/shell/shell-sidebar.tsx"
+    },
+    {
+      "path": "files/ui/lib/shell/nav-counts.ts",
+      "target": "@ui/lib/shell/nav-counts.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/segmented-control.ts",
+      "target": "@ui/lib/shell/segmented-control.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/use-media-query.ts",
+      "target": "@ui/lib/shell/use-media-query.ts"
+    },
+    {
+      "path": "files/ui/styles/shell.css",
+      "target": "@ui/styles/shell.css"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-shell"]
+  }
+}

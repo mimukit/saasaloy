@@ -174,18 +174,22 @@ export default defineConfig({
       rules: { "unicorn/filename-case": "off" },
     },
 
-    // The admin app has its own primitive set in packages/ui/src/components/admin/, which
-    // `saasaloy add admin` writes. Its names repeat the base ones (`button`, `card`), so an
-    // editor's autocomplete offers both and the wrong one renders with no error, in the
-    // web app's styling. Inside the admin app and the admin folders of @repo/ui, a base
-    // primitive or a base block with an admin twin is a lint error. A project without the
-    // admin app has no file under these globs, so the rule never fires there.
+    // The signed-in apps share one primitive set in packages/ui/src/components/shell/,
+    // which `saasaloy add shell` writes (`admin` and `app` install it). Its names repeat
+    // the base ones (`button`, `card`), so an editor's autocomplete offers both and the
+    // wrong one renders with no error, in the web app's styling. Inside those apps and the
+    // shell, admin and auth folders of @repo/ui, a base primitive or a base block with a
+    // shell twin is a lint error. A project without a signed-in app has no file under
+    // these globs, so the rule never fires there.
     {
       files: [
         "apps/admin/**",
+        "apps/app/**",
         "packages/ui/src/blocks/admin/**",
-        "packages/ui/src/components/admin/**",
-        "packages/ui/src/containers/admin/**",
+        "packages/ui/src/blocks/auth/**",
+        "packages/ui/src/blocks/shell/**",
+        "packages/ui/src/components/shell/**",
+        "packages/ui/src/containers/shell/**",
       ],
       rules: {
         "no-restricted-imports": [
@@ -195,12 +199,12 @@ export default defineConfig({
               {
                 group: [
                   "@repo/ui/components/*",
-                  "!@repo/ui/components/admin/*",
+                  "!@repo/ui/components/shell/*",
                   "@repo/ui/blocks/error-state",
                   "@repo/ui/blocks/theme-toggle",
                 ],
                 message:
-                  "Admin code uses the admin set: import from @repo/ui/components/admin/* and @repo/ui/blocks/admin/*.",
+                  "Signed-in app code uses the shell set: import from @repo/ui/components/shell/* and @repo/ui/blocks/shell/*.",
               },
             ],
           },

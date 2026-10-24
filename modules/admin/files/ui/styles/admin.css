@@ -46,16 +46,11 @@
 
 @import "./globals.css";
 
-/* The admin primitive set, opted into by this app alone.
-
-   globals.css lists the primitives the landing page renders and stops there, because
-   Tailwind scans content rather than imports. The admin app renders only its own set in
-   components/admin/, never a base primitive, so it scans that folder and not the base
-   components. The blocks and containers it renders are already in globals.css's globs.
-
-   The path is relative to this file, so `../components/admin` is
-   packages/ui/src/components/admin. */
-@source "../components/admin/**/*.tsx";
+/* The shell's layer: the `@source` line for the shell primitive set, the defaults and the
+   colour mapping for the status pairs, the status pill tones and the sort accent, and the
+   skeleton and toast motion (see shell.css). The `:root` and `.dark` blocks below replace
+   every one of its default values with this app's measured ones. */
+@import "./shell.css";
 
 /* The `.dark` class, set before React mounts (see apps/admin/src/main.tsx). Declared
    here rather than in globals.css for the reason brand.css gives. */
@@ -124,7 +119,7 @@
   --status-bad: oklch(0.501 0.178 28.7);
   --status-bad-foreground: oklch(0.505 0.213 27.518);
 
-  /* The status pairs the admin primitives read. Each pair is a fill and a text tone:
+  /* The status pairs the shell primitives read. Each pair is a fill and a text tone:
      `--success` tints a badge or an alert, and `--success-foreground` is the darker
      text on that tint, never a contrast colour for a solid fill. `--destructive-foreground`
      follows the same rule for `--destructive`. Tailwind's 500 and 700 steps. */
@@ -203,8 +198,8 @@
 
 /* The colour mapping and the radius scale repeat brand.css's on purpose: each theme file
    holds its own `@theme inline` and `dark` variant, because globals.css holds neither
-   (brand.css says why). The `status-*` and `accent-sort` lines are the admin app's own:
-   the two extra accents and the status pill's three state tones. */
+   (brand.css says why). shell.css maps the status pairs, the status pill tones and the
+   sort accent, so this block maps only the shadcn set. */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -241,22 +236,6 @@
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-ring: var(--sidebar-ring);
-  --color-status-open: var(--status-open);
-  --color-status-open-foreground: var(--status-open-foreground);
-  --color-status-ok: var(--status-ok);
-  --color-status-ok-foreground: var(--status-ok-foreground);
-  --color-status-warn: var(--status-warn);
-  --color-status-warn-foreground: var(--status-warn-foreground);
-  --color-status-bad: var(--status-bad);
-  --color-status-bad-foreground: var(--status-bad-foreground);
-  --color-accent-sort: var(--accent-sort);
-  --color-destructive-foreground: var(--destructive-foreground);
-  --color-info: var(--info);
-  --color-info-foreground: var(--info-foreground);
-  --color-success: var(--success);
-  --color-success-foreground: var(--success-foreground);
-  --color-warning: var(--warning);
-  --color-warning-foreground: var(--warning-foreground);
 }
 
 @theme {
@@ -270,97 +249,15 @@
   --font-sans:
     "Inter Variable", ui-sans-serif, system-ui, sans-serif, "Apple Color Emoji",
     "Segoe UI Emoji", "Segoe UI Symbol", "Noto Color Emoji";
-
-  /* The motion the admin primitives name: the skeleton's shimmer and the toast's bump on
-     success and shake on error. The odd and even pairs are the same curve twice, so a
-     second toast of the same kind restarts the animation instead of skipping it. */
-  --animate-skeleton: skeleton 2s -1s infinite linear;
-  --animate-toast-success-odd: toast-success-odd 0.32s
-    cubic-bezier(0.5, 1, 0.89, 1);
-  --animate-toast-success-even: toast-success-even 0.32s
-    cubic-bezier(0.5, 1, 0.89, 1);
-  --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
-  --animate-toast-error-even: toast-error-even 0.28s
-    cubic-bezier(0.5, 1, 0.89, 1);
-
-  @keyframes skeleton {
-    to {
-      background-position: -200% 0;
-    }
-  }
-
-  @keyframes toast-success-odd {
-    0%,
-    100% {
-      scale: 1;
-    }
-
-    30% {
-      scale: 1.025;
-    }
-
-    60% {
-      scale: 0.99;
-    }
-  }
-
-  @keyframes toast-success-even {
-    0%,
-    100% {
-      scale: 1;
-    }
-
-    30% {
-      scale: 1.025;
-    }
-
-    60% {
-      scale: 0.99;
-    }
-  }
-
-  @keyframes toast-error-odd {
-    0%,
-    100% {
-      translate: 0 0;
-    }
-
-    25%,
-    75% {
-      translate: -3px 0;
-    }
-
-    50% {
-      translate: 3px 0;
-    }
-  }
-
-  @keyframes toast-error-even {
-    0%,
-    100% {
-      translate: 0 0;
-    }
-
-    25%,
-    75% {
-      translate: -3px 0;
-    }
-
-    50% {
-      translate: 3px 0;
-    }
-  }
 }
 
 @layer base {
   body {
     /* Inter ships contextual alternates and tabular figures behind feature flags. `cv11`
        gives the single-storey `l`/`g` the reference type uses; `ss01` is Inter's own
-       stylistic set for the same. Counts in the nav and the table sit in a right-aligned
-       column, so figures have to be the same width. */
+       stylistic set for the same. shell.css sets the tabular figures. */
     font-feature-settings:
       "cv11" 1,
       "ss01" 1;
-    font-variant-numeric: tabular-nums;
   }
 }

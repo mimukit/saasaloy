@@ -249,7 +249,7 @@ The admin app is a backoffice: dense lists, a detail panel beside them, and shor
 
 ## Apps
 
-This file covers the admin app, which `saasaloy add admin` installs. Its tokens live in `packages/ui/src/styles/admin.css`, which imports the shared `globals.css` and declares its own `:root` and `.dark` values, its `@theme inline` mapping and its radius scale. The web app has its own `apps/web/DESIGN.md` and `web.css`, and a change in one never reaches the other. A theme preset only ever targets `web.css`; nothing writes to `admin.css` but a person.
+This file covers the admin app, which `saasaloy add admin` installs. Its tokens live in `packages/ui/src/styles/admin.css`, which imports the shared `globals.css` and declares its own `:root` and `.dark` values, its `@theme inline` mapping and its radius scale. The web app has its own `apps/web/DESIGN.md` and `brand.css`, and a change in one never reaches the other. A theme preset only ever targets `brand.css`; nothing writes to `admin.css` but a person.
 
 ## Colors
 
@@ -281,14 +281,14 @@ The base radius is `0.75rem`. Controls and the content panel use `lg`. Cards and
 
 ## Components
 
-The primitives in `packages/ui/src/components/admin/` are the only controls admin code uses, and a lint rule enforces it. Buttons are 32 px tall from `sm` up and 36 px below it; inputs are 30 px and 34 px. Every control shows a 2 px focus ring in the `ring` tone. A primary button carries a faint inner highlight.
+The shell primitives in `packages/ui/src/components/shell/` are the only controls admin code uses, and a lint rule enforces it. Buttons are 32 px tall from `sm` up and 36 px below it; inputs are 30 px and 34 px. Every control shows a 2 px focus ring in the `ring` tone. A primary button carries a faint inner highlight.
 
-Lists use the data table: a muted header row, 44 px rows, the hover tone on hover and the accent tone on the selected row, and the orange sort indicator on the active column. An empty list shows the empty state, a loading page shows the page skeleton, and a failure shows the admin error state with the shared error copy. A create flow opens in a dialog, a destructive confirm uses the alert dialog, and every save reports its result in a toast.
+Lists use the data table: a muted header row, 44 px rows, the hover tone on hover and the accent tone on the selected row, and the orange sort indicator on the active column. An empty list shows the empty state, a loading page shows the page skeleton, and a failure shows the shell error state with the shared error copy. A create flow opens in a dialog, a destructive confirm uses the alert dialog, and every save reports its result in a toast.
 
 ## Do's and Don'ts
 
 - Read this file and `packages/ui/src/styles/admin.css` before you change the admin UI.
-- Import controls from `@repo/ui/components/admin/*`, and never from the base `@repo/ui/components/*`.
+- Import controls from `@repo/ui/components/shell/*`, and never from the base `@repo/ui/components/*`.
 - Pad with `--page-gutter` through PageHeader and PageBody; never write a page's own outer padding.
 - Keep light and dark token pairs together when you change a role.
 - Use `accent-sort` for the active sort column only, and a status pair only for a status.

@@ -3,7 +3,7 @@ import { RouterProvider, createRouter } from "@tanstack/react-router";
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 
-import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
+import { PageSkeleton } from "@repo/ui/blocks/shell/page-skeleton";
 import {
   getStoredTheme,
   hasChosenTheme,

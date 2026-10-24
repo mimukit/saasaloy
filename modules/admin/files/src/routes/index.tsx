@@ -4,10 +4,10 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 import { RefreshCwIcon } from "lucide-react";
 import { useMemo } from "react";
 
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
-import { Button, buttonVariants } from "@repo/ui/components/admin/button";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { Avatar, AvatarFallback } from "@repo/ui/components/shell/avatar";
+import { Button, buttonVariants } from "@repo/ui/components/shell/button";
 import {
   Card,
   CardAction,
@@ -15,10 +15,10 @@ import {
   CardHeader,
   CardPanel,
   CardTitle,
-} from "@repo/ui/components/admin/card";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import { PageBody } from "@repo/ui/containers/admin/page-body";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+} from "@repo/ui/components/shell/card";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import { PageBody } from "@repo/ui/containers/shell/page-body";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
 import { api } from "@admin/lib/api";
