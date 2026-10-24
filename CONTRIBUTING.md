@@ -277,6 +277,8 @@ starts from.
 | `lint:css` | `stylelint "**/*.css" --max-warnings 0` | the one CSS file we ship |
 | `format:check` | `prettier --check .` | everything except Markdown |
 
+For a quick local check, `pnpm format:check:cached` runs pass 4 with Prettier's cache, which cuts a repeat run from about 20s to about 5s. Keep the cache out of `format:check` itself. The cache key holds the Prettier version and options but not the plugin versions, so a plugin bump can leave a stale pass for a file that did not change, and `pnpm lint` is the gate the release preflight and CI run.
+
 `pnpm lint:fix` mirrors passes 1-3 — the type-aware oxlint invocation over the same two
 paths, then the plain one over everything, then Stylelint — each with `--fix` instead of
 its reporting flag; `pnpm format` is pass 4 with `--write`. Three things about this are
@@ -560,7 +562,7 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
 3. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-4. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices. Each database driver runs with each API key owner, and each project adds its driver first.
+4. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices. Each database driver runs with each API key owner, and each project adds its driver first. The projects and the development server check run at the same time.
 
 On a rerun after a transient failure you can skip step 3:
 

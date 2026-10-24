@@ -260,28 +260,58 @@ function run(
   }
 }
 
+/** A step that failed inside a check running beside others, with the lines worth showing. */
+class StepError extends Error {
+  readonly detail: string[];
+
+  constructor(message: string, detail: string[]) {
+    super(message);
+    this.name = "StepError";
+    this.detail = detail;
+  }
+}
+
 /**
- * `run`, with the output held back unless the command fails. Forty `saasaloy add` runs
- * would otherwise bury the one line that matters.
+ * Run a command with its output held back unless it fails, and reject with a `StepError`
+ * rather than exit. Forty `saasaloy add` runs would otherwise bury the one line that
+ * matters, and the full scaffolds run side by side, so their output would interleave.
  */
 function runQuiet(
   command: string,
   args: readonly string[],
   label: string,
   options: { cwd: string; env?: NodeJS.ProcessEnv }
-): void {
-  const result = spawnSync(command, args, {
-    cwd: options.cwd,
-    encoding: "utf-8",
-    env: options.env ?? process.env,
+): Promise<void> {
+  return new Promise((done, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let output = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      output += chunk.toString();
+    });
+    child.on("error", (error) => {
+      reject(new StepError(`${label} could not start`, [String(error)]));
+    });
+    child.on("close", (code) => {
+      if (code === 0) {
+        done();
+        return;
+      }
+      const lines = output.trim().split("\n").slice(-30);
+      reject(
+        new StepError(`${label} failed`, [
+          `exit code ${String(code)}`,
+          ...lines,
+        ])
+      );
+    });
   });
-  if (result.error) {
-    fail(`${label} could not start`, String(result.error));
-  }
-  if (result.status !== 0) {
-    const output = `${result.stdout}${result.stderr}`.trim().split("\n");
-    fail(`${label} failed`, ...output.slice(-30));
-  }
 }
 
 /** Every module in the local registry, with the modules each one conflicts with. */
@@ -321,16 +351,17 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
  * again. `add` formats the files it patches with the project's own Prettier, which only
  * exists after the first install.
  */
-function lintFullScaffold(
+async function lintFullScaffold(
   bin: string,
   scaffold: FullScaffold,
   env: NodeJS.ProcessEnv
-): void {
+): Promise<void> {
+  const started = Date.now();
   const dir = join(workDir, scaffold.name);
   step(
     `scaffolding ${scaffold.name} with ${String(scaffold.modules.length)} modules`
   );
-  runQuiet(
+  await runQuiet(
     bin,
     ["init", scaffold.name, "--no-install", "--no-git"],
     `saasaloy init ${scaffold.name}`,
@@ -339,23 +370,33 @@ function lintFullScaffold(
   // A real project is its own git repository, and oxlint honours `.gitignore` up to
   // the repository root. Without this one, oxlint walks up into this repo, whose
   // `.gitignore` excludes `.dev/`, and finds nothing to lint.
-  runQuiet("git", ["init", "--quiet"], `git init in ${scaffold.name}`, {
+  await runQuiet("git", ["init", "--quiet"], `git init in ${scaffold.name}`, {
     cwd: dir,
   });
-  runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+  await runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
     cwd: dir,
   });
   for (const name of scaffold.modules) {
-    runQuiet(bin, ["add", name, "--yes"], `saasaloy add ${name}`, {
-      cwd: dir,
-      env,
-    });
+    await runQuiet(
+      bin,
+      ["add", name, "--yes"],
+      `saasaloy add ${name} in ${scaffold.name}`,
+      { cwd: dir, env }
+    );
   }
-  runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
+  await runQuiet("pnpm", ["install"], `pnpm install in ${scaffold.name}`, {
     cwd: dir,
   });
   step(`running \`pnpm lint\` in ${scaffold.name}`);
-  run("pnpm", ["lint"], `pnpm lint in ${scaffold.name}`, { cwd: dir });
+  await runQuiet("pnpm", ["lint"], `pnpm lint in ${scaffold.name}`, {
+    cwd: dir,
+  });
+  step(`${scaffold.name} passes \`pnpm lint\` (${seconds(started)})`);
+}
+
+/** The time since `started`, as `12s`. */
+function seconds(started: number): string {
+  return `${String(Math.round((Date.now() - started) / 1000))}s`;
 }
 
 async function readManifest(file: string): Promise<Record<string, unknown>> {
@@ -582,10 +623,14 @@ async function main(): Promise<void> {
   run("pnpm", ["install"], "pnpm install", { cwd: projectDir });
 
   step(`starting \`astro dev\` in apps/web and requesting ${WEB_DEV_URL}`);
-  const devFailure = await checkWebDev(join(projectDir, "apps/web"));
-  if (devFailure !== null) {
-    fail("the web app's dev server failed", ...devFailure.split("\n"));
-  }
+  const webDev = checkWebDev(join(projectDir, "apps/web")).then((failure) => {
+    if (failure !== null) {
+      throw new StepError(
+        "the web app's dev server failed",
+        failure.split("\n")
+      );
+    }
+  });
 
   // --- Lint a project that holds every module (needs the network) -------------------
 
@@ -593,11 +638,31 @@ async function main(): Promise<void> {
   // project resolves the imports between workspaces, runs the type-aware pass over the
   // installed blocks, and formats the files `add` patches. Issue #152 found 54 errors
   // that only showed up here.
+  //
+  // The projects share nothing but the pnpm store, which takes concurrent installs, so
+  // they run side by side with the dev server check above. In sequence they were most
+  // of this script's time. Every check runs to its end, so one run reports every
+  // project that fails, not only the first.
   const scaffolds = fullScaffolds(
     await readModules(offlineEnv.SAASALOY_REGISTRY_DIR)
   );
-  for (const scaffold of scaffolds) {
-    lintFullScaffold(bin, scaffold, offlineEnv);
+  const results = await Promise.allSettled([
+    webDev,
+    ...scaffolds.map((scaffold) => lintFullScaffold(bin, scaffold, offlineEnv)),
+  ]);
+  const failures = results.flatMap((result) =>
+    result.status === "rejected" ? [result.reason as unknown] : []
+  );
+  for (const failure of failures) {
+    const message =
+      failure instanceof StepError ? failure.message : String(failure);
+    console.error(`release-smoke: ${message}`);
+    for (const line of failure instanceof StepError ? failure.detail : []) {
+      console.error(`  ${line}`);
+    }
+  }
+  if (failures.length > 0) {
+    fail(`${String(failures.length)} check(s) failed, listed above`);
   }
 
   if (!options.keep) {
