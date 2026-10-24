@@ -18,7 +18,13 @@ import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
 //
 // Shape, one area per top-level destination:
 //
-//   { label, to, icon, count?, groups: [{ label, items: [{ to, label, icon, count? }] }] }
+//   { label, to, icon, count?, groups: [{ label, items: [{ to, label, icon, count?, shortcut? }] }] }
+//
+// `shortcut` is the row's key sequence, `G` then a letter, written with a space: "G U".
+// Pick the letter by hand and never derive it from the label, so "Users" and a later
+// "Usage" cannot collide. components/commands.ts turns each row into a "Go to" command
+// that carries it, and components/commands.test.ts fails on two rows with one shortcut.
+// It binds only when the `command` module is installed; without it the key does nothing.
 //
 // The seed ships one area, "Admin", with one group. The sidebar lists every area's groups
 // in order, and the area's label is the first step of the header's page path; nothing
@@ -32,8 +38,8 @@ export const NAV_AREAS = [
       {
         label: "Manage",
         items: [
-          { to: "/", label: "Overview", icon: GaugeIcon },
-          { to: "/users", label: "Users", icon: UsersIcon },
+          { to: "/", label: "Overview", icon: GaugeIcon, shortcut: "G O" },
+          { to: "/users", label: "Users", icon: UsersIcon, shortcut: "G U" },
         ],
       },
     ],
@@ -63,6 +69,17 @@ export function navCount(entry: {
   readonly count?: number;
 }): number | undefined {
   return entry.count;
+}
+
+/**
+ * The optional key sequence on a nav row, read the way `navCount` reads a count and for
+ * the same reason: a row that omits `shortcut` has no such key on its `as const` type.
+ */
+export function navShortcut(entry: {
+  readonly label: string;
+  readonly shortcut?: string;
+}): string | undefined {
+  return entry.shortcut;
 }
 
 /**

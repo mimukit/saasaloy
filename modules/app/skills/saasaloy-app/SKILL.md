@@ -35,12 +35,12 @@ After `saasaloy add app`:
 
 Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`; never edit that file by hand.
 
-Then put it in the sidebar: add a row to `NAV_AREAS` in `src/components/nav.ts`. The `to` is checked against the route tree, so a typo fails `pnpm typecheck`.
+Then put it in the sidebar: add a row to `NAV_AREAS` in `src/components/nav.ts`. The `to` is checked against the route tree, so a typo fails `pnpm typecheck`. A row takes an optional `shortcut`, `G` then a letter written as `"G P"`; pick the letter by hand and keep it unique, because the tool repo's `commands.test.ts` fails on two rows with one shortcut. Every row becomes a "Go to <label>" command in `src/components/commands.ts`, which `AppShell` declares next to sign out and the three theme choices. A screen declares its own with `useCommands(commands, { scope: "route", label })`. They do nothing until the `command` module is installed, which appends itself to `src/components/shell-extensions.ts`.
 
 ```ts
 items: [
-  { to: "/", label: "Home", icon: HouseIcon },
-  { to: "/projects", label: "Projects", icon: FolderIcon },
+  { to: "/", label: "Home", icon: HouseIcon, shortcut: "G H" },
+  { to: "/projects", label: "Projects", icon: FolderIcon, shortcut: "G P" },
 ],
 ```
 

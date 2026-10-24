@@ -123,8 +123,8 @@ export const NAV_AREAS = [
       {
         label: "Manage",
         items: [
-          { to: "/", label: "Overview", icon: GaugeIcon },
-          { to: "/users", label: "Users", icon: UsersIcon },
+          { to: "/", label: "Overview", icon: GaugeIcon, shortcut: "G O" },
+          { to: "/users", label: "Users", icon: UsersIcon, shortcut: "G U" },
         ],
       },
     ],
@@ -132,13 +132,15 @@ export const NAV_AREAS = [
 ] as const;
 ```
 
-- **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count`. A feature module adds its row with a `nav-entry` patch.
+- **A new nav row** is one entry in an existing group's `items`. It needs `to`, `label` and `icon`, and takes an optional `count` and an optional `shortcut`, `G` then a letter written as `"G R"`. Pick the letter by hand and keep it unique; the tool repo's `commands.test.ts` fails on two rows with one shortcut, and the `command` module reports a conflict. A feature module adds its row with a `nav-entry` patch.
 - **A new group** is one entry in an area's `groups`, with a `label` and its own `items`. The sidebar renders it under the ones above it, with its label.
 - **A new area** is one entry in `NAV_AREAS`. The sidebar lists every area's groups in order, and `areaFor(pathname)` picks the area whose label starts the header's page path.
 
 Keep the `as const`. It is what holds every `to` at a literal type the router can check, so a nav entry naming a route that does not exist fails `pnpm typecheck` instead of 404-ing in the browser. The shell in `@repo/ui` reads the entries through structural types with `to: string`; the one cast from that string back to a route lives in `AppShell`'s link component.
 
-`nav.ts` holds the data and the two rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
+Every row becomes a "Go to <label>" command in `src/components/commands.ts`, next to sign out and the three theme choices. `AppShell` declares them in the `global` scope, and a page declares its own with `useCommands(commands, { scope: "route", label })`, as `src/routes/users.tsx` does for its filters. They do nothing until the `command` module is installed; see "Declare a screen's commands" in the `saasaloy-shell` skill. `src/components/shell-extensions.ts` is the list a module such as `command` appends itself to; keep its `extensions` property even while it is empty.
+
+`nav.ts` holds the data and the rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
 
 ### Add a live count to a nav row
 

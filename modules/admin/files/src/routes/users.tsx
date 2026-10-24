@@ -16,6 +16,8 @@ import { Button } from "@repo/ui/components/shell/button";
 import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
+import { useCommands } from "@repo/ui/lib/shell/commands";
+import type { Command } from "@repo/ui/lib/shell/commands";
 
 import { ADMIN_ROLE } from "@admin/lib/auth";
 import { initialsOf } from "@admin/lib/initials";
@@ -178,6 +180,48 @@ function Users() {
   );
 
   const selected = users.find((user) => user.id === selectedId);
+
+  // This page's commands. They drive the same state the chips and the panel's close
+  // button do, and the palette lists them first, under "Users". Each one hides while it
+  // would do nothing. With no `command` module installed, the call does nothing.
+  //
+  // Closing the panel has no Escape binding on purpose. The table already binds Escape
+  // in its `data-table` scope, which is live on this page too, and one chord in two
+  // overlapping scopes is a conflict. The panel's close is a palette row instead.
+  const commands: Command[] = [
+    {
+      id: "admin.show-admins",
+      title: "Show admins",
+      group: "page",
+      keywords: ["filter", "role"],
+      icon: ShieldIcon,
+      when: () => roleFilter !== ADMIN_ROLE,
+      run: () => {
+        setRoleFilter(ADMIN_ROLE);
+      },
+    },
+    {
+      id: "admin.show-all-users",
+      title: "Show all users",
+      group: "page",
+      keywords: ["filter", "clear"],
+      icon: UsersIcon,
+      when: () => roleFilter !== "all",
+      run: () => {
+        setRoleFilter("all");
+      },
+    },
+    {
+      id: "admin.close-user-details",
+      title: "Close user details",
+      group: "page",
+      when: () => selectedId !== null,
+      run: () => {
+        setSelectedId(null);
+      },
+    },
+  ];
+  useCommands(commands, { scope: "route", label: "Users" });
 
   return (
     <PageLayout

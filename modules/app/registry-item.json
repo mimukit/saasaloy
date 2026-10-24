@@ -120,6 +120,14 @@
           "target": "src/components/nav.ts"
         },
         {
+          "path": "files/src/components/commands.ts",
+          "target": "src/components/commands.ts"
+        },
+        {
+          "path": "files/src/components/shell-extensions.ts",
+          "target": "src/components/shell-extensions.ts"
+        },
+        {
           "path": "files/src/components/use-sign-out.ts",
           "target": "src/components/use-sign-out.ts"
         },

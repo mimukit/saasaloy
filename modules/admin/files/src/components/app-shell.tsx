@@ -1,13 +1,17 @@
 import { useQueries } from "@tanstack/react-query";
-import { Link, useRouterState } from "@tanstack/react-router";
+import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { applyThemeChoice } from "@repo/ui/blocks/shell/theme-toggle";
 import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
 import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
+import { useCommands } from "@repo/ui/lib/shell/commands";
 
+import { adminCommands } from "@admin/components/commands";
 import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { NAV_COUNTS } from "@admin/components/nav-counts";
+import { shellExtensions } from "@admin/components/shell-extensions";
 import { useSignOut } from "@admin/components/sign-out-button";
 import { API_CREDENTIALS, API_HEADERS } from "@admin/lib/api";
 import { apiBaseUrl } from "@admin/lib/auth";
@@ -94,6 +98,32 @@ function useNavCounts(): Record<string, number | undefined> {
   });
 }
 
+/**
+ * Declares the app's own commands: Go to each nav row, sign out, and the theme choices.
+ * It renders nothing. It sits inside ShellLayout, not in AppShell's own body, because a
+ * shell extension's provider wraps the layout: a `useCommands` call in AppShell would run
+ * above that provider and register nothing. With no `command` module installed, no
+ * provider is mounted and the call does nothing.
+ */
+function AdminCommands({ signOut }: { signOut: () => Promise<void> }) {
+  const navigate = useNavigate();
+  useCommands(
+    adminCommands({
+      navigate: (to) => {
+        void navigate({ to });
+      },
+      signOut: () => {
+        void signOut();
+      },
+      setTheme: (theme) => {
+        applyThemeChoice(theme);
+      },
+    }),
+    { scope: "global" }
+  );
+  return null;
+}
+
 export function AppShell({
   session,
   children,
@@ -124,8 +154,10 @@ export function AppShell({
       link={ShellNavLink}
       account={{ name, email: session.user.email, initials: initialsOf(name) }}
       signOut={signOut}
+      extensions={shellExtensions}
       counts={counts}
     >
+      <AdminCommands signOut={signOut.signOut} />
       {children}
     </ShellLayout>
   );
