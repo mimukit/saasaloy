@@ -62,6 +62,13 @@
         "name": "r2Env",
         "from": "./env/r2"
       }
+    },
+    {
+      "file": "packages/storage/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@cloudflare/workers-types",
+      "range": "5.20261001.1"
     }
   ],
   "files": [
