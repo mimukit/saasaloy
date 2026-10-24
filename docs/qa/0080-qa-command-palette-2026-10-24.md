@@ -1,6 +1,6 @@
 # QA Plan: Command palette and keyboard shortcuts (#264)
 
-_Generated 2026-10-24, updated 2026-10-24 after the fix round · against `e11aa747` (clean) · covers the `command` module, the shell command contract, and the admin and app commands_
+_Generated 2026-10-24, updated 2026-10-24 after the review fixes · against `dce4c594` (clean) · covers the `command` module, the shell command contract, and the admin and app commands_
 
 ## Summary
 - Cmd/Ctrl+K opens a command palette, `G` then a letter goes to a screen, single keys act on a data table, and `?` lists every shortcut, in admin and in the customer app.
@@ -9,7 +9,7 @@ _Generated 2026-10-24, updated 2026-10-24 after the fix round · against `e11aa7
 ## Environment
 True for the whole plan. Do this once, before Scenario 1.
 
-- Branch: `issue-264-add-the-cmd-k-command-palette-and-shortcut` at `e11aa747`.
+- Branch: `issue-264-add-the-cmd-k-command-palette-and-shortcut` at `dce4c594`.
 - Playground: `.dev/playground` with the `admin`, `app` and `command` modules installed.
 - Admin: `http://localhost:3001`, sign in as `admin@example.test`.
 - App: `http://localhost:3002`, sign in as `member@example.test`.
@@ -191,15 +191,15 @@ pnpm test
 pnpm deps:check
 ```
 
-- ✅ `pnpm lint` → exit 0 at `e11aa747`, all four passes clean.
-- ✅ `pnpm typecheck` → exit 0 at `e11aa747`.
-- ✅ `pnpm test` → exit 0 at `e11aa747`; the suites report 990, 90 and 461 tests, 0 failed. This includes the registry tests (conflicts, sequence prefixes, `when`, scope, group order), the commands tests for admin and app (every nav row has a command, no shortcut repeats), and the `update-deps` case for a 0.x minor bump.
+- ✅ `pnpm lint` → exit 0 at `dce4c594`, all four passes clean.
+- ✅ `pnpm typecheck` → exit 0 at `dce4c594`.
+- ✅ `pnpm test` → exit 0 at `dce4c594`; the suites report 997, 90 and 462 tests, 0 failed, including the default key map conflict test per app. This includes the registry tests (conflicts, sequence prefixes, `when`, scope, group order), the commands tests for admin and app (every nav row has a command, no shortcut repeats), and the `update-deps` case for a 0.x minor bump.
 - ❌ `pnpm deps:check` → exit 1, "91 outdated · 84 up-to-date". The two new pins, `@tanstack/react-hotkeys` 0.16.0 and `@leeoniya/ufuzzy` 1.0.19, are up to date. The acceptance check ran it on `main` at `53e9d332`: exit 1, "91 outdated · 82 up-to-date". The failure is drift on `main`, not this branch.
 - ✅ `./saasaloy add command` in `.dev/playground` → writes the `commandExtension()` patch into both apps' `shell-extensions.ts` and both exact pins into `packages/ui/package.json`. The playground typecheck, lint, and the admin and app builds exit 0. This ran on the Phase 4 tree, which holds the same code as `5b2deb9f`.
 - ✅ Commit `767ee3dc` holds only `scripts/update-deps.ts` and `scripts/update-deps.test.ts`.
 
 ### Browser checks
-_Driven with `playwright-core` 1.64 headless Chromium (Linux, so keycaps read Ctrl) against `http://localhost:3001` and `http://localhost:3002` at `e11aa747`. Every check below ran again after the fix round. Screenshots in `/tmp/qakit/0080-qa-command-palette-2026-10-24/`._
+_Driven with `playwright-core` 1.64 headless Chromium (Linux, so keycaps read Ctrl) against `http://localhost:3001` and `http://localhost:3002` at `dce4c594`. Every check below ran again after the fix round and again after the review fixes. Screenshots in `/tmp/qakit/0080-qa-command-palette-2026-10-24/`._
 
 Admin, at 1280 px and at 360 px unless one width is named:
 
