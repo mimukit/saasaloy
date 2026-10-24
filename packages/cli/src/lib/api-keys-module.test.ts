@@ -4,7 +4,7 @@ import { describe, expect, it } from "vitest";
 import { validateRegistryItem } from "./schema.js";
 import { satisfies } from "./semver.js";
 
-// The `api-keys` split (#229, ADR 0048), read off disk. The core holds what every owner
+// The `api-keys` split (#229, ADR 0055), read off disk. The core holds what every owner
 // shares, and each owner holds what differs. An installed project moves from the old
 // single module to the pair by `add api-keys-organization`, which only works while the
 // moved files keep their targets and the two `auth.ts` patches stay in the core. So the
@@ -101,7 +101,7 @@ describe("the api-keys-organization owner", () => {
     });
     expect(descriptor.dependsOn).toStrictEqual(["api-keys", "multitenant"]);
     expect(descriptor.conflictsWith).toStrictEqual(["api-keys-user"]);
-    // One skill in the core covers both modes (plan 0075, Q12).
+    // One skill in the core covers both modes (plan 0083, Q12).
     expect(descriptor.agent).toBeUndefined();
   });
 

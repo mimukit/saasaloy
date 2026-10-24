@@ -4,7 +4,7 @@
 
 ## Status
 
-accepted, amended 2026-10-22 by [ADR 0048](0048-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)
+accepted, amended 2026-10-22 by [ADR 0055](0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)
 
 ## Considered Options
 
@@ -22,4 +22,4 @@ accepted, amended 2026-10-22 by [ADR 0048](0048-adr-an-api-key-owner-is-a-driver
 
 ## Amendment — 2026-10-22: in user mode the ceiling is the key vocabulary
 
-ADR 0048 splits the owner. Under `api-keys-user` there are no roles, so `apiKeyScopeGuard()` checks the requested scope against `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts`, not against the creator's statements, and it checks every create, with or without a session. The transport is unchanged in both modes: the scope travels as `metadata.scope`, `defaultPermissions` writes it to `permissions`, and only `permissions` is authoritative.
+ADR 0055 splits the owner. Under `api-keys-user` there are no roles, so `apiKeyScopeGuard()` checks the requested scope against `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts`, not against the creator's statements, and it checks every create, with or without a session. The transport is unchanged in both modes: the scope travels as `metadata.scope`, `defaultPermissions` writes it to `permissions`, and only `permissions` is authoritative.

@@ -5,7 +5,7 @@ description: Runbook for the api-keys capability, which gives a machine caller a
 
 # api-keys
 
-`api-keys` gives a caller with no cookie a credential it presents as `Authorization: Bearer sk_…`. Who owns a key is a choice the project makes once, at `add` time, the way it picks a database driver (ADR 0048):
+`api-keys` gives a caller with no cookie a credential it presents as `Authorization: Bearer sk_…`. Who owns a key is a choice the project makes once, at `add` time, the way it picks a database driver (ADR 0055):
 
 | Owner module | A key belongs to | Pulls in | Route gate |
 | --- | --- | --- | --- |

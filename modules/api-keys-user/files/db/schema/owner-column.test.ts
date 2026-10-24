@@ -1,6 +1,6 @@
 // Guards what makes `api_keys` a user's table in both schema variants: the `user_id`
 // column, its cascading foreign key to `users`, and the index the owner lookups use.
-// Deleting an account must delete its keys (plan 0075, Q11), and a variant that drops the
+// Deleting an account must delete its keys (plan 0083, Q11), and a variant that drops the
 // cascade would leave a live credential for a user who no longer exists.
 //
 // It is NOT in the descriptor's `files` list, so `add api-keys-user` never copies it into

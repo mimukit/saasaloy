@@ -8,7 +8,7 @@
 //
 // The last block imports `teams`' `permission-rules.ts` across module folders. Both files
 // stay import-free, so the cross-module import costs nothing at runtime, and it is how the
-// refusal text of the two modes is held to one format (plan 0075, Q2).
+// refusal text of the two modes is held to one format (plan 0083, Q2).
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
