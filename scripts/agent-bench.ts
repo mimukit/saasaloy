@@ -14,9 +14,13 @@
 // to `.dev/bench/<run-id>.out/`, outside the folder the agent sees.
 //
 // The agent's folder sits inside this repo, so the run walls it off from the repo:
-//   - `CLAUDE_CONFIG_DIR` is a fresh folder, so this box's user instructions, skills,
-//     plugins and hooks do not load, and `claudeMdExcludes` names this repo's own
-//     CLAUDE.md and AGENTS.md, which Claude Code would otherwise read from the parent.
+//   - `CLAUDE_CONFIG_DIR` is a fresh folder, so this box's user settings, skills,
+//     plugins and hooks do not load. `claudeMdExcludes` names this repo's own CLAUDE.md
+//     and AGENTS.md, which Claude Code would otherwise read from the parent, and
+//     `~/.claude/CLAUDE.md`, which Claude Code reads even with a fresh config folder.
+//   - Two leaks stay: this repo's project skills (`.claude/skills/`) still load, and
+//     nothing stops the agent reading the repo itself with `cd ../../..`. Only a folder
+//     outside the repo, or a mount namespace, would close them.
 //   - `GIT_CEILING_DIRECTORIES` stops git at `.dev/bench`, so the agent's commits land in
 //     the project it makes and never on this repo's branch.
 //   - `GITHUB_TOKEN` and `GH_TOKEN` are removed, so nothing the agent runs can push.
@@ -169,7 +173,11 @@ async function runAgent(): Promise<number> {
   const configDir = await isolatedConfig(outDir);
   const prompt = readFileSync(join(fixtures, "prompt.md"), "utf-8").trim();
   const settings = JSON.stringify({
-    claudeMdExcludes: [join(root, "CLAUDE.md"), join(root, "AGENTS.md")],
+    claudeMdExcludes: [
+      join(root, "CLAUDE.md"),
+      join(root, "AGENTS.md"),
+      join(homedir(), ".claude/CLAUDE.md"),
+    ],
   });
   const args = [
     "-p",
