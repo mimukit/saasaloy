@@ -179,6 +179,10 @@ describe(runNew, () => {
     expect(reports.flatMap((report) => report.findings)).toStrictEqual([]);
     expect(code).toBe(0);
     expect(out).not.toContain("Doctor");
+    // The TODO description is a warning: said, and the scaffold still passes.
+    expect(out).toContain("Still to write");
+    expect(out).toContain("/description");
+    expect(out).toContain("is ready");
   });
 
   it("records the dependencies the author named", async () => {

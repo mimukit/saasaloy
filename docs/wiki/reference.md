@@ -49,7 +49,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 
 ### JSON output
 
-`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. Every document starts with `"schemaVersion": 1`. A breaking change to a document's shape bumps that number, and a new field does not.
+`list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with `"schemaVersion": 1`. A breaking change to a document's shape bumps that number, and a new field does not.
 
 `--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
 
@@ -373,7 +373,7 @@ Scaffold a module in a registry repo. `module` is the only noun there is, and th
 
 Both value flags take `--type feature` and `--type=feature`. A value flag with nothing usable after it is a usage error, not a silently empty value. The one exception is an empty `--depends-on`, which answers "no dependencies".
 
-It writes three paths under `modules/<name>/`: `registry-item.json`, `files/.gitkeep`, and `skills/saasaloy-<name>/SKILL.md`. The descriptor declares a `requires.saasaloy` range floored at the running CLI's own minor, a `TODO` `description` for you to replace, `stage: "mvp"` and `needs: []`, so it passes `doctor` from the start. The name must match `^[a-z0-9][a-z0-9-]*$`, and the folder must not already exist; either problem refuses before anything is written.
+It writes three paths under `modules/<name>/`: `registry-item.json`, `files/.gitkeep`, and `skills/saasaloy-<name>/SKILL.md`. The descriptor declares a `requires.saasaloy` range floored at the running CLI's own minor, a `TODO` `description` for you to replace, `stage: "mvp"` and `needs: []`, so it passes `doctor` from the start. `doctor` warns on the `TODO` line until you replace it, and `new` prints that warning under **Still to write**. The name must match `^[a-z0-9][a-z0-9-]*$`, and the folder must not already exist; either problem refuses before anything is written.
 
 After the write, `new` runs the same checks `saasaloy doctor` runs, in process. Findings are reported, not refused: the run still exits 0 with "Scaffolded with N findings — fix <dir>/registry-item.json, then `saasaloy doctor <dir>`." A clean scaffold ends with "<name> is ready — put its payload in <dir>/files/ and write its runbook in <dir>/skills/."
 
@@ -387,7 +387,7 @@ saasaloy doctor [<path>] [--json]
 
 Validate what is on disk. Nothing named checks the current directory. `doctor` picks its mode by what the path carries: a `saasaloy.json` means project mode, anything else means registry mode. Its one flag is `--json`, and it never writes.
 
-Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. Besides the schema, it checks what the schema cannot, among them declared files on disk, known aliases, sibling module names, exact-pinned dependencies, the skill folder, and a `description` on every descriptor. The schema keeps `description` optional so a project can still read an older descriptor, but a registry without one fails here. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
+Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. Besides the schema, it checks what the schema cannot, among them declared files on disk, known aliases, sibling module names, exact-pinned dependencies, the skill folder, and a `description` on every descriptor. The schema keeps `description` optional so a project can still read an older descriptor, but a registry without one fails here. A `description` that still starts with `TODO`, as `new module` writes it, is a warning: it prints in a **Warnings** box and never fails the run. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
 
 Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
 
@@ -395,7 +395,7 @@ Below the base box, project mode asks three questions: a module in `installed` t
 
 A path that does not exist exits 2, and so does a directory with no module folders in it.
 
-`--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module` and its `findings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
+`--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module`, its `findings` and its `warnings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
 
 ## Module coordinates
 

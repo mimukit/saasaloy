@@ -20,7 +20,7 @@ import {
   readPolicyState,
   resolveDoctorTarget,
 } from "../lib/doctor.js";
-import type { BaseReport, ModuleReport } from "../lib/doctor.js";
+import type { BaseReport, Finding, ModuleReport } from "../lib/doctor.js";
 import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { pathExists, readIfPresent } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
@@ -127,20 +127,14 @@ function renderBase(report: BaseReport): string {
   return lines.join("\n");
 }
 
-/** The project side of `doctor`: what `saasaloy.json` and the manifest say about each other. */
 /** A finding as `doctor --json` prints it: the module, the pointer and the sentence. */
-function findingJson(found: {
-  module: string;
-  where: string;
-  message: string;
-}): {
-  module: string;
-  where: string;
-  message: string;
-} {
+function findingJson(
+  found: Finding
+): Pick<Finding, "message" | "module" | "where"> {
   return { message: found.message, module: found.module, where: found.where };
 }
 
+/** The project side of `doctor`: what `saasaloy.json` and the manifest say about each other. */
 async function reportProject(path: string, out: Output): Promise<number> {
   const config = await loadConfig(path);
   const manifest = await loadManifest(path);
@@ -283,10 +277,28 @@ export async function runDoctor(argv: string[]): Promise<number> {
         modules: reports.map((report) => ({
           findings: report.findings.map(findingJson),
           module: report.module,
+          warnings: report.warnings.map(findingJson),
         })),
         path,
         problems: total,
       });
+    }
+
+    // Warnings print whatever the problems say, and none of them turns exit 0 into 2.
+    const warned = reports.flatMap((report) => report.warnings);
+    if (warned.length > 0) {
+      note(
+        wrapForNote(
+          warned
+            .map(
+              (found) =>
+                `${pc.yellow("!")} ${pc.cyan(found.module)} ${pc.yellow(found.where)}  ${found.message}`
+            )
+            .join("\n")
+        ),
+        `${pc.yellow("Warnings")} ${pc.dim(`(${warned.length})`)}`,
+        out.tui
+      );
     }
 
     if (bad.length === 0) {

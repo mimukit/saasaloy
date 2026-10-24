@@ -50,7 +50,13 @@ export interface ModuleReport {
   module: string;
   /** Absolute path of the module folder. */
   dir: string;
+  /** Problems: any one of them makes `doctor` exit 2. */
   findings: Finding[];
+  /**
+   * Said, never failed on, like the project side's deploy warnings: a fresh `new module`
+   * scaffold passes `doctor` and is still told what is left to write.
+   */
+  warnings: Finding[];
 }
 
 /** The aliases a descriptor's `files[].target` may name. */
@@ -164,7 +170,8 @@ export async function checkModule(
   const { aliases, dir, siblings } = input;
   const module = basename(dir);
   const findings: Finding[] = [];
-  const report = (): ModuleReport => ({ dir, findings, module });
+  const warnings: Finding[] = [];
+  const report = (): ModuleReport => ({ dir, findings, module, warnings });
 
   const file = join(dir, "registry-item.json");
   if (!(await pathExists(file))) {
@@ -219,6 +226,20 @@ export async function checkModule(
         module,
         "/description",
         'missing — add a one-line "description" of what the module gives a project (`saasaloy list --json` prints it)'
+      )
+    );
+  }
+  // `saasaloy new module` writes a `TODO` line here so the scaffold passes. It is a
+  // warning, not a problem: the module is valid, and the line is the author's next edit.
+  if (
+    typeof item.description === "string" &&
+    item.description.trimStart().startsWith("TODO")
+  ) {
+    warnings.push(
+      finding(
+        module,
+        "/description",
+        "still the scaffold's `TODO` line — replace it with one line on what the module gives a project (`saasaloy list --json` prints it)"
       )
     );
   }

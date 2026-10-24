@@ -332,8 +332,9 @@ async function initProject(opts: InitOptions): Promise<number> {
   // With no terminal, every question init would ask has to be answered by a flag, and
   // each refusal comes before a single file is written: a refusal that leaves a half-made
   // project behind is not a clean one. The guarded prompts would refuse too, but the
-  // install prompt only after the scaffold landed. This one and the install check below
-  // the name and directory checks, so a bad name still gets its own message first.
+  // install prompt only after the scaffold landed. This check runs first, because there
+  // is no name to check yet. The install check runs below, after the name and directory
+  // checks, so a bad name still gets its own message first.
   if (!nameArg && !isInteractive()) {
     cancel(
       `No project name and no terminal to ask for one — pass \`<name>\` (usage: \`${USAGE}\`).`

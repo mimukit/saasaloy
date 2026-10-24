@@ -372,8 +372,8 @@ describe("runDoctor --json (#223)", () => {
     expect(doc).toStrictEqual({
       mode: "registry",
       modules: [
-        { findings: [], module: "alpha" },
-        { findings: [], module: "beta" },
+        { findings: [], module: "alpha", warnings: [] },
+        { findings: [], module: "beta", warnings: [] },
       ],
       path: CLEAN,
       problems: 0,

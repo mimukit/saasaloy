@@ -668,25 +668,23 @@ export function mergeTargets(plan: UpdatePlan): string[] {
  * the next `update` sees base === theirs for the merged file. A moved config patch still
  * waits: `--resolved` names files, and a patch is not one.
  *
- * Returns the targets it marked. The command refuses a path this does not mark before
- * anything is written, so a mistyped path cannot leave a merge unrecorded in silence.
+ * A target the plan does not route to a merge is ignored. The command checks every path
+ * with `matchResolved` first and refuses one that matches nothing before anything is
+ * written, so a mistyped path cannot leave a merge unrecorded in silence.
  */
 export function markResolved(
   plan: UpdatePlan,
   targets: ReadonlySet<string>
-): string[] {
-  const marked: string[] = [];
+): void {
   for (const mod of plan.modules) {
     for (const file of [...mod.files, ...mod.removals]) {
       if (NEEDS_MERGE.has(file.action) && targets.has(file.target)) {
         file.action = "resolved";
-        marked.push(file.target);
       }
     }
     mod.needsMerge = moduleNeedsMerge(mod);
   }
   plan.needsMerge = plan.modules.some((mod) => mod.needsMerge);
-  return marked;
 }
 
 /** Whether anything about one module still routes to the merge plan. */

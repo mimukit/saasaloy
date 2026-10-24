@@ -307,6 +307,13 @@ export async function runNew(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
+    // The scaffold's own placeholders, such as the `TODO` description: valid, so not a
+    // finding, and still the author's first edit.
+    const warnings = reports.flatMap((report) => report.warnings);
+    if (warnings.length > 0) {
+      note(wrapForNote(renderFindings(warnings).join("\n")), "Still to write");
+    }
+
     outro(
       pc.green(
         `${name} is ready — put its payload in ${shown}/files/ and write its runbook in ${shown}/skills/.`

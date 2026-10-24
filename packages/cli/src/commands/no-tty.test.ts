@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, readdir, rm } from "node:fs/promises";
+import { cp, mkdir, mkdtemp, readdir, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,9 +15,16 @@ import { COMMANDS } from "./index.js";
 
 // ADR 0046: with no TTY, no command waits on a prompt. Each one either does its job, or
 // refuses and names the flag that answers. This runs every registered command as a real
-// child process with stdin on /dev/null and stdout piped, so neither side is a terminal,
-// and fails any command that is still running when the timeout fires. A new prompt with
-// no guard (lib/prompts.ts) hangs here rather than in somebody's CI.
+// child process with stdin on /dev/null or on a silent pipe and stdout piped, so neither
+// side is a terminal, and fails any command that is still running when the timeout fires.
+//
+// It runs each command twice over. In an empty directory with no arguments, only `init`'s
+// name prompt is reachable: every other prompt sits behind project detection or a module
+// name. So it also runs each command inside one scaffolded project (and `new module`
+// outside it), with the arguments that reach a prompt: `add` and `remove` a module,
+// `update`, `env`, `init` with no name. A prompt that neither run reaches is guarded by
+// the import allowlist in `src/lib/prompts.test.ts`, which fails any command that takes
+// a prompt from `@clack/prompts` instead of the guard in lib/prompts.ts.
 //
 // The unit suite does not build `dist/`, so the child runs `src/index.ts` through Node's
 // own TypeScript support plus a `.js` → `.ts` resolve hook (test/support/ts-source-hook.ts).
@@ -95,11 +102,48 @@ function runWithoutTty(
   });
 }
 
+// One string to assert on, so a failure prints what the command said.
+function outcomeOf(run: Run): string {
+  if (run.code === null) {
+    return `timed out after ${TIMEOUT_MS} ms:\n${run.output}`;
+  }
+  if (!DEFINED_CODES.has(run.code)) {
+    return `exit ${run.code}:\n${run.output}`;
+  }
+  return "a defined exit code";
+}
+
+const PROJECT = "no-tty-app";
+// `beta` is installed in `project` (with `alpha`, which it depends on), so `remove` has a
+// module to confirm and `env` has a variable to ask for. `bare` is the same scaffold with
+// nothing installed, so `add` has a plan to confirm.
+const INSTALLED = "beta";
+
+/** One setup step. A failure stops the suite with what the command said. */
+async function setUp(cwd: string, argv: string[]): Promise<void> {
+  const run = await runWithoutTty(cwd, argv, "closed");
+  if (run.code !== EXIT_OK) {
+    throw new Error(
+      `\`saasaloy ${argv.join(" ")}\` exited ${String(run.code)}:\n${run.output}`
+    );
+  }
+}
+
 let dir: string;
+let project: string;
+let bare: string;
 
 beforeAll(async () => {
   dir = await mkdtemp(join(tmpdir(), "saasaloy-no-tty-"));
-});
+  project = join(dir, PROJECT);
+  bare = join(dir, "bare");
+  await setUp(dir, ["init", PROJECT, "--no-install", "--no-git"]);
+  await cp(project, bare, { recursive: true });
+  // `env` refuses to write into a folder no repository holds. An empty `.git` is enough
+  // for its gitignore check, and needs no git binary.
+  await mkdir(join(project, ".git"));
+  await setUp(project, ["add", INSTALLED, "--yes"]);
+}, 2 * TIMEOUT_MS);
 
 afterAll(async () => {
   await rm(dir, { recursive: true, force: true });
@@ -122,14 +166,7 @@ describe("every command with no terminal", () => {
       // writes) cannot change what the next one sees.
       const cwd = await mkdtemp(join(dir, `${name}-${stdin}-`));
       const run = await runWithoutTty(cwd, [name], stdin);
-      // One string to assert on, so a failure prints what the command said.
-      let outcome = "a defined exit code";
-      if (run.code === null) {
-        outcome = `timed out after ${TIMEOUT_MS} ms:\n${run.output}`;
-      } else if (!DEFINED_CODES.has(run.code)) {
-        outcome = `exit ${run.code}:\n${run.output}`;
-      }
-      expect(outcome).toBe("a defined exit code");
+      expect(outcomeOf(run)).toBe("a defined exit code");
     },
     TIMEOUT_MS + 10_000
   );
@@ -142,6 +179,59 @@ describe("every command with no terminal", () => {
       expect(run.code).toBe(EXIT_REFUSED);
       expect(run.output).toContain("`<name>`");
       await expect(readdir(cwd)).resolves.toStrictEqual([]);
+    },
+    TIMEOUT_MS + 10_000
+  );
+});
+
+describe("every command with no terminal, inside a project", () => {
+  // The arguments that reach each command's prompt, where it has one. `list`, `outdated`
+  // and `doctor` have none, and run here so a prompt added to them later is reached.
+  const inProject: string[][] = [
+    ["remove", INSTALLED],
+    ["update"],
+    ["env"],
+    ["init"],
+    ["list"],
+    ["outdated"],
+    ["doctor"],
+  ];
+  const cases = inProject.flatMap((argv) =>
+    (["closed", "silent"] as const).map(
+      (stdin) => [argv.join(" "), stdin, argv] as const
+    )
+  );
+
+  it.each(cases)(
+    "`saasaloy %s` with stdin %s exits in time with a code from lib/exit.ts",
+    async (_line, stdin, argv) => {
+      const run = await runWithoutTty(project, argv, stdin);
+      expect(outcomeOf(run)).toBe("a defined exit code");
+    },
+    TIMEOUT_MS + 10_000
+  );
+
+  it.each(["closed", "silent"] as const)(
+    "`saasaloy add beta` in a project without it, with stdin %s, exits in time with a code from lib/exit.ts",
+    async (stdin) => {
+      const run = await runWithoutTty(bare, ["add", INSTALLED], stdin);
+      expect(outcomeOf(run)).toBe("a defined exit code");
+    },
+    TIMEOUT_MS + 10_000
+  );
+
+  // `new` refuses inside a project, so its tier and dependency prompts are reached only
+  // outside one. `--type` without `--depends-on` reaches the dependency question.
+  it.each(["closed", "silent"] as const)(
+    "`saasaloy new module x --type saasaloy:feature` with stdin %s exits in time with a code from lib/exit.ts",
+    async (stdin) => {
+      const cwd = await mkdtemp(join(dir, `new-${stdin}-`));
+      const run = await runWithoutTty(
+        cwd,
+        ["new", "module", "x", "--type", "saasaloy:feature"],
+        stdin
+      );
+      expect(outcomeOf(run)).toBe("a defined exit code");
     },
     TIMEOUT_MS + 10_000
   );

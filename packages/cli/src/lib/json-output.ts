@@ -1,12 +1,14 @@
-import type { Writable } from "node:stream";
 import { cancel } from "@clack/prompts";
+import type { CommonOptions } from "@clack/prompts";
 import { exitCodeFor, formatFailure } from "./exit.js";
 import { stripAnsi, TUI_ON_STDERR } from "./tui.js";
 
 // `--json` on `list`, `doctor`, `outdated`, `env --check` and `add --dry-run` (#223,
 // ADR 0046). The contract an agent reads:
 //
-// - stdout carries exactly one JSON document, with a top-level `schemaVersion`.
+// - stdout carries exactly one JSON document, with a top-level `schemaVersion`. The one
+//   exception is `--help`: help is not a run, so `doctor --json --help` prints plain help
+//   on stdout and exits 0.
 // - The clack TUI and every warning go to stderr, so a person watching still sees them
 //   and `JSON.parse(stdout)` never meets a box-drawing character.
 // - Exit codes keep their `lib/exit.ts` meaning. A run that reaches its report prints the
@@ -29,9 +31,7 @@ export function printJson(document: object): void {
 }
 
 /** The options object every clack call in a `--json`-aware command takes. */
-export interface TuiOptions {
-  readonly output?: Writable;
-}
+export type TuiOptions = Pick<CommonOptions, "output">;
 
 export interface Output {
   json: boolean;

@@ -93,10 +93,11 @@ export interface ModuleSpec {
  * The descriptor as JSON text.
  *
  * Every optional field the scaffold has nothing to say about is left out rather than
- * written empty, except `needs`: `[]` is a claim ("nothing outside the repo") that the
- * author checks along with `stage`. `additionalProperties: false` means a placeholder is
- * a lie the schema cannot catch, and an author deleting `"envVars": {}` is work the
- * scaffold created.
+ * written empty: the schema cannot tell a placeholder from a real value, and an author
+ * deleting `"envVars": {}` is work the scaffold created. Three fields are the exception,
+ * because the author has to decide them anyway. `description` is a `TODO` line, which
+ * `doctor` reports as a warning until the author replaces it. `stage` is `mvp` and
+ * `needs` is `[]` ("nothing outside the repo"), a starting point the author checks.
  * Key order follows the schema's own: identity, then requirements, then contents.
  */
 export function renderDescriptor(spec: ModuleSpec): string {

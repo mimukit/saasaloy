@@ -163,6 +163,38 @@ describe("doctor — schema violations", () => {
     }
   });
 
+  it("warns on the scaffold's TODO description, and finds no problem in it", async () => {
+    // `new module` writes this line so its scaffold passes; the author still owes one.
+    const dir = await mkdtemp(join(tmpdir(), "saasaloy-doctor-todo-"));
+    try {
+      await mkdir(join(dir, "todo"));
+      await writeFile(
+        join(dir, "todo", "registry-item.json"),
+        JSON.stringify({
+          description: "TODO — one line on what todo gives a project.",
+          name: "todo",
+          type: "saasaloy:feature",
+        }),
+        "utf-8"
+      );
+      const [report] = await check(dir);
+
+      expect(report?.findings).toStrictEqual([]);
+      expect(report?.warnings.map((found) => found.where)).toStrictEqual([
+        "/description",
+      ]);
+      expect(report?.warnings[0]?.message).toContain("TODO");
+    } finally {
+      await rm(dir, { force: true, recursive: true });
+    }
+  });
+
+  it("does not warn on a written description", async () => {
+    const [report] = await check(CLEAN, "alpha");
+
+    expect(report?.warnings).toStrictEqual([]);
+  });
+
   it("reports a descriptor that is not valid JSON, and stops there", async () => {
     const findings = await findingsFor("bad-json");
 

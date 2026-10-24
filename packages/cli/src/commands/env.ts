@@ -26,7 +26,7 @@ import {
 } from "../lib/fs-utils.js";
 import { isPathIgnored } from "../lib/gitignore.js";
 import { createOutput, printJson } from "../lib/json-output.js";
-import type { TuiOptions } from "../lib/json-output.js";
+import type { Output, TuiOptions } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
 import { findProjectRoot } from "../lib/project.js";
@@ -98,6 +98,12 @@ const HELP: CommandHelp = {
 
 // `--set` and `--from-file` take a value, as `--set KEY=VALUE` or `--set=KEY=VALUE`.
 const VALUE_FLAGS = ["--set", "--from-file"] as const;
+
+// Both writers refuse with this before a byte lands: before the prompts, and before the
+// `--set`/`--from-file` values.
+const NOT_IGNORED =
+  `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
+  "Add it to .gitignore (the base template already does) and run again.";
 
 /** `KEY=VALUE` as one `--set` pair, or the reason it is not one. */
 function parseSet(raw: string): [string, string] | string {
@@ -430,6 +436,7 @@ interface FlagRun {
   before: string | undefined;
   declarations: Declaration[];
   opts: Options;
+  out: Output;
   root: string;
 }
 
@@ -441,15 +448,11 @@ interface FlagRun {
  * warning, not a failure: the agent filled what it was given, and `--check` is the gate.
  */
 async function writeFlagValues(run: FlagRun): Promise<number> {
-  const { before, declarations, opts, root } = run;
+  const { before, declarations, opts, out, root } = run;
   const values = await readFlagValues(opts);
 
   if (!(await isPathIgnored(root, LOCAL_VALUES))) {
-    cancel(
-      `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
-        "Add it to .gitignore (the base template already does) and run again."
-    );
-    return EXIT_REFUSED;
+    return out.refuse(NOT_IGNORED, EXIT_REFUSED);
   }
 
   const declared = new Set(declarations.map((declaration) => declaration.name));
@@ -457,11 +460,11 @@ async function writeFlagValues(run: FlagRun): Promise<number> {
     .map(([name]) => name)
     .filter((name) => !declared.has(name));
   if (unknown.length > 0) {
-    cancel(
+    return out.refuse(
       `No installed module declares ${unknown.join(", ")} — nothing written. ` +
-        `Check the spelling, or \`saasaloy add\` the module that reads ${unknown.length === 1 ? "it" : "them"}.`
+        `Check the spelling, or \`saasaloy add\` the module that reads ${unknown.length === 1 ? "it" : "them"}.`,
+      EXIT_REFUSED
     );
-    return EXIT_REFUSED;
   }
 
   if (values.length === 0) {
@@ -550,6 +553,7 @@ export async function runEnv(argv: string[]): Promise<number> {
         before: await readTarget(root, LOCAL_VALUES),
         declarations,
         opts,
+        out,
         root,
       });
     }
@@ -618,11 +622,7 @@ export async function runEnv(argv: string[]): Promise<number> {
     // the same refusal is the right answer under `--check`, where it says the deploy gate
     // would have written a secret into a tracked file.
     if (!(await isPathIgnored(root, LOCAL_VALUES))) {
-      return out.refuse(
-        `${pc.cyan(LOCAL_VALUES)} isn't gitignored — refusing to write a secret into a tracked file. ` +
-          "Add it to .gitignore (the base template already does) and run again.",
-        EXIT_REFUSED
-      );
+      return out.refuse(NOT_IGNORED, EXIT_REFUSED);
     }
 
     // `--check` and a session with no terminal take the same path. A prompt nobody can

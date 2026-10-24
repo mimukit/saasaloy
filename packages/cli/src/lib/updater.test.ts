@@ -1442,7 +1442,9 @@ describe("markResolved — update --resolved (#223)", () => {
     expect(plan.needsMerge).toBeTruthy();
     expect(mergeTargets(plan)).toStrictEqual([TARGET]);
 
-    expect(markResolved(plan, new Set([TARGET]))).toStrictEqual([TARGET]);
+    markResolved(plan, new Set([TARGET]));
+    expect(plan.modules[0]?.files[0]?.action).toBe("resolved");
+    expect(mergeTargets(plan)).toStrictEqual([]);
     expect(plan.needsMerge).toBeFalsy();
     expect(plan.modules[0]?.needsMerge).toBeFalsy();
 
@@ -1564,9 +1566,8 @@ describe("markResolved — update --resolved (#223)", () => {
       lock,
       manifest,
     });
-    expect(
-      markResolved(plan, new Set(["apps/api/src/other.ts"]))
-    ).toStrictEqual([]);
+    markResolved(plan, new Set(["apps/api/src/other.ts"]));
+    expect(mergeTargets(plan)).toStrictEqual([TARGET]);
     expect(plan.needsMerge).toBeTruthy();
   });
 });

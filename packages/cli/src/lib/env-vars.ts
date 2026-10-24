@@ -60,12 +60,55 @@ export function isSet(values: Record<string, string>, name: string): boolean {
  * the `=`? A commented-out line is not one: `# KEY=` has a key of `# KEY`.
  */
 function isPlaceholderFor(line: string, name: string): boolean {
+  return assigns(line, name) && line.slice(line.indexOf("=") + 1).trim() === "";
+}
+
+/** Is this line an assignment to `name`? A commented-out `# KEY=` is not one. */
+function assigns(line: string, name: string): boolean {
   const equals = line.indexOf("=");
-  return (
-    equals !== -1 &&
-    line.slice(0, equals).trim() === name &&
-    line.slice(equals + 1).trim() === ""
-  );
+  return equals !== -1 && line.slice(0, equals).trim() === name;
+}
+
+/**
+ * The one writer behind `appendVars` and `replaceVars`. Each `KEY=value` replaces a line
+ * that `matches` picks (the first such line, or every one under `everyMatch`), and a key
+ * no line matches goes on the end. Every other line survives byte for byte.
+ */
+function writeVars(
+  existing: string | undefined,
+  values: [string, string][],
+  matches: (line: string, name: string) => boolean,
+  everyMatch: boolean
+): string {
+  if (values.length === 0) {
+    return existing ?? "";
+  }
+  if (!existing || existing.trim() === "") {
+    return `${values.map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
+  }
+
+  const lines = existing.split("\n");
+  const appended: string[] = [];
+  for (const [name, value] of values) {
+    const line = `${name}=${value}`;
+    let found = false;
+    for (const [index, existingLine] of lines.entries()) {
+      if (matches(existingLine, name)) {
+        lines[index] = line;
+        found = true;
+        if (!everyMatch) {
+          break;
+        }
+      }
+    }
+    if (!found) {
+      appended.push(line);
+    }
+  }
+
+  const kept = lines.join("\n");
+  const head = kept.endsWith("\n") ? kept : `${kept}\n`;
+  return appended.length === 0 ? head : `${head}${appended.join("\n")}\n`;
 }
 
 /**
@@ -86,30 +129,7 @@ export function appendVars(
   existing: string | undefined,
   additions: [string, string][]
 ): string {
-  if (additions.length === 0) {
-    return existing ?? "";
-  }
-  if (!existing || existing.trim() === "") {
-    return `${additions.map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
-  }
-
-  const lines = existing.split("\n");
-  const appended: string[] = [];
-  for (const [name, value] of additions) {
-    const line = `${name}=${value}`;
-    const index = lines.findIndex((existingLine) =>
-      isPlaceholderFor(existingLine, name)
-    );
-    if (index === -1) {
-      appended.push(line);
-    } else {
-      lines[index] = line;
-    }
-  }
-
-  const kept = lines.join("\n");
-  const head = kept.endsWith("\n") ? kept : `${kept}\n`;
-  return appended.length === 0 ? head : `${head}${appended.join("\n")}\n`;
+  return writeVars(existing, additions, isPlaceholderFor, false);
 }
 
 /**
@@ -122,12 +142,6 @@ export function parseEnvFile(text: string): [string, string][] {
   return Object.entries(parseEnvValues(text)).filter(
     ([, value]) => value.trim() !== ""
   );
-}
-
-/** Is this line an assignment to `name`? A commented-out `# KEY=` is not one. */
-function assigns(line: string, name: string): boolean {
-  const equals = line.indexOf("=");
-  return equals !== -1 && line.slice(0, equals).trim() === name;
 }
 
 /**
@@ -143,31 +157,7 @@ export function replaceVars(
   existing: string | undefined,
   values: [string, string][]
 ): string {
-  if (values.length === 0) {
-    return existing ?? "";
-  }
-  if (!existing || existing.trim() === "") {
-    return `${values.map(([name, value]) => `${name}=${value}`).join("\n")}\n`;
-  }
-
-  const lines = existing.split("\n");
-  const appended: string[] = [];
-  for (const [name, value] of values) {
-    let found = false;
-    for (const [index, line] of lines.entries()) {
-      if (assigns(line, name)) {
-        lines[index] = `${name}=${value}`;
-        found = true;
-      }
-    }
-    if (!found) {
-      appended.push(`${name}=${value}`);
-    }
-  }
-
-  const kept = lines.join("\n");
-  const head = kept.endsWith("\n") ? kept : `${kept}\n`;
-  return appended.length === 0 ? head : `${head}${appended.join("\n")}\n`;
+  return writeVars(existing, values, assigns, true);
 }
 
 /**

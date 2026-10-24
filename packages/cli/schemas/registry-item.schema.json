@@ -53,7 +53,7 @@
     "stage": {
       "type": "string",
       "enum": ["validate", "mvp", "teams", "money", "scale"],
-      "description": "The product stage that usually earns this module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A dependency takes the earliest stage of a module that needs it, and a provider takes its capability's stage."
+      "description": "The product stage that usually earns this module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage."
     },
     "needs": {
       "type": "array",
