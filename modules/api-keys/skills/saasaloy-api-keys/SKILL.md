@@ -25,7 +25,7 @@ The core, `api-keys`, holds what both owners share:
 Each owner ships `packages/auth/src/plugins/api-key.ts` at the same path, so the `auth.ts` import line is the same in both modes. The owner's file adds `references` and the `schema.apikey` rename to the shared options, and it holds that owner's `apiKeyScopeGuard()`. Each owner also ships `packages/db/src/schema/api-keys.ts`, with `organization_id` or `user_id` as the owner column.
 
 - `api-keys-organization` adds `packages/auth/src/resolvers/api-key.ts` (the bearer resolver, patched into `multitenant`'s `tenantResolvers`), the `/api-keys` screen in `apps/admin`, and its `NAV_ITEMS` entry.
-- `api-keys-user` adds `packages/auth/src/caller.ts` (`requireCaller`, `requireScope`), `packages/auth/src/api-key-rules.ts` (the import-free rules `scopeDenial` and `keyAllows`), and `packages/auth/src/api-key-scopes.ts` (the key vocabulary). It has no screen and patches nothing.
+- `api-keys-user` adds `packages/auth/src/caller.ts` (`requireCaller`, `requireScope`), `packages/auth/src/api-key-rules.ts` (the import-free rules `scopeDenial`, `keyAllows` and `ownerMayUseKeys`), and `packages/auth/src/api-key-scopes.ts` (the key vocabulary). It has no screen. Its one patch puts `apiKeyAdminGuard()` into `adminAuth.plugins`.
 
 ## Picking an owner
 
@@ -129,9 +129,11 @@ export const API_KEY_SCOPES: Readonly<Record<string, readonly string[]>> = {
 };
 ```
 
-`apiKeyScopeGuard()` checks every create against this list, with or without a session. A server-side `auth.api.createApiKey` with `permissions` is held to the same list as a browser's `metadata.scope`. Removing a pair later stops new keys from carrying it and does not shrink a key that already holds it. Revoke and reissue those keys.
+`apiKeyScopeGuard()` checks every create against this list, with or without a session. A server-side `auth.api.createApiKey` with `permissions` is held to the same list as a browser's `metadata.scope`. Removing a pair later stops new keys from carrying it and does not shrink a key that already holds it. Revoke and reissue those keys. It checks a server-side `auth.api.updateApiKey` that sets `permissions` against the same list. A browser cannot set `permissions` on update at all, because the plugin refuses that field from a request, and `metadata.scope` on an update changes no scope.
 
 ### Issuing, listing and revoking keys
+
+Keys live on the client instance, under `/auth`, only. The core registers the plugin on `adminAuth` too, for the organization owner's screen, so this owner patches `apiKeyAdminGuard()` into `adminAuth.plugins`. It refuses every `/admin/auth/api-key/*` call with 403 `API_KEYS_ON_CLIENT_ONLY`, so an admin session can neither mint nor verify a user-owned key, and a credential counts only where it was issued (ADR 0050).
 
 There is no key screen in user mode. Call the client plugin from the signed-in user's browser. `authClient` here is the client `createClient(baseURL)` from `@repo/auth/client` returns:
 
@@ -167,6 +169,7 @@ export const cards = new Hono().get("/", async (c) => {
 - **A session user passes every demand.** A scope narrows a key and never a person.
 - **A key must hold every demanded action.** The 403 names the first missing pair: `permission required: cards:write`.
 - **An empty demand is refused** for both kinds, with 403 `permission required`. A demand built from an empty loop fails closed.
+- **A banned owner's keys stop working.** `requireCaller` loads the key's owner after the key verifies and answers 401 `invalid api key` while the owner is banned, the way the `admin()` plugin refuses their sign-in. A ban with a past `banExpires` no longer counts. The plugin itself never reads the user row, so this check is the only one.
 - **Data ownership is the route's job.** `requireScope` says what a caller may do, never which rows are theirs. Filter every query on `caller.userId`.
 
 Both functions throw `HTTPException`, so `apps/api`'s `onError` renders their refusals as the `{ error: { code, message } }` envelope.
@@ -206,12 +209,14 @@ The snapshot is hand-authored against `@better-auth/api-key@1.7.7` and ships in 
 | Case | Mode | Status and body |
 | --- | --- | --- |
 | A claimed bearer header with no key, or a key not found, revoked, disabled or expired | both | 401 `invalid api key` |
+| A valid key whose owner is banned | user | 401 `invalid api key` |
+| Any `/admin/auth/api-key/*` call | user | 403 `API_KEYS_ON_CLIENT_ONLY` |
 | No bearer header and no session on `requireCaller` | user | 401 `sign in first` |
 | `x-organization-id` beside a bearer header | organization | 403 `forbidden` |
 | A route demand the key does not hold | both | 403 `permission required: <resource>:<action>` |
 | An empty demand on `requireScope` | user | 403 `permission required` |
 | A create scope wider than the creator's statements | organization | 403 `permission required: <resource>:<action>` |
-| A create scope outside `API_KEY_SCOPES` | user | 403 `permission required: <resource>:<action>` |
+| A create scope, or a server-side update's `permissions`, outside `API_KEY_SCOPES` | user | 403 `permission required: <resource>:<action>` |
 
 A route refusal comes through the api's `{ error: { code, message } }` envelope. The guard's 403 on `/auth/api-key/create` is a Better Auth `APIError`, so its body is Better Auth's `{ "message": "permission required: …" }` with no `code`, in both modes. A client that reads the create error must read `error.message`.
 
@@ -241,11 +246,9 @@ The core stays installed across the switch, so its `auth.ts` patches stay too. B
 
 Remove the owner first. The owner depends on the core, so `remove api-keys` refuses while an owner is installed.
 
-Then `saasaloy remove api-keys` reverses the core's six patches: the two server plugins on each of `auth` and `adminAuth`, and the client plugin in each of `authClientPlugins` and `adminAuthClientPlugins`.
+`saasaloy remove api-keys-organization` reverses the bearer resolver patch and the `/api-keys` nav entry, and deletes the owner's files. `saasaloy remove api-keys-user` reverses the `apiKeyAdminGuard()` patch on `adminAuth` and deletes its files, which include `caller.ts`, so every route that imports `@repo/auth/caller` stops compiling. For both owners, the `api_keys` table survives. Run `db:generate` and read the drop migration before you apply it. Tell the machine callers first, because every key stops working when the owner goes. Removing the last owner also warns that `api-keys` is left with none of its `requiresOneOf` installed and names the fix. It does not refuse, because switching owners is remove-then-add, and `doctor` reports the state until an owner is back.
 
-`saasaloy remove api-keys-organization` reverses the bearer resolver patch and the `/api-keys` nav entry, and deletes the owner's files. `saasaloy remove api-keys-user` patches nothing and deletes its files, which include `caller.ts`, so every route that imports `@repo/auth/caller` stops compiling. For both owners, the `api_keys` table survives. Run `db:generate` and read the drop migration before you apply it. Tell the machine callers first, because every key stops working when the owner goes.
-
-`saasaloy remove api-keys` then reverses the two `auth.ts` plugins and the client plugin, and deletes `api-key-options.ts` and `api-key-client.ts`. The `@better-auth/api-key` line in `packages/auth/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`.
+`saasaloy remove api-keys` then reverses the core's six patches, the two server plugins on each of `auth` and `adminAuth` and the client plugin in each of `authClientPlugins` and `adminAuthClientPlugins`, and deletes `api-key-options.ts` and `api-key-client.ts`. The `@better-auth/api-key` line in `packages/auth/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`.
 
 ## Moving an existing `api-keys` project to the split
 
