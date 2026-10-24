@@ -1,6 +1,6 @@
 ---
 name: saasaloy-setup
-description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, and when re-running to update the brief after something changed.
+description: Interview the project owner about their product once, and write the answers to docs/product-brief.md — the shared context every other Saasaloy skill reads. Use at the start of a freshly scaffolded project, when the owner says "set up this project", "tell you about my product", "what is this project", when config.app.name is still the shipped "Saasaloy", when another skill needs product context and no brief exists yet, when re-running to update the brief after something changed, and when an unattended build starts on a brief whose frontmatter says autonomy: afk.
 ---
 
 # saasaloy-setup — find out what this project is, once
@@ -21,14 +21,14 @@ It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves
 |------|-----------------|
 | `docs/product-brief.md` | The whole file. Create `docs/` if it does not exist. |
 | `packages/config/src/project.ts` | `app.name` and `app.locale`, and nothing else in the file. |
+| `docs/build-log.md` | Under `autonomy: afk` only: one `## Setup` section, or the `## Blocked` list. |
 
 Nothing else. You are not here to write the landing page, add a dependency, or touch a
 block.
 
 ## Step 0 — before you ask anything
 
-1. **Read `docs/product-brief.md`.** If it exists, someone has already been through this.
-   Read it fully and jump to [Re-running](#re-running).
+1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, nobody is at the keyboard: follow [Unattended run](#unattended-run) and ask nothing. Otherwise, if it exists, someone has already been through this. Read it fully and jump to [Re-running](#re-running).
 2. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships
    commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When
    it is set, it is the best opening guess you have, and it belongs in question 1's
@@ -65,6 +65,14 @@ number.
 | 8 | **Tone** | How the product should sound. Ask for an adjective *and* a site they think gets it right. |
 | 9 | **Pricing** | Per tier: name, who it is for, real monthly price, annual price if there is one. See [Pricing](#pricing-is-extracted-never-invented). |
 | 10 | **Where "sign up" goes** | The signup, waitlist or app URL the primary button should point at. See [The destination](#the-destination-question). |
+
+Then ask one more question, last and on its own: **"Run the build unattended?"** It is not an eleventh brief section. It decides whether an agent may later build the project with nobody at the keyboard, so a person must answer it. Offer two samples and no third:
+
+> **Run the build unattended?**
+> a. No — I'll stay at the keyboard and answer each skill's questions.
+> b. Yes — write `autonomy: afk` into the brief, so the build skills run without asking me.
+
+On yes, write `autonomy: afk` into the brief's frontmatter. Before you write it, check the brief is [complete](#unattended-run): when an answer is missing or tagged `weak:`, name each one and say that an unattended run stops at those sections until they are filled. On no, write no `autonomy` field, and remove one an earlier run wrote.
 
 ### Every question ships with sample answers
 
@@ -174,6 +182,10 @@ Ask where the primary call to action should go. Three answers to expect:
 on every re-run, and it is what every other skill reads instead of interviewing again.
 
 ```md
+---
+autonomy: afk
+---
+
 # Product brief
 
 Last updated: YYYY-MM-DD (saasaloy-setup)
@@ -210,6 +222,8 @@ https://ledgerly.com.bd/waitlist — a Tally form, live now.
 - The template loads no webfont, so a non-Latin script renders in whatever face the
   visitor's device provides.
 ```
+
+The frontmatter is there only when the owner answered yes to "Run the build unattended?". Leave it out on a no.
 
 Two rules about this file:
 
@@ -255,6 +269,17 @@ A brief on disk means the interview already happened.
 4. **If the brief was hand-edited**, that wins. Do not tidy someone's prose back into your
    own phrasing.
 
+## Unattended run
+
+`autonomy: afk` in the brief's frontmatter means a person answered yes to "Run the build unattended?" and is not at the keyboard now. Ask nothing in this run: no question, no confirmation, no preview that waits for an answer. The attended interview above never runs here, because only a person can write the brief.
+
+1. **Check that the brief is complete.** It is complete when all ten answers are present and filled: Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, and Where "sign up" goes. An honest empty answer ("no proof yet", "no pricing yet") counts as filled. An answer tagged `weak:`, a missing section, or an empty one does not. `Known gaps` and any extra section are not checked.
+2. **With an incomplete brief, stop.** Append each missing, empty or weak section to `docs/build-log.md` under `## Blocked`, one list item each, naming the section and what is wrong (`- Product brief: Proof is empty`). Create the file with a `# Build log` title when it does not exist, and add the `## Blocked` heading when it is not there. Write nothing else, and stop the run. An unattended build does not start the first module with a brief that is not complete.
+3. **With a complete brief, set the two facts that are code.** Set `app.name` from Name and `app.locale` from Language's code in `packages/config/src/project.ts`, exactly as [Step 3](#step-3--set-the-two-facts-that-are-code) says, with no confirmation. Leave either one alone when it already matches the brief. Run `pnpm typecheck`.
+4. **Log what you did.** Append a `## Setup` section to `docs/build-log.md`: the name and the locale you set, or that both already matched, and the `pnpm typecheck` result. Leave the commit to the stage that runs this skill.
+
+Never edit the brief in this run. A wrong answer in it is the owner's to fix.
+
 ## What happens next
 
 Say so explicitly when you finish, because the brief on its own changes nothing the owner
@@ -277,6 +302,7 @@ can see:
   a sample answer.
 - **No dependencies, no i18n machinery, no webfonts.** Record the gap in the brief; do not
   close it.
+- **Under `autonomy: afk`, never ask.** Write the `## Blocked` list and stop instead.
 - **A dirty tree, a missing repo, or a thin interview is not a blocker.** Warn, record less,
   and say what you left out. (This is about those three conditions only — anything unsafe
   or outside this skill's scope you decline as you normally would.)

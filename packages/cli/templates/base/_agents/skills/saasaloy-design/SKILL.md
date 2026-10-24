@@ -1,6 +1,6 @@
 ---
 name: saasaloy-design
-description: Keep apps/web/DESIGN.md, and apps/admin/DESIGN.md when the admin app is installed, true of the Saasaloy design layer. Use theme to choose and apply a registry style to the web app, update after packages/ui changes, or audit a design contract for token drift.
+description: Keep apps/web/DESIGN.md, and apps/admin/DESIGN.md when the admin app is installed, true of the Saasaloy design layer. Use theme to choose and apply a registry style to the web app, update after packages/ui changes, or audit a design contract for token drift. Under autonomy: afk in docs/product-brief.md, theme picks the preset from the brief without asking.
 derived-from: "designkit (MIT), narrowed 2026-08-09"
 ---
 
@@ -27,13 +27,13 @@ The grounding rule controls every mode. Every token value must exist in the proj
 - `update` re-derives the contract after a design layer change, writes a new fingerprint, and lints the result.
 - `audit` checks the fingerprint and the contract. It never writes.
 
-If the user does not name a mode, ask which mode to use. Do not choose between a write and an audit.
+If the user does not name a mode, ask which mode to use. Do not choose between a write and an audit. The one exception is an unattended run: see [Unattended run](#unattended-run).
 
 ## Write surface
 
 | Mode | Files |
 |------|-------|
-| `theme` | web only: `packages/ui/src/styles/brand.css`, `apps/web/DESIGN.md`, and `docs/product-brief.md` only when the brief is absent |
+| `theme` | web only: `packages/ui/src/styles/brand.css`, `apps/web/DESIGN.md`, `docs/product-brief.md` only when the brief is absent, and `docs/build-log.md` under `autonomy: afk` |
 | `update` | the chosen app's `DESIGN.md` only |
 | `audit` | none |
 
@@ -123,7 +123,7 @@ If the network or `pnpm dlx` is unavailable, continue with the fingerprint and l
 
 ### 1. Read the product context
 
-Read `docs/product-brief.md` first. Use its product, audience, differentiator, tone, and language answers. Do not ask those questions again.
+Read `docs/product-brief.md` first. When its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run). Use its product, audience, differentiator, tone, and language answers. Do not ask those questions again.
 
 If the brief is absent, offer to run `saasaloy-setup`:
 
@@ -162,6 +162,17 @@ Recompute and replace the fingerprint stamp. Run the official linter.
 ### 5. Report
 
 Name the registry style URL. List the changed token groups and the new fingerprint. State the linter result. Tell the user that component or page work follows `packages/ui/AGENTS.md`.
+
+## Unattended run
+
+`autonomy: afk` in the frontmatter of `docs/product-brief.md` means nobody is at the keyboard. Ask nothing, and wait for no approval.
+
+1. **Pick the mode.** With no mode named, run `theme` for the web app. A named mode runs as named. `theme` never runs for the admin app, here as anywhere.
+2. **Read the brief instead of asking.** Take the colour mood and the density from the Tone answer, the Audience answer and the site the owner pointed at. Ask no design question. With no brief, append `- Design: no docs/product-brief.md` under `## Blocked` in `docs/build-log.md` and stop. Create the log with a `# Build log` title when it does not exist.
+3. **Pick one registry style that fits the tone.** Take it from `https://tweakcn.com` or `https://ui.shadcn.com/create`, as [step 2 of `theme`](#2-choose-the-registry-style) says. Fetch the URL first and check that it serves a `registry:style` item. Do not invent a palette, and do not write token values by hand.
+4. **Apply it and re-derive the contract** with steps 3 and 4 of `theme`, with no preview and no approval. Every check in step 3 still applies. When the preset removes a required rule or changes `components.json`, revert `brand.css` and `components.json` with git and log it under `## Blocked`.
+5. **Fall back when you cannot reach a registry.** With no network, keep the shipped theme, run `update` on `apps/web/DESIGN.md` only if its fingerprint is stale, adding or deleting no section, and list the theme choice under `## Left for a human`.
+6. **Log the run.** Append a `## Design` section to `docs/build-log.md`: the registry style URL, one line on why it fits the brief's tone, the new fingerprint and the linter result. Leave the commit to the stage that runs this skill.
 
 ## `update`
 
