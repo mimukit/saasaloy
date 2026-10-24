@@ -35,7 +35,7 @@ Rejected alternatives:
 - Port the imports again under #252. Nothing is left to port. The file already imports from `@repo/ui/*/shell`.
 - Add a static test in `scripts/` that checks each `@admin/components/<name>` import in `modules/*/files` against the files a module ships. It is cheap and has no install step, but it covers one alias only, and #268 covers the same failure with the real compiler.
 
-### Phase 1: close #252 with evidence
+### Phase 1: close #252 with evidence (built 2026-10-24)
 
 Attended: the owner approves the closing comment, because it is an outward action.
 
