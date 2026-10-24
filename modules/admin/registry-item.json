@@ -61,6 +61,20 @@
         "path": "/",
         "status": 200
       }
+    },
+    {
+      "file": "apps/admin/src/components/shell-extensions.ts",
+      "kind": "plugin-array",
+      "exportName": "shellExtensions",
+      "arrayProp": "extensions",
+      "call": "commandExtension",
+      "import": {
+        "name": "commandExtension",
+        "from": "@repo/ui/containers/command/command-root"
+      },
+      "when": {
+        "installed": ["command"]
+      }
     }
   ],
   "files": [

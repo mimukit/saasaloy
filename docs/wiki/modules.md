@@ -15,6 +15,7 @@ Every installable module in the default registry, in one place. This table is th
 | `admin` | capability | an `apps/admin` TanStack Router SPA behind the auth session, on `api` + `auth` + `shell` |
 | `shell` | capability | the frame, the coss primitive set, the page blocks and `shell.css` under `@repo/ui/*/shell` that every signed-in SPA renders, with no auth logic and no dependency |
 | `app` | capability | an `apps/app` TanStack Router SPA on port 3002 for every signed-in user: the `shell` frame with the web brand, the `auth` sign-in and sign-up blocks, and a home screen, on `api` + `auth` + `shell`, with no `admin` |
+| `command` | feature | a Cmd/Ctrl+K command palette, `G` then a letter to move between screens, a `?` sheet of every shortcut, and one conflict-checked key registry, for `admin` and `app` on `shell`. Each app's descriptor wires it into the shell header, whichever lands first |
 | `email` | capability | a `packages/email` workspace with the provider interface, the escaping `html` tag and `safeUrl`, on `api` |
 | `email-console` | feature (provider) | an `email` provider that logs messages instead of sending — no plan, no domain, no key |
 | `email-cloudflare` | feature (provider) | an `email` provider on Cloudflare Email Sending — needs a paid Workers plan and a hand-onboarded domain, see [the reference](reference.md#email-providers) |

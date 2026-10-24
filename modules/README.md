@@ -58,6 +58,8 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `feature-flags` is a feature that scaffolds `packages/feature-flags` and stacks on `api`, `database`, `validators`, `auth`, `admin` and `kv`. It holds typed flags, per-tenant overrides, percentage rollouts, maintenance mode and kill switches behind one resolver: the database is the source of truth, a published `kv` document is the read path, and an isolate cache in front of it reaches a warm Worker in about `FLAGS_ISOLATE_TTL_SECONDS`. It ships a `/flags` admin screen.
 
+`command` is a feature on `shell` that gives every signed-in SPA one keyboard model: a Cmd/Ctrl+K palette, `G` then a letter for navigation, single keys on the page, and a `?` sheet of every binding. The contract lives in `shell` (`useCommands` and the extension seam), so a screen declares its commands with no dependency on this module. `command` ships the provider, the palette, the sheet and the key engine, the one file that imports `@tanstack/react-hotkeys`. It names no app: `admin` and `app` each carry a `plugin-array` patch gated on `command` that appends `commandExtension()` to their `shellExtensions` list. It takes neither providers nor drivers.
+
 A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `kv-upstash`, `storage-cloudflare`, `storage-memory`, `billing-stripe`, `billing-console`, `payment-console`, `payment-manual`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the

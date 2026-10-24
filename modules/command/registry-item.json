@@ -1,0 +1,62 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "command",
+  "type": "saasaloy:feature",
+  "description": "A Cmd/Ctrl+K command palette, G-then-letter navigation, a ? shortcut sheet and one conflict-checked key registry for every signed-in SPA on the shell.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.8"
+  },
+  "dependsOn": ["shell"],
+  "dependencies": [],
+  "patches": [
+    {
+      "file": "packages/ui/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@tanstack/react-hotkeys",
+      "range": "0.16.0"
+    },
+    {
+      "file": "packages/ui/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@leeoniya/ufuzzy",
+      "range": "1.0.19"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/ui/lib/command/registry.ts",
+      "target": "@ui/lib/command/registry.ts"
+    },
+    {
+      "path": "files/ui/lib/command/engine.ts",
+      "target": "@ui/lib/command/engine.ts"
+    },
+    {
+      "path": "files/ui/lib/command/filter.ts",
+      "target": "@ui/lib/command/filter.ts"
+    },
+    {
+      "path": "files/ui/blocks/command/keycaps.tsx",
+      "target": "@ui/blocks/command/keycaps.tsx"
+    },
+    {
+      "path": "files/ui/blocks/command/command-palette.tsx",
+      "target": "@ui/blocks/command/command-palette.tsx"
+    },
+    {
+      "path": "files/ui/blocks/command/shortcut-help.tsx",
+      "target": "@ui/blocks/command/shortcut-help.tsx"
+    },
+    {
+      "path": "files/ui/containers/command/command-root.tsx",
+      "target": "@ui/containers/command/command-root.tsx"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-command"]
+  }
+}
