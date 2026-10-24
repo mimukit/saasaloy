@@ -1,5 +1,5 @@
 // Tests for permission checking's decision core. This file is NOT in the descriptor's
-// `files` list, so `add rbac` never copies it into a user's project — it exists for this
+// `files` list, so `add teams` never copies it into a user's project — it exists for this
 // repo only.
 //
 // It runs on `node:test`, not on the CLI's vitest instance, for the reason
@@ -7,7 +7,7 @@
 // only inside a scaffolded project. Run it with `pnpm test:modules`. The import needs the
 // explicit `.ts` extension because Node's type stripping resolves the real file.
 //
-// `./rbac-rules.ts` carries one `import type` (`./authorize`) and no runtime import at
+// `./permission-rules.ts` carries one `import type` (`./authorize`) and no runtime import at
 // all, which is what lets this test load it with nothing installed. Add a runtime import
 // there and this file stops loading — that is the guard.
 
@@ -21,8 +21,8 @@ import {
   findLockedRole,
   permissionDenial,
   roleLockDenial,
-} from "./rbac-rules.ts";
-import type { PrincipalLike, ResolvedStatements } from "./rbac-rules.ts";
+} from "./permission-rules.ts";
+import type { PrincipalLike, ResolvedStatements } from "./permission-rules.ts";
 
 // The three base names from `access.ts`, restated. The real tuple is `BASE_ROLES` there,
 // which this file cannot import: it pulls `better-auth/plugins/access`.
@@ -63,7 +63,7 @@ describe("can, for a member", () => {
 
   it("refuses a resource the role has never heard of", () => {
     // An unknown resource holds no actions, so it refuses exactly like an empty one.
-    // `requireCan` cannot reach this arm — `Permissions` from `access.ts` types the
+    // `requirePermission` cannot reach this arm — `Permissions` from `access.ts` types the
     // demand — but a stored role parsed at runtime can, and so can `apps/admin`.
     assert.equal(allows(viewer, { billing: ["read"] }), false);
   });

@@ -5,7 +5,7 @@ description: Runbook for the api-keys feature, which gives an organization beare
 
 # api-keys
 
-The `api-keys` feature answers the third tenant question: **how does a caller with no cookie get the same answers?** `multitenant` resolves which organization a request is for, `rbac` gates what may be done in it, and this ships the credential a machine presents.
+The `api-keys` feature answers the third tenant question: **how does a caller with no cookie get the same answers?** `multitenant` resolves which organization a request is for and gates what may be done in it, and this ships the credential a machine presents.
 
 It adds `@better-auth/api-key` to `packages/auth`, the `api_keys` snapshot to `packages/db`, a bearer resolver into `multitenant`'s `tenantResolvers` table, the `apiKeyScopeGuard()` plugin, and the `/api-keys` screen in `apps/admin`.
 
@@ -52,7 +52,7 @@ A key's scope is a permission map picked from `packages/auth/src/access.ts`, the
 
 ```ts
 .delete("/:id", async (c) => {
-  const tenant = await requireCan(c, { project: ["delete"] }); // key or cookie, one line
+  const tenant = await requirePermission(c, { project: ["delete"] }); // key or cookie, one line
 });
 ```
 

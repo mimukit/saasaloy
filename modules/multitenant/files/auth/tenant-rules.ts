@@ -187,7 +187,7 @@ function parsePermission(permission: string): ResolvedStatements | null {
  * can stay a pure function over the answer:
  *
  * - a base role with a stored row of the same name — the static role merged with the row,
- *   the row widening it. `roleLockGuard()` in `rbac` refuses to write such a row, and
+ *   the row widening it. `roleLockGuard()` refuses to write such a row, and
  *   this arm is still here because a row written before the guard shipped, or straight
  *   into the database, has to resolve the same way the plugin resolves it.
  * - a base role with no stored row — the static role alone. The common case.

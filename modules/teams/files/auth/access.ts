@@ -75,7 +75,7 @@ export const member = ac.newRole({
 export const roles = { owner, admin, member };
 
 /**
- * The base role names, locked. `rbac`'s `roleLockGuard()` refuses `createRole`,
+ * The base role names, locked. `roleLockGuard()` refuses `createRole`,
  * `updateRole` and `deleteRole` for any name in this tuple, so nothing can store a row
  * named `admin` and quietly extend the static `admin` above. Only custom roles are
  * created, edited and deleted.
@@ -87,7 +87,7 @@ export type BaseRole = (typeof BASE_ROLES)[number];
 
 /**
  * A permission demand: a resource from `statements` mapped to some of its actions. This
- * is the type `requireCan(c, permissions)` and `can(principal, permissions)` take, so an
+ * is the type `requirePermission(c, permissions)` and `can(principal, permissions)` take, so an
  * undeclared resource or a misspelled action is a compile error rather than a check that
  * silently passes.
  */

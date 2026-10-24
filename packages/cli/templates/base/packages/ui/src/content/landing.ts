@@ -372,7 +372,7 @@ export const landing = {
       {
         id: "teams",
         title: "Onboard teams",
-        modules: ["teams", "multitenant", "rbac"],
+        modules: ["teams", "multitenant"],
       },
       {
         id: "charge",
@@ -411,7 +411,6 @@ export const landing = {
           "waitlist",
           "teams",
           "multitenant",
-          "rbac",
           "api-keys",
           "email-react",
           "ratelimit",

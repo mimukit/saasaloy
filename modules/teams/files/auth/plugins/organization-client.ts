@@ -24,7 +24,7 @@ export function organizationClientPlugin() {
     // The client's own copy of the server's `dynamicAccessControl`. It adds nothing at
     // runtime; it decides whether `auth.organization.listRoles`, `createRole`,
     // `updateRole` and `deleteRole` exist on the inferred client type at all. Without it
-    // the `/roles` screen in `rbac` does not compile. Keep the two flags in step with
+    // the `/roles` screen `multitenant` ships does not compile. Keep the two flags in step with
     // `./organization.ts`.
     dynamicAccessControl: { enabled: true },
   });

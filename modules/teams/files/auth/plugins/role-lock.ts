@@ -1,7 +1,7 @@
 import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { BASE_ROLES } from "../access";
-import { findLockedRole, roleLockDenial } from "../rbac-rules";
+import { findLockedRole, roleLockDenial } from "../permission-rules";
 
 // The lock on the three base roles, as a Better Auth plugin.
 //

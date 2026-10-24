@@ -14,7 +14,7 @@ import type { RegistryPatch } from "./schema.js";
 // that `modules/auth` ships: `add` must put every call into both arrays, and `remove` must
 // take every one back out, leaving the files byte-for-byte as `auth` shipped them.
 
-const MODULES = ["teams", "rbac", "api-keys", "billing-stripe"] as const;
+const MODULES = ["teams", "api-keys", "billing-stripe"] as const;
 
 /** Each export that holds a plugin array, paired with its twin on the other instance. */
 const TWINS: Record<string, string> = {
