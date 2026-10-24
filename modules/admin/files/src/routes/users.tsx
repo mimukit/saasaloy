@@ -185,9 +185,9 @@ function Users() {
   // button do, and the palette lists them first, under "Users". Each one hides while it
   // would do nothing. With no `command` module installed, the call does nothing.
   //
-  // Closing the panel has no Escape binding on purpose. The table already binds Escape
-  // in its `data-table` scope, which is live on this page too, and one chord in two
-  // overlapping scopes is a conflict. The panel's close is a palette row instead.
+  // Escape closes the panel through the table's `onDismiss` below: the table owns Escape
+  // in its `data-table` scope, so a second Escape here would be a conflict. "Close user
+  // details" stays as a palette row for a person who reaches the page by the palette.
   const commands: Command[] = [
     {
       id: "admin.show-admins",
@@ -315,6 +315,9 @@ function Users() {
         selectedId={selectedId}
         onRowClick={(user) => {
           setSelectedId(user.id);
+        }}
+        onDismiss={() => {
+          setSelectedId(null);
         }}
         emptyState={
           roleFilter === "all" ? (

@@ -40,6 +40,9 @@ export interface CommandContext {
  *
  * `when` hides the command from the palette and disables its binding while it returns
  * `false`. It and `run` are read at call time, so they may close over fresh state.
+ *
+ * `active` marks the command as the current choice of a set, such as the theme in use.
+ * The palette reads it when it renders and shows "Current" in place of the keycap.
  */
 export interface Command {
   id: `${string}.${string}`;
@@ -49,6 +52,7 @@ export interface Command {
   icon?: LucideIcon;
   shortcut?: string;
   when?: () => boolean;
+  active?: () => boolean;
   run: (ctx: CommandContext) => void;
 }
 
@@ -87,7 +91,7 @@ export const CommandRegistryContext: Context<CommandRegistry | null> =
  * It registers in an effect and unregisters on cleanup. It registers again only when the
  * shape of the list changes (an id, a title, a group, a shortcut, the keywords, whether
  * `when` is set) or the scope or label does. A new `run` or `when` closure on each render
- * does not re-register: the registered commands call the latest ones. `icon` is read at
+ * does not re-register: the registered commands call the latest ones, `active` included. `icon` is read at
  * registration time, so pass a module-level component.
  */
 export function useCommands(

@@ -39,6 +39,7 @@ describe("commandsKey", () => {
       { shortcut: undefined },
       { keywords: ["nav"] },
       { when: () => true },
+      { active: () => true },
     ];
     for (const change of changes) {
       assert.notEqual(
@@ -58,6 +59,17 @@ describe("commandsKey", () => {
 });
 
 describe("delegateToLatest", () => {
+  it("reads the latest active closure of the same id", () => {
+    let current = false;
+    let latest: readonly Command[] = [command({ active: () => false })];
+    const [registered] = delegateToLatest(latest, () => latest);
+    latest = [command({ active: () => current })];
+
+    assert.equal(registered?.active?.(), false);
+    current = true;
+    assert.equal(registered?.active?.(), true);
+  });
+
   it("runs the latest closure of the same id", () => {
     const calls: string[] = [];
     let latest: readonly Command[] = [

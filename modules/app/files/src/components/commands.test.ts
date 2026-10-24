@@ -24,6 +24,7 @@ function build() {
     setTheme: (theme) => {
       calls.push(`theme ${theme}`);
     },
+    currentTheme: () => "dark",
   });
   return { commands, calls };
 }
@@ -97,5 +98,13 @@ describe("appCommands", () => {
       "theme dark",
       "theme system",
     ]);
+  });
+
+  it("marks the theme in use as the active choice", () => {
+    const { commands } = build();
+    const active = commands
+      .filter((command) => command.active?.() === true)
+      .map((command) => command.id);
+    assert.deepEqual(active, ["app.theme-dark"]);
   });
 });

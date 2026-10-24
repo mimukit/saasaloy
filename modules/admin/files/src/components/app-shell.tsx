@@ -3,7 +3,10 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { applyThemeChoice } from "@repo/ui/blocks/shell/theme-toggle";
+import {
+  applyThemeChoice,
+  currentThemeChoice,
+} from "@repo/ui/blocks/shell/theme-toggle";
 import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
 import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
 import { useCommands } from "@repo/ui/lib/shell/commands";
@@ -118,6 +121,7 @@ function AdminCommands({ signOut }: { signOut: () => Promise<void> }) {
       setTheme: (theme) => {
         applyThemeChoice(theme);
       },
+      currentTheme: currentThemeChoice,
     }),
     { scope: "global" }
   );

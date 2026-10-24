@@ -5,9 +5,9 @@ import type { Command } from "./commands";
 
 /**
  * A string that changes when the shape of a command list changes, and only then: an id,
- * a title, a group, a shortcut, a keyword, or whether `when` is set. `run` and `when`
- * closures change every render and are deliberately left out, so a re-render does not
- * re-register the list.
+ * a title, a group, a shortcut, a keyword, or whether `when` or `active` is set. The
+ * `run`, `when` and `active` closures change every render and are deliberately left
+ * out, so a re-render does not re-register the list.
  */
 export function commandsKey(commands: readonly Command[]): string {
   return JSON.stringify(
@@ -18,15 +18,16 @@ export function commandsKey(commands: readonly Command[]): string {
       command.shortcut ?? null,
       command.keywords ?? [],
       command.when !== undefined,
+      command.active !== undefined,
     ])
   );
 }
 
 /**
- * Copies of `commands` whose `run` and `when` call the command of the same id in the
- * list `read()` returns at call time. A registration made once then always runs the
+ * Copies of `commands` whose `run`, `when` and `active` call the command of the same id
+ * in the list `read()` returns at call time. A registration made once then always runs the
  * latest closure. A command whose id has gone from the latest list does nothing, and its
- * `when` reports `false`.
+ * `when` and `active` report `false`.
  */
 export function delegateToLatest(
   commands: readonly Command[],
@@ -44,5 +45,9 @@ export function delegateToLatest(
       command.when === undefined
         ? undefined
         : () => find(command.id)?.when?.() ?? false,
+    active:
+      command.active === undefined
+        ? undefined
+        : () => find(command.id)?.active?.() ?? false,
   }));
 }

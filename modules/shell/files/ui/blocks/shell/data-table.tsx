@@ -112,6 +112,7 @@ export function DataTable<TRow extends object>({
   rowId,
   onRowClick,
   selectedId,
+  onDismiss,
   emptyState,
   caption,
   className,
@@ -127,6 +128,12 @@ export function DataTable<TRow extends object>({
   onRowClick?: (row: TRow) => void;
   /** The `rowId` of the highlighted row, or `null` when none is. */
   selectedId?: string | null;
+  /**
+   * Called by the table's Escape key while a row is selected, after it drops the J/K
+   * highlight, so the page can close its detail panel. Omit it and Escape only drops
+   * the highlight.
+   */
+  onDismiss?: () => void;
   /** Rendered in place of the rows when `rows` is empty. The header row stays. */
   emptyState?: ReactNode;
   /** An accessible description of the table, rendered visually hidden. */
@@ -216,12 +223,20 @@ export function DataTable<TRow extends object>({
     },
     {
       id: "shell.table-clear-highlight",
-      title: "Clear row highlight",
+      title:
+        onDismiss === undefined
+          ? "Clear row highlight"
+          : "Close the detail panel",
       group: "page",
       shortcut: "Escape",
-      when: () => highlight !== null,
+      when: () =>
+        highlight !== null ||
+        (onDismiss !== undefined && (selectedId ?? null) !== null),
       run: () => {
         setHighlightedId(null);
+        if (onDismiss !== undefined && (selectedId ?? null) !== null) {
+          onDismiss();
+        }
       },
     },
   ];

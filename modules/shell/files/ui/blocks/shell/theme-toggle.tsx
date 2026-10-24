@@ -61,7 +61,8 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-function currentChoice(): Theme {
+/** The theme choice in use now, read from `<html>`. The app's theme commands read it too. */
+export function currentThemeChoice(): Theme {
   const value = document.documentElement.getAttribute(THEME_ATTRIBUTE);
   return isTheme(value) ? value : "system";
 }
@@ -108,7 +109,11 @@ function chooseTheme(
 }
 
 export function ThemeMenuItem() {
-  const choice = useSyncExternalStore(subscribe, currentChoice, choiceOnServer);
+  const choice = useSyncExternalStore(
+    subscribe,
+    currentThemeChoice,
+    choiceOnServer
+  );
   const current = THEME_OPTIONS.find((option) => option.value === choice);
 
   return (

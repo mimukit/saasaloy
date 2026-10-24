@@ -16,7 +16,7 @@ import type { NavItem } from "./nav";
 // With no `command` module installed, nothing reads them, and the app behaves as it did.
 // With it, each one is a palette row, and a row's `shortcut` is its key binding.
 //
-// The builder is pure on purpose. It takes the three side effects as arguments and
+// The builder is pure on purpose. It takes the side effects and the theme reader as arguments and
 // imports no router, no session and no DOM, so commands.test.ts can walk NAV_AREAS and
 // check that every row has a command and that no two shortcuts are equal.
 
@@ -25,6 +25,8 @@ export interface AppCommandActions {
   navigate: (to: NavItem["to"]) => void;
   signOut: () => void;
   setTheme: (theme: Theme) => void;
+  /** The theme choice in use now, read when the palette renders its "Current" mark. */
+  currentTheme: () => Theme;
 }
 
 /** "Recent signups" → "recent-signups", the tail of a "Go to" command id. */
@@ -49,6 +51,7 @@ export function appCommands({
   navigate,
   signOut,
   setTheme,
+  currentTheme,
 }: AppCommandActions): Command[] {
   const items: readonly NavItem[] = NAV_AREAS.flatMap((area) =>
     area.groups.flatMap((group) => group.items)
@@ -71,6 +74,7 @@ export function appCommands({
     group: "preferences",
     keywords: ["appearance", "color scheme"],
     icon,
+    active: () => currentTheme() === value,
     run: () => {
       setTheme(value);
     },

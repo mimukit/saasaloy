@@ -100,7 +100,7 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 | `PageHeader` | `blocks/shell/page-header` | `title`, `count?`, `description?`, `actions?` | The page's only `h1`. `count` stays out of the heading text; `0` renders, `undefined` does not. `actions` holds the page-level buttons, such as Refresh or New. |
 | `PageBody` | `containers/shell/page-body` | `children` | The padded, scrolling body under the header, for cards, forms and editors. A list page that hands its height to `DataTable` does not need it. |
 | `PageLayout` | `containers/shell/page-layout` | `children`, `detail?`, `detailLabel?`, `onDetailClose?` | Puts a list beside its detail. `detail` docks as a column at `md` and up and opens as a bottom sheet below it; the same node either way. Passing `undefined` closes both. |
-| `DataTable` | `blocks/shell/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `emptyState?` | See below. |
+| `DataTable` | `blocks/shell/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `onDismiss?`, `emptyState?` | See below. |
 | `DetailPanel` | `blocks/shell/detail-panel` | `title`, `onClose`, `description?`, `media?`, `status?`, `banner?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `footer?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. `status` renders after the title in the header, for one `StatusPill` or two; when the header shows the status, drop the status attribute row. `banner` renders under the header and above the tabs and does not scroll; pass an `Alert` from `components/shell/alert`. `footer` is pinned under the scrolling body behind a hairline, for the record's main decision such as Confirm and Reject. `actions` stays inside the scrolling body, for in-body controls such as a role select. A panel with none of the three renders as before. It draws no border; `PageLayout` supplies the edge. |
 | `FilterChips` | `blocks/shell/filter-chips` | `chips`, `selectedId`, `onSelect`, `label` | Each chip is a real `button` with `aria-pressed`. Filtering is the route's. |
 | `AttributeList` | `blocks/shell/attribute-list` | `items` | A `dl` of label and value. An empty value renders as an em dash. |
@@ -143,12 +143,13 @@ useCommands(
 );
 ```
 
-A command is `{ id, title, group, keywords?, icon?, shortcut?, when?, run(ctx) }`:
+A command is `{ id, title, group, keywords?, icon?, shortcut?, when?, active?, run(ctx) }`:
 
 - `id` is `<module>.<verb>`, for example `admin.go-to-users`. It is unique across the app.
 - `group` is `page`, `navigation`, `actions` or `preferences`. The palette shows the page group first, under the registration's `label`.
 - `shortcut` is a logical key, so it follows the typed character on every layout: `Mod+K` (Cmd on macOS, Ctrl elsewhere), `?`, `J`, `Enter`, `Escape`, or a sequence written with spaces, such as `G U`. A key exists only on a command, so the palette and the sheet can never miss one.
 - `when` hides the command and disables its key while it returns `false`. `run` receives `{ source: "palette" | "shortcut" }`.
+- `active` marks the current choice of a set, such as the theme in use. The palette reads it when it renders and shows "Current" in place of the keycap.
 
 `useCommands` registers in an effect and unregisters when the component unmounts. A new `run` or `when` closure on each render does not register again; the registered command calls the latest one. A change to an id, a title, a group, a shortcut, the keywords or the scope does register again. `icon` is read at registration time, so pass a module-level icon component.
 
@@ -160,7 +161,7 @@ The `scope` says how long a registration lives and which keys may overlap:
 | `route` | the current page's commands, listed first in the palette under `label` | the page is mounted |
 | `data-table` | the table keys `DataTable` declares | a `DataTable` is mounted |
 
-The shell declares two sets itself. `SidebarProvider` declares `shell.toggle-sidebar` on `Mod+B` in `global`; it keeps its raw Cmd/Ctrl+B listener only while `useCommandProvider()` is `false`, so the key works with or without `command` and never toggles twice. `DataTable` declares `J` (next row), `K` (previous row), `Enter` (open the highlighted row, the same call a row click makes) and `Escape` (drop the highlight) in `data-table`. The highlight takes the rows' hover tone, so it never reads as the selection. Closing the detail panel stays with the route, which owns the selection.
+The shell declares two sets itself. `SidebarProvider` declares `shell.toggle-sidebar` on `Mod+B` in `global`; it keeps its raw Cmd/Ctrl+B listener only while `useCommandProvider()` is `false`, so the key works with or without `command` and never toggles twice. `DataTable` declares `J` (next row), `K` (previous row), `Enter` (open the highlighted row, the same call a row click makes) and `Escape` (drop the highlight) in `data-table`. The highlight takes the rows' hover tone, so it never reads as the selection. The route owns the selection: pass `onDismiss` and Escape also calls it while a row is selected, so the page closes its detail panel (`routes/users.tsx` in admin does). With no `onDismiss`, Escape only drops the highlight.
 
 Before you bind a key, read the reserved key table in the `saasaloy-command` skill. `C`, `E`, `Mod+Backspace`, `/` and `G` then a letter carry one meaning each across every app. Use a reserved key only for its meaning, or pick an unreserved key. Two bindings that clash in overlapping scopes throw in dev.
 
