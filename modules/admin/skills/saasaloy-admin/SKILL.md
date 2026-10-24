@@ -170,10 +170,12 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 `DataTable` is the only file that imports `@tanstack/react-table`, and that is the point: a caller describes its screen with `columns` and `rows` and never sees a `ColumnDef` or a sorting state. A column is:
 
 ```tsx
-{ id, header, value, cell?, sortable?, align? }
+{ id, header, value, cell?, sortable?, align?, card? }
 ```
 
 `value(row)` is both the sort key and the cell content when `cell` is absent, so the two cannot fall out of step. `cell(row)` renders anything richer. `rowId(row)` keys the rows, matches `selectedId`, and is what `onRowClick` should store, because an index breaks the moment a sort reorders the table. Sorting is client side and two-state, and the active header is the one place `--accent-sort` orange appears. Empty cells render `—`, a boolean renders `Yes`/`No`, and a `Date` renders through `toLocaleDateString()`.
+
+Below `md` the same rows render as a `<ul>` of cards, so a list has no sideways scroll at 360 px. The table and the card list never mount together: `DataTable` reads the width through `useMediaQuery("md")` from `lib/admin/use-media-query`, the same call `PageLayout` makes. A card is a title row over a `<dl>` of label and value lines, each label the column's `header`. The column's `card` hint picks its place: `title` heads the card, `trailing` sits at the right of the title row (an amount, a status, a role), `line` is a label and value line, and `hidden` leaves the column out. With no column hinted `title`, the first column is the title, and every other unhinted column is a line, so a page with no hints still gets usable cards. The cards keep the order the table's sort state gives and show no sort control. With `onRowClick`, each card is one `<button>` with `aria-current` on the selected one and the table's focus ring; the selected card takes the same accent fill as the selected row. The empty state and the caption carry over. The slot rule is `cardSlots(columns)` in `blocks/admin/data-table-cards.ts`, JSX-free so `pnpm test:modules` covers it. Set `card: "trailing"` on the one column a reader scans for, and `card: "hidden"` on a column that only makes sense beside the others in a table.
 
 Inside a page, build every control from the primitive set: `Field` with `FieldLabel` and `Input`, `Select` or `Checkbox` in a form; `Switch` for an on/off setting; `Dialog` for a create flow; `AlertDialog` before a revoke, a delete or a cancel; and `toastManager.add({ type, title, description })` from `components/admin/toast` for the result of every mutation. The toast provider is already mounted in `__root.tsx`.
 

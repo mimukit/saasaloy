@@ -1,7 +1,8 @@
-import { useCallback, useSyncExternalStore } from "react";
+import { useCallback } from "react";
 import type { ReactNode } from "react";
 
 import { Sheet, SheetPopup, SheetTitle } from "@repo/ui/components/admin/sheet";
+import { useMediaQuery } from "@repo/ui/lib/admin/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 
 // What a route renders inside the shell's content panel: a column for the page itself,
@@ -20,35 +21,12 @@ import { cn } from "@repo/ui/lib/utils";
 // `undefined`, and both the side panel and the sheet close. There is no second boolean
 // to keep in step.
 
-/** Tailwind's `md`. The one place the breakpoint is written as a number. */
-const MD_QUERY = "(min-width: 48rem)";
-
-function subscribeToWidth(onChange: () => void): () => void {
-  const list = window.matchMedia(MD_QUERY);
-  list.addEventListener("change", onChange);
-
-  return () => {
-    list.removeEventListener("change", onChange);
-  };
-}
-
-/**
- * Whether the viewport is at `md` or wider.
- *
- * A CSS-only answer would not do here. `md:hidden` on the sheet still mounts it, and a
- * mounted sheet traps focus and paints a backdrop even while it is invisible, so the
- * detail panel would be modal at desktop. Reading the breakpoint in JavaScript lets one
- * of the two placements render and the other not exist at all.
- */
-function useIsDesktop(): boolean {
-  return useSyncExternalStore(
-    subscribeToWidth,
-    () => window.matchMedia(MD_QUERY).matches,
-    // The server snapshot. The admin app is a client-rendered SPA, so this is only the
-    // value React uses if it ever hydrates; desktop is the layout the shell assumes.
-    () => true
-  );
-}
+// The width is read in JavaScript through `useMediaQuery("md")`, the same call DataTable
+// and the sidebar make, rather than with CSS. `md:hidden` on the sheet would still mount
+// it, and a mounted sheet traps focus and paints a backdrop even while it is invisible, so
+// the detail panel would be modal at desktop. Reading the breakpoint lets one of the two
+// placements render and the other not exist at all. The hook's server snapshot is
+// `false`; the admin app is a client-rendered SPA, so that value is never used.
 
 export function PageLayout({
   children,
@@ -66,7 +44,7 @@ export function PageLayout({
   onDetailClose?: () => void;
   className?: string;
 }) {
-  const isDesktop = useIsDesktop();
+  const isDesktop = useMediaQuery("md");
   const open = detail !== undefined && detail !== null;
 
   const handleOpenChange = useCallback(

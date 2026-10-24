@@ -9,7 +9,7 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { useMemo } from "react";
+import { useId, useMemo } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -20,9 +20,14 @@ import {
   TableHeader,
   TableRow,
 } from "@repo/ui/components/admin/table";
+import { useMediaQuery } from "@repo/ui/lib/admin/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 
 import { EMPTY, isEmptyValue } from "@repo/ui/blocks/admin/attribute-list";
+// Relative, not `@repo/ui/blocks/...`: the package maps `./blocks/*` to `.tsx` files only,
+// and this rule is a `.ts` file so `node --test` can load it without JSX.
+import { cardSlots } from "./data-table-cards";
+import type { CardSlot } from "./data-table-cards";
 
 // The dense list the reference renders in the content panel: a muted header row, rows
 // about 48px tall, an em dash wherever a cell has nothing, and one column at a time
@@ -36,6 +41,12 @@ import { EMPTY, isEmptyValue } from "@repo/ui/blocks/admin/attribute-list";
 // The library earns its place on sorting alone: comparators for strings, numbers and
 // dates, a stable order for equal keys, and one place that owns which column is active.
 // Everything else here is markup.
+//
+// Below `md` the same rows render as a list of cards instead of a table, because six
+// columns do not fit 360px without a sideways scroll. The columns decide the card through
+// their `card` hint, so a page describes one layout and gets both. The breakpoint is read
+// in JavaScript, not CSS, so the table and the card list never mount together: two
+// mounted copies would put every row's button in the Tab order twice.
 
 /**
  * What a column reads out of a row: the sort key, and the cell content when the column
@@ -62,6 +73,13 @@ export interface DataTableColumn<TRow> {
   sortable?: boolean;
   /** `end` right-aligns the column, for counts and dates. Defaults to `start`. */
   align?: "start" | "end";
+  /**
+   * Where the column goes in the card list below `md`. `title` heads the card, `trailing`
+   * sits at the right of the title row (an amount, a status), `line` is a label and value
+   * line under it, and `hidden` leaves the column out of the card. With no column hinted
+   * `title`, the first column is the title; every other unhinted column is a line.
+   */
+  card?: CardSlot;
 }
 
 // Registered once, at module scope. v9 has no global feature set: a table only has
@@ -134,6 +152,24 @@ export function DataTable<TRow extends object>({
   });
 
   const modelRows = table.getRowModel().rows;
+  const isDesktop = useMediaQuery("md");
+
+  if (!isDesktop) {
+    return (
+      <DataTableCards
+        columns={columns}
+        // The sorted row model, so the cards keep whatever order the table's sort state
+        // gives. The card list shows no sort control of its own.
+        rows={modelRows.map((modelRow) => modelRow.original)}
+        rowId={rowId}
+        onRowClick={onRowClick}
+        selectedId={selectedId}
+        emptyState={emptyState}
+        caption={caption}
+        className={className}
+      />
+    );
+  }
 
   return (
     <div
@@ -287,6 +323,134 @@ export function DataTable<TRow extends object>({
         </TableBody>
       </Table>
     </div>
+  );
+}
+
+/**
+ * The rows as cards, for widths below `md`. Each card is the title row (title columns,
+ * then trailing columns at the right) over a list of label and value lines. A card with
+ * `onRowClick` is one button, the whole card, which is the keyboard path the table's
+ * first-cell button gives at desktop.
+ */
+function DataTableCards<TRow extends object>({
+  columns,
+  rows,
+  rowId,
+  onRowClick,
+  selectedId,
+  emptyState,
+  caption,
+  className,
+}: {
+  columns: readonly DataTableColumn<TRow>[];
+  rows: readonly TRow[];
+  rowId: (row: TRow) => string;
+  onRowClick?: (row: TRow) => void;
+  selectedId?: string | null;
+  emptyState?: ReactNode;
+  caption: string;
+  className?: string;
+}) {
+  const captionId = useId();
+  const slots = useMemo(() => cardSlots(columns), [columns]);
+
+  return (
+    <div
+      className={cn(
+        "flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto",
+        className
+      )}
+    >
+      {/* The table's caption, kept for assistive tech. It names the list below. */}
+      <p id={captionId} className="sr-only">
+        {caption}
+      </p>
+
+      {rows.length === 0 ? (
+        <p className="text-muted-foreground px-(--page-gutter) py-3 text-center text-sm">
+          {emptyState ?? "Nothing to show."}
+        </p>
+      ) : (
+        <ul aria-labelledby={captionId} className="flex flex-col">
+          {rows.map((row) => {
+            const id = rowId(row);
+            const selected = selectedId === id;
+
+            const body = (
+              <>
+                <span className="flex min-w-0 items-start gap-2">
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {slots.title.map((column) => (
+                      <span key={column.id}>{cellBody(column, row)}</span>
+                    ))}
+                  </span>
+                  {slots.trailing.map((column) => (
+                    <span key={column.id} className="shrink-0 text-sm">
+                      {cellBody(column, row)}
+                    </span>
+                  ))}
+                </span>
+
+                {slots.lines.length === 0 ? null : (
+                  <dl className="text-muted-foreground mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
+                    {slots.lines.map((column) => (
+                      <div key={column.id} className="contents">
+                        <dt>{column.header}</dt>
+                        <dd className="text-foreground min-w-0 truncate">
+                          {cellBody(column, row)}
+                        </dd>
+                      </div>
+                    ))}
+                  </dl>
+                )}
+              </>
+            );
+
+            return (
+              <li
+                key={id}
+                // The same accent fill the table's selected row takes.
+                className={cn(
+                  "border-border border-b",
+                  selected && "bg-accent"
+                )}
+              >
+                {onRowClick === undefined ? (
+                  <div className="block px-(--page-gutter) py-3">{body}</div>
+                ) : (
+                  <button
+                    type="button"
+                    aria-current={selected ? true : undefined}
+                    onClick={() => {
+                      onRowClick(row);
+                    }}
+                    // The table row button's focus ring, so focus looks the same at
+                    // every width.
+                    className="hover:bg-accent/50 focus-visible:ring-ring/50 block w-full px-(--page-gutter) py-3 text-left transition-colors focus-visible:ring-[3px] focus-visible:outline-none focus-visible:ring-inset"
+                  >
+                    {body}
+                  </button>
+                )}
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/** A column's content for one row, or the em dash when it has none. */
+function cellBody<TRow>(column: DataTableColumn<TRow>, row: TRow): ReactNode {
+  const content =
+    column.cell === undefined
+      ? renderValue(column.value(row))
+      : column.cell(row);
+
+  return isEmptyValue(content) ? (
+    <span className="text-muted-foreground">{EMPTY}</span>
+  ) : (
+    content
   );
 }
 

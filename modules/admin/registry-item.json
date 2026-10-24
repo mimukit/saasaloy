@@ -87,6 +87,10 @@
       "target": "@ui/blocks/admin/brand-mark.tsx"
     },
     {
+      "path": "files/ui/blocks/admin/data-table-cards.ts",
+      "target": "@ui/blocks/admin/data-table-cards.ts"
+    },
+    {
       "path": "files/ui/blocks/admin/data-table.tsx",
       "target": "@ui/blocks/admin/data-table.tsx"
     },

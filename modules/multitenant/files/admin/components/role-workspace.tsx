@@ -143,6 +143,7 @@ const ROLE_COLUMNS: readonly DataTableColumn<RoleRow>[] = [
   {
     id: "kind",
     header: "Type",
+    card: "trailing",
     value: (role) => (role.locked ? "base" : "custom"),
     sortable: true,
     // A custom role is the thing this screen exists to manage, so it takes the blue pill;
@@ -198,6 +199,7 @@ const MEMBER_COLUMNS: readonly DataTableColumn<MemberRow>[] = [
   {
     id: "role",
     header: "Role",
+    card: "trailing",
     value: (member) => member.role,
     sortable: true,
     cell: (member) =>

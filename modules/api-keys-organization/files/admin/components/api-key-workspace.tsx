@@ -173,6 +173,7 @@ const COLUMNS: readonly DataTableColumn<KeyRow>[] = [
   {
     id: "status",
     header: "Status",
+    card: "trailing",
     value: (row) => row.enabled,
     sortable: true,
     cell: (row) => <KeyStatus enabled={row.enabled} />,

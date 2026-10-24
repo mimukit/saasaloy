@@ -144,6 +144,7 @@ const INVOICE_COLUMNS: readonly DataTableColumn<InvoiceRow>[] = [
   {
     id: "amount",
     header: "Amount",
+    card: "trailing",
     // The minor-unit number sorts; the cell shows it formatted. Mixed currencies sort by
     // the raw number, which is the best a list with no exchange rate can do.
     value: (invoice) => invoice.amount,

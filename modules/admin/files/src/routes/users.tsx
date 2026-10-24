@@ -106,6 +106,7 @@ const COLUMNS: readonly DataTableColumn<AdminUser>[] = [
   {
     id: "role",
     header: "Role",
+    card: "trailing",
     value: roleOf,
     sortable: true,
     // Admin is the live state on this screen, so it takes the blue pill and every other

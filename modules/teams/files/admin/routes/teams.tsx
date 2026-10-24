@@ -114,6 +114,7 @@ const COLUMNS: readonly DataTableColumn<OrganizationRow>[] = [
   {
     id: "status",
     header: "Status",
+    card: "trailing",
     value: (organization) => organization.isActive,
     sortable: true,
     cell: (organization) => <ActiveStatus active={organization.isActive} />,
