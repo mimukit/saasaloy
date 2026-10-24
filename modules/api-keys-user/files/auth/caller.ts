@@ -1,7 +1,7 @@
 import { HTTPException } from "hono/http-exception";
 import { auth } from "./auth";
-import { keyAllows } from "./api-key-rules";
-import type { Caller, ScopeDemand } from "./api-key-rules";
+import { keyAllows, ownerMayUseKeys } from "./api-key-rules";
+import type { Caller, KeyOwner, ScopeDemand } from "./api-key-rules";
 import { SIGNED_OUT } from "./authorize";
 import type { Denial } from "./authorize";
 import { withAuthScope } from "./db-provider";
@@ -74,8 +74,9 @@ function invalidKeyError(): HTTPException {
  *
  * It RETURNS its failures rather than throwing them: `{ valid: false, error: { code } }`
  * for KEY_NOT_FOUND, KEY_DISABLED, KEY_EXPIRED and INVALID_API_KEY alike. All four
- * collapse to the same 401 here. The `try` is for a transport or database failure
- * underneath, which must not surface as a 500 naming the auth internals.
+ * collapse to the same 401 here, and so does a key whose owner is banned or gone. The
+ * `try` is for a transport or database failure underneath, which must not surface as a
+ * 500 naming the auth internals.
  */
 async function keyCaller(c: AuthRequestContext): Promise<Caller> {
   const key = bearerKey(c.req.raw.headers);
@@ -83,18 +84,29 @@ async function keyCaller(c: AuthRequestContext): Promise<Caller> {
     throw invalidKeyError();
   }
 
-  const result = await withAuthScope(c, async () => {
+  const verified = await withAuthScope(c, async () => {
     try {
-      return await auth.api.verifyApiKey({ body: { key } });
+      const result = await auth.api.verifyApiKey({ body: { key } });
+      if (!result.valid || !result.key) {
+        return null;
+      }
+      const found = result.key as unknown as VerifiedKey;
+      // A banned owner keeps no working key. `verifyApiKey` never reads the user row, so
+      // a ban, which only revokes sessions, would leave every key live. Same 401 as any
+      // other failed key, so a caller learns nothing about the account.
+      const context = await auth.$context;
+      const owner = (await context.internalAdapter.findUserById(
+        found.referenceId
+      )) as KeyOwner | null;
+      return ownerMayUseKeys(owner) ? found : null;
     } catch {
       return null;
     }
   });
 
-  if (!result?.valid || !result.key) {
+  if (!verified) {
     throw invalidKeyError();
   }
-  const verified = result.key as unknown as VerifiedKey;
 
   return {
     userId: verified.referenceId,

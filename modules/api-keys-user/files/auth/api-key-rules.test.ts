@@ -16,7 +16,7 @@ import {
   emptyDemandDenial,
   permissionDenial,
 } from "../../../teams/files/auth/permission-rules.ts";
-import { keyAllows, scopeDenial } from "./api-key-rules.ts";
+import { keyAllows, ownerMayUseKeys, scopeDenial } from "./api-key-rules.ts";
 import type { CallerPrincipal } from "./api-key-rules.ts";
 
 const VOCABULARY = { cards: ["read", "write"], reviews: ["read"] };
@@ -157,5 +157,44 @@ describe("the refusal text matches teams' permission-rules.ts", () => {
   it("states an empty demand the way emptyDemandDenial does", () => {
     assert.deepEqual(keyAllows(USER, {}).denial, emptyDemandDenial());
     assert.deepEqual(keyAllows(key({}), {}).denial, emptyDemandDenial());
+  });
+});
+
+describe("ownerMayUseKeys", () => {
+  const NOW = Date.parse("2026-10-24T00:00:00.000Z");
+
+  it("lets an owner who is not banned use their keys", () => {
+    assert.equal(ownerMayUseKeys({ banned: false }, NOW), true);
+    assert.equal(ownerMayUseKeys({ banned: null }, NOW), true);
+    assert.equal(ownerMayUseKeys({}, NOW), true);
+  });
+
+  it("refuses a banned owner with no expiry", () => {
+    assert.equal(ownerMayUseKeys({ banned: true }, NOW), false);
+    assert.equal(
+      ownerMayUseKeys({ banned: true, banExpires: null }, NOW),
+      false
+    );
+  });
+
+  it("refuses a banned owner whose ban has not expired", () => {
+    const later = new Date(NOW + 60_000);
+    assert.equal(
+      ownerMayUseKeys({ banned: true, banExpires: later }, NOW),
+      false
+    );
+  });
+
+  it("lets a banned owner through once the ban has expired", () => {
+    const earlier = new Date(NOW - 60_000).toISOString();
+    assert.equal(
+      ownerMayUseKeys({ banned: true, banExpires: earlier }, NOW),
+      true
+    );
+  });
+
+  it("refuses a key with no owner row", () => {
+    assert.equal(ownerMayUseKeys(null, NOW), false);
+    assert.equal(ownerMayUseKeys(undefined, NOW), false);
   });
 });
