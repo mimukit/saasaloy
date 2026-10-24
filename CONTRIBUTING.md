@@ -536,6 +536,8 @@ To see the whole plan without doing any of it:
 pnpm release:dry
 ```
 
+The dry run skips the preflight hook. Run `pnpm release:preflight` to check the release requirements and the packed artifact.
+
 ### The npm README
 
 `packages/cli/README.md` is generated and gitignored. npm reads a package's README from the directory holding its `package.json` and nowhere else, so the repo root README never reaches the npm page on its own. `prepack` runs `pnpm readme:cli`, which copies the root README into `packages/cli/` and rewrites every relative link to an absolute `github.com` URL. npm resolves relative links against `repository.directory`, which is `packages/cli`, so `LICENSE.md` would otherwise 404.
@@ -558,7 +560,7 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
 3. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-4. Runs `pnpm release:smoke`, which packs the tarball, installs it into `.dev/release-smoke/` with npm (outside any workspace), and drives `saasaloy --version`, `saasaloy init` and `saasaloy add api` through the installed bin. `add` runs offline against this repo's `modules/`, so it proves the artifact and not GitHub's uptime. It then installs the project from the network and starts the web app's `astro dev`. Last, it scaffolds one project per database driver with every module and runs the project's own `pnpm lint`, because only a real project resolves the imports between workspaces and runs the type-aware pass over the installed blocks.
+4. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices. Each database driver runs with each API key owner, and each project adds its driver first.
 
 On a rerun after a transient failure you can skip step 3:
 

@@ -198,4 +198,72 @@ describe("fullScaffolds", () => {
       { modules: ["api", "kv"], name: "full" },
     ]);
   });
+
+  it("crosses independent choices and adds the database driver before API key ownership", () => {
+    const modules = [
+      free("api"),
+      {
+        ...free("database"),
+        dependsOn: ["api"],
+        requiresOneOf: ["database-d1", "database-postgres"],
+      },
+      {
+        conflictsWith: ["database-postgres"],
+        dependsOn: ["database"],
+        name: "database-d1",
+      },
+      {
+        conflictsWith: ["database-d1"],
+        dependsOn: ["database"],
+        name: "database-postgres",
+      },
+      { ...free("auth"), dependsOn: ["database"] },
+      {
+        ...free("api-keys"),
+        dependsOn: ["auth"],
+        requiresOneOf: ["api-keys-organization", "api-keys-user"],
+      },
+      {
+        conflictsWith: ["api-keys-user"],
+        dependsOn: ["api-keys"],
+        name: "api-keys-organization",
+      },
+      {
+        conflictsWith: ["api-keys-organization"],
+        dependsOn: ["api-keys"],
+        name: "api-keys-user",
+      },
+    ];
+    const scaffolds = fullScaffolds(modules);
+    assert.equal(scaffolds.length, 4);
+    const combinations = new Set<string>();
+    for (const scaffold of scaffolds) {
+      const drivers = scaffold.modules.filter((name) =>
+        name.startsWith("database-")
+      );
+      const owners = scaffold.modules.filter((name) =>
+        name.startsWith("api-keys-")
+      );
+      assert.equal(drivers.length, 1);
+      assert.equal(owners.length, 1);
+      assert.equal(scaffold.modules[0], drivers[0]);
+      assert.equal(scaffold.modules[1], owners[0]);
+      combinations.add(`${drivers[0]}/${owners[0]}`);
+    }
+    assert.equal(combinations.size, 4);
+  });
+
+  it("honours one-sided conflicts without dropping compatible modules", () => {
+    assert.deepEqual(
+      fullScaffolds([
+        { conflictsWith: ["b"], name: "a" },
+        free("b"),
+        { conflictsWith: ["b"], name: "c" },
+      ]),
+      [
+        { modules: ["a", "c"], name: "full-a-c" },
+        { modules: ["b"], name: "full-b" },
+      ]
+    );
+  });
 });

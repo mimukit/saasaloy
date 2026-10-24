@@ -83,6 +83,8 @@ const RENDER_ERROR_PATTERNS = [
 export interface ModuleEntry {
   name: string;
   conflictsWith: string[];
+  dependsOn?: string[];
+  requiresOneOf?: string[];
 }
 
 /** One project the lint step scaffolds, and the modules it adds, in order. */
@@ -151,27 +153,80 @@ export function findRenderErrors(log: string): string[] {
  * The projects that together put every registry module through a real project's
  * `pnpm lint` (issue #152). Exported for its own test.
  *
- * Two modules that conflict cannot share a project, so each module that declares a
- * conflict gets a project of its own, with every conflict-free module added after it.
- * Today that is one project per database driver. The driver goes first because most
- * other modules require a database.
+ * Each project takes a maximal compatible set of choices, then every conflict-free
+ * module. Independent choices cross, so each API key owner runs with each database
+ * driver. Dependencies order the choices before the remaining modules.
  */
 export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
-  const free = modules
-    .filter((entry) => entry.conflictsWith.length === 0)
+  const exclusive = modules
+    .filter((entry) =>
+      modules.some(
+        (other) =>
+          entry.conflictsWith.includes(other.name) ||
+          other.conflictsWith.includes(entry.name)
+      )
+    )
     .map((entry) => entry.name)
     .toSorted();
-  const exclusive = modules
-    .filter((entry) => entry.conflictsWith.length > 0)
+  const free = modules
+    .filter((entry) => !exclusive.includes(entry.name))
     .map((entry) => entry.name)
     .toSorted();
   if (exclusive.length === 0) {
     return [{ modules: free, name: "full" }];
   }
-  return exclusive.map((name) => ({
-    modules: [name, ...free],
-    name: `full-${name}`,
-  }));
+  const entries = new Map(modules.map((entry) => [entry.name, entry]));
+  const conflicts = (a: string, b: string): boolean =>
+    Boolean(entries.get(a)?.conflictsWith.includes(b)) ||
+    Boolean(entries.get(b)?.conflictsWith.includes(a));
+  let choices: string[][] = [[]];
+  for (const name of exclusive) {
+    choices = choices.flatMap((choice) =>
+      choice.some((other) => conflicts(name, other))
+        ? [choice]
+        : [choice, [...choice, name]]
+    );
+  }
+  return choices
+    .filter((choice) =>
+      exclusive.every(
+        (name) =>
+          choice.includes(name) ||
+          choice.some((other) => conflicts(name, other))
+      )
+    )
+    .toSorted((a, b) => a.join(",").localeCompare(b.join(",")))
+    .map((choice) => {
+      const selected = new Set(choice);
+      const visited = new Set<string>();
+      const ordered: string[] = [];
+      const visit = (name: string): void => {
+        if (visited.has(name)) {
+          return;
+        }
+        visited.add(name);
+        const entry = entries.get(name);
+        for (const dependency of entry?.dependsOn ?? []) {
+          visit(dependency);
+        }
+        const provider = entry?.requiresOneOf?.find((option) =>
+          selected.has(option)
+        );
+        if (provider !== undefined) {
+          visit(provider);
+        }
+        if (selected.has(name)) {
+          ordered.push(name);
+        }
+      };
+      for (const name of choice) {
+        visit(name);
+      }
+      return {
+        modules: [...ordered, ...free],
+        name: `full-${ordered.join("-")}`,
+      };
+    });
 }
 
 function fail(message: string, ...detail: string[]): never {
@@ -245,6 +300,16 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
         ? conflicts.filter((name): name is string => typeof name === "string")
         : [],
       name: dirent.name,
+      dependsOn: Array.isArray(descriptor.dependsOn)
+        ? descriptor.dependsOn.filter(
+            (name): name is string => typeof name === "string"
+          )
+        : [],
+      requiresOneOf: Array.isArray(descriptor.requiresOneOf)
+        ? descriptor.requiresOneOf.filter(
+            (name): name is string => typeof name === "string"
+          )
+        : [],
     });
   }
   return entries;
