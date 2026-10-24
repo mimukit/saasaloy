@@ -21,7 +21,7 @@ export const apiEnv = createEnv({
       .string()
       .default("")
       .describe(
-        "Comma-separated allowed origins for credentialed cross-origin requests, e.g. https://app.x.com. The localhost dev origins are always allowed."
+        "Comma-separated allowed origins for credentialed cross-origin requests, e.g. https://app.x.com. A set value replaces the localhost dev origins, so list every deployed frontend."
       ),
   },
   // A Worker is a server, and `typeof window === "undefined"` is true in a browser bundle

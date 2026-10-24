@@ -39,7 +39,7 @@ export default {
     // pointed at the convention we actually ship rather than turned off.
     "import-notation": "string",
 
-    // The colour tokens in `web.css` come from shadcn verbatim, in oklch's
+    // The colour tokens in `brand.css` come from shadcn verbatim, in oklch's
     // decimal form (`oklch(0.985 0 0)`). Rewriting 62 of them to `oklch(98.5% 0deg)`
     // is equivalent CSS that would then have to be re-applied by hand after every
     // upstream sync, and `scripts/verify-preset.ts` asserts on that block. Match

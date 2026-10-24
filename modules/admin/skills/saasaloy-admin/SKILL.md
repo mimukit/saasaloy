@@ -353,7 +353,7 @@ A data route needs no `errorComponent` of its own: the router's default renders 
 
 ## Theme and font
 
-**The admin app carries its own theme file.** This module writes `packages/ui/src/styles/admin.css`, beside the web app's `web.css`. It imports the shared `globals.css`, which owns Tailwind's entrypoint, the `@source` globs and the base layer and holds no token values. `admin.css` then imports the `shell` module's `shell.css` and declares the `dark` custom variant, this app's `:root` and `.dark` values, and its own `@theme inline` colour mapping and radius scale. The variant and the mapping repeat `web.css`'s on purpose: each theme file holds its own, so a shadcn preset aimed at `web.css` never reaches this app.
+**The admin app carries its own theme file.** This module writes `packages/ui/src/styles/admin.css`, beside the web app's `brand.css`. It imports the shared `globals.css`, which owns Tailwind's entrypoint, the `@source` globs and the base layer and holds no token values. `admin.css` then imports the `shell` module's `shell.css` and declares the `dark` custom variant, this app's `:root` and `.dark` values, and its own `@theme inline` colour mapping and radius scale. The variant and the mapping repeat `brand.css`'s on purpose: each theme file holds its own, so a shadcn preset aimed at `brand.css` never reaches this app.
 
 That `shell.css` import is load-bearing. It holds the `@source` line for `components/shell/`, the colour mapping for the status tokens, and the skeleton and toast motion. Drop it and every shell primitive renders unstyled with no error. See the `saasaloy-shell` skill.
 
@@ -394,7 +394,7 @@ It is exact-pinned. Template and module-descriptor dependencies are invisible to
 `3001` is not cosmetic. The api's `DEV_ORIGINS` allowlist and better-auth's `trustedOrigins` both
 hardcode `http://localhost:3001` as the keyless dev fallback, so a drifting port turns into a CORS
 rejection that reads like a code bug. `strictPort` makes a busy port fail loudly instead of quietly
-shifting to `3002`.
+shifting to `3002`, the port `apps/app` holds.
 
 In production the origin comes from `PUBLIC_API_URL`, and the api needs the admin origin in
 `CORS_ORIGINS`. The prefix is `PUBLIC_` rather than Vite's default `VITE_` (`envPrefix` in

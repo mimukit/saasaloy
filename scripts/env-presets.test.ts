@@ -29,7 +29,7 @@ const MODULES = join(ROOT, "modules");
 const BASE_ENV = join(ROOT, "packages/cli/templates/base/apps/web/src/env.ts");
 
 /** The services a `# @services` line and an `envServices` entry may name. */
-const SERVICES = new Set(["api", "web", "admin", "deploy"]);
+const SERVICES = new Set(["api", "web", "admin", "app", "deploy"]);
 
 interface Descriptor {
   envVars?: Record<string, string>;

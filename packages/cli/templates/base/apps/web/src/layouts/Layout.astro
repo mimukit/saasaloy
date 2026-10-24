@@ -1,8 +1,8 @@
 ---
 // The one document shell for every page. It owns <html>/<head>/<body> and the single
 // import of the web theme, so a page is only ever its own content — no page may
-// duplicate the shell or import a stylesheet again. web.css imports the shared
-// globals.css itself.
+// duplicate the shell or import a stylesheet again. web.css imports brand.css, the
+// tokens, and brand.css imports the shared globals.css.
 import { config } from "@repo/config";
 import "@repo/ui/styles/web.css";
 import { siteName } from "@repo/ui";

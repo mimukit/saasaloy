@@ -176,13 +176,13 @@ The base uses a neutral, content-first system. It gives a new product a clear st
 
 ## Apps
 
-This file covers the web app. Each app has its own theme file in `packages/ui/src/styles/` and its own `DESIGN.md` in its own folder. `web.css` holds the tokens recorded here, and `globals.css` holds the shared Tailwind setup with no token values. Another app's theme file imports `globals.css` and declares its own tokens, mapping and radius scale, so a change here never reaches it.
+This file covers the web app. Each app has its own stylesheet in `packages/ui/src/styles/` and its own `DESIGN.md` in its own folder. `brand.css` holds the tokens recorded here, `web.css` imports it and adds the landing page's layout, type and motion vocabulary, and `globals.css` holds the shared Tailwind setup with no token values. Another app's theme file, such as `admin.css`, imports `globals.css` and declares its own tokens, mapping and radius scale, so a change here never reaches it.
 
 ## Colors
 
 The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive color is the only chromatic semantic token in the seed.
 
-Use the semantic custom properties in `packages/ui/src/styles/web.css`. Do not copy their current `oklch()` values into components.
+Use the semantic custom properties in `packages/ui/src/styles/brand.css`. Do not copy their current `oklch()` values into components.
 
 ## Typography
 
@@ -214,7 +214,7 @@ The `error-state` block is the one screen for a failure: a wrong path, a failed 
 
 ## Do's and Don'ts
 
-- Read this file and `packages/ui/src/styles/web.css` before you write UI.
+- Read this file, `packages/ui/src/styles/brand.css` and `packages/ui/src/styles/web.css` before you write UI.
 - Use semantic token utilities such as `bg-primary` and `text-muted-foreground`.
 - Keep light and dark token pairs together when you change a semantic role.
 - Keep new pages within the established type scale and radius vocabulary.
@@ -234,4 +234,4 @@ The `.dark` class selects the dark token set. The pre-paint theme script applies
 
 The theme toggle has two states, light and dark. `system` is only the starting state: a visitor who never pressed the toggle follows the OS. A press flips the resolved mode and stores the choice, and no press steps back to `system`. Do not add a third state or a light/dark/system menu to the toggle.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:e25d78b57596 of packages/ui/src/styles/web.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:d7c3ad027b63 of packages/ui/src/styles/brand.css_

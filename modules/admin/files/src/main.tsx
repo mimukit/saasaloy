@@ -14,7 +14,7 @@ import {
 import { RouteError } from "@admin/components/route-error";
 
 import { routeTree } from "./routeTree.gen";
-// The one theme import for the whole SPA. admin.css lives in packages/ui beside web.css:
+// The one theme import for the whole SPA. admin.css lives in packages/ui beside brand.css:
 // it imports the shared globals.css first — Tailwind's entrypoint, the @source globs and
 // the base layer — and then declares this app's tokens. The font comes in beside it,
 // because this app, not @repo/ui, depends on it. No route imports a stylesheet again.

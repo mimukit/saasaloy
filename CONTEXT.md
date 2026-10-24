@@ -136,8 +136,8 @@ The Phase-3 prioritization axis: a capability's rank equals how many downstream 
 ## Environment values
 
 ### Service
-A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
-_Avoid: app. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
+A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
+_Avoid: "app" as a word for any service: `app` is the name of one service, the customer SPA at `apps/app`. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
 
 ### Key list
 `packages/env/.env.example`, the project's one tracked file naming every environment key. `saasaloy add` generates it from the installed descriptors' `envVars`, grouped under a `# @services` line per distinct set of readers. It replaced `apps/api/.dev.vars.example` and every per-workspace example ([ADR 0040](docs/adr/0040-adr-a-scaffolded-project-writes-env-never-dev-vars-2026-09-20.md)).
@@ -156,8 +156,8 @@ _Avoid: schema for this. The schema is one key's validator; the preset is the se
 ## Production deploy
 
 ### Deploy target
-A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api and admin modules append `api` (10) and `admin` (20) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
-_Avoid: app, for this. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
+A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api, admin and app modules append `api` (10), `admin` (20) and `app` (25) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
+_Avoid: "app" as a word for any deploy target: `app` names one of them. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
 
 ### Smoke check
 A row in `SMOKE_CHECKS` in the same file: `{ id, service, path, status, body? }`, keyed by `id`. After every Worker is live, the deploy requests the path on each custom domain of the service (a `routes[]` entry with `custom_domain: true` in its `wrangler.jsonc`) and expects that status and body, three tries 5 seconds apart. A service with no custom domain gets no smoke check, and the run says so. A failed smoke check means no [deploy tag](#deploy-tag).
@@ -286,7 +286,7 @@ Machine-owned provenance at the consumer root: per installed module, its [regist
 _Avoid: putting resolved SHAs in `saasaloy.json`._
 
 ### File aliases
-The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin`.
+The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin` / `@app`.
 
 ### Conditional file entry (`onlyWith`)
 A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.
@@ -308,7 +308,7 @@ A `.saasaloy/manifest.json` entry whose hash the CLI took off disk rather than f
 _Avoid: pristine entry, baseline hash._
 
 ### Owned file
-A base-template file the template ships once and the project owns afterwards — `globals.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
+A base-template file the template ships once and the project owns afterwards — `globals.css`, `brand.css`, `web.css`, the blocks, the components, `packages/ui/src/index.ts`, the layout, the favicon. Declared as globs in `_saasaloy-base.json`'s `ownedFiles`, distinct from a [seed file](#seed-file), which is recorded and then ignored entirely. An owned file is created or restored when absent and routed to the merge plan when present.
 _Avoid: user file, editable file._
 
 ### Seed file
@@ -332,7 +332,7 @@ The committed design contract for one app, in that app's folder: `apps/web/DESIG
 Agent guidance copied by `init` because every generated project needs it. It differs from a module skill, which arrives only when `saasaloy add` installs its module.
 
 ### Token fingerprint
-The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/web.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
+The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/brand.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
 
 ### Module skill (skill folder)
 A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.

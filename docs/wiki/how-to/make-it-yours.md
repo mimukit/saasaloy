@@ -22,7 +22,7 @@ It needs the brief. Run without one and it offers to run `/saasaloy-setup` first
 
 The design skill owns `apps/web/DESIGN.md`, the web app's design contract. It records the design system; it writes no components and no pages. Three modes:
 
-- **`theme`** — pick a shadcn `registry:style` preset (from [ui.shadcn.com/create](https://ui.shadcn.com/create) or [tweakcn.com](https://tweakcn.com)), apply it to `packages/ui/src/styles/web.css`, and re-derive `apps/web/DESIGN.md` from the result. It reads the product brief for tone, so it too works better after step 1.
+- **`theme`** — pick a shadcn `registry:style` preset (from [ui.shadcn.com/create](https://ui.shadcn.com/create) or [tweakcn.com](https://tweakcn.com)), apply it to `packages/ui/src/styles/brand.css`, and re-derive `apps/web/DESIGN.md` from the result. It reads the product brief for tone, so it too works better after step 1.
 - **`update`** — re-derive the contract after you (or a module) change the design layer. `saasaloy add` reminds you to run this when an install writes into `packages/ui/`.
 - **`audit`** — report where the code and the contract disagree, writing nothing.
 

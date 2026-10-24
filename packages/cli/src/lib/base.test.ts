@@ -387,6 +387,7 @@ describe("the shipped declaration", () => {
 
     for (const target of [
       "packages/ui/src/styles/globals.css",
+      "packages/ui/src/styles/brand.css",
       "packages/ui/src/styles/web.css",
       "packages/ui/src/blocks/hero.tsx",
       "packages/ui/src/components/badge.tsx",

@@ -28,14 +28,20 @@ export interface Variables {
   log: Logger;
 }
 
-// Local dev origins for `apps/web` (Astro, :3000) and `apps/admin` (TanStack
-// Router/Vite, :3001) — the keyless dev fallback so `wrangler dev`/`vite dev` works
-// with zero config. Frontends get 3xxx, backends 4xxx (api is :4000); every dev server
-// pins its port with `strictPort`, so these stay true instead of drifting to the next
-// free port. Prod sets `CORS_ORIGINS` (comma-separated) explicitly; a misconfigured
-// prod value fails visibly (CORS rejects the real origin) rather than silently
-// falling back.
-const DEV_ORIGINS = ["http://localhost:3000", "http://localhost:3001"];
+// Local dev origins for `apps/web` (Astro, :3000), `apps/admin` (TanStack Router/Vite,
+// :3001) and `apps/app` (TanStack Router/Vite, :3002) — the keyless dev fallback so
+// `wrangler dev`/`vite dev` works with zero config. Frontends get 3xxx, backends 4xxx
+// (api is :4000); every dev server pins its port with `strictPort`, so these stay true
+// instead of drifting to the next free port. An origin stays listed when its app is not
+// installed, because nothing listens there. Prod sets `CORS_ORIGINS` (comma-separated)
+// explicitly, and a set value replaces this list rather than adding to it; a
+// misconfigured prod value fails visibly (CORS rejects the real origin) rather than
+// silently falling back.
+const DEV_ORIGINS = [
+  "http://localhost:3000",
+  "http://localhost:3001",
+  "http://localhost:3002",
+];
 
 // The one error body this api answers with: `{ error: { code, message } }`. It is the
 // same envelope `@repo/validators`' `errorSchema` describes, written out here because

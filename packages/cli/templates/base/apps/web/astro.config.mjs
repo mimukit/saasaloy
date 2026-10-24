@@ -79,7 +79,8 @@ export default defineConfig({
   vite: {
     // Tailwind 4 is a Vite plugin, not an Astro integration — `@astrojs/tailwind` is EOL
     // and never supported v4. The theme lives in packages/ui: the @source globs in
-    // src/styles/globals.css, the tokens in src/styles/web.css, which Layout.astro
+    // src/styles/globals.css, the tokens in src/styles/brand.css, and the landing
+    // utilities in src/styles/web.css, which imports brand.css and which Layout.astro
     // imports via `@repo/ui/styles/web.css`.
     plugins: [tailwindcss()],
     server: { strictPort: true },

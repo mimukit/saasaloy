@@ -1,5 +1,57 @@
 # Changelog
 
+## Unreleased
+
+### ⚠ BREAKING CHANGES
+
+* **ui:** the web tokens move from packages/ui/src/styles/web.css to
+  a new brand.css beside it: the `:root` and `.dark` blocks,
+  `@custom-variant dark` and `@theme inline`. brand.css imports
+  globals.css, web.css imports brand.css and keeps the landing
+  layout, type and motion utilities, and components.json points
+  shadcn at brand.css. saasaloy update creates brand.css from the
+  template and sends web.css to the merge plan because the project
+  owns it. globals.css and Layout.astro join the merge plan for
+  comment changes only. update leaves apps/web/DESIGN.md alone
+  because it is a seed file, and overwrites components.json only if
+  you never edited it.
+  Until you finish the steps below, Layout.astro still loads your
+  old web.css, so the site looks the same and brand.css is unused.
+
+  1. Copy the `@custom-variant dark` line and the `:root`, `.dark`
+     and `@theme inline` blocks from your web.css into brand.css,
+     replacing the template's copies below its
+     `@import "./globals.css";`. Keep your own values: a preset you
+     applied lives in web.css, not in the new file.
+  2. In web.css, delete those four and change
+     `@import "./globals.css";` to `@import "./brand.css";`. Keep
+     the landing block, from the comment that opens "The landing
+     page's layout" to the end of the file.
+  3. Set `tailwind.css` in packages/ui/components.json to
+     `src/styles/brand.css`, if the update did not.
+  4. Run the saasaloy-design skill's `update` flow, or edit the last
+     line of apps/web/DESIGN.md by hand so it names
+     packages/ui/src/styles/brand.css with the first 12 hex
+     characters of that file's sha256.
+  5. Run `pnpm build` and check that globals.css, brand.css and
+     web.css hold one `:root`, one `.dark`, one `@theme inline` and
+     one `@custom-variant dark` between them.
+
+* **email-react:** the template preview moves from port 3002 to
+  3003, because the coming `app` module takes 3002. saasaloy update
+  changes the `dev` script in packages/email-react/package.json.
+  Change a bookmark or a script that opens localhost:3002.
+
+### Features
+
+* **api, auth:** `http://localhost:3002` joins the dev origin list
+  in apps/api/src/index.ts and packages/auth/src/auth.ts, ready for
+  the `app` module. A project made before this release gets it from
+  `saasaloy update api auth`. Until then, a request from :3002 fails
+  CORS. The `CORS_ORIGINS` description now says that a set value
+  replaces the localhost list, so a deployed project lists every
+  frontend origin in it.
+
 ## [0.7.0](https://github.com/mimukit/saasaloy/compare/v0.6.1...v0.7.0) (2026-10-24)
 
 ### ⚠ BREAKING CHANGES

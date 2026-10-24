@@ -249,7 +249,7 @@ The admin app is a backoffice: dense lists, a detail panel beside them, and shor
 
 ## Apps
 
-This file covers the admin app, which `saasaloy add admin` installs. Its tokens live in `packages/ui/src/styles/admin.css`, which imports the shared `globals.css` and declares its own `:root` and `.dark` values, its `@theme inline` mapping and its radius scale. The web app has its own `apps/web/DESIGN.md` and `web.css`, and a change in one never reaches the other. A theme preset only ever targets `web.css`; nothing writes to `admin.css` but a person.
+This file covers the admin app, which `saasaloy add admin` installs. Its tokens live in `packages/ui/src/styles/admin.css`, which imports the shared `globals.css` and declares its own `:root` and `.dark` values, its `@theme inline` mapping and its radius scale. The web app has its own `apps/web/DESIGN.md` and `brand.css`, and a change in one never reaches the other. A theme preset only ever targets `brand.css`; nothing writes to `admin.css` but a person.
 
 ## Colors
 
