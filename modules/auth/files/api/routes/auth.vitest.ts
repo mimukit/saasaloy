@@ -125,7 +125,7 @@ describe("two instances, two cookies", () => {
     expect(res.status).toBe(200);
     cookieValue(res, "client.session_token");
     const rows = await database.db.select().from(sessions);
-    expect(rows.map((row) => row.audience)).toEqual(["client"]);
+    expect(rows.map((row) => row.audience)).toStrictEqual(["client"]);
   });
 
   it("writes the admin cookie and an admin row on /admin/auth", async () => {
@@ -134,7 +134,7 @@ describe("two instances, two cookies", () => {
     expect(res.status).toBe(200);
     cookieValue(res, "admin.session_token");
     const rows = await database.db.select().from(sessions);
-    expect(rows.map((row) => row.audience)).toEqual(["admin"]);
+    expect(rows.map((row) => row.audience)).toStrictEqual(["admin"]);
   });
 
   it("keeps a client and an admin signed in together in one browser", async () => {
@@ -339,5 +339,37 @@ describe("the admin instance", () => {
       }
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("password length", () => {
+  function signUp(env: object, password: string) {
+    return app.request(
+      "/auth/sign-up/email",
+      {
+        body: JSON.stringify({
+          email: "new@example.test",
+          name: "New Person",
+          password,
+        }),
+        headers: { "content-type": "application/json", ...ORIGIN },
+        method: "POST",
+      },
+      env
+    );
+  }
+
+  it("refuses a sign-up password shorter than 12 characters", async () => {
+    const res = await signUp(database.env, "elevenchars");
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe("PASSWORD_TOO_SHORT");
+  });
+
+  it("takes a sign-up password of 12 characters", async () => {
+    const res = await signUp(database.env, "twelve-chars");
+
+    expect(res.status).toBe(200);
   });
 });
