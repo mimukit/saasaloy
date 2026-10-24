@@ -115,6 +115,8 @@ rm -rf .dev/qa242-tdd
 ```
 
 ## Automated verification (by AI agent)
+
+_Updated 2026-10-24 · after a rebase onto `main` and a review fix round, the gate ran again at `eff9a71`: build, lint, typecheck, test and `verify:content` exit 0, and `test:e2e` gives 49 passed and the same 4 pre-existing failures. The results below come from the first run at `7e18318`._
 _Checks the agent ran itself at `7e18318` (clean tree). No action needed from the tester; listed here for context and sign-off._
 
 Commands run (one per block; chain with `&&` when they must run together):
