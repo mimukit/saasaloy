@@ -77,6 +77,21 @@ Attended: the owner approves the mockup screenshots and the round they settle on
 
 Done when: this phase carries an "Approved YYYY-MM-DD, round N" line, the list of picks, and the filter verdict.
 
+Approved 2026-10-24, round 1. The owner approved the 43 screenshots of round 1 in the T3 thread for #264.
+
+Picks:
+
+- Trigger location: the header's right slot, so the extension field stays `header`. From 640 px up it is a 240 px field that reads "Search commands…" with the Mod+K keycaps; below 640 px it is a 32 px icon button with no keycaps. The sidebar footer was the rejected option: it already holds the account row, and on a phone the sidebar is a closed sheet.
+- Palette: the shell `Dialog` popup at 576 px wide, placed 12 vh from the top (8 px from the top below 640 px, never bottom-stuck), with the 48 px search row, a list capped at `min(480px, 60vh)`, and a 40 px footer that shows ↑ ↓ Move, ↵ Run, Esc Close and ? All shortcuts. Below 640 px the footer drops Esc and ? and the search row drops its Esc keycap.
+- Groups in this order: the current page's commands under the page's title (for example "Users"), then Navigation, Actions and Preferences. A page that declares no command shows no page group. Rows are 34 px with a 16 px muted icon; the highlighted row takes the `accent` tone.
+- Keycaps inside a popup (the palette and the `?` sheet) take a 1 px inset `input` hairline and a transparent fill. The shell `Kbd` fill is `muted`, and on admin dark `muted` equals `popover`, so a filled keycap vanishes there. No new token.
+- Matched characters in a filtered row render semibold and underlined in the `muted-foreground` tone. The active theme row shows "Current" in place of a keycap.
+- Empty result: "No commands match “<query>”", then "Try a page name, such as “users”, or press ? for every shortcut."
+- The `?` sheet: a dialog titled "Keyboard shortcuts" with General, Navigation and, while a table is mounted, Data table sections. Two columns from 640 px, one below. A sequence reads `G` then `U`, with "then" in the caption size.
+- Keycaps follow the platform: ⌘ on macOS, Ctrl elsewhere.
+
+Filter verdict: use `@leeoniya/ufuzzy` 1.0.19, exact-pinned, with `{ intraIns: 1 }`. The Base UI 1.9.0 default is a collator `contains` match that keeps list order. On the 40 sample commands it returned nothing for "usr", "go u", "tog side" and "refnd"; uFuzzy matched all four and returned the same sets for "users", "inv", "dark", "theme", "api" and "subs". Within each group, rows follow uFuzzy's rank; the group order above stays fixed. The `command` descriptor adds the dependency next to `@tanstack/react-hotkeys`.
+
 ### Phase 2: the contract and the seam in `shell` (#264)
 
 - Add `modules/shell/files/ui/lib/shell/commands.ts`: the `Command` and `CommandScope` types, `CommandRegistryContext`, `useCommands(commands, { scope })`, and `useCommandProvider()`, which reports whether a provider is mounted. No dependency.
