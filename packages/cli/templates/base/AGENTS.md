@@ -151,13 +151,13 @@ The other five run when the thing they own moves:
 The linter is **[oxlint](https://oxc.rs)** configured from **[Ultracite](https://www.ultracite.ai)**'s presets, with **Prettier** and **Stylelint** owning formatting. All four run from `oxlint.config.mjs`, `prettier.config.js` and `stylelint.config.js` at the root — there is no shared config package, because oxlint cannot consume one (`extends` takes file paths, JSON only).
 
 - `pnpm lint` — the gate. Four passes, in order:
-  1. `lint:types` — oxlint with `--type-aware` over `packages/env/src`, `packages/tooling/src` and `packages/ui/src`
+  1. `lint:types` — oxlint with `--type-aware` over `packages/config/src`, `packages/env/src`, `packages/tooling/src` and `packages/ui/src`
   2. `lint:code` — oxlint over everything, no type information
   3. `lint:css` — Stylelint over `**/*.css`
   4. `format:check` — `prettier --check .`
-- `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over the same three folders, the plain one over everything, then Stylelint. **Never** add `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
+- `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over the same four folders, the plain one over everything, then Stylelint. **Never** add `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
 - `pnpm format` — `prettier --write .`
-- `pnpm typecheck` — `tsc`, and it must pass before you commit.
+- `pnpm typecheck` — `turbo run typecheck`, which runs `tsc` in each workspace, and it must pass before you commit.
 
 **Why the type-aware pass is scoped and the plain one is not.** `--type-aware` is a global CLI switch, so the split is by invocation rather than by config. It stays off `.astro` because `apps/web/tsconfig.json` includes the build-generated `.astro/types.d.ts`, which would make `astro sync` a prerequisite of every `pnpm lint`, including on a fresh clone. Do not merge the two passes.
 
@@ -203,7 +203,7 @@ Testing mode: `off`. This project ships no module tests, and `saasaloy add` writ
 An agent may build this project with no person at the keyboard. These rules apply only then, and they override "Ask First" where they say so.
 
 - **The signal is `autonomy: afk`** in the YAML frontmatter of `docs/product-brief.md`. Only a person sets it: `saasaloy-setup` asks "Run the build unattended?" as its last question. With no such field, every skill keeps its attended path and asks.
-- **A person supplies the two inputs**: the env values in `packages/env/.env`, and the brief, written through the attended `saasaloy-setup` interview. Run `pnpm env:setup` before the first build. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.
+- **A person supplies the two inputs**: the env values in `packages/env/.env`, and the brief, written through the attended `saasaloy-setup` interview. The person also runs `pnpm env:setup` before the first build. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.
 - **`pnpm check` is the gate.** Run `pnpm lint:fix` and `pnpm format`, then `pnpm check`. A stage is not done until it passes.
 - **Commit once per stage on `build/mvp`.** Create the branch if it does not exist, and continue on it when it does. Commit through the Husky and commitlint hooks, never with `--no-verify`. Never push.
 - **`docs/build-log.md` is the output.** Give each stage a `## <stage>` section with what it did and its commit hash. Put what stopped the run under `## Blocked`, and each step you leave for a person under `## Left for a human`. A new session reads the log first and continues from the last stage with a commit.

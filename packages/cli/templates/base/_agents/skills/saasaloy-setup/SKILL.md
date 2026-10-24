@@ -21,14 +21,14 @@ It writes no copy. `saasaloy-landing-copy` does that, from the brief this leaves
 |------|-----------------|
 | `docs/product-brief.md` | The whole file. Create `docs/` if it does not exist. |
 | `packages/config/src/project.ts` | `app.name` and `app.locale`, and nothing else in the file. |
-| `docs/build-log.md` | Under `autonomy: afk` only: one `## Setup` section, or the `## Blocked` list. |
+| `docs/build-log.md` | Under `autonomy: afk` only: the run's lines in the current stage's section, or in a `## Setup` section, or the `## Blocked` list. |
 
 Nothing else. You are not here to write the landing page, add a dependency, or touch a
 block.
 
 ## Step 0 — before you ask anything
 
-1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, nobody is at the keyboard: follow [Unattended run](#unattended-run) and ask nothing. Otherwise, if it exists, someone has already been through this. Read it fully and jump to [Re-running](#re-running).
+1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run) and ask nothing, unless a person in this conversation asks for the interview, a change to the brief, or to turn unattended runs off. Then take the attended path below. Otherwise, if it exists, someone has already been through this. Read it fully and jump to [Re-running](#re-running).
 2. **Read `packages/config/src/project.ts`** for the current `app.name`. It ships
    commented out, so the name is still the base's `"Saasaloy"` until someone sets it. When
    it is set, it is the best opening guess you have, and it belongs in question 1's
@@ -124,6 +124,8 @@ An answer is **weak** when it names no audience, no number, no named alternative
 proof the owner could point at. "Everyone" is not an audience. "It's faster" is not a
 differentiator. "Businesses struggle with productivity" is not a problem.
 
+An honest empty answer is not weak. "No proof yet", "no pricing yet" and "nothing to link to yet" are facts the owner stated, so record them as plain text with no `weak:` tag.
+
 Push back **at most twice per question**, and make each follow-up narrower than the last —
 carrying fresh samples, same as the first ask:
 
@@ -173,8 +175,8 @@ Ask where the primary call to action should go. Three answers to expect:
 - **A URL.** Record it. An external form, a waitlist provider, an app subdomain.
 - **A route this project will have later** (`/signup`). Record it, and note it does not
   exist yet.
-- **Nothing yet.** Record it as `weak:`. The page keeps sending people to its own closing
-  section, which is honest but weak, and the labels have to stay modest to match.
+- **Nothing yet.** Record "nothing to link to yet", with no `weak:` tag. The page keeps
+  sending people to its own closing section, and the labels have to stay modest to match.
 
 ## Step 2 — write the brief
 
@@ -182,10 +184,6 @@ Ask where the primary call to action should go. Three answers to expect:
 on every re-run, and it is what every other skill reads instead of interviewing again.
 
 ```md
----
-autonomy: afk
----
-
 # Product brief
 
 Last updated: YYYY-MM-DD (saasaloy-setup)
@@ -223,7 +221,13 @@ https://ledgerly.com.bd/waitlist — a Tally form, live now.
   visitor's device provides.
 ```
 
-The frontmatter is there only when the owner answered yes to "Run the build unattended?". Leave it out on a no.
+On a yes to "Run the build unattended?", put this frontmatter above the `# Product brief` title. On a no, leave it out:
+
+```md
+---
+autonomy: afk
+---
+```
 
 Two rules about this file:
 
@@ -274,9 +278,9 @@ A brief on disk means the interview already happened.
 `autonomy: afk` in the brief's frontmatter means a person answered yes to "Run the build unattended?" and is not at the keyboard now. Ask nothing in this run: no question, no confirmation, no preview that waits for an answer. The attended interview above never runs here, because only a person can write the brief.
 
 1. **Check that the brief is complete.** It is complete when all ten answers are present and filled: Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, and Where "sign up" goes. An honest empty answer ("no proof yet", "no pricing yet") counts as filled. An answer tagged `weak:`, a missing section, or an empty one does not. `Known gaps` and any extra section are not checked.
-2. **With an incomplete brief, stop.** Append each missing, empty or weak section to `docs/build-log.md` under `## Blocked`, one list item each, naming the section and what is wrong (`- Product brief: Proof is empty`). Create the file with a `# Build log` title when it does not exist, and add the `## Blocked` heading when it is not there. Write nothing else, and stop the run. An unattended build does not start the first module with a brief that is not complete.
+2. **With an incomplete brief, stop.** Append each missing, empty or weak section to `docs/build-log.md` under `## Blocked`, one list item each, naming the section and what is wrong (`- Product brief: Proof is empty`). Create the file with a `# Build log` title when it does not exist, and add the `## Blocked` heading when it is not there. End the list with `- Product brief: fill these sections with /saasaloy-setup, or delete the autonomy line to work attended`. Write nothing else, and stop the run. An unattended build does not start the first module with a brief that is not complete.
 3. **With a complete brief, set the two facts that are code.** Set `app.name` from Name and `app.locale` from Language's code in `packages/config/src/project.ts`, exactly as [Step 3](#step-3--set-the-two-facts-that-are-code) says, with no confirmation. Leave either one alone when it already matches the brief. Run `pnpm typecheck`.
-4. **Log what you did.** Append a `## Setup` section to `docs/build-log.md`: the name and the locale you set, or that both already matched, and the `pnpm typecheck` result. Leave the commit to the stage that runs this skill.
+4. **Log what you did** in `docs/build-log.md`: the name and the locale you set, or that both already matched, and the `pnpm typecheck` result. Add the lines under the current stage's `##` section when a build is running, and under a new `## Setup` section when none is. Write no hex string other than a commit hash, because the log's reader takes the first one in a section as its commit. The stage that commits adds its commit hash to that section.
 
 Never edit the brief in this run. A wrong answer in it is the owner's to fix.
 

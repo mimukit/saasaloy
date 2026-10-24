@@ -34,8 +34,8 @@ If the user does not name a mode, ask which mode to use. Do not choose between a
 | Mode | Files |
 |------|-------|
 | `theme` | web only: `packages/ui/src/styles/brand.css`, `apps/web/DESIGN.md`, `docs/product-brief.md` only when the brief is absent, and `docs/build-log.md` under `autonomy: afk` |
-| `update` | the chosen app's `DESIGN.md` only |
-| `audit` | none |
+| `update` | the chosen app's `DESIGN.md`, and `docs/build-log.md` under `autonomy: afk` |
+| `audit` | none, under `autonomy: afk` too |
 
 `theme` never runs for the admin app. A preset targets `brand.css` through `components.json`, and nothing writes to `admin.css` but a person. When the user asks to restyle the admin app, say so, and offer `update` after they edit `admin.css`.
 
@@ -165,14 +165,14 @@ Name the registry style URL. List the changed token groups and the new fingerpri
 
 ## Unattended run
 
-`autonomy: afk` in the frontmatter of `docs/product-brief.md` means nobody is at the keyboard. Ask nothing, and wait for no approval.
+`autonomy: afk` in the frontmatter of `docs/product-brief.md` means nobody is at the keyboard. Ask nothing, and wait for no approval. When a person in this conversation asks to choose the theme or to approve it, take the attended path instead.
 
 1. **Pick the mode.** With no mode named, run `theme` for the web app. A named mode runs as named. `theme` never runs for the admin app, here as anywhere.
-2. **Read the brief instead of asking.** Take the colour mood and the density from the Tone answer, the Audience answer and the site the owner pointed at. Ask no design question. With no brief, append `- Design: no docs/product-brief.md` under `## Blocked` in `docs/build-log.md` and stop. Create the log with a `# Build log` title when it does not exist.
-3. **Pick one registry style that fits the tone.** Take it from `https://tweakcn.com` or `https://ui.shadcn.com/create`, as [step 2 of `theme`](#2-choose-the-registry-style) says. Fetch the URL first and check that it serves a `registry:style` item. Do not invent a palette, and do not write token values by hand.
-4. **Apply it and re-derive the contract** with steps 3 and 4 of `theme`, with no preview and no approval. Every check in step 3 still applies. When the preset removes a required rule or changes `components.json`, revert `brand.css` and `components.json` with git and log it under `## Blocked`.
+2. **Read the brief instead of asking.** Take the colour mood and the density from the Tone answer, the Audience answer and the site the owner pointed at. Ask no design question.
+3. **Pick one registry style that fits the tone.** Take a tweakcn theme, served at `https://tweakcn.com/r/themes/<name>.json`, as [step 2 of `theme`](#2-choose-the-registry-style) allows. `https://ui.shadcn.com/create` needs a person at a browser, so it is not an option here. Fetch the URL first and check that it serves a `registry:style` item. Do not invent a palette, and do not write token values by hand.
+4. **Apply it and re-derive the contract** with steps 3 and 4 of `theme`, with no preview and no approval. First copy `brand.css` and `components.json` to a temporary folder outside the repo, because a fresh project may have no commit to restore them from. Every check in step 3 still applies. When the preset removes a required rule or changes `components.json`, copy both files back and log the failure under `## Blocked`.
 5. **Fall back when you cannot reach a registry.** With no network, keep the shipped theme, run `update` on `apps/web/DESIGN.md` only if its fingerprint is stale, adding or deleting no section, and list the theme choice under `## Left for a human`.
-6. **Log the run.** Append a `## Design` section to `docs/build-log.md`: the registry style URL, one line on why it fits the brief's tone, the new fingerprint and the linter result. Leave the commit to the stage that runs this skill.
+6. **Log the run** in `docs/build-log.md`: the registry style URL, one line on why it fits the brief's tone, and the linter result. Add the lines under the current stage's `##` section when a build is running, and under a new `## Design` section when none is. Create the log with a `# Build log` title when it does not exist. Leave the fingerprint out: the log's reader takes the first hex string in a section as its commit. The stage that commits adds its commit hash to that section.
 
 ## `update`
 

@@ -23,7 +23,7 @@ reviewed.
 | `packages/ui/src/content/landing.ts` | Everything under `landing.*`. Plus `ui.*`, **translated only**, and only when the page is not in English — see [Language](#language-and-the-ui-namespace). |
 | `apps/web/src/pages/index.astro` | Only to drop a block, and only behind its own confirmation. |
 | `docs/product-brief.md` | Only to append what you learned filling a gap the brief left, and only its **Known gaps** section otherwise. |
-| `docs/build-log.md` | Under `autonomy: afk` only: the `## Landing copy` section and the items it adds to `## Left for a human` or `## Blocked`. |
+| `docs/build-log.md` | Under `autonomy: afk` only: the run's lines in the current stage's section, or in a `## Landing copy` section, and the items it adds to `## Left for a human` or `## Blocked`. |
 
 Nothing else — in particular not `packages/config/src/project.ts`, which holds the product
 name and the locale. Those are project identity, `saasaloy-setup` owns them, and
@@ -32,7 +32,7 @@ brief.
 
 ## Step 0 — before you write anything
 
-1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run) instead of the steps below. No brief, no copy. Say so and offer to run
+1. **Read `docs/product-brief.md`.** If its frontmatter holds `autonomy: afk`, follow [Unattended run](#unattended-run) instead of the steps below, unless a person in this conversation asks for the draft and the review. Then take the attended path. No brief, no copy. Say so and offer to run
    `saasaloy-setup`:
 
    > There's no `docs/product-brief.md`, so I'd be writing about a product I know nothing
@@ -367,14 +367,14 @@ Removing a block is not redesigning one. You are editing lines in a page, not ed
 
 `autonomy: afk` in the brief's frontmatter means nobody is at the keyboard. Write the page from the brief with no draft approval and no question, and record every decision in `docs/build-log.md`, which is where the owner reviews it later. Every rule in Steps 1 to 5 still holds, except where this section replaces it.
 
-1. **Read the brief, the content module and the icon registry**, as [Step 0](#step-0--before-you-write-anything) says. With no brief, append `- Landing copy: no docs/product-brief.md` under `## Blocked` in `docs/build-log.md` and stop. Create the log with a `# Build log` title when it does not exist.
+1. **Read the brief, the content module and the icon registry**, as [Step 0](#step-0--before-you-write-anything) says.
 2. **Ask nothing.** Write around every gap and every `weak:` tag the brief left, the way [Step 1](#step-1--fill-only-the-gaps-the-brief-left) says to when a gap stays a gap: describe what the product does, and leave the claim out.
 3. **Write no draft file, and wait for no review.** Skip Steps 2 and 3. When a `docs/landing-copy-draft.md` from an earlier run is on disk, leave it alone and list it under `## Left for a human`.
 4. **Leave hand-written copy alone.** When the content module has been rewritten by hand and the brief does not explain it, write nothing to it. List it under `## Left for a human` and stop.
-5. **Write `landing.ts`** as [Step 4](#step-4--write-the-content-module) says, with no confirmation.
+5. **Write `landing.ts`** as [Step 4](#step-4--write-the-content-module) says, with no confirmation. First copy `landing.ts` and `apps/web/src/pages/index.astro` to a temporary folder outside the repo, because a fresh project may have no commit to restore them from.
 6. **Drop a block only when the brief gives it nothing true to carry**: no pricing yet, no named customer for the quotes or the logos, no real sequence for how it works. Make the three edits in [Dropping a block](#dropping-a-block-is-its-own-confirmation), retarget each action that pointed at it, and log the drop. Pricing marked as placeholder keeps the shipped tiers, and that goes under `## Left for a human`.
-7. **Prove it** with [Step 5](#step-5--prove-it-then-clean-up)'s two commands. A red build that you cannot fix goes under `## Blocked`, with the write reverted.
-8. **Log the run.** Append a `## Landing copy` section to `docs/build-log.md`: the sections you rewrote, each block you dropped and why, and the lines you are least sure about. Add each **Not mine to fix** item, such as a name or locale that disagrees with the brief, under `## Left for a human`. Leave the commit to the stage that runs this skill.
+7. **Prove it** with [Step 5](#step-5--prove-it-then-clean-up)'s two commands. When you cannot fix a red build, copy both files back from the temporary folder and log the failure under `## Blocked`.
+8. **Log the run** in `docs/build-log.md`: the sections you rewrote, each block you dropped and why, and the lines you are least sure about. Add the lines under the current stage's `##` section when a build is running, and under a new `## Landing copy` section when none is. The stage that commits adds its commit hash to that section. Add each **Not mine to fix** item, such as a name or locale that disagrees with the brief, under `## Left for a human`. Create the log with a `# Build log` title when it does not exist.
 
 ## Re-running
 
