@@ -1,0 +1,5 @@
+{
+  "productName": "Shelfnote",
+  "entity": { "table": "books", "word": "book" },
+  "defaultLandingMarkers": ["not the scaffolding"]
+}

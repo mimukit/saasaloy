@@ -1,0 +1,10 @@
+# Env values for the agent benchmark (scripts/agent-bench.ts). Local loopback only.
+# The secret signs sessions on localhost and nowhere else; it is not a credential.
+BETTER_AUTH_SECRET=bench-only-5f0c1d9a7e3b4c6f8a2d1e0b9c7a6f5e
+BETTER_AUTH_URL=http://localhost:4000
+PUBLIC_API_URL=http://localhost:4000
+EMAIL_PROVIDER=console
+EMAIL_FROM=hello@shelfnote.test
+LOGGER_PROVIDER=console
+LOG_LEVEL=info
+PUBLIC_SITE_URL=http://localhost:3000
