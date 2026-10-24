@@ -2,7 +2,7 @@
 
 Grilled: 2026-10-24
 
-Updated 2026-10-24 during the build: Q12 (the `queue` exception) was asked and settled with the owner after the full-scaffold typecheck found it.
+Updated 2026-10-24 during the build: Q12 (the `queue` exception) was asked and settled with the owner after the full-scaffold typecheck found it. The review of PR #274 added the `payment` core to Phase 4, which carried the package unused like `sms` and `logger`.
 
 ## Context
 
@@ -18,7 +18,7 @@ Every other workspace that imports a capability barrel (`packages/auth`, `packag
 
 Goal: a provider's vendor types stay inside the provider, so a workspace that imports a capability core typechecks with no vendor setup of its own, and no core lists a vendor types package (AGENTS.md, "The core is vendor-blind").
 
-Target: a project with `email`, `email-cloudflare` and `email-react` passes `pnpm typecheck` with 0 errors, and no file under `modules/{email,kv,storage,sms,logger}/files` names `@cloudflare/workers-types`. `queue` is the one exception (see Design decisions).
+Target: a project with `email`, `email-cloudflare` and `email-react` passes `pnpm typecheck` with 0 errors, and no file under `modules/{email,kv,storage,sms,logger,payment}/files` names `@cloudflare/workers-types`. `queue` is the one exception (see Design decisions).
 
 Prototypes (2026-10-24, deleted), all with `tsc` 7.0.2, the base tsconfig and `types: []`:
 
@@ -88,12 +88,12 @@ Done when: in `.dev`, a fresh project with `storage` and `storage-cloudflare` pa
 
 ### Phase 4: sms, logger and the provider rule (built 2026-10-24)
 
-- `modules/sms/files` and `modules/logger/files`: remove the devDependency and `compilerOptions.types` (parts 3 and 4). No provider change.
+- `modules/sms/files`, `modules/logger/files` and `modules/payment/files`: remove the devDependency and `compilerOptions.types` (parts 3 and 4). No provider change.
 - `.agents/skills/create-provider/SKILL.md`: correct line 184 and the `kv` and `queue` binding-flavour text that say a binding provider has no npm dependency. Add one rule to "The shape": a provider names a vendor type with `import type`, never an ambient global, and pins the types package with a devDependency patch into its core.
 
 Done when:
 
-- `grep -rln workers-types modules/{email,kv,storage,sms,logger}/files` prints nothing.
+- `grep -rln workers-types modules/{email,kv,storage,sms,logger,payment}/files` prints nothing.
 - Each of the four `modules/*-cloudflare/files/cloudflare.ts` files starts with an `import type { … } from "@cloudflare/workers-types"`.
 - In `.dev`, a full `database-d1` scaffold (every module, `database-d1` side of each conflict) passes `pnpm typecheck` with exit 0.
 - The repo gate exits 0: `pnpm lint`, `pnpm typecheck`, `pnpm test`. `pnpm deps:check` lists the new devDependency patch pins and adds no new failure (it already fails on `main` for upstream drift).
