@@ -12,7 +12,8 @@ Every installable module in the default registry, in one place. This table is th
 | `database-d1` | feature (driver) | the Cloudflare D1 client, `drizzle.config.ts` and wrangler binding. Conflicts with `database-postgres` |
 | `database-postgres` | feature (driver) | the Postgres client over `postgres.js`, a Hyperdrive-aware `getDb`, and a `withDb` callback helper that scopes a client to one handler and closes it. Conflicts with `database-d1` |
 | `auth` | capability | a `packages/auth` workspace wrapping Better Auth, on `api` + `database`. Installs under either driver: it ships its schema and its db provider in a SQLite and a Postgres variant, and holds a request-scoped db client behind the module-scope singleton ([ADR 0029](../adr/0029-adr-auth-holds-a-request-scoped-db-client-2026-08-31.md)) |
-| `admin` | capability | an `apps/admin` TanStack Router SPA behind the auth session, on `api` + `auth` |
+| `admin` | capability | an `apps/admin` TanStack Router SPA behind the auth session, on `api` + `auth` + `shell` |
+| `shell` | capability | the frame, the coss primitive set, the page blocks and `shell.css` under `@repo/ui/*/shell` that every signed-in SPA renders, with no auth logic and no dependency |
 | `email` | capability | a `packages/email` workspace with the provider interface, the escaping `html` tag and `safeUrl`, on `api` |
 | `email-console` | feature (provider) | an `email` provider that logs messages instead of sending — no plan, no domain, no key |
 | `email-cloudflare` | feature (provider) | an `email` provider on Cloudflare Email Sending — needs a paid Workers plan and a hand-onboarded domain, see [the reference](reference.md#email-providers) |

@@ -29,7 +29,7 @@ A module that scaffolds an app or package **and** establishes convention-based e
 A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
 
 ### `shell`
-The capability that owns the app frame every signed-in app renders: layout, nav, user menu and theme toggle, under `@repo/ui/*/shell`. It holds no auth logic, so each app keeps its own guard ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
+The capability that owns the app frame every signed-in app renders (layout, nav, user menu and theme toggle) and the primitives, page blocks and `shell.css` tokens those apps compose, under `@repo/ui/*/shell`. It holds no auth logic, so each app keeps its own guard ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
 _Avoid: admin shell, layout._
 
 ### `app` module
