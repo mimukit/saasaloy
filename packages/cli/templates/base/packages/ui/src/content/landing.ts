@@ -377,7 +377,7 @@ export const landing = {
       {
         id: "charge",
         title: "Charge money",
-        modules: ["billing", "billing-stripe", "entitlements"],
+        modules: ["billing", "billing-stripe"],
       },
       {
         id: "scale",
@@ -413,7 +413,6 @@ export const landing = {
           "multitenant",
           "rbac",
           "api-keys",
-          "entitlements",
           "email-react",
           "ratelimit",
           "feature-flags",

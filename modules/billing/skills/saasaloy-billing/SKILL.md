@@ -1,11 +1,11 @@
 ---
 name: saasaloy-billing
-description: Runbook for the billing capability — provider-agnostic subscriptions in packages/billing, with a plan file, a projection table, a billable-subject file and per-provider modules. Use when adding a plan, wiring a checkout or portal route, reading a BillingError, choosing or switching BILLING_PROVIDER, registering a webhook in the vendor's dashboard, or writing a third billing provider.
+description: Runbook for the billing capability — provider-agnostic subscriptions in packages/billing, with a plan file, a projection table, a billable-subject file, plan entitlements and per-provider modules. Use when adding a plan, adding a plan feature or a numeric limit, gating an API route with requireFeature or requireWithinLimit, reading the 402 it returns, working out why a subject resolves to the free plan, wiring a checkout or portal route, reading a BillingError, choosing or switching BILLING_PROVIDER, registering a webhook in the vendor's dashboard, or writing a third billing provider.
 ---
 
 # billing — provider-agnostic subscriptions from `packages/billing`
 
-`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
+`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, the plan entitlements (`src/entitlements.ts`, with the `requireFeature` and `requireWithinLimit` gates in `apps/api`), and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
 
 Callers import `@repo/billing`, call `createBilling(env)`, and never learn who takes the money. It is the same shape as `@repo/email` and `@repo/queue`, on purpose (ADR 0033, ADR 0034).
 
@@ -56,6 +56,92 @@ The default bills the signed-in user: `customerType` is `"user"`, `referenceId` 
 Nothing seeds a table and nothing reads a plan back from a vendor. `stripeAuthPlugin()` maps this list into the plugin's own shape: `providerIds.stripe.monthly` → `priceId`, `.yearly` → `annualDiscountPriceId`, `trialDays` → `freeTrial.days`.
 
 **The landing page keeps its own copy.** The base's `pricing-table` block reads `content/landing.ts`, and nothing patches one file from the other. Change a price and change both.
+
+## Entitlements — what a plan allows
+
+`packages/billing/src/entitlements.ts` answers three questions about a billable subject: which plan, which boolean **plan features**, which numeric limits. `apps/api/src/middleware/require-feature.ts` is the HTTP gate over the same answer.
+
+Call a boolean allowance a **plan feature**, never a "feature flag". The `feature-flags` module owns that second term for an operator toggle, and the two answer different questions.
+
+It calls no payment provider and needs none installed. A project on `billing-console` still resolves every subject to the default plan and gates plan features on it.
+
+The two sources are both yours: `plans.ts` for the plan table, and `billing_subscriptions` for the projection the event path writes.
+
+### The resolution rule
+
+The subject's **latest** row counts when its status is `trialing`, `active` or `past_due` **and** `lockedAt` is null. Anything else resolves to the default plan:
+
+| State | Resolves to |
+|---|---|
+| No row at all | default plan |
+| `trialing`, `active`, `past_due`, unlocked | that row's plan |
+| `past_due` with `lockedAt` set by the dunning sweep | default plan |
+| `canceled`, `unpaid`, `incomplete`, `paused` | default plan |
+| A row naming a plan `plans.ts` no longer has | default plan |
+
+`past_due` keeps the paid plan on purpose. The daily lockout job ends the grace period, not the first failed charge — see "Statuses and the lockout" below.
+
+The last row is worth knowing about: dropping a tier out of `plans.ts` while someone is still subscribed to it puts them on the free plan rather than failing every request they make. The row is still in the table for an operator to see.
+
+### Read an entitlement
+
+```ts
+import { currentPlan, hasFeature, limit, withinLimit } from "@repo/billing/entitlements";
+
+const plan = await currentPlan(store, subject);
+const canExport = await hasFeature(store, subject, "export");
+const seats = await limit(store, subject, "seats"); // -1 means unmetered
+const roomForOneMore = await withinLimit(store, subject, "seats", filled);
+```
+
+`store` is the `BillingStore` port — `createBillingStore(db)` inside `withDb`, exactly as a billing route builds it. `subject` comes from `resolveSubject(c)`.
+
+An unknown feature name is `false` and an unknown limit is `0`. A typo denies rather than granting an unbounded quota.
+
+### Gate a route
+
+```ts
+import { requireFeature, requireWithinLimit } from "../middleware/require-feature";
+import type { EntitlementVariables } from "../middleware/require-feature";
+
+export const exportRoute = new Hono<{
+  Bindings: AuthDbBindings;
+  Variables: EntitlementVariables;
+}>()
+  .post("/export", requireFeature("export"), (c) => c.json({ ok: true }))
+  .post("/projects", requireWithinLimit("projects", countProjects), create);
+```
+
+Both refuse with **402 Payment Required** and name what was short:
+
+```json
+{ "error": { "code": "feature_required", "feature": "export", "message": "…" } }
+{ "error": { "code": "limit_reached", "limit": "projects", "message": "…" } }
+```
+
+402 rather than 403 because it is the one status a plan picker can act on without a second round trip. An anonymous caller gets 401 instead: they have no plan to be short of.
+
+### The per-request memo
+
+The resolved plan is cached in `c.var.entitlements` for the life of the request, so two gates on one route do one read between them. The cache is an argument rather than a module-level map, and that is mandatory rather than tidy: a Workers isolate is reused across requests, so a module-level cache would answer the next subject with this one's plan.
+
+Pass the same cache when you call the functions directly:
+
+```ts
+const cache = withEntitlementCache(c);
+await hasFeature(store, subject, "export", cache);
+await limit(store, subject, "seats", cache);   // no second query
+```
+
+Omit it and each call is its own read, which is the right default for a one-off check.
+
+### Caching beyond the request
+
+There is none yet. `invalidateEntitlements(subject)` is a no-op the event consumer already calls, and it is the single function a `kv` cache would fill in — that is a follow-up issue, after the `kv` capability lands. Do not add a cache with a lifetime longer than a request until then.
+
+### Adding a plan feature or a limit
+
+Edit `plans.ts` and nothing else. There is no table to seed, no migration, and no admin editor — that was settled against on purpose. A new plan feature needs a `features` entry on every plan that grants it; anything unset reads as denied.
 
 ## The routes
 
@@ -152,7 +238,7 @@ Checked against `@better-auth/stripe` **1.7.3**. These are all sixteen fields th
 Three consequences worth holding:
 
 - **The customer link is a real column on `users`.** `modules/billing` adds `users.billingCustomerId` with a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, because a Better Auth plugin writes the customer id onto the `user` model and cannot be pointed at another table. `saasaloy remove billing` takes the column back out of the schema file; the deployed column survives until you generate and apply the migration.
-- **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts` and `entitlements` reads them there.
+- **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts`, and the entitlement resolver in `src/entitlements.ts` (`limit()`) reads them there.
 - **The plugin's plan `name` is this project's plan *id*.** It lower-cases `name` and stores it in the `plan` column, which is the string `findPlan(plans, …)` looks up. Keep plan ids lower-case.
 
 **On a `better-auth` or `@better-auth/stripe` bump:** open the new version's schema module and diff its `subscription` and `user` field lists against the table above. A field the plugin writes with no column behind it fails at the first webhook, not at `pnpm typecheck`.
@@ -194,6 +280,20 @@ A project that installed billing before the tables became plural has `billing_su
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `billing_subscription_*` → `billing_subscriptions_*`), and it must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
 5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
 6. Apply the migration with the command from the installed driver's skill. Then sign in once and open the billing page to confirm the adapter finds every table.
+
+## Upgrading from the `entitlements` module
+
+The entitlement resolver and the 402 gates used to ship as a separate `entitlements` module. `billing` now ships both files itself, and the registry no longer has an `entitlements` module. A project that still has it installed moves to the new layout like this:
+
+1. Commit or stash your work, so `git diff` can show any edit you made to the two files.
+2. Run `saasaloy update --dry-run`. It prints `entitlements — Unknown module "entitlements"`, and it marks `packages/billing/src/entitlements.ts` as `conflict → merge`, because two modules now claim that file. Do not apply this update.
+3. Run `saasaloy remove entitlements --yes`. It deletes `packages/billing/src/entitlements.ts`, `apps/api/src/middleware/require-feature.ts` and the `saasaloy-entitlements` skill. Until the next step, every route that imports `requireFeature` or `requireWithinLimit` fails to compile.
+4. Run `saasaloy add billing --yes --force`. It writes both files back, now owned by `billing`.
+5. Run `pnpm install`, then `pnpm --filter @repo/billing typecheck` and `pnpm --filter @repo/api typecheck`. Both must pass.
+6. Run `grep -c '"entitlements"' .saasaloy/manifest.json`. The count must be `0`. The manifest still tracks `packages/billing/src/entitlements.ts`, under `"module": "billing"`.
+7. Run `git diff` on the two files, and apply again any local edit that step 4 replaced.
+
+No table, column or migration changes, so the database needs nothing.
 
 ## Write a third provider
 
