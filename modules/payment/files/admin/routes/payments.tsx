@@ -12,22 +12,45 @@ import {
   ReceiptTextIcon,
   RefreshCwIcon,
   TriangleAlertIcon,
-  XIcon,
 } from "lucide-react";
-import { useEffect, useMemo, useRef, useState } from "react";
-import type { ReactNode } from "react";
+import { useMemo, useState } from "react";
 
+import { DataTable } from "@repo/ui/blocks/admin/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
+import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
+import { FilterChips } from "@repo/ui/blocks/admin/filter-chips";
+import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import {
+  Alert,
+  AlertDescription,
+  AlertTitle,
+} from "@repo/ui/components/admin/alert";
 import { Button } from "@repo/ui/components/admin/button";
+import {
+  Dialog,
+  DialogClose,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogPanel,
+  DialogPopup,
+  DialogTitle,
+} from "@repo/ui/components/admin/dialog";
+import { Field, FieldLabel } from "@repo/ui/components/admin/field";
 import { Input } from "@repo/ui/components/admin/input";
-import { Label } from "@repo/ui/components/admin/label";
+import {
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+} from "@repo/ui/components/admin/select";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
+import type { StatusTone } from "@repo/ui/components/admin/status-pill";
+import { Textarea } from "@repo/ui/components/admin/textarea";
+import { toastManager } from "@repo/ui/components/admin/toast";
+import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 
-import { DataTable } from "@admin/components/data-table";
-import type { DataTableColumn } from "@admin/components/data-table";
-import { DetailPanel } from "@admin/components/detail-panel";
-import { FilterChips } from "@admin/components/filter-chips";
-import { PageHeader } from "@admin/components/page-header";
-import { PageLayout } from "@admin/components/page-layout";
-import { StatusPill } from "@admin/components/status-pill";
 import { api } from "@admin/lib/api";
 
 // The Payments screen at `/payments`, shipped by `modules/payment`. The router plugin wires
@@ -42,6 +65,11 @@ import { api } from "@admin/lib/api";
 // Every call goes to `apps/api`'s `/admin/payment` routes behind `requireAdmin`, and this
 // file names no provider. Adding `payment-manual` or a gateway later changes the rows, not
 // this file.
+//
+// The record's status sits in the detail panel's header. A `submitted` payment shows the
+// "Nothing here is verified" warning as the panel's banner and pins Confirm and Reject in
+// its footer, so neither scrolls away under a long history. Below `md` the table becomes
+// a card list and the panel a sheet, both drawn by the shared admin parts.
 
 const STATUS_FILTERS = [
   { id: "submitted", label: "Submitted" },
@@ -69,6 +97,12 @@ const REJECT_REASONS = [
 ] as const;
 
 type RejectReason = (typeof REJECT_REASONS)[number]["id"];
+
+/** The reasons as Select items, so the trigger shows the label and not the id. */
+const REJECT_ITEMS = REJECT_REASONS.map((item) => ({
+  label: item.label,
+  value: item.id,
+}));
 
 const LIST_KEY = ["admin", "payment", "payments"] as const;
 
@@ -222,13 +256,28 @@ function refundable(payment: Payment): number {
   return (payment.settledAmount ?? payment.amount) - payment.refundedAmount;
 }
 
-// Two tones, as StatusPill allows. `submitted` is the live state on this screen, the one
-// that waits for a person, so it alone takes the blue pill.
+// `submitted` is the live state on this screen, the one that waits for a person, so it
+// takes the blue `open` pill. A settled payment is `ok`, a failed one `bad`, and the two
+// states nobody acts on here stay `neutral`.
+const STATUS_TONE: Record<StatusFilter, StatusTone> = {
+  cancelled: "neutral",
+  failed: "bad",
+  pending: "neutral",
+  submitted: "open",
+  successful: "ok",
+};
+
 function statusPill(status: StatusFilter) {
+  return <StatusPill label={STATUS_LABEL[status]} tone={STATUS_TONE[status]} />;
+}
+
+/** The claim and the checkout disagree: a staff member checks the statement for which. */
+function amountDiffersPill() {
   return (
     <StatusPill
-      label={STATUS_LABEL[status]}
-      tone={status === "submitted" ? "open" : "neutral"}
+      label="Amount differs"
+      icon={<TriangleAlertIcon />}
+      tone="warn"
     />
   );
 }
@@ -237,13 +286,7 @@ function StatusCell({ payment }: { payment: Payment }) {
   return (
     <span className="inline-flex flex-wrap items-center gap-1">
       {statusPill(payment.status)}
-      {amountDiffers(payment) ? (
-        <StatusPill
-          label="Amount differs"
-          icon={<TriangleAlertIcon />}
-          tone="neutral"
-        />
-      ) : null}
+      {amountDiffers(payment) ? amountDiffersPill() : null}
       {payment.refundedAmount > 0 ? (
         <StatusPill
           label={`Refunded ${money(payment.refundedAmount, payment.currency)}`}
@@ -257,6 +300,7 @@ function StatusCell({ payment }: { payment: Payment }) {
 const referenceColumn: DataTableColumn<Payment> = {
   id: "reference",
   header: "Reference",
+  card: "title",
   value: reference,
   sortable: true,
   cell: (payment) => (
@@ -267,6 +311,7 @@ const referenceColumn: DataTableColumn<Payment> = {
 const methodColumn: DataTableColumn<Payment> = {
   id: "method",
   header: "Method",
+  card: "line",
   value: (payment) => methodLabel(payment.method),
   sortable: true,
 };
@@ -274,6 +319,7 @@ const methodColumn: DataTableColumn<Payment> = {
 const amountColumn: DataTableColumn<Payment> = {
   id: "amount",
   header: "Amount",
+  card: "trailing",
   value: (payment) => payment.amount,
   sortable: true,
   align: "end",
@@ -287,6 +333,7 @@ const amountColumn: DataTableColumn<Payment> = {
 const transactionColumn: DataTableColumn<Payment> = {
   id: "transaction",
   header: "Transaction ID",
+  card: "line",
   value: (payment) => payment.transactionId,
   cell: (payment) =>
     payment.transactionId === null ? null : (
@@ -303,6 +350,7 @@ const transactionColumn: DataTableColumn<Payment> = {
 const statusColumn: DataTableColumn<Payment> = {
   id: "status",
   header: "Status",
+  card: "line",
   value: (payment) => payment.status,
   cell: (payment) => <StatusCell payment={payment} />,
 };
@@ -316,6 +364,7 @@ const QUEUE_COLUMNS: readonly DataTableColumn<Payment>[] = [
   {
     id: "submitted",
     header: "Submitted",
+    card: "line",
     value: (payment) =>
       payment.submittedAt === null ? null : new Date(payment.submittedAt),
     sortable: true,
@@ -335,12 +384,14 @@ const SETTLED_COLUMNS: readonly DataTableColumn<Payment>[] = [
   {
     id: "provider",
     header: "Provider",
+    card: "line",
     value: (payment) => payment.provider,
     sortable: true,
   },
   {
     id: "settled",
     header: "Settled",
+    card: "line",
     value: (payment) =>
       payment.settledAt === null ? null : new Date(payment.settledAt),
     sortable: true,
@@ -433,184 +484,193 @@ function History({ lines }: { lines: readonly HistoryLine[] }) {
   );
 }
 
-/**
- * A modal over the page, on the platform's own `<dialog>`. The shared ui package ships no
- * dialog, and `showModal()` gives the backdrop, the focus trap and Escape for free.
- */
-function Modal({
-  open,
-  title,
-  onClose,
-  children,
-}: {
-  open: boolean;
-  title: string;
-  onClose: () => void;
-  children: ReactNode;
-}) {
-  const ref = useRef<HTMLDialogElement>(null);
-
-  useEffect(() => {
-    const dialog = ref.current;
-    if (dialog === null) {
-      return;
-    }
-    if (open && !dialog.open) {
-      dialog.showModal();
-    } else if (!open && dialog.open) {
-      dialog.close();
-    }
-  }, [open]);
-
-  return (
-    <dialog
-      ref={ref}
-      aria-label={title}
-      onClose={onClose}
-      // Escape belongs to this dialog alone. Below `md` the detail panel sits in a Sheet
-      // that also closes on Escape, and without this one key press closed both.
-      onKeyDown={(event) => {
-        if (event.key === "Escape") {
-          event.stopPropagation();
-        }
-      }}
-      className="bg-popover text-popover-foreground border-border m-auto w-[min(26rem,calc(100vw-2rem))] rounded-xl border p-0 shadow-lg backdrop:bg-black/45"
-    >
-      {open ? (
-        <div className="flex flex-col gap-3 p-4 text-sm">
-          <h2 className="text-base font-semibold">{title}</h2>
-          {children}
-        </div>
-      ) : null}
-    </dialog>
-  );
-}
+// The two dialogs render inside the detail node, not beside the table. Below `md` that
+// node sits in PageLayout's sheet, and a dialog nested under the sheet's popup is the
+// topmost layer: Escape and an outside press close the dialog alone, not the sheet too.
+//
+// Each form keeps its fields in a child of the popup. The popup unmounts when the dialog
+// closes, by Cancel, by Escape or after a successful submit, so the next open starts
+// empty with no reset to remember.
 
 function RejectDialog({
   payment,
+  open,
   pending,
   error,
   onCancel,
   onReject,
 }: {
-  payment: Payment | undefined;
+  payment: Payment;
+  open: boolean;
   pending: boolean;
   error: string | null;
   onCancel: () => void;
   onReject: (reason: RejectReason, note: string) => void;
 }) {
-  const [reason, setReason] = useState<RejectReason | "">("");
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          onCancel();
+        }
+      }}
+    >
+      <DialogPopup>
+        <RejectForm
+          payment={payment}
+          pending={pending}
+          error={error}
+          onReject={onReject}
+        />
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function RejectForm({
+  payment,
+  pending,
+  error,
+  onReject,
+}: {
+  payment: Payment;
+  pending: boolean;
+  error: string | null;
+  onReject: (reason: RejectReason, note: string) => void;
+}) {
+  const [reason, setReason] = useState<RejectReason | null>(null);
   const [note, setNote] = useState("");
 
   return (
-    <Modal
-      open={payment !== undefined}
-      title="Reject this payment?"
-      onClose={() => {
-        setReason("");
-        setNote("");
-        onCancel();
+    <form
+      className="flex min-h-0 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (reason !== null) {
+          onReject(reason, note);
+        }
       }}
     >
-      {payment === undefined ? null : (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (reason !== "") {
-              onReject(reason, note);
-            }
-          }}
-        >
-          <p className="text-muted-foreground">
-            {reference(payment)} · {methodLabel(payment.method)} ·{" "}
-            {money(payment.amount, payment.currency)} asked
-            {payment.claimedAmount === null
-              ? ""
-              : `, ${money(payment.claimedAmount, payment.currency)} claimed`}
-          </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="reject-reason" className="text-muted-foreground">
-              Reason
-            </Label>
-            <select
-              id="reject-reason"
-              required
-              value={reason}
-              onChange={(event) => {
-                setReason(event.target.value as RejectReason | "");
-              }}
-              className="border-input dark:bg-input/30 h-8 rounded-lg border bg-transparent px-2 text-sm"
-            >
-              <option value="" disabled>
-                Choose a reason
-              </option>
-              {REJECT_REASONS.map((item) => (
-                <option key={item.id} value={item.id}>
+      <DialogHeader>
+        <DialogTitle>Reject this payment?</DialogTitle>
+        <DialogDescription>
+          {reference(payment)} · {methodLabel(payment.method)} ·{" "}
+          {money(payment.amount, payment.currency)} asked
+          {payment.claimedAmount === null
+            ? ""
+            : `, ${money(payment.claimedAmount, payment.currency)} claimed`}
+        </DialogDescription>
+      </DialogHeader>
+      <DialogPanel className="grid gap-4">
+        <Field>
+          <FieldLabel>Reason</FieldLabel>
+          <Select
+            items={REJECT_ITEMS}
+            value={reason}
+            required
+            onValueChange={(next: RejectReason | null) => {
+              setReason(next);
+            }}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Choose a reason" />
+            </SelectTrigger>
+            <SelectPopup>
+              {REJECT_ITEMS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
                   {item.label}
-                </option>
+                </SelectItem>
               ))}
-            </select>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="reject-note" className="text-muted-foreground">
-              Note for the shopper (optional)
-            </Label>
-            <textarea
-              id="reject-note"
-              value={note}
-              maxLength={1000}
-              onChange={(event) => {
-                setNote(event.target.value);
-              }}
-              className="border-input dark:bg-input/30 min-h-16 rounded-lg border bg-transparent px-2.5 py-1.5 text-sm"
-            />
-          </div>
-          <p className="text-muted-foreground">
-            The shopper can submit the same transaction ID again after a
-            rejection.
+            </SelectPopup>
+          </Select>
+        </Field>
+        <Field>
+          <FieldLabel>Note for the shopper (optional)</FieldLabel>
+          <Textarea
+            value={note}
+            maxLength={1000}
+            onChange={(event) => {
+              setNote(event.target.value);
+            }}
+          />
+        </Field>
+        <p className="text-muted-foreground text-sm">
+          The shopper can submit the same transaction ID again after a
+          rejection.
+        </p>
+        {error === null ? null : (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
           </p>
-          {error === null ? null : (
-            <p className="text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="destructive"
-              disabled={pending || reason === ""}
-            >
-              {pending ? "Rejecting…" : "Reject payment"}
-            </Button>
-          </div>
-        </form>
-      )}
-    </Modal>
+        )}
+      </DialogPanel>
+      <DialogFooter>
+        <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+        <Button
+          type="submit"
+          variant="destructive"
+          disabled={pending || reason === null}
+        >
+          {pending ? "Rejecting…" : "Reject payment"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
 function RefundDialog({
   payment,
+  open,
   pending,
   error,
   onCancel,
   onRefund,
 }: {
-  payment: Payment | undefined;
+  payment: Payment;
+  open: boolean;
   pending: boolean;
   error: string | null;
   onCancel: () => void;
   onRefund: (amount: number, note: string) => void;
 }) {
+  return (
+    <Dialog
+      open={open}
+      onOpenChange={(next) => {
+        if (!next) {
+          onCancel();
+        }
+      }}
+    >
+      <DialogPopup>
+        <RefundForm
+          payment={payment}
+          pending={pending}
+          error={error}
+          onRefund={onRefund}
+        />
+      </DialogPopup>
+    </Dialog>
+  );
+}
+
+function RefundForm({
+  payment,
+  pending,
+  error,
+  onRefund,
+}: {
+  payment: Payment;
+  pending: boolean;
+  error: string | null;
+  onRefund: (amount: number, note: string) => void;
+}) {
   const [amount, setAmount] = useState("");
   const [note, setNote] = useState("");
 
-  const digits = payment === undefined ? 2 : minorDigits(payment.currency);
-  const remaining = payment === undefined ? 0 : refundable(payment);
+  const digits = minorDigits(payment.currency);
+  const remaining = refundable(payment);
   const parsed = Number(amount);
   const minor = Math.round(parsed * 10 ** digits);
   const valid =
@@ -620,118 +680,64 @@ function RefundDialog({
     minor <= remaining;
 
   return (
-    <Modal
-      open={payment !== undefined}
-      title="Record a refund"
-      onClose={() => {
-        setAmount("");
-        setNote("");
-        onCancel();
+    <form
+      className="flex min-h-0 flex-col"
+      onSubmit={(event) => {
+        event.preventDefault();
+        if (valid) {
+          onRefund(minor, note);
+        }
       }}
     >
-      {payment === undefined ? null : (
-        <form
-          className="flex flex-col gap-3"
-          onSubmit={(event) => {
-            event.preventDefault();
-            if (valid) {
-              onRefund(minor, note);
-            }
-          }}
-        >
-          <p className="text-muted-foreground">
-            Log a refund you already sent. Up to{" "}
-            {money(remaining, payment.currency)} of{" "}
-            {money(payment.settledAmount ?? payment.amount, payment.currency)}{" "}
-            is left to refund.
+      <DialogHeader>
+        <DialogTitle>Record a refund</DialogTitle>
+        <DialogDescription>
+          Log a refund you already sent. Up to{" "}
+          {money(remaining, payment.currency)} of{" "}
+          {money(payment.settledAmount ?? payment.amount, payment.currency)} is
+          left to refund.
+        </DialogDescription>
+      </DialogHeader>
+      <DialogPanel className="grid gap-4">
+        <Field>
+          <FieldLabel>Amount ({payment.currency.toUpperCase()})</FieldLabel>
+          <Input
+            type="number"
+            inputMode="decimal"
+            required
+            min={1 / 10 ** digits}
+            max={remaining / 10 ** digits}
+            step={1 / 10 ** digits}
+            value={amount}
+            aria-invalid={amount !== "" && !valid ? true : undefined}
+            onChange={(event) => {
+              setAmount(event.target.value);
+            }}
+          />
+        </Field>
+        <Field>
+          <FieldLabel>Note (optional)</FieldLabel>
+          <Textarea
+            value={note}
+            maxLength={1000}
+            onChange={(event) => {
+              setNote(event.target.value);
+            }}
+          />
+        </Field>
+        {error === null ? null : (
+          <p className="text-destructive text-sm" role="alert">
+            {error}
           </p>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="refund-amount" className="text-muted-foreground">
-              Amount ({payment.currency.toUpperCase()})
-            </Label>
-            <Input
-              id="refund-amount"
-              type="number"
-              inputMode="decimal"
-              required
-              min={1 / 10 ** digits}
-              max={remaining / 10 ** digits}
-              step={1 / 10 ** digits}
-              value={amount}
-              aria-invalid={amount !== "" && !valid ? true : undefined}
-              onChange={(event) => {
-                setAmount(event.target.value);
-              }}
-            />
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Label htmlFor="refund-note" className="text-muted-foreground">
-              Note (optional)
-            </Label>
-            <textarea
-              id="refund-note"
-              value={note}
-              maxLength={1000}
-              onChange={(event) => {
-                setNote(event.target.value);
-              }}
-              className="border-input dark:bg-input/30 min-h-16 rounded-lg border bg-transparent px-2.5 py-1.5 text-sm"
-            />
-          </div>
-          {error === null ? null : (
-            <p className="text-destructive" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="flex justify-end gap-2">
-            <Button type="button" variant="outline" onClick={onCancel}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={pending || !valid}>
-              {pending ? "Recording…" : "Record refund"}
-            </Button>
-          </div>
-        </form>
-      )}
-    </Modal>
-  );
-}
-
-/** The lost-race notice, bottom right. It closes itself after a few seconds. */
-function Toast({
-  title,
-  body,
-  onClose,
-}: {
-  title: string;
-  body: string;
-  onClose: () => void;
-}) {
-  useEffect(() => {
-    const timer = setTimeout(onClose, 8000);
-    return () => {
-      clearTimeout(timer);
-    };
-  }, [onClose]);
-
-  return (
-    <div
-      role="status"
-      className="bg-popover text-popover-foreground border-border fixed right-5 bottom-5 z-50 flex w-[min(21rem,calc(100vw-2.5rem))] items-start gap-2 rounded-xl border p-3 text-sm shadow-lg"
-    >
-      <div className="min-w-0 flex-1">
-        <p className="font-medium">{title}</p>
-        <p className="text-muted-foreground">{body}</p>
-      </div>
-      <Button
-        variant="ghost"
-        size="icon-xs"
-        aria-label="Dismiss"
-        onClick={onClose}
-      >
-        <XIcon />
-      </Button>
-    </div>
+        )}
+      </DialogPanel>
+      <DialogFooter>
+        <DialogClose render={<Button variant="ghost" />}>Cancel</DialogClose>
+        <Button type="submit" disabled={pending || !valid}>
+          {pending ? "Recording…" : "Record refund"}
+        </Button>
+      </DialogFooter>
+    </form>
   );
 }
 
@@ -818,7 +824,6 @@ function PaymentDetailView({
 
   const attributes = isSubmitted
     ? [
-        { label: "Status", value: statusPill(payment.status) },
         {
           label: "Asked at checkout",
           value: (
@@ -831,22 +836,20 @@ function PaymentDetailView({
           label: "Claimed",
           value:
             payment.claimedAmount === null ? null : (
-              <span className="inline-flex flex-wrap items-center gap-1">
-                <span className="font-semibold tabular-nums">
-                  {money(payment.claimedAmount, payment.currency)}
-                </span>
-                {amountDiffers(payment) ? (
-                  <StatusPill
-                    label="Amount differs"
-                    icon={<TriangleAlertIcon />}
-                  />
-                ) : null}
+              // The "Amount differs" pill sits in the header; here the claim takes its colour.
+              <span
+                className={
+                  amountDiffers(payment)
+                    ? "text-status-warn-foreground font-semibold tabular-nums"
+                    : "font-semibold tabular-nums"
+                }
+              >
+                {money(payment.claimedAmount, payment.currency)}
               </span>
             ),
         },
       ]
     : [
-        { label: "Status", value: statusPill(payment.status) },
         { label: "Amount", value: money(payment.amount, payment.currency) },
         // Only a successful payment can carry a refund, so the row is noise elsewhere.
         ...(isSuccessful
@@ -875,74 +878,77 @@ function PaymentDetailView({
       ];
 
   return (
-    <div className="flex min-h-0 w-full flex-col gap-2">
-      {isSubmitted ? (
-        <div
-          role="note"
-          className="border-border bg-muted text-foreground flex shrink-0 gap-2 rounded-xl border p-3 text-sm"
-        >
-          <TriangleAlertIcon className="text-muted-foreground mt-0.5 size-4 shrink-0" />
-          <p>
-            <span className="font-semibold">Nothing here is verified.</span>{" "}
-            {account === null
-              ? "Find this transaction ID in the receiving account's own statement before you confirm."
-              : `Find this transaction ID in the ${account.label} statement for ${account.number} before you confirm.`}
-          </p>
-        </div>
-      ) : null}
-
-      <DetailPanel
-        title={reference(payment)}
-        onClose={onClose}
-        className="flex-1"
-        attributes={attributes}
-        groups={
-          isSubmitted
-            ? [submission, paymentGroup, historyGroup]
-            : [paymentGroup, historyGroup]
-        }
-      />
-
-      {isSubmitted || (isSuccessful && refundable(payment) > 0) ? (
-        <div className="bg-card border-border flex shrink-0 flex-col gap-2 rounded-xl border p-3">
-          {error === null ? null : (
-            <p className="text-destructive text-sm" role="alert">
-              {error}
-            </p>
-          )}
-          <div className="flex gap-2">
-            {isSubmitted ? (
-              <>
-                <Button
-                  className="flex-1"
-                  disabled={pending}
-                  onClick={onConfirm}
-                >
-                  {pending ? "Confirming…" : "Confirm payment"}
-                </Button>
-                <Button
-                  className="flex-1"
-                  variant="destructive"
-                  disabled={pending}
-                  onClick={onReject}
-                >
-                  Reject…
-                </Button>
-              </>
-            ) : (
-              <Button
-                className="flex-1"
-                variant="outline"
-                disabled={pending}
-                onClick={onRefund}
-              >
-                Record refund…
-              </Button>
+    <DetailPanel
+      title={reference(payment)}
+      onClose={onClose}
+      className="flex-1"
+      status={
+        <>
+          {statusPill(payment.status)}
+          {amountDiffers(payment) ? amountDiffersPill() : null}
+        </>
+      }
+      banner={
+        isSubmitted ? (
+          <Alert variant="warning">
+            <TriangleAlertIcon />
+            <AlertTitle>Nothing here is verified.</AlertTitle>
+            <AlertDescription>
+              {account === null
+                ? "Find this transaction ID in the receiving account's own statement before you confirm."
+                : `Find this transaction ID in the ${account.label} statement for ${account.number} before you confirm.`}
+            </AlertDescription>
+          </Alert>
+        ) : undefined
+      }
+      attributes={attributes}
+      groups={
+        isSubmitted
+          ? [submission, paymentGroup, historyGroup]
+          : [paymentGroup, historyGroup]
+      }
+      footer={
+        isSubmitted || (isSuccessful && refundable(payment) > 0) ? (
+          <>
+            {error === null ? null : (
+              <p className="text-destructive text-sm" role="alert">
+                {error}
+              </p>
             )}
-          </div>
-        </div>
-      ) : null}
-    </div>
+            <div className="flex gap-2">
+              {isSubmitted ? (
+                <>
+                  <Button
+                    className="flex-1"
+                    disabled={pending}
+                    onClick={onConfirm}
+                  >
+                    {pending ? "Confirming…" : "Confirm payment"}
+                  </Button>
+                  <Button
+                    className="flex-1"
+                    variant="destructive"
+                    disabled={pending}
+                    onClick={onReject}
+                  >
+                    Reject…
+                  </Button>
+                </>
+              ) : (
+                <Button
+                  className="flex-1"
+                  variant="outline"
+                  disabled={pending}
+                  onClick={onRefund}
+                >
+                  Record refund…
+                </Button>
+              )}
+            </div>
+          </>
+        ) : undefined
+      }
+    />
   );
 }
 
@@ -951,9 +957,6 @@ function Payments() {
   const [status, setStatus] = useState<StatusFilter>("submitted");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"reject" | "refund" | null>(null);
-  const [toast, setToast] = useState<{ title: string; body: string } | null>(
-    null
-  );
 
   const { data, isFetching } = useQuery(paymentsQuery(status));
   const rows = useMemo(() => data?.payments ?? [], [data]);
@@ -992,18 +995,29 @@ function Payments() {
     await refresh();
   };
 
+  // A review moves a payment out of `submitted`, so the sidebar's live count on the
+  // Payments row drops. The shell owns that query; this page only marks it stale. A
+  // refund leaves the status alone and does not touch the count.
+  const refreshCount = async () => {
+    await queryClient.invalidateQueries({
+      queryKey: ["nav-count", "/payments"],
+    });
+  };
+
   // A 409 means another staff member reviewed this payment first. The page refetches,
   // then names the status the payment holds now.
   const lostRace = async (id: string) => {
     setDialog(null);
-    await refresh();
+    await Promise.all([refresh(), refreshCount()]);
     const now = queryClient.getQueryData(paymentQuery(id).queryKey);
-    setToast({
-      body:
+    toastManager.add({
+      description:
         now === undefined
           ? "The list shows its current status."
           : `It is now ${STATUS_LABEL[now.payment.status]}. The list shows its current status.`,
+      timeout: 8000,
       title: "Someone else reviewed this payment first.",
+      type: "info",
     });
   };
 
@@ -1038,7 +1052,9 @@ function Payments() {
         await lostRace(input.id);
       }
     },
-    onSuccess: settle,
+    onSuccess: async (next) => {
+      await Promise.all([settle(next), refreshCount()]);
+    },
   });
 
   const refund = useMutation({
@@ -1080,26 +1096,59 @@ function Payments() {
       }}
       detail={
         selected === undefined ? undefined : (
-          <PaymentDetailView
-            payment={selected}
-            detail={detail.data}
-            pending={review.isPending || refund.isPending}
-            error={dialog === null ? reviewError : null}
-            onClose={() => {
-              select();
-            }}
-            onConfirm={() => {
-              review.mutate({ action: "confirm", id: selected.id });
-            }}
-            onReject={() => {
-              review.reset();
-              setDialog("reject");
-            }}
-            onRefund={() => {
-              refund.reset();
-              setDialog("refund");
-            }}
-          />
+          <>
+            <PaymentDetailView
+              payment={selected}
+              detail={detail.data}
+              pending={review.isPending || refund.isPending}
+              error={dialog === null ? reviewError : null}
+              onClose={() => {
+                select();
+              }}
+              onConfirm={() => {
+                review.mutate({ action: "confirm", id: selected.id });
+              }}
+              onReject={() => {
+                review.reset();
+                setDialog("reject");
+              }}
+              onRefund={() => {
+                refund.reset();
+                setDialog("refund");
+              }}
+            />
+
+            <RejectDialog
+              payment={selected}
+              open={dialog === "reject"}
+              pending={review.isPending}
+              error={dialog === "reject" ? reviewError : null}
+              onCancel={() => {
+                setDialog(null);
+              }}
+              onReject={(reason, note) => {
+                review.mutate({
+                  action: "reject",
+                  id: selected.id,
+                  note,
+                  reason,
+                });
+              }}
+            />
+
+            <RefundDialog
+              payment={selected}
+              open={dialog === "refund"}
+              pending={refund.isPending}
+              error={refund.error?.message ?? null}
+              onCancel={() => {
+                setDialog(null);
+              }}
+              onRefund={(amount, note) => {
+                refund.mutate({ amount, id: selected.id, note });
+              }}
+            />
+          </>
         )
       }
     >
@@ -1121,7 +1170,7 @@ function Payments() {
         }
       />
 
-      <div className="border-border flex shrink-0 items-center gap-2 border-b px-4 py-2">
+      <div className="border-border flex shrink-0 items-center gap-2 overflow-x-auto border-b px-(--page-gutter) py-2">
         <FilterChips
           chips={chips}
           selectedId={status}
@@ -1156,44 +1205,6 @@ function Payments() {
           )
         }
       />
-
-      <RejectDialog
-        payment={dialog === "reject" ? selected : undefined}
-        pending={review.isPending}
-        error={dialog === "reject" ? reviewError : null}
-        onCancel={() => {
-          setDialog(null);
-        }}
-        onReject={(reason, note) => {
-          if (selected !== undefined) {
-            review.mutate({ action: "reject", id: selected.id, note, reason });
-          }
-        }}
-      />
-
-      <RefundDialog
-        payment={dialog === "refund" ? selected : undefined}
-        pending={refund.isPending}
-        error={refund.error?.message ?? null}
-        onCancel={() => {
-          setDialog(null);
-        }}
-        onRefund={(amount, note) => {
-          if (selected !== undefined) {
-            refund.mutate({ amount, id: selected.id, note });
-          }
-        }}
-      />
-
-      {toast === null ? null : (
-        <Toast
-          title={toast.title}
-          body={toast.body}
-          onClose={() => {
-            setToast(null);
-          }}
-        />
-      )}
     </PageLayout>
   );
 }
