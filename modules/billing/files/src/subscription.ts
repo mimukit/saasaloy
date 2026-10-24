@@ -271,7 +271,7 @@ function project(
 
 /**
  * Drop any cached entitlement answer for this subject. A no-op today, because
- * `entitlements` memoizes per request only and a request never outlives an event. It is
+ * the entitlement resolver (`currentPlan` in `entitlements.ts`) memoizes per request only and a request never outlives an event. It is
  * called from the one place a plan can change, so adding a `kv` cache later (issue filed
  * after #129) is an edit to this function and to nothing else.
  */

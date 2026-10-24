@@ -115,12 +115,12 @@ const lazyStripeClient = new Proxy({} as Stripe, {
  * The default plan is left out: it carries no `providerIds`, nobody buys it, and the
  * plugin would reject a plan with no price. `name` is the plan **id** rather than the
  * display name, because the plugin lower-cases `name` and stores it in the `plan` column,
- * which is the value `entitlements` looks up in `plans.ts`.
+ * which is the value the entitlement resolver (`currentPlan`) looks up in `plans.ts`.
  *
  * `limits` is deliberately NOT passed through. The plugin writes `limits` onto the
  * subscription row whenever a plan carries it (`onSubscriptionCreated`, in the published
  * `@better-auth/stripe` 1.7.3 `dist/index.mjs`), and `billing_subscriptions` has no such
- * column. Limits are read from `plans.ts` by `entitlements` and never need to round-trip
+ * column. Limits are read from `plans.ts` by the entitlement resolver (`limit`) and never need to round-trip
  * through the vendor.
  */
 function stripePlans() {

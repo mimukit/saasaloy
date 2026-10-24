@@ -184,8 +184,8 @@ describe("entitlements with no subscription", () => {
 
   it("needs no payment provider installed to answer", async () => {
     // `BILLING_PROVIDER` is never read on this path: entitlements resolve from `plans.ts`
-    // and the projection, which is why `entitlements` is a module of its own and works in a
-    // project that takes no money yet.
+    // and the projection only, so the resolver works in a project that has `billing` with no
+    // provider registered and takes no money yet.
     const { store } = fakeStore();
 
     assert.equal((await currentPlan(store, SUBJECT)).id, "free");
