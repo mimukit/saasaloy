@@ -7,7 +7,7 @@ import { satisfies } from "./semver.js";
 // The `api-keys` split (#229, ADR 0055), read off disk. The core holds what every owner
 // shares, and each owner holds what differs. An installed project moves from the old
 // single module to the pair by `add api-keys-organization`, which only works while the
-// moved files keep their targets and the two `auth.ts` patches stay in the core. So the
+// moved files keep their targets and the `auth.ts` patches stay in the core. So the
 // split itself is under test here, not just the descriptors' validity.
 
 const MODULES = new URL("../../../../modules/", import.meta.url);
@@ -74,6 +74,13 @@ describe("the api-keys core", () => {
       ["packages/auth/package.json", "package-json-dependency", undefined],
       ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
       ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
+      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
+      ["packages/auth/src/auth.ts", "plugin-array", "./plugins/api-key"],
+      [
+        "packages/auth/src/client.ts",
+        "plugin-array",
+        "./plugins/api-key-client",
+      ],
       [
         "packages/auth/src/client.ts",
         "plugin-array",
@@ -138,6 +145,10 @@ describe("the api-keys-organization owner", () => {
         path: "files/admin/components/api-key-workspace.tsx",
         target: "@admin/components/api-key-workspace.tsx",
       },
+      {
+        path: "files/db/seed/api-keys.ts",
+        target: "@db/seed/slices/api-keys.ts",
+      },
     ]);
   });
 
@@ -147,7 +158,7 @@ describe("the api-keys-organization owner", () => {
 
     expect(patches.map((patch) => [patch.file, patch.kind])).toStrictEqual([
       ["packages/auth/src/tenant.ts", "plugin-array"],
-      ["apps/admin/src/components/app-shell.tsx", "const-array"],
+      ["apps/admin/src/components/nav.ts", "nav-entry"],
     ]);
   });
 
@@ -200,6 +211,10 @@ describe("the api-keys-user owner", () => {
         target: "@auth/api-key-rules.ts",
       },
       { path: "files/auth/caller.ts", target: "@auth/caller.ts" },
+      {
+        path: "files/db/seed/api-keys.ts",
+        target: "@db/seed/slices/api-keys.ts",
+      },
     ]);
   });
 
