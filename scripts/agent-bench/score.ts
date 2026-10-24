@@ -182,9 +182,16 @@ export function sameCounts(
   return true;
 }
 
+const TASK_PREFIX = /^[^\s:]+:[^\s:]+: /;
+
 /** Finds the console provider's mail to `to` in a dev-server log, or undefined. */
 export function findConsoleMail(log: string, to: string): string | undefined {
-  const blocks = log.split("───── email (console provider) ─────").slice(1);
+  // `pnpm dev` runs through turbo, which puts `@repo/api:dev: ` before every line.
+  const plain = log
+    .split(/\r?\n/)
+    .map((line) => line.replace(TASK_PREFIX, ""))
+    .join("\n");
+  const blocks = plain.split("───── email (console provider) ─────").slice(1);
   return blocks
     .map(
       (block) => block.split("────────────────────────────────────")[0] ?? ""
@@ -395,6 +402,7 @@ export async function run(
     detached: true,
     stdio: ["ignore", log.fd, log.fd],
   });
+  trackGroup(child.pid);
   let timedOut = false;
   const timer = setTimeout(() => {
     timedOut = true;
@@ -410,8 +418,34 @@ export async function run(
   });
   clearTimeout(timer);
   killGroup(child.pid);
+  untrackGroup(child.pid);
   await log.close();
   return { code, output: readFileSync(options.logFile, "utf-8"), timedOut };
+}
+
+// Every process group the benchmark starts, so a signal handler can stop them all.
+const groups = new Set<number>();
+
+/** Records a detached child's process group for `stopAllGroups()`. */
+export function trackGroup(pid: number | undefined): void {
+  if (pid) {
+    groups.add(pid);
+  }
+}
+
+/** Forgets a process group once it is stopped, so a reused id is never killed. */
+export function untrackGroup(pid: number | undefined): void {
+  if (pid) {
+    groups.delete(pid);
+  }
+}
+
+/** Kills every tracked process group. Safe to call from a signal handler. */
+export function stopAllGroups(): void {
+  for (const pid of groups) {
+    killGroup(pid, "SIGKILL");
+  }
+  groups.clear();
 }
 
 export function killGroup(
@@ -779,6 +813,7 @@ async function checkRuntime(
     detached: true,
     stdio: ["ignore", handle.fd, handle.fd],
   });
+  trackGroup(dev.pid);
   try {
     const webUp = await waitForHttp(`http://localhost:${PORTS.web}/`, 180_000);
     const apiUp = await waitForHttp(
@@ -809,6 +844,7 @@ async function checkRuntime(
     killGroup(dev.pid);
     await sleep(3000);
     killGroup(dev.pid, "SIGKILL");
+    untrackGroup(dev.pid);
     await handle.close();
     await killStrays(project);
   }

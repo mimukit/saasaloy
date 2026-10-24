@@ -158,6 +158,17 @@ describe("findConsoleMail", () => {
     );
     assert.equal(findConsoleMail(log, "c@x.test"), undefined);
   });
+
+  it("finds the mail behind turbo's task prefix, as `pnpm dev` prints it", () => {
+    const prefixed = mail("b@x.test", "Reset your password")
+      .split("\n")
+      .map((line) => `@repo/api:dev: ${line}`)
+      .join("\n");
+    assert.match(
+      findConsoleMail(`@repo/web:dev: ready\n${prefixed}`, "b@x.test") ?? "",
+      /Reset your password/
+    );
+  });
 });
 
 describe("judgeLanding", () => {

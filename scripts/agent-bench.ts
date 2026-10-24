@@ -53,6 +53,9 @@ import {
   portBusy,
   PORTS,
   scoreRun,
+  stopAllGroups,
+  trackGroup,
+  untrackGroup,
 } from "./agent-bench/score.ts";
 import type { Expect } from "./agent-bench/score.ts";
 
@@ -75,6 +78,21 @@ const STRIP = [
   /^GITHUB_TOKEN$/,
   /^GH_TOKEN$/,
 ];
+
+/**
+ * Stops every process group the benchmark started, and every process left in the run
+ * folder, when the benchmark is interrupted. Every child is detached, so a Ctrl-C or a
+ * dropped SSH session (SIGHUP) reaches only this process, never the agent or a server.
+ */
+function stopOnSignal(runDir: string): void {
+  const stop = () => {
+    stopAllGroups();
+    void killStrays(runDir).then(() => process.exit(130));
+  };
+  for (const signal of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
+    process.once(signal, stop);
+  }
+}
 
 function fatal(message: string): never {
   console.error(`agent-bench: ${message}`);
@@ -160,6 +178,7 @@ async function runAgent(): Promise<number> {
   const runDir = join(benchDir, runId);
   const outDir = `${runDir}.out`;
   await mkdir(runDir, { recursive: true });
+  stopOnSignal(runDir);
   await mkdir(outDir, { recursive: true });
   copyFileSync(join(fixtures, "brief.md"), join(runDir, "product-brief.md"));
   copyFileSync(join(fixtures, "env"), join(runDir, "env"));
@@ -203,12 +222,7 @@ async function runAgent(): Promise<number> {
     detached: true,
     stdio: ["ignore", transcript.fd, stderr.fd],
   });
-  const stop = () => {
-    killGroup(agent.pid, "SIGKILL");
-    void killStrays(runDir).then(() => process.exit(130));
-  };
-  process.once("SIGINT", stop);
-  process.once("SIGTERM", stop);
+  trackGroup(agent.pid);
   const timer = setTimeout(() => {
     killGroup(agent.pid);
   }, AGENT_TIMEOUT_MS);
@@ -222,6 +236,7 @@ async function runAgent(): Promise<number> {
   });
   clearTimeout(timer);
   killGroup(agent.pid, "SIGKILL");
+  untrackGroup(agent.pid);
   await transcript.close();
   await stderr.close();
   const leftover = await killStrays(runDir);
@@ -304,6 +319,7 @@ if (scoreIndex === -1) {
   if (!existsSync(runDir)) {
     fatal(`no run folder at ${runDir}`);
   }
+  stopOnSignal(runDir);
   const code = await score(runDir, argv.includes("--static"));
   const strays = await killStrays(runDir);
   if (strays.length > 0) {
