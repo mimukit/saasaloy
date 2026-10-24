@@ -22,6 +22,7 @@
     "lint:fix": "oxlint -c oxlint.config.mjs --type-aware --fix packages/cli/src scripts && oxlint -c oxlint.config.mjs --fix . && stylelint \"**/*.css\" --fix",
     "format": "prettier --write .",
     "format:check": "prettier --check .",
+    "format:check:cached": "prettier --check --cache --cache-strategy content .",
     "typecheck": "pnpm run typecheck:scripts && turbo run typecheck",
     "typecheck:scripts": "tsc -p tsconfig.scripts.json",
     "test": "turbo run test && pnpm run test:modules && pnpm run test:base && pnpm run test:tooling && pnpm run test:scripts",

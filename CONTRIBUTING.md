@@ -277,6 +277,8 @@ starts from.
 | `lint:css` | `stylelint "**/*.css" --max-warnings 0` | the one CSS file we ship |
 | `format:check` | `prettier --check .` | everything except Markdown |
 
+For a quick local check, `pnpm format:check:cached` runs pass 4 with Prettier's cache, which cuts a repeat run from about 20s to about 5s. Keep the cache out of `format:check` itself. The cache key holds the Prettier version and options but not the plugin versions, so a plugin bump can leave a stale pass for a file that did not change, and `pnpm lint` is the gate the release preflight and CI run.
+
 `pnpm lint:fix` mirrors passes 1-3 — the type-aware oxlint invocation over the same two
 paths, then the plain one over everything, then Stylelint — each with `--fix` instead of
 its reporting flag; `pnpm format` is pass 4 with `--write`. Three things about this are
