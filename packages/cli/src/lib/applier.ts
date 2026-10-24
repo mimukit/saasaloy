@@ -41,7 +41,7 @@ import {
   samePatchEntry,
   untrackPatch,
 } from "./manifest.js";
-import type { Manifest } from "./manifest.js";
+import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { PatchMatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
@@ -980,7 +980,8 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
             file: p.file,
             patch: p.patch,
           }) &&
-          mayShareTarget(p.module, entry.module, modules)
+          mayShareTarget(p.module, entry.module, modules) &&
+          !stillDeclares(entry, modules)
       )
       .map((entry) => entry.module);
     if (previous.length > 0) {
@@ -1031,6 +1032,25 @@ export interface ApplyResult {
   /** Patches the codemod declined to apply, each with the reason it gave. Distinct from
    *  an idempotent no-op, which changes nothing and has nothing to report. */
   patchRefusals: PatchRefusal[];
+}
+
+// Whether a recorded patch's module still ships it in the descriptor this run loaded. A
+// patch changes hands only when its old module dropped it, as a split does. A module that
+// still declares it keeps the record, so `remove <new module>` never reverses an edit the
+// old one needs. An old module this run did not load cannot be checked, so it keeps the
+// record too: the take-over fails closed (#229).
+function stillDeclares(
+  entry: ManifestPatch,
+  modules: ReadonlyMap<string, LoadedModule>
+): boolean {
+  const loaded = modules.get(entry.module);
+  if (!loaded) {
+    return true;
+  }
+  const recorded = JSON.stringify(entry.patch);
+  return (loaded.item.patches ?? []).some(
+    (op) => op.file === entry.file && JSON.stringify(op) === recorded
+  );
 }
 
 // Drop the records a planned patch takes over, once this module holds its own (#229).

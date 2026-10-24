@@ -1332,6 +1332,16 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     });
   }
 
+  // The core as the registry ships it after the split: the patch moved to the owner, so
+  // the core's descriptor no longer declares it.
+  function splitCore(mods: LoadedModule[]): LoadedModule[] {
+    return mods.map((mod) =>
+      mod.item.name === "waitlist"
+        ? { ...mod, item: { ...mod.item, patches: [] } }
+        : mod
+    );
+  }
+
   async function installCore(
     config: SaasaloyConfig,
     manifest: Manifest
@@ -1365,7 +1375,7 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     const result = await executePlan(
       await plan({
         install: ["waitlist-owner"],
-        modules: [...mods, owner],
+        modules: [...splitCore(mods), owner],
         config,
         manifest,
       }),
@@ -1394,7 +1404,7 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     await executePlan(
       await plan({
         install: ["waitlist-owner"],
-        modules: [...mods, middle, owner],
+        modules: [...splitCore(mods), middle, owner],
         config,
         manifest,
       }),
@@ -1415,7 +1425,7 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     await executePlan(
       await plan({
         install: ["waitlist-owner"],
-        modules: [...mods, stranger],
+        modules: [...splitCore(mods), stranger],
         config,
         manifest,
       }),
@@ -1423,6 +1433,26 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
       config,
       manifest
     );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
+  });
+
+  it("leaves the patch under a related module whose descriptor still declares it", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const mods = await installCore(config, manifest);
+    const owner = await waitlistOwner(["waitlist"]);
+    await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [...mods, owner],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    // The core still needs the edit, so `remove waitlist-owner` must not reverse it.
     expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
   });
 
@@ -1434,7 +1464,7 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     await executePlan(
       await plan({
         install: ["waitlist-owner"],
-        modules: [...mods, owner],
+        modules: [...splitCore(mods), owner],
         config,
         manifest,
       }),

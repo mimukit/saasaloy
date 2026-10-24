@@ -204,6 +204,62 @@ describe("buildRemovePlan — dependents", () => {
   });
 });
 
+describe("buildRemovePlan — a core left with no owner (#229)", () => {
+  function ownerLock(): Lockfile {
+    return {
+      ...emptyLock(),
+      modules: {
+        "api-keys": {
+          source: "s/r",
+          ref: "main",
+          resolved: "a".repeat(40),
+          requiresOneOf: ["api-keys-organization", "api-keys-user"],
+        },
+        "api-keys-user": {
+          source: "s/r",
+          ref: "main",
+          resolved: "b".repeat(40),
+          dependsOn: ["api-keys"],
+        },
+      },
+    };
+  }
+
+  it("warns and names the other owner when the last owner goes", async () => {
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["api-keys", "api-keys-user"],
+    };
+    const plan = await build(
+      "api-keys-user",
+      config,
+      emptyManifest(),
+      ownerLock()
+    );
+    expect(plan.dependents).toStrictEqual([]);
+    expect(plan.warnings).toHaveLength(1);
+    expect(plan.warnings[0]).toMatch(
+      /^api-keys needs one of: api-keys-organization, api-keys-user/
+    );
+    expect(plan.warnings[0]).toContain("`saasaloy add api-keys-organization`");
+    expect(plan.warnings[0]).toContain("`saasaloy remove api-keys`");
+  });
+
+  it("stays quiet while another option is still installed", async () => {
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["api-keys", "api-keys-user", "api-keys-organization"],
+    };
+    const plan = await build(
+      "api-keys-user",
+      config,
+      emptyManifest(),
+      ownerLock()
+    );
+    expect(plan.warnings).toStrictEqual([]);
+  });
+});
+
 describe("buildRemovePlan — links", () => {
   async function skillManifest(module = "auth"): Promise<Manifest> {
     const manifest = emptyManifest();
