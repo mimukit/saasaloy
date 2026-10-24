@@ -8,9 +8,12 @@
 // commands, same config files, just narrowed to what git is about to record.
 // Markdown is absent on purpose: `.prettierignore` excludes it repo-wide because
 // Ultracite's Prettier sets `proseWrap: "never"`.
+//
+// `--no-error-on-unmatched-pattern`: a commit that stages only files oxlint ignores (a
+// module's generated routeTree.gen.ts) would otherwise fail on "No files found to lint".
 export default {
   "*.{js,jsx,mjs,cjs,ts,tsx,astro}": [
-    "oxlint -c oxlint.config.mjs --fix --deny-warnings",
+    "oxlint -c oxlint.config.mjs --fix --deny-warnings --no-error-on-unmatched-pattern",
     "prettier --write",
   ],
   "*.css": ["stylelint --fix --max-warnings 0", "prettier --write"],
