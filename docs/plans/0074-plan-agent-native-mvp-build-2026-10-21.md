@@ -1,6 +1,6 @@
 # Plan: an agent builds a SaaS MVP on Saasaloy with no human at the keyboard
 
-Grilled: 2026-10-22
+Grilled: 2026-10-24
 
 ## Context
 
@@ -29,8 +29,8 @@ Success: a headless agent starts in an empty folder that holds a complete produc
 | MVP bar | Local only, with the modules in the README's MVP row. The agent stops at a running, seeded, tested local app. Deploy stays a human step through plan 0070's `pnpm deploy:production`. |
 | Product UI home | A new `app` capability module: a customer SPA at `apps/app` on port 3002, open to every signed-in user. The `web` app holds only public pages. |
 | Module name | `app`, at `apps/app`. Docs write it as the code span `app` to keep it apart from the plain word. |
-| Shared shell | A new `shell` capability owns the layout, nav, user menu and theme toggle under `@repo/ui/*/shell`. `admin` and `app` both depend on it. It holds no auth logic: `admin` guards on the role, `app` guards on the session. The work moves #204's shell paths after #204 merges, and does not reopen #204. |
-| Sign-in and sign-up | `auth` writes `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` into `@repo/ui`. Each takes an `onSubmit`, per the no-IO rule. Each app renders them on its own route and calls `authClient` there. `admin`'s `login.tsx` renders the block. |
+| Shared shell | A new `shell` capability owns the layout, nav, user menu and theme toggle under `@repo/ui/*/shell`, and the primitives and blocks they and the apps render (see "`shell` owns"). `admin` and `app` both depend on it. It holds no auth logic: `admin` guards on the role, `app` guards on the session. The work moves #204's shell paths after #204 merges, and does not reopen #204. |
+| Sign-in and sign-up | `auth` writes `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` into `@repo/ui`. Each takes an `onSubmit`, per the no-IO rule. Each app renders them on its own route and calls `authClient` there. `admin`'s `login.tsx` renders the block. The blocks import the `shell` primitives and install with `onlyWith: shell`, so `auth` gets no new dependency and a project with no SPA gets no unused blocks (#226 grill, 2026-10-24). If #225 lands before #226, it uses `components/admin/*` with `onlyWith: admin`, and #226 moves both to `shell`. |
 | Password reset mail | `auth` ships an `onlyWith: email` file that sets Better Auth's `sendResetPassword` through `@repo/email`. Email verification stays off. |
 | Human input contract | The human writes a complete `docs/product-brief.md` through the attended `saasaloy-setup` interview, and supplies the env values in a file. After the agent starts, it never asks. |
 | Complete brief | All ten `saasaloy-setup` sections are present and filled, and none is marked weak. With an incomplete brief, the unattended run stops before the first module and lists the missing sections under "Blocked" in `docs/build-log.md`. |
@@ -54,7 +54,14 @@ Success: a headless agent starts in an empty folder that holds a complete produc
 | UI house rules for `shell` and `app` | The rules in the base `apps/web/DESIGN.md` and `AGENTS.md`, plus the admin shell rules #192 settles. The visual reference is PR #204's admin shell. Phase 1 approves the `app` variant of it. |
 | `app` look | The `shell` frame with the web brand tokens, light first. `admin` keeps its dark backoffice theme. Settled in the #227 grill on 2026-10-22. |
 | Brand tokens | The token block of the base `packages/ui/src/styles/web.css` moves to `brand.css`: the token values, `@custom-variant dark` and `@theme inline`. `web.css` imports it and keeps the landing layout and motion CSS. The `app` stylesheet imports it too. `components.json` and the `apps/web/DESIGN.md` fingerprint name `brand.css`, because shadcn merges a preset in place only in the file that holds both blocks. |
-| `shell` stays app-neutral | `shell` has no dependency on `admin` and imports no app stylesheet. Its components read semantic tokens only, and each app stylesheet adds `@source` for the shell folders. This is what lets `saasaloy add app` run with no `admin`. |
+| `shell` stays app-neutral | `shell` has no dependency on `admin` and imports no app stylesheet. Its components read semantic tokens only, and `shell.css` adds `@source` for the shell folders. This is what lets `saasaloy add app` run with no `admin`. |
+| `shell` owns | Everything generic in #204's set: the ~40 coss primitives and their `NOTICE.md`, every block except the `feature-flags` block, the 6 containers, the 3 `lib` helpers, the brand mark asset and `assets.d.ts`, and the `@tanstack/react-table` patch that `data-table` needs. `admin` keeps `admin.css`, the `apps/admin` scaffold and the api route. `feature-flags` keeps its block at `blocks/admin/feature-flags.tsx`. `shell` has `dependsOn: []`, because the base `packages/ui` carries every other package it imports. Settled in the #226 grill on 2026-10-24. |
+| `shell` paths | `@repo/ui/{components,blocks,containers,lib}/shell/*`, per ADR 0047. Each file keeps its name and changes only its folder, so `containers/admin/shell-layout.tsx` becomes `containers/shell/shell-layout.tsx`. ADR 0047 gets a dated amendment that `shell` owns the primitives, blocks, containers, helpers and `shell.css`. |
+| `shell` tokens | `shell` ships `packages/ui/src/styles/shell.css`. It holds the `@source` lines for the shell folders, the `@theme inline` mapping for `destructive-foreground`, `success`, `warning`, `info`, the `status-ok`, `status-warn`, `status-bad` and `status-open` pairs and `accent-sort`, the `--animate-skeleton` and `--animate-toast-*` keyframes, and default values in `:root` and `.dark` from the approved mockup's Tailwind ramp values. It imports nothing. An app stylesheet imports its theme, then `shell.css`, then sets its overrides. `admin.css` keeps its measured values as overrides. |
+| `shell` props | `ShellSidebar` takes `subtitle` (default `"Admin"`, `null` hides it). `ShellLayout` takes `trail`, as the approved mockup wrote it. The avatar fallback keeps `bg-muted` and adds `ring-1 ring-border`, so the circle shows on every canvas. The `shell-sidebar.tsx` comments name the app's sign-in route, not `/login`. |
+| `shell` consumers | The seven modules that write admin screens (`teams`, `billing`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`) change their imports to the `shell` paths in #226 and keep `dependsOn: admin`. The base `oxlint.config.mjs` twin-primitive rule adds the `shell` folders to its globs. |
+| Pre-`shell` `admin` projects | The changelog gives the steps, under the breaking changes of the release (`feat(shell)!`): one `saasaloy update` of every installed module, so `shell` installs and the dependent modules get the new imports, then one `sed` line over the project's own files, then the merge plan for an edited file, then `pnpm check`. #226 tests the steps in a `.dev` project made from the pre-move registry. `saasaloy-shell` repeats them. No compatibility stubs and no CLI codemod. |
+| `shell` token guard | `scripts/shell-tokens.test.ts`, under `node --test`, reads the class names in `modules/shell/files/**` and checks that the base `web.css` token block or `shell.css` defines each colour and `animate-` token. |
 | `app` dev origin | `http://localhost:3002` goes into `DEV_ORIGINS` in the base source of `api` and `auth`, the same as 3001, with no patch. A project made before that release gets it through `saasaloy update api auth`. `saasaloy-app` says so in its wire-up step and names the CORS symptom in failure modes, and the changelog says the same. |
 | `app` production origin | No new key. The production `app` origin goes into `CORS_ORIGINS`, the one list the api CORS spine and `auth`'s `trustedOrigins` both read through `packages/env`. `saasaloy-app` documents it with `COOKIE_DOMAIN` and the workers.dev case. |
 | `app` deploy | `apps/app` ships an assets-only `wrangler.jsonc` with `not_found_handling: "single-page-application"`, a `"deploy": "env-deploy app"` script, and an `app` row in `packages/env/src/services.ts`, like `admin`. `pnpm deploy:production` deploys it. |
@@ -147,7 +154,7 @@ Done when: `wc -l` on the base `AGENTS.md` prints 250 or fewer, a scaffolded pro
 
 ### Phase 7: auth blocks and the password reset mail (#225)
 
-- Add `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` to the `auth` module's files, written into `@repo/ui`. Each takes an `onSubmit` and does no IO.
+- Add `blocks/auth/sign-in.tsx` and `blocks/auth/sign-up.tsx` to the `auth` module's files, written into `@repo/ui`. Each takes an `onSubmit` and does no IO. They import the `shell` primitives and install with `onlyWith: shell`.
 - Change `admin`'s `login.tsx` to render the sign-in block.
 - Add an `onlyWith: email` file to `auth` that sets `sendResetPassword` through `@repo/email`, with a template in the email module's convention.
 - Document both in `saasaloy-auth`, with a "Wire-up" section for the blocks.
@@ -156,12 +163,15 @@ Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POS
 
 ### Phase 8: the `shell` capability (#226)
 
-- Add `modules/shell/` as a capability. Move #204's shell files from `@repo/ui/*/admin` to `@repo/ui/*/shell`: layout, nav, user menu and theme toggle, with no auth logic.
-- Make `admin` depend on `shell` and import from the new paths.
-- Ship `saasaloy-shell` with "Add a nav entry", "Use the shell in a new app", wire-up and removal.
-- Check what `saasaloy update` does in a project that installed `admin` before the move, and document the merge steps in the changelog.
+- Add `modules/shell/` as a capability with `dependsOn: []`. Move the files "`shell` owns" names from `@repo/ui/*/admin` to `@repo/ui/*/shell`, with no auth logic.
+- Add `shell.css` per "`shell` tokens". `admin.css` imports it and keeps its values as overrides.
+- Add the `subtitle` and `trail` props, the avatar ring and the sign-in route comments per "`shell` props".
+- Make `admin` depend on `shell` and import from the new paths. Change the seven consumer modules and the base lint rule per "`shell` consumers".
+- Add `scripts/shell-tokens.test.ts` per "`shell` token guard".
+- Ship `saasaloy-shell` with "Add a nav entry", "Use the shell in a new app", wire-up, removal and the upgrade steps. Update the docs that name the admin paths: the base `AGENTS.md`, `saasaloy-design`, the containers `README.md`, `saasaloy-admin` and `CONTEXT.md`. Amend ADR 0047.
+- Test the upgrade steps in a `.dev` project made from the pre-move registry, and write them in the changelog.
 
-Done when: `saasaloy add admin` in a fresh project also installs `shell`, the admin app renders its shell from `@repo/ui/*/shell`, and `grep -r "ui/blocks/admin" modules/admin/files` finds no shell file.
+Done when: `saasaloy add admin` in a fresh project also installs `shell`; the admin app renders its shell from `@repo/ui/*/shell`; `modules/admin/files/ui` holds only `styles/admin.css`; `saasaloy add shell` works with no `admin`; `scripts/shell-tokens.test.ts` passes; and the changelog steps take a pre-move `.dev` project to a passing `pnpm check`.
 
 ### Phase 9: the `app` module (#227)
 
@@ -215,7 +225,7 @@ Done when: one benchmark run prints PASS on every MVP bar line, and the report l
 
 ## Open questions
 
-None. The grill on 2026-10-21 settled every question in the draft, and the #227 grill on 2026-10-22 settled the `app` details.
+None. The grill on 2026-10-21 settled every question in the draft, the #227 grill on 2026-10-22 settled the `app` details, and the #226 grill on 2026-10-24 settled the `shell` details.
 
 ## Non-goals
 
