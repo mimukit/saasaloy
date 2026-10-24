@@ -1,6 +1,6 @@
 # QA Plan: User-owned API keys and the api-keys owner split
 
-_Generated 2026-10-22 · against `4a6b615` (clean tree), with the A1 and B2 fixes rechecked on the next commit · covers #229: the `api-keys` core, `api-keys-organization`, `api-keys-user`, and the CLI `requiresOneOf` fixes in `update`, `add` and `doctor`_
+_Generated 2026-10-22 · against `4a6b615` (clean tree), with the A1 and B2 fixes rechecked on the next commit · extended 2026-10-24 after the restack on the dissolve-rbac branch and the review fix round (CLI 0.7.0) · covers #229: the `api-keys` core, `api-keys-organization`, `api-keys-user`, and the CLI `requiresOneOf` fixes in `update`, `add` and `doctor`_
 
 ## Summary
 - A project with no organizations installs `api-keys-user`, and a user issues scoped keys that a route reads through `requireCaller` and `requireScope`.
@@ -9,7 +9,8 @@ _Generated 2026-10-22 · against `4a6b615` (clean tree), with the A1 and B2 fixe
 ## Environment
 True for the whole plan. Do this once, before Scenario 1.
 
-- Branch: `issue-229-let-a-user-own-an-api-key-with-no-organization` at `4a6b615`.
+- Branch: `issue-229-let-a-user-own-an-api-key-with-no-organization`, at its current head. The plan was first run at `4a6b615`; the 2026-10-24 re-run is recorded under **Automated verification**.
+- The CLI under test is 0.7.0. `api-keys`, `api-keys-organization` and `api-keys-user` declare `requires.saasaloy: ">=0.7.0"`, so a CLI older than 0.7.0 refuses them.
 - Every `saasaloy` run uses this checkout's CLI and `modules/` folder. Every project is under `.dev/`.
 - The API base URL is `http://localhost:4000`. Better Auth answers under `/auth/*`.
 - The agent left the test projects from its run under `.dev/`: `qa229-user-d1`, `qa229-user-pg`, `qa229-old`, `qa229-old-control`, `qa229-org-d1`, `qa229-pick`.
@@ -18,6 +19,12 @@ Set the repo path and build the CLI:
 
 ```sh
 export REPO=/home/dev/worktrees/saasaloy/issue-229-let-a-user-own-an-api-key-with-no-organization && cd $REPO && pnpm --filter saasaloy build
+```
+
+Check the CLI version. It must print `0.7.0`:
+
+```sh
+node $REPO/packages/cli/dist/index.js --version
 ```
 
 Point the CLI at this checkout:
@@ -441,6 +448,95 @@ psql "postgres://qa@127.0.0.1:5545/qa229" -c "SELECT indexdef FROM pg_indexes WH
 
 - ✅ `add api-keys-organization -y` installs on D1. Typecheck passes in 6 of 7 packages. The one failure is the `@repo/db` `tenant.typecheck.ts` error (TS2578, TS2353), and the old registry gives the same error.
 - ✅ The `api_keys` SQL from `db:generate`, and the whole migration, are byte-identical to the old registry's.
+
+### Re-run on 2026-10-24, after the restack and the review fixes
+
+The branch was restacked on the dissolve-rbac branch at `39cea69`, the CLI was bumped to 0.7.0, and the review fixes landed. The agent built the CLI and ran these on new scratch projects: `.dev/qa-user-d1` (D1, `api-keys-user`, `API_KEY_SCOPES = { cards: ["read", "write"] }`, a scratch route at `apps/api/src/routes/qa-caller.ts` with `/qa/read` demanding `cards:read` and `/qa/server-update` calling `auth.api.updateApiKey` inside `withAuthScope`), `.dev/qa-old` (built with the dissolve-rbac branch's CLI and registry, then moved with this branch's), and `.dev/qa-pick-rm` (built with this branch's 0.7.0 CLI). The seeded users sign in with `saasaloy-dev-password`.
+
+Banned owner. The member signs in, creates a `cards:read` key, and the agent bans and unbans the member with `$DB_CMD`:
+
+```sh
+$DB_CMD "UPDATE users SET banned = 1, ban_expires = NULL WHERE email='member@example.test'"
+```
+
+```sh
+$DB_CMD "UPDATE users SET ban_expires = 1000 WHERE email='member@example.test'"
+```
+
+```sh
+curl -s -w ' HTTP %{http_code}\n' -H "Authorization: Bearer $KEY" $B/qa/read
+```
+
+- ✅ Before the ban, bearer `/qa/read` → 200 `{"kind":"apiKey"}`.
+- ✅ Banned, no `banExpires` → 401 `invalid api key`, the same body as any failed key.
+- ✅ Banned with a `banExpires` in the past → 200 again.
+
+Bearer with a tab:
+
+```sh
+curl -s -w ' HTTP %{http_code}\n' -H "Authorization: Bearer$(printf '\t')$KEY" $B/qa/read
+```
+
+- ✅ `Bearer<TAB>key` → 200 `{"kind":"apiKey"}`. The tab claims the key path, the same as a space.
+
+The admin instance. The seeded superadmin signs in on `/admin/auth`:
+
+```sh
+curl -s -c /tmp/qa-admin.txt -H 'Content-Type: application/json' -H 'Origin: http://localhost:3001' -X POST $B/admin/auth/sign-in/email -d '{"email":"superadmin@example.test","password":"saasaloy-dev-password"}'
+```
+
+```sh
+curl -s -w ' HTTP %{http_code}\n' -b /tmp/qa-admin.txt -H 'Content-Type: application/json' -H 'Origin: http://localhost:3001' -X POST $B/admin/auth/api-key/create -d '{"name":"admin-made"}'
+```
+
+- ✅ Admin sign-in → 200.
+- ✅ `POST /admin/auth/api-key/create` → 403 `{"message":"user-owned api keys are issued and used under /auth only","code":"API_KEYS_ON_CLIENT_ONLY"}`.
+- ✅ `GET /admin/auth/api-key/list` → the same 403.
+- ✅ Create and list on `/auth` still work for the member.
+
+Server-side update. The scratch route passes `keyId`, `userId` and `permissions` to `auth.api.updateApiKey`:
+
+```sh
+curl -s -w ' HTTP %{http_code}\n' -H 'Content-Type: application/json' -X POST $B/qa/server-update -d "{\"keyId\":\"$KEYID\",\"userId\":\"$USERID\",\"permissions\":{\"reviews\":[\"read\"]}}"
+```
+
+```sh
+$DB_CMD "SELECT permissions FROM api_keys WHERE id='$KEYID'"
+```
+
+- ✅ `permissions` `{"cards":["read","write"]}`, inside the vocabulary → 200, and the row holds the new scope.
+- ✅ `permissions` `{"reviews":["read"]}`, outside the vocabulary → 403 `permission required: reviews:read`. The row still holds `{"cards":["read","write"]}`.
+
+Take-over, `.dev/qa-old`:
+
+```sh
+node $CLI update -y </dev/null
+```
+
+```sh
+node $CLI add api-keys-organization -y </dev/null
+```
+
+- ✅ `update` → exit 2, names both owners, says "Nothing was changed.", and `git status` is clean.
+- ✅ After `add api-keys-organization`, the manifest moves only the two patches the new core no longer declares, `apiKeyTenant` and the `/api-keys` nav entry, to `api-keys-organization`. The core keeps its six patches: `apiKeyPlugin` and `apiKeyScopeGuard` on `auth` and `adminAuth`, and `apiKeyClientPlugin` on both client lists.
+- ✅ The unit tests cover the other half: a related module whose descriptor still declares the patch keeps it.
+
+Remove of the last owner, `.dev/qa-pick-rm`:
+
+```sh
+node $CLI remove api-keys-user -y </dev/null
+```
+
+```sh
+node $CLI doctor </dev/null
+```
+
+- ✅ `remove` exits 0 and warns: "api-keys needs one of: api-keys-organization, api-keys-user, and this removal leaves none installed", naming `saasaloy add api-keys-organization` or `saasaloy remove api-keys`. It reverses the `apiKeyAdminGuard()` patch on `adminAuth`.
+- ✅ `doctor` then exits 2 and reports the unmet requirement.
+
+Limit, found in this run. The warning and `doctor` read the core's `requiresOneOf` from `saasaloy-lock.json`. On a project whose registry is a local folder (`SAASALOY_REGISTRY_DIR`), `resolved` stays `local`, so `update` never rewrites the core's lock entry, and a project first built with an older registry keeps an entry with no `requiresOneOf`. In `.dev/qa-old` `remove api-keys-organization` therefore printed no warning and `doctor` exited 0. With a git source the SHA moves, `update` rewrites the entry, and both fire. A project built with the 0.7.0 CLI records `requiresOneOf` at `add` time, as `.dev/qa-pick-rm` shows.
+
+Gate on the new head: `pnpm install --frozen-lockfile`, `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`, `pnpm verify:pins`, `pnpm --filter saasaloy build` and `test:matrix` (991 tests) pass. `test:e2e` fails only the 4 cases that fail on main too (`apply.test.ts` x3, `partial-apply.test.ts` x1). `pnpm verify:e2e --driver=d1` and `--driver=postgres` pass.
 
 ### Browser checks
 _No browser check ran._ `playwright-cli` is on this box, but no screen in this change is new. The organization `/api-keys` screen differs by one comment line, and user mode ships no screen. TC-4.1 covers the screen by hand.
