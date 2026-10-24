@@ -10,7 +10,19 @@
   "removeWarnings": [
     "The deployed api_keys table survives this removal. Run db:generate and review the resulting drop migration before you apply it. Every key in it stops working the moment requireCaller goes, so tell the machine callers before you remove this module, not after. Every route that imports @repo/auth/caller stops compiling."
   ],
-  "patches": [],
+  "patches": [
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "adminAuth",
+      "arrayProp": "plugins",
+      "call": "apiKeyAdminGuard",
+      "import": {
+        "name": "apiKeyAdminGuard",
+        "from": "./plugins/api-key"
+      }
+    }
+  ],
   "files": [
     {
       "path": "files/db/schema/api-keys.sqlite.ts",

@@ -218,8 +218,29 @@ describe("the api-keys-user owner", () => {
     ]);
   });
 
-  it("carries no patch, because nothing it adds needs a registration table", async () => {
-    expect((await readDescriptor("api-keys-user")).patches).toStrictEqual([]);
+  it("patches one guard into adminAuth alone, so keys live on /auth only (ADR 0050)", async () => {
+    const patches = (await readDescriptor("api-keys-user"))
+      .patches as (PatchEntry & {
+      exportName?: string;
+    })[];
+
+    expect(
+      patches.map((patch) => [
+        patch.file,
+        patch.kind,
+        patch.exportName,
+        patch.call,
+        patch.import?.from,
+      ])
+    ).toStrictEqual([
+      [
+        "packages/auth/src/auth.ts",
+        "plugin-array",
+        "adminAuth",
+        "apiKeyAdminGuard",
+        "./plugins/api-key",
+      ],
+    ]);
   });
 
   it("is named by the core's requiresOneOf and by the organization owner's conflictsWith", async () => {

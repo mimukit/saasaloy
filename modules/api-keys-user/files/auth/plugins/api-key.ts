@@ -3,7 +3,15 @@ import type { BetterAuthPlugin } from "better-auth";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import { scopeDenial } from "../api-key-rules";
 import { API_KEY_SCOPES } from "../api-key-scopes";
-import { API_KEY_OPTIONS, GUARDED_PATHS, scopeOf } from "./api-key-options";
+import {
+  API_KEY_OPTIONS,
+  GUARDED_PATHS,
+  field,
+  scopeOf,
+} from "./api-key-options";
+
+/** The endpoint a server-side `auth.api.updateApiKey` reaches. */
+const UPDATE_PATH = "/api-key/update";
 
 // User-owned API keys, in two plugins.
 //
@@ -65,6 +73,12 @@ export function apiKeyPlugin() {
  * skip: a server-side `auth.api.createApiKey` with `permissions` is held to the same list
  * as the browser's `metadata.scope`.
  *
+ * It checks every update that sets `permissions` too. Only a server-side
+ * `auth.api.updateApiKey` can set that field, because the plugin refuses it from a
+ * request, but the ceiling is the project's and a trusted caller is held to it as well.
+ * An update reads `permissions` alone: `metadata.scope` on an update changes no scope,
+ * since `defaultPermissions` runs on create only.
+ *
  * What it deliberately does not do:
  *
  * - It does not refuse a signed-out caller. The plugin refuses that itself, with its own
@@ -83,9 +97,13 @@ export function apiKeyScopeGuard(): BetterAuthPlugin {
           // An undefined path matches nothing. Fail closed the safe way round: no path
           // means no guard to run, not a guard that runs on every endpoint.
           matcher: (context) =>
-            context.path !== undefined && GUARDED_PATHS.has(context.path),
+            context.path !== undefined &&
+            (GUARDED_PATHS.has(context.path) || context.path === UPDATE_PATH),
           handler: createAuthMiddleware(async (ctx) => {
-            const scope = scopeOf(ctx.body);
+            const scope =
+              ctx.path === UPDATE_PATH
+                ? scopeOf({ permissions: field(ctx.body, "permissions") })
+                : scopeOf(ctx.body);
             if (!scope) {
               return;
             }
@@ -97,6 +115,38 @@ export function apiKeyScopeGuard(): BetterAuthPlugin {
               // uses. Thrown before the plugin's handler, so no row is written.
               throw new APIError("FORBIDDEN", { message: denial.message });
             }
+          }),
+        },
+      ],
+    },
+  };
+}
+
+/**
+ * Refuse every `/api-key/*` endpoint on the admin instance.
+ *
+ * The core patches `apiKeyPlugin()` into both `auth` and `adminAuth`, because the
+ * organization owner's screen lives in the admin app. A user-owned key has no screen
+ * there, and ADR 0050 lets a credential count only where it was issued. Without this
+ * guard an admin could mint a key at `/admin/auth/api-key/create`, and that key would
+ * pass `requireCaller` on client routes, which read the same table. So in user mode the
+ * admin instance mints, lists, verifies and revokes nothing; keys live on `/auth` only.
+ *
+ * `api-keys-user` patches this into `adminAuth.plugins` alone.
+ */
+export function apiKeyAdminGuard(): BetterAuthPlugin {
+  return {
+    id: "api-key-admin-guard",
+    hooks: {
+      before: [
+        {
+          matcher: (context) => context.path?.startsWith("/api-key/") ?? false,
+          handler: createAuthMiddleware(async () => {
+            throw APIError.from("FORBIDDEN", {
+              code: "API_KEYS_ON_CLIENT_ONLY",
+              message:
+                "user-owned api keys are issued and used under /auth only",
+            });
           }),
         },
       ],
