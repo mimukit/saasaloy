@@ -1,6 +1,6 @@
 ---
 name: saasaloy-shell
-description: Runbook for the shell capability — the frame, the coss primitive set, the page blocks and shell.css under @repo/ui/*/shell that every signed-in SPA (admin, app) renders. Use when adding a nav entry or an area, using the shell in a new app, wiring ShellLayout (areas, link, account, signOut, counts, subtitle, trail), composing a page from PageHeader, PageLayout, PageBody, DataTable, DetailPanel, FilterChips, EmptyState, ErrorState or StatusPill, picking a primitive, setting the status, sort-accent or motion tokens an app stylesheet overrides, fixing an unstyled primitive or a transparent status pill, upgrading a project that installed admin before the shell moved out of it, or removing the module.
+description: Runbook for the shell capability — the frame, the coss primitive set, the page blocks, the command contract, the shell extension seam and shell.css under @repo/ui/*/shell that every signed-in SPA (admin, app) renders. Use when adding a nav entry or an area, declaring a screen's commands or keyboard shortcuts with useCommands, adding a shell extension, using the shell in a new app, wiring ShellLayout (areas, link, account, signOut, counts, subtitle, trail), composing a page from PageHeader, PageLayout, PageBody, DataTable, DetailPanel, FilterChips, EmptyState, ErrorState or StatusPill, picking a primitive, setting the status, sort-accent or motion tokens an app stylesheet overrides, fixing an unstyled primitive or a transparent status pill, upgrading a project that installed admin before the shell moved out of it, or removing the module.
 ---
 
 # shell — the frame every signed-in app renders
@@ -14,7 +14,7 @@ It holds **no auth logic and no router**. Each app reads its own session and rou
 | `components/shell/` | the primitives and `NOTICE.md` (the MIT notice the copy needs) |
 | `blocks/shell/` | `PageHeader`, `DataTable`, `DetailPanel`, `FilterChips`, `AttributeList`, `EmptyState`, `ErrorState`, `PageSkeleton`, `BrandMark`, `ThemeMenuItem` |
 | `containers/shell/` | `ShellLayout`, `ShellSidebar`, `ShellNav` types, `PageFrame`, `PageLayout`, `PageBody` |
-| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants |
+| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants, the command contract (`commands.ts`) and the extension seam (`extensions.ts`) |
 | `assets/shell/` | `brand-mark.svg` (replace it with your own single-colour mark) and `assets.d.ts` |
 | `styles/shell.css` | the `@source` line for the primitives, the status and sort tokens with defaults, the skeleton and toast motion |
 
@@ -64,6 +64,7 @@ A new signed-in app is a Vite SPA like `apps/admin` or `apps/app`. Four steps pu
    | `subtitle?` | the line under the product name; `"Admin"` by default, `null` hides it |
    | `trail?` | `readonly { label: string; to?: string }[]`, the page path after the area when it goes deeper than the nav label, for example Projects / New project. A step with `to` renders through `link`; the last step is the current page |
    | `organizationPicker?` | the #141 organization picker slot |
+   | `extensions?` | the app's `shellExtensions` list; see [Shell extensions](#shell-extensions) |
 
 4. **Wrap the routes** in `PageFrame` in the root route, and set the router's `defaultPendingComponent` to `PageSkeleton` and `defaultErrorComponent` to a route error that renders `ErrorState`. Mount the toast provider from `components/shell/toast` once.
 
@@ -83,7 +84,7 @@ Keep the `as const`: it holds every `to` at a literal type the router checks, so
 
 This module writes the whole UI kit of the signed-in apps into `packages/ui/src/`, and their code uses nothing else:
 
-- **`components/shell/`** holds the primitives: 39 components adapted from coss ui on Base UI, plus `StatusPill`. Alert, alert dialog, avatar, badge, breadcrumb, button, card, checkbox, collapsible, combobox, dialog, empty, field, fieldset, form, group, input, input group, kbd, label, menu, meter, popover, radio group, scroll area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, toggle, toggle group and tooltip. The names are coss's: `*Popup` and `*Panel` for the parts shadcn calls `*Content`, `Menu*` for the dropdown menu, and a `render` prop instead of `asChild`. A few shadcn aliases (`DialogContent`, `DropdownMenu*`, `TabsTrigger`) are exported too. `NOTICE.md` in the folder carries the MIT notice the copy needs; keep it there.
+- **`components/shell/`** holds the primitives: 41 components adapted from coss ui on Base UI, plus `StatusPill`. Alert, alert dialog, autocomplete, avatar, badge, breadcrumb, button, card, checkbox, collapsible, combobox, command, dialog, empty, field, fieldset, form, group, input, input group, kbd, label, menu, meter, popover, radio group, scroll area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, toggle, toggle group and tooltip. The names are coss's: `*Popup` and `*Panel` for the parts shadcn calls `*Content`, `Menu*` for the dropdown menu, and a `render` prop instead of `asChild`. A few shadcn aliases (`DialogContent`, `DropdownMenu*`, `TabsTrigger`) are exported too. `NOTICE.md` in the folder carries the MIT notice the copy needs; keep it there.
 - **`blocks/shell/`** holds the page blocks below, plus `BrandMark`, `ThemeMenuItem` and `ErrorState`. `ThemeMenuItem` (in `theme-toggle.tsx`) and `ErrorState` are the shell twins of the base blocks; the theme control is a row in the sidebar's account menu, not a header button.
 - **`containers/shell/`** holds `ShellLayout`, `ShellSidebar`, `PageFrame`, `PageLayout` and `PageBody`.
 - **`lib/shell/`** holds two helpers the primitives use, and **`assets/`** holds the brand mark.
@@ -118,6 +119,60 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 Below `md` the same rows render as a `<ul>` of cards, so a list has no sideways scroll at 360 px. The table and the card list never mount together: `DataTable` reads the width through `useMediaQuery("md")` from `lib/shell/use-media-query`, the same call `PageLayout` makes. A card is a title row over a `<dl>` of label and value lines, each label the column's `header`. The column's `card` hint picks its place: `title` heads the card, `trailing` sits at the right of the title row (an amount, a status, a role), `line` is a label and value line, and `hidden` leaves the column out. With no column hinted `title`, the first column is the title, and every other unhinted column is a line, so a page with no hints still gets usable cards. The cards keep the order the table's sort state gives and show no sort control. With `onRowClick`, each card is one `<button>` with `aria-current` on the selected one and the table's focus ring; the selected card takes the same accent fill as the selected row. The empty state and the caption carry over. The slot rule is `cardSlots(columns)` in `blocks/shell/data-table-cards.ts`, JSX-free so `pnpm test:modules` covers it in this repo. Set `card: "trailing"` on the one column a reader scans for, and `card: "hidden"` on a column that only makes sense beside the others in a table.
 
 Inside a page, build every control from the primitive set: `Field` with `FieldLabel` and `Input`, `Select` or `Checkbox` in a form; `Switch` for an on/off setting; `Dialog` for a create flow; `AlertDialog` before a revoke, a delete or a cancel; and `toastManager.add({ type, title, description })` from `components/shell/toast` for the result of every mutation. Each app mounts the toast provider once in its `__root.tsx`.
+
+## Declare a screen's commands
+
+A screen declares what it can do with `useCommands` from `@repo/ui/lib/shell/commands`. The shell holds the contract and no engine. The `command` module mounts the provider that turns each declared command into a palette row, a key binding and a line in the `?` shortcut sheet. With no provider mounted, `useCommands` does nothing, so a screen declares its commands whether or not `command` is installed and needs no dependency on it.
+
+```tsx
+import { useCommands } from "@repo/ui/lib/shell/commands";
+
+useCommands(
+  [
+    {
+      id: "admin.show-admins",
+      title: "Show admins",
+      group: "page",
+      keywords: ["role", "filter"],
+      run: () => {
+        setRoleFilter("admin");
+      },
+    },
+  ],
+  { scope: "route", label: "Users" }
+);
+```
+
+A command is `{ id, title, group, keywords?, icon?, shortcut?, when?, run(ctx) }`:
+
+- `id` is `<module>.<verb>`, for example `admin.go-to-users`. It is unique across the app.
+- `group` is `page`, `navigation`, `actions` or `preferences`. The palette shows the page group first, under the registration's `label`.
+- `shortcut` is a logical key, so it follows the typed character on every layout: `Mod+K` (Cmd on macOS, Ctrl elsewhere), `?`, `J`, `Enter`, `Escape`, or a sequence written with spaces, such as `G U`. A key exists only on a command, so the palette and the sheet can never miss one.
+- `when` hides the command and disables its key while it returns `false`. `run` receives `{ source: "palette" | "shortcut" }`.
+
+`useCommands` registers in an effect and unregisters when the component unmounts. A new `run` or `when` closure on each render does not register again; the registered command calls the latest one. A change to an id, a title, a group, a shortcut, the keywords or the scope does register again. `icon` is read at registration time, so pass a module-level icon component.
+
+The `scope` says how long a registration lives and which keys may overlap:
+
+| Scope | What it holds | Lives while |
+|---|---|---|
+| `global` | the app's own commands: navigation, theme, sign out, the sidebar | the shell is mounted |
+| `route` | the current page's commands, listed first in the palette under `label` | the page is mounted |
+| `data-table` | the table keys `DataTable` declares | a `DataTable` is mounted |
+
+The shell declares two sets itself. `SidebarProvider` declares `shell.toggle-sidebar` on `Mod+B` in `global`; it keeps its raw Cmd/Ctrl+B listener only while `useCommandProvider()` is `false`, so the key works with or without `command` and never toggles twice. `DataTable` declares `J` (next row), `K` (previous row), `Enter` (open the highlighted row, the same call a row click makes) and `Escape` (drop the highlight) in `data-table`. The highlight takes the rows' hover tone, so it never reads as the selection. Closing the detail panel stays with the route, which owns the selection.
+
+Before you bind a key, read the reserved key table in the `saasaloy-command` skill. `C`, `E`, `Mod+Backspace`, `/` and `G` then a letter carry one meaning each across every app. Use a reserved key only for its meaning, or pick an unreserved key. Two bindings that clash in overlapping scopes throw in dev.
+
+## Shell extensions
+
+A module adds itself to every shell app through `defineShellExtensions` from `@repo/ui/lib/shell/extensions`, not by editing the shell. Each app holds its list in `src/components/shell-extensions.ts` and passes it to `ShellLayout` as `extensions`:
+
+```ts
+export const shellExtensions = defineShellExtensions({ extensions: [] });
+```
+
+An extension is `{ id, Provider, header? }`. `Provider` wraps the whole layout, the first entry outermost. `header` renders at the right of the header, after the page path. A module ships a factory such as `commandExtension()`, and the app's descriptor appends a bare call to it with a `plugin-array` patch, gated on the module being installed. Keep the `extensions` property even while the array is empty, or the patch has nothing to append into. Two entries with one `id` throw at load. With an empty list, `ShellLayout` renders exactly what it rendered before the prop existed.
 
 ## Tokens and motion
 
@@ -178,4 +233,5 @@ Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move
 - **Semantic tokens only.** A shell file names no app's token file and no value.
 - **One primitive set.** Signed-in app code imports `@repo/ui/components/shell/*`, never a base primitive.
 - **`@tanstack/react-table` is imported by `data-table.tsx` and by nothing else.**
+- **A shortcut lives on a command.** Declare it through `useCommands`, never with a raw `keydown` listener. The sidebar's fallback listener is the one exception, and it stands down while a command provider is mounted.
 - **The copy is frozen.** A fix is a hand edit, from coss's MIT registry folder only.

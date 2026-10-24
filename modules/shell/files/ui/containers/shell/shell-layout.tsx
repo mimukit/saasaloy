@@ -1,5 +1,5 @@
 import { Fragment } from "react";
-import type { ReactNode } from "react";
+import type { ReactElement, ReactNode } from "react";
 
 import {
   SidebarInset,
@@ -13,6 +13,7 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/shell/shell-nav";
+import type { ShellExtension } from "@repo/ui/lib/shell/extensions";
 import type { LiveCounts } from "@repo/ui/lib/shell/nav-counts";
 
 // The shell every signed-in screen renders inside: an inset sidebar on the canvas, and a
@@ -23,6 +24,14 @@ import type { LiveCounts } from "@repo/ui/lib/shell/nav-counts";
 // This file composes and holds no navigation data and no router. Each app's
 // AppShell reads the current path and the session, and passes them in with the nav
 // data and its link component.
+//
+// `extensions` is the seam a module adds itself through (see lib/shell/extensions.ts).
+// Each entry's `Provider` wraps the whole layout, the first entry outermost, and each
+// `header` renders at the right of the header, after the page path. With no extensions
+// the output is the same as before the prop existed.
+
+// One shared empty list, so an app with no extensions passes a stable default.
+const NO_EXTENSIONS: readonly ShellExtension[] = [];
 
 /** The label of the nav item that owns `path`, or `undefined` when none does. */
 function pageLabelFor(
@@ -52,6 +61,7 @@ export function ShellLayout({
   counts,
   subtitle,
   trail,
+  extensions = NO_EXTENSIONS,
   children,
 }: {
   areas: readonly ShellNavArea[];
@@ -73,8 +83,10 @@ export function ShellLayout({
    * plus the nav label that owns the current path.
    */
   trail?: readonly { label: string; to?: string }[];
+  /** The app's `shellExtensions` list, from `defineShellExtensions`. */
+  extensions?: readonly ShellExtension[];
   children: ReactNode;
-}) {
+}): ReactElement {
   const pageLabel = pageLabelFor(areas, currentPath);
   const Crumb = link;
   const steps =
@@ -82,8 +94,13 @@ export function ShellLayout({
     (pageLabel === undefined || pageLabel === area.label
       ? []
       : [{ label: pageLabel }]);
+  const headers = extensions.flatMap((extension) =>
+    extension.header === undefined
+      ? []
+      : [{ id: extension.id, Header: extension.header }]
+  );
 
-  return (
+  const layout = (
     <SidebarProvider className="bg-background h-dvh min-h-0 overflow-hidden">
       <ShellSidebar
         areas={areas}
@@ -133,6 +150,13 @@ export function ShellLayout({
               })}
             </ol>
           </nav>
+          {headers.length === 0 ? null : (
+            <div className="flex shrink-0 items-center gap-2">
+              {headers.map(({ id, Header }) => (
+                <Header key={id} />
+              ))}
+            </div>
+          )}
         </header>
 
         {/* A flex column, so the page frame inside takes its height from `flex-1`. A
@@ -144,4 +168,11 @@ export function ShellLayout({
       </SidebarInset>
     </SidebarProvider>
   );
+
+  // Wrapped from the last entry inward, so the first entry ends up outermost.
+  let tree = layout;
+  for (const { id, Provider } of extensions.toReversed()) {
+    tree = <Provider key={id}>{tree}</Provider>;
+  }
+  return tree;
 }

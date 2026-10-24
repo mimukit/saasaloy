@@ -45,6 +45,10 @@
       "target": "@ui/blocks/shell/data-table.tsx"
     },
     {
+      "path": "files/ui/blocks/shell/data-table-highlight.ts",
+      "target": "@ui/blocks/shell/data-table-highlight.ts"
+    },
+    {
       "path": "files/ui/blocks/shell/detail-panel.tsx",
       "target": "@ui/blocks/shell/detail-panel.tsx"
     },
@@ -85,6 +89,10 @@
       "target": "@ui/components/shell/alert.tsx"
     },
     {
+      "path": "files/ui/components/shell/autocomplete.tsx",
+      "target": "@ui/components/shell/autocomplete.tsx"
+    },
+    {
       "path": "files/ui/components/shell/avatar.tsx",
       "target": "@ui/components/shell/avatar.tsx"
     },
@@ -115,6 +123,10 @@
     {
       "path": "files/ui/components/shell/combobox.tsx",
       "target": "@ui/components/shell/combobox.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/command.tsx",
+      "target": "@ui/components/shell/command.tsx"
     },
     {
       "path": "files/ui/components/shell/dialog.tsx",
@@ -259,6 +271,18 @@
     {
       "path": "files/ui/containers/shell/shell-sidebar.tsx",
       "target": "@ui/containers/shell/shell-sidebar.tsx"
+    },
+    {
+      "path": "files/ui/lib/shell/command-registration.ts",
+      "target": "@ui/lib/shell/command-registration.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/commands.ts",
+      "target": "@ui/lib/shell/commands.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/extensions.ts",
+      "target": "@ui/lib/shell/extensions.ts"
     },
     {
       "path": "files/ui/lib/shell/nav-counts.ts",

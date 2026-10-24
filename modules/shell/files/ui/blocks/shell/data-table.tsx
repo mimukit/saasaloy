@@ -9,8 +9,8 @@ import {
   useTable,
 } from "@tanstack/react-table";
 import { ArrowDownIcon, ArrowUpIcon, ChevronsUpDownIcon } from "lucide-react";
-import { useId, useMemo } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
+import type { ReactNode, Ref } from "react";
 
 import {
   Table,
@@ -20,6 +20,8 @@ import {
   TableHeader,
   TableRow,
 } from "@repo/ui/components/shell/table";
+import { useCommands } from "@repo/ui/lib/shell/commands";
+import type { Command } from "@repo/ui/lib/shell/commands";
 import { useMediaQuery } from "@repo/ui/lib/shell/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -28,6 +30,7 @@ import { EMPTY, isEmptyValue } from "@repo/ui/blocks/shell/attribute-list";
 // and this rule is a `.ts` file so `node --test` can load it without JSX.
 import { cardSlots } from "./data-table-cards";
 import type { CardSlot } from "./data-table-cards";
+import { stepHighlight } from "./data-table-highlight";
 
 // The dense list the reference renders in the content panel: a muted header row, rows
 // about 48px tall, an em dash wherever a cell has nothing, and one column at a time
@@ -47,6 +50,13 @@ import type { CardSlot } from "./data-table-cards";
 // their `card` hint, so a page describes one layout and gets both. The breakpoint is read
 // in JavaScript, not CSS, so the table and the card list never mount together: two
 // mounted copies would put every row's button in the Tab order twice.
+//
+// While it is mounted, the table declares four keys in the `data-table` command scope:
+// J and K move a highlight down and up the rows, Enter opens the highlighted row (the
+// same call a click makes), and Escape drops the highlight. They are commands, so they
+// bind only when a command provider is mounted; without one, the table renders exactly
+// as it did before and the highlight never appears. The highlight takes the rows' hover
+// tone, so it never reads as the selection.
 
 /**
  * What a column reads out of a row: the sort key, and the cell content when the column
@@ -154,6 +164,80 @@ export function DataTable<TRow extends object>({
   const modelRows = table.getRowModel().rows;
   const isDesktop = useMediaQuery("md");
 
+  // The ids in displayed order, so J and K follow the active sort.
+  const displayedIds = modelRows.map((modelRow) => modelRow.id);
+  const [highlightedId, setHighlightedId] = useState<string | null>(null);
+  // A filter or a refetch can take the highlighted row away; treat it as no highlight.
+  const highlight =
+    highlightedId !== null && displayedIds.includes(highlightedId)
+      ? highlightedId
+      : null;
+  const highlightedRow =
+    highlight === null
+      ? undefined
+      : modelRows.find((modelRow) => modelRow.id === highlight)?.original;
+
+  const commands: readonly Command[] = [
+    {
+      id: "shell.table-next-row",
+      title: "Next row",
+      group: "page",
+      shortcut: "J",
+      when: () => displayedIds.length > 0,
+      run: () => {
+        setHighlightedId(
+          stepHighlight(displayedIds, highlight, selectedId ?? null, 1)
+        );
+      },
+    },
+    {
+      id: "shell.table-previous-row",
+      title: "Previous row",
+      group: "page",
+      shortcut: "K",
+      when: () => displayedIds.length > 0,
+      run: () => {
+        setHighlightedId(
+          stepHighlight(displayedIds, highlight, selectedId ?? null, -1)
+        );
+      },
+    },
+    {
+      id: "shell.table-open-row",
+      title: "Open highlighted row",
+      group: "page",
+      shortcut: "Enter",
+      when: () => onRowClick !== undefined && highlightedRow !== undefined,
+      run: () => {
+        if (onRowClick !== undefined && highlightedRow !== undefined) {
+          onRowClick(highlightedRow);
+        }
+      },
+    },
+    {
+      id: "shell.table-clear-highlight",
+      title: "Clear row highlight",
+      group: "page",
+      shortcut: "Escape",
+      when: () => highlight !== null,
+      run: () => {
+        setHighlightedId(null);
+      },
+    },
+  ];
+  useCommands(commands, { scope: "data-table" });
+
+  // Keep the highlighted row in view as J and K walk past the scrolled edge.
+  const containerRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (highlight === null) {
+      return;
+    }
+    containerRef.current
+      ?.querySelector("[data-highlighted]")
+      ?.scrollIntoView({ block: "nearest" });
+  }, [highlight]);
+
   if (!isDesktop) {
     return (
       <DataTableCards
@@ -164,15 +248,18 @@ export function DataTable<TRow extends object>({
         rowId={rowId}
         onRowClick={onRowClick}
         selectedId={selectedId}
+        highlightedId={highlight}
         emptyState={emptyState}
         caption={caption}
         className={className}
+        containerRef={containerRef}
       />
     );
   }
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "flex min-h-0 flex-1 flex-col",
         "[&>[data-slot=table-container]]:min-h-0 [&>[data-slot=table-container]]:flex-1 [&>[data-slot=table-container]]:overflow-auto",
@@ -257,6 +344,8 @@ export function DataTable<TRow extends object>({
                   // The vendored TableRow already styles this attribute, so the selected
                   // look comes from the same place every other table's does.
                   data-state={selectedId === id ? "selected" : undefined}
+                  // The J/K highlight, in the rows' hover tone.
+                  data-highlighted={highlight === id ? "" : undefined}
                   // Pointer convenience only, and deliberately WITHOUT role or tabIndex.
                   // `role="button"` on a <tr> takes the row out of the table's
                   // accessibility tree: a screen reader in table mode stops seeing the row,
@@ -271,7 +360,8 @@ export function DataTable<TRow extends object>({
                   }
                   className={cn(
                     "border-border",
-                    onRowClick === undefined ? undefined : "cursor-pointer"
+                    onRowClick === undefined ? undefined : "cursor-pointer",
+                    highlight === id && "bg-accent/50"
                   )}
                 >
                   {columns.map((column, index) => {
@@ -338,24 +428,30 @@ function DataTableCards<TRow extends object>({
   rowId,
   onRowClick,
   selectedId,
+  highlightedId,
   emptyState,
   caption,
   className,
+  containerRef,
 }: {
   columns: readonly DataTableColumn<TRow>[];
   rows: readonly TRow[];
   rowId: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   selectedId?: string | null;
+  /** The J/K highlight, or `null` when there is none. */
+  highlightedId: string | null;
   emptyState?: ReactNode;
   caption: string;
   className?: string;
+  containerRef: Ref<HTMLDivElement>;
 }) {
   const captionId = useId();
   const slots = useMemo(() => cardSlots(columns), [columns]);
 
   return (
     <div
+      ref={containerRef}
       className={cn(
         "flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto",
         className
@@ -375,6 +471,7 @@ function DataTableCards<TRow extends object>({
           {rows.map((row) => {
             const id = rowId(row);
             const selected = selectedId === id;
+            const highlighted = highlightedId === id;
 
             const body = (
               <>
@@ -409,10 +506,12 @@ function DataTableCards<TRow extends object>({
             return (
               <li
                 key={id}
-                // The same accent fill the table's selected row takes.
+                data-highlighted={highlighted ? "" : undefined}
+                // The same accent fill the table's selected row takes, and its hover
+                // tone for the J/K highlight.
                 className={cn(
                   "border-border border-b",
-                  selected && "bg-accent"
+                  selected ? "bg-accent" : highlighted && "bg-accent/50"
                 )}
               >
                 {onRowClick === undefined ? (
