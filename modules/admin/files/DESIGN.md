@@ -24,6 +24,12 @@ colors:
   sidebar: "oklch(0.96 0.008 73.74)"
   status-open: "oklch(0.915 0.024 256.11)"
   status-open-foreground: "oklch(0.347 0.067 253.68)"
+  status-ok: "oklch(0.696 0.17 162.48)"
+  status-ok-foreground: "oklch(0.508 0.118 165.612)"
+  status-warn: "oklch(0.769 0.188 70.08)"
+  status-warn-foreground: "oklch(0.555 0.163 48.998)"
+  status-bad: "oklch(0.501 0.178 28.7)"
+  status-bad-foreground: "oklch(0.505 0.213 27.518)"
   accent-sort: "oklch(0.579 0.158 41.66)"
   success: "oklch(0.696 0.17 162.48)"
   success-foreground: "oklch(0.508 0.118 165.612)"
@@ -48,6 +54,12 @@ colors:
   dark-sidebar: "oklch(0.134 0 0)"
   dark-status-open: "oklch(0.395 0.069 257.5)"
   dark-status-open-foreground: "oklch(0.985 0 0)"
+  dark-status-ok: "oklch(0.696 0.17 162.48)"
+  dark-status-ok-foreground: "oklch(0.765 0.177 163.223)"
+  dark-status-warn: "oklch(0.769 0.188 70.08)"
+  dark-status-warn-foreground: "oklch(0.828 0.189 84.429)"
+  dark-status-bad: "oklch(0.704 0.191 22.216)"
+  dark-status-bad-foreground: "oklch(0.704 0.191 22.216)"
   dark-accent-sort: "oklch(0.729 0.152 39.51)"
   dark-success-foreground: "oklch(0.765 0.177 163.223)"
   dark-warning-foreground: "oklch(0.828 0.189 84.429)"
@@ -159,6 +171,24 @@ components:
   status-pill-open-dark:
     backgroundColor: "{colors.dark-status-open}"
     textColor: "{colors.dark-status-open-foreground}"
+  status-pill-ok:
+    textColor: "{colors.status-ok-foreground}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.sm}"
+  status-pill-ok-dark:
+    textColor: "{colors.dark-status-ok-foreground}"
+  status-pill-warn:
+    textColor: "{colors.status-warn-foreground}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.sm}"
+  status-pill-warn-dark:
+    textColor: "{colors.dark-status-warn-foreground}"
+  status-pill-bad:
+    textColor: "{colors.status-bad-foreground}"
+    typography: "{typography.caption}"
+    rounded: "{rounded.sm}"
+  status-pill-bad-dark:
+    textColor: "{colors.dark-status-bad-foreground}"
   sort-indicator:
     textColor: "{colors.accent-sort}"
   sort-indicator-dark:
@@ -227,7 +257,7 @@ Three neutral tones carry every surface: the canvas (`background`), the raised c
 
 Hairlines and input borders are alpha, not a fixed grey: `border` is black at 8 % on light and white at 8 % on dark, and `input` is a step stronger. One alpha rule reads the same on the canvas, on a panel and on a popup.
 
-Status colours come in pairs. The plain token (`success`, `warning`, `info`, `destructive`) tints a fill at low opacity, and the `-foreground` token is the darker text on that tint. `status-open` is the muted blue of the admin role pill and other live states. `accent-sort` is the orange of the active sort column, and nothing else uses it.
+Status colours come in pairs. The plain token (`success`, `warning`, `info`, `destructive`) tints a fill at low opacity, and the `-foreground` token is the darker text on that tint. The status pill reads pairs of its own: `status-open` is the muted blue of the admin role pill and other live states, and `status-ok`, `status-warn` and `status-bad` are a settled state, one waiting on someone, and a failure. Those three copy the `success`, `warning` and `destructive` values and tint the same way, 8 % on light and 16 % on dark. They exist because a theme preset rewrites the shadcn roles, `destructive-foreground` included, and no preset sets a `status-*` key, so a status keeps its colour under any preset. A value that is a state takes a status pill, and a tag such as a plan name or a flag type takes a badge. `accent-sort` is the orange of the active sort column, and nothing else uses it.
 
 Use the semantic utilities, such as `bg-card`, `text-muted-foreground` and `border-border`. Do not copy an `oklch()` value into a component.
 
@@ -272,4 +302,4 @@ Controls use short colour and shadow transitions. Popups fade and scale in from 
 
 The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and the "Theme" submenu in the account menu picks Light, Dark or System, with a circle reveal from the picked item. Every component uses the semantic tokens, so both themes stay in step.
 
-_Seeded by the saasaloy admin module · tokens sha256:b187a46c1de4 of packages/ui/src/styles/admin.css_
+_Seeded by the saasaloy admin module · tokens sha256:de8fecf6b226 of packages/ui/src/styles/admin.css_

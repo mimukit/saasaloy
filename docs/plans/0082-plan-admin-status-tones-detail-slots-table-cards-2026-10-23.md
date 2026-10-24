@@ -75,7 +75,7 @@ Attended: settled. The owner approved mockup round 1 on 2026-10-24 (Visual refer
 
 Done when: the owner approves a mockup round in the planning session, and the Visual reference row names that round and date.
 
-### Phase 2: StatusPill tones
+### Phase 2: StatusPill tones (#217) (built 2026-10-24)
 
 - Add the `status-ok`, `status-warn` and `status-bad` pairs to `:root`, `.dark` and `@theme inline` in `modules/admin/files/ui/styles/admin.css`, with today's `success`, `warning` and `destructive` values.
 - Add `ok`, `warn` and `bad` to `StatusTone` and `TONE_CLASS` in `status-pill.tsx`, reading the `status-*` pairs, and rewrite its header comment.
@@ -84,14 +84,14 @@ Done when: the owner approves a mockup round in the planning session, and the Vi
 
 Done when: `grep -rn 'Badge variant="\(success\|warning\|error\)"' modules/*/files` finds no status use, `grep -n 'success\|warning\|destructive' status-pill.tsx` finds no token, `pnpm lint` and `pnpm test` pass, and a scaffold with those modules shows the pills in both themes with the same colours as round 1.
 
-### Phase 3: DetailPanel slots
+### Phase 3: DetailPanel slots (#217) (built 2026-10-24)
 
 - Add `status`, `banner` and `footer` to `DetailPanel`, placed as Design decisions says, inside the docked column and the `md` sheet alike.
 - Document the three props in `modules/admin/skills/saasaloy-admin/SKILL.md`.
 
 Done when: a panel with all three slots keeps the banner and the footer in view while a long body scrolls, at 1280 px docked and at 360 px in the sheet, and a panel with none renders as it does on `main`.
 
-### Phase 4: DataTable card layout
+### Phase 4: DataTable card layout (#217) (built 2026-10-24)
 
 - Replace the private `useIsDesktop` in `page-layout.tsx` with `useMediaQuery("md")` from `ui/lib/admin/use-media-query.ts`, and use the same call in `data-table.tsx`.
 - Put the card slot rule in a JSX-free `ui/blocks/admin/data-table-cards.ts` (`cardSlots(columns)`), with a `node --test` test beside it.
@@ -99,7 +99,7 @@ Done when: a panel with all three slots keeps the banner and the footer in view 
 
 Done when: `pnpm test:modules` runs the new `cardSlots` test green, and at 360 px the Payments, Users, Billing, Teams, API keys and Roles lists show cards with no sideways scroll.
 
-### Phase 5: live nav counts
+### Phase 5: live nav counts (#217) (built 2026-10-24)
 
 - Add `apps/admin/src/components/nav-counts.ts` with an empty `NAV_COUNTS`, and register the file in the admin module.
 - Add a `counts` prop to `ShellLayout` and `ShellSidebar`, and fetch the counts in `app-shell.tsx` as Design decisions says. Put the merge rule in a JSX-free helper with a `node --test` test.
@@ -107,7 +107,7 @@ Done when: `pnpm test:modules` runs the new `cardSlots` test green, and at 360 p
 
 Done when: in a scaffold with `admin` and `payment`, the sidebar shows "Payments 1" after one payment is submitted, and the badge disappears after staff confirm it, with no reload. The count-merge test covers the zero rule.
 
-### Phase 6: Payments page back to the round 1 layout
+### Phase 6: Payments page back to the round 1 layout (#217) (built 2026-10-24)
 
 - Fix the `@admin/components/*` imports in `payments.tsx` to the `@repo/ui` paths.
 - Map statuses to tones: `submitted` `open`, `successful` `ok`, `failed` `bad`, `pending` and `cancelled` `neutral`, and "Amount differs" `warn`.

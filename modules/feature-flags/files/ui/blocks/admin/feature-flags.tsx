@@ -15,6 +15,7 @@ import {
 import { Field, FieldLabel } from "@repo/ui/components/admin/field";
 import { Input } from "@repo/ui/components/admin/input";
 import { Label } from "@repo/ui/components/admin/label";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { Switch } from "@repo/ui/components/admin/switch";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -106,7 +107,7 @@ export function FeatureFlags({
             <CardTitle className="flex items-center gap-2 text-sm">
               Maintenance mode
               {maintenance.enabled ? (
-                <Badge variant="destructive">Site closed</Badge>
+                <StatusPill label="Site closed" tone="bad" />
               ) : null}
             </CardTitle>
             <CardDescription>

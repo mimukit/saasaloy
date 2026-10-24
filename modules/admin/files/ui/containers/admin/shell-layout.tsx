@@ -12,6 +12,7 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/admin/shell-nav";
+import type { LiveCounts } from "@repo/ui/lib/admin/nav-counts";
 
 // The shell every admin screen renders inside: an inset sidebar on the canvas, and a
 // content panel beside it with a sticky header. The header carries the sidebar toggle
@@ -47,6 +48,7 @@ export function ShellLayout({
   account,
   signOut,
   organizationPicker,
+  counts,
   children,
 }: {
   areas: readonly ShellNavArea[];
@@ -58,6 +60,8 @@ export function ShellLayout({
   signOut: ShellSignOut;
   /** The #141 organization picker, rendered at the top of the sidebar. */
   organizationPicker?: ReactNode;
+  /** Live nav counts keyed by a row's `to`. The sidebar shows them over static counts. */
+  counts?: LiveCounts;
   children: ReactNode;
 }) {
   const pageLabel = pageLabelFor(areas, currentPath);
@@ -70,6 +74,7 @@ export function ShellLayout({
         account={account}
         signOut={signOut}
         organizationPicker={organizationPicker}
+        counts={counts}
       />
 
       <SidebarInset className="bg-card text-card-foreground border-border min-h-0 overflow-hidden border shadow-none md:peer-data-[variant=inset]:rounded-lg md:peer-data-[variant=inset]:shadow-none">

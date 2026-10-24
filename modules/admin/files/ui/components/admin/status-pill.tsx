@@ -4,22 +4,34 @@ import { cn } from "@repo/ui/lib/utils";
 
 // The pill the reference renders in a table's Status column ("Open" on a
 // muted blue fill). Also the right shape for a single-value state anywhere else on a
-// page — the overview's health result, a role, a plan tier.
+// page — the overview's health result, a role, an invoice state, a key that is on or off.
+// A value that is not a state (a plan name, a flag type, a count) is a tag, and a tag
+// stays a Badge.
 //
-// Two tones and no more. `open` is the muted blue keyed to --status-open, the token the
-// admin stylesheet measured off the screenshots; `neutral` is the panel's own hover tone.
-// Orange is deliberately absent: --accent-sort belongs to the active sort indicator and
-// to an AI surface, and a pill that could be orange would put a third meaning on it.
+// Five tones. `open` is the muted blue keyed to --status-open, the token the admin
+// stylesheet measured off the screenshots; `neutral` is the panel's own hover tone. `ok`,
+// `warn` and `bad` are a settled state, one waiting on someone, and a failure. They tint
+// their fill the way Badge does (8 % on light, 16 % on dark) and set the text in the
+// pair's foreground.
+//
+// Every tone but `neutral` reads a `status-*` pair of its own, never a shadcn role. A
+// theme preset rewrites the shadcn roles, and it sets the red pair with another meaning,
+// but no preset sets a `status-*` key, so a status keeps its colour under any preset.
+// `neutral` reads `muted` and follows the preset on purpose. Orange is absent:
+// --accent-sort belongs to the active sort indicator and to an AI surface.
 //
 // Mapping a domain value onto a tone is the caller's job, not this component's. A role,
-// a health check and an invoice state all reach "which of these is the live one" by
-// different rules, so the rule stays in the route that knows it.
+// a health check and an invoice state all reach "which tone is this" by different rules,
+// so the rule stays in the route that knows it.
 
-export type StatusTone = "neutral" | "open";
+export type StatusTone = "neutral" | "open" | "ok" | "warn" | "bad";
 
 const TONE_CLASS: Record<StatusTone, string> = {
   neutral: "bg-muted text-muted-foreground",
   open: "bg-status-open text-status-open-foreground",
+  ok: "bg-status-ok/8 text-status-ok-foreground dark:bg-status-ok/16",
+  warn: "bg-status-warn/8 text-status-warn-foreground dark:bg-status-warn/16",
+  bad: "bg-status-bad/8 text-status-bad-foreground dark:bg-status-bad/16",
 };
 
 export function StatusPill({

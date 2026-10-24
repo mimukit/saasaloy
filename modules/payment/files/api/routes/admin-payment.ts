@@ -127,6 +127,15 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
     })
   )
 
+  // The sidebar's live count on the Payments row: how many payments wait for a review.
+  // The admin shell polls it through NAV_COUNTS, so it answers only `{ count }`.
+  .get("/review-count", (c) =>
+    staff(c, async ({ db }) => {
+      const { submitted } = await countPayments(db);
+      return c.json({ count: submitted }, 200);
+    })
+  )
+
   // One payment, with its event history and its refunds.
   .get("/payments/:id", (c) =>
     staff(c, async ({ db }) => {

@@ -139,6 +139,38 @@ Keep the `as const`. It is what holds every `to` at a literal type the router ca
 
 `nav.ts` holds the data and the two rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
 
+### Add a live count to a nav row
+
+A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many payments wait for a review, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the admin session.
+
+A module adds its entry with a `const-array` patch keyed on `to`. The payment module's patch is the example:
+
+```json
+{
+  "file": "apps/admin/src/components/nav-counts.ts",
+  "kind": "const-array",
+  "constName": "NAV_COUNTS",
+  "key": "to",
+  "entry": { "to": "/payments", "path": "/admin/payment/review-count" }
+}
+```
+
+`AppShell` runs one TanStack query per entry under the key `["nav-count", to]`. Each query fetches `PUBLIC_API_URL` plus `path` with the session cookie and `x-auth-audience: admin`, the same `API_HEADERS` and `API_CREDENTIALS` that `src/lib/api.ts` gives the typed client. The queries refetch on window focus and every 60 s, and TanStack Query does not run the interval in a hidden tab. `AppShell` passes the numbers to `ShellLayout` as `counts`, keyed by `to`.
+
+The sidebar applies `withLiveCounts` from `@repo/ui/lib/admin/nav-counts`:
+
+- A live count replaces the row's static `count`.
+- A live 0 hides the badge. A static 0 still renders.
+- With no live count (loading, a failed fetch, a non-OK answer or a body without a numeric `count`) the static `count` stays. A failed count shows no error.
+
+A screen whose action changes a count invalidates the key after the mutation, so the badge follows with no reload:
+
+```ts
+await queryClient.invalidateQueries({ queryKey: ["nav-count", "/payments"] });
+```
+
+Keep the route that answers the count cheap: the shell calls it on every focus and every minute while the tab is open.
+
 ## The admin primitive set and the page blocks
 
 This module writes the admin app's whole UI kit into `packages/ui/src/`, and admin code uses nothing else:
@@ -160,20 +192,22 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 | `PageBody` | `containers/admin/page-body` | `children` | The padded, scrolling body under the header, for cards, forms and editors. A list page that hands its height to `DataTable` does not need it. |
 | `PageLayout` | `containers/admin/page-layout` | `children`, `detail?`, `detailLabel?`, `onDetailClose?` | Puts a list beside its detail. `detail` docks as a column at `md` and up and opens as a bottom sheet below it; the same node either way. Passing `undefined` closes both. |
 | `DataTable` | `blocks/admin/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `emptyState?` | See below. |
-| `DetailPanel` | `blocks/admin/detail-panel` | `title`, `onClose`, `description?`, `media?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. It draws no border; `PageLayout` supplies the edge. |
+| `DetailPanel` | `blocks/admin/detail-panel` | `title`, `onClose`, `description?`, `media?`, `status?`, `banner?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `footer?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. `status` renders after the title in the header, for one `StatusPill` or two; when the header shows the status, drop the status attribute row. `banner` renders under the header and above the tabs and does not scroll; pass an `Alert` from `components/admin/alert`. `footer` is pinned under the scrolling body behind a hairline, for the record's main decision such as Confirm and Reject. `actions` stays inside the scrolling body, for in-body controls such as a role select. A panel with none of the three renders as before. It draws no border; `PageLayout` supplies the edge. |
 | `FilterChips` | `blocks/admin/filter-chips` | `chips`, `selectedId`, `onSelect`, `label` | Each chip is a real `button` with `aria-pressed`. Filtering is the route's. |
 | `AttributeList` | `blocks/admin/attribute-list` | `items` | A `dl` of label and value. An empty value renders as an em dash. |
 | `EmptyState` | `blocks/admin/empty-state` | `title`, `description?`, `icon?`, `action?` | The filler for `DataTable`'s `emptyState`. Write different words for an empty list and a list filtered down to nothing. |
 | `ErrorState` | `blocks/admin/error-state` | `code`, `title?`, `description?`, `detail?`, `primaryAction?`, `secondaryAction?` | The admin error screen, with the words from `content/errors.ts`. |
-| `StatusPill` | `components/admin/status-pill` | `label`, `tone?` | `neutral` or `open`, the muted blue of a live state. The route maps a value onto a tone. |
+| `StatusPill` | `components/admin/status-pill` | `label`, `tone?`, `icon?` | Five tones: `neutral` (the default), `open` (the muted blue of a live state), `ok` (settled, such as paid or verified), `warn` (waiting on someone, such as pending or open) and `bad` (a failure, such as site closed). Use it for a value that is a state; a tag such as a plan name, a flag type or a count stays a `Badge`. The route maps a value onto a tone. |
 
 `DataTable` is the only file that imports `@tanstack/react-table`, and that is the point: a caller describes its screen with `columns` and `rows` and never sees a `ColumnDef` or a sorting state. A column is:
 
 ```tsx
-{ id, header, value, cell?, sortable?, align? }
+{ id, header, value, cell?, sortable?, align?, card? }
 ```
 
 `value(row)` is both the sort key and the cell content when `cell` is absent, so the two cannot fall out of step. `cell(row)` renders anything richer. `rowId(row)` keys the rows, matches `selectedId`, and is what `onRowClick` should store, because an index breaks the moment a sort reorders the table. Sorting is client side and two-state, and the active header is the one place `--accent-sort` orange appears. Empty cells render `—`, a boolean renders `Yes`/`No`, and a `Date` renders through `toLocaleDateString()`.
+
+Below `md` the same rows render as a `<ul>` of cards, so a list has no sideways scroll at 360 px. The table and the card list never mount together: `DataTable` reads the width through `useMediaQuery("md")` from `lib/admin/use-media-query`, the same call `PageLayout` makes. A card is a title row over a `<dl>` of label and value lines, each label the column's `header`. The column's `card` hint picks its place: `title` heads the card, `trailing` sits at the right of the title row (an amount, a status, a role), `line` is a label and value line, and `hidden` leaves the column out. With no column hinted `title`, the first column is the title, and every other unhinted column is a line, so a page with no hints still gets usable cards. The cards keep the order the table's sort state gives and show no sort control. With `onRowClick`, each card is one `<button>` with `aria-current` on the selected one and the table's focus ring; the selected card takes the same accent fill as the selected row. The empty state and the caption carry over. The slot rule is `cardSlots(columns)` in `blocks/admin/data-table-cards.ts`, JSX-free so `pnpm test:modules` covers it. Set `card: "trailing"` on the one column a reader scans for, and `card: "hidden"` on a column that only makes sense beside the others in a table.
 
 Inside a page, build every control from the primitive set: `Field` with `FieldLabel` and `Input`, `Select` or `Checkbox` in a form; `Switch` for an on/off setting; `Dialog` for a create flow; `AlertDialog` before a revoke, a delete or a cancel; and `toastManager.add({ type, title, description })` from `components/admin/toast` for the result of every mutation. The toast provider is already mounted in `__root.tsx`.
 
@@ -185,9 +219,9 @@ Inside a page, build every control from the primitive set: `Field` with `FieldLa
 - The row type is derived from the query's own return type, so a field dropped in `apps/api` lands as a typecheck failure here.
 - `PageHeader` shows `data.total`, the api's count. The endpoint caps its answer at 100 users, so the loaded page and the real total can differ.
 - `FilterChips` narrows the loaded rows by role, in the component, with no refetch.
-- `DataTable` renders name with an avatar, email, role as a `StatusPill`, verified as a success or warning `Badge`, and created. The columns are a module-scope constant.
+- `DataTable` renders name with an avatar, email, role as a `StatusPill`, verified as an `ok` or `warn` `StatusPill`, and created. The columns are a module-scope constant.
 - An empty list shows one `EmptyState`, and a list filtered to nothing shows another with a "Show all users" button.
-- The selected user is `useState` in the route. The route builds the `DetailPanel` and hands it to `PageLayout` as `detail`.
+- The selected user is `useState` in the route. The route builds the `DetailPanel`, with the role pill in its `status` slot, and hands it to `PageLayout` as `detail`.
 - `UsersError` is the worked example of a route overriding the router's default error screen.
 
 Copy that split when you add a screen: **the route owns the state and the data, the blocks own the pixels.**
@@ -364,6 +398,7 @@ The palette is a three-step neutral ramp measured off the reference screenshots 
 Beyond the shadcn set, `admin.css` declares the status pairs the primitives read (`--success`, `--warning`, `--info` and `--destructive-foreground`, each a fill tone and a darker text tone), the skeleton and toast keyframes, and two accents, all surfaced through `@theme inline`:
 
 - `--status-open` (and `--status-open-foreground`) — the muted blue of `StatusPill`'s `open` tone and of a primary circular action.
+- `--status-ok`, `--status-warn` and `--status-bad` (each with a `-foreground`) — `StatusPill`'s `ok`, `warn` and `bad` tones. They copy the `--success`, `--warning` and `--destructive` values, and they exist so a theme preset, which sets `--destructive` and `--destructive-foreground` with another meaning, never repaints a status. No preset sets a `status-*` key.
 - `--accent-sort` — the orange on `DataTable`'s active sort header. It is reserved for one indicator at a time and for an AI surface. It is never a section background, and `StatusPill` deliberately has no orange tone.
 
 **Dark by default, and every stored choice wins — `system` included.** `applyStartingTheme()` in `src/main.tsx` runs above `createRoot` and is one line: `setTheme(hasChosenTheme() ? getStoredTheme() : "dark")`.

@@ -154,6 +154,7 @@ The staff reason and note are on the latest `payment_events` row for the payment
 | --- | --- | --- |
 | `GET /admin/payment/payments?status=` | none | `{ payments, counts }`. Without `status`, every payment. `submitted` lists oldest first. |
 | `GET /admin/payment/payments/:id` | none | `{ payment, events, refunds }` |
+| `GET /admin/payment/review-count` | none | `{ count }`, the number of `submitted` payments. The admin sidebar polls it for the live count on the Payments row; see below. |
 | `POST /admin/payment/payments/:id/review` | `{ action: "confirm", note? }` or `{ action: "reject", reason, note? }` | the detail shape |
 | `POST /admin/payment/payments/:id/refunds` | `{ amount, note? }` | the detail shape |
 
@@ -256,6 +257,8 @@ Open **Payments** in the admin app. The **Submitted** chip is the default, oldes
 2. Open your own statement for that account. Check four things: an incoming entry with that transaction ID exists, the amount matches, the sender matches, and the time is close to the submission.
 3. Click **Confirm** when all four match. The payment moves to `successful`, `settled_amount` takes the claimed amount, and `settled_at` records the time.
 4. Click **Reject** when they do not match. Pick a reason (`amount_mismatch`, `not_found`, `duplicate`, `other`) and add a note for the shopper. The payment moves to `failed`.
+
+The **Payments** row in the sidebar shows how many payments wait in **Submitted**. The module adds `{ to: "/payments", path: "/admin/payment/review-count" }` to the admin app's `NAV_COUNTS` with a `const-array` patch, and the shell refetches it on window focus and every 60 s. No count shows when nothing waits. The `saasaloy-admin` skill describes live counts.
 
 Two staff who click Confirm at once get one success and one 409. The page shows the loser a toast that someone else reviewed the payment first.
 

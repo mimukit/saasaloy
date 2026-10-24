@@ -81,6 +81,16 @@
         "name": "BanknoteIcon",
         "from": "lucide-react"
       }
+    },
+    {
+      "file": "apps/admin/src/components/nav-counts.ts",
+      "kind": "const-array",
+      "constName": "NAV_COUNTS",
+      "key": "to",
+      "entry": {
+        "to": "/payments",
+        "path": "/admin/payment/review-count"
+      }
     }
   ],
   "files": [

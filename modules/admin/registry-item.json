@@ -87,6 +87,10 @@
       "target": "@ui/blocks/admin/brand-mark.tsx"
     },
     {
+      "path": "files/ui/blocks/admin/data-table-cards.ts",
+      "target": "@ui/blocks/admin/data-table-cards.ts"
+    },
+    {
       "path": "files/ui/blocks/admin/data-table.tsx",
       "target": "@ui/blocks/admin/data-table.tsx"
     },
@@ -307,6 +311,10 @@
       "target": "@ui/containers/admin/shell-sidebar.tsx"
     },
     {
+      "path": "files/ui/lib/admin/nav-counts.ts",
+      "target": "@ui/lib/admin/nav-counts.ts"
+    },
+    {
       "path": "files/ui/lib/admin/segmented-control.ts",
       "target": "@ui/lib/admin/segmented-control.ts"
     },
@@ -385,6 +393,10 @@
         {
           "path": "files/src/components/nav.ts",
           "target": "src/components/nav.ts"
+        },
+        {
+          "path": "files/src/components/nav-counts.ts",
+          "target": "src/components/nav-counts.ts"
         },
         {
           "path": "files/src/components/access-denied.tsx",

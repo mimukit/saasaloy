@@ -31,6 +31,8 @@ import {
   CardPanel,
   CardTitle,
 } from "@repo/ui/components/admin/card";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
+import type { StatusTone } from "@repo/ui/components/admin/status-pill";
 import { toastManager } from "@repo/ui/components/admin/toast";
 import { PageBody } from "@repo/ui/containers/admin/page-body";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
@@ -93,18 +95,23 @@ export const Route = createFileRoute("/billing")({
 });
 
 // Vendors report statuses in their own words, so only the two that every one of them
-// shares get a colour: a paid invoice is settled, an open one is waiting on the customer.
-// Everything else (draft, void, uncollectible, a vendor's own term) stays neutral.
-function InvoiceStatus({ status }: { status: string }) {
+// shares get a colour: a paid invoice is settled (`ok`), an open one is waiting on the
+// customer (`warn`). Everything else (draft, void, uncollectible, a vendor's own term)
+// stays neutral.
+function invoiceTone(status: string): StatusTone {
   if (status === "paid") {
-    return <Badge variant="success">{status}</Badge>;
+    return "ok";
   }
 
   if (status === "open") {
-    return <Badge variant="warning">{status}</Badge>;
+    return "warn";
   }
 
-  return <Badge variant="secondary">{status}</Badge>;
+  return "neutral";
+}
+
+function InvoiceStatus({ status }: { status: string }) {
+  return <StatusPill label={status} tone={invoiceTone(status)} />;
 }
 
 // The invoice table's shape, at module scope: it depends on no state, and hoisting it keeps
@@ -137,6 +144,7 @@ const INVOICE_COLUMNS: readonly DataTableColumn<InvoiceRow>[] = [
   {
     id: "amount",
     header: "Amount",
+    card: "trailing",
     // The minor-unit number sorts; the cell shows it formatted. Mixed currencies sort by
     // the raw number, which is the best a list with no exchange rate can do.
     value: (invoice) => invoice.amount,
@@ -252,14 +260,11 @@ function Billing() {
           <DetailPanel
             title={selected.number ?? selected.id}
             description={formatAmount(selected.amount, selected.currency)}
+            status={<InvoiceStatus status={selected.status} />}
             onClose={() => {
               setSelectedId(null);
             }}
             attributes={[
-              {
-                label: "Status",
-                value: <InvoiceStatus status={selected.status} />,
-              },
               {
                 label: "Amount",
                 value: formatAmount(selected.amount, selected.currency),
@@ -367,11 +372,12 @@ function Billing() {
             </CardHeader>
             <CardPanel className="flex flex-wrap items-center gap-2 pt-0 text-sm">
               <span className="font-medium">{plan?.name ?? "—"}</span>
-              <Badge variant={live ? "info" : "secondary"}>
-                {live?.status ?? "no subscription"}
-              </Badge>
+              <StatusPill
+                label={live?.status ?? "no subscription"}
+                tone={live ? "open" : "neutral"}
+              />
               {live?.cancelAtPeriodEnd === true ? (
-                <Badge variant="warning">cancels at period end</Badge>
+                <StatusPill label="cancels at period end" tone="warn" />
               ) : null}
               {live?.trialEnd === undefined || live.trialEnd === null ? null : (
                 <span className="text-muted-foreground">
