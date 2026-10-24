@@ -3670,3 +3670,46 @@ describe("buildPlan — config section keys", () => {
     expect(built.patches).toHaveLength(1);
   });
 });
+
+// #249: kv calls KV_KEY_PREFIX optional and kv-upstash requires it. `add kv-upstash` on a
+// fresh project installs both in one run, and a union of `envOptional` marked the key
+// blank on purpose, so `pnpm env:setup` passed a blank prefix.
+describe("buildPlan — envOptional needs every declaring module", () => {
+  async function kv(): Promise<LoadedModule> {
+    return writeModule("kv", {
+      type: "saasaloy:capability",
+      envVars: { KV_KEY_PREFIX: "Optional prefix." },
+      envServices: { default: ["api"] },
+      envOptional: ["KV_KEY_PREFIX"],
+    });
+  }
+
+  it("drops the key when a module in the run requires it", async () => {
+    const upstash = await writeModule("kv-upstash", {
+      type: "saasaloy:feature",
+      envVars: { KV_KEY_PREFIX: "Required prefix." },
+      envServices: { default: ["api"] },
+    });
+
+    const p = await plan({
+      install: ["kv", "kv-upstash"],
+      modules: [await kv(), upstash],
+    });
+
+    expect(p.envOptional).toStrictEqual([]);
+    expect(p.envVars.KV_KEY_PREFIX).toBe("Required prefix.");
+  });
+
+  it("keeps the key when every declaring module calls it optional", async () => {
+    const memory = await writeModule("kv-memory", {
+      type: "saasaloy:feature",
+    });
+
+    const p = await plan({
+      install: ["kv", "kv-memory"],
+      modules: [await kv(), memory],
+    });
+
+    expect(p.envOptional).toStrictEqual(["KV_KEY_PREFIX"]);
+  });
+});

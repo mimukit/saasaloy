@@ -70,7 +70,9 @@ Rules the core enforces, all as `KvError` with code `invalid_key`:
   Hash the long piece and put the hash in the key.
 
 `KV_KEY_PREFIX` (empty by default) goes in front of everything, which lets a staging and a
-production Worker share one namespace.
+production Worker share one namespace. `kv-upstash` requires it: its preset in
+`packages/kv/src/env-preset.ts` sits after the core's own keys in `kvPreset.extends`, and the
+last declaration of a key wins, so a blank prefix fails `createEnv` once `kv-upstash` is in.
 
 ## The TTL floor, and why nothing rounds
 
@@ -213,7 +215,9 @@ UPSTASH_REDIS_REST_TOKEN=<token>
 
 Put the production values in `packages/env/.env.prod`, and `pnpm deploy:production` ships them as Worker secrets. The token is a secret. Never put it in `apps/api/wrangler.jsonc`; that file is committed.
 
-**2. Set `KV_KEY_PREFIX`, which this provider requires.** One Redis database is one flat keyspace. Without a prefix, `list({})` scans every key in the database and hands back keys the project does not own, so an empty or unset value throws `provider_error` before any request leaves.
+**2. Set `KV_KEY_PREFIX`, which this provider requires.** One Redis database is one flat keyspace. Without a prefix, `list({})` scans every key in the database and hands back keys the project does not own, so the env gate refuses an empty or unset value: `pnpm env:setup` stops on it, and the api's `createEnv` throws `KV_KEY_PREFIX (kv-upstash): unset`. The provider also throws `provider_error` on a blank prefix, for a client built without the gate.
+
+A project that added `kv-upstash` before saasaloy 0.8.0 still has `# Blank on purpose: this key may stay empty.` above `KV_KEY_PREFIX` in `packages/env/.env.example`. Delete that line, so `pnpm env:setup` checks the key too.
 
 ```sh
 # packages/env/.env (and packages/env/.env.prod for a deploy)

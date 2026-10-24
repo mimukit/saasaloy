@@ -5,19 +5,21 @@
   "description": "A kv provider on Upstash Redis over HTTPS; needs an Upstash account and two REST secrets.",
   "stage": "scale",
   "needs": ["vendor-account"],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["kv"],
   "dependencies": [],
   "envVars": {
     "UPSTASH_REDIS_REST_URL": "REST endpoint of your Upstash Redis database, the `https://<name>-<id>.upstash.io` one from the database page under REST API. Required once KV_PROVIDER=upstash. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_URL`) in production. There is no default: unset, every call through this provider throws KvError(\"provider_error\") before a request leaves the Worker.",
-    "UPSTASH_REDIS_REST_TOKEN": "REST token for the same database, from the same panel. Use the read-write token — the read-only one cannot `SET`, `DEL` or run the limiter's `EVAL`. Store it as a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_TOKEN`), never in wrangler.jsonc, and rotate it in the Upstash console if it leaks. A wrong token surfaces as KvError(\"provider_error\") with providerCode `401` and retryable false, because retrying a bad credential only burns request budget."
+    "UPSTASH_REDIS_REST_TOKEN": "REST token for the same database, from the same panel. Use the read-write token — the read-only one cannot `SET`, `DEL` or run the limiter's `EVAL`. Store it as a Workers secret (`wrangler secret put UPSTASH_REDIS_REST_TOKEN`), never in wrangler.jsonc, and rotate it in the Upstash console if it leaks. A wrong token surfaces as KvError(\"provider_error\") with providerCode `401` and retryable false, because retrying a bad credential only burns request budget.",
+    "KV_KEY_PREFIX": "Prefix put in front of every key `buildKey` produces (e.g. `staging:` or your project name). Required once KV_PROVIDER=upstash, and it must not be blank: one Redis database is one flat keyspace, so without a prefix `list` would scan every key in it and two environments sharing a database would collide. `createEnv` and `pnpm env:setup` both refuse a blank value."
   },
   "envServices": {
     "default": ["api"]
   },
   "removeWarnings": [
     "Removing this module does not delete the Upstash database or the keys in it. Delete the database in the Upstash console when nothing else reads it, and revoke UPSTASH_REDIS_REST_TOKEN.",
-    "`@upstash/redis` stays in packages/kv/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs it."
+    "`@upstash/redis` stays in packages/kv/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs it.",
+    "`KV_KEY_PREFIX` stays required in packages/env/.env.example. If the next provider allows a blank prefix, add `# Blank on purpose: this key may stay empty.` above it, or keep a value."
   ],
   "patches": [
     {

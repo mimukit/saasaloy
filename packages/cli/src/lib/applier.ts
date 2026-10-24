@@ -666,7 +666,9 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   const devVars: Record<string, string> = {};
   const envServices: Record<string, ServiceName[]> = {};
   const envServicesGuessed = new Set<string>();
-  const envOptional = new Set<string>();
+  // Per key, the modules in this run that declare it and the ones that call it optional.
+  const envDeclaredBy = new Map<string, Set<string>>();
+  const envOptionalBy = new Map<string, Set<string>>();
   const removeWarnings: Record<string, string[]> = {};
 
   // Collect the aliases every scaffold in this run registers up front, so a feature's
@@ -883,10 +885,11 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
       devVars[key] = value;
     }
     for (const key of item.envOptional ?? []) {
-      envOptional.add(key);
+      envOptionalBy.set(key, (envOptionalBy.get(key) ?? new Set()).add(name));
     }
     for (const [key, value] of Object.entries(item.envVars ?? {})) {
       envVars[key] = value;
+      envDeclaredBy.set(key, (envDeclaredBy.get(key) ?? new Set()).add(name));
       if (!item.envServices) {
         envServicesGuessed.add(name);
       }
@@ -994,7 +997,15 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     dependencies,
     devDependencies,
     devVars,
-    envOptional: [...envOptional].toSorted(),
+    // A key may stay blank only when every module declaring it in this run says so. kv
+    // calls `KV_KEY_PREFIX` optional and kv-upstash requires it, and `add kv-upstash` on a
+    // fresh project installs both, so a union would mark a required key blank (#249).
+    envOptional: [...envDeclaredBy]
+      .filter(([key, declaredBy]) =>
+        [...declaredBy].every((module) => envOptionalBy.get(key)?.has(module))
+      )
+      .map(([key]) => key)
+      .toSorted(),
     envServices,
     envServicesGuessed: [...envServicesGuessed].toSorted(),
     envVars,

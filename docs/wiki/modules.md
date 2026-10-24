@@ -26,7 +26,7 @@ Every installable module in the default registry, in one place. This table is th
 | `queue` | capability | a `packages/queue` workspace with a job table, a schedule table, a five-field cron matcher and the provider registry, on `api`. Zero runtime dependencies; `QUEUE_PROVIDER` picks the provider at runtime with no default |
 | `queue-cloudflare` | feature (provider) | a `queue` provider on Cloudflare Queues: one file, four wrangler bindings, and a `handlers` entry in `apps/api/src/worker.ts` for the non-`fetch` Worker exports |
 | `queue-memory` | feature (provider) | a `queue` provider that runs jobs in-process: one file, one patch, no binding and no env var |
-| `kv` | capability | a `packages/kv` workspace with the provider interface, namespaced keys and the `consume` contract a rate limit policy builds on, on `api`. `KV_PROVIDER` picks the provider at runtime; `KV_KEY_PREFIX` namespaces every key |
+| `kv` | capability | a `packages/kv` workspace with the provider interface, namespaced keys and the `consume` contract a rate limit policy builds on, on `api`. `KV_PROVIDER` picks the provider at runtime; `KV_KEY_PREFIX` namespaces every key, and `kv-upstash` requires it |
 | `kv-cloudflare` | feature (provider) | a `kv` provider on Workers KV: the `KV` namespace binding plus the `ratelimits` bindings in `apps/api/wrangler.jsonc` |
 | `kv-upstash` | feature (provider) | a `kv` provider on Upstash Redis over HTTPS: two REST secrets, a required `KV_KEY_PREFIX`, and a `consume` that counts globally and reports `remaining` |
 | `kv-memory` | feature (provider) | a `kv` provider that keeps entries in memory, for local development and tests |

@@ -278,4 +278,27 @@ describe("blank-on-purpose keys", () => {
 
     expect(out).not.toContain(BLANK_ON_PURPOSE);
   });
+
+  // #249: `add kv` writes the marker, then `add kv-upstash` declares the key as required.
+  it("drops the marker when a later run declares the key required", () => {
+    const first = renderEnvExample({
+      devVars: {},
+      envVars: { KV_KEY_PREFIX: "Optional prefix." },
+      services: { KV_KEY_PREFIX: ["api"] },
+      existing: {},
+      optional: ["KV_KEY_PREFIX"],
+    });
+    expect(first).toContain(BLANK_ON_PURPOSE);
+
+    const out = renderEnvExample({
+      devVars: {},
+      envVars: { KV_KEY_PREFIX: "Required prefix." },
+      services: { KV_KEY_PREFIX: ["api"] },
+      existing: parseEnvExample(first),
+      optional: [],
+    });
+
+    expect(out).not.toContain(BLANK_ON_PURPOSE);
+    expect(out).toContain("# Required prefix.\nKV_KEY_PREFIX=");
+  });
 });

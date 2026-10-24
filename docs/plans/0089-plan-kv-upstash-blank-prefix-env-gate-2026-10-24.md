@@ -40,7 +40,7 @@ Goal: a project on Upstash cannot deploy a blank key prefix, so the limiter neve
 
 Follow the issue's proposed change. It reuses the `extends` composition that `createEnv` already has, the `appendEntry` codemod behaviour, the existing `envOptional` field and `BLANK_ON_PURPOSE` marker, and the preset test as it stands. No new mechanism ships.
 
-### Phase 1: provider preset wins over the kv core
+### Phase 1: provider preset wins over the kv core (built 2026-10-24)
 
 - `modules/kv/files/src/env-preset.ts`: move the two keys into `export const kvCorePreset = definePreset({ module: "@repo/kv", server: { ... } })`. Make `kvPreset = definePreset({ module: "@repo/kv", extends: [kvCorePreset] })`. Keep the "keep this line in exactly this shape" comment, and add one that states the order rule: `flatten` runs `extends` in array order, the last declaration of a key wins, so `kvCorePreset` stays first and a provider preset appended after it may tighten a core key.
 - `modules/kv-upstash/registry-item.json`: add `KV_KEY_PREFIX` to `envVars` with required wording. Set `requires.saasaloy` to `>=0.8.0`, or to the next unreleased CLI version if 0.8.0 has shipped by then. Add the `removeWarnings` line from Design decisions.
@@ -49,14 +49,14 @@ Follow the issue's proposed change. It reuses the `extends` composition that `cr
 
 Done when: `pnpm test:base` and `pnpm test:scripts` pass, including the new override case, and `pnpm lint` passes.
 
-### Phase 2: the marker needs every declaring module
+### Phase 2: the marker needs every declaring module (built 2026-10-24)
 
 - `packages/cli/src/lib/applier.ts`: replace the plain `envOptional` union with per-key tracking. Emit a key in `plan.envOptional` only when each module that declares it in `envVars` also lists it in `envOptional`.
 - Tests, beside the existing `envOptional` cases in `packages/cli/src/commands/add.test.ts`: one run that adds kv and kv-upstash together leaves no marker on `KV_KEY_PREFIX` and carries kv-upstash's description; one run that adds kv and kv-memory keeps the marker; two runs (`kv`, then `kv-upstash`) end with no marker.
 
 Done when: `pnpm test:tooling` passes with the three new cases, and in a `.dev` project `saasaloy add kv-upstash` (kv not yet installed) writes `packages/env/.env.example` with no `# Blank on purpose` line above `KV_KEY_PREFIX`.
 
-### Phase 3: docs and the end-to-end check
+### Phase 3: docs and the end-to-end check (built 2026-10-24)
 
 - Add the upgrade note for existing kv-upstash projects to `modules/kv/skills/saasaloy-kv/SKILL.md`, and carry the same note in the fix commit body.
 - Update the `KV_KEY_PREFIX` wording where it says "optional" without the Upstash exception: `modules/kv/skills/saasaloy-kv/SKILL.md`, `modules/README.md`, `docs/wiki/modules.md`, and `docs/wiki/how-to/deploy-to-cloudflare.md` if it touches the key.
