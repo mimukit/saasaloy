@@ -33,7 +33,7 @@ A third problem sits under the design pass. The admin app has only the base temp
 
 | Decision | Resolution |
 |----------|-----------|
-| Relation to plan 0047 | This plan refines 0047. The content panel and the route-owned detail panel stay. The rail and nav panel stay unless the Phase 2 mockup picks the sidebar shell (see "Shell shape" below). `NAV_AREAS` typed against the route tree stays. Dark by default stays. 0047's non-goals (search, command palette, pagination, stored nav state) stay non-goals. |
+| Relation to plan 0047 | This plan refines 0047. The content panel and the route-owned detail panel stay. The rail and nav panel stay unless the Phase 2 mockup picks the sidebar shell (see "Shell shape" below). `NAV_AREAS` typed against the route tree stays. Dark by default stays. 0047's non-goals (search, command palette, pagination, stored nav state) stay non-goals. Plan [0084](0084-plan-command-module-2026-10-24.md) (#264) lifts the command palette non-goal on 2026-10-24. |
 | `@repo/ui` layer layout | Seven top-level folders, no `admin/` or `web/` at the root of `src/`: `assets` (images, SVGs, icons), `blocks` (compound components built from primitives), `components` (shadcn primitives, official and custom), `containers` (shells and layouts that hold blocks and components), `content` (copy, in one place for later i18n), `lib` (utilities), `styles` (CSS files with the token variables). A folder may hold `admin/`, `web/` or `shared/` children where a split helps. The existing names `content` and `lib` stay. |
 | Meaning of `containers` | Changes from "binds a store and wires it into blocks" to "a shell or a layout that holds blocks and components on a page". `containers/README.md` and the base `AGENTS.md` say so. The no-IO rule for all of `@repo/ui` stays. |
 | The `assets` layer (grilled Q12) | The docs list it now. The first real asset creates the folder and `assets.d.ts`. If the Phase 2 mockup puts a brand mark in the rail, that SVG is the first asset. No empty folder ships. |
@@ -183,7 +183,7 @@ None. The first grill on 2026-10-18 settled the original questions, and the seco
 - Module-contributed overview cards. A follow-up issue.
 - An automated visual or a11y gate for the admin app. A follow-up issue after #178.
 - Migration code in `saasaloy update`. Existing projects move through the merge plan and the written steps.
-- Search, a command palette, pagination, and stored nav state, as in plan 0047.
+- Search, a command palette, pagination, and stored nav state, as in plan 0047. Plan [0084](0084-plan-command-module-2026-10-24.md) (#264) lifts the command palette non-goal on 2026-10-24.
 - A runtime theme switcher between presets, or a theme editor.
 - Translations. The `content` layer only keeps copy in one place for later i18n.
 - The dev-only UI gallery route. That is #185, which this plan makes easier by putting the admin primitives in `@repo/ui`.

@@ -28,6 +28,9 @@ const MODULES = join(ROOT, "modules");
  */
 const BASE_ENV = join(ROOT, "packages/cli/templates/base/apps/web/src/env.ts");
 
+/** The workspaces the base template ships under `packages/`. */
+const BASE_PACKAGES = join(ROOT, "packages/cli/templates/base/packages");
+
 /** The services a `# @services` line and an `envServices` entry may name. */
 const SERVICES = new Set(["api", "web", "admin", "app", "deploy"]);
 
@@ -201,6 +204,14 @@ function workspacePackages(): Map<string, PackageJson[]> {
   };
   for (const module of modules()) {
     const path = join(MODULES, module, "files", "package.json");
+    if (existsSync(path)) {
+      add(path);
+    }
+  }
+  // `@repo/ui` and the other base packages: a module patches in an import from one of
+  // them too, such as `command`'s `@repo/ui/containers/command/command-root` (#264).
+  for (const workspace of readdirSync(BASE_PACKAGES)) {
+    const path = join(BASE_PACKAGES, workspace, "package.json");
     if (existsSync(path)) {
       add(path);
     }

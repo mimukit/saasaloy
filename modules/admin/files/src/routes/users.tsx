@@ -16,6 +16,8 @@ import { Button } from "@repo/ui/components/shell/button";
 import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
+import { useCommands } from "@repo/ui/lib/shell/commands";
+import type { Command } from "@repo/ui/lib/shell/commands";
 
 import { ADMIN_ROLE } from "@admin/lib/auth";
 import { initialsOf } from "@admin/lib/initials";
@@ -179,6 +181,48 @@ function Users() {
 
   const selected = users.find((user) => user.id === selectedId);
 
+  // This page's commands. They drive the same state the chips and the panel's close
+  // button do, and the palette lists them first, under "Users". Each one hides while it
+  // would do nothing. With no `command` module installed, the call does nothing.
+  //
+  // Escape closes the panel through the table's `onDismiss` below: the table owns Escape
+  // in its `data-table` scope, so a second Escape here would be a conflict. "Close user
+  // details" stays as a palette row for a person who reaches the page by the palette.
+  const commands: Command[] = [
+    {
+      id: "admin.show-admins",
+      title: "Show admins",
+      group: "page",
+      keywords: ["filter", "role"],
+      icon: ShieldIcon,
+      when: () => roleFilter !== ADMIN_ROLE,
+      run: () => {
+        setRoleFilter(ADMIN_ROLE);
+      },
+    },
+    {
+      id: "admin.show-all-users",
+      title: "Show all users",
+      group: "page",
+      keywords: ["filter", "clear"],
+      icon: UsersIcon,
+      when: () => roleFilter !== "all",
+      run: () => {
+        setRoleFilter("all");
+      },
+    },
+    {
+      id: "admin.close-user-details",
+      title: "Close user details",
+      group: "page",
+      when: () => selectedId !== null,
+      run: () => {
+        setSelectedId(null);
+      },
+    },
+  ];
+  useCommands(commands, { scope: "route", label: "Users" });
+
   return (
     <PageLayout
       detailLabel={selected?.name}
@@ -271,6 +315,9 @@ function Users() {
         selectedId={selectedId}
         onRowClick={(user) => {
           setSelectedId(user.id);
+        }}
+        onDismiss={() => {
+          setSelectedId(null);
         }}
         emptyState={
           roleFilter === "all" ? (

@@ -20,12 +20,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyBumps,
+  buildCandidates,
   depPath,
   depValue,
   discoverManifests,
+  MAJOR_GROUP_TITLE,
   readManifestDeps,
+  semverDelta,
 } from "./update-deps.ts";
-import type { Dep, Manifest, ManifestKind } from "./update-deps.ts";
+import type { Dep, Manifest, ManifestKind, Row } from "./update-deps.ts";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -261,5 +264,48 @@ describe("depValue", () => {
       '{\n  "dependencies": { "hono": "4.13.5" }\n}\n'
     );
     assert.equal(depValue(manifest, arrayDep, "4.14.0"), "4.14.0");
+  });
+});
+
+describe("semverDelta", () => {
+  it("reads a 0.y to 0.z change as major, since semver promises nothing below 1.0", () => {
+    assert.equal(semverDelta("0.16.0", "0.17.0"), "major");
+    assert.equal(semverDelta("0.16.0", "1.0.0"), "major");
+  });
+
+  it("reads a 0.y patch as a patch", () => {
+    assert.equal(semverDelta("0.16.0", "0.16.3"), "patch");
+  });
+
+  it("keeps the usual levels from 1.0 up", () => {
+    assert.equal(semverDelta("4.13.5", "5.0.0"), "major");
+    assert.equal(semverDelta("4.13.5", "4.14.0"), "minor");
+    assert.equal(semverDelta("4.13.5", "4.13.6"), "patch");
+    assert.equal(semverDelta("4.13.5", "4.13.5"), "none");
+  });
+});
+
+describe("buildCandidates", () => {
+  it("puts a 0.y to 0.z primary in the major group, so it is never pre-checked", () => {
+    const dep: Dep = {
+      bucket: "dependencies",
+      name: "zero-major",
+      spec: "0.16.0",
+      kind: "exact",
+    };
+    const row: Row = {
+      manifest: fixture("registry-item", DESCRIPTOR, [dep]),
+      dep,
+      resolved: {
+        target: "0.17.0",
+        targetOverall: "0.17.0",
+        newerMajor: false,
+      },
+      status: "outdated",
+      candidates: [{ kind: "primary", target: "0.17.0" }],
+    };
+    const [candidate] = buildCandidates([row]);
+    assert.equal(candidate?.kind, "major");
+    assert.equal(candidate?.group, MAJOR_GROUP_TITLE);
   });
 });

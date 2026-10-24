@@ -4,6 +4,9 @@ import { cva } from "class-variance-authority";
 import type { VariantProps } from "class-variance-authority";
 import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
+import { useCommandProvider, useCommands } from "@repo/ui/lib/shell/commands";
+import type { Command } from "@repo/ui/lib/shell/commands";
+import { SIDEBAR_KEYS } from "@repo/ui/lib/shell/shell-keys";
 import { useMediaQuery } from "@repo/ui/lib/shell/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/shell/button";
@@ -123,7 +126,28 @@ export function SidebarProvider({
     ...style,
   };
 
-  // Adds a keyboard shortcut to toggle the sidebar.
+  // Cmd/Ctrl+B toggles the sidebar. It is declared as a command, so a mounted command
+  // provider binds it and lists it in the palette and the shortcut sheet. With no
+  // provider, `useCommands` does nothing and the raw listener below takes the key
+  // instead. Only one of the two is ever live, so a press never toggles twice.
+  const hasCommandProvider = useCommandProvider();
+  const commands = React.useMemo<readonly Command[]>(
+    () => [
+      {
+        id: SIDEBAR_KEYS.toggle.id,
+        title: "Toggle sidebar",
+        group: "actions",
+        icon: PanelLeftIcon,
+        shortcut: SIDEBAR_KEYS.toggle.shortcut,
+        run: () => {
+          toggleSidebar();
+        },
+      },
+    ],
+    [toggleSidebar]
+  );
+  useCommands(commands, { scope: "global" });
+
   React.useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent): void => {
       if (
@@ -135,11 +159,14 @@ export function SidebarProvider({
       }
     };
 
-    window.addEventListener("keydown", handleKeyDown);
+    // Removing a listener that was never added is a no-op, so one cleanup fits both.
+    if (!hasCommandProvider) {
+      window.addEventListener("keydown", handleKeyDown);
+    }
     return () => {
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [toggleSidebar]);
+  }, [toggleSidebar, hasCommandProvider]);
 
   // We add a state so that we can do data-state="expanded" or "collapsed".
   // This makes it easier to style the sidebar with Tailwind classes.

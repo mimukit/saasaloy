@@ -61,7 +61,8 @@ function subscribe(onChange: () => void): () => void {
   };
 }
 
-function currentChoice(): Theme {
+/** The theme choice in use now, read from `<html>`. The app's theme commands read it too. */
+export function currentThemeChoice(): Theme {
   const value = document.documentElement.getAttribute(THEME_ATTRIBUTE);
   return isTheme(value) ? value : "system";
 }
@@ -70,19 +71,16 @@ function choiceOnServer(): Theme {
   return "system";
 }
 
-function chooseTheme(
-  value: unknown,
-  details: MenuPrimitive.RadioGroup.ChangeEventDetails
+/**
+ * Apply a theme choice the way this submenu does: the circle reveal from `origin`, then
+ * the marker that keeps the choice on the next load. The app's "Theme: …" commands call
+ * it too, so a choice from the command palette and one from this menu are the same act.
+ * With no `origin` the circle grows from the page's centre.
+ */
+export function applyThemeChoice(
+  value: Theme,
+  origin: Element = document.documentElement
 ): void {
-  if (typeof value !== "string" || !isTheme(value)) {
-    return;
-  }
-
-  // The circle grows from the item that was picked. A change with no element behind it
-  // grows from the page's centre.
-  const { target } = details.event;
-  const origin = target instanceof Element ? target : document.documentElement;
-
   revealTheme(origin, () => {
     setTheme(value);
   });
@@ -96,8 +94,26 @@ function chooseTheme(
   }
 }
 
+function chooseTheme(
+  value: unknown,
+  details: MenuPrimitive.RadioGroup.ChangeEventDetails
+): void {
+  if (typeof value !== "string" || !isTheme(value)) {
+    return;
+  }
+
+  // The circle grows from the item that was picked. A change with no element behind it
+  // grows from the page's centre.
+  const { target } = details.event;
+  applyThemeChoice(value, target instanceof Element ? target : undefined);
+}
+
 export function ThemeMenuItem() {
-  const choice = useSyncExternalStore(subscribe, currentChoice, choiceOnServer);
+  const choice = useSyncExternalStore(
+    subscribe,
+    currentThemeChoice,
+    choiceOnServer
+  );
   const current = THEME_OPTIONS.find((option) => option.value === choice);
 
   return (

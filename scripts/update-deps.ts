@@ -147,7 +147,7 @@ export interface Manifest extends ManifestFile {
 }
 
 /** One resolved (manifest, dep) pair — the unit the report and the picker render. */
-interface Row {
+export interface Row {
   manifest: Manifest;
   dep: Dep;
   resolved: Resolved | null;
@@ -164,14 +164,14 @@ interface Job {
 }
 
 /** One proposed write. */
-interface Candidate {
+export interface Candidate {
   row: Row;
   target: string;
   kind: "primary" | "major";
   group: string;
 }
 
-type SemverLevel = "major" | "minor" | "patch" | "none";
+export type SemverLevel = "major" | "minor" | "patch" | "none";
 
 /** Which report section a row renders under. */
 type GroupKey =
@@ -580,13 +580,17 @@ function wrapForNote(text: string): string {
 }
 
 // Semver bump level between two stable versions (null when either isn't a triple).
-function semverDelta(cur: string, target: string): SemverLevel | null {
+// Below 1.0 semver makes no stability promise, so a `0.y → 0.z` change reads as major.
+export function semverDelta(cur: string, target: string): SemverLevel | null {
   const a = parseSemver(cur);
   const b = parseSemver(target);
   if (!a || !b) {
     return null;
   }
   if (b[0] !== a[0]) {
+    return "major";
+  }
+  if (a[0] === 0 && b[1] !== a[1]) {
     return "major";
   }
   if (b[1] !== a[1]) {
@@ -705,7 +709,8 @@ const PRIMARY_GROUP_TITLE = {
   minor: "Minor",
   patch: "Patch",
 };
-const MAJOR_GROUP_TITLE = "Major — crosses a major, review before selecting";
+export const MAJOR_GROUP_TITLE =
+  "Major — crosses a major, review before selecting";
 
 function primaryGroupTitle(cur: string, target: string): string {
   const d = semverDelta(cur, target);
@@ -719,17 +724,22 @@ function primaryGroupTitle(cur: string, target: string): string {
 }
 
 // Lift the policy's candidates onto their rows and give each the report group the
-// picker lists it under.
-function buildCandidates(rows: Row[]): Candidate[] {
+// picker lists it under. A primary that `semverDelta` reads as major (a `0.y → 0.z`
+// bump) joins the major group, so it is never pre-checked and needs --allow-major.
+export function buildCandidates(rows: Row[]): Candidate[] {
   const out: Candidate[] = [];
   for (const row of rows) {
     for (const c of row.candidates) {
+      const kind =
+        c.kind === "major" || semverDelta(row.dep.spec, c.target) === "major"
+          ? "major"
+          : c.kind;
       out.push({
         group:
-          c.kind === "major"
+          kind === "major"
             ? MAJOR_GROUP_TITLE
             : primaryGroupTitle(row.dep.spec, c.target),
-        kind: c.kind,
+        kind,
         row,
         target: c.target,
       });

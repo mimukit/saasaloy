@@ -61,6 +61,20 @@
         "path": "/",
         "status": 200
       }
+    },
+    {
+      "file": "apps/admin/src/components/shell-extensions.ts",
+      "kind": "plugin-array",
+      "exportName": "shellExtensions",
+      "arrayProp": "extensions",
+      "call": "commandExtension",
+      "import": {
+        "name": "commandExtension",
+        "from": "@repo/ui/containers/command/command-root"
+      },
+      "when": {
+        "installed": ["command"]
+      }
     }
   ],
   "files": [
@@ -143,6 +157,14 @@
         {
           "path": "files/src/components/nav.ts",
           "target": "src/components/nav.ts"
+        },
+        {
+          "path": "files/src/components/commands.ts",
+          "target": "src/components/commands.ts"
+        },
+        {
+          "path": "files/src/components/shell-extensions.ts",
+          "target": "src/components/shell-extensions.ts"
         },
         {
           "path": "files/src/components/nav-counts.ts",

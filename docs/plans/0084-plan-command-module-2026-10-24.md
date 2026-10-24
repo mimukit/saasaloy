@@ -92,7 +92,7 @@ Picks:
 
 Filter verdict: use `@leeoniya/ufuzzy` 1.0.19, exact-pinned, with `{ intraIns: 1 }`. The Base UI 1.9.0 default is a collator `contains` match that keeps list order. On the 40 sample commands it returned nothing for "usr", "go u", "tog side" and "refnd"; uFuzzy matched all four and returned the same sets for "users", "inv", "dark", "theme", "api" and "subs". Within each group, rows follow uFuzzy's rank; the group order above stays fixed. The `command` descriptor adds the dependency next to `@tanstack/react-hotkeys`.
 
-### Phase 2: the contract and the seam in `shell` (#264)
+### Phase 2: the contract and the seam in `shell` (#264) (built 2026-10-24)
 
 - Add `modules/shell/files/ui/lib/shell/commands.ts`: the `Command` and `CommandScope` types, `CommandRegistryContext`, `useCommands(commands, { scope })`, and `useCommandProvider()`, which reports whether a provider is mounted. No dependency.
 - Add `defineShellExtensions` and the `ShellExtension` type. Give `ShellLayout` an `extensions` prop that wraps the layout in each `Provider` in array order and renders each `header` in the header's right slot.
@@ -103,7 +103,7 @@ Filter verdict: use `@leeoniya/ufuzzy` 1.0.19, exact-pinned, with `{ intraIns: 1
 
 Done when: `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, and a scaffolded admin app in `.dev` with no `command` module behaves exactly as before. Cmd/Ctrl+B still toggles the sidebar.
 
-### Phase 3: admin and app declare their commands and their seams (#264)
+### Phase 3: admin and app declare their commands and their seams (#264) (built 2026-10-24)
 
 Each step below applies to `modules/admin/files/src/` and to `modules/app/files/src/`, unless it names one app.
 
@@ -115,7 +115,7 @@ Each step below applies to `modules/admin/files/src/` and to `modules/app/files/
 
 Done when: both new tests pass under `pnpm test:modules`, and admin and app without `command` installed still render and behave as before.
 
-### Phase 4: the `command` module (#264)
+### Phase 4: the `command` module (#264) (built 2026-10-24)
 
 - In `scripts/update-deps.ts`, make `semverDelta` report a `0.y → 0.z` change as `major`, with a case in `scripts/update-deps.test.ts`. Ship it as its own commit.
 - Scaffold `modules/command/` with the `create-module` skill. Set `dependsOn: ["shell"]` and a `package-json-dependency` patch for `@tanstack/react-hotkeys` into `packages/ui/package.json`.

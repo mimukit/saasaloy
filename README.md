@@ -107,7 +107,7 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 | Tier | Modules |
 |---|---|
 | Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `payment` |
-| Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags` |
+| Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command` |
 | Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `payment-console`, `payment-manual` |
 | Driver | `database-d1`, `database-postgres`, `api-keys-organization`, `api-keys-user` |
 

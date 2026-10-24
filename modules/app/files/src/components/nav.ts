@@ -15,7 +15,13 @@ import { config } from "@repo/config";
 //
 // Shape, one area per top-level destination:
 //
-//   { label, to, icon, groups: [{ label, items: [{ to, label, icon }] }] }
+//   { label, to, icon, groups: [{ label, items: [{ to, label, icon, shortcut? }] }] }
+//
+// `shortcut` is the row's key sequence, `G` then a letter, written with a space: "G H".
+// Pick the letter by hand and never derive it from the label, so two rows that start
+// with one letter cannot collide. components/commands.ts turns each row into a "Go to"
+// command that carries it, and components/commands.test.ts fails on two rows with one
+// shortcut. It binds only when the `command` module is installed.
 //
 // The area label is the product name, not "Admin": it is the first step of the header's
 // page path. The scaffold ships one row, Home. Your first feature adds the second.
@@ -27,7 +33,7 @@ export const NAV_AREAS = [
     groups: [
       {
         label: "Workspace",
-        items: [{ to: "/", label: "Home", icon: HouseIcon }],
+        items: [{ to: "/", label: "Home", icon: HouseIcon, shortcut: "G H" }],
       },
     ],
   },
@@ -35,6 +41,20 @@ export const NAV_AREAS = [
 
 export type NavAreas = typeof NAV_AREAS;
 export type NavArea = NavAreas[number];
+export type NavGroup = NavArea["groups"][number];
+export type NavItem = NavGroup["items"][number];
+
+/**
+ * The optional key sequence on a nav row. A row that omits `shortcut` has no such key on
+ * its `as const` type, so read it through this helper rather than `item.shortcut`. The
+ * required `label` keeps the parameter from being a weak type that rejects such a row.
+ */
+export function navShortcut(entry: {
+  readonly label: string;
+  readonly shortcut?: string;
+}): string | undefined {
+  return entry.shortcut;
+}
 
 /** The area whose `to` is the longest prefix of the pathname, or the first area. */
 export function areaFor(pathname: string): NavArea {
