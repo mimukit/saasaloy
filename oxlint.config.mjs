@@ -253,6 +253,26 @@ export default defineConfig({
       rules,
     },
     ...ultracite.overrides,
+    // A module's Vitest file does ship. It is `<name>.vitest.ts` here, so `pnpm
+    // test:modules` (`node --test` over `*.test.ts`) skips it, and its descriptor renames
+    // it to `<name>.test.ts` in the project. Ultracite's test-file globs
+    // (`**/*.{test,spec,…}`) miss the `.vitest.ts` name, so without this block the
+    // scaffold's Vitest rules reached these files only after `saasaloy add` (issue #266).
+    // The blocks are Ultracite's own test-file overrides, re-targeted rather than listed
+    // by hand, so a preset bump cannot open the gap again. They take none of the
+    // node:test exemptions below: the file runs on Vitest in the project.
+    //
+    // Assert it after any change here: plant `expect(await Promise.resolve(1)).toBe(1)`
+    // in modules/auth/files/api/routes/auth.vitest.ts and confirm
+    // `vitest/prefer-expect-resolves` fires.
+    ...ultracite.overrides
+      .filter((override) =>
+        override.files.some((glob) => glob.startsWith("**/*.{test,spec"))
+      )
+      .map((override) => ({
+        ...override,
+        files: ["modules/*/files/**/*.vitest.ts"],
+      })),
 
     // --- Node surfaces -----------------------------------------------------
     // The CLI's own source and the maintainer scripts. `ultracite/oxlint/core`

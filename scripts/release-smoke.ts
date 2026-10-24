@@ -88,6 +88,15 @@ const RENDER_ERROR_PATTERNS = [
   /Cannot read properties of null \(reading 'use[A-Z]\w*'\)/,
 ];
 
+/** The testing mode each full scaffold takes, so the module tests reach its lint. */
+const TESTING_FLAG = "--testing=tests-after";
+
+/**
+ * A module test every full scaffold must hold. Without it, a dropped `--testing` flag
+ * would leave the lint step passing on no module test at all.
+ */
+const FULL_SCAFFOLD_TESTS = ["apps/api/src/routes/auth.test.ts"];
+
 /** A registry module as the lint step reads it: its name and the modules it excludes. */
 export interface ModuleEntry {
   name: string;
@@ -359,6 +368,10 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
  * `pnpm lint`, in the order a user takes: install the base, add the modules, install
  * again. `add` formats the files it patches with the project's own Prettier, which only
  * exists after the first install.
+ *
+ * Testing is on (`--testing=tests-after`), because a module test ships only into a
+ * project with testing on, and the project's Vitest rules reach it only here (issue
+ * #266). `tdd` ships the same files.
  */
 async function lintFullScaffold(
   bin: string,
@@ -372,8 +385,8 @@ async function lintFullScaffold(
   );
   await runQuiet(
     bin,
-    ["init", scaffold.name, "--no-install", "--no-git"],
-    `saasaloy init ${scaffold.name}`,
+    ["init", scaffold.name, "--no-install", "--no-git", TESTING_FLAG],
+    `saasaloy init ${scaffold.name} ${TESTING_FLAG}`,
     { cwd: workDir }
   );
   // A real project is its own git repository, and oxlint honours `.gitignore` up to
@@ -396,6 +409,7 @@ async function lintFullScaffold(
   await runQuiet("pnpm", SCAFFOLD_INSTALL, `pnpm install in ${scaffold.name}`, {
     cwd: dir,
   });
+  await assertExists(dir, FULL_SCAFFOLD_TESTS, `add in ${scaffold.name}`);
   step(`running \`pnpm lint\` in ${scaffold.name}`);
   await runQuiet("pnpm", ["lint"], `pnpm lint in ${scaffold.name}`, {
     cwd: dir,
@@ -680,7 +694,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module in ${String(scaffolds.length)} project(s).${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s).${kept}`
   );
 }
 
