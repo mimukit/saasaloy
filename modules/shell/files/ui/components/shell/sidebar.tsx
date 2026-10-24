@@ -6,6 +6,7 @@ import { PanelLeftIcon } from "lucide-react";
 import * as React from "react";
 import { useCommandProvider, useCommands } from "@repo/ui/lib/shell/commands";
 import type { Command } from "@repo/ui/lib/shell/commands";
+import { SIDEBAR_KEYS } from "@repo/ui/lib/shell/shell-keys";
 import { useMediaQuery } from "@repo/ui/lib/shell/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 import { Button } from "@repo/ui/components/shell/button";
@@ -133,11 +134,11 @@ export function SidebarProvider({
   const commands = React.useMemo<readonly Command[]>(
     () => [
       {
-        id: "shell.toggle-sidebar",
+        id: SIDEBAR_KEYS.toggle.id,
         title: "Toggle sidebar",
         group: "actions",
         icon: PanelLeftIcon,
-        shortcut: "Mod+B",
+        shortcut: SIDEBAR_KEYS.toggle.shortcut,
         run: () => {
           toggleSidebar();
         },

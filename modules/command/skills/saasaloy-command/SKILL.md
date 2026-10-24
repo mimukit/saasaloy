@@ -65,7 +65,7 @@ useCommands(
 
 The fields:
 
-- `id` is `<module>.<verb>`: the module that declares it, a dot, then what it does in kebab case. `admin.go-to-users`, `admin.sign-out`, `shell.toggle-sidebar`, `command.open-palette`. The id is unique across the app; the registry keeps the first command of a repeated id.
+- `id` is `<module>.<verb>`: the module that declares it, a dot, then what it does in kebab case. `admin.go-to-users`, `admin.sign-out`, `shell.toggle-sidebar`, `command.open-palette`. The id is unique across the app. A repeated id is reported the way a conflict is: it throws in development, and in production it warns once and the first command keeps the id.
 - `title` is the palette row and the sheet line. Start with a verb: "Go to Users", "Show admins", "Sign out".
 - `group` is `page`, `navigation`, `actions` or `preferences`. The palette lists the groups in that order, and the page group takes the registration's `label` as its heading. Inside a group, the shell's commands come first, then this module's, then every other owner's in declaration order (`PALETTE_OWNER_ORDER` in `lib/command/registry.ts`, read from the id prefix).
 - `keywords` are extra words the filter matches. The filter is fuzzy, so "usr" finds "Users" without a keyword.
@@ -119,9 +119,9 @@ These keys carry one meaning in every app. Use a reserved key only for that mean
 
 ## Conflicts
 
-Two bindings conflict when they are the same chord or sequence, or when one is a prefix of the other (`G` against `G U`), in overlapping scopes. A command whose `when` is false still owns its key. In development a conflict throws, and the error names both command ids, the first of which keeps the key. In production it warns once in the console, the first-declared binding keeps the key, and the second command stays in the palette with no key.
+Two bindings conflict when they are the same chord or sequence, or when one is a prefix of the other (`G` against `G U`), in overlapping scopes. `Ctrl` counts as `Mod` in this check, because Mod is Control on Windows and Linux, so `Ctrl+B` conflicts with `Mod+B`. A command whose `when` is false still owns its key. In development a conflict throws, and the error names both command ids, the first of which keeps the key. In production it warns once in the console, the first-declared binding keeps the key, and the second command stays in the palette with no key.
 
-Each app's `commands.test.ts` walks `NAV_AREAS` and asserts that no two shortcuts are equal. Add the case there when you add a key to the app's own commands.
+In your project the development-mode throw is the check: open the app with `pnpm dev` after you add a key, and a conflict stops the page with both command ids. The saasaloy repo guards the shipped defaults with its own tests, which run the app's commands, this module's two keys, `Mod+B` and the four table keys through `findConflicts`; those tests stay in the saasaloy repo and never reach a project.
 
 ## The palette and the sheet
 

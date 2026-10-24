@@ -77,7 +77,11 @@ export interface CommandRegistration {
   label?: string;
 }
 
-/** What a command provider exposes. `register` returns the matching unregister. */
+/**
+ * What a command provider exposes. `register` returns the matching unregister. A second
+ * `register` with an id already held replaces that entry in its place, and the unregister
+ * an earlier call returned then does nothing: it removes only the object it registered.
+ */
 export interface CommandRegistry {
   register: (registration: CommandRegistration) => () => void;
 }
@@ -88,7 +92,7 @@ export const CommandRegistryContext: Context<CommandRegistry | null> =
 /**
  * Declare commands for as long as the calling component is mounted.
  *
- * It registers in an effect and unregisters on cleanup. It registers again only when the
+ * It registers in an effect and unregisters when it unmounts. It registers again only when the
  * shape of the list changes (an id, a title, a group, a shortcut, the keywords, whether
  * `when` is set) or the scope or label does. A new `run` or `when` closure on each render
  * does not re-register: the registered commands call the latest ones, `active` included. `icon` is read at
@@ -117,16 +121,31 @@ export function useCommands(
 
   // The registered `run` and `when` read `latest` at call time, so they always call this
   // component's newest closures.
-  useEffect(
-    () =>
+  //
+  // A shape change registers again under the same id and does not unregister first, so the
+  // provider replaces the entry in its place and the list keeps the order the screens
+  // mounted in. Only the second effect unregisters: when the component unmounts or the
+  // provider changes. Its cleanup runs before the first effect's next run, so a new
+  // provider never sees the entry the old one held.
+  const unregister = useRef<(() => void) | null>(null);
+  useEffect(() => {
+    unregister.current =
       registry?.register({
         id: registrationId,
         commands: delegateToLatest(shape.commands, () => latest.current),
         scope,
         label,
-      }),
-    [registry, registrationId, shape.commands, scope, label]
-  );
+      }) ?? null;
+  }, [registry, registrationId, shape.commands, scope, label]);
+  useEffect(() => {
+    const held = registry;
+    return () => {
+      if (held !== null) {
+        unregister.current?.();
+      }
+      unregister.current = null;
+    };
+  }, [registry]);
 }
 
 /** Whether a command provider is mounted above the caller. */

@@ -14,17 +14,21 @@ import {
 } from "@repo/ui/lib/command/engine";
 import type { EngineBinding } from "@repo/ui/lib/command/engine";
 import {
+  COMMAND_KEYS,
+  dropRegistration,
   isAvailable,
   mergeRegistrations,
   pageExample,
   paletteGroups,
   parseShortcut,
+  placeRegistration,
   resolveBindings,
   shortcutSections,
 } from "@repo/ui/lib/command/registry";
 import type {
   Chord,
   Platform,
+  ReportOptions,
   ResolvedCommand,
 } from "@repo/ui/lib/command/registry";
 import { CommandRegistryContext } from "@repo/ui/lib/shell/commands";
@@ -51,14 +55,24 @@ declare const process: { env: { NODE_ENV?: string } };
 const MODE: "development" | "production" =
   process.env.NODE_ENV === "production" ? "production" : "development";
 
-const OPEN_PALETTE = "command.open-palette";
-const SHOW_SHORTCUTS = "command.show-shortcuts";
+const OPEN_PALETTE = COMMAND_KEYS.openPalette.id;
+const SHOW_SHORTCUTS = COMMAND_KEYS.showShortcuts.id;
 
 /** The palette never lists the command that opens it. */
 const HIDDEN_FROM_PALETTE: ReadonlySet<string> = new Set([OPEN_PALETTE]);
 
-/** The conflict pairs already warned about, so each warns once per page load. */
-const WARNED = new Set<string>();
+/**
+ * How a conflict or a repeated command id is reported: it throws in development and warns
+ * once per page load in production. `warned` holds the faults already reported.
+ */
+const REPORT: ReportOptions = {
+  mode: MODE,
+  warn: (message) => {
+    // oxlint-disable-next-line no-console -- a production conflict is a warning by design (plan 0084).
+    console.warn(message);
+  },
+  warned: new Set<string>(),
+};
 
 type Overlay = "palette" | "shortcuts" | null;
 
@@ -71,8 +85,8 @@ interface CommandUi {
 
 const CommandUiContext = createContext<CommandUi | null>(null);
 
-const PALETTE_SHORTCUT = "Mod+K";
-const SHORTCUTS_SHORTCUT = "?";
+const PALETTE_SHORTCUT = COMMAND_KEYS.openPalette.shortcut;
+const SHORTCUTS_SHORTCUT = COMMAND_KEYS.showShortcuts.shortcut;
 
 function binding(
   entry: ResolvedCommand & { steps: readonly Chord[] }
@@ -99,21 +113,18 @@ function CommandProvider({
   const platform = usePlatform();
 
   // `register` keeps a registration's place when the same `useCommands` call registers
-  // again, so rows of one owner keep the order the screens mounted in. The palette then
-  // ranks the owners by `PALETTE_OWNER_ORDER` in registry.ts.
+  // again: `useCommands` registers a changed list under the same id without unregistering
+  // first, and `placeRegistration` replaces the entry where it stands. So rows of one owner
+  // keep the order the screens mounted in, and the palette then ranks the owners by
+  // `PALETTE_OWNER_ORDER` in registry.ts. The unregister removes only its own object, so
+  // the one an earlier `register` returned does nothing once that entry is replaced.
   const registry = useMemo<CommandRegistry>(
     () => ({
       register: (registration) => {
-        setRegistrations((current) =>
-          current.some((entry) => entry.id === registration.id)
-            ? current.map((entry) =>
-                entry.id === registration.id ? registration : entry
-              )
-            : [...current, registration]
-        );
+        setRegistrations((current) => placeRegistration(current, registration));
         return () => {
           setRegistrations((current) =>
-            current.filter((entry) => entry !== registration)
+            dropRegistration(current, registration)
           );
         };
       },
@@ -152,21 +163,10 @@ function CommandProvider({
   }, []);
 
   const resolved = useMemo(
-    () => mergeRegistrations([own, ...registrations]),
+    () => mergeRegistrations([own, ...registrations], REPORT),
     [own, registrations]
   );
-  const bound = useMemo(
-    () =>
-      resolveBindings(resolved, {
-        mode: MODE,
-        warn: (message) => {
-          // oxlint-disable-next-line no-console -- a production conflict is a warning by design (plan 0084).
-          console.warn(message);
-        },
-        warned: WARNED,
-      }),
-    [resolved]
-  );
+  const bound = useMemo(() => resolveBindings(resolved, REPORT), [resolved]);
 
   const groups = paletteGroups(resolved, HIDDEN_FROM_PALETTE);
   const sections = shortcutSections(bound);

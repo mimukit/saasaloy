@@ -289,6 +289,10 @@
       "target": "@ui/lib/shell/nav-counts.ts"
     },
     {
+      "path": "files/ui/lib/shell/shell-keys.ts",
+      "target": "@ui/lib/shell/shell-keys.ts"
+    },
+    {
       "path": "files/ui/lib/shell/segmented-control.ts",
       "target": "@ui/lib/shell/segmented-control.ts"
     },

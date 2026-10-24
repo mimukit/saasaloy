@@ -14,11 +14,13 @@ import type {
 } from "@repo/ui/lib/shell/commands";
 import {
   chordKeycaps,
+  dropRegistration,
   findConflicts,
   mergeRegistrations,
   pageExample,
   paletteGroups,
   parseShortcut,
+  placeRegistration,
   resolveBindings,
   shortcutSections,
 } from "./registry.ts";
@@ -108,6 +110,19 @@ describe("findConflicts", () => {
     const conflicts = findConflicts(resolved);
     assert.equal(conflicts.length, 1);
     assert.equal(conflicts[0]?.kind, "sequence-prefix");
+  });
+
+  it("counts Ctrl as Mod, since Mod is Control on Windows and Linux", () => {
+    const resolved = mergeRegistrations([
+      registration("a", "global", [
+        command("shell.toggle-sidebar", "actions", { shortcut: "Mod+B" }),
+        command("admin.bold", "actions", { shortcut: "Ctrl+B" }),
+        command("admin.other", "actions", { shortcut: "Alt+B" }),
+      ]),
+    ]);
+    const conflicts = findConflicts(resolved);
+    assert.equal(conflicts.length, 1);
+    assert.equal(conflicts[0]?.second.command.id, "admin.bold");
   });
 
   it("lets two sequences share a first step when neither is a prefix", () => {
@@ -334,6 +349,40 @@ describe("pageExample", () => {
 });
 
 describe("mergeRegistrations", () => {
+  const repeated = () => [
+    registration("a", "global", [command("admin.one", "actions")]),
+    registration("b", "global", [
+      command("admin.one", "preferences"),
+      command("admin.two", "actions"),
+    ]),
+  ];
+
+  it("throws on a repeated id in development, naming the id", () => {
+    assert.throws(
+      () => mergeRegistrations(repeated(), devOptions()),
+      /"admin\.one" is declared twice/
+    );
+  });
+
+  it("warns once on a repeated id in production and keeps the first", () => {
+    const messages: string[] = [];
+    const options = {
+      mode: "production" as const,
+      warn: (message: string) => {
+        messages.push(message);
+      },
+      warned: new Set<string>(),
+    };
+    mergeRegistrations(repeated(), options);
+    const resolved = mergeRegistrations(repeated(), options);
+    assert.deepEqual(
+      resolved.map((entry) => `${entry.command.id}:${entry.command.group}`),
+      ["admin.one:actions", "admin.two:actions"]
+    );
+    assert.equal(messages.length, 1);
+    assert.match(messages[0] ?? "", /"admin\.one"/);
+  });
+
   it("keeps the first command of a repeated id", () => {
     const resolved = mergeRegistrations([
       registration("a", "global", [command("admin.one", "actions")]),
@@ -346,6 +395,28 @@ describe("mergeRegistrations", () => {
       resolved.map((entry) => `${entry.command.id}:${entry.command.group}`),
       ["admin.one:actions", "admin.two:actions"]
     );
+  });
+});
+
+describe("placeRegistration", () => {
+  it("replaces a held id in its place and appends a new one", () => {
+    const first = registration("a", "global", []);
+    const second = registration("b", "route", []);
+    const again = registration("a", "global", [
+      command("admin.one", "actions"),
+    ]);
+    const list = placeRegistration(placeRegistration([], first), second);
+    assert.deepEqual(placeRegistration(list, again), [again, second]);
+  });
+
+  it("leaves a replaced entry alone when its old unregister runs", () => {
+    const first = registration("a", "global", []);
+    const again = registration("a", "global", [
+      command("admin.one", "actions"),
+    ]);
+    const list = placeRegistration([first], again);
+    assert.deepEqual(dropRegistration(list, first), [again]);
+    assert.deepEqual(dropRegistration(list, again), []);
   });
 });
 

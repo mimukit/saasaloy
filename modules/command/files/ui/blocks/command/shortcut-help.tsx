@@ -7,7 +7,7 @@ import {
   DialogTitle,
 } from "@repo/ui/components/shell/dialog";
 import { Keycaps } from "@repo/ui/blocks/command/keycaps";
-import { formatKeycaps } from "@repo/ui/lib/command/engine";
+import { formatKeycaps, OVERLAY_ATTRIBUTE } from "@repo/ui/lib/command/engine";
 import type { Platform, ShortcutSection } from "@repo/ui/lib/command/registry";
 
 // The `?` sheet: every live binding, in sections. It is presentational; the container
@@ -71,7 +71,7 @@ export function ShortcutHelp({
         bottomStickOnMobile={false}
         className={POPUP_CLASSES}
         // The engine's dialog guard skips a popup that carries this attribute.
-        data-command-overlay=""
+        {...{ [OVERLAY_ATTRIBUTE]: "" }}
       >
         <div className="border-border flex h-13 shrink-0 items-center border-b ps-5 pe-12">
           <DialogTitle className="text-base leading-6 font-semibold">

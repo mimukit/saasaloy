@@ -11,6 +11,16 @@ import type {
 // sheet sections. It imports no React and no key library, so `node --test` loads it as is;
 // the type import above is erased. The engine (./engine.ts) binds what this file returns.
 
+/**
+ * The ids and shortcuts of the module's own two commands, which command-root.tsx declares.
+ * They sit here, free of React, so the apps' repo tests can run the shipped key map
+ * through `findConflicts` with the values the provider binds.
+ */
+export const COMMAND_KEYS = {
+  openPalette: { id: "command.open-palette", shortcut: "Mod+K" },
+  showShortcuts: { id: "command.show-shortcuts", shortcut: "?" },
+} as const;
+
 /** One step of a shortcut: a key and the modifiers held with it. */
 export interface Chord {
   /** The logical key: an upper-case letter, a typed character such as `?`, or a name such as `Enter`. */
@@ -117,11 +127,14 @@ export function parseShortcut(shortcut: string): Chord[] {
   return steps.map((step) => parseChord(step, shortcut));
 }
 
-/** One string per chord, equal for two chords that match the same key press. */
+/**
+ * One string per chord, equal for two chords that can match the same key press. `Ctrl`
+ * counts as `Mod`: on Windows and Linux Mod is Control, so `Ctrl+B` and `Mod+B` are one
+ * key there, and the conflict check reports them on every platform.
+ */
 export function chordKey(chord: Chord): string {
   const held = [
-    chord.mod ? "mod" : "",
-    chord.ctrl ? "ctrl" : "",
+    chord.mod || chord.ctrl ? "mod" : "",
     chord.alt ? "alt" : "",
     chord.shift ? "shift" : "",
   ].filter((part) => part !== "");
@@ -133,21 +146,63 @@ export function holdsCommandModifier(chord: Chord): boolean {
   return chord.mod || chord.ctrl || chord.alt;
 }
 
+/** How a fault in the registrations is reported: thrown in development, warned once in production. */
+export interface ReportOptions {
+  mode: "development" | "production";
+  warn: (message: string) => void;
+  /** The faults already warned about, by key, carried across calls. */
+  warned: Set<string>;
+}
+
+function report(options: ReportOptions, key: string, message: string): void {
+  if (options.mode === "development") {
+    throw new Error(message);
+  }
+  if (!options.warned.has(key)) {
+    options.warned.add(key);
+    options.warn(message);
+  }
+}
+
+/** The message a repeated command id throws or warns with. */
+export function repeatedIdMessage(
+  id: string,
+  first: CommandRegistration,
+  second: CommandRegistration
+): string {
+  return (
+    `command: the id "${id}" is declared twice, by the registrations "${first.id}" and ` +
+    `"${second.id}". The first keeps it and the second is dropped. Give each command its ` +
+    "own id; a screen mounts one DataTable at a time, since every table declares the same keys."
+  );
+}
+
 /**
  * Flatten the registrations into one list in declaration order, parsing each shortcut.
- * A later command with an id already seen is dropped: one id names one command.
+ * A later command with an id already seen is dropped: one id names one command. With
+ * `options`, a repeated id is reported the way a binding conflict is: it throws in
+ * `development` and warns once in `production`.
  */
 export function mergeRegistrations(
-  registrations: readonly CommandRegistration[]
+  registrations: readonly CommandRegistration[],
+  options?: ReportOptions
 ): ResolvedCommand[] {
-  const seen = new Set<string>();
+  const seen = new Map<string, CommandRegistration>();
   const resolved: ResolvedCommand[] = [];
   for (const registration of registrations) {
     for (const command of registration.commands) {
-      if (seen.has(command.id)) {
+      const owner = seen.get(command.id);
+      if (owner !== undefined) {
+        if (options !== undefined) {
+          report(
+            options,
+            `repeat:${command.id}`,
+            repeatedIdMessage(command.id, owner, registration)
+          );
+        }
         continue;
       }
-      seen.add(command.id);
+      seen.set(command.id, registration);
       resolved.push({
         command,
         registrationId: registration.id,
@@ -240,31 +295,54 @@ export function conflictMessage(conflict: Conflict): string {
  */
 export function resolveBindings(
   resolved: readonly ResolvedCommand[],
-  options: {
-    mode: "development" | "production";
-    warn: (message: string) => void;
-    warned: Set<string>;
-  }
+  options: ReportOptions
 ): ResolvedCommand[] {
   const conflicts = findConflicts(resolved);
   const dropped = new Set<string>();
   for (const conflict of conflicts) {
-    if (options.mode === "development") {
-      throw new Error(conflictMessage(conflict));
-    }
-    if (dropped.has(conflict.first.command.id)) {
+    if (
+      options.mode === "production" &&
+      dropped.has(conflict.first.command.id)
+    ) {
       continue;
     }
+    report(
+      options,
+      `${conflict.first.command.id}|${conflict.second.command.id}`,
+      conflictMessage(conflict)
+    );
     dropped.add(conflict.second.command.id);
-    const pair = `${conflict.first.command.id}|${conflict.second.command.id}`;
-    if (!options.warned.has(pair)) {
-      options.warned.add(pair);
-      options.warn(conflictMessage(conflict));
-    }
   }
   return resolved.filter(
     (entry) => entry.steps !== null && !dropped.has(entry.command.id)
   );
+}
+
+/**
+ * The provider's list with `registration` in it. A registration whose id is already held
+ * replaces that entry in its place, so a list that registers again keeps its slot; a new
+ * id goes to the end.
+ */
+export function placeRegistration(
+  current: readonly CommandRegistration[],
+  registration: CommandRegistration
+): readonly CommandRegistration[] {
+  return current.some((entry) => entry.id === registration.id)
+    ? current.map((entry) =>
+        entry.id === registration.id ? registration : entry
+      )
+    : [...current, registration];
+}
+
+/**
+ * The provider's list without `registration`. It removes that object only, so the
+ * unregister of an entry that a later `register` already replaced does nothing.
+ */
+export function dropRegistration(
+  current: readonly CommandRegistration[],
+  registration: CommandRegistration
+): readonly CommandRegistration[] {
+  return current.filter((entry) => entry !== registration);
 }
 
 /** Whether a command is available now: its `when` holds, or it has none. */

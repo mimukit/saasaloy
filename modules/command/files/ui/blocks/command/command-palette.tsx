@@ -16,7 +16,7 @@ import {
 } from "@repo/ui/components/shell/command";
 import { Kbd, KbdGroup } from "@repo/ui/components/shell/kbd";
 import { Keycaps } from "@repo/ui/blocks/command/keycaps";
-import { formatKeycaps } from "@repo/ui/lib/command/engine";
+import { formatKeycaps, OVERLAY_ATTRIBUTE } from "@repo/ui/lib/command/engine";
 import { filterPalette, splitMatches } from "@repo/ui/lib/command/filter";
 import type { FilteredGroup, FilteredRow } from "@repo/ui/lib/command/filter";
 import type {
@@ -134,7 +134,7 @@ export function CommandPalette({
         aria-label="Command palette"
         className={POPUP_PLACEMENT}
         // The engine's dialog guard skips a popup that carries OVERLAY_ATTRIBUTE.
-        data-command-overlay=""
+        {...{ [OVERLAY_ATTRIBUTE]: "" }}
       >
         <Command
           items={all}

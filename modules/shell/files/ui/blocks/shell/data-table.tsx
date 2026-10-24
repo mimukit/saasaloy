@@ -22,6 +22,7 @@ import {
 } from "@repo/ui/components/shell/table";
 import { useCommands } from "@repo/ui/lib/shell/commands";
 import type { Command } from "@repo/ui/lib/shell/commands";
+import { TABLE_KEYS } from "@repo/ui/lib/shell/shell-keys";
 import { useMediaQuery } from "@repo/ui/lib/shell/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -196,10 +197,10 @@ export function DataTable<TRow extends object>({
 
   const commands: readonly Command[] = [
     {
-      id: "shell.table-next-row",
+      id: TABLE_KEYS.nextRow.id,
       title: "Next row",
       group: "page",
-      shortcut: "J",
+      shortcut: TABLE_KEYS.nextRow.shortcut,
       when: () => keysLive() && displayedIds.length > 0,
       run: () => {
         setHighlightedId(
@@ -208,10 +209,10 @@ export function DataTable<TRow extends object>({
       },
     },
     {
-      id: "shell.table-previous-row",
+      id: TABLE_KEYS.previousRow.id,
       title: "Previous row",
       group: "page",
-      shortcut: "K",
+      shortcut: TABLE_KEYS.previousRow.shortcut,
       when: () => keysLive() && displayedIds.length > 0,
       run: () => {
         setHighlightedId(
@@ -220,10 +221,10 @@ export function DataTable<TRow extends object>({
       },
     },
     {
-      id: "shell.table-open-row",
+      id: TABLE_KEYS.openRow.id,
       title: "Open highlighted row",
       group: "page",
-      shortcut: "Enter",
+      shortcut: TABLE_KEYS.openRow.shortcut,
       when: () =>
         keysLive() && onRowClick !== undefined && highlightedRow !== undefined,
       run: () => {
@@ -233,13 +234,13 @@ export function DataTable<TRow extends object>({
       },
     },
     {
-      id: "shell.table-clear-highlight",
+      id: TABLE_KEYS.clearHighlight.id,
       title:
         onDismiss === undefined
           ? "Clear row highlight"
           : "Close the detail panel",
       group: "page",
-      shortcut: "Escape",
+      shortcut: TABLE_KEYS.clearHighlight.shortcut,
       when: () =>
         keysLive() &&
         (highlight !== null ||
