@@ -78,7 +78,7 @@ Rejected at a line each: changing the shared `globals.css` so the whole monorepo
 ## Non-goals
 
 - No change to the shared theme, the landing page, or the base `DESIGN.md` token fingerprint.
-- No user editing, search, command palette, notifications, or pagination beyond the api's first 100 users.
+- No user editing, search, command palette, notifications, or pagination beyond the api's first 100 users. Plan [0084](0084-plan-command-module-2026-10-24.md) (#264) lifts the command palette non-goal on 2026-10-24.
 - No AI or "Copilot" panel content; the detail panel's second tab is left empty.
 - No stored nav state and no server-driven layout preferences.
 - No Saans or SaansMono; Inter is the substitute, and no mono font is added.

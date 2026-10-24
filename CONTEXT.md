@@ -36,6 +36,22 @@ _Avoid: admin shell, layout._
 The capability at `apps/app` that holds every screen a signed-in end user sees: the product UI home. It renders the `shell` and the `auth` sign-in blocks, and guards on the session, where `admin` guards on the role. `web` keeps only public pages ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
 _Avoid: customer panel, dashboard, portal._
 
+### Command
+One thing a person can do in a signed-in app, declared as `{ id, title, group, keywords?, icon?, shortcut?, when?, active?, run }`. The `id` is `<module>.<verb>`, for example `admin.go-to-users`. A screen, block or module declares its commands with `useCommands(commands, { scope })` from `@repo/ui/lib/shell/commands`, which does nothing when no provider is mounted, so the screen needs no dependency on the `command` module. When `command` is installed, its provider turns every declared command into a palette row, a key binding when it has a [shortcut](#shortcut), and an entry in the `?` sheet. The contract lives in `shell` and the engine in `command` ([ADR 0056](docs/adr/0056-adr-ui-contract-and-seam-in-shell-engine-in-command-2026-10-24.md)).
+_Avoid: action, menu item. Avoid hotkey for the command itself, which is the shortcut._
+
+### Shortcut
+The optional key binding on a [command](#command): a logical key that follows the typed character on every layout, such as `Mod+K` (Cmd on macOS, Ctrl elsewhere), `?`, `J`, or a sequence written with spaces, `G U` for G then U. A shortcut exists only on a command, so the palette and the `?` sheet can never miss one. Two shortcuts conflict when they are the same chord, or one is a sequence prefix of the other, in overlapping [scopes](#command-scope); in development a conflict throws with both command ids, and in production it warns once and keeps the first. Bindings are fixed defaults in code, and the reserved key table in the `saasaloy-command` skill says which keys keep one meaning across modules. Only `lib/command/engine.ts` imports the binding library.
+_Avoid: hotkey, keybinding as separate things. A `G` letter on a nav row is declared on the `NAV_AREAS` item, never derived from the label._
+
+### Command scope
+How long a `useCommands` registration lives, and so which [shortcuts](#shortcut) may overlap: `global` for the app's own commands (navigation, theme, sign out, the sidebar), `route` for the current page's commands, which the palette lists first under the page's label, and `data-table` for the `J`, `K`, Enter and Esc keys a mounted `DataTable` declares. An open dialog or alert dialog takes an exclusive scope, so no command key fires behind it, Mod+K included.
+_Avoid: context, layer._
+
+### Shell extension
+A module's part of every shell app, declared as `{ id, Provider, header? }`: `Provider` wraps the whole layout and `header` renders in the header's right slot. Each app holds its own frozen list in `src/components/shell-extensions.ts`, built with `defineShellExtensions({ extensions: [] })` and passed to `ShellLayout`; the first entry is the outermost provider. A module ships a factory, such as `commandExtension()`, and each app's own descriptor carries a `plugin-array` patch, gated `when: { installed: ["<module>"] }`, that appends a bare call to it, so the module names no app ([ADR 0056](docs/adr/0056-adr-ui-contract-and-seam-in-shell-engine-in-command-2026-10-24.md)). Two entries with one `id` throw at module load.
+_Avoid: plugin, slot._
+
 ### Team
 The product word for the `teams` feature module, which adds Better Auth organizations, members, invitations, and active-organization switching. It does not mean Better Auth's nested teams-within-an-organization sub-feature. That sub-feature stays disabled, so the module adds no `team` or `teamMember` table.
 _Avoid: using team to mean an organization subdivision unless the nested plugin feature is enabled later._
