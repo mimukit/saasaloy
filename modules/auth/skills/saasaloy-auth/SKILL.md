@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -404,6 +404,65 @@ await client.signIn.email({ email, password });
 `fetchOptions: { credentials: "include" }` is baked into both. The calling origin must be in `CORS_ORIGINS` (api's spine) for the cookie to be set and sent cross-origin.
 
 `adminClient()` rides on the admin client only, mirroring the server's `admin()`, because its endpoints answer only on `/admin/auth`. That is what types `session.user.role` and puts `auth.admin.*` on the admin app's client. Handing those methods to a browser grants nothing; the server authorizes every call. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
+
+## Wire-up: the sign-in and sign-up blocks
+
+`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks (the backfill).
+
+| File | Exports |
+|---|---|
+| `packages/ui/src/blocks/auth/sign-in.tsx` | `SignInCard`, `SignInValues` |
+| `packages/ui/src/blocks/auth/sign-up.tsx` | `SignUpCard`, `SignUpValues` |
+| `packages/ui/src/blocks/auth/auth-card.tsx` | `AuthCard`, `AuthAlert`, `useAuthSubmit`, the frame both cards use |
+
+The blocks do no IO, per the `@repo/ui` rule. They import no auth client, no router, no store and no env. The app renders a block on its own route and owns the call:
+
+- **`onSubmit(values)` returns `Promise<string | void>`.** Return a message and the card shows it in a `role="alert"` line above the button. Return nothing on success, after you navigate.
+- **Catch your own network failure.** A throw resets the button and reaches the console, but the card shows nothing. Turn it into a returned message, as the example below does.
+- **`SignInCard` takes `signUpHref?`, `title?` and `description?`.** With no `signUpHref`, the card has no footer. `admin` passes its own title and description and no `signUpHref`.
+- **`SignUpCard` takes `signInHref`, `title?` and `description?`.** Its password field asks for 12 characters, the server's `minPasswordLength` (see "Password rules"). Change both together.
+- **The block renders the card, not the page.** Centre it on your app's canvas: `app` uses `bg-sidebar`, `admin` uses `bg-background`.
+
+A sign-in route in a TanStack Router app. `@app/lib/auth` stands for the app's own client file: `createClient(apiBaseUrl)` from `@repo/auth/client`, with the url from the app's env gate, as `apps/admin/src/lib/auth.ts` does with `createAdminClient`.
+
+```tsx
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { SignInCard } from "@repo/ui/blocks/auth/sign-in";
+import type { SignInValues } from "@repo/ui/blocks/auth/sign-in";
+import { auth } from "@app/lib/auth";
+
+export const Route = createFileRoute("/sign-in")({ component: SignInScreen });
+
+function SignInScreen() {
+  const router = useRouter();
+
+  async function handleSignIn(values: SignInValues): Promise<string | void> {
+    try {
+      const { error } = await auth.signIn.email(values);
+      if (error) {
+        return error.message ?? "Sign-in failed. Check the email and password.";
+      }
+    } catch {
+      return "Could not reach the api. Check that it is running.";
+    }
+    await router.navigate({ to: "/" });
+  }
+
+  return (
+    <main className="bg-sidebar flex min-h-dvh items-center justify-center p-4">
+      <SignInCard onSubmit={handleSignIn} signUpHref="/sign-up" />
+    </main>
+  );
+}
+```
+
+`SignUpCard` follows the same shape, with `auth.signUp.email({ name, email, password })` and `signInHref="/sign-in"`.
+
+**Styles.** The blocks are under `packages/ui/src/blocks/`, which `globals.css` scans. An app stylesheet that does not import `globals.css`, such as one built on `brand.css`, adds `@source "../blocks/auth/**/*.tsx";`, or the card renders unstyled with no error.
+
+**Lint.** The base `oxlint.config.mjs` twin-primitive rule covers `packages/ui/src/blocks/auth/**`, so a base primitive in a block is a lint error. A project made before this rule copies the glob from the base template.
+
+**Removal.** `saasaloy remove shell` refuses while `admin` or `app` is installed. When it runs, it deletes the three block files with it, so delete each route that imports them first.
 
 ## Password rules
 
