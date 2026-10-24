@@ -137,7 +137,7 @@ The Phase-3 prioritization axis: a capability's rank equals how many downstream 
 
 ### Service
 A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
-_Avoid: app. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
+_Avoid: "app" as a word for any service: `app` is the name of one service, the customer SPA at `apps/app`. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
 
 ### Key list
 `packages/env/.env.example`, the project's one tracked file naming every environment key. `saasaloy add` generates it from the installed descriptors' `envVars`, grouped under a `# @services` line per distinct set of readers. It replaced `apps/api/.dev.vars.example` and every per-workspace example ([ADR 0040](docs/adr/0040-adr-a-scaffolded-project-writes-env-never-dev-vars-2026-09-20.md)).
@@ -157,7 +157,7 @@ _Avoid: schema for this. The schema is one key's validator; the preset is the se
 
 ### Deploy target
 A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api, admin and app modules append `api` (10), `admin` (20) and `app` (25) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
-_Avoid: app, for this. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
+_Avoid: "app" as a word for any deploy target: `app` names one of them. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
 
 ### Smoke check
 A row in `SMOKE_CHECKS` in the same file: `{ id, service, path, status, body? }`, keyed by `id`. After every Worker is live, the deploy requests the path on each custom domain of the service (a `routes[]` entry with `custom_domain: true` in its `wrangler.jsonc`) and expects that status and body, three tries 5 seconds apart. A service with no custom domain gets no smoke check, and the run says so. A failed smoke check means no [deploy tag](#deploy-tag).

@@ -19,7 +19,7 @@ description: Runbook for the app capability — the customer SPA at apps/app on 
 | `apps/app/src/lib/auth.ts`, `api.ts`, `redirect.ts` | the auth client and session cache, the typed api client, the safe-destination check |
 | `packages/ui/src/styles/app.css` | the app's one stylesheet: `brand.css`, `shell.css`, two canvas values |
 
-It also appends an `app` row to `packages/env/src/services.ts`, a deploy target and a smoke check to `packages/tooling/src/targets.ts`, and a `PUBLIC_API_URL` entry for `app` to `packages/env/.env.example`. The `auth` module's blocks under `packages/ui/src/blocks/auth/` arrive in the same run, because they ship with `shell`.
+It also appends an `app` row to `packages/env/src/services.ts`, a deploy target and a smoke check to `packages/tooling/src/targets.ts`, and a `PUBLIC_API_URL` entry for `app` to `packages/env/.env.example`. The `auth` module's blocks under `packages/ui/src/blocks/auth/` arrive in the same run: `auth` ships them with `when: { installed: ["shell"] }`, so the `shell` this module brings writes them.
 
 ## Wire-up
 
