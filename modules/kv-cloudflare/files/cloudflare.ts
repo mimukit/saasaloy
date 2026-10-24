@@ -1,3 +1,4 @@
+import type { KVNamespace, RateLimit } from "@cloudflare/workers-types";
 import { KvError } from "../provider";
 import type {
   ConsumeResult,
@@ -15,9 +16,11 @@ import type {
 // `ratelimits` entries in apps/api/wrangler.jsonc *are* the credential, which is why
 // this module declares no envVars of its own.
 //
-// `KVNamespace` and `RateLimit` are ambient globals from @cloudflare/workers-types,
-// which packages/kv already carries as a devDependency. Nothing is imported at runtime
-// and there is no npm dependency to add (ADR 0020).
+// `KVNamespace` and `RateLimit` are imported from @cloudflare/workers-types, never read
+// as ambient globals. The barrel in packages/kv/src/index.ts imports this file, so every
+// workspace that imports `@repo/kv` compiles it, and none of them should need Worker
+// types of its own. This module's descriptor gives packages/kv the devDependency. Nothing
+// is imported at runtime (ADR 0020).
 //
 // Three limits shape everything below, and none of them is this file's to fix:
 //

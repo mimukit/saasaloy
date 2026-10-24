@@ -1,6 +1,10 @@
 {
   "extends": "@repo/tsconfig/base.json",
   "compilerOptions": {
+    // The one capability core that keeps Worker globals. The `jobs` array imports
+    // feature barrels (`@repo/billing`, `@repo/file-uploads`) whose files run only on
+    // Workers, and `billing-stripe` imports `cloudflare:workers`, a module only the
+    // ambient declarations name. Providers still import their types explicitly.
     "types": ["@cloudflare/workers-types"]
   },
   "include": ["src"]

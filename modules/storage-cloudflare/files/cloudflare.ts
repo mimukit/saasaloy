@@ -1,3 +1,9 @@
+import type {
+  R2Bucket,
+  R2Object,
+  R2PutOptions,
+  ReadableStream as WorkerReadableStream,
+} from "@cloudflare/workers-types";
 import { AwsClient } from "aws4fetch";
 import { StorageError } from "../provider";
 import type {
@@ -33,8 +39,9 @@ import type {
 // own proxy URL instead, so an R2 bucket with no API token serves the same upload UI as
 // a fully configured one. One module, both modes.
 //
-// `R2Bucket`, `R2Object` and friends are ambient globals from
-// @cloudflare/workers-types, which packages/storage already carries as a devDependency.
+// `R2Bucket`, `R2Object` and friends are imported from @cloudflare/workers-types, never
+// read as ambient globals, so a workspace that imports `@repo/storage` needs no Worker
+// types of its own. This module's descriptor gives packages/storage that devDependency.
 // The single npm dependency is `aws4fetch` (zero dependencies of its own), patched into
 // packages/storage/package.json by this module's descriptor — ADR 0020 keeps a vendor
 // package inside the capability that owns it.
@@ -224,7 +231,11 @@ export function cloudflare(
         return {
           ...describe(object),
           arrayBuffer: () => object.arrayBuffer(),
-          body: object.body,
+          // Two declarations of one runtime object. The core contract names the DOM
+          // `ReadableStream`; R2 hands back the Workers one, which adds `readAtLeast`
+          // and an optional done `value`, so neither type accepts the other. `put` and
+          // `uploadPart` below cast the same way in the other direction.
+          body: object.body as unknown as ReadableStream,
           text: () => object.text(),
         };
       } catch (error) {
@@ -302,7 +313,7 @@ export function cloudflare(
       try {
         const object = await bucketOf(env).put(
           key,
-          body as ReadableStream | ArrayBuffer | string,
+          body as WorkerReadableStream | ArrayBuffer | string,
           putMetadata(putOptions)
         );
         if (!object) {
@@ -332,7 +343,7 @@ export function cloudflare(
           .resumeMultipartUpload(upload.key, upload.uploadId)
           .uploadPart(
             partNumber,
-            body as ReadableStream | ArrayBuffer | string
+            body as WorkerReadableStream | ArrayBuffer | string
           );
         return { etag: part.etag, partNumber: part.partNumber };
       } catch (error) {
