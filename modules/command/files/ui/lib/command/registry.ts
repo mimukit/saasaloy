@@ -298,8 +298,25 @@ const GROUP_LABELS: Record<Exclude<CommandGroup, "page">, string> = {
 export const UNLABELLED_PAGE = "This page";
 
 /**
+ * The owners whose rows lead a palette group, in this order, named by the id prefix
+ * before the dot. The shell's commands come first (they act on the frame every screen
+ * shares), then this module's own, then every other owner in declaration order. So the
+ * Actions group reads "Toggle sidebar, Show keyboard shortcuts, Sign out", as the
+ * approved mockup does, whichever screen mounted first. The shortcut sheet does not use
+ * this rank: it keeps declaration order, which puts "Open the command palette" first.
+ */
+export const PALETTE_OWNER_ORDER: readonly string[] = ["shell", "command"];
+
+function ownerRank(entry: ResolvedCommand): number {
+  const owner = entry.command.id.slice(0, entry.command.id.indexOf("."));
+  const rank = PALETTE_OWNER_ORDER.indexOf(owner);
+  return rank === -1 ? PALETTE_OWNER_ORDER.length : rank;
+}
+
+/**
  * The palette rows, grouped in the fixed order: each page's commands under the page's
- * label, then Navigation, Actions and Preferences. The palette shows the commands of the
+ * label, then Navigation, Actions and Preferences. Inside Navigation, Actions and
+ * Preferences the rows follow `PALETTE_OWNER_ORDER`. The palette shows the commands of the
  * `global` and `route` scopes whose `when` holds; the `data-table` scope is keys only and
  * appears in the shortcut sheet. `hidden` names command ids the palette never lists, such
  * as the command that opens the palette itself. An empty group is left out.
@@ -333,12 +350,31 @@ export function paletteGroups(
     if (group === "page") {
       continue;
     }
-    const items = visible.filter((entry) => entry.command.group === group);
+    // `toSorted` is stable, so rows of one owner keep their declaration order.
+    const items = visible
+      .filter((entry) => entry.command.group === group)
+      .toSorted((left, right) => ownerRank(left) - ownerRank(right));
     if (items.length > 0) {
       groups.push({ key: group, label: GROUP_LABELS[group], items });
     }
   }
   return groups;
+}
+
+/**
+ * The page the palette's empty state names: "Try a page name, such as “users”". It is the
+ * second Navigation row, or the first when there is only one, with "Go to " removed and
+ * lower-cased. The first row is the app's root page by the NAV_AREAS convention (Overview
+ * in admin, Home in the app), and a person who searches is rarely looking for the page
+ * they start on, so admin reads "users" and the one-page app reads "home". With no
+ * Navigation row it is `undefined`, and the hint drops the example.
+ */
+export function pageExample(
+  groups: readonly PaletteGroup[]
+): string | undefined {
+  const items = groups.find((group) => group.key === "navigation")?.items ?? [];
+  const title = (items[1] ?? items[0])?.command.title;
+  return title?.replace(/^Go to /, "").toLowerCase();
 }
 
 /** One section of the shortcut sheet. */

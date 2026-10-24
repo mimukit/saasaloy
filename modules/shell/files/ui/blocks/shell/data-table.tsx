@@ -30,7 +30,7 @@ import { EMPTY, isEmptyValue } from "@repo/ui/blocks/shell/attribute-list";
 // and this rule is a `.ts` file so `node --test` can load it without JSX.
 import { cardSlots } from "./data-table-cards";
 import type { CardSlot } from "./data-table-cards";
-import { stepHighlight } from "./data-table-highlight";
+import { stepHighlight, tableKeysLive } from "./data-table-highlight";
 
 // The dense list the reference renders in the content panel: a muted header row, rows
 // about 48px tall, an em dash wherever a cell has nothing, and one column at a time
@@ -56,7 +56,10 @@ import { stepHighlight } from "./data-table-highlight";
 // same call a click makes), and Escape drops the highlight. They are commands, so they
 // bind only when a command provider is mounted; without one, the table renders exactly
 // as it did before and the highlight never appears. The highlight takes the rows' hover
-// tone, so it never reads as the selection.
+// tone, so it never reads as the selection. The four keys stand down while a button, a
+// link or a field outside the table has the focus (`tableKeysLive`), so Enter presses a
+// focused filter chip instead of opening a row, and the highlight clears when the focus
+// moves to such a control.
 
 /**
  * What a column reads out of a row: the sort key, and the cell content when the column
@@ -184,13 +187,20 @@ export function DataTable<TRow extends object>({
       ? undefined
       : modelRows.find((modelRow) => modelRow.id === highlight)?.original;
 
+  // The table's root element, for the focus rule and for scrolling the highlight.
+  const containerRef = useRef<HTMLDivElement>(null);
+  // Read at key-press time: the keys act only while no control outside the table holds
+  // the focus.
+  const keysLive = (): boolean =>
+    tableKeysLive(document.activeElement, containerRef.current);
+
   const commands: readonly Command[] = [
     {
       id: "shell.table-next-row",
       title: "Next row",
       group: "page",
       shortcut: "J",
-      when: () => displayedIds.length > 0,
+      when: () => keysLive() && displayedIds.length > 0,
       run: () => {
         setHighlightedId(
           stepHighlight(displayedIds, highlight, selectedId ?? null, 1)
@@ -202,7 +212,7 @@ export function DataTable<TRow extends object>({
       title: "Previous row",
       group: "page",
       shortcut: "K",
-      when: () => displayedIds.length > 0,
+      when: () => keysLive() && displayedIds.length > 0,
       run: () => {
         setHighlightedId(
           stepHighlight(displayedIds, highlight, selectedId ?? null, -1)
@@ -214,7 +224,8 @@ export function DataTable<TRow extends object>({
       title: "Open highlighted row",
       group: "page",
       shortcut: "Enter",
-      when: () => onRowClick !== undefined && highlightedRow !== undefined,
+      when: () =>
+        keysLive() && onRowClick !== undefined && highlightedRow !== undefined,
       run: () => {
         if (onRowClick !== undefined && highlightedRow !== undefined) {
           onRowClick(highlightedRow);
@@ -230,8 +241,9 @@ export function DataTable<TRow extends object>({
       group: "page",
       shortcut: "Escape",
       when: () =>
-        highlight !== null ||
-        (onDismiss !== undefined && (selectedId ?? null) !== null),
+        keysLive() &&
+        (highlight !== null ||
+          (onDismiss !== undefined && (selectedId ?? null) !== null)),
       run: () => {
         setHighlightedId(null);
         if (onDismiss !== undefined && (selectedId ?? null) !== null) {
@@ -242,8 +254,25 @@ export function DataTable<TRow extends object>({
   ];
   useCommands(commands, { scope: "data-table" });
 
+  // Drop the highlight when the focus moves to a control outside the table, so no
+  // highlight is left that the table's keys could not act on.
+  useEffect(() => {
+    if (highlight === null) {
+      return;
+    }
+    const onFocusIn = (event: FocusEvent): void => {
+      const target = event.target instanceof Element ? event.target : null;
+      if (!tableKeysLive(target, containerRef.current)) {
+        setHighlightedId(null);
+      }
+    };
+    document.addEventListener("focusin", onFocusIn);
+    return () => {
+      document.removeEventListener("focusin", onFocusIn);
+    };
+  }, [highlight, containerRef]);
+
   // Keep the highlighted row in view as J and K walk past the scrolled edge.
-  const containerRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
     if (highlight === null) {
       return;
@@ -251,7 +280,7 @@ export function DataTable<TRow extends object>({
     containerRef.current
       ?.querySelector("[data-highlighted]")
       ?.scrollIntoView({ block: "nearest" });
-  }, [highlight]);
+  }, [highlight, containerRef]);
 
   if (!isDesktop) {
     return (

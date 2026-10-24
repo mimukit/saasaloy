@@ -33,3 +33,56 @@ export function stepHighlight(
   const next = Math.min(Math.max(start + step, 0), ids.length - 1);
   return ids[next] ?? null;
 }
+
+/**
+ * The controls that keep their own keys. A focused one outside the table takes Enter and
+ * Escape (and J and K) for itself, so the table's keys stay off it.
+ */
+export const INTERACTIVE_SELECTOR = [
+  "a[href]",
+  "button",
+  "input",
+  "select",
+  "textarea",
+  "summary",
+  '[contenteditable]:not([contenteditable="false"])',
+  '[role="button"]',
+  '[role="link"]',
+  '[role="checkbox"]',
+  '[role="radio"]',
+  '[role="switch"]',
+  '[role="tab"]',
+  '[role="menuitem"]',
+  '[role="option"]',
+  '[role="combobox"]',
+  '[role="slider"]',
+  '[role="textbox"]',
+].join(", ");
+
+/** The part of a DOM element the focus rule reads, so a test can pass a plain object. */
+export interface FocusTarget {
+  closest: (selector: string) => unknown;
+}
+
+/**
+ * Whether the table's keys (J, K, Enter, Escape) may act while `focused` has the focus.
+ *
+ * They act with nothing focused (the page body), with the focus anywhere inside the
+ * table's own container, its row buttons and sort headers included, or with the focus on
+ * an element outside the table that is not a control. A focused button, link, field or
+ * ARIA widget outside the table keeps the key: Enter on the "Admins" chip presses the
+ * chip, not the highlighted row. `container` is the table's root element, or `null`
+ * before it mounts.
+ */
+export function tableKeysLive<T extends FocusTarget>(
+  focused: T | null,
+  container: { contains: (node: T) => boolean } | null
+): boolean {
+  if (focused === null) {
+    return true;
+  }
+  if (container?.contains(focused) === true) {
+    return true;
+  }
+  return focused.closest(INTERACTIVE_SELECTOR) === null;
+}

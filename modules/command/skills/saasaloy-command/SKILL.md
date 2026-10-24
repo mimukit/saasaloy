@@ -67,7 +67,7 @@ The fields:
 
 - `id` is `<module>.<verb>`: the module that declares it, a dot, then what it does in kebab case. `admin.go-to-users`, `admin.sign-out`, `shell.toggle-sidebar`, `command.open-palette`. The id is unique across the app; the registry keeps the first command of a repeated id.
 - `title` is the palette row and the sheet line. Start with a verb: "Go to Users", "Show admins", "Sign out".
-- `group` is `page`, `navigation`, `actions` or `preferences`. The palette lists the groups in that order, and the page group takes the registration's `label` as its heading.
+- `group` is `page`, `navigation`, `actions` or `preferences`. The palette lists the groups in that order, and the page group takes the registration's `label` as its heading. Inside a group, the shell's commands come first, then this module's, then every other owner's in declaration order (`PALETTE_OWNER_ORDER` in `lib/command/registry.ts`, read from the id prefix).
 - `keywords` are extra words the filter matches. The filter is fuzzy, so "usr" finds "Users" without a keyword.
 - `icon` is a module-level lucide component, drawn at 16 px in the muted tone.
 - `shortcut` is optional. Most commands are palette-only. See the key map below before you add one.
@@ -115,7 +115,7 @@ These keys carry one meaning in every app. Use a reserved key only for that mean
 | `/` | focus the page's filter or search field |
 | `G` then a letter | go to a screen; the letter is set on the `NAV_AREAS` row |
 
-`J`, `K`, `Enter` and `Escape` belong to the data table while one is mounted, so a page with a table cannot bind them.
+`J`, `K`, `Enter` and `Escape` belong to the data table while one is mounted, so a page with a table cannot bind them. They act only while no control outside the table holds the focus.
 
 ## Conflicts
 

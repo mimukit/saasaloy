@@ -7,7 +7,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { stepHighlight } from "./data-table-highlight.ts";
+import { stepHighlight, tableKeysLive } from "./data-table-highlight.ts";
 
 const rows = ["a", "b", "c"];
 
@@ -45,5 +45,32 @@ describe("stepHighlight", () => {
     assert.equal(stepHighlight(rows, "gone", null, 1), "a");
     assert.equal(stepHighlight(rows, "gone", "also-gone", -1), "c");
     assert.equal(stepHighlight(rows, "gone", "b", 1), "c");
+  });
+});
+
+describe("tableKeysLive", () => {
+  // A stand-in element: `control` says whether it sits in a button, link or field.
+  const element = (control: boolean) => ({
+    closest: (selector: string) =>
+      control && selector.includes("button") ? {} : null,
+  });
+  const inside = element(true);
+  const table = { contains: (node: unknown) => node === inside };
+
+  it("acts with nothing focused", () => {
+    assert.equal(tableKeysLive(null, table), true);
+  });
+
+  it("acts with the page body focused", () => {
+    assert.equal(tableKeysLive(element(false), table), true);
+  });
+
+  it("acts with the focus on one of the table's own controls", () => {
+    assert.equal(tableKeysLive(inside, table), true);
+  });
+
+  it("leaves the key to a focused control outside the table", () => {
+    assert.equal(tableKeysLive(element(true), table), false);
+    assert.equal(tableKeysLive(element(true), null), false);
   });
 });

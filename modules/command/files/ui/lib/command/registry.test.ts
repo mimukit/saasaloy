@@ -16,6 +16,7 @@ import {
   chordKeycaps,
   findConflicts,
   mergeRegistrations,
+  pageExample,
   paletteGroups,
   parseShortcut,
   resolveBindings,
@@ -244,6 +245,91 @@ describe("paletteGroups", () => {
       paletteGroups(resolved, new Set(["command.open-palette"])),
       []
     );
+  });
+});
+
+describe("palette row order", () => {
+  // The order the provider merges them in: its own commands, then the app's, then the
+  // sidebar's, which is how the admin shell mounts.
+  const resolved = mergeRegistrations([
+    registration("command", "global", [
+      command("command.open-palette", "actions", { shortcut: "Mod+K" }),
+      command("command.show-shortcuts", "actions", { shortcut: "?" }),
+    ]),
+    registration("app", "global", [
+      command("admin.go-to-overview", "navigation", { shortcut: "G O" }),
+      command("admin.sign-out", "actions"),
+      command("admin.theme-light", "preferences"),
+    ]),
+    registration("sidebar", "global", [
+      command("shell.toggle-sidebar", "actions", { shortcut: "Mod+B" }),
+    ]),
+  ]);
+
+  it("lists Actions as the shell's, then the module's, then the app's", () => {
+    const actions = paletteGroups(
+      resolved,
+      new Set(["command.open-palette"])
+    ).find((group) => group.key === "actions");
+    assert.deepEqual(
+      actions?.items.map((entry) => entry.command.id),
+      ["shell.toggle-sidebar", "command.show-shortcuts", "admin.sign-out"]
+    );
+  });
+
+  it("keeps declaration order in the sheet's General section", () => {
+    const general = shortcutSections(resolved).find(
+      (section) => section.key === "general"
+    );
+    assert.deepEqual(
+      general?.items.map((entry) => entry.command.id),
+      ["command.open-palette", "command.show-shortcuts", "shell.toggle-sidebar"]
+    );
+  });
+
+  it("keeps declaration order among one owner's rows", () => {
+    const navigation = paletteGroups(
+      mergeRegistrations([
+        registration("app", "global", [
+          command("admin.go-to-overview", "navigation"),
+          command("admin.go-to-users", "navigation"),
+        ]),
+      ])
+    )[0];
+    assert.deepEqual(
+      navigation?.items.map((entry) => entry.command.id),
+      ["admin.go-to-overview", "admin.go-to-users"]
+    );
+  });
+});
+
+describe("pageExample", () => {
+  const navigation = (titles: string[]) =>
+    paletteGroups(
+      mergeRegistrations([
+        registration(
+          "app",
+          "global",
+          titles.map((title, index) =>
+            command(`app.go-${index}`, "navigation", { title })
+          )
+        ),
+      ])
+    );
+
+  it("names the second Navigation row, past the root page", () => {
+    assert.equal(
+      pageExample(navigation(["Go to Overview", "Go to Users"])),
+      "users"
+    );
+  });
+
+  it("names the only Navigation row when there is one", () => {
+    assert.equal(pageExample(navigation(["Go to Home"])), "home");
+  });
+
+  it("names no page when there is no Navigation row", () => {
+    assert.equal(pageExample([]), undefined);
   });
 });
 

@@ -16,6 +16,7 @@ import type { EngineBinding } from "@repo/ui/lib/command/engine";
 import {
   isAvailable,
   mergeRegistrations,
+  pageExample,
   paletteGroups,
   parseShortcut,
   resolveBindings,
@@ -73,15 +74,6 @@ const CommandUiContext = createContext<CommandUi | null>(null);
 const PALETTE_SHORTCUT = "Mod+K";
 const SHORTCUTS_SHORTCUT = "?";
 
-/** "Go to Users" → "users": the page the empty state suggests. */
-function pageExampleOf(
-  groups: ReturnType<typeof paletteGroups>
-): string | undefined {
-  const navigation = groups.find((group) => group.key === "navigation");
-  const title = navigation?.items[0]?.command.title;
-  return title?.replace(/^Go to /, "").toLowerCase();
-}
-
 function binding(
   entry: ResolvedCommand & { steps: readonly Chord[] }
 ): EngineBinding {
@@ -107,7 +99,8 @@ function CommandProvider({
   const platform = usePlatform();
 
   // `register` keeps a registration's place when the same `useCommands` call registers
-  // again, so the palette order follows the order the screens mounted in.
+  // again, so rows of one owner keep the order the screens mounted in. The palette then
+  // ranks the owners by `PALETTE_OWNER_ORDER` in registry.ts.
   const registry = useMemo<CommandRegistry>(
     () => ({
       register: (registration) => {
@@ -232,7 +225,7 @@ function CommandProvider({
           }}
           groups={groups}
           platform={platform}
-          pageExample={pageExampleOf(groups)}
+          pageExample={pageExample(groups)}
           onRun={(entry) => {
             setOverlay(null);
             entry.command.run({ source: "palette" });
