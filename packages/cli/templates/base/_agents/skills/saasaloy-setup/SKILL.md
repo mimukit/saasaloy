@@ -36,8 +36,9 @@ block.
 3. **Look at git, and treat it as advice.** `git status --short` if there is a repo. A dirty
    tree or no repo at all is worth one sentence — "your changes aren't committed, so you
    can't undo this with git; every write here is previewed and confirmed anyway" — and then
-   you carry on. `saasaloy init` does not run `git init`, so a clean-tree requirement would
-   block exactly the person who just scaffolded. **Neither state is a reason to stop.**
+   you carry on. `saasaloy init` creates the repository unless it ran with `--no-git`, and
+   a fresh scaffold has no commit yet, so a clean-tree requirement would block exactly the
+   person who just scaffolded. **Neither state is a reason to stop.**
 4. **Say how long this takes and what it is for**, in two lines, before question 1. Ten
    questions is a real ask, and an owner who does not know why is an owner who answers
    thinly.

@@ -6,7 +6,7 @@ derived-from: "designkit (MIT), narrowed 2026-08-09"
 
 # saasaloy-design
 
-This skill records the design system that the project already uses. It writes no components and no pages. Use `uikit` for that work.
+This skill records the design system that the project already uses. It writes no components and no pages. For that work, follow `packages/ui/AGENTS.md`.
 
 Each app has its own token home and its own contract:
 
@@ -161,7 +161,7 @@ Recompute and replace the fingerprint stamp. Run the official linter.
 
 ### 5. Report
 
-Name the registry style URL. List the changed token groups and the new fingerprint. State the linter result. Tell the user to use `uikit` for component or page work.
+Name the registry style URL. List the changed token groups and the new fingerprint. State the linter result. Tell the user that component or page work follows `packages/ui/AGENTS.md`.
 
 ## `update`
 
@@ -211,7 +211,7 @@ Open with the file count that the audit scanned. Give one verdict for the finger
 
 ## Boundaries
 
-- Never write a component or a page. Use `uikit` for that work.
+- Never write a component or a page. That work follows `packages/ui/AGENTS.md`.
 - Never add a token value that the project does not contain.
 - Never change `globals.css` or `web.css` in any mode, or `brand.css` in `update` or `audit`.
 - Never write during `audit`.

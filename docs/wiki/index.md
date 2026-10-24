@@ -30,6 +30,7 @@ You want a project scaffolded and features installed into it.
   0.1.x overwrite bug: what it hit, how to get the files back, and what changed.
 - [Move off the `infra` module](runbooks/move-off-the-infra-module.md) — take a project that
   deployed through Pulumi to `pnpm deploy:production`, keeping its Workers and data.
+- [Finish the theme split](runbooks/finish-the-theme-split.md) — move a project made before 0.6.0 to `globals.css`, `brand.css` and `web.css`, and add the newer landing blocks.
 
 ## Build a module
 
