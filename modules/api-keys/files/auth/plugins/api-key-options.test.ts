@@ -84,6 +84,9 @@ describe("the bearer header", () => {
     assert.equal(hasBearer(headers("Bearer sk_abc")), true);
     assert.equal(hasBearer(headers("bearer sk_abc")), true);
     assert.equal(hasBearer(headers("BEARER sk_abc")), true);
+    assert.equal(hasBearer(headers("Bearer\tsk_abc")), true);
+    assert.equal(bearerKey(headers("Bearer\tsk_abc")), "sk_abc");
+    assert.equal(hasBearer(headers("Bearersk_abc")), false);
   });
 
   it("does not claim another scheme or a missing header", () => {

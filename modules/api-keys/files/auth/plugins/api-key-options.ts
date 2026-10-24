@@ -157,10 +157,11 @@ interface HeaderSource {
  * sends `Bearer ` with no key arrives here as `Bearer`, and that is still a claim.
  */
 export function hasBearer(headers: HeaderSource): boolean {
-  const header = headers.get(AUTHORIZATION_HEADER)?.toLowerCase();
+  // `Bearer` then any whitespace, or `Bearer` alone. A tab after the scheme claims the key
+  // path the same as a space, so it never falls through to the session cookie.
+  const header = headers.get(AUTHORIZATION_HEADER);
   return (
-    header !== undefined &&
-    (header === BEARER_PREFIX.trim() || header.startsWith(BEARER_PREFIX))
+    header !== undefined && header !== null && /^bearer(?:\s|$)/i.test(header)
   );
 }
 
