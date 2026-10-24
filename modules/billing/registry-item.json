@@ -2,7 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "billing",
   "type": "saasaloy:capability",
-  "description": "Subscriptions in a packages/billing workspace: the provider contract, plans.ts and the subscription projection.",
+  "description": "Subscriptions in a packages/billing workspace: the provider contract, plans.ts, the subscription projection and the plan entitlements.",
   "stage": "money",
   "needs": [],
   "requires": { "saasaloy": ">=0.7.0" },
