@@ -14,7 +14,7 @@ export interface ShellNavItem {
   readonly to: string;
   readonly label: string;
   readonly icon: ComponentType<{ className?: string }>;
-  /** An optional count shown at the right of the row. Zero renders. */
+  /** An optional count shown at the right of the row. A static zero renders. */
   readonly count?: number;
 }
 

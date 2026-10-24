@@ -34,6 +34,8 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/admin/shell-nav";
+import { withLiveCounts } from "@repo/ui/lib/admin/nav-counts";
+import type { LiveCounts } from "@repo/ui/lib/admin/nav-counts";
 
 // The admin sidebar: the brand row, the organization picker's slot, every area's nav
 // groups, and the account menu at the foot. The account menu also holds the Theme submenu.
@@ -51,12 +53,16 @@ import type {
 const ACTIVE_ROW =
   "aria-[current=page]:bg-sidebar-accent aria-[current=page]:text-sidebar-accent-foreground aria-[current=page]:font-medium";
 
+/** The `counts` default: no live counts, so every row keeps its static one. */
+const NO_COUNTS: LiveCounts = {};
+
 export function ShellSidebar({
   areas,
   link: NavLink,
   account,
   signOut: { pending, error, signOut },
   organizationPicker,
+  counts = NO_COUNTS,
 }: {
   areas: readonly ShellNavArea[];
   link: ShellLink;
@@ -64,6 +70,11 @@ export function ShellSidebar({
   signOut: ShellSignOut;
   /** The #141 organization picker. Until a module fills it the slot renders empty. */
   organizationPicker?: ReactNode;
+  /**
+   * Live counts keyed by a row's `to`. A known one replaces the row's static `count`, and
+   * a live 0 hides the badge; see `withLiveCounts`.
+   */
+  counts?: LiveCounts;
 }) {
   const { isMobile, setOpenMobile } = useSidebar();
 
@@ -98,7 +109,7 @@ export function ShellSidebar({
       </SidebarHeader>
 
       <SidebarContent>
-        {areas.flatMap((area) =>
+        {withLiveCounts(areas, counts).flatMap((area) =>
           area.groups.map((group) => (
             <SidebarGroup key={`${area.to}:${group.label}`}>
               <SidebarGroupLabel>{group.label}</SidebarGroupLabel>

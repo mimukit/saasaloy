@@ -139,6 +139,38 @@ Keep the `as const`. It is what holds every `to` at a literal type the router ca
 
 `nav.ts` holds the data and the two rules that read it, and nothing else, so its rules stay unit-testable without React. Read an optional count through the `navCount(entry)` helper rather than `entry.count`.
 
+### Add a live count to a nav row
+
+A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many payments wait for a review, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the admin session.
+
+A module adds its entry with a `const-array` patch keyed on `to`. The payment module's patch is the example:
+
+```json
+{
+  "file": "apps/admin/src/components/nav-counts.ts",
+  "kind": "const-array",
+  "constName": "NAV_COUNTS",
+  "key": "to",
+  "entry": { "to": "/payments", "path": "/admin/payment/review-count" }
+}
+```
+
+`AppShell` runs one TanStack query per entry under the key `["nav-count", to]`. Each query fetches `PUBLIC_API_URL` plus `path` with the session cookie and `x-auth-audience: admin`, the same `API_HEADERS` and `API_CREDENTIALS` that `src/lib/api.ts` gives the typed client. The queries refetch on window focus and every 60 s, and TanStack Query does not run the interval in a hidden tab. `AppShell` passes the numbers to `ShellLayout` as `counts`, keyed by `to`.
+
+The sidebar applies `withLiveCounts` from `@repo/ui/lib/admin/nav-counts`:
+
+- A live count replaces the row's static `count`.
+- A live 0 hides the badge. A static 0 still renders.
+- With no live count (loading, a failed fetch, a non-OK answer or a body without a numeric `count`) the static `count` stays. A failed count shows no error.
+
+A screen whose action changes a count invalidates the key after the mutation, so the badge follows with no reload:
+
+```ts
+await queryClient.invalidateQueries({ queryKey: ["nav-count", "/payments"] });
+```
+
+Keep the route that answers the count cheap: the shell calls it on every focus and every minute while the tab is open.
+
 ## The admin primitive set and the page blocks
 
 This module writes the admin app's whole UI kit into `packages/ui/src/`, and admin code uses nothing else:
