@@ -2,6 +2,7 @@
   "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
   "name": "auth",
   "type": "saasaloy:feature",
+  "description": "Test fixture auth.",
   "dependsOn": ["api"],
   "files": [
     { "path": "files/routes/auth.ts", "target": "@api/routes/auth.ts" },
