@@ -1,5 +1,171 @@
 # Changelog
 
+## [0.7.0](https://github.com/mimukit/saasaloy/compare/v0.6.1...v0.7.0) (2026-10-24)
+
+### ⚠ BREAKING CHANGES
+
+* **template:** a database-d1 project no longer migrates production on every
+  deploy. pnpm deploy:production stops at its migration gate when a migration
+  file changed since the last deploy tag, and migrates only with --migrate.
+  The D1 script db:migrate:prod is renamed db:prod:migrate.
+
+  An existing project takes the gated deploy with `saasaloy update`, then:
+
+    - take packages/tooling (update creates it; deploy.config.ts and
+      targets.ts are the project's after that)
+    - merge the root package.json scripts: deploy:production, prepare,
+      skills:link, lint:types and lint:fix
+    - merge turbo.json: drop ^db:migrate:prod from deploy and the
+      db:migrate:prod task
+    - with database-d1, rename db:migrate:prod in packages/db/package.json
+      to db:prod:migrate if the update did not add it
+    - run `saasaloy doctor` and fix its two Deploy warnings, if shown
+    - add a custom_domain route to each Worker with a production host, so
+      its smoke checks run
+
+  The steps are also in the saasaloy-deploy skill under "A project made
+  before the gated deploy". update does not create docs/runbook-deploy.md,
+  a seed file; copy it from a new project.
+* **template:** a project made before the release step takes it with
+  `saasaloy update`, then finishes by hand:
+
+    - merge the root package.json scripts: release is
+      `node packages/tooling/src/release.ts`, and release:dry is the same
+      with --dry-run (update writes them when the file was not edited)
+    - delete an older .release-it.json and any root release-it or
+      @release-it/conventional-changelog devDependency; release.ts reads
+      neither, so move a changelog choice into the release block of
+      packages/tooling/src/deploy.config.ts
+    - keep CHANGELOG.md and the v* tags; the next release adds its entry
+      above the old ones
+    - run `saasaloy doctor`; it warns while the release script is missing
+
+  The root package.json version now belongs to the project: update keeps
+  it, and a release alone never sends the file to the merge plan. The
+  steps are also in the saasaloy-deploy skill under "A project made
+  before the release step".
+* **api-keys:** api-keys is now a core that needs an owner module,
+  api-keys-organization or api-keys-user. In a project that installed
+  api-keys before this change, saasaloy update now refuses with exit 2,
+  names both owners, and changes nothing until one is installed. The
+  existing keys are organization-owned, so pick api-keys-organization.
+  Upgrade the saasaloy CLI first, because the new api-keys descriptor
+  requires it and an older CLI refuses it. Then run
+  `saasaloy add api-keys-organization`, which adopts the schema, the
+  resolver, the screen and the plugin as they are, and then run
+  `saasaloy update`. The api_keys table does not change, and
+  db:generate reports no schema changes.
+* **billing:** modules/entitlements no longer exists. Install
+  billing instead. An existing project runs 'saasaloy remove
+  entitlements' then 'saasaloy add billing --force'; remove builds its
+  plan from the local manifest, so it still works.
+* **modules:** the rbac module no longer exists. An existing
+  project runs `saasaloy remove rbac`, then `saasaloy add
+  multitenant`. The subpaths @repo/auth/rbac and
+  @repo/auth/rbac-rules become @repo/auth/permissions and
+  @repo/auth/permission-rules, and requireCan becomes
+  requirePermission.
+* **auth:** the session cookies are renamed to client.session_token
+  and admin.session_token, so every existing session ends and users sign
+  in again. A project made before this change runs saasaloy update auth
+  admin, resolves auth.ts, client.ts, server.ts and the auth schema in the
+  merge plan, runs pnpm db:generate and applies the migration that adds
+  sessions.audience, then runs saasaloy update for each module that
+  patches auth (teams, rbac, api-keys, billing-stripe). A route of its own
+  that calls auth.api.* switches to authFor(c).api.* when the admin app
+  calls it, and a middleware on /admin/* must skip /admin/auth/*.
+* **testing:** the six module test files that shipped
+  unconditionally (auth.test.ts, health-db.test.ts,
+  completeness.test.ts, dump.test.ts, production.test.ts and
+  files.test.ts) now ship only when testing is on. A project with
+  testing off, or with no testing key, no longer receives them on
+  add. Run `saasaloy testing tests-after` to get them back.
+
+### Features
+
+* **admin:** add status pill tones and detail panel slots ([856a6d2](https://github.com/mimukit/saasaloy/commit/856a6d2ec7198a4734517c2520788c0c3318fa8b)), references [#217](https://github.com/mimukit/saasaloy/issues/217)
+* **admin:** show data table rows as cards below md ([bcf8540](https://github.com/mimukit/saasaloy/commit/bcf8540cb239d900cd24bd796ca7da82cfa8e05b)), references [#217](https://github.com/mimukit/saasaloy/issues/217)
+* **admin:** show live counts on nav rows ([d29adc5](https://github.com/mimukit/saasaloy/commit/d29adc5c529cf02bb539c88294ce63465910d958)), references [#217](https://github.com/mimukit/saasaloy/issues/217)
+* **api-keys:** let a user own an api key, with no organization ([8b61cd0](https://github.com/mimukit/saasaloy/commit/8b61cd01ca86f99a7e385784b322d1c4b40b1e5c)), closes [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **auth:** build ADMIN_APP_ROLES from config on both sides ([0d85b10](https://github.com/mimukit/saasaloy/commit/0d85b1052d90a7a61805bcb7dde929ddbd0097fa)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **auth:** give the two role strings one home in config ([e225b5c](https://github.com/mimukit/saasaloy/commit/e225b5cd2e22918fb194b51c206a862aaeea6cb3)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **billing:** read the app name and the tier ids from config ([65b0fa3](https://github.com/mimukit/saasaloy/commit/65b0fa30711eecaf1f5ad5a9b634dc619d8d8b72)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **cli:** answer every prompt with a flag ([52e9a75](https://github.com/mimukit/saasaloy/commit/52e9a75bc76cd14e93d5e1d19fc9579958d5b112)), references [#223](https://github.com/mimukit/saasaloy/issues/223)
+* **cli:** guard the base app key and each section file's own key ([bca9e7e](https://github.com/mimukit/saasaloy/commit/bca9e7e405d58d2bd398dc0c96a4a97dd1723b19)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **cli:** keep the project's release version through update ([0ce93ec](https://github.com/mimukit/saasaloy/commit/0ce93ec6c3dcf9aa67d27c7039bb1c928d3ef6d6)), references [#236](https://github.com/mimukit/saasaloy/issues/236)
+* **cli:** link every project skill folder ([e27cc43](https://github.com/mimukit/saasaloy/commit/e27cc43fd9bddf38fc106bd89060a45e1a433a44))
+* **cli:** print json for agents and describe every module ([8182952](https://github.com/mimukit/saasaloy/commit/8182952c14698bf5a4de9a6a5fac53e9d8b235cd)), references [#223](https://github.com/mimukit/saasaloy/issues/223)
+* **cli:** refuse an update that leaves a module without an owner ([2f42e40](https://github.com/mimukit/saasaloy/commit/2f42e402d9ed6e45b321eecccac016434bd6b2ef)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **cli:** refuse every prompt that has no terminal to answer it ([089083e](https://github.com/mimukit/saasaloy/commit/089083ee231fe1c9dc63e852933e31f97e083994)), references [#223](https://github.com/mimukit/saasaloy/issues/223)
+* **cli:** refuse two modules claiming one config section key ([c4500e3](https://github.com/mimukit/saasaloy/commit/c4500e33d2ea99f18ce9791f6831e0c4d24ebc86)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **config:** add the config capability to the base template ([256b822](https://github.com/mimukit/saasaloy/commit/256b8222cb177357577371c1bfb8a9095426cf01)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **config:** ship the product name as Saasaloy ([9dc3d81](https://github.com/mimukit/saasaloy/commit/9dc3d81d08671b379f15e2c9c2d9b12ff724d2a2)), references [#191](https://github.com/mimukit/saasaloy/issues/191) [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **deploy:** add a release step that names each deploy ([6d7c3e6](https://github.com/mimukit/saasaloy/commit/6d7c3e690ebfa6e0d92bccd7266197a166c53a7c)), references [#236](https://github.com/mimukit/saasaloy/issues/236)
+* **e2e:** add the browser suite capability ([c82365e](https://github.com/mimukit/saasaloy/commit/c82365e453731a72cbddc933eb48a2a7bc766c2e)), references [#164](https://github.com/mimukit/saasaloy/issues/164) [#155](https://github.com/mimukit/saasaloy/issues/155)
+* **file-uploads:** record objects, upload UI and the public image path ([35ae909](https://github.com/mimukit/saasaloy/commit/35ae90936c1f2116ba3c88afb8742ab0e56488e0)), references [#175](https://github.com/mimukit/saasaloy/issues/175)
+* **kv-upstash:** add the upstash redis provider ([3cf301b](https://github.com/mimukit/saasaloy/commit/3cf301bbc4ec8200c1e2281715044684adfe716b)), references [#135](https://github.com/mimukit/saasaloy/issues/135)
+* **kv-upstash:** ship an env preset and route its keys to api ([1820493](https://github.com/mimukit/saasaloy/commit/1820493cdb9d6cf6a192d624a90e38a44e3e8b63))
+* **modules:** add deploy rows, a database probe and production db commands ([16d7411](https://github.com/mimukit/saasaloy/commit/16d74110cb9c87cf7af80bea7315dbac9745c7b4))
+* **payment:** move the payments page onto the admin parts ([f0d6928](https://github.com/mimukit/saasaloy/commit/f0d6928a277a33726b831c6db08b3daee640f654)), references [#217](https://github.com/mimukit/saasaloy/issues/217)
+* **repo:** add an agent benchmark and its scorer ([604d611](https://github.com/mimukit/saasaloy/commit/604d611874c22a049a0e612bbf77b1537fb004aa)), references [#222](https://github.com/mimukit/saasaloy/issues/222)
+* **template:** gate, order and tag the production deploy ([277db74](https://github.com/mimukit/saasaloy/commit/277db745e703542b615b9b9e34009ed48afe08f2))
+* **template:** make room for the e2e workspace ([d8da5c4](https://github.com/mimukit/saasaloy/commit/d8da5c49034d804788b5a4ba63be49d4ab487b0e)), references [#155](https://github.com/mimukit/saasaloy/issues/155)
+* **template:** ship the deploy skill, the runbook and skills:link ([1540dca](https://github.com/mimukit/saasaloy/commit/1540dcae8e419d9c5742c23e3612e55e7db461cc))
+* **testing:** add the testing mode and its agents.md block ([3108de1](https://github.com/mimukit/saasaloy/commit/3108de12ddba8fe816755ad5310ef61ccb518472)), references [#242](https://github.com/mimukit/saasaloy/issues/242) [#242](https://github.com/mimukit/saasaloy/issues/242)
+* **testing:** ship module files on a when condition ([56a26a9](https://github.com/mimukit/saasaloy/commit/56a26a9038c99609d6dfd52d61135ce31395a0cd)), references [#242](https://github.com/mimukit/saasaloy/issues/242) [#242](https://github.com/mimukit/saasaloy/issues/242)
+* **testing:** ship the saasaloy-testing skill in the base ([504626d](https://github.com/mimukit/saasaloy/commit/504626d91493d4db07bafa4737d93d7b3d983c44)), references [#242](https://github.com/mimukit/saasaloy/issues/242) [#242](https://github.com/mimukit/saasaloy/issues/242)
+
+### Bug Fixes
+
+* **admin:** render the refusal page without the shell ([a3791a4](https://github.com/mimukit/saasaloy/commit/a3791a4aab26db907713119b7a7226399428870a)), references [#238](https://github.com/mimukit/saasaloy/issues/238)
+* **admin:** stop the build from rewriting routeTree.gen.ts ([f99d51c](https://github.com/mimukit/saasaloy/commit/f99d51c042cc69ea04d9a2184e870eedbdca4351))
+* **api-keys:** keep user-owned keys on the client instance ([c6ab846](https://github.com/mimukit/saasaloy/commit/c6ab8469d37772800abbfe481e56ff10f6b3a186)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **api-keys:** let a tab after Bearer claim the key path ([d2eb4a3](https://github.com/mimukit/saasaloy/commit/d2eb4a3e4d6dc9653845965be3fb6dd11edaa920)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **api-keys:** pin the user-owned schema to api-key 1.7.7 ([b2f6ded](https://github.com/mimukit/saasaloy/commit/b2f6dedad3f1d6a7b9aa92129b0d511899a59080)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **api-keys:** refuse a banned owner's key in user mode ([b0c2c78](https://github.com/mimukit/saasaloy/commit/b0c2c7842c4ce52238e753781b9093a1eb31cfed)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **auth:** key the admin plugin's roles by config's role strings ([a0a8bac](https://github.com/mimukit/saasaloy/commit/a0a8bac607007434ece093677a2c9df934585039)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **auth:** read the seeded and displayed role names from config ([8419315](https://github.com/mimukit/saasaloy/commit/8419315e239a63fed2ef88ccc0f4f3b53e54280a)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **auth:** separate the client and admin sessions ([8b29722](https://github.com/mimukit/saasaloy/commit/8b297221ec6675645db844d3dceb060028f1b997)), references [#238](https://github.com/mimukit/saasaloy/issues/238)
+* **billing:** name the plan entitlements in the module description ([163e187](https://github.com/mimukit/saasaloy/commit/163e187c6ce1b59b70eee838bba04919c553d1c0))
+* **cli:** apply the review findings on the no-tty contract ([cde3828](https://github.com/mimukit/saasaloy/commit/cde382890c8fd62296a860543412beb0de609b98)), references [#223](https://github.com/mimukit/saasaloy/issues/223)
+* **cli:** count a same-slot revision as still declared in the patch take-over ([fe50873](https://github.com/mimukit/saasaloy/commit/fe508737990dbbe6134509e6852f558b46b8bfde)), references [#242](https://github.com/mimukit/saasaloy/issues/242) [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **cli:** move a patch only from a module that dropped it, and warn on an ownerless core ([961ec71](https://github.com/mimukit/saasaloy/commit/961ec71c32023c16ac589daf8c96ae0859629cc1)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **cli:** name the owners when add has no terminal ([5faefee](https://github.com/mimukit/saasaloy/commit/5faefeed627a96fd1775517b063ca8c4c56659d5)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **cli:** report a plugin-array patch whose export is missing ([0c1499a](https://github.com/mimukit/saasaloy/commit/0c1499a8481ce304159f3fedcb4c6e253b5b19ec)), references [#238](https://github.com/mimukit/saasaloy/issues/238)
+* **cli:** start a new project's repository on main ([2662f1c](https://github.com/mimukit/saasaloy/commit/2662f1cc9c67b32e3969081af6092098ad40101a))
+* **config:** drop the extra cast the scaffolded lint flags ([b213310](https://github.com/mimukit/saasaloy/commit/b2133101801844a3c260ec463f182c94bfac28d7)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **config:** freeze the composed config all the way down ([9995908](https://github.com/mimukit/saasaloy/commit/99959089d1929e42a89fbf12f8092e2462c38580)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **config:** let the scaffolded type-aware lint pass the merge tests ([104941f](https://github.com/mimukit/saasaloy/commit/104941f1eb0b3e3e4212d6689f8d116f06f14a68)), references [#154](https://github.com/mimukit/saasaloy/issues/154)
+* **database-d1:** dump before every production migration ([2aa156d](https://github.com/mimukit/saasaloy/commit/2aa156dbe6cc5c3f277693a0776732922bc9b893))
+* **deploy:** bump the minor for a feat below 1.0 ([990f88d](https://github.com/mimukit/saasaloy/commit/990f88d2d1304da41bdc3ae4458df8e78f7bb2eb)), references [#236](https://github.com/mimukit/saasaloy/issues/236)
+* **file-uploads:** adopt main's env preset and seed slice rules ([37c0a82](https://github.com/mimukit/saasaloy/commit/37c0a8202c0914308edb329f2fde22e878c133fa))
+* **file-uploads:** destructure the first validation issue ([46531f2](https://github.com/mimukit/saasaloy/commit/46531f24855e331909953f42a5eb5de19d69e170))
+* **file-uploads:** pass the playground's lint and typecheck on main ([d8f5b2d](https://github.com/mimukit/saasaloy/commit/d8f5b2db50a24bfcf2975933cd6617364f8db91c))
+* **file-uploads:** scope objects to their owner with no organization ([ad36308](https://github.com/mimukit/saasaloy/commit/ad3630868fd907eb126b3a94ec4096ccdc0179da))
+* **kv-upstash:** read list prefixes as the contract does and retry transport failures ([35f6c2e](https://github.com/mimukit/saasaloy/commit/35f6c2e65ad9f186916197d7a0982b17a5671725))
+* **kv-upstash:** treat a workerd fetch failure as a transport failure ([61032f2](https://github.com/mimukit/saasaloy/commit/61032f235534437da639c4421be0ed089fa2019c))
+* **modules:** give both auth instances the feature plugins ([f4dc646](https://github.com/mimukit/saasaloy/commit/f4dc646ed492b2874b2b92ab3186e31301b0f9fd)), references [#238](https://github.com/mimukit/saasaloy/issues/238)
+* **modules:** warn about custom roles on remove multitenant ([39cea69](https://github.com/mimukit/saasaloy/commit/39cea6955dbe6dbbf4808f8ba2fda9d373574fc9)), references [#167](https://github.com/mimukit/saasaloy/issues/167)
+* **payment:** cast users.id to text in the admin joins ([4ba277e](https://github.com/mimukit/saasaloy/commit/4ba277ec835a7729ebb723fcabbca390aa1f7606)), closes [#221](https://github.com/mimukit/saasaloy/issues/221)
+* **registry:** floor the api-keys split at the cli that refuses an ownerless update ([10961d7](https://github.com/mimukit/saasaloy/commit/10961d7c772f827ec4b42313f623f29474cfbe3d)), references [#229](https://github.com/mimukit/saasaloy/issues/229)
+* **release:** cross compatible module choices ([c325786](https://github.com/mimukit/saasaloy/commit/c3257864282aa1a731d95f006987ae36952d9cbb))
+* **repo:** keep the user CLAUDE.md out of the agent benchmark ([ae886a0](https://github.com/mimukit/saasaloy/commit/ae886a0b401d3936be72b03d68b14859f97c086b)), references [#222](https://github.com/mimukit/saasaloy/issues/222)
+* **repo:** let the e2e playground install update its lockfile on CI ([bd55505](https://github.com/mimukit/saasaloy/commit/bd555057892fe92d5374e7f0210ad070a247a405))
+* **repo:** score turbo-prefixed mail and stop the bench on any signal ([feab7f4](https://github.com/mimukit/saasaloy/commit/feab7f4c119b17ed5841543350ab417b46e5bdc3)), references [#222](https://github.com/mimukit/saasaloy/issues/222)
+* **template:** correct the d1 migrate script and the services test ([a77f2f7](https://github.com/mimukit/saasaloy/commit/a77f2f7ad381fddcef2cd1735b4500ecae09b01e))
+* **template:** name each dirty file whole in the deploy gate ([18541cb](https://github.com/mimukit/saasaloy/commit/18541cbfc5bdbf13400b3bed42c12fe1ac29bea1))
+* **testing:** apply the review fixes to backfill and gated patches ([eff9a71](https://github.com/mimukit/saasaloy/commit/eff9a717e2f28e7065c41cc472e3b65bdc83c9a4)), references [#254](https://github.com/mimukit/saasaloy/issues/254) [#242](https://github.com/mimukit/saasaloy/issues/242) [#242](https://github.com/mimukit/saasaloy/issues/242)
+* **ui:** drop the retired entitlements module from the landing lists ([332b597](https://github.com/mimukit/saasaloy/commit/332b597f79ccc18ae65d784d84caf93b1a158bed)), references [#165](https://github.com/mimukit/saasaloy/issues/165)
+
+### Documentation
+
+* **template:** carry the release step merge steps to the changelog ([6733b0f](https://github.com/mimukit/saasaloy/commit/6733b0f38b4f07394df599bbced487655169f513)), references [#236](https://github.com/mimukit/saasaloy/issues/236)
+
+### Code Refactoring
+
+* **billing:** merge entitlements into billing ([c922f0e](https://github.com/mimukit/saasaloy/commit/c922f0e82e581aac888a9f259fe9dfd98c3b910d)), references [#165](https://github.com/mimukit/saasaloy/issues/165)
+* **modules:** dissolve rbac into teams and multitenant ([976046c](https://github.com/mimukit/saasaloy/commit/976046c75ba262293cfb8a1e763345f260a0e021)), references [#167](https://github.com/mimukit/saasaloy/issues/167) [#165](https://github.com/mimukit/saasaloy/issues/165)
+
 ## [0.6.1](https://github.com/mimukit/saasaloy/compare/v0.6.0...v0.6.1) (2026-10-22)
 
 ### ⚠ BREAKING CHANGES
