@@ -11,17 +11,17 @@ import type { SubmitEvent } from "react";
 import { statements } from "@repo/auth/access";
 import { allows } from "@repo/auth/permission-rules";
 import type { PrincipalLike } from "@repo/auth/permission-rules";
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
-import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
-import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
+import { DetailPanel } from "@repo/ui/blocks/shell/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/shell/empty-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
 import {
   Alert,
   AlertAction,
   AlertDescription,
   AlertTitle,
-} from "@repo/ui/components/admin/alert";
+} from "@repo/ui/components/shell/alert";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -31,9 +31,9 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@repo/ui/components/admin/alert-dialog";
-import { Button } from "@repo/ui/components/admin/button";
-import { Checkbox } from "@repo/ui/components/admin/checkbox";
+} from "@repo/ui/components/shell/alert-dialog";
+import { Button } from "@repo/ui/components/shell/button";
+import { Checkbox } from "@repo/ui/components/shell/checkbox";
 import {
   Dialog,
   DialogClose,
@@ -44,19 +44,19 @@ import {
   DialogPopup,
   DialogTitle,
   DialogTrigger,
-} from "@repo/ui/components/admin/dialog";
+} from "@repo/ui/components/shell/dialog";
 import {
   Field,
   FieldDescription,
   FieldLabel,
-} from "@repo/ui/components/admin/field";
-import { Fieldset, FieldsetLegend } from "@repo/ui/components/admin/fieldset";
-import { Input } from "@repo/ui/components/admin/input";
-import { Label } from "@repo/ui/components/admin/label";
-import { Spinner } from "@repo/ui/components/admin/spinner";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import { toastManager } from "@repo/ui/components/admin/toast";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+} from "@repo/ui/components/shell/field";
+import { Fieldset, FieldsetLegend } from "@repo/ui/components/shell/fieldset";
+import { Input } from "@repo/ui/components/shell/input";
+import { Label } from "@repo/ui/components/shell/label";
+import { Spinner } from "@repo/ui/components/shell/spinner";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import { toastManager } from "@repo/ui/components/shell/toast";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 
 import { auth } from "@admin/lib/auth";
 

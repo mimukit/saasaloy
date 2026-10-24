@@ -7,7 +7,7 @@ import {
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
 import { FileUploads } from "@repo/ui/blocks/file-uploads";
 import type { FileRow } from "@repo/ui/blocks/file-uploads";
 

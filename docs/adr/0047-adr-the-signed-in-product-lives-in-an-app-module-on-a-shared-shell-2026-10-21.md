@@ -4,7 +4,7 @@ A signed-in end user had no app to land in. `admin` admits only the admin role, 
 
 ## Status
 
-accepted
+accepted. Amended on 2026-10-24 (below): `shell` owns the primitive set and the page blocks too.
 
 ## Considered Options
 
@@ -19,3 +19,11 @@ accepted
 - A project that installed `admin` before the move gets the new `shell` paths through `saasaloy update` and a merge plan for any shell file it edited.
 - A third signed-in app depends on `shell` and gets the same frame with no copy.
 - "Customer panel" is retired as a term. The `app` module is the product UI home.
+
+## Amendment — 2026-10-24: `shell` owns the whole kit, not only the frame
+
+The #226 grill found that the frame alone is not enough. The approved `app` mockup renders `DataTable`, `PageHeader`, `EmptyState`, `Button`, `Field` and `StatusPill`, not only the layout. A file left in `admin` is a file `app` cannot import with no `admin`. So `shell` owns everything generic in PR #204's set: the coss primitives in `components/shell/`, every block except the `feature-flags` block, the containers, the `lib/shell/` helpers, the brand mark and the `@tanstack/react-table` patch. `admin` keeps only `admin.css`, its app and its api route.
+
+`shell` also ships `styles/shell.css`. It declares the status pairs, the status pill tones, the sort accent and the skeleton and toast motion, with neutral defaults at zero specificity and no import. Each app stylesheet imports its theme, then `shell.css`, then sets its own values. This keeps `shell` free of any app stylesheet.
+
+Rejected: a frame-only `shell` (`app` would still need `admin`), a second module for the primitives (one more dependency edge with no consumer that wants one without the other), and the primitives in the base template (every project would carry about 40 files and a table library with no SPA). A project that installed `admin` before the move follows the upgrade steps in the `saasaloy-shell` skill.

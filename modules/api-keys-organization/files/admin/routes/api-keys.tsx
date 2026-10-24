@@ -3,10 +3,10 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import type { PrincipalLike } from "@repo/auth/permission-rules";
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { PageSkeleton } from "@repo/ui/blocks/admin/page-skeleton";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { PageSkeleton } from "@repo/ui/blocks/shell/page-skeleton";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
 import { ApiKeyWorkspace } from "@admin/components/api-key-workspace";

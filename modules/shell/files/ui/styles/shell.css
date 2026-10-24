@@ -1,0 +1,188 @@
+/* The shell's own layer: what the shell primitives and blocks read beyond the shadcn token
+   set a theme file defines. The shell module writes it, and it imports nothing, so it
+   belongs to no app. Each signed-in app's stylesheet imports its theme first, then this
+   file, then sets any value it wants to change:
+
+     @import "./globals.css";   (admin.css), or "./brand.css" (app.css)
+     @import "./shell.css";
+     :root { --status-open: …; }
+
+   It holds four things:
+
+   1. The `@source` line for the shell primitive set. globals.css already scans blocks/**,
+      containers/** and lib/**, which covers the shell's blocks, containers and helpers.
+      The primitives in components/shell/ are opted in per app, because a project's web
+      app renders none of them.
+   2. Default values for the tokens a theme file does not define: the status pairs, the
+      status pill tones, the sort accent and the destructive text tone.
+   3. The colour mapping that turns each of those into a Tailwind utility.
+   4. The motion the primitives name: the skeleton shimmer and the toast bump and shake.
+
+   WHY `:where()`. The defaults sit at zero specificity, so a theme file's `:root` and
+   `.dark` and an app's own overrides always win, whatever the import order. A shadcn
+   preset that writes `--destructive-foreground` into the theme file keeps its value. One
+   rule follows from it: an app that overrides a token in `:root` overrides it in `.dark`
+   too, or its light value wins in both themes.
+
+   THE DEFAULT VALUES are the ones the approved `app` mockup derived (plan 0074, the "`app`
+   mockup approved" row): the 600 step of Tailwind's emerald, amber and blue ramps on
+   light and the 400 step on dark, the steps the base theme uses for its red
+   `--destructive`. A `-foreground` text tone sits on an 8 % tint of its fill, so on light
+   it drops to the 700 step where the 600 step misses 4.5:1 (emerald, amber). The status
+   pill tones copy the pairs. `status-open` and `accent-sort` take neutral values, because
+   the base theme has no muted blue and no orange. admin.css replaces every one of them
+   with its measured backoffice values. */
+
+@source "../components/shell/**/*.tsx";
+
+:where(:root) {
+  /* Text on a destructive tint. */
+  --destructive-foreground: var(--destructive);
+  --success: oklch(0.596 0.145 163.225);
+  --success-foreground: oklch(0.508 0.118 165.612);
+  --warning: oklch(0.666 0.179 58.318);
+  --warning-foreground: oklch(0.555 0.163 48.998);
+  --info: oklch(0.546 0.245 262.881);
+  --info-foreground: oklch(0.546 0.245 262.881);
+
+  /* The status pill's tones. They are names of their own rather than the pairs above
+     because a theme preset sets `--destructive` with another meaning, and no preset sets a
+     `status-*` key, so an app can pin a status colour that a preset never moves. */
+  --status-ok: var(--success);
+  --status-ok-foreground: var(--success-foreground);
+  --status-warn: var(--warning);
+  --status-warn-foreground: var(--warning-foreground);
+  --status-bad: var(--destructive);
+  --status-bad-foreground: var(--destructive-foreground);
+
+  /* `open` is a solid muted fill, not a tint: a neutral pill one step stronger than the
+     `neutral` tone, which reads --muted-foreground. */
+  --status-open: oklch(0.922 0 0);
+  --status-open-foreground: oklch(0.205 0 0);
+
+  /* The active sort column. One indicator at a time, so it is a colour, not a pair. */
+  --accent-sort: oklch(0.205 0 0);
+}
+
+/* After the light block: both match the root element at zero specificity, so the later
+   rule wins under `.dark`. */
+:where(.dark) {
+  --success: oklch(0.765 0.177 163.223);
+  --success-foreground: oklch(0.765 0.177 163.223);
+  --warning: oklch(0.828 0.189 84.429);
+  --warning-foreground: oklch(0.828 0.189 84.429);
+  --info: oklch(0.707 0.165 254.624);
+  --info-foreground: oklch(0.707 0.165 254.624);
+  --status-open: oklch(0.371 0 0);
+  --status-open-foreground: oklch(0.985 0 0);
+  --accent-sort: oklch(0.922 0 0);
+}
+
+@theme inline {
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --color-status-open: var(--status-open);
+  --color-status-open-foreground: var(--status-open-foreground);
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-foreground: var(--status-ok-foreground);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-foreground: var(--status-warn-foreground);
+  --color-status-bad: var(--status-bad);
+  --color-status-bad-foreground: var(--status-bad-foreground);
+  --color-accent-sort: var(--accent-sort);
+}
+
+/* The skeleton's shimmer and the toast's bump on success and shake on error. The odd and
+   even pairs are the same curve twice, so a second toast of the same kind restarts the
+   animation instead of skipping it. */
+@theme {
+  --animate-skeleton: skeleton 2s -1s infinite linear;
+  --animate-toast-success-odd: toast-success-odd 0.32s
+    cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-success-even: toast-success-even 0.32s
+    cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-odd: toast-error-odd 0.28s cubic-bezier(0.5, 1, 0.89, 1);
+  --animate-toast-error-even: toast-error-even 0.28s
+    cubic-bezier(0.5, 1, 0.89, 1);
+
+  @keyframes skeleton {
+    to {
+      background-position: -200% 0;
+    }
+  }
+
+  @keyframes toast-success-odd {
+    0%,
+    100% {
+      scale: 1;
+    }
+
+    30% {
+      scale: 1.025;
+    }
+
+    60% {
+      scale: 0.99;
+    }
+  }
+
+  @keyframes toast-success-even {
+    0%,
+    100% {
+      scale: 1;
+    }
+
+    30% {
+      scale: 1.025;
+    }
+
+    60% {
+      scale: 0.99;
+    }
+  }
+
+  @keyframes toast-error-odd {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+
+    25%,
+    75% {
+      translate: -3px 0;
+    }
+
+    50% {
+      translate: 3px 0;
+    }
+  }
+
+  @keyframes toast-error-even {
+    0%,
+    100% {
+      translate: 0 0;
+    }
+
+    25%,
+    75% {
+      translate: -3px 0;
+    }
+
+    50% {
+      translate: 3px 0;
+    }
+  }
+}
+
+@layer base {
+  body {
+    /* Counts in the nav and the table sit in a right-aligned column, so figures have to
+       be the same width. */
+    font-variant-numeric: tabular-nums;
+  }
+}

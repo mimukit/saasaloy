@@ -2,21 +2,21 @@ import { FlagIcon } from "lucide-react";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
-import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
-import { Badge } from "@repo/ui/components/admin/badge";
-import { Button } from "@repo/ui/components/admin/button";
+import { EmptyState } from "@repo/ui/blocks/shell/empty-state";
+import { Badge } from "@repo/ui/components/shell/badge";
+import { Button } from "@repo/ui/components/shell/button";
 import {
   Card,
   CardDescription,
   CardHeader,
   CardPanel,
   CardTitle,
-} from "@repo/ui/components/admin/card";
-import { Field, FieldLabel } from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
-import { Label } from "@repo/ui/components/admin/label";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import { Switch } from "@repo/ui/components/admin/switch";
+} from "@repo/ui/components/shell/card";
+import { Field, FieldLabel } from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
+import { Label } from "@repo/ui/components/shell/label";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import { Switch } from "@repo/ui/components/shell/switch";
 import { cn } from "@repo/ui/lib/utils";
 
 // The Flags screen's editor, and nothing else. It is the body of the page: the route

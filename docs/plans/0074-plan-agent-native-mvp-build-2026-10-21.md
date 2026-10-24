@@ -170,7 +170,7 @@ Waits on: Phase 8 for the blocks and the admin change, per "Order of #225 and #2
 
 Done when: in a project with `auth`, `admin`, `email` and `email-console`, a POST to the api's password reset endpoint writes a reset mail to the api's stdout; in a project with no `email`, `add auth` installs no reset file and `auth` still builds; `add email` afterwards backfills the reset file; and the admin sign-in still signs in a seeded admin through the block.
 
-### Phase 8: the `shell` capability (#226)
+### Phase 8: the `shell` capability (#226) (built 2026-10-24)
 
 - Add `modules/shell/` as a capability with `dependsOn: []`. Move the files "`shell` owns" names from `@repo/ui/*/admin` to `@repo/ui/*/shell`, with no auth logic.
 - Add `shell.css` per "`shell` tokens". `admin.css` imports it and keeps its values as overrides.

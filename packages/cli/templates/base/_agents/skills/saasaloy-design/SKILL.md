@@ -17,7 +17,7 @@ Each app has its own token home and its own contract:
 
 Both theme files import `packages/ui/src/styles/globals.css`, which holds the shared Tailwind setup and no token values. Ask which app when the user does not say, and work on one contract at a time. Never read one app's tokens into the other app's contract.
 
-The admin contract also covers the admin primitive set in `packages/ui/src/components/admin/`, its blocks in `packages/ui/src/blocks/admin/` and its containers in `packages/ui/src/containers/admin/`. The web contract covers the base `components/`, the other `blocks/` and the web app.
+The admin contract also covers the shell primitive set in `packages/ui/src/components/shell/`, its blocks in `packages/ui/src/blocks/shell/`, its containers in `packages/ui/src/containers/shell/` and the defaults in `packages/ui/src/styles/shell.css`, as `admin.css` overrides them. The web contract covers the base `components/`, the other `blocks/` and the web app.
 
 The grounding rule controls every mode. Every token value must exist in the project code or in the Tailwind utility that the project uses. Do not choose a nearby value because it looks cleaner.
 

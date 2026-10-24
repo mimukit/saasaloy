@@ -3,8 +3,8 @@ import { Link, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
-import { ShellLayout } from "@repo/ui/containers/admin/shell-layout";
-import type { ShellLinkProps } from "@repo/ui/containers/admin/shell-nav";
+import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
+import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
 
 import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { NAV_COUNTS } from "@admin/components/nav-counts";
