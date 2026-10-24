@@ -7,8 +7,7 @@
   "dependencies": [],
   "envVars": {},
   "removeWarnings": [
-    "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
-    "Custom roles stored in the organization_roles table survive this removal, and nothing reads them once packages/auth/src/permission-rules.ts is gone. Members holding a custom role resolve to the statements of a role name that no longer exists, which is no permissions at all. Reassign them to a base role before you remove this module."
+    "The deployed organizations, members, invitations, and organization_roles tables survive this removal. Run db:generate and review the resulting drop migration before you apply it."
   ],
   "patches": [
     {

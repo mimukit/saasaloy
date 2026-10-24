@@ -89,8 +89,8 @@ export const invitations = sqliteTable(
 //
 // `hasPermission` merges a row over the static role of the same name, so a row named
 // `admin` would extend the static `admin`. `roleLockGuard()` in
-// `packages/auth/src/plugins/role-lock.ts` refuses those three names on write; the unique index below only stops one organization from holding
-// two rows for one name.
+// `packages/auth/src/plugins/role-lock.ts` refuses those three names on write; the
+// unique index below only stops one organization from holding two rows for one name.
 export const organizationRoles = sqliteTable(
   "organization_roles",
   {

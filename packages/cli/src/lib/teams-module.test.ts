@@ -126,11 +126,9 @@ describe("teams module descriptor", () => {
     const descriptor = await readDescriptor();
     const warnings = descriptor.removeWarnings as string[];
 
-    // Two: the tables, then the custom roles those tables hold. The second one came
-    // over from `rbac` when that module dissolved, because `teams` owns the table.
-    expect(warnings).toHaveLength(2);
-    expect(warnings[1]).toMatch(/Custom roles/);
-    expect(warnings[1]).toMatch(/permission-rules\.ts/);
+    // One: the tables. The custom-role warning sits on `multitenant`, because removing it
+    // drops the /roles screen while teams keeps the stored roles live.
+    expect(warnings).toHaveLength(1);
     expect(warnings[0]).toMatch(/organization/);
     expect(warnings[0]).toMatch(/member/);
     expect(warnings[0]).toMatch(/invitation/);

@@ -8,7 +8,8 @@
   "envVars": {},
   "removeWarnings": [
     "The deployed projects table survives this removal. Run db:generate and review the resulting drop migration before you apply it.",
-    "Every route written against requireTenant, forTenant or requirePermission stops compiling once packages/auth/src/tenant.ts, packages/auth/src/permissions.ts and packages/db/src/tenant.ts are gone. Rewrite or delete those routes before you remove this module."
+    "Every route written against requireTenant, forTenant or requirePermission stops compiling once packages/auth/src/tenant.ts, packages/auth/src/permissions.ts and packages/db/src/tenant.ts are gone. Rewrite or delete those routes before you remove this module.",
+    "Custom roles stored in the organization_roles table stay live after this removal: teams keeps dynamicAccessControl, so members holding a custom role keep its statements, but the /roles screen that edits and deletes those roles goes with this module. Edit, reassign or delete custom roles before you remove this module, or manage them afterwards through the Better Auth organization API."
   ],
   "patches": [
     {
