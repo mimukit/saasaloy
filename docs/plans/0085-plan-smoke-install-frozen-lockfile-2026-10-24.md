@@ -39,7 +39,7 @@ Target: a `workflow_dispatch` run of `smoke` on the PR branch logs `` release-sm
 
 Change the install argument list in `scripts/release-smoke.ts`, then prove it with `CI=true` on the dev box and with one dispatched run. It reuses `runQuiet`, `run` and `lintFullScaffold` as they are.
 
-### Phase 1: unfreeze the scaffold installs
+### Phase 1: unfreeze the scaffold installs (built 2026-10-24)
 
 - Add a constant near the top of `scripts/release-smoke.ts`, for example `const SCAFFOLD_INSTALL = ["install", "--no-frozen-lockfile"] as const;`, with a comment: the runner sets `CI=true`, pnpm then freezes the lockfile, and a scaffold's lockfile is never committed, so `add` outgrows it.
 - Use the constant in the three scaffold installs.
