@@ -1,6 +1,8 @@
 import type { Lockfile } from "./lock.js";
 import type { Graph } from "./resolve.js";
 import type { SaasaloyConfig } from "./schema.js";
+import { requestedLabel, subjectOf } from "./requested.js";
+import type { RequestedInput } from "./requested.js";
 
 // `conflictsWith` enforcement for `saasaloy add` — the deterministic core, kept out of
 // commands/add.ts so it can be unit-tested (the commands have no test files).
@@ -141,24 +143,18 @@ const GERUND: Record<ConflictAction, string> = {
 // says so rather than naming a module the user never mentioned.
 function describe(
   conflict: ModuleConflict,
-  requested: string,
+  requested: RequestedInput,
   action: ConflictAction
 ): string {
   const { declaredBy, conflictsWith, installed } = conflict;
 
   if (!installed) {
-    const first =
-      declaredBy === requested
-        ? declaredBy
-        : `${declaredBy} (required by ${requested})`;
-    return `${first} declares a conflict with ${conflictsWith}, and ${GERUND[action]} ${requested} installs both. Add only one of them.`;
+    const first = subjectOf(declaredBy, requested);
+    return `${first} declares a conflict with ${conflictsWith}, and ${GERUND[action]} ${requestedLabel(requested)} installs both. Add only one of them.`;
   }
 
   const incoming = installed === declaredBy ? conflictsWith : declaredBy;
-  const phrase =
-    incoming === requested
-      ? incoming
-      : `${incoming} (required by ${requested})`;
+  const phrase = subjectOf(incoming, requested);
   const sentence =
     installed === declaredBy
       ? `${installed} is already installed and declares a conflict with ${phrase}`
@@ -169,10 +165,10 @@ function describe(
 /** The refusal `add` and `update` print. One line per conflicting pair, under a heading. */
 export function formatConflicts(
   conflicts: ModuleConflict[],
-  requested: string,
+  requested: RequestedInput,
   action: ConflictAction = "add"
 ): string {
-  const heading = `Cannot ${action} ${requested} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
+  const heading = `Cannot ${action} ${requestedLabel(requested)} — module conflict${conflicts.length > 1 ? "s" : ""}:`;
   return [
     heading,
     ...conflicts.map((c) => `  ${describe(c, requested, action)}`),

@@ -1,5 +1,7 @@
 import { isValidRange, satisfies } from "./semver.js";
 import type { Graph } from "./resolve.js";
+import { requestedLabel, subjectOf } from "./requested.js";
+import type { RequestedInput } from "./requested.js";
 
 // `requires.saasaloy` enforcement — "this descriptor needs a CLI at least this new".
 //
@@ -92,14 +94,11 @@ export function detectCliMismatches(
 // the same shape `requires.ts` and `conflicts.ts` use.
 function describe(
   mismatch: CliMismatch,
-  requested: string,
+  requested: RequestedInput,
   cliVersion: string
 ): string {
   const { declaredBy, range, reason } = mismatch;
-  const subject =
-    declaredBy === requested
-      ? declaredBy
-      : `${declaredBy} (required by ${requested})`;
+  const subject = subjectOf(declaredBy, requested);
   if (reason === "unparseable") {
     return `${subject} declares requires.saasaloy "${range}", which isn't a semver range — the module's author has to fix it.`;
   }
@@ -112,10 +111,10 @@ function describe(
 /** The refusal a command prints. One line per mismatch, under a heading. */
 export function formatCliMismatches(
   mismatches: CliMismatch[],
-  requested: string,
+  requested: RequestedInput,
   cliVersion: string
 ): string {
-  const heading = `Cannot apply ${requested} — this CLI is too old for ${mismatches.length > 1 ? "these modules" : "it"}:`;
+  const heading = `Cannot apply ${requestedLabel(requested)} — this CLI is too old for ${mismatches.length > 1 ? "these modules" : "it"}:`;
   return [
     heading,
     ...mismatches.map((m) => `  ${describe(m, requested, cliVersion)}`),

@@ -39,6 +39,7 @@ import {
   persistState,
   pinToLock,
   planDocument,
+  requestedModules,
   runAdd,
   saveEnabledMode,
 } from "./add.js";
@@ -738,7 +739,7 @@ describe("runAdd — enablesTesting and backfill (#242)", () => {
 describe("add — parseArgs", () => {
   it("reads the module name off the first positional", () => {
     expect(parseArgs(["waitlist"])).toMatchObject({
-      name: "waitlist",
+      names: ["waitlist"],
       unknown: [],
     });
   });
@@ -759,7 +760,7 @@ describe("add — parseArgs", () => {
       diff: true,
       dryRun: true,
       force: true,
-      name: "waitlist",
+      names: ["waitlist"],
       unknown: [],
       yes: true,
     });
@@ -785,22 +786,25 @@ describe("add — parseArgs", () => {
     ]);
   });
 
-  it("reports a second positional as an extra argument", () => {
-    expect(parseArgs(["waitlist", "email"]).unknown).toStrictEqual(["email"]);
-    expect(parseArgs(["waitlist", "email"]).name).toBe("waitlist");
+  it("keeps every positional as a name (#233)", () => {
+    expect(parseArgs(["waitlist", "email"]).unknown).toStrictEqual([]);
+    expect(parseArgs(["waitlist", "email"]).names).toStrictEqual([
+      "waitlist",
+      "email",
+    ]);
   });
 
-  it("reports every unknown flag and every extra positional together", () => {
-    expect(
-      parseArgs(["waitlist", "--forse", "email", "--dr-run"]).unknown
-    ).toStrictEqual(["--forse", "--dr-run", "email"]);
+  it("still reports every unknown flag beside several names", () => {
+    const opts = parseArgs(["waitlist", "--forse", "email", "--dr-run"]);
+    expect(opts.unknown).toStrictEqual(["--forse", "--dr-run"]);
+    expect(opts.names).toStrictEqual(["waitlist", "email"]);
   });
 
   it("reads --with as a repeatable value flag in both forms (#223)", () => {
     expect(
       parseArgs(["waitlist", "--with", "database-d1", "--with=email-console"])
     ).toMatchObject({
-      name: "waitlist",
+      names: ["waitlist"],
       unknown: [],
       with: ["database-d1", "email-console"],
     });
@@ -831,13 +835,13 @@ describe("add — parseArgs", () => {
       "owner/repo@v2/waitlist",
       "owner/repo",
     ]) {
-      expect(parseArgs([coord]).name).toBe(coord);
+      expect(parseArgs([coord]).names).toStrictEqual([coord]);
     }
   });
 
-  it("leaves the name undefined when nothing is named", () => {
-    expect(parseArgs([]).name).toBeUndefined();
-    expect(parseArgs(["--dry-run"]).name).toBeUndefined();
+  it("leaves the names empty when nothing is named", () => {
+    expect(parseArgs([]).names).toStrictEqual([]);
+    expect(parseArgs(["--dry-run"]).names).toStrictEqual([]);
   });
 });
 
@@ -904,6 +908,308 @@ describe("add — pinToLock", () => {
     expect(
       pinToLock({ owner: "acme", repo: "kit" }, lockWith({}))
     ).toStrictEqual({ owner: "acme", repo: "kit" });
+  });
+
+  // #233: under several names the forced ones are read, and they share one source.
+  function lockOf(pins: Record<string, string>): Lockfile {
+    const lock = emptyLock();
+    for (const [name, resolved] of Object.entries(pins)) {
+      lock.modules[name] = {
+        ref: "main",
+        resolved,
+        source: "mimukit/saasaloy",
+      };
+    }
+    return lock;
+  }
+
+  it("pins several forced modules that share one SHA", () => {
+    const lock = lockOf({ admin: SHA, teams: SHA });
+    expect(pinToLock({ module: "admin" }, lock, ["admin", "teams"]).ref).toBe(
+      SHA
+    );
+  });
+
+  it("refuses two forced modules pinned to different commits", () => {
+    const other = `9f3a1c2${"b".repeat(33)}`;
+    const lock = lockOf({ admin: other, teams: `b81e04d${"c".repeat(33)}` });
+
+    expect(() =>
+      pinToLock({ module: "admin" }, lock, ["admin", "teams"])
+    ).toThrow(
+      "Cannot re-apply admin (9f3a1c2) and teams (b81e04d) together, they are pinned to different commits. Re-apply them in separate runs, or pass @<ref>."
+    );
+  });
+
+  it("reads no pin when no module is re-applied", () => {
+    const lock = lockOf({ admin: SHA, teams: "c".repeat(40) });
+    expect(pinToLock({ module: "admin" }, lock, []).ref).toBeUndefined();
+  });
+
+  it("lets an explicit @ref settle a split", () => {
+    const lock = lockOf({ admin: SHA, teams: "c".repeat(40) });
+    expect(
+      pinToLock({ module: "admin", ref: "v2" }, lock, ["admin", "teams"]).ref
+    ).toBe("v2");
+  });
+});
+
+// #233: every positional is parsed, and the set has to read from one registry.
+describe(requestedModules, () => {
+  it("takes one name exactly as parseCoordinate reads it", () => {
+    expect(requestedModules(["acme/kit@v2/widget"])).toStrictEqual({
+      names: ["widget"],
+      source: { module: "widget", owner: "acme", ref: "v2", repo: "kit" },
+    });
+    expect(requestedModules(["acme/kit"])).toStrictEqual({
+      names: [],
+      source: { owner: "acme", repo: "kit", ref: undefined },
+    });
+    expect(requestedModules([])).toStrictEqual({ names: [], source: {} });
+  });
+
+  it("keeps argv order and drops a repeated name", () => {
+    expect(
+      requestedModules(["waitlist", "admin", "waitlist"]).names
+    ).toStrictEqual(["waitlist", "admin"]);
+  });
+
+  it("treats a bare name and the default coordinate as one source", () => {
+    const request = requestedModules(["waitlist", "mimukit/saasaloy/admin"]);
+    expect(request.names).toStrictEqual(["waitlist", "admin"]);
+    expect(request.source).toMatchObject({
+      module: "waitlist",
+      owner: "mimukit",
+      repo: "saasaloy",
+    });
+  });
+
+  it("refuses two sources and names the two that differ", () => {
+    expect(() => requestedModules(["waitlist", "acme/kit/teams"])).toThrow(
+      'Cannot add modules from two sources in one run — "waitlist" reads mimukit/saasaloy and "acme/kit/teams" reads acme/kit. Add them in separate runs.'
+    );
+    expect(() => requestedModules(["acme/kit/a", "acme/kit@v2/b"])).toThrow(
+      '"acme/kit@v2/b" reads acme/kit@v2'
+    );
+  });
+
+  it("refuses owner/repo with no module beside other names, with the usage line", () => {
+    expect(() => requestedModules(["waitlist", "acme/kit"])).toThrow(
+      /"acme\/kit" names a registry and no module.*usage: `saasaloy add \[<module>\.\.\./
+    );
+  });
+});
+
+// #233: several names resolve into one graph, print one plan, ask once, and refuse
+// before the first write.
+describe("runAdd — several modules in one run (#233)", () => {
+  let project: string;
+  let registry: string;
+
+  async function writeModule(
+    name: string,
+    extra: Record<string, unknown> = {}
+  ): Promise<void> {
+    const mod = join(registry, name);
+    await mkdir(join(mod, "files"), { recursive: true });
+    await writeFile(
+      join(mod, "registry-item.json"),
+      JSON.stringify({
+        name,
+        type: "saasaloy:feature",
+        files: [{ path: "files/a.ts", target: `@web/${name}.ts` }],
+        ...extra,
+      }),
+      "utf-8"
+    );
+    await writeFile(join(mod, "files", "a.ts"), `${name}\n`, "utf-8");
+  }
+
+  const file = (name: string) => join(project, "apps", "web", `${name}.ts`);
+
+  beforeEach(async () => {
+    project = await mkdtemp(join(tmpdir(), "saasaloy-add-many-"));
+    registry = await mkdtemp(join(tmpdir(), "saasaloy-add-many-reg-"));
+    await mkdir(join(project, "apps", "web"), { recursive: true });
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: { "@web": "apps/web" }, installed: [] }),
+      "utf-8"
+    );
+    await writeModule("base");
+    await writeModule("widget", { dependsOn: ["base"] });
+    await writeModule("gadget", { dependsOn: ["base"] });
+    await writeModule("lefty", { conflictsWith: ["righty"] });
+    await writeModule("righty", { conflictsWith: ["lefty"] });
+    await writeModule("needs-lefty", { dependsOn: ["lefty"] });
+    await writeModule("core", { requiresOneOf: ["driver-a", "driver-b"] });
+    await writeModule("driver-a", { dependsOn: ["core"] });
+    await writeModule("driver-b", { dependsOn: ["core"] });
+    await writeModule("feature-one", { dependsOn: ["core"] });
+    await writeModule("feature-two", { dependsOn: ["core"] });
+    process.env[REGISTRY_ENV] = registry;
+    process.chdir(project);
+  });
+
+  afterEach(async () => {
+    process.chdir(dir);
+    delete process.env[REGISTRY_ENV];
+    await rm(project, { recursive: true, force: true });
+    await rm(registry, { recursive: true, force: true });
+  });
+
+  async function run(args: string[]): Promise<{ code: number; out: string }> {
+    const captured = capture();
+    try {
+      return {
+        code: await runAdd(args),
+        out: stripAnsi(captured.lines.join("")),
+      };
+    } finally {
+      captured.restore();
+    }
+  }
+
+  async function installed(): Promise<string[]> {
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as { installed: string[] };
+    return config.installed;
+  }
+
+  it("writes both modules and their shared prerequisite in one run", async () => {
+    const { code, out } = await run(["widget", "gadget", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("will install: base → widget → gadget");
+    expect(out).toContain("Applied base, widget, gadget");
+    await expect(installed()).resolves.toStrictEqual([
+      "base",
+      "widget",
+      "gadget",
+    ]);
+    for (const name of ["base", "widget", "gadget"]) {
+      await expect(pathExists(file(name))).resolves.toBeTruthy();
+    }
+  });
+
+  it("lists each prerequisite under the root that pulled it in", async () => {
+    const { out } = await run(["needs-lefty", "widget", "--dry-run"]);
+
+    expect(out).toContain("needs-lefty requires: lefty");
+    expect(out).toContain("widget requires: base");
+  });
+
+  it("says there is nothing to do on a second run, and exits 0", async () => {
+    await run(["widget", "gadget", "--yes"]);
+
+    const { code, out } = await run(["widget", "gadget", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("Nothing to do");
+    expect(out).toContain(
+      "widget and gadget and their dependencies are already installed"
+    );
+  });
+
+  it("skips an installed named module with a note, and installs the rest", async () => {
+    await run(["widget", "--yes"]);
+    await rm(file("widget"));
+
+    const { code, out } = await run(["widget", "gadget", "--yes"]);
+
+    expect(code).toBe(0);
+    expect(out).toContain("widget is already installed — skipped");
+    await expect(pathExists(file("gadget"))).resolves.toBeTruthy();
+    await expect(pathExists(file("widget"))).resolves.toBeFalsy();
+  });
+
+  it("re-applies the named modules only under --force", async () => {
+    await run(["widget", "gadget", "--yes"]);
+    for (const name of ["base", "widget", "gadget"]) {
+      await rm(file(name));
+    }
+
+    const { code } = await run(["widget", "gadget", "--force", "--yes"]);
+
+    expect(code).toBe(0);
+    await expect(pathExists(file("widget"))).resolves.toBeTruthy();
+    await expect(pathExists(file("gadget"))).resolves.toBeTruthy();
+    await expect(pathExists(file("base"))).resolves.toBeFalsy();
+  });
+
+  it("refuses every unknown name in one message, and writes nothing", async () => {
+    const { code, out } = await run(["widget", "nosuch", "other", "--dry-run"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain('Unknown modules "nosuch", "other"');
+    await expect(pathExists(file("widget"))).resolves.toBeFalsy();
+  });
+
+  it("refuses a conflict between two named modules before the first write", async () => {
+    const { code, out } = await run(["lefty", "righty", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("Cannot add lefty and righty — module conflict");
+    await expect(installed()).resolves.toStrictEqual([]);
+    await expect(pathExists(file("lefty"))).resolves.toBeFalsy();
+  });
+
+  it("names the root that pulled in a conflicting prerequisite", async () => {
+    const { code, out } = await run([
+      "widget",
+      "needs-lefty",
+      "righty",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(out).toContain("lefty (required by needs-lefty)");
+    await expect(pathExists(file("widget"))).resolves.toBeFalsy();
+  });
+
+  it("answers one requiresOneOf choice for every module in the set with --with", async () => {
+    const { code } = await run([
+      "feature-one",
+      "feature-two",
+      "--with",
+      "driver-a",
+      "--yes",
+    ]);
+
+    expect(code).toBe(0);
+    await expect(installed()).resolves.toStrictEqual([
+      "core",
+      "feature-one",
+      "feature-two",
+      "driver-a",
+    ]);
+  });
+
+  it("names every module in the re-run the unmet requirement suggests", async () => {
+    const { code, out } = await run(["feature-one", "feature-two", "--yes"]);
+
+    expect(code).toBe(2);
+    expect(out).toContain(
+      "saasaloy add feature-one feature-two --with driver-a"
+    );
+  });
+
+  it("puts every named module in argv order into the --dry-run --json plan", async () => {
+    const { code, doc } = await runJson(runAdd, [
+      "gadget",
+      "widget",
+      "--dry-run",
+      "--json",
+    ]);
+
+    expect(code).toBe(0);
+    expect(doc).toMatchObject({
+      install: ["base", "gadget", "widget"],
+      prerequisites: ["base"],
+      requested: ["gadget", "widget"],
+      schemaVersion: 2,
+    });
   });
 });
 
@@ -1020,11 +1326,15 @@ describe("runAdd — --force and the already-installed early return", () => {
     await expect(pathExists(widgetFile())).resolves.toBeFalsy();
   });
 
-  it("refuses an extra positional", async () => {
+  it("takes a second positional as a second module (#233)", async () => {
     const { code, out } = await run(["widget", "base", "--yes"]);
 
-    expect(code).toBe(2);
-    expect(out).toContain("Unknown argument(s): base");
+    expect(code).toBe(0);
+    expect(out).not.toContain("Unknown argument(s)");
+    // `base` is also widget's prerequisite, so it is planned once, ahead of widget.
+    expect(out).toContain("will install: base");
+    await expect(pathExists(baseFile())).resolves.toBeTruthy();
+    await expect(pathExists(widgetFile())).resolves.toBeTruthy();
   });
 
   it("refuses a malformed coordinate", async () => {
@@ -1895,7 +2205,7 @@ describe("runAdd --json (#223)", () => {
         exitCode: 2,
         message: expect.stringContaining("--dry-run --json"),
       },
-      schemaVersion: 1,
+      schemaVersion: 2,
     });
   });
 
@@ -1924,7 +2234,7 @@ describe("runAdd --json (#223)", () => {
 describe(planDocument, () => {
   it("prints the same keys, empty, when everything is already installed", () => {
     expect(
-      planDocument("waitlist", ["api"], undefined, ["api", "waitlist"])
+      planDocument(["waitlist"], ["api"], undefined, ["api", "waitlist"])
     ).toStrictEqual({
       aliasConflicts: [],
       aliases: {},
@@ -1937,7 +2247,7 @@ describe(planDocument, () => {
       links: [],
       patches: [],
       prerequisites: ["api"],
-      requested: "waitlist",
+      requested: ["waitlist"],
       staleOwners: [],
       writesUi: false,
     });

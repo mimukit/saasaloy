@@ -24,7 +24,7 @@ export const EXIT_MERGE_PENDING = 3;
  * catches, sees this type, and exits 2 instead of 1. A plain `Error` stays a 1.
  */
 export class RefusalError extends Error {
-  override readonly name = "RefusalError";
+  override readonly name: string = "RefusalError";
 }
 
 /** True when this error is a refusal saasaloy made, rather than a failure it hit. */

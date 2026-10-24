@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, describe, expect, it } from "vitest";
 import { exitCodeFor, EXIT_REFUSED, isRefusal, RefusalError } from "./exit.js";
-import { confirm, select, text } from "./prompts.js";
+import { confirm, multiselect, select, text } from "./prompts.js";
 
 const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
 const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
@@ -43,6 +43,21 @@ describe("the prompt guard with no terminal", () => {
     expect(exitCodeFor(error)).toBe(EXIT_REFUSED);
     expect((error as Error).message).toBe(
       'No terminal to answer "Install dependencies now?" — pass `--yes` to install, or `--no-install` to skip it.'
+    );
+  });
+
+  it("refuses a multiselect, naming the flag (#233)", async () => {
+    noTerminal();
+    const error = await refusal(() =>
+      multiselect({
+        answeredBy: "one or more module names",
+        message: "Pick modules to add",
+        options: [{ label: "waitlist", value: "waitlist" }],
+      })
+    );
+    expect(error).toBeInstanceOf(RefusalError);
+    expect((error as Error).message).toBe(
+      'No terminal to answer "Pick modules to add" — pass one or more module names.'
     );
   });
 
