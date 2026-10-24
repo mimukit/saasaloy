@@ -20,13 +20,15 @@ import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
   applyBumps,
+  buildCandidates,
   depPath,
   depValue,
   discoverManifests,
+  MAJOR_GROUP_TITLE,
   readManifestDeps,
   semverDelta,
 } from "./update-deps.ts";
-import type { Dep, Manifest, ManifestKind } from "./update-deps.ts";
+import type { Dep, Manifest, ManifestKind, Row } from "./update-deps.ts";
 
 // --- Helpers -----------------------------------------------------------------
 
@@ -280,5 +282,30 @@ describe("semverDelta", () => {
     assert.equal(semverDelta("4.13.5", "4.14.0"), "minor");
     assert.equal(semverDelta("4.13.5", "4.13.6"), "patch");
     assert.equal(semverDelta("4.13.5", "4.13.5"), "none");
+  });
+});
+
+describe("buildCandidates", () => {
+  it("puts a 0.y to 0.z primary in the major group, so it is never pre-checked", () => {
+    const dep: Dep = {
+      bucket: "dependencies",
+      name: "zero-major",
+      spec: "0.16.0",
+      kind: "exact",
+    };
+    const row: Row = {
+      manifest: fixture("registry-item", DESCRIPTOR, [dep]),
+      dep,
+      resolved: {
+        target: "0.17.0",
+        targetOverall: "0.17.0",
+        newerMajor: false,
+      },
+      status: "outdated",
+      candidates: [{ kind: "primary", target: "0.17.0" }],
+    };
+    const [candidate] = buildCandidates([row]);
+    assert.equal(candidate?.kind, "major");
+    assert.equal(candidate?.group, MAJOR_GROUP_TITLE);
   });
 });

@@ -147,7 +147,7 @@ export interface Manifest extends ManifestFile {
 }
 
 /** One resolved (manifest, dep) pair — the unit the report and the picker render. */
-interface Row {
+export interface Row {
   manifest: Manifest;
   dep: Dep;
   resolved: Resolved | null;
@@ -164,7 +164,7 @@ interface Job {
 }
 
 /** One proposed write. */
-interface Candidate {
+export interface Candidate {
   row: Row;
   target: string;
   kind: "primary" | "major";
@@ -709,7 +709,8 @@ const PRIMARY_GROUP_TITLE = {
   minor: "Minor",
   patch: "Patch",
 };
-const MAJOR_GROUP_TITLE = "Major — crosses a major, review before selecting";
+export const MAJOR_GROUP_TITLE =
+  "Major — crosses a major, review before selecting";
 
 function primaryGroupTitle(cur: string, target: string): string {
   const d = semverDelta(cur, target);
@@ -725,7 +726,7 @@ function primaryGroupTitle(cur: string, target: string): string {
 // Lift the policy's candidates onto their rows and give each the report group the
 // picker lists it under. A primary that `semverDelta` reads as major (a `0.y → 0.z`
 // bump) joins the major group, so it is never pre-checked and needs --allow-major.
-function buildCandidates(rows: Row[]): Candidate[] {
+export function buildCandidates(rows: Row[]): Candidate[] {
   const out: Candidate[] = [];
   for (const row of rows) {
     for (const c of row.candidates) {
