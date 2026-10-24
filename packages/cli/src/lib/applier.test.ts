@@ -1456,6 +1456,66 @@ describe("applier — an already-applied patch changes owner along dependsOn (#2
     expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
   });
 
+  it("leaves a gated patch under a module that ships a revision of it in the same slot (#242)", async () => {
+    const config = emptyConfig();
+    const manifest = emptyManifest();
+    const gate = { installed: ["api"] };
+    const base = await waitlistWithRoute();
+    const [op] = base.item.patches ?? [];
+    if (!op) {
+      throw new Error("waitlistWithRoute ships one patch");
+    }
+    const gated = { ...op, when: gate };
+    const core: LoadedModule = {
+      ...base,
+      item: { ...base.item, patches: [gated] },
+    };
+    const api = await apiWorkspace();
+    await executePlan(
+      await plan({
+        install: ["api", "waitlist"],
+        modules: [api, core],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
+
+    // The core's next descriptor revises the op in place; the owner carries the old one.
+    const revised: LoadedModule = {
+      ...core,
+      item: {
+        ...core.item,
+        patches: [
+          {
+            ...gated,
+            import: { name: "waitlist", from: "./routes/waitlist.ts" },
+          } as typeof gated,
+        ],
+      },
+    };
+    const owner = await writeModule("waitlist-owner", {
+      type: "saasaloy:feature",
+      dependsOn: ["waitlist"],
+      patches: [gated],
+    });
+    await executePlan(
+      await plan({
+        install: ["waitlist-owner"],
+        modules: [api, revised, owner],
+        config,
+        manifest,
+      }),
+      root,
+      config,
+      manifest
+    );
+    expect(manifest.patches.map((x) => x.module)).toStrictEqual(["waitlist"]);
+  });
+
   it("lets `remove <owner>` reverse the moved patch, and `remove <core>` leave it", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();

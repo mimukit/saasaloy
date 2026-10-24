@@ -1034,8 +1034,9 @@ export interface ApplyResult {
   patchRefusals: PatchRefusal[];
 }
 
-// Whether a recorded patch's module still ships it in the descriptor this run loaded. A
-// patch changes hands only when its old module dropped it, as a split does. A module that
+// Whether a recorded patch's module still declares it in the descriptor this run loaded,
+// whether or not its `when` holds today. A patch changes hands only when its old module
+// dropped it, as a split does. A module that
 // still declares it keeps the record, so `remove <new module>` never reverses an edit the
 // old one needs. An old module this run did not load cannot be checked, so it keeps the
 // record too: the take-over fails closed (#229).
@@ -1047,9 +1048,12 @@ function stillDeclares(
   if (!loaded) {
     return true;
   }
-  const recorded = JSON.stringify(entry.patch);
-  return (loaded.item.patches ?? []).some(
-    (op) => op.file === entry.file && JSON.stringify(op) === recorded
+  // The same test `patchShips` uses to keep a written gated patch managed (#242): the
+  // exact op, or a revision of it in the same slot under the same `when`, still counts as
+  // the old module's own.
+  const ops = loaded.item.patches ?? [];
+  return ops.some((op) =>
+    isPatchTracked({ patches: [entry] }, entry.module, op, ops)
   );
 }
 
