@@ -1,6 +1,6 @@
 # QA Plan: an agent drives every CLI command with no TTY
 
-_Generated 2026-10-23 · against `eecc9a8` (clean), gate re-run after the rebase onto `main` at `c404949` · covers issue #223: the no-TTY guard, the answering flags, `--json` output and module metadata_
+_Generated 2026-10-23 · against `eecc9a8` (clean), gate re-run after the rebase onto `main` at `c404949`, and after the review fix round and a second rebase at `16ba3bd` · covers issue #223: the no-TTY guard, the answering flags, `--json` output and module metadata_
 
 ## Summary
 - Every `saasaloy` command now runs with no terminal: a prompt either has a flag that answers it, or the command exits 2 and names that flag.
@@ -227,6 +227,7 @@ bash /tmp/afk223qa/checks3.sh
 
 All results below ran at `eecc9a8` with a clean tree. The scripts run the built CLI in `.dev/qa223/` with stdin from `/dev/null` and stdout to a file, so no command has a TTY.
 
+- ✅ Review fix round (2026-10-24): a four-pass review found 0 blockers, 2 should-fix and 9 nits, and commit `a2fdbde` fixed all 11. A second rebase took in PR #166, which merged `entitlements` into `billing`, so the registry now holds 43 modules. At `16ba3bd`, `pnpm typecheck`, `pnpm lint`, `pnpm test` and the build exit 0. `pnpm --filter saasaloy test:e2e` fails only the same 4 tests. `doctor modules` → exit 0, "No problems found." `list --json` → 43 modules, none missing `description`, `stage` or `needs`. `src/commands/no-tty.test.ts` now also runs each command inside a scaffolded project, which reaches the prompts that sit behind project detection.
 - ✅ After the rebase onto `origin/main` (29 new commits, including the config capability), the gate ran again at `c404949`: `pnpm typecheck`, `pnpm lint`, `pnpm test` and `pnpm --filter saasaloy build` exit 0; `pnpm --filter saasaloy test:e2e` fails only the same 4 tests; `doctor modules` → exit 0, "No problems found." The behaviour scripts below ran at `eecc9a8`. In `packages/cli/src/commands/`, `main` changed only `doctor.ts` (two dropped doctor checks), and `doctor modules` above re-ran on it.
 - ✅ `pnpm typecheck` → exit 0
 - ✅ `pnpm lint` → exit 0
