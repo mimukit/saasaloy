@@ -112,6 +112,18 @@
   --status-open-foreground: oklch(0.347 0.067 253.68);
   --accent-sort: oklch(0.579 0.158 41.66);
 
+  /* The status pill's three state tones. They copy the success, warning and destructive
+     pairs below, value for value, under names of their own: a theme preset sets
+     `--destructive` and `--destructive-foreground` with another meaning, and no preset
+     sets a `status-*` key, so a status keeps its colour under any preset. The fill
+     tints at 8 % on light and 16 % on dark; the foreground is the text on that tint. */
+  --status-ok: oklch(0.696 0.17 162.48);
+  --status-ok-foreground: oklch(0.508 0.118 165.612);
+  --status-warn: oklch(0.769 0.188 70.08);
+  --status-warn-foreground: oklch(0.555 0.163 48.998);
+  --status-bad: oklch(0.501 0.178 28.7);
+  --status-bad-foreground: oklch(0.505 0.213 27.518);
+
   /* The status pairs the admin primitives read. Each pair is a fill and a text tone:
      `--success` tints a badge or an alert, and `--success-foreground` is the darker
      text on that tint, never a contrast colour for a solid fill. `--destructive-foreground`
@@ -170,6 +182,14 @@
   --status-open-foreground: oklch(0.985 0 0);
   --accent-sort: oklch(0.729 0.152 39.51);
 
+  /* The state tones on dark, copied from the success, warning and destructive pairs. */
+  --status-ok: oklch(0.696 0.17 162.48);
+  --status-ok-foreground: oklch(0.765 0.177 163.223);
+  --status-warn: oklch(0.769 0.188 70.08);
+  --status-warn-foreground: oklch(0.828 0.189 84.429);
+  --status-bad: oklch(0.704 0.191 22.216);
+  --status-bad-foreground: oklch(0.704 0.191 22.216);
+
   /* The same pairs on dark: the fill keeps its 500 step and the text tone lifts to the
      400 step, so it reads on a tinted dark fill. */
   --destructive-foreground: oklch(0.704 0.191 22.216);
@@ -183,8 +203,8 @@
 
 /* The colour mapping and the radius scale repeat web.css's on purpose: each theme file
    holds its own `@theme inline` and `dark` variant, because globals.css holds neither
-   (web.css says why). The last three lines are the admin app's own: the two extra
-   accents. */
+   (web.css says why). The `status-*` and `accent-sort` lines are the admin app's own:
+   the two extra accents and the status pill's three state tones. */
 @theme inline {
   --radius-sm: calc(var(--radius) - 4px);
   --radius-md: calc(var(--radius) - 2px);
@@ -223,6 +243,12 @@
   --color-sidebar-ring: var(--sidebar-ring);
   --color-status-open: var(--status-open);
   --color-status-open-foreground: var(--status-open-foreground);
+  --color-status-ok: var(--status-ok);
+  --color-status-ok-foreground: var(--status-ok-foreground);
+  --color-status-warn: var(--status-warn);
+  --color-status-warn-foreground: var(--status-warn-foreground);
+  --color-status-bad: var(--status-bad);
+  --color-status-bad-foreground: var(--status-bad-foreground);
   --color-accent-sort: var(--accent-sort);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-info: var(--info);

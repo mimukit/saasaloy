@@ -160,12 +160,12 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 | `PageBody` | `containers/admin/page-body` | `children` | The padded, scrolling body under the header, for cards, forms and editors. A list page that hands its height to `DataTable` does not need it. |
 | `PageLayout` | `containers/admin/page-layout` | `children`, `detail?`, `detailLabel?`, `onDetailClose?` | Puts a list beside its detail. `detail` docks as a column at `md` and up and opens as a bottom sheet below it; the same node either way. Passing `undefined` closes both. |
 | `DataTable` | `blocks/admin/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `emptyState?` | See below. |
-| `DetailPanel` | `blocks/admin/detail-panel` | `title`, `onClose`, `description?`, `media?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. It draws no border; `PageLayout` supplies the edge. |
+| `DetailPanel` | `blocks/admin/detail-panel` | `title`, `onClose`, `description?`, `media?`, `status?`, `banner?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `footer?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. `status` renders after the title in the header, for one `StatusPill` or two; when the header shows the status, drop the status attribute row. `banner` renders under the header and above the tabs and does not scroll; pass an `Alert` from `components/admin/alert`. `footer` is pinned under the scrolling body behind a hairline, for the record's main decision such as Confirm and Reject. `actions` stays inside the scrolling body, for in-body controls such as a role select. A panel with none of the three renders as before. It draws no border; `PageLayout` supplies the edge. |
 | `FilterChips` | `blocks/admin/filter-chips` | `chips`, `selectedId`, `onSelect`, `label` | Each chip is a real `button` with `aria-pressed`. Filtering is the route's. |
 | `AttributeList` | `blocks/admin/attribute-list` | `items` | A `dl` of label and value. An empty value renders as an em dash. |
 | `EmptyState` | `blocks/admin/empty-state` | `title`, `description?`, `icon?`, `action?` | The filler for `DataTable`'s `emptyState`. Write different words for an empty list and a list filtered down to nothing. |
 | `ErrorState` | `blocks/admin/error-state` | `code`, `title?`, `description?`, `detail?`, `primaryAction?`, `secondaryAction?` | The admin error screen, with the words from `content/errors.ts`. |
-| `StatusPill` | `components/admin/status-pill` | `label`, `tone?` | `neutral` or `open`, the muted blue of a live state. The route maps a value onto a tone. |
+| `StatusPill` | `components/admin/status-pill` | `label`, `tone?`, `icon?` | Five tones: `neutral` (the default), `open` (the muted blue of a live state), `ok` (settled, such as paid or verified), `warn` (waiting on someone, such as pending or open) and `bad` (a failure, such as site closed). Use it for a value that is a state; a tag such as a plan name, a flag type or a count stays a `Badge`. The route maps a value onto a tone. |
 
 `DataTable` is the only file that imports `@tanstack/react-table`, and that is the point: a caller describes its screen with `columns` and `rows` and never sees a `ColumnDef` or a sorting state. A column is:
 
@@ -185,9 +185,9 @@ Inside a page, build every control from the primitive set: `Field` with `FieldLa
 - The row type is derived from the query's own return type, so a field dropped in `apps/api` lands as a typecheck failure here.
 - `PageHeader` shows `data.total`, the api's count. The endpoint caps its answer at 100 users, so the loaded page and the real total can differ.
 - `FilterChips` narrows the loaded rows by role, in the component, with no refetch.
-- `DataTable` renders name with an avatar, email, role as a `StatusPill`, verified as a success or warning `Badge`, and created. The columns are a module-scope constant.
+- `DataTable` renders name with an avatar, email, role as a `StatusPill`, verified as an `ok` or `warn` `StatusPill`, and created. The columns are a module-scope constant.
 - An empty list shows one `EmptyState`, and a list filtered to nothing shows another with a "Show all users" button.
-- The selected user is `useState` in the route. The route builds the `DetailPanel` and hands it to `PageLayout` as `detail`.
+- The selected user is `useState` in the route. The route builds the `DetailPanel`, with the role pill in its `status` slot, and hands it to `PageLayout` as `detail`.
 - `UsersError` is the worked example of a route overriding the router's default error screen.
 
 Copy that split when you add a screen: **the route owns the state and the data, the blocks own the pixels.**
@@ -364,6 +364,7 @@ The palette is a three-step neutral ramp measured off the reference screenshots 
 Beyond the shadcn set, `admin.css` declares the status pairs the primitives read (`--success`, `--warning`, `--info` and `--destructive-foreground`, each a fill tone and a darker text tone), the skeleton and toast keyframes, and two accents, all surfaced through `@theme inline`:
 
 - `--status-open` (and `--status-open-foreground`) — the muted blue of `StatusPill`'s `open` tone and of a primary circular action.
+- `--status-ok`, `--status-warn` and `--status-bad` (each with a `-foreground`) — `StatusPill`'s `ok`, `warn` and `bad` tones. They copy the `--success`, `--warning` and `--destructive` values, and they exist so a theme preset, which sets `--destructive` and `--destructive-foreground` with another meaning, never repaints a status. No preset sets a `status-*` key.
 - `--accent-sort` — the orange on `DataTable`'s active sort header. It is reserved for one indicator at a time and for an AI surface. It is never a section background, and `StatusPill` deliberately has no orange tone.
 
 **Dark by default, and every stored choice wins — `system` included.** `applyStartingTheme()` in `src/main.tsx` runs above `createRoot` and is one line: `setTheme(hasChosenTheme() ? getStoredTheme() : "dark")`.

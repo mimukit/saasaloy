@@ -6,7 +6,7 @@ import {
 } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { CheckIcon, UsersRoundIcon } from "lucide-react";
+import { UsersRoundIcon } from "lucide-react";
 import { useState } from "react";
 
 import { DataTable } from "@repo/ui/blocks/admin/data-table";
@@ -16,8 +16,8 @@ import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
 import { ErrorState } from "@repo/ui/blocks/admin/error-state";
 import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
-import { Badge } from "@repo/ui/components/admin/badge";
 import { Button } from "@repo/ui/components/admin/button";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { toastManager } from "@repo/ui/components/admin/toast";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 import { errors } from "@repo/ui/content/errors";
@@ -75,6 +75,16 @@ type Organization = Awaited<
 // needs to sort on it.
 type OrganizationRow = Organization & { isActive: boolean };
 
+// The active organization is the live one and takes the `ok` tone; every other one is
+// simply not in use, so it stays neutral rather than reading as a fault.
+function ActiveStatus({ active }: { active: boolean }) {
+  return active ? (
+    <StatusPill label="Active" tone="ok" />
+  ) : (
+    <StatusPill label="Not active" tone="neutral" />
+  );
+}
+
 // The table's shape, at module scope, so it is a constant rather than an array rebuilt
 // every render, and the `cell` renderers stay out of the render pass.
 const COLUMNS: readonly DataTableColumn<OrganizationRow>[] = [
@@ -106,15 +116,7 @@ const COLUMNS: readonly DataTableColumn<OrganizationRow>[] = [
     header: "Status",
     value: (organization) => organization.isActive,
     sortable: true,
-    cell: (organization) =>
-      organization.isActive ? (
-        <Badge variant="success">
-          <CheckIcon />
-          Active
-        </Badge>
-      ) : (
-        <Badge variant="outline">Not active</Badge>
-      ),
+    cell: (organization) => <ActiveStatus active={organization.isActive} />,
   },
   {
     id: "created",
@@ -196,19 +198,9 @@ function Teams() {
                 <AvatarFallback>{initialsOf(selected.name)}</AvatarFallback>
               </Avatar>
             }
+            status={<ActiveStatus active={selected.isActive} />}
             onClose={closeDetail}
             attributes={[
-              {
-                label: "Status",
-                value: selected.isActive ? (
-                  <Badge variant="success">
-                    <CheckIcon />
-                    Active
-                  </Badge>
-                ) : (
-                  <Badge variant="outline">Not active</Badge>
-                ),
-              },
               { label: "Slug", value: selected.slug },
               { label: "Organization id", value: selected.id },
               {

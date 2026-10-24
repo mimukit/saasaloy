@@ -1,7 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { CheckIcon, IdCardIcon, ShieldIcon, UsersIcon } from "lucide-react";
+import { IdCardIcon, ShieldIcon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
 import { DataTable } from "@repo/ui/blocks/admin/data-table";
@@ -12,7 +12,6 @@ import { ErrorState } from "@repo/ui/blocks/admin/error-state";
 import { FilterChips } from "@repo/ui/blocks/admin/filter-chips";
 import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
-import { Badge } from "@repo/ui/components/admin/badge";
 import { Button } from "@repo/ui/components/admin/button";
 import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
@@ -62,6 +61,19 @@ type RoleFilter = (typeof ROLE_FILTERS)[number]["id"];
  */
 function roleOf(user: AdminUser): string {
   return user.role ?? "user";
+}
+
+/**
+ * A verified address is the settled state and takes the `ok` tone; an unverified one is
+ * waiting on the user, so it reads as `warn` (pending) rather than `bad`. The Verified
+ * column and the panel's Access group both render it, so the rule lives once.
+ */
+function VerifiedStatus({ verified }: { verified: boolean }) {
+  return verified ? (
+    <StatusPill label="Verified" tone="ok" />
+  ) : (
+    <StatusPill label="Pending" tone="warn" />
+  );
 }
 
 // The table's shape, at module scope. It depends on no state, so hoisting it out of the
@@ -115,17 +127,7 @@ const COLUMNS: readonly DataTableColumn<AdminUser>[] = [
     header: "Verified",
     value: (user) => user.emailVerified,
     sortable: true,
-    // A verified address is the settled state and takes the success badge; an
-    // unverified one is waiting on the user, so it reads as pending rather than wrong.
-    cell: (user) =>
-      user.emailVerified ? (
-        <Badge variant="success">
-          <CheckIcon />
-          Verified
-        </Badge>
-      ) : (
-        <Badge variant="warning">Pending</Badge>
-      ),
+    cell: (user) => <VerifiedStatus verified={user.emailVerified} />,
   },
   {
     id: "created",
@@ -192,21 +194,18 @@ function Users() {
                 <AvatarFallback>{initialsOf(selected.name)}</AvatarFallback>
               </Avatar>
             }
+            // The role is the record's status, so it sits in the header beside the name
+            // rather than in an attribute row.
+            status={
+              <StatusPill
+                label={roleOf(selected)}
+                tone={roleOf(selected) === ADMIN_ROLE ? "open" : "neutral"}
+              />
+            }
             onClose={() => {
               setSelectedId(null);
             }}
-            attributes={[
-              {
-                label: "Role",
-                value: (
-                  <StatusPill
-                    label={roleOf(selected)}
-                    tone={roleOf(selected) === ADMIN_ROLE ? "open" : "neutral"}
-                  />
-                ),
-              },
-              { label: "Email", value: selected.email },
-            ]}
+            attributes={[{ label: "Email", value: selected.email }]}
             groups={[
               {
                 id: "account",
@@ -233,7 +232,7 @@ function Users() {
                   { label: "Role", value: roleOf(selected) },
                   {
                     label: "Email verified",
-                    value: selected.emailVerified ? "Yes" : "No",
+                    value: <VerifiedStatus verified={selected.emailVerified} />,
                   },
                 ],
               },

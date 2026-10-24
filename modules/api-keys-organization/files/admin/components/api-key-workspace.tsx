@@ -32,7 +32,6 @@ import {
   AlertDialogTitle,
   AlertDialogTrigger,
 } from "@repo/ui/components/admin/alert-dialog";
-import { Badge } from "@repo/ui/components/admin/badge";
 import { Button } from "@repo/ui/components/admin/button";
 import { Checkbox } from "@repo/ui/components/admin/checkbox";
 import {
@@ -55,6 +54,7 @@ import { Fieldset, FieldsetLegend } from "@repo/ui/components/admin/fieldset";
 import { Input } from "@repo/ui/components/admin/input";
 import { Label } from "@repo/ui/components/admin/label";
 import { Spinner } from "@repo/ui/components/admin/spinner";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { toastManager } from "@repo/ui/components/admin/toast";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 
@@ -142,6 +142,16 @@ function toggleScope(
   return draft;
 }
 
+// An enabled key is live and takes the `ok` tone; a disabled one is switched off on
+// purpose, so it stays neutral rather than reading as a fault.
+function KeyStatus({ enabled }: { enabled: boolean }) {
+  return enabled ? (
+    <StatusPill label="Enabled" tone="ok" />
+  ) : (
+    <StatusPill label="Disabled" tone="neutral" />
+  );
+}
+
 // The table's shape, at module scope: it reads no state, so it stays one constant array
 // and its `cell` renderers stay out of the render pass. The scope is not a column. It is
 // too wide for a row, so it lives in the detail panel.
@@ -165,12 +175,7 @@ const COLUMNS: readonly DataTableColumn<KeyRow>[] = [
     header: "Status",
     value: (row) => row.enabled,
     sortable: true,
-    cell: (row) =>
-      row.enabled ? (
-        <Badge variant="success">Enabled</Badge>
-      ) : (
-        <Badge variant="secondary">Disabled</Badge>
-      ),
+    cell: (row) => <KeyStatus enabled={row.enabled} />,
   },
   {
     id: "expires",
@@ -351,14 +356,11 @@ export function ApiKeyWorkspace({
             description={
               <code className="font-mono">{prefixOf(selected)}</code>
             }
+            status={<KeyStatus enabled={selected.enabled} />}
             onClose={() => {
               setSelectedId(null);
             }}
             attributes={[
-              {
-                label: "Status",
-                value: selected.enabled ? "Enabled" : "Disabled",
-              },
               { label: "Expires", value: formatDate(selected.expiresAt) },
               { label: "Last used", value: formatDate(selected.lastRequest) },
               { label: "Key id", value: selected.id },

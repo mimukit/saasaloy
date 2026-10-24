@@ -23,9 +23,15 @@ import {
 } from "@repo/ui/components/admin/tabs";
 import { cn } from "@repo/ui/lib/utils";
 
-// The panel a selected record opens in: a header with the record's face and name, an
-// optional tab strip, then a scrolling body of attributes, collapsible groups, and the
-// record's actions.
+// The panel a selected record opens in: a header with the record's face, name and
+// status, an optional banner and tab strip, then a scrolling body of attributes,
+// collapsible groups, and the record's actions, and an optional pinned footer.
+//
+// Only the body scrolls. The header, the banner and the footer stay in view however long
+// the body grows, so a warning about the record and the decision it waits on are never
+// scrolled away. `actions` stays inside the body on purpose: a role select or a members
+// form can be tall, and pinning it would leave no room for the record. A panel that sets
+// none of `status`, `banner` and `footer` renders exactly as it did before they existed.
 //
 // The panel is route-owned. It holds no selection state and fetches nothing — the route
 // decides which row is selected, builds the groups from it, and hands the whole panel to
@@ -63,6 +69,9 @@ export function DetailPanel({
   groups,
   tabs,
   actions,
+  status,
+  banner,
+  footer,
   onOpenInNew,
   onClose,
   className,
@@ -79,6 +88,15 @@ export function DetailPanel({
   tabs?: readonly DetailTab[];
   /** The record's controls, below the attributes: a role select, a destructive button. */
   actions?: ReactNode;
+  /** The record's state, after the title in the header: one StatusPill, or two. */
+  status?: ReactNode;
+  /**
+   * A note about the record, under the header and above the tabs, that does not scroll.
+   * Pass an `Alert` from `ui/components/admin/alert`; the panel adds only the gutter.
+   */
+  banner?: ReactNode;
+  /** The record's main decision, pinned under the body behind a hairline. */
+  footer?: ReactNode;
   /** Renders the open-in-new action when given. Omit it and the action is gone. */
   onOpenInNew?: () => void;
   onClose: () => void;
@@ -135,7 +153,17 @@ export function DetailPanel({
       <header className="border-border flex shrink-0 items-center gap-3 border-b px-4 py-3">
         {media}
         <div className="min-w-0 flex-1">
-          <h2 className="truncate text-sm font-semibold">{title}</h2>
+          {status === undefined ? (
+            <h2 className="truncate text-sm font-semibold">{title}</h2>
+          ) : (
+            // The title gives way to the status: it truncates, the pills never do.
+            <div className="flex min-w-0 items-center gap-2">
+              <h2 className="min-w-0 truncate text-sm font-semibold">
+                {title}
+              </h2>
+              <span className="flex shrink-0 items-center gap-1">{status}</span>
+            </div>
+          )}
           {description === undefined ? null : (
             <p className="text-muted-foreground truncate text-xs">
               {description}
@@ -163,6 +191,10 @@ export function DetailPanel({
           <XIcon />
         </Button>
       </header>
+
+      {banner === undefined ? null : (
+        <div className="shrink-0 px-4 pt-3">{banner}</div>
+      )}
 
       {tabs === undefined || tabs.length === 0 ? (
         <ScrollArea className="min-h-0 flex-1">{details}</ScrollArea>
@@ -201,6 +233,12 @@ export function DetailPanel({
             </TabsPanel>
           ))}
         </Tabs>
+      )}
+
+      {footer === undefined ? null : (
+        <footer className="border-border flex shrink-0 flex-col gap-2 border-t px-4 py-3">
+          {footer}
+        </footer>
       )}
     </section>
   );

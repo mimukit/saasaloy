@@ -7,7 +7,6 @@ import { useMemo } from "react";
 import { ErrorState } from "@repo/ui/blocks/admin/error-state";
 import { PageHeader } from "@repo/ui/blocks/admin/page-header";
 import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
-import { Badge } from "@repo/ui/components/admin/badge";
 import { Button, buttonVariants } from "@repo/ui/components/admin/button";
 import {
   Card,
@@ -17,6 +16,7 @@ import {
   CardPanel,
   CardTitle,
 } from "@repo/ui/components/admin/card";
+import { StatusPill } from "@repo/ui/components/admin/status-pill";
 import { PageBody } from "@repo/ui/containers/admin/page-body";
 import { PageLayout } from "@repo/ui/containers/admin/page-layout";
 import { errors } from "@repo/ui/content/errors";
@@ -133,11 +133,11 @@ function Dashboard() {
               <CardDescription>API health</CardDescription>
               <CardTitle className="flex flex-wrap items-center gap-2">
                 {/* "ok" is the one healthy answer; anything else is worth a second look,
-                    so it takes the warning badge rather than a quiet neutral one. */}
+                    so it takes the `warn` tone rather than a quiet neutral one. */}
                 {status === "ok" ? (
-                  <Badge variant="success">Healthy</Badge>
+                  <StatusPill label="Healthy" tone="ok" />
                 ) : (
-                  <Badge variant="warning">{status ?? "Unknown"}</Badge>
+                  <StatusPill label={status ?? "Unknown"} tone="warn" />
                 )}
                 <span className="text-muted-foreground text-sm font-normal">
                   {health.dataUpdatedAt === 0
