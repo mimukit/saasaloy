@@ -178,14 +178,15 @@ export default defineConfig({
     // which `saasaloy add shell` writes (`admin` and `app` install it). Its names repeat
     // the base ones (`button`, `card`), so an editor's autocomplete offers both and the
     // wrong one renders with no error, in the web app's styling. Inside those apps and the
-    // shell and admin folders of @repo/ui, a base primitive or a base block with a shell
-    // twin is a lint error. A project without a signed-in app has no file under these
-    // globs, so the rule never fires there.
+    // shell, admin and auth folders of @repo/ui, a base primitive or a base block with a
+    // shell twin is a lint error. A project without a signed-in app has no file under
+    // these globs, so the rule never fires there.
     {
       files: [
         "apps/admin/**",
         "apps/app/**",
         "packages/ui/src/blocks/admin/**",
+        "packages/ui/src/blocks/auth/**",
         "packages/ui/src/blocks/shell/**",
         "packages/ui/src/components/shell/**",
         "packages/ui/src/containers/shell/**",

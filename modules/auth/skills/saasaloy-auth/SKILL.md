@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -405,15 +405,117 @@ await client.signIn.email({ email, password });
 
 `adminClient()` rides on the admin client only, mirroring the server's `admin()`, because its endpoints answer only on `/admin/auth`. That is what types `session.user.role` and puts `auth.admin.*` on the admin app's client. Handing those methods to a browser grants nothing; the server authorizes every call. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
 
+## Wire-up: the sign-in and sign-up blocks
+
+`auth` ships two blocks into `@repo/ui`, with the frame they share. Each entry carries `when: { installed: ["shell"] }`, because the blocks render the `shell` primitives. A project with no signed-in app gets none of them. `saasaloy add admin` or `saasaloy add app` brings `shell`, and the same run writes the blocks (the backfill).
+
+| File | Exports |
+|---|---|
+| `packages/ui/src/blocks/auth/sign-in.tsx` | `SignInCard`, `SignInValues` |
+| `packages/ui/src/blocks/auth/sign-up.tsx` | `SignUpCard`, `SignUpValues` |
+| `packages/ui/src/blocks/auth/auth-card.tsx` | `AuthCard`, `AuthAlert`, `useAuthSubmit`, the frame both cards use |
+
+The blocks do no IO, per the `@repo/ui` rule. They import no auth client, no router, no store and no env. The app renders a block on its own route and owns the call:
+
+- **`onSubmit(values)` returns `Promise<string | undefined>`.** Return a message and the card shows it in a `role="alert"` line above the button. Return `undefined` (or nothing) on success, after you navigate. Do not write `string | void`: the project lint rejects `void` in a union, and the type does not match.
+- **Catch your own network failure.** A throw resets the button and reaches the console, but the card shows nothing. Turn it into a returned message, as the example below does.
+- **`SignInCard` takes `signUpHref?`, `title?` and `description?`.** With no `signUpHref`, the card has no footer. `admin` passes its own title and description and no `signUpHref`.
+- **`SignUpCard` takes `signInHref`, `title?` and `description?`.** Its password field asks for 12 characters, the server's `minPasswordLength` (see "Password rules"). Change both together.
+- **The block renders the card, not the page.** Centre it on your app's canvas: `app` uses `bg-sidebar`, `admin` uses `bg-background`.
+
+A sign-in route in a TanStack Router app. `@app/lib/auth` stands for the app's own client file: `createClient(apiBaseUrl)` from `@repo/auth/client`, with the url from the app's env gate, as `apps/admin/src/lib/auth.ts` does with `createAdminClient`.
+
+```tsx
+import { createFileRoute, useRouter } from "@tanstack/react-router";
+import { SignInCard } from "@repo/ui/blocks/auth/sign-in";
+import type { SignInValues } from "@repo/ui/blocks/auth/sign-in";
+import { auth } from "@app/lib/auth";
+
+export const Route = createFileRoute("/sign-in")({ component: SignInScreen });
+
+function SignInScreen() {
+  const router = useRouter();
+
+  async function handleSignIn(values: SignInValues): Promise<string | undefined> {
+    try {
+      const { error } = await auth.signIn.email(values);
+      if (error) {
+        return error.message ?? "Sign-in failed. Check the email and password.";
+      }
+    } catch {
+      return "Could not reach the api. Check that it is running.";
+    }
+    await router.navigate({ to: "/" });
+  }
+
+  return (
+    <main className="bg-sidebar flex min-h-dvh items-center justify-center p-4">
+      <SignInCard onSubmit={handleSignIn} signUpHref="/sign-up" />
+    </main>
+  );
+}
+```
+
+`SignUpCard` follows the same shape, with `auth.signUp.email({ name, email, password })` and `signInHref="/sign-in"`.
+
+**Styles.** The blocks are under `packages/ui/src/blocks/`, which `globals.css` scans. An app stylesheet that does not import `globals.css`, such as one built on `brand.css`, adds `@source "../blocks/auth/**/*.tsx";`, or the card renders unstyled with no error.
+
+**Lint.** The base `oxlint.config.mjs` twin-primitive rule covers `packages/ui/src/blocks/auth/**`, so a base primitive in a block is a lint error. A project made before this rule copies the glob from the base template.
+
+**Removal.** `saasaloy remove shell` refuses while `admin` or `app` is installed. When it runs, it deletes the three block files with it, so delete each route that imports them first.
+
+## Password rules
+
+Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update auth`.
+
+## Password reset mail
+
+`auth` does not depend on `email`. When `email` is in the project, `auth` ships the reset mail as well. Each of these entries carries `when: { installed: ["email"] }` (ADR 0054):
+
+| Entry | What it does |
+|---|---|
+| `packages/auth/src/plugins/reset-password-mail.ts` | A Better Auth plugin whose `init()` sets `emailAndPassword.sendResetPassword`. It sends through `createEmail(env)`, with `env` from `cloudflare:workers`. |
+| `resetPasswordMail()` in `auth`'s `plugins` array | A `plugin-array` patch. Only the client instance sends the mail: `adminAuth` reads the same `accounts` table, so a new password counts there too. |
+| `@repo/email` in `packages/auth/package.json` | A `package-json-dependency` patch. |
+| `packages/email/src/templates/reset-password.ts` | The template, in the `email` module's convention. Edit it like `welcome.ts`. |
+| `apps/api/src/routes/reset-password.test.ts` | The route test, only when testing is on too. It replaces `createEmail` with a sender that keeps each message. |
+
+`saasaloy add email` in a project that already has `auth` writes all of them in the same run (the backfill). `saasaloy add auth` in a project with `email` writes them at once.
+
+**Use it.** The client calls Better Auth's endpoint, and the mail goes to the address if it has an account:
+
+```ts
+await authClient.requestPasswordReset({
+  email,
+  redirectTo: `${location.origin}/reset-password`,
+});
+```
+
+`POST /auth/request-password-reset` answers `200` with the same message for a known and an unknown address, so it does not tell a caller which addresses have accounts. The mail carries Better Auth's link, `<BETTER_AUTH_URL>/auth/reset-password/<token>?callbackURL=<redirectTo>`. That endpoint checks the token and redirects to `redirectTo` with `?token=`. The `redirectTo` origin has to be in `trustedOrigins` (`CORS_ORIGINS`, or the localhost dev list), or the request answers `403`. The token lives for 60 minutes. The page that reads the token and calls `authClient.resetPassword({ newPassword, token })` is the app's: no module ships it yet (#230 plans it).
+
+**Check it locally.** With `email-console` and `EMAIL_PROVIDER=console`, the mail prints to the api's stdout:
+
+```sh
+curl -X POST http://localhost:4000/auth/request-password-reset \
+  -H 'content-type: application/json' -H 'origin: http://localhost:3000' \
+  -d '{"email":"member@example.test","redirectTo":"http://localhost:3000/reset-password"}'
+```
+
+**Failure modes.**
+
+- The request answers `400` with `code: "RESET_PASSWORD_DISABLED"`: `email` is not installed, or the `resetPasswordMail()` line is missing from `auth`'s `plugins`. Run `saasaloy add email`, or put the line back.
+- The request answers `200` but no mail arrives: the sender threw. Better Auth logs the error and answers as usual, on purpose. Read the api log. The usual causes are an unset `EMAIL_PROVIDER` or `EMAIL_FROM`, and a `BETTER_AUTH_URL` that is not `https` outside localhost, which `safeUrl` refuses.
+- After `saasaloy remove email`, `pnpm install` fails on `@repo/email`: `remove` deletes the reset files and reverts the `plugins` line, but it does not reverse a `package-json-dependency` patch. Delete `"@repo/email"` from `packages/auth/package.json` by hand.
+
 ## Enabling social OAuth / email verification (not wired)
 
 - **Social providers** (Google, GitHub, …): add a `socialProviders` block to
   `packages/auth/src/auth.ts` yourself — not pre-wired, since it needs per-provider client
   IDs/secrets this module can't invent safely.
-- **Email verification / password reset emails**: `requireEmailVerification` is off and stays off
-  until the **`email`** capability exists (auth deliberately does not depend on it). Wiring it
-  early means Better Auth tries to send email with no provider configured — sign-up would appear
-  to hang or silently fail.
+- **Email verification**: `requireEmailVerification` stays off, with or without `email`. Turning it
+  on needs a `sendVerificationEmail` sender, written the same way as `reset-password-mail.ts`, and a
+  verification screen in each app. Turning it on with no provider configured makes sign-up appear
+  to hang or silently fail. The password reset mail is wired: see "Password reset mail".
 
 ## Schema: hand-authored, never generated at `add` time
 

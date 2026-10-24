@@ -125,7 +125,7 @@ describe("two instances, two cookies", () => {
     expect(res.status).toBe(200);
     cookieValue(res, "client.session_token");
     const rows = await database.db.select().from(sessions);
-    expect(rows.map((row) => row.audience)).toEqual(["client"]);
+    expect(rows.map((row) => row.audience)).toStrictEqual(["client"]);
   });
 
   it("writes the admin cookie and an admin row on /admin/auth", async () => {
@@ -134,7 +134,7 @@ describe("two instances, two cookies", () => {
     expect(res.status).toBe(200);
     cookieValue(res, "admin.session_token");
     const rows = await database.db.select().from(sessions);
-    expect(rows.map((row) => row.audience)).toEqual(["admin"]);
+    expect(rows.map((row) => row.audience)).toStrictEqual(["admin"]);
   });
 
   it("keeps a client and an admin signed in together in one browser", async () => {
@@ -150,8 +150,12 @@ describe("two instances, two cookies", () => {
     );
     const both = `${client}; ${admin}`;
 
-    expect(await sessionUser(database.env, "/auth", both)).toBe(MEMBER);
-    expect(await sessionUser(database.env, "/admin/auth", both)).toBe(ADMIN);
+    await expect(sessionUser(database.env, "/auth", both)).resolves.toBe(
+      MEMBER
+    );
+    await expect(sessionUser(database.env, "/admin/auth", both)).resolves.toBe(
+      ADMIN
+    );
   });
 
   it("ends one session on sign-out and leaves the other", async () => {
@@ -170,8 +174,12 @@ describe("two instances, two cookies", () => {
     const out = await call(database.env, "/admin/auth/sign-out", both, {});
     expect(out.status).toBe(200);
 
-    expect(await sessionUser(database.env, "/auth", both)).toBe(MEMBER);
-    expect(await sessionUser(database.env, "/admin/auth", both)).toBeNull();
+    await expect(sessionUser(database.env, "/auth", both)).resolves.toBe(
+      MEMBER
+    );
+    await expect(
+      sessionUser(database.env, "/admin/auth", both)
+    ).resolves.toBeNull();
   });
 
   it("finds no session for a token copied into the other cookie", async () => {
@@ -188,7 +196,9 @@ describe("two instances, two cookies", () => {
       "admin.session_token="
     );
 
-    expect(await sessionUser(database.env, "/admin/auth", copied)).toBeNull();
+    await expect(
+      sessionUser(database.env, "/admin/auth", copied)
+    ).resolves.toBeNull();
     const list = await call(
       database.env,
       "/admin/auth/admin/list-users",
@@ -208,7 +218,9 @@ describe("two instances, two cookies", () => {
       "client.session_token="
     );
 
-    expect(await sessionUser(database.env, "/auth", copied)).toBeNull();
+    await expect(
+      sessionUser(database.env, "/auth", copied)
+    ).resolves.toBeNull();
   });
 });
 
@@ -223,7 +235,7 @@ describe("the admin instance", () => {
     expect(res.status).toBe(401);
     const body = (await res.json()) as { code?: string };
     expect(body.code).toBe("INVALID_EMAIL_OR_PASSWORD");
-    expect(await database.db.select().from(sessions)).toHaveLength(0);
+    await expect(database.db.select().from(sessions)).resolves.toHaveLength(0);
   });
 
   it("has no sign-up", async () => {
@@ -339,5 +351,37 @@ describe("the admin instance", () => {
       }
     );
     expect(res.status).toBe(403);
+  });
+});
+
+describe("password length", () => {
+  function signUp(env: object, password: string) {
+    return app.request(
+      "/auth/sign-up/email",
+      {
+        body: JSON.stringify({
+          email: "new@example.test",
+          name: "New Person",
+          password,
+        }),
+        headers: { "content-type": "application/json", ...ORIGIN },
+        method: "POST",
+      },
+      env
+    );
+  }
+
+  it("refuses a sign-up password shorter than 12 characters", async () => {
+    const res = await signUp(database.env, "elevenchars");
+
+    expect(res.status).toBe(400);
+    const body = (await res.json()) as { code?: string };
+    expect(body.code).toBe("PASSWORD_TOO_SHORT");
+  });
+
+  it("takes a sign-up password of 12 characters", async () => {
+    const res = await signUp(database.env, "twelve-chars");
+
+    expect(res.status).toBe(200);
   });
 });
