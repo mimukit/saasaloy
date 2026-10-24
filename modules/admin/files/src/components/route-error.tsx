@@ -1,6 +1,6 @@
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
 import { errors } from "@repo/ui/content/errors";
 
 // The router's default error component: what any route shows when its loader throws, for

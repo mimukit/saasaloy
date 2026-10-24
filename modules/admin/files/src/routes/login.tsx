@@ -3,10 +3,10 @@ import { useState } from "react";
 import type { FormEvent } from "react";
 
 import { siteName } from "@repo/ui";
-import { BrandMark } from "@repo/ui/blocks/admin/brand-mark";
-import { Button } from "@repo/ui/components/admin/button";
-import { Field, FieldLabel } from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
+import { BrandMark } from "@repo/ui/blocks/shell/brand-mark";
+import { Button } from "@repo/ui/components/shell/button";
+import { Field, FieldLabel } from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
 
 import { auth, forgetSession } from "@admin/lib/auth";
 import { resolveDestination, toInternalPath } from "@admin/lib/redirect";

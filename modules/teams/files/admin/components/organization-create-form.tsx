@@ -3,7 +3,7 @@ import { PlusIcon } from "lucide-react";
 import { useState } from "react";
 import type { SubmitEvent } from "react";
 
-import { Button } from "@repo/ui/components/admin/button";
+import { Button } from "@repo/ui/components/shell/button";
 import {
   Dialog,
   DialogClose,
@@ -14,15 +14,15 @@ import {
   DialogPopup,
   DialogTitle,
   DialogTrigger,
-} from "@repo/ui/components/admin/dialog";
+} from "@repo/ui/components/shell/dialog";
 import {
   Field,
   FieldDescription,
   FieldError,
   FieldLabel,
-} from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
-import { toastManager } from "@repo/ui/components/admin/toast";
+} from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
+import { toastManager } from "@repo/ui/components/shell/toast";
 
 import { auth } from "@admin/lib/auth";
 

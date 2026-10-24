@@ -1,7 +1,7 @@
 import { ShieldAlertIcon } from "lucide-react";
 
 import { siteName } from "@repo/ui";
-import { BrandMark } from "@repo/ui/blocks/admin/brand-mark";
+import { BrandMark } from "@repo/ui/blocks/shell/brand-mark";
 
 import type { AdminSession } from "@admin/lib/auth";
 import { SignOutButton } from "@admin/components/sign-out-button";

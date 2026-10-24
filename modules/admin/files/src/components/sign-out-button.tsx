@@ -2,7 +2,7 @@ import { useRouter } from "@tanstack/react-router";
 import { LogOutIcon } from "lucide-react";
 import { useState } from "react";
 
-import { Button } from "@repo/ui/components/admin/button";
+import { Button } from "@repo/ui/components/shell/button";
 
 import { auth, forgetSession } from "@admin/lib/auth";
 

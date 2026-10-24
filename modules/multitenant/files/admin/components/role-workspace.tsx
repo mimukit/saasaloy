@@ -9,16 +9,16 @@ import { useMemo, useState } from "react";
 import type { SubmitEvent } from "react";
 
 import { BASE_ROLES, roles as baseRoles } from "@repo/auth/access";
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
-import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
-import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
+import { DetailPanel } from "@repo/ui/blocks/shell/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/shell/empty-state";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
 import {
   Alert,
   AlertDescription,
   AlertTitle,
-} from "@repo/ui/components/admin/alert";
+} from "@repo/ui/components/shell/alert";
 import {
   AlertDialog,
   AlertDialogClose,
@@ -28,9 +28,9 @@ import {
   AlertDialogPopup,
   AlertDialogTitle,
   AlertDialogTrigger,
-} from "@repo/ui/components/admin/alert-dialog";
-import { Badge } from "@repo/ui/components/admin/badge";
-import { Button } from "@repo/ui/components/admin/button";
+} from "@repo/ui/components/shell/alert-dialog";
+import { Badge } from "@repo/ui/components/shell/badge";
+import { Button } from "@repo/ui/components/shell/button";
 import {
   Dialog,
   DialogClose,
@@ -40,25 +40,25 @@ import {
   DialogPanel,
   DialogPopup,
   DialogTitle,
-} from "@repo/ui/components/admin/dialog";
-import { Field, FieldLabel } from "@repo/ui/components/admin/field";
-import { Input } from "@repo/ui/components/admin/input";
+} from "@repo/ui/components/shell/dialog";
+import { Field, FieldLabel } from "@repo/ui/components/shell/field";
+import { Input } from "@repo/ui/components/shell/input";
 import {
   Select,
   SelectItem,
   SelectPopup,
   SelectTrigger,
   SelectValue,
-} from "@repo/ui/components/admin/select";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
+} from "@repo/ui/components/shell/select";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import {
   Tabs,
   TabsList,
   TabsPanel,
   TabsTab,
-} from "@repo/ui/components/admin/tabs";
-import { toastManager } from "@repo/ui/components/admin/toast";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+} from "@repo/ui/components/shell/tabs";
+import { toastManager } from "@repo/ui/components/shell/toast";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 
 import {
   PERMISSION_COUNT,

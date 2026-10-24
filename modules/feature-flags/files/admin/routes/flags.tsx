@@ -8,12 +8,12 @@ import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
 import { MAINTENANCE_KEY } from "@repo/feature-flags";
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
 import { FeatureFlags } from "@repo/ui/blocks/admin/feature-flags";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { toastManager } from "@repo/ui/components/admin/toast";
-import { PageBody } from "@repo/ui/containers/admin/page-body";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { toastManager } from "@repo/ui/components/shell/toast";
+import { PageBody } from "@repo/ui/containers/shell/page-body";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 
 import { api } from "@admin/lib/api";
 

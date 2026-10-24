@@ -6,9 +6,9 @@ import {
 } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
 
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { ToastProvider } from "@repo/ui/components/admin/toast";
-import { PageFrame } from "@repo/ui/containers/admin/page-frame";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { ToastProvider } from "@repo/ui/components/shell/toast";
+import { PageFrame } from "@repo/ui/containers/shell/page-frame";
 import { errors } from "@repo/ui/content/errors";
 
 import { AccessDenied } from "@admin/components/access-denied";
@@ -106,7 +106,7 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
 // the frame too, because they replace the <Outlet /> it wraps.
 //
 // The toast provider sits above both branches, so a screen and the sign-in form can each
-// raise a toast through `toastManager` from @repo/ui/components/admin/toast.
+// raise a toast through `toastManager` from @repo/ui/components/shell/toast.
 function RootLayout() {
   const { session } = Route.useRouteContext();
 

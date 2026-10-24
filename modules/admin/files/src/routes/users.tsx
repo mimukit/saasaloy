@@ -4,17 +4,17 @@ import type { ErrorComponentProps } from "@tanstack/react-router";
 import { IdCardIcon, ShieldIcon, UsersIcon } from "lucide-react";
 import { useMemo, useState } from "react";
 
-import { DataTable } from "@repo/ui/blocks/admin/data-table";
-import type { DataTableColumn } from "@repo/ui/blocks/admin/data-table";
-import { DetailPanel } from "@repo/ui/blocks/admin/detail-panel";
-import { EmptyState } from "@repo/ui/blocks/admin/empty-state";
-import { ErrorState } from "@repo/ui/blocks/admin/error-state";
-import { FilterChips } from "@repo/ui/blocks/admin/filter-chips";
-import { PageHeader } from "@repo/ui/blocks/admin/page-header";
-import { Avatar, AvatarFallback } from "@repo/ui/components/admin/avatar";
-import { Button } from "@repo/ui/components/admin/button";
-import { StatusPill } from "@repo/ui/components/admin/status-pill";
-import { PageLayout } from "@repo/ui/containers/admin/page-layout";
+import { DataTable } from "@repo/ui/blocks/shell/data-table";
+import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
+import { DetailPanel } from "@repo/ui/blocks/shell/detail-panel";
+import { EmptyState } from "@repo/ui/blocks/shell/empty-state";
+import { ErrorState } from "@repo/ui/blocks/shell/error-state";
+import { FilterChips } from "@repo/ui/blocks/shell/filter-chips";
+import { PageHeader } from "@repo/ui/blocks/shell/page-header";
+import { Avatar, AvatarFallback } from "@repo/ui/components/shell/avatar";
+import { Button } from "@repo/ui/components/shell/button";
+import { StatusPill } from "@repo/ui/components/shell/status-pill";
+import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
 import { ADMIN_ROLE } from "@admin/lib/auth";
