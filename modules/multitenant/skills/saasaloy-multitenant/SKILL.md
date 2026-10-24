@@ -62,11 +62,13 @@ Reads usually stay on `requireTenant`. `member` holds `project: ["read"]` in `ac
 
 ## The `/roles` screen
 
-`apps/admin` imports `can` from `@repo/auth/permission-rules`, fetches `GET /tenant` once per page through `tenantQuery`, and hides a control the caller may not use. Better Auth's `checkRolePermission` is deliberately not used: it knows the static roles only, so it answers wrongly for every custom role.
+`apps/admin` imports `allows` from `@repo/auth/permission-rules`, fetches `GET /tenant` once per page through `tenantQuery`, and hides a control the caller may not use. Better Auth's `checkRolePermission` is deliberately not used: it knows the static roles only, so it answers wrongly for every custom role.
 
 **The hide is cosmetic. The 403 is the gate.** A screen that hides a button and skips `requirePermission` has no authorization at all. Write the route check first, then hide the control.
 
 The screen ships here rather than in `teams` because it calls `GET /tenant`, and this module mounts that route. A `teams`-only project would render the screen onto a 404.
+
+A `nav-entry` patch adds the screen to the admin sidebar: `{ to: "/roles", label: "Roles" }` with `ShieldCheckIcon`, in the `Manage` group of `NAV_AREAS` in `apps/admin/src/components/nav.ts`. `remove multitenant` reverses it.
 
 ## Three different questions
 
@@ -166,7 +168,7 @@ The merge has four cases, all in `resolveStatements` in `tenant-rules.ts` and al
 - **Do not mint a `TenantId` outside `requireTenant`.** `asTenantId` exists for that one caller. Calling it on a request-supplied value hands out another organization's rows.
 - **Do not widen `Tenant.organizationId` to `string`.** Every guarantee above turns into a naming convention the moment you do.
 - **Do not resolve the tenant in middleware.** The `chained-route` patch kind registers routes, not `.use()` links (ADR 0028), so a middleware convention would have no way to install itself.
-- **The `projects` table and its routes are an example.** Delete them once your own scoped tables exist. `remove multitenant` names `projects` in its warning, and every route written against `requireTenant`, `forTenant` or `requirePermission` stops compiling when this module goes.
+- **The `projects` table and its routes are an example.** Delete them once your own scoped tables exist. `remove multitenant` names `projects` in its warning, and every route written against `requireTenant`, `forTenant` or `requirePermission` stops compiling when this module goes. A third warning covers custom roles: `teams` keeps them live after this removal, and the `/roles` screen that edits them goes with this module.
 
 ## Upgrading from singular table names
 
@@ -178,3 +180,16 @@ A project that installed `multitenant` before the tables became plural has a `pr
 4. Read the generated SQL before you apply it. It must rename the table and its index (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
 5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
 6. Apply the migration, then sign in once to confirm the adapter finds every table.
+
+## Upgrading from rbac
+
+Until 2026-09-20 a separate `rbac` module shipped the rule, the lock, the gate, the `/roles` screen and the gated `projects.ts`. That module is gone, and `teams` and `multitenant` own its files now. `saasaloy add multitenant` does not bring them back in a project that already has `multitenant`, because `add` skips an installed module. Run `update` per module instead:
+
+1. Commit or stash first, so `git diff` shows what each step did.
+2. Run `saasaloy remove rbac`. It deletes `rbac.ts`, `rbac-rules.ts`, `plugins/role-lock.ts`, `/roles`, its two components, `admin/lib/tenant.ts` and `apps/api/src/routes/projects.ts`. If `api-keys` is installed, its lock entry still names `rbac` in `dependsOn`, so add `--force`.
+3. Run `saasaloy update teams`. It writes `permission-rules.ts` and `plugins/role-lock.ts`, and patches `roleLockGuard()` into both `auth` and `adminAuth`. Until this step runs, no base-role lock is active.
+4. Run `saasaloy update multitenant`. It writes `permissions.ts`, the `/roles` screen and its components, `admin/lib/tenant.ts` and the gated `projects.ts`, and adds the Roles sidebar entry.
+5. If `api-keys` is installed, run `saasaloy update api-keys`. Its files import `@repo/auth/permission-rules` now.
+6. In your own code, change `@repo/auth/rbac` to `@repo/auth/permissions`, `@repo/auth/rbac-rules` to `@repo/auth/permission-rules`, and `requireCan` to `requirePermission`. Then run `pnpm typecheck`.
+
+No table changes. Stored custom roles in `organization_roles` keep working.

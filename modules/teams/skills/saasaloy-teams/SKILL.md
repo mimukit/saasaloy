@@ -60,7 +60,7 @@ The reason is the merge. `dynamicAccessControl` makes `hasPermission` load an or
 
 The guard and the switch ship together, in this module, because a project that enables `dynamicAccessControl` without the guard is the exact hole above.
 
-Better Auth refuses the three names on its own in `1.7.3`: `createRole` and `updateRole` call `checkIfRoleNameIsTakenByPreDefinedRole`, and `deleteRole` answers `CANNOT_DELETE_A_PRE_DEFINED_ROLE`. So `roleLockGuard()` is defence in depth rather than the only guard. Keep it. It runs before the plugin's own `ac` check, it gives one message (`base role is locked: <name>`) for all three endpoints, and the plugin's check is a library behaviour that a minor upgrade can change.
+Better Auth refuses the three names on its own in `1.7.7`: `createRole` and `updateRole` call `checkIfRoleNameIsTakenByPreDefinedRole`, and `deleteRole` answers `CANNOT_DELETE_A_PRE_DEFINED_ROLE`. So `roleLockGuard()` is defence in depth rather than the only guard. Keep it. It gives one message (`base role is locked: <name>`) for all three endpoints, and the plugin's check is a library behaviour that a minor upgrade can change.
 
 To change what a base role holds, edit `access.ts`. That is a code change, and it is reviewed.
 
@@ -120,7 +120,7 @@ The `members`, `invitations` and `organization_roles` tables each follow the ten
 
 Run `pnpm --filter @repo/db db:generate` after a schema change. Review the migration before you apply it. Then use the active database driver skill for the migration command.
 
-Removing `teams` deletes its managed files and reverses the plugin and navigation patches. It does not drop deployed tables. The remove command warns that the `organizations`, `members`, `invitations`, and `organization_roles` tables survive, so review any generated drop migration before applying it. It also warns that stored custom roles survive with nothing left to read them, so reassign their holders to a base role first.
+Removing `teams` deletes its managed files and reverses the plugin and navigation patches. It does not drop deployed tables. The remove command warns that the `organizations`, `members`, `invitations`, and `organization_roles` tables survive, so review any generated drop migration before applying it. Remove `multitenant` first, since it depends on this module; its own removal warns about the custom roles, because it takes the `/roles` screen while this module keeps them live.
 
 ## Conventions to honor
 
@@ -143,3 +143,7 @@ A project that installed `teams` before the tables became plural has `organizati
 4. Read the generated SQL before you apply it. It must rename tables and indexes (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
 5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
 6. Apply the migration, then sign in once to confirm the adapter finds every table.
+
+## Upgrading from rbac
+
+A project that installed the retired `rbac` module gets `permission-rules.ts`, `plugins/role-lock.ts` and the two `roleLockGuard()` patches from `saasaloy update teams`, after `saasaloy remove rbac`. Run the whole sequence in the `saasaloy-multitenant` skill's "Upgrading from rbac" section, in its order: `remove rbac`, then `update teams`, then `update multitenant`, then `update api-keys` when it is installed. `add multitenant` is not a step, because `add` skips an installed module.
