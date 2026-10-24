@@ -77,6 +77,39 @@ describe("createEnv", () => {
     assert.match(error.message, /where mail comes from/);
   });
 
+  // The order a capability relies on to let a provider tighten one of its keys: kv keeps
+  // its own keys in an inner preset first in `extends`, and kv-upstash appends after it.
+  it("lets a later preset in extends override an earlier one", () => {
+    const core = definePreset({
+      module: "@repo/kv",
+      server: { PREFIX: optional("") },
+    });
+    const loose = createEnv({
+      extends: [definePreset({ module: "@repo/kv", extends: [core] })],
+    });
+    assert.equal(loose({ PREFIX: "" }).PREFIX, "");
+
+    const strict = createEnv({
+      extends: [
+        definePreset({
+          module: "@repo/kv",
+          extends: [
+            core,
+            definePreset({
+              module: "kv-upstash",
+              server: { PREFIX: required() },
+            }),
+          ],
+        }),
+      ],
+    });
+    const error = caught(() => strict({ PREFIX: "" }));
+    assert.deepEqual(
+      error.issues.map((issue) => [issue.key, issue.module, issue.reason]),
+      [["PREFIX", "kv-upstash", "unset"]]
+    );
+  });
+
   it("treats an empty string as unset by default", () => {
     const env = createEnv({ server: { A: required() } });
     const error = caught(() => env({ A: "" }));
