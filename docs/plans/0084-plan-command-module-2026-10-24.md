@@ -39,7 +39,7 @@ Research input: `docs/research/0006-research-command-palette-and-shortcuts-2026-
 | Conflicts (grill Q8) | A conflict is the same chord, or a sequence prefix of another binding, in overlapping scopes. In dev, a conflict throws with both command ids. In production, it warns once and keeps the first binding. The static `node:test` check is the gate. |
 | Palette layout | Groups in this order: the current page's commands, Navigation, Actions, Preferences. Each row shows its shortcut with the shell `Kbd`. The footer shows ↑↓, Enter and Esc. Flat list, no nested pages. |
 | Tests | Pure registry logic (conflict check, `when` filter, group order, sequence parsing) sits in `.ts` files and runs on `node:test` under `pnpm test:modules`, the runner `modules/admin/files/src/lib/initials.test.ts` uses. Behaviour in the browser is a QA plan under `docs/qa/` made with `qakit`. |
-| Keyboard e2e (grill Q15) | A follow-up issue, blocked on #178's seeded admin data. It is not in this plan. |
+| Keyboard e2e (grill Q15) | A follow-up issue, blocked on #187's seeded admin and customer data. It is not in this plan: #265. |
 | Outward actions (grill Q14) | Approved: commit and push this plan to `main`, then file one GitHub issue per phase with `issuekit`, plus the Q15 follow-up issue. |
 | UI house rules | Admin follows `modules/admin/files/DESIGN.md`; the customer app has no `DESIGN.md` and takes the web brand tokens (`brand.css`), so the mockup shows the palette in both skins. From the admin file: the dialog takes the `popover` tone and the `2xl` radius; every control shows the 2 px `ring` focus ring; popups fade and scale in; no colour, radius, shadow or type size that `admin.css` does not define; admin code uses shell primitives only (lint-enforced). Both themes and 360 px and 1280 px are first-class. |
 | Visual reference (grill Q13) | None yet. Phase 1 makes the mockup in its own attended session after this plan merges. The owner approves it before any build. |
@@ -65,7 +65,7 @@ Rejected, one line each:
 - An admin-only seam (grill Q1b). The next SPA would rewrite it.
 - The engine folded into `shell` (grill Q1c). It breaks the locked module and puts TanStack into every shell project.
 
-### Phase 1: mockup
+### Phase 1: mockup (#264)
 
 Attended: the owner approves the mockup screenshots and the round they settle on, in a session after this plan merges.
 
@@ -77,7 +77,7 @@ Attended: the owner approves the mockup screenshots and the round they settle on
 
 Done when: this phase carries an "Approved YYYY-MM-DD, round N" line, the list of picks, and the filter verdict.
 
-### Phase 2: the contract and the seam in `shell`
+### Phase 2: the contract and the seam in `shell` (#264)
 
 - Add `modules/shell/files/ui/lib/shell/commands.ts`: the `Command` and `CommandScope` types, `CommandRegistryContext`, `useCommands(commands, { scope })`, and `useCommandProvider()`, which reports whether a provider is mounted. No dependency.
 - Add `defineShellExtensions` and the `ShellExtension` type. Give `ShellLayout` an `extensions` prop that wraps the layout in each `Provider` in array order and renders each `header` in the header's right slot.
@@ -88,7 +88,7 @@ Done when: this phase carries an "Approved YYYY-MM-DD, round N" line, the list o
 
 Done when: `pnpm typecheck`, `pnpm lint` and `pnpm test` pass, and a scaffolded admin app in `.dev` with no `command` module behaves exactly as before. Cmd/Ctrl+B still toggles the sidebar.
 
-### Phase 3: admin and app declare their commands and their seams
+### Phase 3: admin and app declare their commands and their seams (#264)
 
 Each step below applies to `modules/admin/files/src/` and to `modules/app/files/src/`, unless it names one app.
 
@@ -100,7 +100,7 @@ Each step below applies to `modules/admin/files/src/` and to `modules/app/files/
 
 Done when: both new tests pass under `pnpm test:modules`, and admin and app without `command` installed still render and behave as before.
 
-### Phase 4: the `command` module
+### Phase 4: the `command` module (#264)
 
 - In `scripts/update-deps.ts`, make `semverDelta` report a `0.y → 0.z` change as `major`, with a case in `scripts/update-deps.test.ts`. Ship it as its own commit.
 - Scaffold `modules/command/` with the `create-module` skill. Set `dependsOn: ["shell"]` and a `package-json-dependency` patch for `@tanstack/react-hotkeys` into `packages/ui/package.json`.
@@ -114,7 +114,7 @@ Done when: both new tests pass under `pnpm test:modules`, and admin and app with
 
 Done when: in `.dev`, `saasaloy add command` into a project with admin and app writes both patches and the dependency. In admin, Mod+K opens the palette, `G U` opens Users, and `?` lists every binding. In app, Mod+K opens the palette and `G H` opens Home. The registry tests and the new `update-deps` case pass, and `pnpm deps:check` is clean.
 
-### Phase 5: proof and records
+### Phase 5: proof and records (#264)
 
 - Run `qakit` for a QA plan under `docs/qa/` that does every task in admin and app with no mouse, in both themes, at 360 px and 1280 px.
 - Add the terms command, shortcut, scope and shell extension to `CONTEXT.md`.
@@ -133,5 +133,5 @@ None. The grill on 2026-10-24 settled every decision. The filter verdict and the
 - User rebinding, a shortcut settings page, and any stored override, local or server-side.
 - A palette in the Astro web app.
 - Nested palette pages ("Theme…" opening a sub-list) and recent commands.
-- A keyboard e2e test. It is a follow-up issue, blocked on #178.
+- A keyboard e2e test. It is the follow-up issue #265, blocked on #187.
 - Any change to `admin.css` tokens or to `DESIGN.md` beyond what the approved mockup requires.
