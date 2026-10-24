@@ -20,7 +20,7 @@ function reportSkips(skipped: BackfillSkip[], opts: Output): void {
   }
 }
 
-/** A preview: what a real run would write, and nothing written. */
+/** What a backfill would write, listed before anything is written. */
 export function previewBackfill(
   plan: Plan,
   skipped: BackfillSkip[],
@@ -38,7 +38,7 @@ export function previewBackfill(
   if (lines.length > 0) {
     note(
       wrapForNote(
-        `${lines.join("\n")}\n\n${pc.dim("Entries whose condition is now true. A real run writes them.")}`
+        `${lines.join("\n")}\n\n${pc.dim("Entries whose condition is now true. The update writes them when it applies.")}`
       ),
       "Backfill",
       opts

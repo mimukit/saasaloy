@@ -91,6 +91,12 @@ export interface BackfillArgs {
   exclude?: ReadonlySet<string>;
   /** Defaults to the project's own mode. */
   testingMode?: TestingMode;
+  /**
+   * Write only these project-relative paths: a file target, or a patch's file. `update`
+   * passes the targets it showed and backed up before the confirmation, so the backfill
+   * it runs after its own apply writes nothing the approval and the backup did not cover.
+   */
+  within?: ReadonlySet<string>;
   env?: NodeJS.ProcessEnv;
   open?: SourceOpener;
 }
@@ -107,6 +113,16 @@ export interface BackfillPlan {
   skipped: BackfillSkip[];
   /** Drops the temp dirs a remote source fetched into. Call it once the plan has run. */
   cleanup: () => Promise<void>;
+}
+
+/** Every project-relative path a backfill plan would write: file targets and patched files. */
+export function backfillTargets(plan: Plan): string[] {
+  return [
+    ...new Set([
+      ...plan.files.map((f) => f.target),
+      ...plan.patches.map((p) => p.file),
+    ]),
+  ].toSorted();
 }
 
 /** True when a backfill plan has nothing to write. */
@@ -177,9 +193,18 @@ export async function planBackfill(args: BackfillArgs): Promise<BackfillPlan> {
       // left for `update` to restore. And only an untracked target: a tracked one is
       // already managed, whatever its `when` says now (#242 Q1).
       file: (_module, ref) =>
-        ref.when !== undefined && manifest.managed[ref.target] === undefined,
+        ref.when !== undefined &&
+        manifest.managed[ref.target] === undefined &&
+        (args.within?.has(ref.target) ?? true),
       patch: (module, op) =>
-        op.when !== undefined && !isPatchTracked(manifest, module, op),
+        op.when !== undefined &&
+        !isPatchTracked(
+          manifest,
+          module,
+          op,
+          modules.get(module)?.item.patches
+        ) &&
+        (args.within?.has(op.file) ?? true),
     },
     ...(args.testingMode === undefined
       ? {}

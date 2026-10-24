@@ -150,8 +150,9 @@ export interface RegistryFile {
   /** Ship this entry only while the condition holds; see {@link When} (#242). */
   when?: When;
   /**
-   * Why this file ships with no test beside it. The test guards print the reason rather
-   * than fail (#242). Top-level `files[]` only.
+   * Why this file ships with no test beside it (#242). Nothing reads it yet: a later
+   * descriptor guard (#243) is to print the reason rather than fail. Top-level `files[]`
+   * only.
    */
   untested?: string;
   /**

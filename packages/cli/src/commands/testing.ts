@@ -14,12 +14,16 @@ import {
   resolveWithinRoot,
 } from "../lib/fs-utils.js";
 import { runBackfill } from "../lib/backfill.js";
-import { persistLedger } from "../lib/ledger.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest, recordManagedFile } from "../lib/manifest.js";
+import {
+  loadManifest,
+  recordManagedFile,
+  saveManifest,
+} from "../lib/manifest.js";
 import type { Manifest } from "../lib/manifest.js";
 import { findProjectRoot } from "../lib/project.js";
-import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
+import { CONFIG_FILE, loadConfig, saveConfig } from "../lib/saasaloy-config.js";
+import type { LoadedConfig } from "../lib/saasaloy-config.js";
 import {
   parseTestingMode,
   readTestingMode,
@@ -122,6 +126,29 @@ export async function rewriteAgents(
   return "rewritten";
 }
 
+/**
+ * Save `mode` for the project, then bring the `AGENTS.md` block and the manifest along.
+ * Returns the saved config and what happened to the block.
+ *
+ * The order is the rule. `saasaloy.json` is the mode's record, so it is saved first: if
+ * that save throws, nothing else was written and the block still describes the mode the
+ * project has. The block is rewritten next, and the manifest saved last, so the hash it
+ * records is the hash of bytes already on disk (#242). The lock does not change here.
+ */
+export async function setTestingMode(input: {
+  config: LoadedConfig;
+  manifest: Manifest;
+  mode: TestingMode;
+  root: string;
+}): Promise<{ config: LoadedConfig; outcome: BlockOutcome }> {
+  const { manifest, mode, root } = input;
+  const config = { ...input.config, testing: { mode } };
+  await saveConfig(root, config);
+  const outcome = await rewriteAgents(root, manifest, mode);
+  await saveManifest(root, manifest);
+  return { config, outcome };
+}
+
 /** The line `testing` and `add` print for a block they could not keep current. */
 export function reportBlockOutcome(outcome: BlockOutcome): void {
   if (outcome === "no-markers") {
@@ -176,19 +203,12 @@ export async function runTesting(argv: string[]): Promise<number> {
     const manifest = await loadManifest(root);
     const lock = await loadLock(root);
 
-    const outcome = await rewriteAgents(root, manifest, mode);
-    const next = { ...config, testing: { mode } };
-    const failures = await persistLedger({
-      config: next,
-      lock,
+    const { config: next, outcome } = await setTestingMode({
+      config,
       manifest,
+      mode,
       root,
     });
-    const failed = failures[0];
-    if (failed) {
-      throw failed.error;
-    }
-
     reportBlockOutcome(outcome);
 
     // An on-mode writes each gated entry whose `when` is now true and whose target is

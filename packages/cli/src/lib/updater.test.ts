@@ -1886,4 +1886,77 @@ describe("buildUpdatePlan — when (#242)", () => {
       "apply",
     ]);
   });
+
+  // A gated patch the module applied stays managed in every mode, like a gated file, so
+  // a new revision of it ships even with testing off (#242 Q1). The record holds the old
+  // op, so the match is on its slot: module, file, kind and `when`.
+  const script = {
+    file: "package.json",
+    kind: "package-json-script" as const,
+    name: "test:email",
+    when: { testing: true as const },
+  };
+
+  it("ships a changed revision of a gated patch the module applied, with testing off", async () => {
+    await writeFile(join(root, "package.json"), '{ "name": "app" }\n');
+    const old = { ...script, value: "vitest run email" };
+    const next = { ...script, value: "vitest run --dir email" };
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", patches: [old] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", patches: [next] },
+      {}
+    );
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      file: "package.json",
+      module: "email",
+      patch: old,
+      when: old.when,
+    });
+
+    const plan = await build({ manifest, inputs: [input({ base, theirs })] });
+
+    expect(plan.modules[0]?.patches.map((p) => p.patch)).toStrictEqual([next]);
+  });
+
+  it("ships only the op aimed at the recorded slot", async () => {
+    await writeFile(join(root, "package.json"), '{ "name": "app" }\n');
+    const old = { ...script, value: "vitest run email" };
+    const ops = [
+      { ...script, value: "vitest run --dir email" },
+      { ...script, name: "test:email:watch", value: "vitest email" },
+    ];
+    const base = await writeModule(
+      "old",
+      "email",
+      { type: "saasaloy:feature", patches: [old] },
+      {}
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { type: "saasaloy:feature", patches: ops },
+      {}
+    );
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      file: "package.json",
+      module: "email",
+      patch: old,
+      when: old.when,
+    });
+
+    const plan = await build({ manifest, inputs: [input({ base, theirs })] });
+
+    expect(plan.modules[0]?.patches.map((p) => p.patch)).toStrictEqual([
+      ops[0],
+    ]);
+  });
 });

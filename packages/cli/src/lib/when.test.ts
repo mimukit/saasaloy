@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { emptyManifest } from "./manifest.js";
 import type { RegistryPatch, When } from "./schema.js";
-import { isPatchTracked, whenHolds } from "./when.js";
+import { isPatchTracked, sameWhen, whenHolds } from "./when.js";
 
 // #242 Phase 2: one predicate decides whether a gated descriptor entry ships. The keys
 // combine with AND, `testing` asks for any mode but `off`, and every `installed` name
@@ -87,5 +87,76 @@ describe(isPatchTracked, () => {
     });
 
     expect(isPatchTracked(manifest, "database", op)).toBeFalsy();
+  });
+});
+
+// A new revision of an applied gated op is tracked by its slot: the container it writes
+// into and the item it names, not only its file and kind (#242).
+describe("isPatchTracked — revisions (#242)", () => {
+  const plugin = (arrayProp: string, call: string): RegistryPatch => ({
+    arrayProp,
+    call,
+    exportName: "auth",
+    file: "packages/auth/src/auth.ts",
+    import: { from: "./plugins", name: call },
+    kind: "plugin-array",
+    when: { testing: true },
+  });
+
+  function recorded(patch: RegistryPatch) {
+    const manifest = emptyManifest();
+    manifest.patches.push({
+      file: patch.file,
+      module: "auth",
+      patch,
+      when: { testing: true },
+    });
+    return manifest;
+  }
+
+  it("tracks a revision aimed at the same array", () => {
+    const next = plugin("plugins", "testPluginV2()");
+
+    expect(
+      isPatchTracked(
+        recorded(plugin("plugins", "testPlugin()")),
+        "auth",
+        next,
+        [next]
+      )
+    ).toBeTruthy();
+  });
+
+  it("does not track an op aimed at another array of the same file", () => {
+    const next = plugin("hooks", "testHook()");
+
+    expect(
+      isPatchTracked(
+        recorded(plugin("plugins", "testPlugin()")),
+        "auth",
+        next,
+        [next]
+      )
+    ).toBeFalsy();
+  });
+
+  it("falls back to the exact op when two ops share one array", () => {
+    const ops = [plugin("plugins", "a()"), plugin("plugins", "b()")];
+
+    expect(
+      isPatchTracked(recorded(plugin("plugins", "old()")), "auth", ops[0]!, ops)
+    ).toBeFalsy();
+  });
+});
+
+describe(sameWhen, () => {
+  it("ignores the order of the installed names", () => {
+    expect(
+      sameWhen({ installed: ["a", "b"] }, { installed: ["b", "a"] })
+    ).toBeTruthy();
+  });
+
+  it("tells a testing condition from an empty one", () => {
+    expect(sameWhen({ testing: true }, {})).toBeFalsy();
   });
 });

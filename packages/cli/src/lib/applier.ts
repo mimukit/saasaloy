@@ -224,15 +224,20 @@ export function gateFor(
 
 /**
  * Whether a module's config patch ships: its `when` holds, or the module already applied
- * this exact op, which keeps a written gated patch managed in every mode (#242 Q1).
+ * this op or an earlier revision of it, which keeps a written gated patch managed in every
+ * mode (#242 Q1). `siblings` is the module's whole patch list, which `isPatchTracked`
+ * needs to tell a revision from a new op.
  */
 export function patchShips(
   op: RegistryPatch,
   module: string,
   manifest: Pick<Manifest, "patches">,
-  ctx: { installed: ReadonlySet<string>; testingMode: TestingMode }
+  ctx: { installed: ReadonlySet<string>; testingMode: TestingMode },
+  siblings: readonly RegistryPatch[]
 ): boolean {
-  return whenHolds(op.when, ctx) || isPatchTracked(manifest, module, op);
+  return (
+    whenHolds(op.when, ctx) || isPatchTracked(manifest, module, op, siblings)
+  );
 }
 
 /** One `onlyWith` entry that could have filled a target, as the refusal names it. */
@@ -735,6 +740,13 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
   // file. Claims already on disk count: the manifest records each section patch with the
   // module that applied it, so a module installed last month still holds its key. The
   // base template's own sections claim their keys first, under the name `base`.
+  // A gated section patch claims its key only when it ships (#242): a false `when` that
+  // the module never applied writes nothing, so it contests nothing.
+  const whenCtx = { installed: installedSet, testingMode };
+  const shippedPatches = (name: string): RegistryPatch[] =>
+    (modules.get(name)?.item.patches ?? []).filter((op, _index, siblings) =>
+      patchShips(op, name, manifest, whenCtx, siblings)
+    );
   const keyClaims: SectionClaim[] = baseSectionClaims();
   const inRun = new Set(install);
   for (const entry of manifest.patches) {
@@ -743,7 +755,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     }
   }
   for (const name of install) {
-    keyClaims.push(...sectionClaims(name, modules.get(name)?.item.patches));
+    keyClaims.push(...sectionClaims(name, shippedPatches(name)));
   }
   const sectionConflicts = detectSectionCollisions(keyClaims);
   if (sectionConflicts.length > 0) {
@@ -761,7 +773,7 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     if (!mod) {
       continue;
     }
-    for (const { key } of sectionClaims(name, mod.item.patches)) {
+    for (const { key } of sectionClaims(name, shippedPatches(name))) {
       const file = sectionFileOf(mod.item.files, key);
       if (!file) {
         continue;
@@ -931,14 +943,11 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     ])
   );
   const patches: PlannedPatch[] = [];
-  const whenCtx = { installed: installedSet, testingMode };
   for (const name of install) {
     // The file rule, for patches (#242): a false `when` drops an op this module never
     // applied, and a selector keeps only the ops it names.
-    const ops = (modules.get(name)?.item.patches ?? []).filter(
-      (op) =>
-        patchShips(op, name, manifest, whenCtx) &&
-        (select === undefined || select.patch(name, op))
+    const ops = shippedPatches(name).filter(
+      (op) => select === undefined || select.patch(name, op)
     );
     patches.push(
       ...(await previewPatches({ root, module: name, ops, planned }))

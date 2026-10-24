@@ -69,7 +69,7 @@ import { linkAgentSkills } from "../lib/skill-links.js";
 import { readVersion } from "../version.js";
 import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
-import { reportBlockOutcome, rewriteAgents } from "./testing.js";
+import { reportBlockOutcome, setTestingMode } from "./testing.js";
 
 // `saasaloy add <module>` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -599,27 +599,36 @@ export function testingEnabler(
 
 /**
  * Save the mode an `enablesTesting` module turned on, and rewrite the `AGENTS.md` block to
- * match. Runs only after the apply succeeded, so a refused or failed `add` leaves the
- * mode where it was (#242 Q11). Phase 1's block rewrite does the file half.
+ * match. Runs only after the apply, and only for an enabler the apply reported complete
+ * (#242 Q11): a refused or failed `add` leaves the mode where it was, and so does an
+ * enabler whose files changed under the confirmation, which stays uninstalled. Returns
+ * the module that turned testing on, or `undefined` when none did.
  */
-async function saveEnabledMode(input: {
+export async function saveEnabledMode(input: {
+  completed: string[];
   config: LoadedConfig;
-  enabler: string;
-  lock: Lockfile;
+  graph: Pick<Graph, "modules">;
   manifest: Manifest;
   root: string;
-}): Promise<void> {
-  const { config, enabler, lock, manifest, root } = input;
-  config.testing = { mode: ENABLED_MODE };
-  const outcome = await rewriteAgents(root, manifest, ENABLED_MODE);
-  const failed = (await persistLedger({ config, lock, manifest, root }))[0];
-  if (failed) {
-    throw failed.error;
+}): Promise<string | undefined> {
+  const { completed, config, graph, manifest, root } = input;
+  const enabler = testingEnabler(config, completed, graph);
+  if (enabler === undefined) {
+    return undefined;
   }
+  const saved = await setTestingMode({
+    config,
+    manifest,
+    mode: ENABLED_MODE,
+    root,
+  });
+  // The backfill below reads the mode off this same config object.
+  config.testing = saved.config.testing;
   log.info(
     `${pc.cyan(enabler)} turns testing on — ${CONFIG_FILE} now sets the testing mode to ${pc.cyan(ENABLED_MODE)}.`
   );
-  reportBlockOutcome(outcome);
+  reportBlockOutcome(saved.outcome);
+  return enabler;
 }
 
 export async function runAdd(argv: string[]): Promise<number> {
@@ -1086,9 +1095,13 @@ export async function runAdd(argv: string[]): Promise<number> {
       log.warn(`Couldn't write ${ENV_EXAMPLE} — ${formatFailure(error)}.`);
     }
 
-    if (enabler !== undefined) {
-      await saveEnabledMode({ config, enabler, lock, manifest, root });
-    }
+    await saveEnabledMode({
+      completed: result.completed,
+      config,
+      graph,
+      manifest,
+      root,
+    });
     // Another installed module may ship an entry this add made true: a `when.installed`
     // naming the module just added, or a test once the mode turned on (#242 Q8). The
     // modules applied above were planned in the current mode already.

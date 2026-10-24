@@ -770,8 +770,14 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   const patches = await planPatches(
     root,
     name,
-    (theirs.item.patches ?? []).filter((op) =>
-      patchShips(op, name, manifest, { installed: installedSet, testingMode })
+    (theirs.item.patches ?? []).filter((op, _index, siblings) =>
+      patchShips(
+        op,
+        name,
+        manifest,
+        { installed: installedSet, testingMode },
+        siblings
+      )
     ),
     files
   );

@@ -132,7 +132,7 @@
           "untested": {
             "type": "string",
             "minLength": 1,
-            "description": "Why this file ships with no test beside it (#242). The test guards print the reason instead of failing."
+            "description": "Why this file ships with no test beside it (#242). Reserved for a later descriptor guard (#243), which is to read the reason rather than fail the file."
           }
         }
       }

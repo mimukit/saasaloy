@@ -3295,6 +3295,32 @@ describe("buildPlan — config section keys", () => {
     ).rejects.toThrow(/auth and shop both contribute config\.auth/);
   });
 
+  // A gated section patch that does not ship claims nothing (#242): the key is only
+  // contested once the patch would land.
+  it("lets a gated section patch whose when is false leave its key unclaimed", async () => {
+    const shop = await writeModule("shop", {
+      type: "saasaloy:feature",
+      patches: [
+        {
+          file: CONFIG_SECTIONS_FILE,
+          kind: "plugin-array",
+          exportName: "sections",
+          arrayProp: "sections",
+          call: "shopConfig",
+          import: { name: "shopConfig", from: "./sections/auth" },
+          when: { testing: true },
+        },
+      ],
+    });
+
+    const built = await plan({
+      install: ["auth", "shop"],
+      modules: [await sectionModule("auth", "auth"), shop],
+    });
+
+    expect(built.patches.map((p) => p.module)).toStrictEqual(["auth"]);
+  });
+
   it("refuses a module claiming the base template's app key", async () => {
     await expect(
       plan({

@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import {
+  backfillTargets,
   isEmptyBackfill,
   originFor,
   planBackfill,
@@ -189,6 +190,22 @@ describe(planBackfill, () => {
     expect(plan.dependencies).toStrictEqual([]);
     expect(plan.links).toStrictEqual([]);
     expect(plan.install).toStrictEqual(["auth"]);
+  });
+
+  // `update` holds its post-apply backfill to what it listed and backed up (#242 A4).
+  it("keeps only the paths `within` names, and reports them", async () => {
+    const state = await installedAuth("tests-after");
+
+    const { plan, cleanup } = await planBackfill({
+      ...state,
+      env: env(),
+      root,
+      within: new Set(["package.json"]),
+    });
+    await cleanup();
+
+    expect(plan.files).toStrictEqual([]);
+    expect(backfillTargets(plan)).toStrictEqual(["package.json"]);
   });
 
   it("selects an installed-gated file once the module it names is installed", async () => {

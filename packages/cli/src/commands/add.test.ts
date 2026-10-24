@@ -27,6 +27,7 @@ import { emptyManifest } from "../lib/manifest.js";
 import type { Manifest } from "../lib/manifest.js";
 import { REGISTRY_ENV } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
+import { loadConfig } from "../lib/saasaloy-config.js";
 import type { Graph } from "../lib/resolve.js";
 import { stripAnsi } from "../lib/tui.js";
 import {
@@ -38,6 +39,7 @@ import {
   persistState,
   pinToLock,
   runAdd,
+  saveEnabledMode,
 } from "./add.js";
 
 // `add` with no module opens a picker. Without a terminal that prompt can never be
@@ -610,6 +612,52 @@ describe("runAdd — enablesTesting and backfill (#242)", () => {
     await run(["e2e", "--yes"]);
 
     await expect(readMode()).resolves.toBe("tdd");
+  });
+
+  // An enabler whose file changed under the confirmation ends incomplete. It is not
+  // installed, so it has turned nothing on (#242 Q11). The apply itself is out of the
+  // picture here: `completed` is what `executePlan` would report.
+  it("saves no mode when the enabler did not complete", async () => {
+    await writeProject("off");
+    const agents = await readFile(join(project, "AGENTS.md"), "utf-8");
+    const graph = {
+      modules: new Map([
+        ["e2e", { item: { enablesTesting: true } }],
+        ["api", { item: {} }],
+      ]),
+    } as unknown as Pick<Graph, "modules">;
+
+    const enabler = await saveEnabledMode({
+      completed: ["api"],
+      config: await loadConfig(project),
+      graph,
+      manifest: emptyManifest(),
+      root: project,
+    });
+
+    expect(enabler).toBeUndefined();
+    await expect(readMode()).resolves.toBe("off");
+    await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
+      agents
+    );
+  });
+
+  it("saves the mode for the first enabler that completed", async () => {
+    await writeProject("off");
+    const graph = {
+      modules: new Map([["e2e", { item: { enablesTesting: true } }]]),
+    } as unknown as Pick<Graph, "modules">;
+
+    const enabler = await saveEnabledMode({
+      completed: ["e2e"],
+      config: await loadConfig(project),
+      graph,
+      manifest: emptyManifest(),
+      root: project,
+    });
+
+    expect(enabler).toBe("e2e");
+    await expect(readMode()).resolves.toBe("tests-after");
   });
 });
 

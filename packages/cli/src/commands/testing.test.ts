@@ -1,4 +1,11 @@
-import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readFile,
+  rm,
+  writeFile,
+} from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -272,6 +279,24 @@ describe("runTesting — refusals", () => {
     expect(code).toBe(2);
     expect(out).toContain("Unknown argument(s): --force");
   });
+
+  // The config is the mode's record, so it is saved first: a config that cannot be
+  // saved must leave the AGENTS.md block on the old mode, not describe a mode the
+  // project never got (#242).
+  // Root ignores file modes, so the save would not fail there.
+  it.runIf(process.getuid?.() !== 0)(
+    "leaves AGENTS.md untouched when saasaloy.json cannot be saved",
+    async () => {
+      const agents = await readAgents();
+      await chmod(join(project, "saasaloy.json"), 0o444);
+
+      const { code } = await run(["off"]);
+
+      expect(code).not.toBe(0);
+      expect((await readConfig()).testing).toStrictEqual({ mode: "tdd" });
+      await expect(readAgents()).resolves.toBe(agents);
+    }
+  );
 
   it("refuses outside a project with exit 2", async () => {
     await rm(join(project, "saasaloy.json"));
