@@ -1,0 +1,41 @@
+/* The customer app's stylesheet. `saasaloy add app` writes it, and apps/app/src/main.tsx
+   imports it as `@repo/ui/styles/app.css`. It is the app's one Tailwind entrypoint.
+
+   The app wears the shell frame with the WEB BRAND tokens, light first (plan 0074, the
+   "`app` look" row, approved in mockup round 2 on 2026-10-24). So it imports brand.css,
+   never admin.css:
+
+   1. brand.css: globals.css (Tailwind, the @source globs for blocks/**, containers/**
+      and lib/**, the base layer), then the brand :root and .dark values, the dark
+      custom variant and the @theme inline mapping. A shadcn preset applied to brand.css
+      reaches this app and the landing page together.
+   2. shell.css: the @source line for components/shell/, the status and sort tokens the
+      shell primitives read, and their motion.
+   3. The canvas overrides below, the only values this app sets itself.
+
+   Keep the import order. shell.css's defaults sit in `:where()`, so they lose to every
+   rule here whatever the order, but brand.css has to come first so its tokens exist
+   when shell.css maps them. */
+@import "./brand.css";
+@import "./shell.css";
+
+/* ROUND 2 of the mockup. brand.css --sidebar (0.985) sits one hair off the white panel, so
+   the shell canvas would not read. The canvas takes brand --muted (oklch(0.97 0 0))
+   instead, and the active nav row, which brand paints in that same 0.97, moves one step
+   down to brand --border (oklch(0.922 0 0)) so it still reads on the darker canvas. */
+:root {
+  --sidebar: oklch(0.97 0 0);
+  --sidebar-accent: oklch(0.922 0 0);
+}
+
+.dark {
+  /* The canvas one step darker than the panel (--card, oklch(0.205 0 0)), so the panel
+     stands off it. The value is brand.css .dark --background; brand.css keeps --sidebar
+     equal to --card. */
+  --sidebar: oklch(0.145 0 0);
+
+  /* Restated, not changed: brand.css .dark --sidebar-accent. The light override above sits
+     in a later `:root` rule of the same specificity as brand.css's `.dark`, so without
+     this line the dark active row takes the light value. */
+  --sidebar-accent: oklch(0.269 0 0);
+}

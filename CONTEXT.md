@@ -136,7 +136,7 @@ The Phase-3 prioritization axis: a capability's rank equals how many downstream 
 ## Environment values
 
 ### Service
-A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
+A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
 _Avoid: app. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
 
 ### Key list
@@ -156,7 +156,7 @@ _Avoid: schema for this. The schema is one key's validator; the preset is the se
 ## Production deploy
 
 ### Deploy target
-A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api and admin modules append `api` (10) and `admin` (20) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
+A row in `DEPLOY_TARGETS` in a project's `packages/tooling/src/targets.ts`: `{ service, order }`, one per Worker that `pnpm deploy:production` uploads, lowest `order` first. The base seeds `web` (30), and the api, admin and app modules append `api` (10), `admin` (20) and `app` (25) with a `const-array` patch, so a frontend never goes live ahead of the api route it calls. A workspace under `apps/` with a `wrangler.jsonc` and a `deploy` script but no row stops the deploy, which names it ([ADR 0048](docs/adr/0048-adr-production-deploy-is-gated-ordered-and-tagged-2026-10-23.md)).
 _Avoid: app, for this. A deploy target is a [service](#service) that has a Worker; the `deploy` service has none._
 
 ### Smoke check
@@ -286,7 +286,7 @@ Machine-owned provenance at the consumer root: per installed module, its [regist
 _Avoid: putting resolved SHAs in `saasaloy.json`._
 
 ### File aliases
-The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin`.
+The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin` / `@app`.
 
 ### Conditional file entry (`onlyWith`)
 A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.

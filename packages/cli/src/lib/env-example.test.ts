@@ -42,7 +42,11 @@ describe(servicesFor, () => {
   });
 
   it("falls back to the PUBLIC_ prefix rule when nothing is declared", () => {
-    expect(servicesFor("PUBLIC_API_URL")).toStrictEqual(["web", "admin"]);
+    expect(servicesFor("PUBLIC_API_URL")).toStrictEqual([
+      "web",
+      "admin",
+      "app",
+    ]);
     expect(servicesFor("EMAIL_FROM")).toStrictEqual(["api"]);
   });
 });

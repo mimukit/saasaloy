@@ -176,7 +176,7 @@
           "minItems": 1,
           "items": {
             "type": "string",
-            "enum": ["api", "web", "admin", "deploy"]
+            "enum": ["api", "web", "admin", "app", "deploy"]
           }
         }
       },
@@ -187,7 +187,10 @@
         "type": "array",
         "uniqueItems": true,
         "minItems": 1,
-        "items": { "type": "string", "enum": ["api", "web", "admin", "deploy"] }
+        "items": {
+          "type": "string",
+          "enum": ["api", "web", "admin", "app", "deploy"]
+        }
       }
     },
     "envOptional": {
