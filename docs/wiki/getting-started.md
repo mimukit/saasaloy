@@ -106,8 +106,8 @@ need.
 ## Make it yours
 
 The page you are looking at still sells a placeholder product, under a `siteName` that is
-just your directory name. The three skills in `.agents/skills/` exist to fix that, and the
-first two run in order:
+just your directory name. Three of the seven skills in `.agents/skills/` exist to fix that,
+and the first two run in order:
 
 1. **`/saasaloy-setup`** interviews you about the product and writes
    `docs/product-brief.md` — the context every other skill reads.

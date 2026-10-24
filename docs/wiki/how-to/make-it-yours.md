@@ -1,6 +1,6 @@
 # Make the project yours
 
-A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme is shadcn's `neutral`. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three agent skills ship with the base to fix that, as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
+A freshly scaffolded project runs, but it knows nothing about your product: the site name is `Saasaloy`, the landing page describes Saasaloy itself, and the theme is shadcn's `neutral`. The page has thirteen sections; remove the ones you don't need by deleting their line in `apps/web/src/pages/index.astro` (the project README has the recipe). Three of the seven agent skills that ship with the base fix that. They live as real files in `.agents/skills/` with `.claude/skills/` symlinks, so any agent that reads skills can run them. In Claude Code they are slash commands.
 
 Run the first two in order. The third runs whenever you want the look changed.
 
@@ -9,6 +9,8 @@ Run the first two in order. The third runs whenever you want the look changed.
 The setup skill interviews you once — ten questions, starting with the product's name, each with sample answers you can take, edit, or ignore — and writes the answers to `docs/product-brief.md`. That brief is the shared context every other skill reads instead of interviewing you again.
 
 It also sets the two facts that live in code rather than prose: `app.name` and `app.locale` in `packages/config/src/project.ts`. `siteName` and the page's `lang` attribute read them. It writes no landing copy.
+
+Its last question is "Run the build unattended?". Answer yes and it writes `autonomy: afk` into the brief's frontmatter. From then on the setup, landing-copy and design skills run without asking you anything, and log what they did in `docs/build-log.md`. A brief with a missing or weak answer stops an unattended run, and the log lists the sections to fill. To work attended again, delete the `autonomy` line, or ask the skill for the interview.
 
 Re-running it is how you update the brief later: it summarises what it has, asks only about what changed, and re-asks anything it recorded as weak.
 
