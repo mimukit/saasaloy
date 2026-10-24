@@ -4,7 +4,7 @@ Containers are the shells and layouts that hold blocks and components on a page:
 
 The base ships none. `saasaloy add shell` writes the signed-in apps' shell and layouts into `src/containers/shell/`.
 
-Rules (the full version is in the repository's `AGENTS.md`):
+Rules (the full version is in `packages/ui/AGENTS.md`):
 
 - A container takes its data, its links and its callbacks as props. It imports no router and no session; the app that owns them passes them in.
 - No IO anywhere in `@repo/ui`: no fetch, no persistence, no auth.

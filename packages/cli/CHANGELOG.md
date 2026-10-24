@@ -275,8 +275,8 @@
   packages/ui/src/styles/web.css, and DESIGN.md moves to
   apps/web/DESIGN.md. saasaloy update creates web.css and sends
   globals.css and Layout.astro to the merge plan. Finish the move
-  with the steps in the base AGENTS.md under "A project made
-  before the theme split". The admin app imports
+  with the steps in docs/wiki/runbooks/finish-the-theme-split.md.
+  The admin app imports
   @repo/ui/styles/admin.css, which needs the new ./styles/*
   export in packages/ui/package.json.
 

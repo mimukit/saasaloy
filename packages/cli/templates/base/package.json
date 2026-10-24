@@ -11,6 +11,7 @@
   "scripts": {
     "prepare": "husky && node packages/tooling/src/link-skills.ts",
     "build": "turbo run build",
+    "check": "pnpm run typecheck && pnpm run lint && pnpm run test && pnpm run build",
     "clean": "turbo run clean && rimraf -g node_modules .turbo \"{apps,packages}/*/node_modules\" \"{apps,packages}/*/.turbo\"",
     "deploy:production": "node packages/tooling/src/deploy-production.ts",
     "release": "node packages/tooling/src/release.ts",
