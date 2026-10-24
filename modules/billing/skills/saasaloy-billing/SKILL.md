@@ -5,7 +5,7 @@ description: Runbook for the billing capability — provider-agnostic subscripti
 
 # billing — provider-agnostic subscriptions from `packages/billing`
 
-`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
+`packages/billing` (`@repo/billing`) is the capability core: a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, the plan entitlements (`src/entitlements.ts`, with the `requireFeature` and `requireWithinLimit` gates in `apps/api`), and a **provider registry**. It has **zero npm runtime dependencies** and names no payment vendor. Each provider ships as its own module, dropping one file into `src/providers/` and registering itself in the `providers` array in `src/index.ts`.
 
 Callers import `@repo/billing`, call `createBilling(env)`, and never learn who takes the money. It is the same shape as `@repo/email` and `@repo/queue`, on purpose (ADR 0033, ADR 0034).
 
@@ -238,7 +238,7 @@ Checked against `@better-auth/stripe` **1.7.3**. These are all sixteen fields th
 Three consequences worth holding:
 
 - **The customer link is a real column on `users`.** `modules/billing` adds `users.billingCustomerId` with a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, because a Better Auth plugin writes the customer id onto the `user` model and cannot be pointed at another table. `saasaloy remove billing` takes the column back out of the schema file; the deployed column survives until you generate and apply the migration.
-- **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts` and `entitlements` reads them there.
+- **`limits` is not passed through to the plugin.** The plugin writes a `limits` field onto the row whenever a plan config carries one, and that field is outside its declared schema, so no column exists for it. Limits live in `plans.ts`, and the entitlement resolver in `src/entitlements.ts` (`limit()`) reads them there.
 - **The plugin's plan `name` is this project's plan *id*.** It lower-cases `name` and stores it in the `plan` column, which is the string `findPlan(plans, …)` looks up. Keep plan ids lower-case.
 
 **On a `better-auth` or `@better-auth/stripe` bump:** open the new version's schema module and diff its `subscription` and `user` field lists against the table above. A field the plugin writes with no column behind it fails at the first webhook, not at `pnpm typecheck`.
@@ -280,6 +280,20 @@ A project that installed billing before the tables became plural has `billing_su
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `billing_subscription_*` → `billing_subscriptions_*`), and it must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
 5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
 6. Apply the migration with the command from the installed driver's skill. Then sign in once and open the billing page to confirm the adapter finds every table.
+
+## Upgrading from the `entitlements` module
+
+The entitlement resolver and the 402 gates used to ship as a separate `entitlements` module. `billing` now ships both files itself, and the registry no longer has an `entitlements` module. A project that still has it installed moves to the new layout like this:
+
+1. Commit or stash your work, so `git diff` can show any edit you made to the two files.
+2. Run `saasaloy update --dry-run`. It prints `entitlements — Unknown module "entitlements"`, and it marks `packages/billing/src/entitlements.ts` as `conflict → merge`, because two modules now claim that file. Do not apply this update.
+3. Run `saasaloy remove entitlements --yes`. It deletes `packages/billing/src/entitlements.ts`, `apps/api/src/middleware/require-feature.ts` and the `saasaloy-entitlements` skill. Until the next step, every route that imports `requireFeature` or `requireWithinLimit` fails to compile.
+4. Run `saasaloy add billing --yes --force`. It writes both files back, now owned by `billing`.
+5. Run `pnpm install`, then `pnpm --filter @repo/billing typecheck` and `pnpm --filter @repo/api typecheck`. Both must pass.
+6. Run `grep -c '"entitlements"' .saasaloy/manifest.json`. The count must be `0`. The manifest still tracks `packages/billing/src/entitlements.ts`, under `"module": "billing"`.
+7. Run `git diff` on the two files, and apply again any local edit that step 4 replaced.
+
+No table, column or migration changes, so the database needs nothing.
 
 ## Write a third provider
 
