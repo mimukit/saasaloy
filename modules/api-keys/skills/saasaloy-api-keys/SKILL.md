@@ -279,3 +279,7 @@ A project that installed `api-keys` before the tables became plural has an `apik
 4. Read the generated SQL before you apply it. It must rename the table and its indexes (`ALTER TABLE ... RENAME TO ...`), and contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
 5. If it drops a table, delete that migration file and run `pnpm db:generate` again.
 6. Apply the migration, then call the API once with an existing key to confirm the adapter finds the table.
+
+## Next
+
+Run `saasaloy-api` to accept a key on a route and read the caller it resolves to.

@@ -256,3 +256,7 @@ If a submission is blocked in the browser, check `CORS_ORIGINS` on the api Worke
 - **No email-confirmation flow ships here.** Optional `email`-module integration is a follow-up
   (no resolver support yet for optional `dependsOn`); this module's `dependsOn` is a hard
   requirement on `api` + `database` + `validators` only.
+
+## Next
+
+Run `saasaloy-landing-copy` to point the landing page's primary button at the waitlist form.

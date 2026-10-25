@@ -125,3 +125,27 @@ If a new provider would need more than one file and a registration patch, the co
 ## Known gaps
 
 - There is no `saasaloy migrate storage`. Swapping providers copies bytes by hand, and no migration is promised (ADR 0035).
+
+## Removal
+
+Remove the dependents first. `storage-cloudflare` and `storage-memory` depend on `storage`, and so does `file-uploads`. `remove storage` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
+
+`saasaloy remove storage-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array, plus any binding patches it carries. The R2 bucket and every object in it survive. Copy or delete them by hand.
+
+`saasaloy remove storage` then deletes `apps/api/src/routes/storage.ts` and the `packages/storage` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `token.ts`, `env-preset.ts`). It reverses the `chained-route` patch that mounts `/storage` in `apps/api/src/index.ts` and the `plugin-array` patch that adds the storage preset to `apps/api/src/env.ts`. The `@repo/storage` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `STORAGE_PROVIDER`, `STORAGE_URL_SECRET`, `STORAGE_MAX_UPLOAD_BYTES` and `STORAGE_PROXY_URL` lines by hand.
+
+Every route that imports `@repo/storage` stops compiling. Every upload or download link already issued stops working, because the `/storage` proxy route is gone.
+
+## Failure modes
+
+- `STORAGE_PROVIDER is not set.` thrown by `createStorage(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
+- `STORAGE_PROVIDER is "<x>", which is not registered.` Fix the value or `saasaloy add storage-<x>`.
+- `STORAGE_URL_SECRET is not set, so storage cannot sign or verify an upload link.` Set it in `packages/env/.env` for local work, and with `wrangler secret put STORAGE_URL_SECRET` in production.
+- `STORAGE_MAX_UPLOAD_BYTES is "<x>", which is not a positive whole number of bytes.` Fix the value, or unset it for the default cap.
+- `StorageError("provider_error")` with ``No `<binding>` R2 binding on this Worker's env.`` from `storage-cloudflare`. Add an `r2_buckets` entry to `apps/api/wrangler.jsonc` and create the bucket.
+- `StorageError("provider_error")` with `<provider>: <operation> failed`. The provider threw a raw error, and the core wrapped it with `retryable: false`. Read `cause`.
+- Any other `StorageError`. Branch on `code` (`not_found`, `invalid_key`, `too_large`, `rate_limited`, `not_supported`, `provider_error`). Retry only when `retryable` is true.
+
+## Next
+
+Run `saasaloy-file-uploads` to give users an upload screen on top of this store.

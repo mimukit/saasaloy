@@ -39,3 +39,7 @@ The distinction is read off the CLI's own output: it prints `Response Code:` whe
 ## Errors
 
 Every failure arrives as `EnvError` with a `code`: `unreachable`, `denied`, `not_configured` or `invalid_response`. The vendor's own exit status is kept in `providerCode`, and `retryable` is true only for `unreachable`.
+
+## Next
+
+Run `saasaloy-deploy` to ship the values to production.

@@ -280,6 +280,21 @@ Contract notes:
 - Any npm dependency belongs in `packages/logger/package.json`, not in another workspace — only this
   package touches provider SDKs (ADR 0020).
 
+## Removal
+
+You cannot remove `logger` from a normal project. The `api` module declares `dependsOn: ["logger", "logger-console"]`, so `remove logger` and `remove logger-console` both refuse while `api` is installed. Only `--force` overrides the refusal, and then `apps/api` stops compiling.
+
+A second provider is a different case. `saasaloy remove logger-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. Point `LOGGER_PROVIDER` at a provider that is still installed first, or unset it.
+
+If you do force `remove logger`, it deletes the `packages/logger` workspace (`index.ts`, `define.ts`, `provider.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the logger preset to `apps/api/src/env.ts`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `LOGGER_PROVIDER` and `LOG_LEVEL` lines by hand. Every file that imports `@repo/logger` stops compiling, and `apps/api` is one of them.
+
+## Failure modes
+
+- `LOGGER_PROVIDER is "<x>", which is not registered.` thrown by `createLogger(env)`. This is the only construction error. Fix the value, or unset it to select the first registered provider.
+- No log output and no error. `LOGGER_PROVIDER` is unset and no provider is registered, so the core returns a no-op logger. Check the `providers` array in the logger's `index.ts`.
+- Debug lines do not appear. An unknown `LOG_LEVEL` falls back to `info` with no warning. Set `LOG_LEVEL` to a valid level.
+- A secret shows in a log line. Redaction matches known key names only. Read "Redaction: what it catches, and what it does not" above and rename or drop the field.
+
 ## Boundaries to honor
 
 - **`export const logger = defineLogger({ providers: [] })` stays in exactly that shape** — a real
@@ -294,3 +309,7 @@ Contract notes:
   provider's `write`.
 - **`logger-console` is production.** Don't swap it out for "something real" — on Workers it *is*
   the real one.
+
+## Next
+
+Run `saasaloy-api` to log from a route through `c.get("log")`.

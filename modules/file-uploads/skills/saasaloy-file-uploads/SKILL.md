@@ -146,3 +146,7 @@ The rest of this section is for putting the block on a *second* surface, such as
 - **`GET /files/:id/download` refuses a public id** with a 400 rather than signing one. The list response already carries `url` for a public row; a second, expiring URL would imply a revocability this module does not have.
 - **The list is keyset-paginated, not offset-paginated.** The cursor carries the last row's `createdAt` *and* `id`, because two rows can share a millisecond. Treat it as opaque; an unreadable one falls back to the first page.
 - **`size` on a `pending` row is what the client claimed.** Only after `complete` does it hold the real number.
+
+## Next
+
+Run `saasaloy-app` to put the upload block on a customer screen.

@@ -279,3 +279,7 @@ There is no data migration in either direction; see ADR 0026.
   api Worker uploads, and the old Worker serves requests in between. A migration the old code
   cannot read is an outage until the upload finishes, and a failed upload leaves it that way.
 - **One driver per project.** Adding `database-postgres` beside this one is refused, by design.
+
+## Next
+
+Run `saasaloy-database` to add a table, a repository function and a seed slice.

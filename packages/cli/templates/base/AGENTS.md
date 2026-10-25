@@ -128,10 +128,15 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 ### The Base Skills
 
-Seven skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
+Nine skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
 
 1. **`saasaloy-setup`** interviews the owner once and writes `docs/product-brief.md`, then sets `config.app.name` and `config.app.locale`. Other skills read the brief rather than ask again.
 2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
+
+Two build the product once modules are installed:
+
+- **`saasaloy-build`** runs the whole MVP build in stages from a complete brief, with one commit per stage on `build/mvp` and a resumable `docs/build-log.md`. Start here when you are asked to build the product.
+- **`saasaloy-feature`** builds one product entity across the stack: table, migration, seed slice, validator, route, `hc` client, an `app` screen, an `admin` list and a route test.
 
 The other five run when the thing they own moves:
 
@@ -200,7 +205,7 @@ Testing mode: `off`. This project ships no module tests, and `saasaloy add` writ
 
 ## Unattended work
 
-An agent may build this project with no person at the keyboard. These rules apply only then, and they override "Ask First" where they say so.
+An agent may build this project with no person at the keyboard. These rules apply only then, and they override "Ask First" where they say so. The `saasaloy-build` skill runs the stages these rules describe.
 
 - **The signal is `autonomy: afk`** in the YAML frontmatter of `docs/product-brief.md`. Only a person sets it: `saasaloy-setup` asks "Run the build unattended?" as its last question. With no such field, every skill keeps its attended path and asks.
 - **A person supplies the two inputs**: the env values in `packages/env/.env`, and the brief, written through the attended `saasaloy-setup` interview. The person also runs `pnpm env:setup` before the first build. The brief is complete when all ten answers are filled (Name, Language, Audience, Problem, Current alternative, Differentiator, Proof, Tone, Pricing, Where "sign up" goes) and none is tagged `weak:`. With an incomplete brief, stop before the first module and list each missing or weak section under `## Blocked` in `docs/build-log.md`.

@@ -117,3 +117,7 @@ This module adds no workflow. A project that wants the suite on CI writes its ow
 ## What this suite is not
 
 No visual regression, no accessibility assertions, no performance budget, no load or contract testing. One browser engine, Chromium. Nothing runs against a deployed preview or production: every flow drives a dev server on localhost with a development database.
+
+## Next
+
+Run `saasaloy-testing` to decide which other tests a change needs.
