@@ -6,17 +6,24 @@
 // suites. Run it with `pnpm test:scripts`.
 
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { describe, it } from "node:test";
 import {
+  addArgs,
   databaseDriver,
+  envFile,
+  insideDir,
   listenerPids,
   parseArgs,
   readDevVar,
+  readPresets,
 } from "./playground.ts";
+import type { Preset } from "./playground.ts";
 
 describe("parseArgs", () => {
   it("reads snap", () => {
-    assert.deepEqual(parseArgs(["snap"]), { command: "snap", db: false });
+    assert.deepEqual(parseArgs(["snap"]), { command: "snap" });
   });
 
   it("reads restore with and without --db", () => {
@@ -27,8 +34,28 @@ describe("parseArgs", () => {
     });
   });
 
-  it("refuses --db on snap", () => {
-    assert.throws(() => parseArgs(["snap", "--db"]), /--db/);
+  it("refuses a flag on snap and down", () => {
+    assert.throws(() => parseArgs(["snap", "--db"]), /no flags/);
+    assert.throws(() => parseArgs(["down", "--db"]), /no flags/);
+  });
+
+  it("reads up with the full preset on d1 by default", () => {
+    assert.deepEqual(parseArgs(["up"]), {
+      command: "up",
+      db: "d1",
+      preset: "full",
+    });
+    assert.deepEqual(
+      parseArgs(["up", "--preset", "minimal", "--db", "postgres"]),
+      { command: "up", db: "postgres", preset: "minimal" }
+    );
+  });
+
+  it("refuses an unknown driver, a missing value or an unknown up flag", () => {
+    assert.throws(() => parseArgs(["up", "--db", "mysql"]), /d1 or postgres/);
+    assert.throws(() => parseArgs(["up", "--preset"]), /needs a value/);
+    assert.throws(() => parseArgs(["up", "--preset", "--db"]), /needs a value/);
+    assert.throws(() => parseArgs(["up", "--fast"]), /--fast/);
   });
 
   it("refuses an unknown command or flag", () => {
@@ -77,5 +104,98 @@ describe("readDevVar", () => {
 
   it("skips a comment and a missing key", () => {
     assert.equal(readDevVar("# DATABASE_URL=x\n", "DATABASE_URL"), undefined);
+  });
+});
+
+const presetsFile = resolve(import.meta.dirname, "play-presets.json");
+const modulesDir = resolve(import.meta.dirname, "../modules");
+
+function descriptor(name: string): { conflictsWith?: string[] } {
+  return JSON.parse(
+    readFileSync(resolve(modulesDir, name, "registry-item.json"), "utf-8")
+  ) as { conflictsWith?: string[] };
+}
+
+describe("play-presets.json", () => {
+  const presets = readPresets(readFileSync(presetsFile, "utf-8"));
+
+  it("holds minimal and full", () => {
+    assert.deepEqual(Object.keys(presets).toSorted(), ["full", "minimal"]);
+  });
+
+  it("names only modules in the registry, and no two that conflict", () => {
+    for (const [name, preset] of Object.entries(presets)) {
+      for (const module of preset.modules) {
+        assert.ok(
+          existsSync(resolve(modulesDir, module, "registry-item.json")),
+          `${name} names ${module}, which is not in modules/`
+        );
+        for (const other of descriptor(module).conflictsWith ?? []) {
+          assert.ok(
+            !preset.modules.includes(other),
+            `${name} names ${module} and ${other}, which conflict`
+          );
+        }
+      }
+    }
+  });
+
+  it("leaves the driver to --db", () => {
+    for (const preset of Object.values(presets)) {
+      assert.ok(!preset.modules.some((m) => m.startsWith("database")));
+    }
+  });
+});
+
+describe("readPresets", () => {
+  it("refuses a preset that sets BETTER_AUTH_SECRET", () => {
+    const text = JSON.stringify({
+      bad: { description: "", env: { BETTER_AUTH_SECRET: "x" }, modules: [] },
+    });
+    assert.throws(() => readPresets(text), /BETTER_AUTH_SECRET/);
+  });
+
+  it("refuses a preset with no module list", () => {
+    const text = JSON.stringify({ bad: { description: "", env: {} } });
+    assert.throws(() => readPresets(text), /modules list/);
+  });
+
+  it("skips a $comment key", () => {
+    assert.deepEqual(readPresets('{"$comment":"x"}'), {});
+  });
+});
+
+describe("addArgs and envFile", () => {
+  const preset: Preset = {
+    description: "",
+    env: { B: "2", A: "1" },
+    modules: ["waitlist"],
+  };
+
+  it("adds the driver --db picks", () => {
+    assert.deepEqual(addArgs(preset, "postgres"), [
+      "add",
+      "waitlist",
+      "--with",
+      "database-postgres",
+      "--yes",
+    ]);
+  });
+
+  it("adds nothing for a preset with no modules", () => {
+    assert.deepEqual(addArgs({ ...preset, modules: [] }, "d1"), []);
+  });
+
+  it("writes one sorted line per key", () => {
+    assert.match(envFile(preset), /\nA=1\nB=2\n$/);
+  });
+});
+
+describe("insideDir", () => {
+  it("admits the folder and what is under it, and nothing beside it", () => {
+    assert.ok(insideDir("/r/.dev/playground", "/r/.dev/playground"));
+    assert.ok(insideDir("/r/.dev/playground/apps/api", "/r/.dev/playground"));
+    assert.ok(!insideDir("/r/.dev/playground-2", "/r/.dev/playground"));
+    assert.ok(!insideDir(undefined, "/r/.dev/playground"));
   });
 });
