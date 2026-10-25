@@ -21,6 +21,24 @@
       "kind": "package-json-script",
       "name": "e2e:install",
       "value": "pnpm --filter @repo/e2e e2e:install"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "ci:prepare:e2e",
+      "value": "pnpm e2e:install --with-deps",
+      "when": {
+        "installed": ["ci"]
+      }
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "ci:e2e",
+      "value": "pnpm e2e",
+      "when": {
+        "installed": ["ci"]
+      }
     }
   ],
   "files": [],

@@ -1,0 +1,43 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ci",
+  "type": "saasaloy:capability",
+  "description": "A static GitHub Actions workflow that runs install, ci:prepare, lint, typecheck and test on every push, and turns the deploy CI gate on.",
+  "stage": "validate",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.8.0" },
+  "dependsOn": [],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "ci:prepare",
+      "value": "pnpm run --if-present --workspace-concurrency=1 \"/^ci:prepare:/\""
+    },
+    {
+      "file": "packages/tooling/src/deploy.config.ts",
+      "kind": "const-property",
+      "constName": "deployConfig",
+      "property": "ciWorkflow",
+      "value": "ci.yml"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/workflows/ci.yml",
+      "target": "@root/.github/workflows/ci.yml"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": ".",
+      "aliases": { "@root": "." },
+      "files": []
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-ci"]
+  }
+}
