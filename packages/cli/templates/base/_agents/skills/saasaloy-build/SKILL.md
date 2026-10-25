@@ -68,7 +68,7 @@ Read `modules[]`. For the Validate stage keep each module whose `stage` is `vali
 1. **Drop a module with a non-empty `needs`.** `cloudflare-paid`, `stripe`, `domain` and `vendor-account` each need a person with an account. Log each dropped module and its `needs` under `## Left for a human`.
 2. **Pick one provider or driver per capability, the local one.** `database-d1` for `database`, `logger-console` for `logger`, `email-console` for `email`. A module in another module's `conflictsWith` list is never added beside it.
 3. **Drop the optional extras the brief does not ask for:** `waitlist` (the MVP has a real sign-up), `e2e` (it needs a browser download), `email-react` and `command`. Add one when the brief names what it does, and log why.
-4. **Add the rest in one call per stage**, with every `requiresOneOf` answered: `saasaloy add <modules...> --with database-d1 --yes`. `add` resolves `dependsOn` itself.
+4. **Add the rest in one call per stage**: `saasaloy add <modules...> --yes`. Name the picked driver or provider in the list itself (`database-d1`, `email-console`), and `add` resolves `dependsOn` and the `requiresOneOf` choice from it. Pass `--with <module>` only when `add` exits 2 and names an unmet choice: `add` also exits 2 on a `--with` that answers no open choice.
 
 For the MVP stage this gives `shell`, `auth`, `app`, `admin`, `email` and `email-console`, on top of the Validate stage's `database`, `database-d1`, `api`, `logger`, `logger-console` and `validators`.
 
@@ -151,7 +151,8 @@ Under `autonomy: afk`, `AGENTS.md` "Unattended work" allows schema changes, migr
 
 ## Failure modes
 
-- **`saasaloy add` exits 2 and names a flag.** The CLI has no terminal to ask on. Pass the flag it names: `--yes`, or `--with <module>` for a `requiresOneOf` choice.
+- **`saasaloy add` exits 2 and names a flag.** The CLI has no terminal to ask on. Pass the flag it names: `--yes`, or `--with <module>` for an unmet `requiresOneOf` choice.
+- **`saasaloy add` exits 2 with "answers no unmet requirement".** A `--with` named a module that is already in the list or already installed. Drop the `--with`.
 - **`saasaloy add` refuses a module that conflicts with an installed one.** Rule 2 above picked two drivers or providers for one capability. Keep the local one.
 - **`pnpm check` fails in a file you did not touch.** Read the error first. A scaffolded file fails only when a module's wire-up step was skipped, so run the module's Wire-up section before you change the file.
 - **The dev server cannot bind its port.** Another process holds it. Stop the process you started; never stop a process you did not start, and never move a port, because the CORS lists name the fixed ports.
