@@ -6,6 +6,7 @@ import { readVersion } from "../version.js";
 import { describeInvalidDescriptor } from "./cli-requires.js";
 import { RefusalError } from "./exit.js";
 import { pathExists, readDirNames } from "./fs-utils.js";
+import type { TemplateVars } from "./scaffold.js";
 import type { RegistryItem } from "./schema.js";
 import { validateRegistryItem } from "./schema.js";
 
@@ -29,6 +30,11 @@ export interface LoadedModule {
   /** Absolute path to a local copy of the module's folder (source of `files[].path`). */
   dir: string;
   item: RegistryItem;
+  /**
+   * The `{{VAR}}` values this module's files render with, set by `renderModule` once the
+   * project is known. Absent on a module read for its descriptor alone.
+   */
+  vars?: TemplateVars;
 }
 
 /** Where a module was resolved from — the lockfile entry, minus `dependsOn`. */

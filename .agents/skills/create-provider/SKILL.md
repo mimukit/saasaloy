@@ -418,14 +418,14 @@ is the only route for a non-`fetch` Worker export. Two rules bind that half:
 **Descriptor, binding flavour** (`queue-cloudflare`): the same `plugin-array` patch, plus a
 `wrangler-binding` patch per binding and a second `plugin-array` for the handler set. The binding
 patches use the **dotted `bindingType`** the CLI gained for this capability, so a nested Wrangler
-key is one patch and removal unwinds the parents it created:
+key is one patch and removal unwinds the parents it created. A resource name lives in one Cloudflare account beside every other project's, so it starts with `{{PROJECT_NAME}}`, which `saasaloy add` renders in module files and patch entries alike:
 
 ```jsonc
 { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
-  "bindingType": "queues.producers", "entry": { "binding": "JOBS", "queue": "app-jobs" } },
+  "bindingType": "queues.producers", "entry": { "binding": "JOBS", "queue": "{{PROJECT_NAME}}-jobs" } },
 { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
   "bindingType": "queues.consumers", "matchOn": "queue",
-  "entry": { "queue": "app-jobs", "max_batch_size": 10, "max_retries": 3 } },
+  "entry": { "queue": "{{PROJECT_NAME}}-jobs", "max_batch_size": 10, "max_retries": 3 } },
 { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
   "bindingType": "triggers.crons", "entry": "* * * * *" },
 { "file": "apps/api/src/worker.ts", "kind": "plugin-array",
@@ -668,7 +668,7 @@ Keys arrive already built and already checked. The core runs `assertValidKey` be
   "envVars": { "R2_ACCOUNT_ID": "…", "R2_ACCESS_KEY_ID": "…", "R2_SECRET_ACCESS_KEY": "…", "R2_BUCKET_NAME": "…" },
   "patches": [
     { "file": "apps/api/wrangler.jsonc", "kind": "wrangler-binding",
-      "bindingType": "r2_buckets", "entry": { "binding": "BUCKET", "bucket_name": "app-storage" },
+      "bindingType": "r2_buckets", "entry": { "binding": "BUCKET", "bucket_name": "{{PROJECT_NAME}}-storage" },
       "matchOn": "binding" },
     { "file": "packages/storage/package.json", "kind": "package-json-dependency",
       "section": "dependencies", "name": "aws4fetch", "range": "1.0.20" },

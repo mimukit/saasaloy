@@ -93,13 +93,13 @@ itself.
 "d1_databases": [
   {
     "binding": "DB",
-    "database_name": "app-db",
+    "database_name": "<project>-db",
     "migrations_dir": "../../packages/db/migrations"
   }
 ]
 ```
 
-`binding: "DB"` is the name that shows up as `c.env.DB`. `migrations_dir` points wrangler at the
+`<project>` is the project name `saasaloy add` read from `saasaloy.json`, so two projects in one Cloudflare account never share a database. `binding: "DB"` is the name that shows up as `c.env.DB`. `migrations_dir` points wrangler at the
 SQL the core's `db:generate` emits.
 
 **There is no `database_id`, and you do not need one.** Local dev serves from a miniflare SQLite
@@ -108,7 +108,7 @@ Cloudflare account at all. In production the database is found by its `database_
 `db:prod:migrate` creates it on the first `pnpm deploy:production --migrate` when the account has none by that name, and `wrangler deploy` then connects the binding to it. A later deploy reuses the same database.
 
 A project made before this change carries `"database_id": "local"`. Delete that line, or replace
-it with the real id from `wrangler d1 info app-db`. Wrangler sends any id it finds, so `"local"`
+it with the real id from `wrangler d1 info <database_name>`. Wrangler sends any id it finds, so `"local"`
 breaks every remote command. A real id is not a secret; commit it if you add one.
 
 ## Applying migrations

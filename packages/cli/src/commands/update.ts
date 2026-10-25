@@ -66,7 +66,7 @@ import type { Graph } from "../lib/resolve.js";
 import { resolveGraph } from "../lib/resolve.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { readTestingMode, suggestsTestingMode } from "../lib/testing.js";
-import { baseTemplateDir } from "../lib/scaffold.js";
+import { baseTemplateDir, templateVars } from "../lib/scaffold.js";
 import { linkAgentSkills } from "../lib/skill-links.js";
 import { compareVersions, parseVersion } from "../lib/semver.js";
 import { TUI_ON_STDERR, wrapForNote } from "../lib/tui.js";
@@ -1104,6 +1104,7 @@ export async function runUpdate(argv: string[]): Promise<number> {
       considered: targets,
       skipped,
       pkg,
+      vars: templateVars(project.name),
     });
 
     // `--resolved` (#223): the named files leave the merge plan before it is summarized,

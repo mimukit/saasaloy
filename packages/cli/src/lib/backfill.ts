@@ -9,8 +9,11 @@ import {
   REGISTRY_ENV,
   RemoteRegistrySource,
 } from "./registry.js";
+import { renderModule } from "./module-render.js";
+import { resolveProjectName } from "./project-name.js";
 import type { LoadedModule, RegistrySource } from "./registry.js";
 import type { LoadedConfig } from "./saasaloy-config.js";
+import { templateVars } from "./scaffold.js";
 import type { TestingMode } from "./testing.js";
 import { isPatchTracked } from "./when.js";
 
@@ -147,6 +150,9 @@ export async function planBackfill(args: BackfillArgs): Promise<BackfillPlan> {
     );
   };
 
+  // Rendered as `add` rendered them (#197), so a backfilled file and patch hold the
+  // project's names and the patch-tracking test below compares like with like.
+  const vars = templateVars((await resolveProjectName(root, config)).name);
   const modules = new Map<string, LoadedModule>();
   const skipped: BackfillSkip[] = [];
   for (const name of config.installed) {
@@ -169,7 +175,7 @@ export async function planBackfill(args: BackfillArgs): Promise<BackfillPlan> {
       sources.set(key, source);
     }
     try {
-      modules.set(name, await source.readModule(name));
+      modules.set(name, renderModule(await source.readModule(name), vars));
     } catch (error) {
       // One unreadable module must not cost the others their backfill; the next run
       // tries it again.
