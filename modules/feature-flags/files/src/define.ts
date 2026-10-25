@@ -36,7 +36,7 @@ export const KILL_PREFIX = "kill.";
 export const MAINTENANCE_KEY = "system.maintenance";
 
 export interface FlagDefinition<K extends string = string> {
-  /** Dotted, lower-case, e.g. `billing.new-checkout`. Unique across the registry. */
+  /** Dotted, lower-case, e.g. `subscription.new-checkout`. Unique across the registry. */
   key: K;
   type: FlagType;
   /**
@@ -66,7 +66,7 @@ export interface FlagContext {
   tenantId?: string;
 }
 
-/** `"kill.payments" | "billing.x"` narrows to `"payments"`. */
+/** `"kill.payments" | "subscription.x"` narrows to `"payments"`. */
 export type KillSwitchName<K extends string> =
   K extends `${typeof KILL_PREFIX}${infer N}` ? N : never;
 
@@ -119,7 +119,7 @@ export interface FlagsRegistry<F extends readonly FlagDefinition[]> {
  * Declare a flag.
  *
  * ```ts
- * defineFlag({ key: "billing.new-checkout", type: "percentage", default: false });
+ * defineFlag({ key: "subscription.new-checkout", type: "percentage", default: false });
  * ```
  *
  * Adding a key needs a deploy, because `flag()`'s key set is this array. Changing any
@@ -133,7 +133,7 @@ export function defineFlag<K extends string>(
   if (!/^[a-z][a-z0-9-]*(\.[a-z0-9-]+)+$/.test(key)) {
     throw new Error(
       `Flag key ${JSON.stringify(key)} must be lower-case and dotted, e.g. ` +
-        `"billing.new-checkout". The prefix is what groups a screen's flags together.`
+        `"subscription.new-checkout". The prefix is what groups a screen's flags together.`
     );
   }
 

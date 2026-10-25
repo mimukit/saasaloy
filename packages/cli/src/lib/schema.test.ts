@@ -147,8 +147,8 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
   },
   "drizzle-column": {
     exportName: "user",
-    column: "billingCustomerId",
-    value: 'text("billing_customer_id")',
+    column: "subscriptionCustomerId",
+    value: 'text("subscription_customer_id")',
   },
   "nav-entry": {
     constName: "NAV_AREAS",

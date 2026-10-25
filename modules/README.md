@@ -15,7 +15,7 @@ modules/
 ```
 
 See `docs/plans/0001-plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in
-Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `billing`, …). The first to land
+Phase 1 (`api`, `database`, `waitlist`) and Phase 2 (`auth`, `admin`, `subscription`, …). The first to land
 is `api` (a capability — it carries `scaffolds[]`; see ADR 0013 for the scaffolds/files split). A
 capability built on a vendor SDK encapsulates it in the workspace it scaffolds — other workspaces
 import its exported utilities, never the vendor package (ADR 0020).
@@ -44,7 +44,7 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `queue` is the capability that scaffolds `packages/queue` (`@repo/queue`): a job table, a schedule table, a five-field cron matcher and a provider registry, with zero runtime dependencies. It merges what the catalog listed as `queue`, `cron` and `workflows`, because to a caller they are one thing: run work outside the request. It `dependsOn` `api` and patches `@repo/queue` into `apps/api/package.json`. `QUEUE_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0033 for why a queue takes providers rather than drivers.
 
-`billing` is the capability that scaffolds `packages/billing` (`@repo/billing`): a provider contract, a plan table, a billable-subject file, the projection rules over `billing_subscriptions`, the plan entitlements, and a provider registry, with zero runtime dependencies and no payment vendor named anywhere in it. `BILLING_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0034 for why a payment capability takes providers even though the project owns the table. `src/entitlements.ts` answers what a subject's plan allows, reading only `plans.ts` and the projection, so it runs with no payment provider installed; `apps/api/src/middleware/require-feature.ts` is the 402 gate over the same answer. A boolean in a plan's `features` is a **plan feature**, never a "feature flag" — that term belongs to `feature-flags`.
+`subscription` is the capability that scaffolds `packages/subscription` (`@repo/subscription`): a provider contract, a plan table, a billable-subject file, the projection rules over `subscriptions`, the plan entitlements, and a provider registry, with zero runtime dependencies and no payment vendor named anywhere in it. `SUBSCRIPTION_PROVIDER` picks the provider at runtime and has no default in either direction. See ADR 0034 for why a payment capability takes providers even though the project owns the table. `src/entitlements.ts` answers what a subject's plan allows, reading only `plans.ts` and the projection, so it runs with no payment provider installed; `apps/api/src/middleware/require-feature.ts` is the 402 gate over the same answer. A boolean in a plan's `features` is a **plan feature**, never a "feature flag" — that term belongs to `feature-flags`.
 
 `payment` is the capability that scaffolds `packages/payment` (`@repo/payment`): one-time payments linked to an app record by an opaque reference, with a provider contract, a status machine over `payments`, `payment_events` and `payment_refunds`, status-change listeners and a provider registry, with zero runtime dependencies. `PAYMENT_PROVIDER` is a comma list in priority order, and `create({ method })` stores the first listed provider that offers the method. It ships the public callback route `/payment/callback/:provider/*` and the staff review routes under `/admin/payment`, and no shopper routes: an app authorizes its own reference and calls `createPayment(env)`. See ADR 0045.
 
@@ -60,7 +60,7 @@ the same files a browser bundle imports. Request shapes live there; database col
 
 `command` is a feature on `shell` that gives every signed-in SPA one keyboard model: a Cmd/Ctrl+K palette, `G` then a letter for navigation, single keys on the page, and a `?` sheet of every binding. The contract lives in `shell` (`useCommands` and the extension seam), so a screen declares its commands with no dependency on this module. `command` ships the provider, the palette, the sheet and the key engine, the one file that imports `@tanstack/react-hotkeys`. It names no app: `admin` and `app` each carry a `plugin-array` patch gated on `command` that appends `commandExtension()` to their `shellExtensions` list. It takes neither providers nor drivers.
 
-A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `kv-upstash`, `storage-cloudflare`, `storage-memory`, `billing-stripe`, `billing-console`, `payment-console`, `payment-manual`) is a narrow feature: one file into a
+A **provider module** (`email-cloudflare`, `email-console`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-memory`, `kv-upstash`, `storage-cloudflare`, `storage-memory`, `subscription-stripe`, `subscription-console`, `payment-console`, `payment-manual`) is a narrow feature: one file into a
 capability's `providers/` folder plus the patch that registers it, carrying whatever descriptor
 surface that provider needs (a binding, an npm dep, a secret). It ships no skill of its own — the
 capability's skill documents it. See `.agents/skills/create-provider/`.
@@ -73,10 +73,10 @@ last one is how any module registers a non-`fetch` Worker export, and it is the 
 no binding and no env var, so a project develops and tests background work with no vendor account
 and no network.
 
-`billing-stripe` shows the other end of the same rule: one file with **two** exports, because
+`subscription-stripe` shows the other end of the same rule: one file with **two** exports, because
 Stripe reaches the project through two doors — the capability's `providers` array and Better Auth's
 `plugins` array — so it carries two `plugin-array` patches and three `package-json-dependency`
-patches. `billing-console` is its local twin: one file, one patch, no secret, and the whole
+patches. `subscription-console` is its local twin: one file, one patch, no secret, and the whole
 checkout flow with no network.
 
 A **driver module** (`database-d1`, `database-postgres`) is the mutually exclusive kind. Several

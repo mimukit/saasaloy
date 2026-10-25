@@ -31,7 +31,7 @@ import type {
 // shopper, and checking it in keeps it reviewed (ADR 0039). A method with no account set is
 // reported as unavailable, so `create` with it answers `method_unavailable`.
 //
-// Ported from the provider half of PR #170 (`billing-bkash-personal`): the three submission
+// Ported from the provider half of PR #170 (`subscription-bkash-personal`): the three submission
 // fields, the bKash transaction id rule and the trim-and-upper-case normalization. The
 // sender number goes through `bangladeshMobile` from `@repo/validators/phone` instead of
 // #170's inline regex.

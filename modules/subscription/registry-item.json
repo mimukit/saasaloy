@@ -1,0 +1,274 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "subscription",
+  "type": "saasaloy:capability",
+  "description": "Subscriptions in a packages/subscription workspace: the provider contract, plans.ts, the subscription projection and the plan entitlements.",
+  "stage": "money",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
+  "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
+  "dependencies": [],
+  "envVars": {
+    "SUBSCRIPTION_PROVIDER": "Which installed provider takes payments: `stripe` (add subscription-stripe) or `console` (add subscription-console). Always required — there is no default, so nothing charges a real card by accident and nothing stops taking payments silently.",
+    "SUBSCRIPTION_LOCKOUT_DAYS": "How many days a subscription may stay past_due before the daily lockout job sets locked_at and the subject drops to the default plan. Optional; 14 when unset.",
+    "SUBSCRIPTION_APP_URL": "Absolute https URL the subscription emails link to, normally your admin app's /subscription page. Also the one origin the checkout, portal and change-plan routes accept a redirect URL on. Optional; http://localhost:3001/subscription when unset, which is the dev default and is refused by the email renderer on any host but localhost."
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["SUBSCRIPTION_LOCKOUT_DAYS", "SUBSCRIPTION_APP_URL"],
+  "removeWarnings": [
+    "The deployed subscriptions and subscription_events tables survive this removal, and so does the users.subscription_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.",
+    "Removing this module does not cancel anything at the payment provider. Cancel live subscriptions in the vendor's own dashboard first.",
+    "Any route still wrapped in requireFeature() or requireWithinLimit() loses its import when this module goes. Search apps/api for both names before you remove it."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/subscription",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/subscription",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "subscriptionConfigSection",
+      "import": {
+        "name": "subscriptionConfigSection",
+        "from": "./sections/subscription"
+      }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "drizzle-orm",
+      "range": "0.45.3"
+    },
+    {
+      "file": "packages/queue/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/subscription",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/subscription",
+      "call": "subscriptionRoute",
+      "import": {
+        "name": "subscriptionRoute",
+        "from": "./routes/subscription"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "subscriptionEventJob",
+      "import": {
+        "name": "subscriptionEventJob",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "pastDueLockoutJob",
+      "import": {
+        "name": "pastDueLockoutJob",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "pastDueLockoutSchedule",
+      "import": {
+        "name": "pastDueLockoutSchedule",
+        "from": "@repo/subscription"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": { "to": "/subscription", "label": "Subscription" },
+      "icon": { "name": "CreditCardIcon", "from": "lucide-react" }
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "subscriptionCustomerId",
+      "value": "text(\"subscription_customer_id\")"
+    },
+    {
+      "file": "apps/api/src/env.ts",
+      "kind": "plugin-array",
+      "exportName": "apiEnv",
+      "arrayProp": "extends",
+      "call": "subscriptionEnv",
+      "import": {
+        "name": "subscriptionEnv",
+        "from": "@repo/subscription/env-preset"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/subscription.ts",
+      "target": "@api/routes/subscription.ts"
+    },
+    {
+      "path": "files/api/subscription-store.ts",
+      "target": "@api/subscription-store.ts"
+    },
+    {
+      "path": "files/config/subscription.ts",
+      "target": "@config/sections/subscription.ts"
+    },
+    {
+      "path": "files/api/require-feature.ts",
+      "target": "@api/middleware/require-feature.ts"
+    },
+    {
+      "path": "files/admin/routes/subscription.tsx",
+      "target": "@admin/routes/subscription.tsx"
+    },
+    {
+      "path": "files/email/templates/trial-ending.ts",
+      "target": "@email/templates/trial-ending.ts"
+    },
+    {
+      "path": "files/email/templates/payment-failed.ts",
+      "target": "@email/templates/payment-failed.ts"
+    },
+    {
+      "path": "files/email/templates/account-locked.ts",
+      "target": "@email/templates/account-locked.ts"
+    },
+    {
+      "path": "files/db/schema/subscription.sqlite.ts",
+      "target": "@db/schema/subscription.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/subscription.pg.ts",
+      "target": "@db/schema/subscription.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/seed/subscriptions.ts",
+      "target": "@db/seed/slices/subscriptions.ts"
+    },
+    {
+      "path": "files/db/seed/subscription-events.ts",
+      "target": "@db/seed/slices/subscription-events.ts"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/subscription",
+      "aliases": {
+        "@subscription": "packages/subscription/src"
+      },
+      "files": [
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/provider.ts",
+          "target": "src/provider.ts"
+        },
+        {
+          "path": "files/src/plans.ts",
+          "target": "src/plans.ts"
+        },
+        {
+          "path": "files/src/entitlements.ts",
+          "target": "src/entitlements.ts"
+        },
+        {
+          "path": "files/src/subject.ts",
+          "target": "src/subject.ts"
+        },
+        {
+          "path": "files/src/subscription.ts",
+          "target": "src/subscription.ts"
+        },
+        {
+          "path": "files/src/store.ts",
+          "target": "src/store.ts"
+        },
+        {
+          "path": "files/src/enqueue.ts",
+          "target": "src/enqueue.ts"
+        },
+        {
+          "path": "files/src/notify.ts",
+          "target": "src/notify.ts"
+        },
+        {
+          "path": "files/src/config.ts",
+          "target": "src/config.ts"
+        },
+        {
+          "path": "files/src/jobs/event.ts",
+          "target": "src/jobs/event.ts"
+        },
+        {
+          "path": "files/src/jobs/past-due-lockout.ts",
+          "target": "src/jobs/past-due-lockout.ts"
+        },
+        {
+          "path": "files/src/jobs/event-handler.ts",
+          "target": "src/jobs/event-handler.ts"
+        },
+        {
+          "path": "files/src/providers/.gitkeep",
+          "target": "src/providers/.gitkeep"
+        },
+        {
+          "path": "files/src/env-preset.ts",
+          "target": "src/env-preset.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-subscription"]
+  }
+}

@@ -96,7 +96,7 @@ async function noUsersYet(): Promise<boolean> {
 // other capability follows). This is deliberate: the Better Auth plugin-array patch point
 // (`{ exportName: "auth" | "adminAuth", arrayProp: "plugins" }` — see
 // packages/cli/src/lib/patch/ts-module.ts) must be a module-scope `export const` for
-// `billing`/`teams` to patch `plugins: [...]` with zero codemod changes. Workers'
+// `subscription`/`teams` to patch `plugins: [...]` with zero codemod changes. Workers'
 // `cloudflare:workers` importable-env makes the string config and the secret above
 // available at module scope, which is what makes this shape possible. A feature module
 // patches both arrays, so both groups get the feature.
@@ -181,7 +181,7 @@ function sharedOptions(group: Audience) {
       // `auth.api.*` call, sign-up included, into a 500.
       //
       // Passing `config.schema` instead would fix the read and break the composition: the
-      // expected set grows with the plugin array, so `billing-stripe` pushing `stripe()`
+      // expected set grows with the plugin array, so `subscription-stripe` pushing `stripe()`
       // would need the `subscription` model in that object too, and every later plugin
       // another table. A capability module would then have to patch this file to add a
       // table name, which is exactly the coupling the plugin-array patch point exists to
@@ -242,7 +242,7 @@ export const auth = betterAuth({
     // No `sendResetPassword` here. With `email` installed, `resetPasswordMail()` in the
     // array below sets it; without `email`, a reset request answers 400.
   },
-  // The patch point for feature capabilities (`billing` pushing `stripe()`, `teams` pushing
+  // The patch point for feature capabilities (`subscription` pushing `stripe()`, `teams` pushing
   // `organization()`, `email` bringing `resetPasswordMail()`). Keep this an array literal
   // (never omit it, never hoist it to a named const) — `insertIntoPluginArray` needs a
   // real array to push into. A feature module patches `adminAuth`'s array below as well.

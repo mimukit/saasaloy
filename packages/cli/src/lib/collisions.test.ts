@@ -470,7 +470,9 @@ describe(sectionKeyOf, () => {
   });
 
   it("tolerates an explicit extension", () => {
-    expect(sectionKeyOf(sectionPatch("./sections/billing.ts"))).toBe("billing");
+    expect(sectionKeyOf(sectionPatch("./sections/subscription.ts"))).toBe(
+      "subscription"
+    );
   });
 
   it("ignores a plugin-array patch on any other file", () => {
@@ -499,7 +501,7 @@ describe(detectSectionCollisions, () => {
     expect(
       detectSectionCollisions([
         { module: "auth", key: "auth" },
-        { module: "billing", key: "billing" },
+        { module: "subscription", key: "subscription" },
       ])
     ).toStrictEqual([]);
   });

@@ -15,7 +15,7 @@ import {
 // semantic, so each column is the idiomatic form for its dialect and what has to match is
 // the shape a row comes back in.
 //
-// Unlike `billing`'s tables these are the record, not a projection of a vendor's. A manual
+// Unlike `subscription`'s tables these are the record, not a projection of a vendor's. A manual
 // payment has no vendor record at all, so the `payments` row is the source of truth and an
 // app reads it by reference. Every status change appends a `payment_events` row, and the
 // core in `packages/payment` is the only writer of either table.

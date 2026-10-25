@@ -29,7 +29,7 @@ import { apiBaseUrl } from "@admin/lib/auth";
 // The browser sends both cookies to the api host, the client one included when a client
 // is signed in on another app in this browser. The `require*Admin*` gates read the admin
 // session whatever the header says, but a generic gate (`requireSession`,
-// `requireTenant`) reads the session the header names, so a teams or billing screen
+// `requireTenant`) reads the session the header names, so a teams or subscription screen
 // here acts as the admin who is signed in, not as the client in the other tab.
 //
 // The two are exported so a plain `fetch` to the api (the shell's live nav counts, whose

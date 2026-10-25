@@ -71,7 +71,7 @@ export function dbFlagSource(c: FlagsRequestContext): FlagSource {
  *
  * ```ts
  * const flags = flagsFor(c);
- * if (await flags.flag("billing.new-checkout", { subjectId: user.id })) { ... }
+ * if (await flags.flag("subscription.new-checkout", { subjectId: user.id })) { ... }
  * ```
  *
  * Cheap to call. It builds two closures and a `createKv(env)`; the isolate cache behind it

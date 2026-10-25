@@ -72,17 +72,19 @@ export default app;
   });
 
   it("appends to an existing chain, keeping the earlier links", () => {
-    const withBilling = `import { Hono } from "hono";
-import { billing } from "./routes/billing.js";
+    const withSubscription = `import { Hono } from "hono";
+import { subscription } from "./routes/subscription.js";
 
-const app = new Hono().route("/billing", billing);
+const app = new Hono().route("/subscription", subscription);
 
 export default app;
 `;
-    const out = insertChainedRoute(withBilling, WAITLIST);
-    expect(out).toContain('.route("/billing", billing)');
+    const out = insertChainedRoute(withSubscription, WAITLIST);
+    expect(out).toContain('.route("/subscription", subscription)');
     expect(out).toContain('.route("/waitlist", waitlist)');
-    expect(out.indexOf('"/billing"')).toBeLessThan(out.indexOf('"/waitlist"'));
+    expect(out.indexOf('"/subscription"')).toBeLessThan(
+      out.indexOf('"/waitlist"')
+    );
     expect(parses(out)).toBeTruthy();
   });
 
@@ -205,17 +207,17 @@ describe(removeChainedRoute, () => {
 
   it("removes only the matched link, keeping its siblings", () => {
     const both = `import { Hono } from "hono";
-import { billing } from "./routes/billing.js";
+import { subscription } from "./routes/subscription.js";
 import { waitlist } from "./routes/waitlist.js";
 
-const app = new Hono().route("/billing", billing).route("/waitlist", waitlist);
+const app = new Hono().route("/subscription", subscription).route("/waitlist", waitlist);
 
 export default app;
 `;
     const out = removeChainedRoute(both, WAITLIST);
-    expect(out).toContain('.route("/billing", billing)');
+    expect(out).toContain('.route("/subscription", subscription)');
     expect(out).not.toContain("/waitlist");
-    expect(out).toContain('from "./routes/billing.js"');
+    expect(out).toContain('from "./routes/subscription.js"');
     expect(parses(out)).toBeTruthy();
   });
 

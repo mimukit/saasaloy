@@ -40,7 +40,7 @@ import { flagsFor } from "../lib/flags";
 export const checkout = new Hono().post("/", async (c) => {
   const flags = flagsFor(c);
 
-  if (await flags.flag("billing.new-checkout", { subjectId: user.id, tenantId: org.id })) {
+  if (await flags.flag("subscription.new-checkout", { subjectId: user.id, tenantId: org.id })) {
     return newCheckout(c);
   }
   return oldCheckout(c);
@@ -59,7 +59,7 @@ import { defineFlag } from "../define";
 
 export function newCheckout() {
   return defineFlag({
-    key: "billing.new-checkout",
+    key: "subscription.new-checkout",
     type: "percentage",
     default: false,
     description: "Route checkout through the new provider.",

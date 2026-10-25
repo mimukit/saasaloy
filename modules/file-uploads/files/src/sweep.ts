@@ -6,7 +6,7 @@
 // only Vite understands — into a workspace that does not compile with Vite's types. So the
 // port is declared here, `apps/api/src/lib/storage-sweep.ts` implements it over the real
 // Drizzle client, and the job file sees neither. Same arrangement, and the same reason, as
-// `packages/billing`'s `BillingStore`.
+// `packages/subscription`'s `SubscriptionStore`.
 
 /** One row, reduced to what the sweep actually reads. */
 export interface SweepRow {
