@@ -1,6 +1,8 @@
 
 # Saasaloy — agent overview
 
+**Want to build a product with Saasaloy, not change Saasaloy?** Read [`llms.txt`](llms.txt) instead. This file is for agents that develop this repo.
+
 ## Architecture philosophy: portable capabilities, swappable providers
 
 **Cloudflare is a provider, not the architecture.** Every capability that wraps an external service ships as a neutral core plus provider modules, so a project swaps the vendor without touching the core, a consumer, or any other module. `email` + `email-cloudflare` / `email-plunk` / `email-console` is the reference shape; `logger` and `sms` follow it. `queue` + `queue-cloudflare` / `queue-memory` / a later `queue-upstash`, and `kv` + `kv-cloudflare` / `kv-upstash`, are the same shape applied to bindings: the platform owns the messages and the entries, the project never migrates them, so a runtime env var may pick the vendor (ADR 0033). `storage` + `storage-cloudflare` / `storage-memory` takes providers too, and it is the closest call on the list: a swap copies every object by hand, but an alternate implementation adds one file and replaces none, so the provider shape wins (ADR 0037, which rewrote ADR 0033's `storage` row).
