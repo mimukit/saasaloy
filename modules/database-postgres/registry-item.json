@@ -17,6 +17,25 @@
   },
   "patches": [
     {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:check",
+      "value": "node scripts/check.ts"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:check",
+      "value": "pnpm --filter @repo/db db:check"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "test:prepare",
+      "value": "pnpm db:check",
+      "when": { "testing": true }
+    },
+    {
       "file": "apps/api/wrangler.jsonc",
       "kind": "wrangler-binding",
       "bindingType": "compatibility_flags",
@@ -171,6 +190,10 @@
         {
           "path": "files/scripts/status.ts",
           "target": "scripts/status.ts"
+        },
+        {
+          "path": "files/scripts/check.ts",
+          "target": "scripts/check.ts"
         },
         {
           "path": "files/scripts/drop.ts",
