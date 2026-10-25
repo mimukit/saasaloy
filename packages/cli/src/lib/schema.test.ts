@@ -145,6 +145,11 @@ const SAMPLE_OPS: Record<PatchKind, Record<string, unknown>> = {
     key: "to",
     entry: { to: "/teams", label: "Teams" },
   },
+  "const-property": {
+    constName: "deployConfig",
+    property: "ciWorkflow",
+    value: "ci.yml",
+  },
   "drizzle-column": {
     exportName: "user",
     column: "billingCustomerId",

@@ -61,6 +61,9 @@ function patchSlot(op: RegistryPatch): unknown[] {
     case "const-array": {
       return [op.constName, op.key, op.entry[op.key]];
     }
+    case "const-property": {
+      return [op.constName, op.property];
+    }
     case "nav-entry": {
       return [op.constName, op.area, op.group, op.entry.to];
     }
