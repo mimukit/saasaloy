@@ -188,6 +188,24 @@ Pointed at a project, `doctor` also prints a Base section: which CLI recorded th
 
 Every file under `packages/cli/templates/base/` is a managed file in a scaffolded project, recorded at `init` under the module name `base` with the hash of its rendered bytes. `saasaloy outdated` compares the lock's template hash against the running CLI's, so any edit to the template turns the base row `outdated` for every project scaffolded before it, and `saasaloy update` then overwrites the clean copies and routes edited ones to the merge plan. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles`, as an explicit path; a test asserts every listed path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename.
 
+### One-command bring-up
+
+```sh
+pnpm play:up                               # the full preset on D1
+pnpm play:up --preset full --db postgres   # the same on Postgres in a Compose container
+pnpm play:up --preset minimal              # the base template only
+pnpm play:smoke                            # every installed module's smoke checks
+pnpm play:down                             # stop the dev servers play:up started
+```
+
+`play:up` stops the playground's own dev servers, deletes `.dev/playground`, and then builds the CLI, scaffolds, adds the preset's modules with the driver `--db` names, installs, writes `packages/env/.env` from the preset, runs `pnpm env:setup`, `db:generate`, `pnpm db:setup` and `pnpm db:seed`, commits a baseline, and starts every app's `pnpm dev` in the background. It ends when the web (3000), admin (3001), app (3002) and api (4000) ports answer. Logs and pid files go to `.dev/play/`. Every dev port is `strictPort`, so `play:up` refuses to start when a process from another checkout holds one, and it names that process. It never stops a process outside the playground.
+
+The presets live in `scripts/play-presets.json`: a module list and an `env` map each. `full` is every module with a local provider, so it needs no vendor account and no network. `BETTER_AUTH_SECRET` stays unset, and Better Auth then uses its dev key on the loopback `BETTER_AUTH_URL`. Sign in as `superadmin@example.test`, `admin@example.test` or `member@example.test` with the password `saasaloy-dev-password`; `banned@example.test` is refused.
+
+With `--db postgres`, `play:up` gives this checkout its own Compose project (`playground-<hash>`), removes that project's container and named volume, and refuses when another Postgres answers on 5432. Remove the container when you are done with `docker compose --project-name playground-<hash> down --volumes`, using the name `docker ps` shows.
+
+A module can ship `modules/<name>/smoke.ts`, beside its descriptor. It is never copied into a project. It drives the api over HTTP only, so one script runs on both drivers, and it uses the helper in `scripts/smoke.ts`, which signs a seeded user in on the client (`/auth`) or admin (`/admin/auth`) surface, keeps the cookie, and prints one `PASS` or `FAIL` line per check. `pnpm play:smoke` runs the script of every installed module in install order, prints the total, and exits 1 on any failure. Run it on a fresh seed.
+
 ### Resetting
 
 ```sh
@@ -200,7 +218,7 @@ pnpm play:destroy       # remove .dev/playground entirely
 
 The playground is a git repository, and `play:init` commits a baseline after the install. `play:restore` runs `git reset --hard` and `git clean -fd` against it, then `pnpm install`. Ignored files stay, so `node_modules`, `apps/api/.dev.vars` and the local D1 state survive a restore. Add the modules you test most, run `pnpm play:snap`, and every later restore returns to that state. `git diff` in the playground shows exactly what an `add` wrote.
 
-`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and prints the command that starts the api again. It does not start the api itself, so the api runs in your own terminal with its output in view. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment or from `apps/api/.dev.vars`.
+`play:restore --db` stops whatever listens on the api port (4000) with its workerd children, and waits for them to exit, because deleting D1 state under a running workerd breaks every later query. It then runs `db:generate`, wipes and migrates the database, and prints the command that starts the api again. It does not start the api itself, so the api runs in your own terminal with its output in view. Under `database-d1` the wipe deletes `apps/api/.wrangler`. Under `database-postgres` it drops the `public` and `drizzle` schemas at `DATABASE_URL`, read from the environment, from `apps/api/.env`, or from `apps/api/.dev.vars`.
 
 ### Global linking (`main` checkout only)
 
@@ -234,6 +252,9 @@ uncommitted-work QA, use the playground shim above; it's worktree-safe by constr
 | `pnpm play:watch` | re-run `add <module> --force` when an installed module's files or descriptor change |
 | `pnpm play:snap` | commit the current playground as the new baseline |
 | `pnpm play:restore` | reset the playground to its baseline and `pnpm install`; `--db` also resets the database |
+| `pnpm play:up` | a fresh playground from a preset, migrated, seeded, with every app's dev server running; `--preset minimal\|full`, `--db d1\|postgres` |
+| `pnpm play:down` | stop the dev servers `play:up` started |
+| `pnpm play:smoke` | run every installed module's `modules/<name>/smoke.ts` against the running playground |
 | `pnpm play:reset` | `play:destroy` then `play:init` |
 | `pnpm play:destroy` | delete `.dev/playground` |
 | `pnpm --filter saasaloy test:e2e` | spawn the built binary against a temp project |
