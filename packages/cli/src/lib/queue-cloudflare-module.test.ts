@@ -47,7 +47,7 @@ async function readDescriptor(): Promise<Descriptor> {
 }
 
 describe("queue-cloudflare descriptor", () => {
-  it("is a valid provider module: one file, into the capability's providers folder", async () => {
+  it("is a valid provider module: one file and its gated test, into the capability's providers folder", async () => {
     const descriptor = await readDescriptor();
 
     await expect(
@@ -62,6 +62,11 @@ describe("queue-cloudflare descriptor", () => {
     expect(descriptor.envVars).toStrictEqual({});
     expect(descriptor.files).toStrictEqual([
       { path: "files/cloudflare.ts", target: "@queue/providers/cloudflare.ts" },
+      {
+        path: "files/cloudflare.vitest.ts",
+        target: "@queue/providers/cloudflare.test.ts",
+        when: { testing: true },
+      },
     ]);
   });
 

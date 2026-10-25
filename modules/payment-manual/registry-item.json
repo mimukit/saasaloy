@@ -37,6 +37,11 @@
     {
       "path": "files/manual.ts",
       "target": "@payment/providers/manual.ts"
+    },
+    {
+      "path": "files/manual.vitest.ts",
+      "target": "@payment/providers/manual.test.ts",
+      "when": { "testing": true }
     }
   ],
   "scaffolds": []

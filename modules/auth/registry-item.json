@@ -5,7 +5,7 @@
   "description": "Sign-in and sessions with Better Auth in a packages/auth workspace, on api and database.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api", "database"],
   "dependencies": [],
   "envVars": {
@@ -186,58 +186,88 @@
         },
         {
           "path": "files/src/auth.ts",
-          "target": "src/auth.ts"
+          "target": "src/auth.ts",
+          "untested": "Assembles the Better Auth instance; auth.test.ts exercises it through the api."
+        },
+        {
+          "path": "files/src/audience-rank.vitest.ts",
+          "target": "src/audience-rank.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/authorize.ts",
-          "target": "src/authorize.ts"
+          "target": "src/authorize.ts",
+          "untested": "Tested through audience-rank.test.ts and server.test.ts, which import it."
         },
         {
           "path": "files/src/db-scope.ts",
           "target": "src/db-scope.ts"
         },
         {
+          "path": "files/src/db-scope.vitest.ts",
+          "target": "src/db-scope.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/db-provider.d1.ts",
           "target": "src/db-provider.ts",
-          "onlyWith": "database-d1"
+          "onlyWith": "database-d1",
+          "untested": "Hands the D1 client to the adapter; wiring the route tests cover."
         },
         {
           "path": "files/src/db-provider.pg.ts",
           "target": "src/db-provider.ts",
-          "onlyWith": "database-postgres"
+          "onlyWith": "database-postgres",
+          "untested": "Hands the Postgres client to the adapter; wiring the route tests cover."
         },
         {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
         },
         {
+          "path": "files/src/env.vitest.ts",
+          "target": "src/env.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/scoped-adapter.ts",
-          "target": "src/scoped-adapter.ts"
+          "target": "src/scoped-adapter.ts",
+          "untested": "Wraps the Drizzle adapter in the request scope; db-scope.test.ts and the route tests cover it."
         },
         {
           "path": "files/src/plugins/audience.ts",
-          "target": "src/plugins/audience.ts"
+          "target": "src/plugins/audience.ts",
+          "untested": "A Better Auth plugin; auth.test.ts covers the cross-audience sign-in it refuses."
         },
         {
           "path": "files/src/plugins/client-admin-guard.ts",
-          "target": "src/plugins/client-admin-guard.ts"
+          "target": "src/plugins/client-admin-guard.ts",
+          "untested": "A Better Auth plugin; auth.test.ts covers the refusal it adds."
         },
         {
           "path": "files/src/plugins/rank-guard.ts",
-          "target": "src/plugins/rank-guard.ts"
+          "target": "src/plugins/rank-guard.ts",
+          "untested": "A Better Auth plugin over rankDenial, which audience-rank.test.ts tests."
         },
         {
           "path": "files/src/plugins/reset-password-mail.ts",
           "target": "src/plugins/reset-password-mail.ts",
-          "when": { "installed": ["email"] }
+          "when": { "installed": ["email"] },
+          "untested": "A Better Auth plugin; reset-password.test.ts covers the mail it sends."
         },
         {
           "path": "files/src/server.ts",
           "target": "src/server.ts"
         },
         {
+          "path": "files/src/server.vitest.ts",
+          "target": "src/server.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/client.ts",
-          "target": "src/client.ts"
+          "target": "src/client.ts",
+          "untested": "Builds the Better Auth browser clients; wiring with no rule of its own."
         },
         {
           "path": "files/src/env-preset.ts",

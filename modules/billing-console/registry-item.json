@@ -23,7 +23,12 @@
     }
   ],
   "files": [
-    { "path": "files/console.ts", "target": "@billing/providers/console.ts" }
+    { "path": "files/console.ts", "target": "@billing/providers/console.ts" },
+    {
+      "path": "files/console.vitest.ts",
+      "target": "@billing/providers/console.test.ts",
+      "when": { "testing": true }
+    }
   ],
   "scaffolds": []
 }

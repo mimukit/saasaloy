@@ -41,12 +41,22 @@
       "target": "@ui/blocks/shell/data-table-cards.ts"
     },
     {
+      "path": "files/ui/blocks/shell/data-table-cards.vitest.ts",
+      "target": "@ui/blocks/shell/data-table-cards.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/ui/blocks/shell/data-table.tsx",
       "target": "@ui/blocks/shell/data-table.tsx"
     },
     {
       "path": "files/ui/blocks/shell/data-table-highlight.ts",
       "target": "@ui/blocks/shell/data-table-highlight.ts"
+    },
+    {
+      "path": "files/ui/blocks/shell/data-table-highlight.vitest.ts",
+      "target": "@ui/blocks/shell/data-table-highlight.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/ui/blocks/shell/detail-panel.tsx",
@@ -277,6 +287,11 @@
       "target": "@ui/lib/shell/command-registration.ts"
     },
     {
+      "path": "files/ui/lib/shell/command-registration.vitest.ts",
+      "target": "@ui/lib/shell/command-registration.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/ui/lib/shell/commands.ts",
       "target": "@ui/lib/shell/commands.ts"
     },
@@ -285,8 +300,18 @@
       "target": "@ui/lib/shell/extensions.ts"
     },
     {
+      "path": "files/ui/lib/shell/extensions.vitest.ts",
+      "target": "@ui/lib/shell/extensions.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/ui/lib/shell/nav-counts.ts",
       "target": "@ui/lib/shell/nav-counts.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/nav-counts.vitest.ts",
+      "target": "@ui/lib/shell/nav-counts.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/ui/lib/shell/shell-keys.ts",

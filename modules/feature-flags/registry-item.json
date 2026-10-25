@@ -5,7 +5,7 @@
   "description": "Typed feature flags with per-tenant overrides, percentage rollouts, kill switches and a flags admin screen.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api", "database", "validators", "auth", "admin", "kv"],
   "dependencies": [],
   "envVars": {
@@ -72,12 +72,22 @@
       "target": "@api/routes/feature-flags.ts"
     },
     {
+      "path": "files/api/routes/feature-flags.vitest.ts",
+      "target": "@api/routes/feature-flags.test.ts",
+      "when": { "testing": true, "installed": ["kv-memory"] }
+    },
+    {
       "path": "files/api/lib/flags.ts",
       "target": "@api/lib/flags.ts"
     },
     {
       "path": "files/api/middleware/maintenance.ts",
       "target": "@api/middleware/maintenance.ts"
+    },
+    {
+      "path": "files/api/middleware/maintenance.vitest.ts",
+      "target": "@api/middleware/maintenance.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/db/schema/feature-flags.sqlite.ts",
@@ -138,24 +148,38 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/document.ts",
-          "target": "src/document.ts"
+          "target": "src/document.ts",
+          "untested": "Tested through define.test.ts, which reads and writes the document."
         },
         {
           "path": "files/src/cache.ts",
-          "target": "src/cache.ts"
+          "target": "src/cache.ts",
+          "untested": "Tested through define.test.ts, which covers the isolate cache."
         },
         {
           "path": "files/src/hash.ts",
           "target": "src/hash.ts"
         },
         {
+          "path": "files/src/hash.vitest.ts",
+          "target": "src/hash.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/source.ts",
-          "target": "src/source.ts"
+          "target": "src/source.ts",
+          "untested": "The FlagSource interface; types only."
         },
         {
           "path": "files/src/flags/system.ts",
-          "target": "src/flags/system.ts"
+          "target": "src/flags/system.ts",
+          "untested": "Defines the maintenance flag; maintenance.test.ts reads it."
         },
         {
           "path": "files/src/env-preset.ts",

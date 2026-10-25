@@ -537,11 +537,11 @@ array is identified by — get it wrong and a second `add` appends a duplicate i
 nothing. An HTTP provider (`kv-upstash`) drops both wrangler patches and adds its SDK through a
 `package-json-dependency` patch into `packages/kv/package.json`, exactly as `email-resend` does.
 
-One repo-only wrinkle worth copying. A provider file reads `../provider`, which resolves inside a
-scaffolded project but not inside `modules/<capability>-<provider>/files/`. To run a `node:test`
-suite against the file in place, add a one-line re-export shim beside the module —
-`modules/kv-memory/provider.ts` holding `export * from "../kv/files/src/provider";` — and leave it
-out of the descriptor's `files` list so it never ships. `queue-memory` and `kv-memory` both do this.
+Ship the provider's test beside it as `files/<provider>.vitest.ts`, with an entry that targets
+`@<cap>/providers/<provider>.test.ts` and carries `"when": { "testing": true }`. The test imports
+`../index` and `../provider` as the project sees them. `pnpm test:modules` resolves those through
+the module layout to the real core, so no re-export shim is needed. `kv-memory` and `queue-memory`
+are the shape to copy.
 
 ## Mode: `billing`
 

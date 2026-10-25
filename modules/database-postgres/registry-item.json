@@ -189,6 +189,11 @@
           "target": "scripts/lib/branch-name.ts"
         },
         {
+          "path": "files/scripts/lib/branch-name.vitest.ts",
+          "target": "scripts/lib/branch-name.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/context.ts",
           "target": "scripts/lib/context.ts"
         },
@@ -197,12 +202,27 @@
           "target": "scripts/lib/env-file.ts"
         },
         {
+          "path": "files/scripts/lib/env-file.vitest.ts",
+          "target": "scripts/lib/env-file.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/seed.ts",
           "target": "scripts/lib/seed.ts"
         },
         {
+          "path": "files/scripts/lib/seed.vitest.ts",
+          "target": "scripts/lib/seed.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/state.ts",
           "target": "scripts/lib/state.ts"
+        },
+        {
+          "path": "files/scripts/lib/state.vitest.ts",
+          "target": "scripts/lib/state.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/scripts/lib/url.ts",

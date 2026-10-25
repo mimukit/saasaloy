@@ -71,33 +71,21 @@ The watcher also re-scaffolds the base when `packages/cli/templates/base` change
 
 ### Unit tests over module payloads
 
-`pnpm test` is three passes. `turbo run test` runs the CLI's vitest suite, `pnpm test:modules`
-runs `node --test` over `modules/*/files/**/*.test.ts` — the security-relevant pure functions a
-module ships, such as `deriveCookieDomain` and `requireAuthSecret` in `modules/auth/files/src/env.ts` —
-and `pnpm test:scripts` runs the same runner over `scripts/**/*.test.ts`, which today covers the
-write path of `scripts/update-deps.ts`, the pin rules in `scripts/verify-pins.ts`, and the two
-release scripts' pure decisions — the `workspace:` detector in `scripts/release-smoke.ts` and the
-skip flag in `scripts/release-preflight.ts`.
+`pnpm test` runs several passes. `turbo run test` runs the CLI's vitest suite, `pnpm test:modules` runs every module unit test in place on Vitest, and `pnpm test:scripts` runs `node --test` over `scripts/**/*.test.ts`, which covers the maintainer scripts and the descriptor guards.
 
-That last file guards its `main()` call behind a `process.argv[1]` check, because a test importing
-its helpers must not start a registry scan. Keep the guard if you add another script test.
+A module unit test is `<name>.vitest.ts` beside the file it tests, under `modules/<module>/files/`. Its descriptor entry renames it to `<name>.test.ts` and gates it on the testing mode, so a project with testing on gets the test and a project with testing off gets none (ADR 0054, issue #243):
 
-The second pass uses Node's own test runner rather than vitest, and the reason is mechanical.
-Vite loads a tsconfig for every file it transforms; a module payload's `tsconfig.json` extends
-`@repo/tsconfig/base.json`, which resolves only inside a scaffolded project, so vitest fails those
-files with `TSCONFIG_ERROR` before an assertion runs. Node 24 strips the types with no tsconfig at
-all — the same reason `scripts/*.ts` needs no build step.
+```json
+{ "path": "files/src/keys.vitest.ts", "target": "src/keys.test.ts", "when": { "testing": true } }
+```
 
-Two rules for a test under `modules/`:
+`pnpm test:modules` runs `packages/cli/vitest.modules.config.ts`. Write a test's imports as the project will see them. `packages/cli/test/module-layout.ts` reads every descriptor and the base template, maps each project path to the repo file `saasaloy add` copies there, and resolves a relative import or a `@repo/<workspace>` import from a module file through that map. So a provider test imports `../index`, a cross-module test imports `@repo/kv/providers/memory`, and both land on the real files in this repo with no shim. `@repo/config` resolves to `scripts/config-shim.ts`, and `lucide-react` to stub icons. Route tests (`api/routes/*.vitest.ts`) and the seed completeness test need the scaffolded `apps/api` and `@repo/db/testing`, so the config leaves them out, and a playground run proves them.
 
-- Keep it out of the descriptor's `files` and `scaffolds[].files` lists, so `add` never copies it
-  into a user's project.
-- Import with the explicit `.ts` extension (`from "./env.ts"`). Node resolves the real file. Shipped
-  payload code keeps the extensionless style the bundler expects.
+A test that imports a module it does not depend on names that module in `when.installed`, as `billing`'s entitlements test does with `billing-console` and `queue-memory`. A test that checks a repo-only fact, such as both dialect variants or a descriptor pin, gets no descriptor entry and stays in this repo.
 
-A payload file may import a sibling. `pnpm test:modules` runs with `--import ./scripts/ts-resolve-hook.ts`, a `registerHooks` resolver that appends `.ts` to an extensionless relative specifier, so `import { defineQueue } from "./define"` inside a payload resolves under `node --test` without putting a non-portable extension into every generated project. The hook touches relative specifiers only.
+Two guards under `pnpm test:scripts` hold the rule. `scripts/module-tests.test.ts` fails when a scaffold ships a `src/**/*.ts` logic file with no `<name>.test.ts` beside it, and `scripts/route-tests.test.ts` fails when a descriptor ships an `@api/routes/<name>.ts` with no `@api/routes/<name>.test.ts`. A file that ships with no test carries an `"untested": "<reason>"` key on its entry, and the guard prints the reason.
 
-What still will not resolve is anything outside the payload: `cloudflare:workers`, `better-auth`, or a `@repo/*` workspace package all need a scaffolded project. Extract the pure part into its own file first, the way `auth.ts` extracted `env.ts`.
+`pnpm lint` applies the scaffold's Vitest rules to every `.vitest.ts` file here (issue #266), and a project typechecks the shipped copy, so write the test as typed project code.
 
 ### The two suites `pnpm test` does not run
 

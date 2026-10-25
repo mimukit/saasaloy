@@ -94,6 +94,11 @@
       "target": "@auth/plugins/api-key-options.ts"
     },
     {
+      "path": "files/auth/plugins/api-key-options.vitest.ts",
+      "target": "@auth/plugins/api-key-options.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/auth/plugins/api-key-client.ts",
       "target": "@auth/plugins/api-key-client.ts"
     }

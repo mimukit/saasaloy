@@ -6,7 +6,7 @@
   "stage": "scale",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.8.0"
   },
   "dependsOn": ["api", "auth", "admin", "database", "storage", "validators"],
   "dependencies": [],
@@ -103,6 +103,11 @@
       "target": "@api/lib/file-uploads.ts"
     },
     {
+      "path": "files/api/lib/file-uploads.vitest.ts",
+      "target": "@api/lib/file-uploads.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/api/lib/storage-sweep.ts",
       "target": "@api/lib/storage-sweep.ts"
     },
@@ -137,6 +142,11 @@
       "target": "@ui/lib/public-image.ts"
     },
     {
+      "path": "files/ui/lib/public-image.vitest.ts",
+      "target": "@ui/lib/public-image.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/admin/routes/files.tsx",
       "target": "@admin/routes/files.tsx"
     }
@@ -162,11 +172,13 @@
         },
         {
           "path": "files/src/sweep.ts",
-          "target": "src/sweep.ts"
+          "target": "src/sweep.ts",
+          "untested": "No test yet: picks the stale uploads the sweep deletes."
         },
         {
           "path": "files/src/job.ts",
-          "target": "src/job.ts"
+          "target": "src/job.ts",
+          "untested": "The queue job and schedule around sweep; wiring with no rule of its own."
         },
         {
           "path": "files/src/env-preset.ts",

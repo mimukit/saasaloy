@@ -77,6 +77,11 @@
       "target": "@storage/providers/cloudflare.ts"
     },
     {
+      "path": "files/cloudflare.vitest.ts",
+      "target": "@storage/providers/cloudflare.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/env.ts",
       "target": "@storage/env/r2.ts"
     }

@@ -6,7 +6,7 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.8.0"
   },
   "dependsOn": ["api", "auth", "shell"],
   "dependencies": [],
@@ -83,6 +83,11 @@
       "target": "@api/routes/admin-users.ts"
     },
     {
+      "path": "files/api/routes/admin-users.vitest.ts",
+      "target": "@api/routes/admin-users.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/ui/styles/admin.css",
       "target": "@ui/styles/admin.css"
     }
@@ -136,19 +141,31 @@
         },
         {
           "path": "files/src/lib/auth.ts",
-          "target": "src/lib/auth.ts"
+          "target": "src/lib/auth.ts",
+          "untested": "Builds the Better Auth admin client from the env; wiring with no rule of its own."
         },
         {
           "path": "files/src/lib/api.ts",
-          "target": "src/lib/api.ts"
+          "target": "src/lib/api.ts",
+          "untested": "Builds the typed Hono client with fixed headers; wiring with no rule of its own."
         },
         {
           "path": "files/src/lib/redirect.ts",
           "target": "src/lib/redirect.ts"
         },
         {
+          "path": "files/src/lib/redirect.vitest.ts",
+          "target": "src/lib/redirect.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/lib/initials.ts",
           "target": "src/lib/initials.ts"
+        },
+        {
+          "path": "files/src/lib/initials.vitest.ts",
+          "target": "src/lib/initials.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/components/app-shell.tsx",
@@ -156,19 +173,27 @@
         },
         {
           "path": "files/src/components/nav.ts",
-          "target": "src/components/nav.ts"
+          "target": "src/components/nav.ts",
+          "untested": "A data table of nav rows; commands.test.ts walks it."
         },
         {
           "path": "files/src/components/commands.ts",
           "target": "src/components/commands.ts"
         },
         {
+          "path": "files/src/components/commands.vitest.ts",
+          "target": "src/components/commands.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/components/shell-extensions.ts",
-          "target": "src/components/shell-extensions.ts"
+          "target": "src/components/shell-extensions.ts",
+          "untested": "An empty registry that modules patch; no logic."
         },
         {
           "path": "files/src/components/nav-counts.ts",
-          "target": "src/components/nav-counts.ts"
+          "target": "src/components/nav-counts.ts",
+          "untested": "Declares the nav count sources; the merge rule it feeds is tested in the shell module."
         },
         {
           "path": "files/src/components/access-denied.tsx",
@@ -200,7 +225,8 @@
         },
         {
           "path": "files/src/lib/users-query.ts",
-          "target": "src/lib/users-query.ts"
+          "target": "src/lib/users-query.ts",
+          "untested": "A TanStack Query options object over the api client; no logic."
         }
       ]
     }

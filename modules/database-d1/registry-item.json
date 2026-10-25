@@ -175,6 +175,11 @@
           "target": "scripts/lib/seed.ts"
         },
         {
+          "path": "files/scripts/lib/seed.vitest.ts",
+          "target": "scripts/lib/seed.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/migrate-prod.ts",
           "target": "scripts/migrate-prod.ts"
         },

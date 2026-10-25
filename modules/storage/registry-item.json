@@ -53,6 +53,11 @@
     {
       "path": "files/api/routes/storage.ts",
       "target": "@api/routes/storage.ts"
+    },
+    {
+      "path": "files/api/routes/storage.vitest.ts",
+      "target": "@api/routes/storage.test.ts",
+      "when": { "testing": true, "installed": ["storage-memory"] }
     }
   ],
   "scaffolds": [
@@ -79,6 +84,11 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },
@@ -87,8 +97,18 @@
           "target": "src/keys.ts"
         },
         {
+          "path": "files/src/keys.vitest.ts",
+          "target": "src/keys.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/token.ts",
           "target": "src/token.ts"
+        },
+        {
+          "path": "files/src/token.vitest.ts",
+          "target": "src/token.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/providers/.gitkeep",

@@ -58,6 +58,11 @@
       "target": "@kv/providers/upstash.ts"
     },
     {
+      "path": "files/upstash.vitest.ts",
+      "target": "@kv/providers/upstash.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/env.ts",
       "target": "@kv/env/upstash.ts"
     }

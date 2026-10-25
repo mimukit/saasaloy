@@ -26,6 +26,11 @@
     {
       "path": "files/infisical.ts",
       "target": "@env/providers/infisical.ts"
+    },
+    {
+      "path": "files/infisical.vitest.ts",
+      "target": "@env/providers/infisical.test.ts",
+      "when": { "testing": true }
     }
   ],
   "scaffolds": [],

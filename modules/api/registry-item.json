@@ -5,7 +5,7 @@
   "description": "An apps/api Hono Worker on Cloudflare, registered as the @api alias, with structured logging.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {
@@ -98,15 +98,18 @@
         },
         {
           "path": "files/src/worker.ts",
-          "target": "src/worker.ts"
+          "target": "src/worker.ts",
+          "untested": "Hands each platform event to the handler table; the route tests run the app it exports."
         },
         {
           "path": "files/src/client.ts",
-          "target": "src/client.ts"
+          "target": "src/client.ts",
+          "untested": "A type-only re-export of the app type."
         },
         {
           "path": "files/src/routes/health.ts",
-          "target": "src/routes/health.ts"
+          "target": "src/routes/health.ts",
+          "untested": "Answers a fixed 200; health-db.test.ts covers the route mounting."
         }
       ]
     }

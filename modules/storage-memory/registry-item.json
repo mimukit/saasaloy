@@ -23,7 +23,12 @@
     }
   ],
   "files": [
-    { "path": "files/memory.ts", "target": "@storage/providers/memory.ts" }
+    { "path": "files/memory.ts", "target": "@storage/providers/memory.ts" },
+    {
+      "path": "files/memory.vitest.ts",
+      "target": "@storage/providers/memory.test.ts",
+      "when": { "testing": true }
+    }
   ],
   "scaffolds": []
 }

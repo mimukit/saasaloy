@@ -5,7 +5,7 @@
   "description": "A packages/sms workspace with the provider interface and segment counting; add one sms provider.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -58,7 +58,8 @@
         },
         {
           "path": "files/src/define.ts",
-          "target": "src/define.ts"
+          "target": "src/define.ts",
+          "untested": "No test yet: the provider registry and the send path."
         },
         {
           "path": "files/src/provider.ts",
@@ -66,11 +67,13 @@
         },
         {
           "path": "files/src/segments.ts",
-          "target": "src/segments.ts"
+          "target": "src/segments.ts",
+          "untested": "No test yet: GSM-7 and UCS-2 segment counting."
         },
         {
           "path": "files/src/templates/verification-code.ts",
-          "target": "src/templates/verification-code.ts"
+          "target": "src/templates/verification-code.ts",
+          "untested": "No test yet: the verification code message."
         },
         {
           "path": "files/src/providers/.gitkeep",
