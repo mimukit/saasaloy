@@ -63,10 +63,20 @@ describe(delegateToLatest, () => {
   it("runs the latest closure of the same id", () => {
     const calls: string[] = [];
     let latest: readonly Command[] = [
-      command({ run: () => calls.push("old") }),
+      command({
+        run: () => {
+          calls.push("old");
+        },
+      }),
     ];
     const [registered] = delegateToLatest(latest, () => latest);
-    latest = [command({ run: () => calls.push("new") })];
+    latest = [
+      command({
+        run: () => {
+          calls.push("new");
+        },
+      }),
+    ];
 
     registered?.run({ source: "shortcut" });
     expect(calls).toStrictEqual(["new"]);
@@ -74,7 +84,13 @@ describe(delegateToLatest, () => {
 
   it("passes the context through", () => {
     const sources: string[] = [];
-    const latest = [command({ run: (ctx) => sources.push(ctx.source) })];
+    const latest = [
+      command({
+        run: (ctx) => {
+          sources.push(ctx.source);
+        },
+      }),
+    ];
     const [registered] = delegateToLatest(latest, () => latest);
 
     registered?.run({ source: "palette" });
@@ -95,7 +111,12 @@ describe(delegateToLatest, () => {
   it("does nothing, and reports false, once the id has left the list", () => {
     const calls: string[] = [];
     let latest: readonly Command[] = [
-      command({ when: () => true, run: () => calls.push("ran") }),
+      command({
+        when: () => true,
+        run: () => {
+          calls.push("ran");
+        },
+      }),
     ];
     const [registered] = delegateToLatest(latest, () => latest);
     latest = [];

@@ -1,5 +1,8 @@
+import { billingSubscriptions } from "@repo/db/schema/billing";
+import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
 import { env as workerEnv } from "cloudflare:workers";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import app from "../index";
 
@@ -70,6 +73,11 @@ const CHECKOUT = {
 
 describe("/billing", () => {
   it("subscribes the caller through checkout, and the subscription reads it back", async () => {
+    // The seed gives `member` a past-due subscription, and checkout refuses a second live
+    // one, so the test starts this user with none.
+    await database.db
+      .delete(billingSubscriptions)
+      .where(eq(billingSubscriptions.referenceId, seedId("users", "member")));
     const cookie = await signIn("member@example.test");
 
     const checkout = await call("/billing/checkout", cookie, CHECKOUT);

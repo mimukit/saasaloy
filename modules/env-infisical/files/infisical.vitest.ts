@@ -1,8 +1,9 @@
 // Tests for the Infisical value source: the auth exchange, the export parse, the folder
 // choice, and the one distinction the offline rule turns on.
 //
-// It ships as `infisical.test.ts` when testing is on, and `pnpm test:modules` runs it in
-// place on Vitest in the saasaloy repo. The `infisical` CLI is injected as a plain
+// It never ships. The provider lands in `packages/env`, which runs its tests on `node:test`
+// and sits outside the project's Vitest run, so a Vitest file there would fail
+// `pnpm test`. `pnpm test:modules` runs it in place on Vitest in the saasaloy repo. The `infisical` CLI is injected as a plain
 // function, so nothing here opens a connection or shells out.
 
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";

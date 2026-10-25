@@ -209,7 +209,10 @@ export function moduleLayoutPlugin(repo: string, base: string): Plugin {
       if (!source.startsWith("./") && !source.startsWith("../")) {
         return null;
       }
-      const from = layout.projectPath.get(importer);
+      // A repo-only test has no entry of its own, so it sits where the file it tests lands.
+      const from =
+        layout.projectPath.get(importer) ??
+        layout.projectPath.get(importer.replace(/\.vitest\.ts$/, ".ts"));
       if (from === undefined) {
         return null;
       }

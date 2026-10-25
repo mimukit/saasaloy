@@ -6,7 +6,12 @@ import { defineShellExtensions } from "./extensions";
 import type { ShellExtension } from "./extensions";
 
 function extension(id: string): ShellExtension {
-  return { id, Provider: ({ children }) => children };
+  return {
+    id,
+    // ReactNode's union holds a promise, so the rule reads a plain pass-through as one.
+    // oxlint-disable-next-line typescript/promise-function-async -- returns children as is
+    Provider: ({ children }) => children,
+  };
 }
 
 describe(defineShellExtensions, () => {

@@ -1,3 +1,4 @@
+import type { Db } from "@repo/db/client";
 import { testDatabase } from "@repo/db/testing";
 import { createPayment } from "@repo/payment";
 import type { PaymentEnv } from "@repo/payment";
@@ -29,9 +30,17 @@ function env(): PaymentEnv & Record<string, unknown> {
   };
 }
 
+/**
+ * The payment store over the test database. Under `database-postgres` the harness hands out
+ * the transaction each test runs in, which queries like a `Db` but is typed apart from it.
+ */
+function store() {
+  return createPaymentStore(database.db as unknown as Db);
+}
+
 /** Start a console card payment through the core, the way a feature route would. */
 function startPayment() {
-  return withPaymentStore(createPaymentStore(database.db), () =>
+  return withPaymentStore(store(), () =>
     createPayment(env()).create({
       amount: 1500,
       currency: "USD",
@@ -45,9 +54,7 @@ function startPayment() {
 
 /** Read one payment back through the core. */
 function paymentById(id: string) {
-  return withPaymentStore(createPaymentStore(database.db), () =>
-    createPayment(env()).get(id)
-  );
+  return withPaymentStore(store(), () => createPayment(env()).get(id));
 }
 
 function complete(form?: Record<string, string>) {
