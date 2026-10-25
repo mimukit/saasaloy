@@ -32,7 +32,7 @@ export default defineConfig({
     // `packages/db/vitest.config.ts` explains it; the root config cannot set it for us.
     fsModuleCache: false,
     // A route test signs a seeded user in, which hashes a password, and its first request
-    // also opens the test database. Under a full parallel \`pnpm test\` that can pass the
+    // also opens the test database. Under a full parallel `pnpm test` that can pass the
     // 5 second default, so route tests get more room (issue #243).
     testTimeout: 30_000,
     globalSetup: globSync("test/setup/*.ts", { cwd: here(".") })
