@@ -20,7 +20,9 @@
 // `config.auth.adminRole` would otherwise fail on a bare specifier no node_modules holds.
 // `./config-shim.ts` composes that object the way an installed project does; the `/define`
 // subpath goes straight to the template source, since a section file only needs the helper.
-// The map is deliberately closed — two entries — rather than a general workspace resolver,
+// `@repo/kv` maps onto `modules/kv/files/src/index.ts`, because `payment-bkash`'s provider
+// file imports the kv core for the store its token lives in (ADR 0057).
+// The map is deliberately closed — three entries — rather than a general workspace resolver,
 // because every other `@repo/*` package is scaffolded by a module and is not on disk in this
 // repo at all.
 
@@ -42,6 +44,10 @@ const HAS_EXTENSION = /\.[cm]?[jt]sx?$/;
 
 const here = import.meta.dirname;
 const WORKSPACES = new Map([
+  [
+    "@repo/kv",
+    pathToFileURL(join(here, "../modules/kv/files/src/index.ts")).href,
+  ],
   ["@repo/config", pathToFileURL(join(here, "config-shim.ts")).href],
   [
     "@repo/config/define",
