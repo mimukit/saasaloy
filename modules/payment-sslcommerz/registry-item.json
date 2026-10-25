@@ -1,0 +1,60 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "payment-sslcommerz",
+  "type": "saasaloy:feature",
+  "description": "A payment provider on the SSLCOMMERZ hosted checkout for cards and wallets in Bangladesh; needs an SSLCOMMERZ store.",
+  "stage": "money",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.7.0" },
+  "dependsOn": ["payment"],
+  "dependencies": [],
+  "envVars": {
+    "SSLCOMMERZ_STORE_ID": "Your SSLCOMMERZ store id, from the merchant panel: register a sandbox store at https://developer.sslcommerz.com, or use the live store SSLCOMMERZ issues you. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret (`wrangler secret put SSLCOMMERZ_STORE_ID`) in production. Unset, the provider reports `card` as unavailable and `create` answers method_unavailable; set but wrong, the gateway refuses the session and it surfaces as provider_error with the gateway's own failedreason.",
+    "SSLCOMMERZ_STORE_PASSWORD": "The store password issued with SSLCOMMERZ_STORE_ID, sometimes called the API password. It is sent on the session-open POST, on every validation call and on every refund, so a deployed Worker holds it as a secret (`wrangler secret put SSLCOMMERZ_STORE_PASSWORD`), never in wrangler.jsonc.",
+    "SSLCOMMERZ_RECEIPT_EMAIL": "A real mailbox you own, e.g. payments@yourdomain.com. SSLCOMMERZ requires cus_email on every session and mails its own receipt to it. A provider is handed an opaque payment reference and never learns the payer's address, so this is the one address it can name.",
+    "SSLCOMMERZ_MODE": "Which gateway host to use: `sandbox` for https://sandbox.sslcommerz.com or `live` for https://securepay.sslcommerz.com. Optional, and it defaults to `sandbox`, so a deploy that never set it cannot take real money; any other value fails the env check."
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["SSLCOMMERZ_MODE"],
+  "removeWarnings": [
+    "SSLCOMMERZ payments already in the payments table survive this removal. The core refuses to refund a payment whose provider is not registered, so finish refunds first or make them in the SSLCOMMERZ merchant panel.",
+    "The IPN URL stays registered in the SSLCOMMERZ merchant panel if you set one there. Remove it, or the gateway keeps posting to /payment/callback/sslcommerz/ipn, which then answers 404."
+  ],
+  "patches": [
+    {
+      "file": "packages/payment/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "payment",
+      "arrayProp": "providers",
+      "call": "sslcommerz",
+      "import": {
+        "name": "sslcommerz",
+        "from": "./providers/sslcommerz"
+      }
+    },
+    {
+      "file": "packages/payment/src/env-preset.ts",
+      "kind": "plugin-array",
+      "exportName": "paymentPreset",
+      "arrayProp": "extends",
+      "call": "sslcommerzEnv",
+      "import": {
+        "name": "sslcommerzEnv",
+        "from": "./env/sslcommerz"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/sslcommerz.ts",
+      "target": "@payment/providers/sslcommerz.ts"
+    },
+    {
+      "path": "files/env.ts",
+      "target": "@payment/env/sslcommerz.ts"
+    }
+  ],
+  "scaffolds": []
+}
