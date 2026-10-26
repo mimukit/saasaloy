@@ -10,7 +10,7 @@ saasaloy already has two pieces of this. `modules/storage` owns `buildKey`, `ass
 
 Goal: a project attaches a file to its own record with one helper call on the server and one component in the browser, and no project writes signature or read-cap code again.
 
-Target: both primeshopr flows call the helper, and `payment-receipt.ts` keeps no byte reading or signature code after brainaloylabs/primeshopr#97 moves onto the extracted version. A reviewer checks it with `grep -n "getReader\|0xff" apps/api/src/lib/payment-receipt.ts` (no match).
+Target: both primeshopr flows call the helper, and `payment-receipt.ts` keeps no byte reading or signature code after brainaloylabs/primeshopr#103 moves them onto the extracted version. brainaloylabs/primeshopr#97 changed the browser only; the server code is unchanged from before it. A reviewer checks it with `grep -n "getReader\|0xff" apps/api/src/lib/payment-receipt.ts` (no match).
 
 ## Design decisions (settled)
 
@@ -24,8 +24,10 @@ Target: both primeshopr flows call the helper, and `payment-receipt.ts` keeps no
 | `file-uploads` block | Moves onto `FileDrop` in this plan (Phase 4). `file-uploads` already lists `storage` in `dependsOn`. |
 | Browser component | `FileDrop` in `packages/ui/src/components/file-drop.tsx`: drop zone, picker button, thumbnail or file chip per file, remove, refusal reason. It holds no IO and no copy; labels come in as props, the same contract as primeshopr's `AttachmentPickerLabels`. |
 | Who ships `FileDrop` | The `storage` module, as a file into `@ui`. The base template has no use for it without storage. |
-| `react-dropzone` | Not used. primeshopr's picker covers the same ground with native drag events and a hidden input, and a native version adds no template dependency for `deps:update` to track. |
-| Order of work | primeshopr#97 builds first, in its own thread. This plan extracts from it, so the two real callers set the API, as the issue asks. |
+| `react-dropzone` | Used, pinned to 20.1.4, the version primeshopr's merged `packages/ui/src/components/file-drop.tsx` uses. The storage descriptor adds it to `packages/ui/package.json`. Re-grilled 2026-10-26 (reopened Q5): the extraction ports a component that already runs. |
+| Single or several files | A `multiple` prop, default `false`, matches primeshopr's receipt field. With `multiple` true, `maxFiles` caps the count, which covers the support flow (brainaloylabs/primeshopr#98) and the `file-uploads` block. |
+| primeshopr server migration | brainaloylabs/primeshopr#103 moves the receipt route and `storeFiles` onto the helpers, blocked on #284. Filed 2026-10-26. |
+| Order of work | primeshopr#97 built first and merged through primeshopr PR #101 on 2026-10-26. This plan extracts from it, so the two real callers set the API, as the issue asks. |
 | Tests | vitest unit tests beside the source for `upload.ts`, the same shape as `keys.test.ts`. `FileDrop` gets no component tests, because the base `ui` package has no runner; the `.dev` check in Phase 6 covers it. |
 | Outward actions | Approved 2026-10-26: commit this plan to `main`, push, update the #284 body, and label #284 `blocked` until primeshopr#97 merges. |
 | UI house rules | Read `DESIGN.md` and the base `ui` AGENTS.md in Phase 1 and list the rules here before the mockup. |
@@ -38,9 +40,9 @@ Rejected: a new `upload` module (one more install step for no extra dependency o
 
 ### Phase 1: wait for primeshopr#97 and approve the FileDrop mockup
 
-Attended: primeshopr#97 merged, and the owner approves the mockup screenshots: `FileDrop` in five states (empty, dragging, two files with one image thumbnail, one refused file, disabled) and the admin `/files` screen with `FileDrop` in it.
+Attended: the owner approves the mockup screenshots: `FileDrop` in single mode (empty, dragging, one image chosen, one refused file, disabled), in multiple mode (two files with one image thumbnail, the `maxFiles` refusal) and the admin `/files` screen with `FileDrop` in it.
 
-- Read the merged primeshopr#97 code and note where its helper API differs from the surface above. Update the Helper surface row if it does.
+- Read primeshopr's merged `file-drop.tsx` on its `main` (PR #101) and use it as the base for the port. The server helper surface comes from `payment-receipt.ts` and `storeFiles`, because #97 did not change the api.
 - Build the mockup and record the approval date and round in Design decisions.
 
 Done when: Design decisions carries a mockup approval row with a date, and the Helper surface row matches primeshopr#97's merged code.
@@ -56,10 +58,10 @@ Done when: `pnpm test` passes the new `upload.test.ts`, and `pnpm lint` is clean
 ### Phase 3: FileDrop component
 
 - Add `modules/storage/files/ui/components/file-drop.tsx` and register it in `modules/storage/registry-item.json` as a file targeting `@ui/components/file-drop.tsx`.
-- Port the behaviour of `attachment-picker.tsx`: check type, size and count as a file is chosen, revoke each object URL when its chip goes, keep the refusal reason on screen.
-- Add drag and drop with native events.
+- Port primeshopr's `file-drop.tsx` on `react-dropzone` 20.1.4, and add `react-dropzone` to `packages/ui/package.json` through a `package-json-dependency` patch in the storage descriptor.
+- Add the `multiple` and `maxFiles` props, and take the multi-file list behaviour from `attachment-picker.tsx`: check type, size and count as a file is chosen, revoke each object URL when its chip goes, keep the refusal reason on screen.
 
-Done when: in a `.dev` project with `storage` installed, the component renders the five approved mockup states, and the screenshots match the Phase 1 round.
+Done when: in a `.dev` project with `storage` installed, the component renders the approved mockup states in both modes, and the screenshots match the Phase 1 round.
 
 ### Phase 4: move the file-uploads block onto FileDrop
 
@@ -90,4 +92,4 @@ None. The grill on 2026-10-26 settled every question.
 - Changes to the direct-to-R2 path in `file-uploads`, including a signature check in `complete` (it would need a ranged `get` on `StorageProvider`). Phase 4 changes the block only.
 - Image compression, resizing or EXIF stripping in the browser.
 - Multipart or resumable uploads.
-- Editing primeshopr. Its migration is brainaloylabs/primeshopr#97.
+- Editing primeshopr. Its server migration is brainaloylabs/primeshopr#103, and its support picker is brainaloylabs/primeshopr#98.
