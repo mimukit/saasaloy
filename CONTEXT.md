@@ -445,5 +445,5 @@ The downstream SaaS repo produced by `saasaloy init`.
 The git-ignored sandbox directory where the CLI is exercised, so running `init`/`add` never mutates the tool repo.
 
 ### Public site
-Saasaloy's own marketing site at `site/` in the tool repo. It is a generated project that the published CLI scaffolds with `saasaloy init` and keeps current with `saasaloy update`, so it is a standing test of the base. The root pnpm workspace and root turbo do not include it ([plan 0091](docs/plans/0091-plan-public-site-and-brand-2026-10-26.md)).
+Saasaloy's own marketing site at `apps/web` in the tool repo, the `@saasaloy/web` package in the root pnpm workspace. It started as a copy of the base landing page, and it is a fork: `saasaloy update` never reaches it ([plan 0091](docs/plans/0091-plan-public-site-and-brand-2026-10-26.md)).
 _Avoid: website, landing page, docs site. The landing page is the base page every generated project gets, and `docs-site` is a separate catalog module._

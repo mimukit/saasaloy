@@ -10,7 +10,7 @@ Saasaloy has a published CLI (`saasaloy@0.7.0` on npm), 48 modules, a README and
 
 The audience is the technical founder the README speaks to: a developer who wants to test a SaaS idea without first building auth, billing and tenancy. The page explains what Saasaloy is, and it gets that visitor to run `npx saasaloy init my-app`, with the repository and the getting-started guide one click away.
 
-The site is itself a Saasaloy project. It is scaffolded with the published CLI into `site/` of this repo, so the landing page the product advertises is the landing page the product generates. That makes the site a standing dogfood test of `init` and `update`.
+The site lives at `apps/web`, a package in this repo's root pnpm workspace. It started as a copy of the base template's `apps/web` and the parts of `packages/ui` that page uses, so it begins from the landing page the product generates. It is a fork: `saasaloy update` never touches it, and the `.dev/playground` flow and the release smoke test keep testing `init`. A later docs site reads `docs/wiki/` from the same repo.
 
 Goal: a visitor understands Saasaloy in one screen and leaves with the init command, the repo, or the guide.
 
@@ -20,29 +20,31 @@ Target: mobile Lighthouse score of 95 or more in performance, accessibility, bes
 
 | Decision | Resolution |
 |----------|-----------|
-| Site home | A Saasaloy project at `site/` in this repo, created by `saasaloy init`. It keeps its own `pnpm-workspace.yaml` root, like `.dev/playground`. The root workspace (`packages: ["packages/*"]`) and root turbo do not include it. One repo keeps the copy, the module list and the brand files in one PR. |
-| Scaffold CLI | The published CLI: `npx saasaloy@0.7.0 init site --testing=off`, run from the repo root. `init` skips `git init` by itself because `site/` sits inside a tracked working tree (`packages/cli/src/commands/init.ts:229`). Template updates reach the site through `saasaloy update`, never by hand-copying from `packages/cli/templates/base`. |
-| Update cadence | A step in the CONTRIBUTING "Releasing" checklist: after each npm publish, run `npx saasaloy@<new> update` in `site/` and open a PR titled `chore(site): update to saasaloy <version>`. |
-| Template boundary | No change to `packages/cli/templates/base` or to any module. A base template bug the site finds is filed as its own issue (see Outward actions) and worked around in `site/` only, with a comment naming the issue. |
-| Stack | What the base ships: Astro 7 static output, Tailwind 4, React islands, `@repo/ui` blocks (`hero`, `navbar`, `feature-grid`, `faq`, `cta`, `footer`, `theme-toggle`). The site restyles these blocks; it adds a new block only where no base block fits (the module map). |
-| Hosting and URL | Cloudflare Workers static assets through the base `wrangler.jsonc` (assets only, `404-page` handling). The worker `name` in `site/apps/web/wrangler.jsonc` changes from `site-web` to `saasaloy`, so the URL is `saasaloy.<account>.workers.dev`. No custom domain in this plan. |
-| Deploy job | A new root workflow, `.github/workflows/site.yml`, runs `pnpm -C site deploy:production` on a push to `main` that touches `site/**` or `modules/**`. Issue #199's `infra-ci-deploy` does not apply: it writes `site/.github/workflows/`, which GitHub ignores. The same workflow runs install, lint, build and the gate on pull requests. |
-| Deploy credentials | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets, exported to `deploy:production`. `ENV_SOURCE` stays unset, because exported variables override the value source. Phase 3 runs a `--dry-run` deploy first. |
-| Root lint | `site/` joins the root oxlint, Prettier, Stylelint and lint-staged ignores. CI runs `pnpm -C site lint`, which checks the site with the template's own rules. |
-| husky | No change. In `site/`, husky prints ".git can't be found" and exits 0, and the root hooks cover commits. Phase 3 confirms `pnpm install` in `site/` exits 0. |
+| Site home | `apps/web`, a package named `@saasaloy/web` in the root workspace (`packages: ["apps/*", "packages/*"]`). Root `pnpm install`, root turbo and root lint cover it, with one lockfile. One repo keeps the copy, the module list, the brand files and later the docs in one PR. The owner set this on 2026-10-26, after a scaffold into a nested `site/` project showed the cost of a second workspace root (see Rejected). |
+| Source | A copy of `packages/cli/templates/base/apps/web` with the `@repo/ui` pieces it uses copied into `apps/web/src/`: every block, the `button` and `card` primitives, `lib/`, `content/` and `styles/`. `@repo/ui/*` imports become `@web/*`. The shell-only primitives, `containers/` and the CSS probe `lib/sentinel.ts` are not copied. |
+| No env or config packages | `@repo/env` and `@repo/config` are not copied. `src/site.ts` holds `siteName` and `locale`. The public origin is `site` in `astro.config.mjs`, and the layout builds the canonical URL from `Astro.site`. `PUBLIC_API_URL` is gone, because the site calls no API. |
+| Template updates | None automatic. `apps/web` is a fork, and `saasaloy update` never reaches it. A base template fix that the site wants is copied by hand in its own PR. |
+| Template boundary | No change to `packages/cli/templates/base` or to any module. A base template bug the site finds is filed as its own issue (see Outward actions) and fixed in `apps/web` only, with a comment naming the issue. |
+| Stack | What the base ships: Astro 7 static output, Tailwind 4, React islands, and the blocks in `apps/web/src/blocks/` (`hero`, `navbar`, `feature-grid`, `faq`, `cta`, `footer`, `theme-toggle`). The site restyles these blocks; it adds a new block only where no base block fits (the module map). Phase 6 deletes the blocks the page does not use. |
+| Hosting and URL | Cloudflare Workers static assets through the base `wrangler.jsonc` (assets only, `404-page` handling). The worker `name` in `apps/web/wrangler.jsonc` is `saasaloy`, so the URL is `saasaloy.<account>.workers.dev`. No custom domain in this plan. |
+| Deploy job | A new root workflow, `.github/workflows/site.yml`, runs `pnpm --filter @saasaloy/web deploy` on a push to `main` that touches `apps/web/**`, `modules/**` or `docs/wiki/**`. The same workflow runs install, lint, build and the gate on pull requests. |
+| Deploy credentials | `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID` as repository secrets, exported to the deploy step. `wrangler deploy` reads both from the environment. Phase 3 runs `wrangler deploy --dry-run` first. |
+| Root lint | The root `pnpm lint` covers `apps/web`. `oxlint.config.mjs` gives `apps/web/**` the template's rule map, Node globals for its config files, browser globals for `src/`, and the vendored primitives' label exemption. Prettier and Stylelint need no change. |
+| husky | No change. The root hooks cover `apps/web` like every other workspace file. |
+| Install scripts | Root `pnpm-workspace.yaml` allows `workerd` and `sharp` to run their install scripts, the same pair the base template allows. |
 | Primary action | The hero shows `npx saasaloy init my-app` with a copy button. GitHub and the getting-started guide sit beside it as secondary links. |
 | Pages | One landing page and the 404 page. The base `privacy` and `terms` pages are removed, and `500` stays. |
 | Theme | Light and dark, through the base `theme-toggle` and `THEME_INIT_SCRIPT` with no edit. A first-time visitor gets the OS setting, and the toggle choice persists. Dark is the brand's lead palette in the logo, the social card and the banner. |
 | Palettes | The owner selects the cobalt blueprint direction during the mockup rounds on 2026-10-26. Light uses pale paper `#f6f7f9`, cobalt `#315fe8`, navy `#0b2253` and gray prose. Dark uses navy `#101722`, off-white `#eef2f8`, pale blue `#8fa8ff` and muted prose `#a9b5c7`. Solid buttons use cobalt with white labels in both themes. The first hero sentence uses navy in light and off-white in dark; the second uses the theme's blue accent. These choices replace the banner's lime direction for the site. |
 | Fonts | Phase 1 compares two open-licence pairings: Geist with Geist Mono, and Inter Display with JetBrains Mono. Self-hosted through `@fontsource` packages with `font-display: swap`, at most two families. The owner picks from screenshots. |
 | Copy | The README keeps its long pitch. The site uses a short version and links to the README "Why Saasaloy exists" section. Every claim on the site must also appear in the README, and the early-stage warning stays visible. |
-| Module map | A hand-placed diagram of `api`, `database`, `auth`, `email` and `payment` in the banner's style, then a list of every module grouped by type, with `description` and `dependsOn`. The list is read at build time from `../modules/*/registry-item.json`, so a rename such as `billing` to `subscription` reaches the page with no copy edit. |
+| Module map | A hand-placed diagram of `api`, `database`, `auth`, `email` and `payment` in the banner's style, then a list of every module grouped by type, with `description` and `dependsOn`. The list is read at build time from `../../modules/*/registry-item.json`, so a rename such as `billing` to `subscription` reaches the page with no copy edit. |
 | Version display | None. The page shows no CLI version. |
 | Doc links | Getting started: `https://github.com/mimukit/saasaloy/blob/main/docs/wiki/getting-started.md`. Repository: `https://github.com/mimukit/saasaloy`. |
-| Analytics | Cloudflare Web Analytics, with no cookies. The token is `PUBLIC_CF_ANALYTICS_TOKEN`, declared through the site's `packages/env`. The beacon is left out when the token is unset. `site.yml` reads it from a repository variable. A `workers.dev` host has no zone, so Cloudflare cannot inject the script automatically. |
+| Analytics | Cloudflare Web Analytics, with no cookies. The token is `PUBLIC_CF_ANALYTICS_TOKEN`, read at build time from `import.meta.env`. The beacon is left out when the token is unset. `site.yml` reads it from a repository variable. A `workers.dev` host has no zone, so Cloudflare cannot inject the script automatically. |
 | Logo scope | A lowercase wordmark taken from the banner, and a square module mark for the favicon, the GitHub avatar and social cards. Mockup round 1 shows three mark options. Each ships as light-on-dark and dark-on-light SVG. |
 | Brand guidelines home | `assets/branding/README.md` beside the logo and banner files: logo use, clear space, colours, type, image style, voice, and the social and repository asset sizes. |
-| Design system home | `site/DESIGN.md`, the project's own spec-compliant DESIGN.md that the base already ships, rewritten with the brand tokens and checked by the designkit linter. Tokens live in `site/packages/ui/src/styles/globals.css`. |
+| Design system home | `apps/web/DESIGN.md`, the spec-compliant DESIGN.md copied from the base, rewritten with the brand tokens and checked by the designkit linter. Tokens live in `apps/web/src/styles/brand.css`. |
 | Visual reference | `assets/branding/readme-banners/06-module-map.png`. Mockup approval: pending (Phase 1). |
 | Section selections, 2026-10-26 | The owner locks round 5 variation A for product stages, module catalog, providers, the site source section, FAQ and footer. Images are in `.dev/mockup-287/round-5-images/`: `stages-a.png`, `catalog-a.png`, `providers-a.png`, `site-a.png`, `faq-a.png` and `footer-a.png`. The hero remains open. Round 6 compares abstract blueprint illustrations without the product stages. Full-page approval remains pending. |
 | Hero direction, 2026-10-26 | The owner rejects the round 6 illustrations. The hero uses SaaS application wireframes and source or service diagrams. The hero does not repeat the product stages. Headline and highlighted text use the primary cobalt, not black. Round 7 compares three images under `.dev/mockup-287/round-7-hero/`. Hero approval remains pending. |
@@ -51,17 +53,17 @@ Target: mobile Lighthouse score of 95 or more in performance, accessibility, bes
 | Approved section set, 2026-10-26 | The owner approves the round 9 hero and keeps round 5 A for the other six sections. Round 10 combines these selections into separate desktop light, desktop dark, mobile light and mobile dark images. Files live under `.dev/mockup-287/round-10-full-page/`. Full-page review remains pending. This section approval does not complete the remaining Phase 1 coverage. |
 | UI house rules | Phase 1 reads the base `DESIGN.md` and the base `ui` AGENTS.md and lists the rules here before the mockup. Rules already stated for this repo: cards in a row share one height; the mockup covers the navbar over the hero and every toggle state (from the #191 lesson in AGENTS.md); external links open in a new tab. |
 | Mockup coverage | The full page in both themes at 375, 768 and 1440 px. Component states (copy button before and after a click, FAQ open and closed) in dark at all three widths and in light at 1440 px. The theme toggle in both states. The 404 page in both themes. |
-| Gate tooling | `@lhci/cli` and `@axe-core/playwright`, exact-pinned devDependencies in the `site/` root, run in `site.yml` against the built `dist/client`. axe runs in both themes at all three widths. Lighthouse runs once on mobile, where headless Chromium reports a light OS. |
+| Gate tooling | `@lhci/cli` and `@axe-core/playwright`, exact-pinned devDependencies in `apps/web`, run in `site.yml` against the built `dist/client`. axe runs in both themes at all three widths. Lighthouse runs once on mobile, where headless Chromium reports a light OS. |
 | Outward actions (approved 2026-10-26) | A merge to `main` deploys the site (Phase 2 records the consent). After the deploy passes the Phase 7 checks, the build may run `gh repo edit --homepage <url>` and add the site link to the README in the same PR. The build may file base template bugs as issues labelled `needs-planning` and link them from the PR. |
 
 ## Approach
 
-Scaffold a real Saasaloy project into `site/`, restyle its base landing page with a brand derived from the README banner, add one module map block that reads the registry, and deploy the static output to Cloudflare. It reuses the base template's static Astro build, its `wrangler.jsonc`, its `@repo/ui` blocks, theme script and tokens, its DESIGN.md format, its `packages/env` gate, its `deploy:production` script, and the `.dev/mockup-*` screenshot flow from issue #217.
+Copy the base landing page into `apps/web` as a root workspace package, restyle it with a brand derived from the README banner, add one module map block that reads the registry, and deploy the static output to Cloudflare. It reuses the base template's static Astro build, its `wrangler.jsonc`, its blocks, theme script and tokens, its DESIGN.md format, and the `.dev/mockup-*` screenshot flow from issue #217.
 
 Rejected, for the record:
 
-- A plain Astro workspace in the root `pnpm-workspace.yaml`. Less upkeep, but no dogfood claim, and the site would not exercise `init` or `update`.
-- A separate `saasaloy-site` repo. Full dogfood, but the module list and copy drift from this repo, and the brand files split across two repos.
+- A Saasaloy project scaffolded by `saasaloy init` into a nested `site/` folder (the first choice, tried and dropped on 2026-10-26). It needed a second workspace root and lockfile, root lint ignores, and its own lint run in CI. The root pre-commit hook rejected the scaffold's `packages/env` tests, and a local CLI build recorded an unpublished `cliVersion` in its lock. Its one gain, a standing test of `init` and `update`, the playground flow and the release smoke test already give.
+- A separate `saasaloy-site` repo. Full dogfood, but the module list, the copy and later the docs from `docs/wiki/` would cross two repos, and a wiki change would have to start a deploy in the other repo.
 
 ### Phase 1: approve the brand and page mockups
 
@@ -85,17 +87,17 @@ Attended: the owner creates the Cloudflare API token, the Web Analytics site and
 
 Done when: `gh secret list` shows both Cloudflare secrets, `gh variable list` shows the analytics token, and this plan names the final URL.
 
-### Phase 3: scaffold `site/` and fit it into the repo
+### Phase 3: set up `apps/web` in the root workspace
 
-- Run `npx saasaloy@0.7.0 init site --testing=off` from the repo root and commit the result unchanged as its own commit, so later diffs show only the site's own edits.
-- Rename the worker to `saasaloy` in `site/apps/web/wrangler.jsonc`.
-- Remove `privacy.astro` and `terms.astro`.
-- Add `site/` to the root oxlint, Prettier, Stylelint and lint-staged ignores.
-- Add `.github/workflows/site.yml`: on pull requests, install, lint and build inside `site/`; on push to `main` with `site/**` or `modules/**` changes, also deploy.
-- Add the update step to the CONTRIBUTING "Releasing" checklist.
-- Confirm `pnpm install` in `site/` exits 0, and run `pnpm -C site deploy:production -- --dry-run` with the Cloudflare credentials exported.
+- Copy the base `apps/web` and the `@repo/ui` pieces it uses into `apps/web`, as the Source row describes, and rewrite `@repo/ui/*` imports to `@web/*`.
+- Replace `@repo/env` and `@repo/config` with `src/site.ts` and the Astro `site` origin. Change the `deploy` script to `wrangler deploy`.
+- Rename the worker to `saasaloy` in `apps/web/wrangler.jsonc`.
+- Remove `privacy.astro` and `terms.astro`, and the footer's legal links.
+- Add `"apps/*"` to `pnpm-workspace.yaml`, allow the `workerd` and `sharp` install scripts, and add the `apps/web` overrides to `oxlint.config.mjs`.
+- Add `.github/workflows/site.yml`: on pull requests, install, lint and build `@saasaloy/web`; on push to `main` with `apps/web/**`, `modules/**` or `docs/wiki/**` changes, also deploy.
+- Run `pnpm --filter @saasaloy/web exec wrangler deploy --dry-run` with the Cloudflare credentials exported.
 
-Done when: `pnpm lint` at the root passes, `pnpm -C site lint` passes, `pnpm -C site build` writes `site/apps/web/dist/client/index.html`, the dry run names the worker `saasaloy`, and the `site.yml` pull request job is green.
+Done when: root `pnpm install` exits 0, root `pnpm lint` passes, `pnpm --filter @saasaloy/web build` writes `apps/web/dist/client/index.html`, `astro dev` serves the page at `http://localhost:3000`, the dry run names the worker `saasaloy`, and the `site.yml` pull request job is green.
 
 ### Phase 4: brand assets and guidelines
 
@@ -107,17 +109,18 @@ Done when: `assets/branding/` holds both SVG variants of the wordmark and the ma
 
 ### Phase 5: design system
 
-- Replace the neutral tokens in `site/packages/ui/src/styles/globals.css` with the approved light and dark palettes, type and radius, and self-host the approved fonts.
-- Rewrite `site/DESIGN.md` with those tokens and the component rules, and validate it with the designkit linter.
+- Replace the neutral tokens in `apps/web/src/styles/brand.css` with the approved light and dark palettes, type and radius, and self-host the approved fonts.
+- Rewrite `apps/web/DESIGN.md` with those tokens and the component rules, and validate it with the designkit linter.
 - Restyle the base blocks the page uses through tokens and props, not forks, where the block allows it.
 
-Done when: the designkit linter passes on `site/DESIGN.md`, and every colour and font in the built CSS traces to a token in that file.
+Done when: the designkit linter passes on `apps/web/DESIGN.md`, and every colour and font in the built CSS traces to a token in that file.
 
 ### Phase 6: build the landing page
 
-- Sections: hero with the init command and copy button, how it works (the stages from the README: landing page, waitlist, auth, teams, billing), the module map, the provider story (Cloudflare by default, local console and memory providers), a dogfood note ("this site is a Saasaloy project"), FAQ, footer.
-- Write the module map block: the five-module diagram, then the grouped list read from `../modules/*/registry-item.json` at build time.
-- Declare `PUBLIC_CF_ANALYTICS_TOKEN` in the site's env descriptors and preset, and render the beacon only when it is set.
+- Sections: hero with the init command and copy button, how it works (the stages from the README: landing page, waitlist, auth, teams, billing), the module map, the provider story (Cloudflare by default, local console and memory providers), a site source note (the site's code lives in this repo and started from the base landing page), FAQ, footer.
+- Write the module map block: the five-module diagram, then the grouped list read from `../../modules/*/registry-item.json` at build time.
+- Read `PUBLIC_CF_ANALYTICS_TOKEN` from `import.meta.env`, and render the beacon only when it is set.
+- Delete the blocks, content and primitives the page no longer uses.
 - Set the Astro `site` URL, page metadata, the social card, the favicon and the canonical link.
 - Write the copy from the README. Check that every claim on the page appears in the README.
 - Add the Lighthouse and axe gate to `site.yml`.
@@ -126,7 +129,7 @@ Done when: the built page matches the approved Phase 1 screenshots at 375, 768 a
 
 ### Phase 7: deploy and verify
 
-- Merge, and let `site.yml` deploy through `deploy:production`.
+- Merge, and let `site.yml` deploy through `wrangler deploy`.
 - Run Lighthouse and axe against the deployed URL.
 - When both pass, run `gh repo edit --homepage <url>` and add the site link to the README in a follow-up PR.
 
@@ -140,7 +143,7 @@ None. Each decision settled in the grill on 2026-10-26.
 
 - Changes to the base template, its landing blocks or any module (the issue's boundary).
 - A dark-first edit to the site's `THEME_INIT_SCRIPT`. The site follows the OS on the first visit.
-- A docs site. Docs stay in `docs/wiki/` on GitHub; the catalog's `docs-site` module is separate work.
+- A docs site. Docs stay in `docs/wiki/` on GitHub for this plan. A later plan renders them in `apps/web` from the same files; the catalog's `docs-site` module is separate work.
 - A `/modules` page, a `/brand` page, a blog, i18n or a waitlist form.
 - Buying or attaching a custom domain.
 - New README banners, or a light variant of the banner.
