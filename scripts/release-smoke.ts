@@ -373,7 +373,6 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
 }
 
 /**
-/**
  * Scaffold one project with every module in `scaffold`, then run each of the project's
  * own `FULL_SCAFFOLD_CHECKS`, in the order a user takes: install the base, add the
  * modules, install again. `add` formats the files it patches with the project's own
