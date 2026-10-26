@@ -21,6 +21,13 @@ describe("fileDropError", () => {
     );
   });
 
+  it("takes any type when the accept list is empty", () => {
+    assert.equal(
+      fileDropError({ size: MB, type: "text/csv" }, [], 5 * MB),
+      null
+    );
+  });
+
   it("refuses an empty file", () => {
     assert.equal(fileDropError(png(0), accept, 5 * MB), "empty");
   });

@@ -88,7 +88,8 @@ function Files() {
         imageTransforms={files.data?.settings.imageTransforms ?? false}
         publicUploads={files.data?.settings.publicUploads ?? false}
         onUpload={(file, visibility) =>
-          write.mutate({ file, kind: "upload", visibility })
+          // Async, so the block waits for one file before it sends the next.
+          write.mutateAsync({ file, kind: "upload", visibility })
         }
         onDownload={(id) => write.mutate({ id, kind: "download" })}
         onDelete={(id) => write.mutate({ id, kind: "delete" })}

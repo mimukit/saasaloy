@@ -56,7 +56,7 @@ export interface FileDropLabels {
 
 interface FileDropBase {
   id?: string;
-  /** MIME types, such as `image/jpeg`. */
+  /** MIME types, such as `image/jpeg`. An empty list takes every type. */
   accept: readonly string[];
   /** The cap per file, in bytes. */
   maxBytes: number;
@@ -228,15 +228,17 @@ export function FileDrop(props: FileDropProps) {
   const [refusal, setRefusal] = useState<string | null>(null);
   const shownError = error ?? refusal;
 
-  const files: readonly File[] = props.multiple
-    ? props.files
-    : props.file === undefined
-      ? []
-      : [props.file];
-  const maxFiles = props.multiple ? props.maxFiles : 1;
-  const uploading = props.multiple
-    ? (props.progress ?? []).some((value) => value !== undefined)
-    : props.progress !== undefined;
+  const files: readonly File[] =
+    props.multiple === true
+      ? props.files
+      : props.file === undefined
+        ? []
+        : [props.file];
+  const maxFiles = props.multiple === true ? props.maxFiles : 1;
+  const uploading =
+    props.multiple === true
+      ? (props.progress ?? []).some((value) => value !== undefined)
+      : props.progress !== undefined;
 
   function pick(accepted: File[], rejected: FileRejection[]) {
     const picked = [...accepted, ...rejected.map((entry) => entry.file)];
@@ -244,7 +246,7 @@ export function FileDrop(props: FileDropProps) {
     if (file === undefined) {
       return;
     }
-    if (!props.multiple) {
+    if (props.multiple !== true) {
       const code = fileDropError(file, accept, maxBytes);
       if (code !== null) {
         setRefusal(errorText(code, file.name, maxBytes, 1, labels));
@@ -280,7 +282,7 @@ export function FileDrop(props: FileDropProps) {
 
   function remove(index: number) {
     setRefusal(null);
-    if (props.multiple) {
+    if (props.multiple === true) {
       props.onFilesChange(props.files.filter((_, at) => at !== index));
     } else {
       props.onFileChange();
@@ -288,7 +290,10 @@ export function FileDrop(props: FileDropProps) {
   }
 
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
-    accept: Object.fromEntries(accept.map((type) => [type, []])),
+    accept:
+      accept.length === 0
+        ? undefined
+        : Object.fromEntries(accept.map((type) => [type, []])),
     multiple: props.multiple === true,
     disabled: disabled || uploading,
     onDrop: pick,
@@ -306,7 +311,7 @@ export function FileDrop(props: FileDropProps) {
   });
   const input = <input {...getInputProps({ id })} />;
   const progressAt = (index: number) =>
-    props.multiple ? props.progress?.[index] : props.progress;
+    props.multiple === true ? props.progress?.[index] : props.progress;
 
   return (
     <div className={cn("flex min-w-0 flex-col gap-2", className)}>
@@ -354,7 +359,9 @@ export function FileDrop(props: FileDropProps) {
               key={`${index}-${file.name}`}
               file={file}
               progress={progressAt(index)}
-              uploadBytes={props.multiple ? undefined : props.uploadBytes}
+              uploadBytes={
+                props.multiple === true ? undefined : props.uploadBytes
+              }
               labels={labels}
               disabled={disabled}
               onRemove={() => {
@@ -362,7 +369,7 @@ export function FileDrop(props: FileDropProps) {
               }}
             />
           ))}
-          {props.multiple && (
+          {props.multiple === true && (
             <div
               {...zoneProps}
               className={cn(

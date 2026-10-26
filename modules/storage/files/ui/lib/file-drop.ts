@@ -8,8 +8,8 @@ export type FileDropErrorCode = "badType" | "empty" | "tooLarge" | "tooMany";
 /**
  * Why a picked file is refused, or null when it may join the list.
  *
- * `count` is how many files the list holds already, and `maxFiles` the most it may
- * hold; a single-file drop zone passes neither.
+ * An empty `accept` list takes every type. `count` is how many files the list holds
+ * already, and `maxFiles` the most it may hold; a single-file drop zone passes neither.
  */
 export function fileDropError(
   file: Pick<File, "size" | "type">,
@@ -21,7 +21,7 @@ export function fileDropError(
   if (count >= maxFiles) {
     return "tooMany";
   }
-  if (!accept.includes(file.type)) {
+  if (accept.length > 0 && !accept.includes(file.type)) {
     return "badType";
   }
   if (file.size === 0) {
