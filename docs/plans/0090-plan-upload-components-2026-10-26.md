@@ -30,7 +30,9 @@ Target: both primeshopr flows call the helper, and `payment-receipt.ts` keeps no
 | Order of work | primeshopr#97 built first and merged through primeshopr PR #101 on 2026-10-26. This plan extracts from it, so the two real callers set the API, as the issue asks. |
 | Tests | vitest unit tests beside the source for `upload.ts`, the same shape as `keys.test.ts`. `FileDrop` gets no component tests, because the base `ui` package has no runner; the `.dev` check in Phase 6 covers it. |
 | Outward actions | Approved 2026-10-26: commit this plan to `main`, push, update the #284 body, and label #284 `blocked` until primeshopr#97 merges. |
-| UI house rules | Read `DESIGN.md` and the base `ui` AGENTS.md in Phase 1 and list the rules here before the mockup. |
+| UI house rules | The repo has no root `DESIGN.md`; the rules come from `packages/cli/templates/base/packages/ui/AGENTS.md`. No IO in `@repo/ui`: `FileDrop` hands `File` objects to the app. Copy comes in as label props, never hard-coded. Tokens only (`border-input`, `bg-muted`, `text-destructive`), so light and dark both follow the theme. A component under `src/components/` is scanned only when `globals.css` names it in an `@source` line, because a block renders it. |
+| Mockup approval | Approved 2026-10-26, round 1. Single mode is primeshopr's component unchanged. Multiple mode is layout B: the file list first, then a one-line "Add more, or drop files here" bar; the full drop zone shows only when the list is empty. Screenshots: `docs/plans/assets/0090-upload-components/round1-*.png`. Layouts A (full zone above the list) and C (tile grid) were rejected. |
+| Admin multi-file submit | The `file-uploads` block takes several files per submit (`multiple`, upload button reads "Upload N files") and calls `onUpload(file)` once per file. Approved with the mockup, 2026-10-26. |
 
 ## Approach
 
@@ -38,7 +40,7 @@ Extract the Worker-path checks from primeshopr into `@repo/storage`, and ship `F
 
 Rejected: a new `upload` module (one more install step for no extra dependency or binding); direct-to-R2 only (no signature check and no size cap until after the bytes land, and primeshopr's flows have no record table to sweep); one helper that covers both paths (the two paths check at different times, so a shared API would hide that difference).
 
-### Phase 1: wait for primeshopr#97 and approve the FileDrop mockup
+### Phase 1: wait for primeshopr#97 and approve the FileDrop mockup (built 2026-10-26)
 
 Attended: the owner approves the mockup screenshots: `FileDrop` in single mode (empty, dragging, one image chosen, one refused file, disabled), in multiple mode (two files with one image thumbnail, the `maxFiles` refusal) and the admin `/files` screen with `FileDrop` in it.
 
@@ -59,16 +61,18 @@ Done when: `pnpm test` passes the new `upload.test.ts`, and `pnpm lint` is clean
 
 - Add `modules/storage/files/ui/components/file-drop.tsx` and register it in `modules/storage/registry-item.json` as a file targeting `@ui/components/file-drop.tsx`.
 - Port primeshopr's `file-drop.tsx` on `react-dropzone` 20.1.4, and add `react-dropzone` to `packages/ui/package.json` through a `package-json-dependency` patch in the storage descriptor.
-- Add the `multiple` and `maxFiles` props, and take the multi-file list behaviour from `attachment-picker.tsx`: check type, size and count as a file is chosen, revoke each object URL when its chip goes, keep the refusal reason on screen.
+- Add the `multiple` and `maxFiles` props in layout B, and take the multi-file list behaviour from `attachment-picker.tsx`: check type, size and count as a file is chosen, revoke each object URL when its chip goes, keep the refusal reason on screen.
+- Add `@source "../components/file-drop.tsx";` to `globals.css` through the storage descriptor, so Tailwind scans the component.
 
 Done when: in a `.dev` project with `storage` installed, the component renders the approved mockup states in both modes, and the screenshots match the Phase 1 round.
 
 ### Phase 4: move the file-uploads block onto FileDrop
 
-- Replace the file input in `modules/file-uploads/files/ui/blocks/file-uploads.tsx` with `FileDrop`, and keep the block's `onUpload(file)` contract.
+- Replace the file input in `modules/file-uploads/files/ui/blocks/file-uploads.tsx` with `FileDrop` in `multiple` mode, and keep the block's `onUpload(file)` contract: the block calls it once per file, in order.
+- Change the submit button to "Upload N files", and show each file's progress in its row while the loop runs.
 - Keep the public or private choice and its disabled reason as they are.
 
-Done when: in a `.dev` project with `file-uploads`, the admin `/files` screen uploads a file through `FileDrop` and matches the approved mockup.
+Done when: in a `.dev` project with `file-uploads`, the admin `/files` screen uploads two files in one submit through `FileDrop`, lists both, and matches `round1-admin-*.png` layout B.
 
 ### Phase 5: skill section
 
@@ -81,7 +85,7 @@ Done when: the skill section's route example compiles in the `.dev` project, and
 
 - In `.dev`, scaffold a project with `storage` and `storage-memory`, add the skill's example route, and upload a PNG, a renamed text file and a 6 MB file.
 
-Done when: the PNG returns 201, the renamed file returns a 4xx with the signature reason, and the 6 MB file returns 413. The target line then holds once primeshopr#97 swaps its copies for the extracted helper.
+Done when: the PNG returns 201, the renamed file returns a 4xx with the signature reason, and the 6 MB file returns 413. The target line then holds once brainaloylabs/primeshopr#103 swaps its copies for the extracted helper.
 
 ## Open questions
 
