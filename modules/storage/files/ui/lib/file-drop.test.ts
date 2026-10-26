@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { fileDropError, fileSize, uploadedMegabytes } from "./file-drop.ts";
+import { fileDropError, fileSize, uploadedSize } from "./file-drop.ts";
 
 const MB = 1024 * 1024;
 const png = (size: number) => ({ size, type: "image/png" });
@@ -54,19 +54,30 @@ describe("fileSize", () => {
   });
 });
 
-describe("uploadedMegabytes", () => {
-  it("splits the total by the progress, clamped to 0..100", () => {
-    assert.deepEqual(uploadedMegabytes(2 * MB, 50), {
+describe("uploadedSize", () => {
+  it("splits a megabyte total by the progress, clamped to 0..100", () => {
+    assert.deepEqual(uploadedSize(2 * MB, 50), {
+      unit: "mb",
       done: "1.0",
       total: "2.0",
     });
-    assert.deepEqual(uploadedMegabytes(2 * MB, 150), {
+    assert.deepEqual(uploadedSize(2 * MB, 150), {
+      unit: "mb",
       done: "2.0",
       total: "2.0",
     });
-    assert.deepEqual(uploadedMegabytes(2 * MB, -5), {
+    assert.deepEqual(uploadedSize(2 * MB, -5), {
+      unit: "mb",
       done: "0.0",
       total: "2.0",
+    });
+  });
+
+  it("counts a file under 1 MB in kilobytes, so it never reads 0.0 of 0.0", () => {
+    assert.deepEqual(uploadedSize(12 * 1024, 50), {
+      unit: "kb",
+      done: "6",
+      total: "12",
     });
   });
 });

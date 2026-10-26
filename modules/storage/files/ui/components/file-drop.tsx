@@ -1,14 +1,10 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useState } from "react";
 import { FileTextIcon, PlusIcon, UploadIcon, XIcon } from "lucide-react";
 import { useDropzone } from "react-dropzone";
 import type { FileRejection } from "react-dropzone";
 
 import { Button } from "@repo/ui/components/button";
-import {
-  fileDropError,
-  fileSize,
-  uploadedMegabytes,
-} from "@repo/ui/lib/file-drop";
+import { fileDropError, fileSize, uploadedSize } from "@repo/ui/lib/file-drop";
 import type { FileDropErrorCode } from "@repo/ui/lib/file-drop";
 import { interpolate } from "@repo/ui/lib/interpolate";
 import { cn } from "@repo/ui/lib/utils";
@@ -42,7 +38,7 @@ export interface FileDropLabels {
   sizeMb: string;
   /** "Remove {name}". */
   remove: string;
-  /** "{done} of {total} MB · {percent}%". */
+  /** "{done} of {total} · {percent}%". `done` and `total` come from `sizeKb` or `sizeMb`. */
   progress: string;
   /** "{name}". */
   badType: string;
@@ -95,6 +91,20 @@ function sizeText(bytes: number, labels: FileDropLabels): string {
   return interpolate(unit === "kb" ? labels.sizeKb : labels.sizeMb, { size });
 }
 
+function progressText(
+  bytes: number,
+  progress: number,
+  labels: FileDropLabels
+): string {
+  const { unit, done, total } = uploadedSize(bytes, progress);
+  const label = unit === "kb" ? labels.sizeKb : labels.sizeMb;
+  return interpolate(labels.progress, {
+    done: interpolate(label, { size: done }),
+    total: interpolate(label, { size: total }),
+    percent: Math.round(progress),
+  });
+}
+
 function errorText(
   code: FileDropErrorCode,
   name: string,
@@ -117,23 +127,26 @@ function errorText(
 }
 
 function Thumbnail({ file }: { file: File }) {
-  const isImage = file.type.startsWith("image/");
-  const url = useMemo(
-    () => (isImage ? URL.createObjectURL(file) : null),
-    [file, isImage]
-  );
-
-  // Free the preview when the row goes.
-  useEffect(
-    () => () => {
-      if (url !== null) {
-        URL.revokeObjectURL(url);
+  // The preview URL lives exactly as long as the <img>: the ref callback makes it when
+  // the element mounts and its cleanup frees it. A URL made in render or in useMemo
+  // breaks under React StrictMode, which runs a cleanup once before the image loads.
+  const preview = useCallback(
+    (img: HTMLImageElement | null) => {
+      // React 19 calls the cleanup instead of passing null, so `img` is set here.
+      const url = img === null ? null : URL.createObjectURL(file);
+      if (img !== null && url !== null) {
+        img.src = url;
       }
+      return () => {
+        if (url !== null) {
+          URL.revokeObjectURL(url);
+        }
+      };
     },
-    [url]
+    [file]
   );
 
-  if (url === null) {
+  if (!file.type.startsWith("image/")) {
     return (
       <span
         aria-hidden="true"
@@ -145,7 +158,7 @@ function Thumbnail({ file }: { file: File }) {
   }
   return (
     <img
-      src={url}
+      ref={preview}
       alt=""
       className="bg-muted size-14 shrink-0 rounded-lg object-cover"
     />
@@ -177,10 +190,7 @@ function FileRow({
         </span>
         <span className="text-muted-foreground block text-sm">
           {uploading
-            ? interpolate(labels.progress, {
-                ...uploadedMegabytes(uploadBytes ?? file.size, progress),
-                percent: Math.round(progress),
-              })
+            ? progressText(uploadBytes ?? file.size, progress, labels)
             : sizeText(file.size, labels)}
         </span>
         {uploading && (

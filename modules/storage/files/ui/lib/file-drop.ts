@@ -42,12 +42,18 @@ export function fileSize(bytes: number): { unit: "kb" | "mb"; size: string } {
   return { unit: "mb", size: (kb / 1024).toFixed(1) };
 }
 
-/** "2.1 of 3.4": the part of a file sent so far, in megabytes with one decimal. */
-export function uploadedMegabytes(
+/**
+ * The part of a file sent so far, in the unit its total reads best in: "6 of 12" in
+ * kilobytes for a small file, "2.1 of 3.4" in megabytes from 1 MB up.
+ */
+export function uploadedSize(
   bytes: number,
   progress: number
-): { done: string; total: string } {
-  const total = bytes / 1024 / 1024;
+): { unit: "kb" | "mb"; done: string; total: string } {
   const share = Math.min(100, Math.max(0, progress)) / 100;
-  return { done: (total * share).toFixed(1), total: total.toFixed(1) };
+  const { unit, size: total } = fileSize(bytes);
+  if (unit === "kb") {
+    return { unit, done: String(Math.round((bytes * share) / 1024)), total };
+  }
+  return { unit, done: ((bytes * share) / 1024 / 1024).toFixed(1), total };
 }

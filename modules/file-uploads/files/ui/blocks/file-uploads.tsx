@@ -54,7 +54,7 @@ const dropLabels: FileDropLabels = {
   sizeKb: "{size} KB",
   sizeMb: "{size} MB",
   remove: "Remove {name}",
-  progress: "{done} of {total} MB · {percent}%",
+  progress: "{done} of {total} · {percent}%",
   badType: "{name} is not a type this screen takes.",
   empty: "{name} is empty.",
   tooLarge: "{name} is over the {max} MB limit.",
