@@ -44,6 +44,8 @@ export type {
 } from "./provider";
 export { signToken, verifyToken } from "./token";
 export type { StorageTokenClaims } from "./token";
+export { ownsKey, readLimited, sniffType } from "./upload";
+export type { OwnsKeyOptions, Sniffed, SniffedType } from "./upload";
 
 // The provider registry, and the patch point every `storage-<provider>` module writes
 // into. `saasaloy add storage-cloudflare` adds its import and appends `cloudflare()`

@@ -91,6 +91,10 @@
           "target": "src/token.ts"
         },
         {
+          "path": "files/src/upload.ts",
+          "target": "src/upload.ts"
+        },
+        {
           "path": "files/src/providers/.gitkeep",
           "target": "src/providers/.gitkeep"
         },
