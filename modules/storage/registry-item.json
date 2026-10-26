@@ -38,6 +38,13 @@
       "range": "workspace:*"
     },
     {
+      "file": "packages/ui/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "react-dropzone",
+      "range": "20.1.4"
+    },
+    {
       "file": "apps/api/src/env.ts",
       "kind": "plugin-array",
       "exportName": "apiEnv",
@@ -53,6 +60,14 @@
     {
       "path": "files/api/routes/storage.ts",
       "target": "@api/routes/storage.ts"
+    },
+    {
+      "path": "files/ui/components/file-drop.tsx",
+      "target": "@ui/components/file-drop.tsx"
+    },
+    {
+      "path": "files/ui/lib/file-drop.ts",
+      "target": "@ui/lib/file-drop.ts"
     }
   ],
   "scaffolds": [

@@ -45,6 +45,11 @@
 @source "../components/label.tsx";
 @source "../components/separator.tsx";
 
+/* Written by the `storage` module, which has no patch kind for CSS. Before that module
+   is added the file does not exist, and a non-matching @source is silent, so the line
+   costs nothing. Both blocks/file-uploads.tsx and an app page render it. */
+@source "../components/file-drop.tsx";
+
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to
    packages/apps/** — a directory that does not exist. shadcn's own astro-monorepo
