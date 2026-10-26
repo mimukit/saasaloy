@@ -81,6 +81,8 @@ describe("infra-ci-deploy module", () => {
     // The deploy reads the last deploy tag and pushes the next one.
     expect(workflow).toMatch(/^ {10}fetch-depth: 0$/m);
     expect(workflow).toMatch(/^ {2}contents: write$/m);
+    // `git tag --annotate` needs an identity, and a runner has none.
+    expect(workflow).toMatch(/^ {10}git config user\.email /m);
   });
 
   it("takes every credential from a repository secret", async () => {
