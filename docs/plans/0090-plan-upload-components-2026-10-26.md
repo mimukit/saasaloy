@@ -49,7 +49,7 @@ Attended: the owner approves the mockup screenshots: `FileDrop` in single mode (
 
 Done when: Design decisions carries a mockup approval row with a date, and the Helper surface row matches primeshopr#97's merged code.
 
-### Phase 2: server helper in @repo/storage
+### Phase 2: server helper in @repo/storage (built 2026-10-26)
 
 - Add `modules/storage/files/src/upload.ts` with `readLimited`, `sniffType` and `ownsKey`, and export them from `src/index.ts`.
 - Add new `StorageErrorCode` values only if a function needs to throw (for example `too_large`); a refusal that the caller turns into a 4xx returns `null`.
@@ -57,7 +57,7 @@ Done when: Design decisions carries a mockup approval row with a date, and the H
 
 Done when: `pnpm test` passes the new `upload.test.ts`, and `pnpm lint` is clean.
 
-### Phase 3: FileDrop component
+### Phase 3: FileDrop component (built 2026-10-26)
 
 - Add `modules/storage/files/ui/components/file-drop.tsx` and register it in `modules/storage/registry-item.json` as a file targeting `@ui/components/file-drop.tsx`.
 - Port primeshopr's `file-drop.tsx` on `react-dropzone` 20.1.4, and add `react-dropzone` to `packages/ui/package.json` through a `package-json-dependency` patch in the storage descriptor.
@@ -66,7 +66,7 @@ Done when: `pnpm test` passes the new `upload.test.ts`, and `pnpm lint` is clean
 
 Done when: in a `.dev` project with `storage` installed, the component renders the approved mockup states in both modes, and the screenshots match the Phase 1 round.
 
-### Phase 4: move the file-uploads block onto FileDrop
+### Phase 4: move the file-uploads block onto FileDrop (built 2026-10-26)
 
 - Replace the file input in `modules/file-uploads/files/ui/blocks/file-uploads.tsx` with `FileDrop` in `multiple` mode, and keep the block's `onUpload(file)` contract: the block calls it once per file, in order.
 - Change the submit button to "Upload N files", and show each file's progress in its row while the loop runs.
@@ -74,14 +74,14 @@ Done when: in a `.dev` project with `storage` installed, the component renders t
 
 Done when: in a `.dev` project with `file-uploads`, the admin `/files` screen uploads two files in one submit through `FileDrop`, lists both, and matches `round1-admin-*.png` layout B.
 
-### Phase 5: skill section
+### Phase 5: skill section (built 2026-10-26)
 
 - Add a "Uploads through the Worker" section to `modules/storage/skills/saasaloy-storage/SKILL.md`. It wires one route (`readLimited` → `sniffType` → `buildKey` → `put`), a later `ownsKey` check when a record saves the key, `FileDrop` on the page, and a signed download link for staff.
 - Add one paragraph that says when to pick `file-uploads` instead: files over 10 MB, a files list, a sweep.
 
 Done when: the skill section's route example compiles in the `.dev` project, and the section names `file-uploads` as the other path.
 
-### Phase 6: check in a scaffolded project
+### Phase 6: check in a scaffolded project (built 2026-10-26)
 
 - In `.dev`, scaffold a project with `storage` and `storage-memory`, add the skill's example route, and upload a PNG, a renamed text file and a 6 MB file.
 
