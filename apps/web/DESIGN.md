@@ -1,96 +1,100 @@
 ---
 version: alpha
-name: "{{PROJECT_NAME}}"
-description: "The neutral, content-first design system shipped by the Saasaloy base template."
+name: "Saasaloy"
+description: "The cobalt blueprint system of the Saasaloy public site, from the round 10 mockup approved for issue #287."
 omitted:
   - section: spacing
     reason: "Tailwind's default scale is used unchanged"
 colors:
-  background: "oklch(1 0 0)"
-  foreground: "oklch(0.145 0 0)"
-  card: "oklch(1 0 0)"
-  card-foreground: "oklch(0.145 0 0)"
-  primary: "oklch(0.205 0 0)"
-  primary-foreground: "oklch(0.985 0 0)"
-  secondary: "oklch(0.97 0 0)"
-  secondary-foreground: "oklch(0.205 0 0)"
-  muted: "oklch(0.97 0 0)"
-  muted-foreground: "oklch(0.556 0 0)"
+  background: "#f6f7f9"
+  foreground: "#0b2253"
+  card: "#ffffff"
+  card-foreground: "#0b2253"
+  primary: "#315fe8"
+  primary-foreground: "#ffffff"
+  highlight: "#315fe8"
+  secondary: "#eaeffd"
+  secondary-foreground: "#315fe8"
+  muted: "#eaeef8"
+  muted-foreground: "#626b78"
   destructive: "oklch(0.577 0.245 27.325)"
-  border: "oklch(0.922 0 0)"
-  ring: "oklch(0.708 0 0)"
-  dark-background: "oklch(0.145 0 0)"
-  dark-foreground: "oklch(0.985 0 0)"
-  dark-card: "oklch(0.205 0 0)"
-  dark-card-foreground: "oklch(0.985 0 0)"
-  dark-primary: "oklch(0.922 0 0)"
-  dark-primary-foreground: "oklch(0.205 0 0)"
-  dark-secondary: "oklch(0.269 0 0)"
-  dark-secondary-foreground: "oklch(0.985 0 0)"
-  dark-muted-foreground: "oklch(0.708 0 0)"
+  border: "#cbd6f5"
+  ring: "#315fe8"
+  dark-background: "#101722"
+  dark-foreground: "#eef2f8"
+  dark-card: "#161e2d"
+  dark-card-foreground: "#eef2f8"
+  dark-highlight: "#8fa8ff"
+  dark-secondary: "#222b41"
+  dark-secondary-foreground: "#8fa8ff"
+  dark-muted: "#1d2638"
+  dark-muted-foreground: "#a9b5c7"
   dark-destructive: "oklch(0.704 0.191 22.216)"
+  dark-border: "#303b59"
+  dark-ring: "#8fa8ff"
 typography:
   headline-display:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 4.5rem
-    fontWeight: 500
+    fontWeight: 700
     lineHeight: 1.05
     letterSpacing: -0.035em
   headline-section:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 3rem
-    fontWeight: 600
+    fontWeight: 700
     lineHeight: 1.1
     letterSpacing: -0.03em
-  headline-lg:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: 2.25rem
-    fontWeight: 600
-    lineHeight: 2.5rem
-    letterSpacing: -0.025em
   headline-md:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 1.875rem
-    fontWeight: 600
+    fontWeight: 700
     lineHeight: 2.25rem
     letterSpacing: -0.025em
-  body-lg:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
-    fontSize: 1.125rem
+  wordmark:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: 1.5rem
+    fontWeight: 600
+    lineHeight: 2rem
+    letterSpacing: -0.02em
+  lead:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: 1.25rem
     fontWeight: 400
     lineHeight: 1.75rem
-  lead:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+  body-lg:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 1.125rem
     fontWeight: 400
     lineHeight: 1.75rem
   body-md:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 1rem
     fontWeight: 400
     lineHeight: 1.5rem
   body-sm:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 0.875rem
     fontWeight: 400
     lineHeight: 1.25rem
   label-md:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 0.875rem
     fontWeight: 500
     lineHeight: 1.25rem
-  label-sm:
-    fontFamily: "ui-sans-serif, system-ui, sans-serif"
+  code-md:
+    fontFamily: "Geist Mono, ui-monospace, monospace"
+    fontSize: 0.875rem
+    fontWeight: 400
+    lineHeight: 1.25rem
+  code-sm:
+    fontFamily: "Geist Mono, ui-monospace, monospace"
     fontSize: 0.75rem
-    fontWeight: 500
+    fontWeight: 400
     lineHeight: 1rem
 rounded:
-  sm: 0.375rem
-  md: 0.5rem
-  lg: 0.625rem
-  xl: 0.875rem
-  2xl: 1rem
-  4xl: 2rem
+  none: 0px
+  full: 9999px
 components:
   page:
     backgroundColor: "{colors.background}"
@@ -99,16 +103,29 @@ components:
   page-dark:
     backgroundColor: "{colors.dark-background}"
     textColor: "{colors.dark-foreground}"
+  wordmark:
+    textColor: "{colors.highlight}"
+    typography: "{typography.wordmark}"
+  wordmark-dark:
+    textColor: "{colors.dark-highlight}"
   hero-title:
     textColor: "{colors.foreground}"
     typography: "{typography.headline-display}"
+  hero-title-highlight:
+    textColor: "{colors.highlight}"
+  hero-title-highlight-dark:
+    textColor: "{colors.dark-highlight}"
   section-title:
-    textColor: "{colors.foreground}"
+    textColor: "{colors.highlight}"
     typography: "{typography.headline-section}"
+  section-title-dark:
+    textColor: "{colors.dark-highlight}"
   section-lead:
     textColor: "{colors.muted-foreground}"
     typography: "{typography.lead}"
-  legal-title:
+  section-lead-dark:
+    textColor: "{colors.dark-muted-foreground}"
+  error-title:
     textColor: "{colors.foreground}"
     typography: "{typography.headline-md}"
   body-large:
@@ -117,112 +134,171 @@ components:
   body-small:
     textColor: "{colors.muted-foreground}"
     typography: "{typography.body-sm}"
+  technical-label:
+    textColor: "{colors.highlight}"
+    typography: "{typography.code-sm}"
+  technical-label-dark:
+    textColor: "{colors.dark-highlight}"
   button-primary:
     backgroundColor: "{colors.primary}"
     textColor: "{colors.primary-foreground}"
     typography: "{typography.label-md}"
-    rounded: "{rounded.lg}"
-    height: 2rem
-  button-primary-dark:
-    backgroundColor: "{colors.dark-primary}"
-    textColor: "{colors.dark-primary-foreground}"
+    rounded: "{rounded.none}"
+    height: 2.5rem
   button-secondary:
     backgroundColor: "{colors.secondary}"
     textColor: "{colors.secondary-foreground}"
-    rounded: "{rounded.lg}"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.none}"
+    height: 2.5rem
   button-secondary-dark:
     backgroundColor: "{colors.dark-secondary}"
     textColor: "{colors.dark-secondary-foreground}"
+  command-field:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.foreground}"
+    typography: "{typography.code-md}"
+    rounded: "{rounded.none}"
+    height: 2.5rem
+  command-field-dark:
+    backgroundColor: "{colors.dark-card}"
+    textColor: "{colors.dark-foreground}"
+  filter-tab:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.highlight}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+  filter-tab-active:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
+  type-tag:
+    backgroundColor: "{colors.secondary}"
+    textColor: "{colors.secondary-foreground}"
+    typography: "{typography.code-sm}"
+    rounded: "{rounded.none}"
+  stage-marker:
+    backgroundColor: "{colors.background}"
+    textColor: "{colors.highlight}"
+    typography: "{typography.label-md}"
+    rounded: "{rounded.full}"
+    size: 2rem
+  stage-marker-active:
+    backgroundColor: "{colors.primary}"
+    textColor: "{colors.primary-foreground}"
+  stage-row-active:
+    backgroundColor: "{colors.muted}"
+  stage-row-active-dark:
+    backgroundColor: "{colors.dark-muted}"
+  card:
+    backgroundColor: "{colors.card}"
+    textColor: "{colors.card-foreground}"
+    typography: "{typography.body-sm}"
+    rounded: "{rounded.none}"
+  card-dark:
+    backgroundColor: "{colors.dark-card}"
+    textColor: "{colors.dark-card-foreground}"
   button-destructive:
     backgroundColor: "{colors.destructive}"
     textColor: "{colors.primary-foreground}"
   destructive-text-dark:
     textColor: "{colors.dark-destructive}"
-  input:
-    textColor: "{colors.foreground}"
-    typography: "{typography.body-md}"
-    rounded: "{rounded.lg}"
-    height: 2rem
-  card:
-    backgroundColor: "{colors.card}"
-    textColor: "{colors.card-foreground}"
-    typography: "{typography.body-sm}"
-    rounded: "{rounded.xl}"
-  card-dark:
-    backgroundColor: "{colors.dark-card}"
-    textColor: "{colors.dark-card-foreground}"
-  callout:
-    backgroundColor: "{colors.muted}"
-    textColor: "{colors.foreground}"
-    rounded: "{rounded.2xl}"
-  badge:
-    backgroundColor: "{colors.primary}"
-    textColor: "{colors.primary-foreground}"
-    typography: "{typography.label-sm}"
-    rounded: "{rounded.4xl}"
   focus-ring:
     backgroundColor: "{colors.ring}"
+  focus-ring-dark:
+    backgroundColor: "{colors.dark-ring}"
   border:
     backgroundColor: "{colors.border}"
-  muted-text-dark:
-    textColor: "{colors.dark-muted-foreground}"
+  border-dark:
+    backgroundColor: "{colors.dark-border}"
 ---
 
-# {{PROJECT_NAME}} Design System
+# Saasaloy Design System
 
 ## Overview
 
-The base uses a neutral, content-first system. It gives a new product a clear structure without choosing a brand palette for the owner. Product identity enters through the theme tokens, the product brief, and the copy.
+The site reads as a technical drawing of the product. Fine cobalt lines on pale paper, a faint graph-paper grid, and isometric line art show what a Saasaloy project holds: an application, its source files, a database, an email service. The visual source is the round 10 mockup that the owner approved for issue #287, in `.dev/mockup-287/round-10-full-page/`. That mockup replaced the lime direction of the README banner with the cobalt blueprint direction recorded in `docs/plans/0091-plan-public-site-and-brand-2026-10-26.md`.
+
+The mockup leads the code here. `apps/web/src/styles/brand.css` still holds the neutral seed tokens of the base template until Phase 5 of the plan writes these values into it.
 
 ## Apps
 
-This file covers the web app. Each app has its own stylesheet in `packages/ui/src/styles/` and its own `DESIGN.md` in its own folder. `brand.css` holds the tokens recorded here, `web.css` imports it and adds the landing page's layout, type and motion vocabulary, and `globals.css` holds the shared Tailwind setup with no token values. Another app's theme file, such as `admin.css`, imports `globals.css` and declares its own tokens, mapping and radius scale, so a change here never reaches it.
+This file covers the public site, the only app in `apps/web`. It is a fork of the base template's web app, and `saasaloy update` never reaches it. `brand.css` holds the tokens recorded here, `web.css` imports it and adds the page's layout, type and motion vocabulary, and `globals.css` holds the shared Tailwind setup with no token values.
 
 ## Colors
 
-The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive color is the only chromatic semantic token in the seed.
+Cobalt `primary` (#315fe8) is the one chromatic colour, and both themes use it for solid buttons with white labels. The light theme is pale paper (#f6f7f9) with navy text (#0b2253) and gray prose (#626b78). The dark theme is deep navy (#101722) with off-white text (#eef2f8), pale blue (#8fa8ff) and muted prose (#a9b5c7).
 
-Use the semantic custom properties in `packages/ui/src/styles/brand.css`. Do not copy their current `oklch()` values into components.
+`highlight` is the colour of section titles, the wordmark, technical labels and line art. It is cobalt in light and pale blue in dark, because cobalt on deep navy is too dark to read as text. The hero's first sentence uses `foreground`, and its second sentence uses `highlight`.
+
+The plan supplies the eight values above. The other roles are derived from them, so the palette has no colour of its own outside that set:
+
+- `border` mixes 22% cobalt into the light paper, and `dark-border` mixes 25% pale blue into the dark navy.
+- `muted` mixes 6% cobalt into the paper, and `dark-muted` mixes 10% pale blue into the navy. The active stage row uses these.
+- `secondary` mixes 10% cobalt into white, and `dark-secondary` mixes 14% pale blue into the navy. Type tags and the secondary button use these.
+- `card` is white in light. `dark-card` mixes 5% pale blue into the navy, so a surface in dark is never a white island.
+- `ring` is the theme's `highlight`.
+- `destructive` keeps the base seed values. The page has no danger state, and the token exists only for the shared primitives.
+
+Use the semantic custom properties in `apps/web/src/styles/brand.css`. Do not copy hex values into components. Do not add green, orange, purple or lime. The catalog type tags in the mockup carry some of these colours, and the manifest records that as an image tool limitation, not a design choice. Every tag uses the `type-tag` pair.
 
 ## Typography
 
-The template uses Tailwind's system sans stack, with no web font. Three named sizes in `web.css` carry the landing page's ramp. `text-display` is the hero's one `h1`: medium weight, very tight tracking, and fluid from `2.5rem` to `4.5rem`. `text-section-title` is every section's `h2`: semibold, tight, fluid from `2rem` to `3rem`. `text-lead` is the paragraph under either. The token map records the largest size of each fluid step. Body copy uses the `text-sm` through `text-lg` scale. Controls use medium weight at `text-xs` or `text-sm`. Code the page quotes (commands, module names, paths) uses the mono face at `text-xs` or the surrounding size.
+The site self-hosts two faces through `@fontsource` packages with `font-display: swap`. Geist carries headlines, prose and controls. Geist Mono carries every command, module name, path, environment value, stage description and diagram label. The split tells the reader what to type and what to read.
+
+Headlines are bold with tight tracking. `text-display` is the hero's one `h1`, fluid from `2.5rem` to `4.5rem`. `text-section-title` is every section's `h2`, fluid from `2rem` to `3rem`. The token map records the largest size of each fluid step. `text-lead` is the sans paragraph under either title, in `muted-foreground`. Body copy uses `body-sm` through `body-lg`. Mono text uses `code-md` in the command field and the catalog rows, and `code-sm` in tabs, tags and diagram callouts.
+
+The wordmark is the lowercase word `saasaloy` in Geist, in `highlight`. The footer repeats it at section-title size.
 
 ## Layout
 
-Three container widths live in `web.css`. `section-container` is every section's frame at `64rem`. `section-container-narrow` is a deliberate `48rem` reading measure for the FAQ and the closing CTA. `section-container-wide` is `80rem`, for the navbar and the hero's product frame. All three share a `1.5rem` gutter. The sticky navbar floats: a gap holds it off the top of the viewport, and it overlays the first section instead of pushing it down. The hero's background, grid and light beams start at the top of the page, behind the bar, so no band of plain background shows above the hero. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own, so sections can be added, removed and reordered without the spacing drifting. Components use Tailwind's default spacing scale, which stays omitted from the token map because the project does not define a custom scale.
+Every section is two columns on desktop: copy on the left, a line-art illustration on the right. The FAQ follows the same split, with the accordion on the left and a repository tree on the right. On mobile the columns stack, copy first.
+
+Three container widths live in `web.css`. The two-column sections and the navbar use `section-container-wide` at `80rem`. `section-container` at `64rem` stays for a single-column block such as the 404 page. All share a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own.
+
+A full-width blueprint rule separates the sections. It is a hairline in `border` with a small crosshair at each end and short tick marks along it. The navbar sits above the first rule: the wordmark on the left, then Docs, GitHub, Guide and the theme toggle on the right. The graph-paper grid runs behind the whole page as one continuous background, so no section draws a band of its own.
+
+Components use Tailwind's default spacing scale, which stays omitted from the token map.
 
 ## Elevation & Depth
 
-Surfaces use borders, rings, and tonal contrast instead of a shadow scale. Landing cards add a hairline `shadow-xs`. Two elements carry a soft drop shadow tinted from `foreground`: the hero's product frame and the featured pricing tier. Those are the page's only raised surfaces. The small shadow on the input is a component detail. Do not infer a project shadow scale from any of them.
+The page is flat. Hairline borders and tonal surfaces separate content, and nothing casts a shadow. The dark theme adds no glow and no gradient. Depth exists only inside the isometric illustrations, which draw it with line work, not with CSS.
 
 ## Shapes
 
-The base radius is `0.625rem`. Controls use the `lg` radius. Cards use `xl`. Large callouts use `2xl`. Badges use `4xl` for a pill shape.
+Corners are square. Every frame, button, command field, tab, tag, table and accordion row uses `rounded.none`. The one round shape is the stage marker, a `rounded.full` circle that holds the stage number. Do not add a radius between these two values.
 
 ## Components
 
-The landing page is thirteen blocks in `packages/ui/src/blocks/`, composed by explicit imports in `apps/web/src/pages/index.astro`: navbar, hero, logo-cloud, pain-points, how-it-works, feature-grid, showcase, audience, testimonials, pricing-table, faq, cta and footer. They share one vocabulary. A section opens with a centred `section-title` and `lead`. Cards are bordered at the `xl` radius. A product visual sits in a double frame: an outer bordered shell at `1.25rem` and an inner surface at `0.875rem`. Primary calls to action sit in a thin ringed wrapper beside a ghost button. Decoration is drawn from tokens: the `grid-pattern` utility under a radial mask, and a dashed rule for dividers inside a card and above the footer.
+The landing page has seven sections in this order: hero, stages, catalog, providers, this site, FAQ and footer. Each section opens with a `section-title`, except the hero, which uses `hero-title`.
 
-Primary buttons use the primary pair. Secondary buttons use the secondary pair. Destructive actions use the destructive token with restrained tint states. Inputs and buttons share a `2rem` default height and the `lg` radius. Cards use the card pair and a border-strength ring.
+- **Hero.** The headline reads "A landing page today. Your next module tomorrow." A `lead` follows. Under it, the command field holds `npx saasaloy init my-app`, joined to a solid Copy button. Two inline links follow, Getting started and GitHub, each with an icon and a trailing arrow and a hairline divider between them. A `body-small` note under the links says the project is a proof of concept. The illustration is an isometric application wireframe with a sign-in panel, source files, a database and an email service.
+- **Stages.** A vertical list of five numbered stages on a hairline: landing page, waitlist, sign-in, teams and payments. Each stage has a title and a mono description. The active stage fills its marker with `primary` and tints its row with `muted`. The illustration is an exploded stack of source slabs in the same order, and the active slab fills with `primary`.
+- **Catalog.** Filter tabs over a flat table of modules with Module, Purpose and Type columns. The active tab is solid `primary`, and the others are outlined. Table rows are separated by hairlines and have no zebra fill. The module list comes from `modules/*/registry-item.json` at build time.
+- **Providers.** One capability connects to three interchangeable provider modules, with a small `.env` panel that shows the selecting variable. Short callouts in `highlight` name the point of each part.
+- **This site.** A `lead`, the command field again, and an outlined secondary button that links to the site source.
+- **FAQ.** Bordered accordion rows with a chevron. The question is in `highlight`, and the open answer is in `muted-foreground`.
+- **Footer.** The large wordmark, the tagline "Start small. Own the source.", and links to GitHub, Getting started, Changelog and the MIT license in `highlight`.
 
-Cards in one row share one height. The grid stretches its cards, so it carries no `items-start`, and sibling cards hold the same number of one-line items. The pricing tiers are the worked example: five one-line bullets each. A card's primary action sits inside that card, on the primary button, never below or beside it.
+The command field is the page's primary call to action. It is a bordered mono field with a prompt glyph, and a solid `primary` Copy button sits flush against its right edge. Both share the `2.5rem` height and square corners. The copy button shows its copied state in place and never moves the layout.
 
-A value that waits on a request shows the `Skeleton` primitive in its place, at the size the value will take, until the response arrives. It never shows a blank gap or a spinner. Add the primitive with `pnpm --filter @repo/ui exec shadcn add skeleton` the first time a page needs it.
+Illustrations are line art in `highlight` on the page background, with mono callouts on leader lines. One element per illustration fills with `primary` to mark the focus. Draw them as SVG so the stroke colour follows the theme tokens.
 
-The `error-state` block is the one screen for a failure: a wrong path, a failed render, a server error. It is a single centered card holding a muted icon, a status label in the mono face at the smallest size, a title at `body-lg`, a description in `muted-foreground`, and one or two actions on the button scale. It carries no destructive token and no alert tint, because a mistyped address is not a danger state. Every app renders this block rather than its own error markup, so a theme change reaches all three at once.
+Cards in one row share one height. The grid stretches its cards, so it carries no `items-start`, and sibling cards hold the same number of one-line items. A card's primary action sits inside that card, on the primary button.
+
+The `error-state` block is the 404 and 500 screen. It is a single bordered frame holding a muted icon, a status label in `code-sm`, a title, a description in `muted-foreground`, and one or two actions on the button scale. It carries no destructive token and no alert tint, because a mistyped address is not a danger state.
 
 ## Do's and Don'ts
 
-- Read this file, `packages/ui/src/styles/brand.css` and `packages/ui/src/styles/web.css` before you write UI.
-- Use semantic token utilities such as `bg-primary` and `text-muted-foreground`.
+- Read this file, `apps/web/src/styles/brand.css` and `apps/web/src/styles/web.css` before you write UI.
+- Use semantic token utilities such as `bg-primary`, `text-highlight` and `text-muted-foreground`.
 - Keep light and dark token pairs together when you change a semantic role.
-- Keep new pages within the established type scale and radius vocabulary.
-- Do not add a color, radius, shadow, or type size that the code does not define.
-- Do not use a shadow when a border or tonal surface provides the needed separation.
-- Keep UI copy direct and specific. Use the product brief for product language.
-- Do not put a value in copy that goes stale: a version number, a release date, a count. Say something general and link to where the current value lives, the way the hero pill says "See what's new" and links to the changelog.
-- Open every link that leaves the site in a new tab. Spread `externalLinkProps(href)` from `@repo/ui/lib/external-link` onto the anchor and render `newTabHint(href)` inside it. A path on this site or a same-page anchor stays in the tab.
+- Do not add a colour, radius, shadow, or type size that this file does not define.
+- Do not add a shadow, a glow or a gradient. Use a hairline or a tonal surface.
+- Do not round a corner, except the stage marker.
+- Put commands, module names, paths and environment values in Geist Mono.
+- Keep UI copy short and literal. Every claim on the site must also appear in the README, and the proof-of-concept note stays visible.
+- Do not put a value in copy that goes stale: a version number, a release date, a count. Link to where the current value lives.
+- Open every link that leaves the site in a new tab. Spread `externalLinkProps(href)` from `@web/lib/external-link` onto the anchor and render `newTabHint(href)` inside it. A path on this site or a same-page anchor stays in the tab.
 
 ## Motion
 
@@ -230,8 +306,8 @@ Motion is CSS only and additive. With reduced motion requested, or in a browser 
 
 ## Dark Mode
 
-The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned.
+Dark is the brand's lead palette. The `.dark` class selects the dark token set. The pre-paint theme script applies the class before rendering and records the resolved mode in `data-theme`. Components must use semantic tokens so both themes stay aligned. In dark, every surface stays navy, including the wireframe panels inside an illustration.
 
 The theme toggle has two states, light and dark. `system` is only the starting state: a visitor who never pressed the toggle follows the OS. A press flips the resolved mode and stores the choice, and no press steps back to `system`. Do not add a third state or a light/dark/system menu to the toggle.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:d7c3ad027b63 of packages/ui/src/styles/brand.css_
+_Supplied from the round 10 mockup and plan 0091 on `issue-287-add-a-public-site-and-design-system`@`327c456d` on 2026-10-26._
