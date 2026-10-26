@@ -1,0 +1,78 @@
+---
+// The one document shell for every page. It owns <html>/<head>/<body> and the single
+// import of the web theme, so a page is only ever its own content — no page may
+// duplicate the shell or import a stylesheet again. web.css imports brand.css, the
+// tokens, and brand.css imports the shared globals.css.
+import "@web/styles/web.css";
+import { locale, siteName } from "@web/site";
+import { ui } from "@web/content/landing";
+import { THEME_INIT_SCRIPT } from "@web/lib/theme";
+
+interface Props {
+  title: string;
+  description?: string;
+}
+
+const { title, description } = Astro.props;
+
+// `Astro.site` is the `site` origin in astro.config.mjs. It is always set there, so the
+// canonical URL never falls back to the dev server's host.
+const canonical = new URL(Astro.url.pathname, Astro.site).href;
+---
+
+<!doctype html>
+<html lang={locale}>
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    {/*
+      Explicit icon link, not the implicit /favicon.ico lookup. Without a link the
+      browser guesses /favicon.ico, and Chrome tags that guess `Sec-Fetch-Site:
+      cross-site`, which the Astro dev server blocks with a `[router]` warning
+      (astro/dist/vite-plugin-astro-server/sec-fetch.js). A declared same-origin
+      link never gets that treatment. Replace public/favicon.svg with the project mark.
+    */}
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <link rel="canonical" href={canonical} />
+    {description && <meta name="description" content={description} />}
+    {/*
+      The link preview. Every page gets the title, the URL and the card type; a page that
+      passes a description gets it here too. To add a preview image, put a 1200×630 file
+      in public/ and add `og:image` and `twitter:image` tags beside these.
+    */}
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content={siteName} />
+    <meta property="og:title" content={title} />
+    {description && <meta property="og:description" content={description} />}
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    {/*
+      Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
+      paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
+      from bundling it into a deferred module, which would defeat the whole point —
+      `<script type="module">` is deferred by specification and always runs too late.
+      The script body is lib/theme.ts's THEME_INIT_SCRIPT, imported above and baked into
+      this HTML at build time, so the layout holds no copy of it: it reads the stored
+      choice, falls back to the OS preference, and also drives every
+      `[data-theme-toggle]` on the page through one delegated listener. That is why
+      blocks/theme-toggle needs no client directive. Do not inline a second
+      resolver here, and do not turn this into an import.
+    */}
+    <script is:inline set:html={THEME_INIT_SCRIPT} />
+  </head>
+  <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
+    {/*
+      The first Tab stop on every page. It stays off screen until focused, then jumps past
+      the navbar to the page's <main>. Every page and the error block give their <main>
+      `id="main"` and `tabindex="-1"`, so focus lands there too.
+    */}
+    <a
+      href="#main"
+      class="bg-background focus-visible:ring-ring/50 sr-only z-100 rounded-lg border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus-visible:ring-3"
+    >
+      {ui.layout.skipToContent}
+    </a>
+    <slot />
+  </body>
+</html>

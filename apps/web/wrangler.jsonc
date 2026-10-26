@@ -1,0 +1,34 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "saasaloy",
+  "compatibility_date": "2026-07-22",
+  // `astro dev` renders inside workerd, and @astrojs/react's server renderer keeps a
+  // dynamic `import("node:stream")` for the Node streaming path. That path never runs
+  // here (workerd resolves react-dom/server to the edge build), but without this flag
+  // @cloudflare/vite-plugin warns "Unexpected Node.js imports" on every dev start. The
+  // adapter only adds `nodejs_als` on its own. It costs nothing while the site is
+  // assets-only, and the first `prerender = false` page gets Node APIs with no edit.
+  "compatibility_flags": ["nodejs_compat"],
+  // Static assets, and still no Worker code — but the layout moved. Registering
+  // @astrojs/cloudflare in astro.config.mjs (for src/pages/500.astro) makes Astro build
+  // to dist/client + dist/server instead of a flat dist/. While every page is
+  // prerendered the adapter runs assets-only and leaves dist/server empty, so there is
+  // no `main` to point at here. Add one the day a page sets `prerender = false`, when
+  // the adapter writes the server entry.
+  //
+  // THIS FILE IS NOT THE CONFIG THAT DEPLOYS. The build writes
+  // .wrangler/deploy/config.json, which redirects wrangler to the adapter's own generated
+  // file at dist/client/wrangler.json — wrangler prints "Using redirected Wrangler
+  // configuration" when it does. The adapter merges what is below into that file and adds
+  // its own keys, so an edit here only reaches production through that merge. Read
+  // dist/client/wrangler.json off a real build to see what actually ships, and run
+  // `wrangler deploy --dry-run` after changing anything here.
+  "assets": {
+    "directory": "./dist/client",
+    // An address matching no asset gets dist/client/404.html with a real 404 status,
+    // instead of Cloudflare's empty miss. Do not change this to
+    // "single-page-application" — that is the admin app's setting, and here it would
+    // answer every typo with the home page at status 200.
+    "not_found_handling": "404-page",
+  },
+}

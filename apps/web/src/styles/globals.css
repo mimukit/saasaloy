@@ -1,0 +1,63 @@
+/* The shared layer of the theme: Tailwind's entrypoint, the source globs and the base
+   layer, and NO token values. The tokens, colour mapping and `dark` variant live in
+   brand.css, which imports this file first. web.css imports brand.css, and Layout.astro
+   imports web.css. A page never imports this file directly. */
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+/* Tailwind's automatic class detection is rooted at the current working directory, which
+   is apps/web under `astro dev` but the repo root when Turborepo builds. This glob names
+   the app's own source either way. A glob that matches nothing fails silently: the
+   classes never reach the CSS and the page renders unstyled. */
+@source "../**/*.{ts,tsx,astro}";
+
+/* DESIGN.md names utilities in prose (`text-6xl`, `shadow`). Without this line,
+   cwd-rooted detection reads it and each one lands in the stylesheet. */
+@source not "../../DESIGN.md";
+
+/* The theme toggle's circular reveal. A press runs inside a view transition (revealTheme()
+   in lib/theme.ts, and the same code in THEME_INIT_SCRIPT), and these rules animate it: the
+   new theme grows as a circle from the button over a still snapshot of the old one. The
+   script sets the circle's centre and final radius as custom properties on <html>, and
+   the `data-theme-reveal` attribute scopes the rules to a toggle press, so any other view
+   transition keeps the browser's default cross-fade. It lives here, not in a theme file,
+   because every app shares the toggle. With reduced motion requested, the script skips
+   the transition, and the rule below stops any that still starts. */
+[data-theme-reveal]::view-transition-old(root),
+[data-theme-reveal]::view-transition-new(root) {
+  animation: none;
+  mix-blend-mode: normal;
+}
+
+[data-theme-reveal]::view-transition-new(root) {
+  animation: theme-reveal 0.45s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+@keyframes theme-reveal {
+  from {
+    clip-path: circle(0 at var(--theme-reveal-x) var(--theme-reveal-y));
+  }
+
+  to {
+    clip-path: circle(
+      var(--theme-reveal-r) at var(--theme-reveal-x) var(--theme-reveal-y)
+    );
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-theme-reveal]::view-transition-new(root) {
+    animation: none;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
