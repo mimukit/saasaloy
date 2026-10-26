@@ -85,6 +85,82 @@ The browser does the same `PUT target.url` whichever provider is active. `target
 
 A provider returns `undefined` from `presignPut` when it cannot sign (no API credentials, or no signing at all), and the core falls back to the proxy with no code change at the caller. That is what lets `storage-memory` and an R2 bucket with no API token serve the same UI.
 
+## Uploads through the Worker
+
+A file that belongs to a record you already own (a payment receipt, a ticket attachment) can go up in the request body itself. The Worker reads it, so the api caps the size while the bytes arrive and names the file by its first bytes before anything is stored. Three functions from `@repo/storage` do the checks:
+
+- `readLimited(body, maxBytes)` reads the body and returns `null` past the cap. It counts the bytes that arrive, so a chunked body with no `Content-Length` is capped too.
+- `sniffType(bytes, allowed)` returns `{ type, extension }` from the file signature, or `null`. It knows JPEG, PNG, WebP, GIF and PDF. The browser's content type and the filename play no part, so an HTML page renamed `receipt.png` is refused.
+- `ownsKey(key, { tenantId, scope, id }, { filename })` checks, on a later request, that a key the browser sends back sits under this caller's record. Pass `filename` to pin the name the route chose, for example `/^[a-f\d-]{36}\.(jpg|png|pdf)$/`.
+
+A refusal returns `null` and the route picks the status. They throw only on a programmer error: a cap that is not a positive whole number, or key parts `buildKey` rejects.
+
+The route, as `apps/api/src/routes/receipts.ts` with `auth` installed. Mount it with one `.route("/receipts", receipts)` link in `apps/api/src/index.ts`:
+
+```ts
+import { requireSession, withAuthScope } from "@repo/auth/server";
+import type { AuthDbBindings } from "@repo/auth/server";
+import { buildKey, createStorage, readLimited, sniffType } from "@repo/storage";
+import type { StorageEnv } from "@repo/storage";
+import { Hono } from "hono";
+
+const MAX_BYTES = 5 * 1024 * 1024;
+
+function errorBody(code: string, message: string) {
+  return { error: { code, message } };
+}
+
+export const receipts = new Hono<{ Bindings: AuthDbBindings & StorageEnv }>()
+  // The body is the file itself, not a form: `fetch(url, { method: "POST", body: file })`.
+  .post("/:orderId", (c) =>
+    withAuthScope(c, async () => {
+      const session = await requireSession(c);
+
+      const bytes = await readLimited(c.req.raw.body, MAX_BYTES);
+      if (bytes === null) {
+        return c.json(
+          errorBody("too_large", "A receipt is at most 5 MB."),
+          413
+        );
+      }
+      const sniffed = sniffType(bytes, [
+        "image/jpeg",
+        "image/png",
+        "application/pdf",
+      ]);
+      if (sniffed === null) {
+        return c.json(
+          errorBody("unsupported_type", "A receipt is a JPG, PNG or PDF file."),
+          415
+        );
+      }
+
+      const key = buildKey({
+        tenantId: session.user.id,
+        scope: "receipts",
+        id: c.req.param("orderId"),
+        filename: `${crypto.randomUUID()}.${sniffed.extension}`,
+      });
+      await createStorage(c.env).put(key, bytes, { contentType: sniffed.type });
+      return c.json({ key }, 201);
+    })
+  );
+```
+
+When a form saves the key later (upload the receipt first, submit the payment second), check it before you store it:
+
+```ts
+if (!ownsKey(input.receiptKey, { tenantId: session.user.id, scope: "receipts", id: orderId })) {
+  return c.json(errorBody("forbidden", "This receipt does not belong to this order."), 403);
+}
+```
+
+Staff read the file through a signed link, never through a public URL: `createStorage(c.env).createDownloadUrl(key)` returns a target whose `url` works for an hour.
+
+**In the browser**, render `FileDrop` from `@repo/ui/components/file-drop`, which this module writes into `packages/ui`. It is a drop zone for one file, or with `multiple` and `maxFiles` a list with an "add more" bar. It checks type, size and count as files are picked, holds no copy (every string is a `labels` prop), and does no IO: it hands `File` objects to the app, and the app sends each one as the request body. Pass `progress` while a file uploads. Its checks are a courtesy to the person picking the file; the route above is the check that counts.
+
+**When to use `file-uploads` instead.** `readLimited` holds the whole file in Worker memory, and a Worker has 128 MB. Keep this path for files up to about 10 MB. For anything larger, for a list of every file a tenant uploaded, or for a sweep that removes abandoned uploads, add the `file-uploads` module: the browser PUTs straight to the bucket and its `complete` step checks what arrived.
+
 ## Keys are built, never written
 
 ```ts
