@@ -101,7 +101,7 @@ One row of `billing_subscriptions`: a [billable subject](#billable-subject)'s re
 _Avoid: membership, licence. A Better Auth `subscription` model is the plugin's name for the same row, mapped onto this one._
 
 ### Billable subject
-Who the bill is addressed to: an opaque `{ referenceId, customerType }` pair that `packages/billing/src/subject.ts` resolves from the request and authorizes. The default bills the user, so `customerType` is `"user"` and `referenceId` is the user id; installing `teams` overrides the same file under `onlyWith` to bill the active organization and check membership instead. Nothing else in the capability — no route, no job, no entitlement check — knows which of the two it is looking at, which is what lets a project move billing from users to organizations by replacing one file.
+Who the bill is addressed to: an opaque `{ referenceId, customerType }` pair that `packages/billing/src/subject.ts` resolves from the request and authorizes. The default bills the user, so `customerType` is `"user"` and `referenceId` is the user id. Nothing else in the capability — no route, no job, no entitlement check — reads the subject's shape, so a project that bills organizations instead replaces this one file.
 _Avoid: customer, account, owner. The customer is the vendor's object, reached through `providerCustomerId`._
 
 ### Entitlement
