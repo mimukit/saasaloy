@@ -42,7 +42,8 @@ With `ENV_SOURCE=infisical`, commit `.infisical.json` (the `env-infisical` runbo
 2. `pnpm install --frozen-lockfile`.
 3. The production values: `ENV_PROD` written to `packages/env/.env.prod`, or the Infisical CLI installed.
 4. When `.github/workflows/ci.yml` exists (the `ci` module), wait for that workflow's run on the same commit. The deploy's CI gate fails while that run is still going.
-5. `pnpm deploy:production`: the gates, every Worker in order, the smoke checks, and the deploy tag pushed back to the repository. The job has `contents: write` for that push.
+5. Set the git identity to `github-actions[bot]`, because the deploy tag is an annotated tag.
+6. `pnpm deploy:production`: the gates, every Worker in order, the smoke checks, and the deploy tag pushed back to the repository. The job has `contents: write` for that push.
 
 Only one deploy runs at a time. A second push waits for the first deploy to finish and is never cancelled halfway.
 

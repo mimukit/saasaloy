@@ -92,5 +92,11 @@ jobs:
           echo "::error::ci.yml has no run on $GITHUB_SHA after five minutes."
           exit 1
 
+      # The deploy writes an annotated tag, and git refuses one with no identity.
+      - name: Set the git identity for the deploy tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
       - name: pnpm deploy:production
         run: pnpm deploy:production ${{ inputs.migrate && '--migrate' || '' }}
