@@ -1,0 +1,18 @@
+{
+  "tool": "built-in image_gen",
+  "purpose": "Saasaloy GitHub README banner options",
+  "prompts": [
+    {
+      "key": "01-connected-modules",
+      "prompt": "Use case: ads-marketing. Asset type: GitHub README repository banner for Saasaloy. Create one finished wide landscape banner, approximately 3:1 aspect ratio, 1800x600 composition. Background deep charcoal almost black. Exact headline text \"saasaloy\" in large warm-white modern lowercase sans serif, confidently placed in left half with generous margin. Exact smaller supporting text \"Composable SaaS starter kit\". Right half features an original abstract arrangement of small interlocking precision-machined modules, matte dark graphite with controlled amber edge illumination, assembled into a compact sculptural S-like form. This represents capabilities added as needed. Restrained amber accent, subtle fine grain, generous dark negative space, excellent legibility at GitHub content width. Polished independent open-source developer-tool identity, quiet and precise. Flat artwork filling the whole image, no device mockup, no fake UI, no vendor logos, no extra words, no watermark. Keep everything inside safe margins."
+    },
+    {
+      "key": "02-geometric-symbol",
+      "prompt": "Use case: ads-marketing. Asset type: GitHub README repository banner for Saasaloy. Create one finished extra-wide landscape banner, approximately 3:1 aspect ratio, 1800x600 composition. Deep midnight navy background, almost black. Strong centered horizontal lockup: original geometric S symbol made of two interlocking angular bands to the left of exact headline \"saasaloy\" in large crisp off-white lowercase custom-feeling sans-serif typography. Small line of exact supporting text \"Composable SaaS starter kit\" below wordmark. Symbol uses cool mint and muted turquoise, clean architectural geometry with a subtle luminous edge, restrained and distinctive, no recognizable existing corporate mark. Very faint oversized outline echoes of the modular symbol in distant background corners, lots of negative space, premium editorial graphic design. Make the mark and wordmark readable at small size. Flat banner artwork edge to edge, no device mockup, no interface screenshot, no extra text, no badges, no watermark. Safe margins."
+    },
+    {
+      "key": "03-technical-grid",
+      "prompt": "Use case: ads-marketing. Asset type: GitHub README repository banner for Saasaloy. Create one finished wide landscape banner, approximately 3:1 aspect ratio, 1800x600 composition. Almost-black background with a very faint technical square grid. Large exact wordmark \"saasaloy\" in off-white lowercase bold sans-serif on left; small exact supporting line \"Composable SaaS starter kit\" below. Right side has a spare architectural axonometric drawing of modular square plates at several heights, precisely aligned, some connected and one being added, with fine cream lines and a small number of electric lime highlighted edges. Elegant diagrammatic illustration conveying source-code modules that fit together, no literal hardware or chips. Flat graphic design with precise strokes, clear hierarchy, dark negative space, restrained lime accent, editorial engineering aesthetic. No cloud icons, no fake code, no extra text, no vendor logos, no device mockup, no watermark. Keep generous safe margins."
+    }
+  ]
+}

@@ -1,3 +1,5 @@
+![Saasaloy module map with API, auth, database, email, and payment modules on a dark technical grid.](assets/branding/readme-banners/06-module-map.png)
+
 # Saasaloy
 
 **Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, billing and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
