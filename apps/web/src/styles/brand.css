@@ -1,7 +1,7 @@
 /* The brand: the token values, the colour mapping, the radius scale and the `dark`
    variant. Every app that wears the product's look imports this file once, through its
    own stylesheet: web.css for the landing page today, and any later app stylesheet the
-   same way. apps/web/DESIGN.md records these values and fingerprints this file.
+   same way. apps/web/DESIGN.md records these values; change a value there and here together.
 
    This is the file components.json names, so a shadcn preset merges into it. The
    `dark` variant and the `@theme inline` mapping sit here rather than in globals.css on
@@ -18,6 +18,18 @@
    one alone gets tokens with no Tailwind under them. Never import globals.css next to
    this file: a second copy of Tailwind's entrypoint duplicates every rule. */
 @import "./globals.css";
+
+/* The two self-hosted faces, Geist and Geist Mono, from @fontsource. Latin subset only:
+   the site is English, and each weight file ships with `font-display: swap`, so text
+   paints in the fallback stack at once and swaps when the face lands. One file per weight
+   the type scale in DESIGN.md uses: 400 body, 500 labels, 600 the wordmark, 700
+   headlines, and 400 and 500 for mono. `--font-sans` and `--font-mono` below name them. */
+@import "@fontsource/geist/latin-400.css";
+@import "@fontsource/geist/latin-500.css";
+@import "@fontsource/geist/latin-600.css";
+@import "@fontsource/geist/latin-700.css";
+@import "@fontsource/geist-mono/latin-400.css";
+@import "@fontsource/geist-mono/latin-500.css";
 
 /* Dark mode is the `.dark` class shadcn assumes. It is set pre-paint by the inline
    THEME_INIT_SCRIPT (src/lib/theme.ts) that every host document emits —
@@ -36,81 +48,72 @@
      `system`. `light dark` here would let the OS override an explicit choice. */
   color-scheme: light;
 
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
+  /* Square corners everywhere. The `@theme inline` block maps every radius step to this
+     one value, so no `rounded-*` utility can round a corner. `rounded-full` stays round
+     for the stage marker, the one exception DESIGN.md allows. */
+  --radius: 0;
+
+  /* The cobalt blueprint palette, light. Every value is a `colors` token in
+     apps/web/DESIGN.md. `popover`, `accent` and `input` are shadcn roles the design does
+     not name; they reuse `card`, `muted` and `border` so the shared primitives draw no
+     colour of their own. */
+  --background: #f6f7f9;
+  --foreground: #0b2253;
+  --card: #fff;
+  --card-foreground: #0b2253;
+  --popover: #fff;
+  --popover-foreground: #0b2253;
+  --primary: #315fe8;
+  --primary-foreground: #fff;
+  --highlight: #315fe8;
+  --secondary: #eaeffd;
+  --secondary-foreground: #315fe8;
+  --muted: #eaeef8;
+  --muted-foreground: #626b78;
+  --accent: #eaeef8;
+  --accent-foreground: #0b2253;
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --border: #cbd6f5;
+  --input: #cbd6f5;
+  --ring: #315fe8;
 }
 
+/* The dark palette: deep navy, off-white text and pale blue `highlight`. `primary` and
+   `primary-foreground` keep their light values, so a solid button is cobalt with a white
+   label in both themes. */
 .dark {
   color-scheme: dark;
 
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
+  --background: #101722;
+  --foreground: #eef2f8;
+  --card: #161e2d;
+  --card-foreground: #eef2f8;
+  --popover: #161e2d;
+  --popover-foreground: #eef2f8;
+  --highlight: #8fa8ff;
+  --secondary: #222b41;
+  --secondary-foreground: #8fa8ff;
+  --muted: #1d2638;
+  --muted-foreground: #a9b5c7;
+  --accent: #1d2638;
+  --accent-foreground: #eef2f8;
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: #303b59;
+  --input: #303b59;
+  --ring: #8fa8ff;
 }
 
 @theme inline {
-  --radius-sm: calc(var(--radius) - 4px);
-  --radius-md: calc(var(--radius) - 2px);
+  --font-sans: "Geist", ui-sans-serif, system-ui, sans-serif;
+  --font-mono: "Geist Mono", ui-monospace, monospace;
+  --radius-xs: var(--radius);
+  --radius-sm: var(--radius);
+  --radius-md: var(--radius);
   --radius-lg: var(--radius);
-  --radius-xl: calc(var(--radius) + 4px);
+  --radius-xl: var(--radius);
+  --radius-2xl: var(--radius);
+  --radius-3xl: var(--radius);
+  --radius-4xl: var(--radius);
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -119,6 +122,7 @@
   --color-popover-foreground: var(--popover-foreground);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
+  --color-highlight: var(--highlight);
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-muted: var(--muted);
@@ -129,17 +133,4 @@
   --color-border: var(--border);
   --color-input: var(--input);
   --color-ring: var(--ring);
-  --color-chart-1: var(--chart-1);
-  --color-chart-2: var(--chart-2);
-  --color-chart-3: var(--chart-3);
-  --color-chart-4: var(--chart-4);
-  --color-chart-5: var(--chart-5);
-  --color-sidebar: var(--sidebar);
-  --color-sidebar-foreground: var(--sidebar-foreground);
-  --color-sidebar-primary: var(--sidebar-primary);
-  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
-  --color-sidebar-accent: var(--sidebar-accent);
-  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
-  --color-sidebar-border: var(--sidebar-border);
-  --color-sidebar-ring: var(--sidebar-ring);
 }

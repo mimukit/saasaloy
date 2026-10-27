@@ -10,7 +10,7 @@ import { createElement } from "react";
 import type { ReactNode } from "react";
 
 const CODE_CLASS =
-  "bg-muted text-foreground rounded-md border px-1.5 py-0.5 font-mono text-[0.85em]";
+  "bg-muted text-foreground border px-1.5 py-0.5 font-mono text-[0.85em]";
 
 /**
  * Split `message` on backtick pairs and wrap every odd part in <code>. An unmatched

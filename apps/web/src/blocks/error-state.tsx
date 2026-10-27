@@ -22,6 +22,11 @@ import { cn } from "@web/lib/utils";
 // never do that — Astro serializes island props, and a function does not survive the
 // crossing.
 //
+// The look is apps/web/DESIGN.md's: one square bordered frame on the blueprint grid,
+// a muted icon, the status label in mono `code-sm`, a `headline-md` title, the
+// description in `muted-foreground`, and the actions on the button scale. No destructive
+// token and no alert tint: a mistyped address is not a danger state.
+//
 // Every word comes from ../content/errors.ts. The defaults are the not-found case, since
 // it is the one screen with no second sensible reading; the render-failure and
 // server-failure callers pass their own strings from the same module. Edit the words
@@ -92,17 +97,20 @@ export function ErrorState({
       id="main"
       tabIndex={-1}
       className={cn(
-        "mx-auto flex min-h-dvh max-w-lg items-center px-6",
+        "mx-auto flex min-h-dvh max-w-xl items-center px-6",
         className
       )}
     >
-      <Card className="w-full">
-        <CardHeader>
-          <CircleAlertIcon className="text-muted-foreground size-5" />
-          <p className="text-muted-foreground font-mono text-xs tracking-widest">
-            {code}
-          </p>
-          <CardTitle className="text-lg">{title}</CardTitle>
+      <Card className="w-full gap-6 [--card-spacing:--spacing(8)]">
+        <CardHeader className="gap-3">
+          <CircleAlertIcon
+            aria-hidden="true"
+            className="text-muted-foreground size-5"
+          />
+          <p className="text-highlight font-mono text-xs">{code}</p>
+          <CardTitle className="text-3xl leading-9 font-bold tracking-[-0.025em]">
+            {title}
+          </CardTitle>
           <CardDescription className="text-pretty">
             {description}
           </CardDescription>

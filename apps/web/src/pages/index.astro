@@ -1,20 +1,17 @@
 ---
 import { siteName } from "@web/site";
-import { Audience } from "@web/blocks/audience";
-import { Cta } from "@web/blocks/cta";
+import { CommandField } from "@web/components/command-field";
 import { Faq } from "@web/blocks/faq";
-import { FeatureGrid } from "@web/blocks/feature-grid";
 import { Footer } from "@web/blocks/footer";
 import { Hero } from "@web/blocks/hero";
-import { HowItWorks } from "@web/blocks/how-it-works";
-import { LogoCloud } from "@web/blocks/logo-cloud";
+import { ModuleCatalog } from "@web/blocks/module-catalog";
 import { Navbar } from "@web/blocks/navbar";
-import { PainPoints } from "@web/blocks/pain-points";
-import { PricingTable } from "@web/blocks/pricing-table";
-import { Showcase } from "@web/blocks/showcase";
-import { Testimonials } from "@web/blocks/testimonials";
+import { Providers } from "@web/blocks/providers";
+import { SiteSource } from "@web/blocks/site-source";
+import { Stages } from "@web/blocks/stages";
 import { landing } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
+import { loadModuleCatalog } from "@web/lib/module-registry";
 import Layout from "../layouts/Layout.astro";
 
 // This page carries no copy of its own — the tab title and meta description come from
@@ -22,6 +19,9 @@ import Layout from "../layouts/Layout.astro";
 // own words from the same file (src/content/landing.ts).
 
 // This page composes itself from explicit imports and nothing else.
+
+// The catalog rows come from modules/*/registry-item.json, read once at build time.
+const catalogRows = loadModuleCatalog();
 ---
 
 {/*
@@ -33,16 +33,27 @@ import Layout from "../layouts/Layout.astro";
     - Add one back: copy the block file in, then add the import and the line.
 
   The page is composed from src/blocks/*, one file per block.
-  Blocks render to static HTML by default; only the two that need browser state carry a
+  Blocks render to static HTML by default; only the parts that need browser state carry a
   client directive, and each one is deliberate:
     - Navbar       client:idle    — mobile menu, above the fold, so hydrate when the
                                     browser goes idle rather than waiting for scroll.
-    - PricingTable client:visible — monthly/annual toggle, below the fold.
-  Every other block ships no JavaScript at all. The FAQ and the pain points open and close
-  with native <details>, and all motion is CSS. The footer adds one inline script that
-  writes the current year. The theme toggle sits inside the navbar and needs no island of
-  its own: the pre-paint script Layout.astro emits drives it.
+    - CommandField client:visible — the copy button, in the hero and in the site source
+                                    section. It reaches its block through the block's
+                                    `commandField` slot. `visible` hydrates each field once
+                                    it is on screen, so the hero's hydrates right after
+                                    load without competing with the first paint, and the
+                                    one further down waits for the scroll. Before it
+                                    hydrates, or with JavaScript off, the command is
+                                    plain selectable text.
+  Every other block ships no JavaScript at all. The FAQ opens and closes with native
+  <details>, the catalog filter and the stages highlight are CSS `:has()`, and all motion
+  is CSS. The footer adds one inline script that writes the current year. The theme
+  toggle sits inside the navbar and needs no island of its own: the pre-paint script
+  Layout.astro emits drives it.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
+
+  The sections follow the round 10 mockup, with a `blueprint-rule` between each pair.
+  The footer draws its own rules.
 */}
 <Layout
   title={interpolate(landing.meta.title, { siteName })}
@@ -50,17 +61,30 @@ import Layout from "../layouts/Layout.astro";
 >
   <Navbar client:idle siteName={siteName} />
   <main id="main" tabindex="-1">
-    <Hero siteName={siteName} />
-    <LogoCloud />
-    <PainPoints siteName={siteName} />
-    <HowItWorks siteName={siteName} />
-    <FeatureGrid siteName={siteName} />
-    <Showcase siteName={siteName} />
-    <Audience siteName={siteName} />
-    <Testimonials siteName={siteName} />
-    <PricingTable client:visible siteName={siteName} />
+    <Hero>
+      <CommandField
+        slot="commandField"
+        client:visible
+        command={landing.hero.command}
+      />
+    </Hero>
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <Stages />
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <ModuleCatalog rows={catalogRows} />
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <Providers />
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <SiteSource>
+      <CommandField
+        slot="commandField"
+        client:visible
+        command={landing.siteSource.command}
+        prompt="$"
+      />
+    </SiteSource>
+    <div aria-hidden="true" class="blueprint-rule"></div>
     <Faq siteName={siteName} />
-    <Cta siteName={siteName} />
   </main>
   <Footer siteName={siteName} />
 </Layout>

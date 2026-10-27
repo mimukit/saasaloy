@@ -218,7 +218,7 @@ components:
 
 The site reads as a technical drawing of the product. Fine cobalt lines on pale paper, a faint graph-paper grid, and isometric line art show what a Saasaloy project holds: an application, its source files, a database, an email service. The visual source is the round 10 mockup that the owner approved for issue #287, in `.dev/mockup-287/round-10-full-page/`. That mockup replaced the lime direction of the README banner with the cobalt blueprint direction recorded in `docs/plans/0091-plan-public-site-and-brand-2026-10-26.md`.
 
-The mockup leads the code here. `apps/web/src/styles/brand.css` still holds the neutral seed tokens of the base template until Phase 5 of the plan writes these values into it.
+The mockup leads the code here. `apps/web/src/styles/brand.css` holds the values this file records, and a change to one goes into the other in the same edit.
 
 ## Apps
 
@@ -253,7 +253,7 @@ The wordmark is the lowercase word `saasaloy` in Geist, in `highlight`. The foot
 
 Every section is two columns on desktop: copy on the left, a line-art illustration on the right. The FAQ follows the same split, with the accordion on the left and a repository tree on the right. On mobile the columns stack, copy first.
 
-Three container widths live in `web.css`. The two-column sections and the navbar use `section-container-wide` at `80rem`. `section-container` at `64rem` stays for a single-column block such as the 404 page. All share a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `5rem` on small screens and `8rem` from `48rem` up. A block uses these names and sets no width or section padding of its own.
+One container width lives in `web.css`: every section, the navbar and the footer use `section-container-wide` at `80rem`, with a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `3rem` on small screens and `4rem` from `48rem` up, which keeps the page near the density of the round 10 mockup. A block uses these names and sets no width or section padding of its own.
 
 A full-width blueprint rule separates the sections. It is a hairline in `border` with a small crosshair at each end and short tick marks along it. The navbar sits above the first rule: the wordmark on the left, then Docs, GitHub, Guide and the theme toggle on the right. The graph-paper grid runs behind the whole page as one continuous background, so no section draws a band of its own.
 
@@ -265,7 +265,7 @@ The page is flat. Hairline borders and tonal surfaces separate content, and noth
 
 ## Shapes
 
-Corners are square. Every frame, button, command field, tab, tag, table and accordion row uses `rounded.none`. The one round shape is the stage marker, a `rounded.full` circle that holds the stage number. Do not add a radius between these two values.
+Corners are square. Every frame, button, command field, tab, tag, tile and accordion row uses `rounded.none`. The one round shape is the stage marker, a `rounded.full` circle that holds the stage number. Do not add a radius between these two values.
 
 ## Components
 
@@ -273,7 +273,7 @@ The landing page has seven sections in this order: hero, stages, catalog, provid
 
 - **Hero.** The headline reads "A landing page today. Your next module tomorrow." A `lead` follows. Under it, the command field holds `npx saasaloy init my-app`, joined to a solid Copy button. Two inline links follow, Getting started and GitHub, each with an icon and a trailing arrow and a hairline divider between them. A `body-small` note under the links says the project is a proof of concept. The illustration is an isometric application wireframe with a sign-in panel, source files, a database and an email service.
 - **Stages.** A vertical list of five numbered stages on a hairline: landing page, waitlist, sign-in, teams and payments. Each stage has a title and a mono description. The active stage fills its marker with `primary` and tints its row with `muted`. The illustration is an exploded stack of source slabs in the same order, and the active slab fills with `primary`.
-- **Catalog.** Filter tabs over a flat table of modules with Module, Purpose and Type columns. The active tab is solid `primary`, and the others are outlined. Table rows are separated by hairlines and have no zebra fill. The module list comes from `modules/*/registry-item.json` at build time.
+- **Catalog.** The heading and the filter tabs sit beside the module drawing, and a full-width grid of module tiles sits below them, four across on desktop. Each tile shows the name, the type tag and the description. The active tab is solid `primary`, and the others are outlined. Tiles share hairline borders and have no shadow or zebra fill. The module list comes from `modules/*/registry-item.json` at build time.
 - **Providers.** One capability connects to three interchangeable provider modules, with a small `.env` panel that shows the selecting variable. Short callouts in `highlight` name the point of each part.
 - **This site.** A `lead`, the command field again, and an outlined secondary button that links to the site source.
 - **FAQ.** Bordered accordion rows with a chevron. The question is in `highlight`, and the open answer is in `muted-foreground`.
@@ -302,7 +302,9 @@ The `error-state` block is the 404 and 500 screen. It is a single bordered frame
 
 ## Motion
 
-Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The named utilities in `web.css` are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `beam-in` (the hero's two light beams, which show from their top-left end and widen just after the cascade starts, staggered with `--beam-in-delay`), `reveal` (a scroll-tied entrance below the fold), `marquee` (the logo row), `shine-text` (the announcement pill), `nav-float` (the navbar frosting once the page scrolls) and `hover-lift`. Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. Motion stays in prose because the DESIGN.md alpha schema has no motion token group. A theme toggle press reveals the new theme as a circle that grows from the button, through a view transition whose animation lives in `globals.css`. The script only starts it, and reduced motion skips it.
+Motion is CSS only and additive. With reduced motion requested, or in a browser that lacks the feature, every element sits in its final state. The page keeps four named utilities in `web.css`, and they are the whole vocabulary: `blur-in` (the hero's load-time cascade, staggered with `--blur-in-delay`), `reveal` (a scroll-tied entrance below the fold), `nav-float` (the navbar frosts and gains its bottom hairline once the page scrolls) and `hover-lift` (a 2px rise under the pointer, with no shadow). Blocks use these names and write no keyframes. Color and state changes use short Tailwind transitions. A theme toggle press reveals the new theme as a circle that grows from the button, through a view transition whose animation lives in `globals.css`. The script only starts it, and reduced motion skips it.
+
+Phase 5 deleted `beam-in`, `marquee` and `shine-text`: the first broke the no-glow rule, and the other two belonged to blocks the page dropped. Do not bring them back. Motion stays in prose because the DESIGN.md alpha schema has no motion token group.
 
 ## Dark Mode
 
@@ -310,4 +312,4 @@ Dark is the brand's lead palette. The `.dark` class selects the dark token set. 
 
 The theme toggle has two states, light and dark. `system` is only the starting state: a visitor who never pressed the toggle follows the OS. A press flips the resolved mode and stores the choice, and no press steps back to `system`. Do not add a third state or a light/dark/system menu to the toggle.
 
-_Supplied from the round 10 mockup and plan 0091 on `issue-287-add-a-public-site-and-design-system`@`327c456d` on 2026-10-26._
+_Supplied from the round 10 mockup and plan 0091 on `issue-287-add-a-public-site-and-design-system`@`6ec0613c` on 2026-10-26._

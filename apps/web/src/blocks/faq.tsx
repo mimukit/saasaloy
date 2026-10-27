@@ -1,7 +1,8 @@
-import { ChevronDownIcon } from "lucide-react";
+import { ChevronRightIcon } from "lucide-react";
 
 import { siteName as defaultSiteName } from "@web/site";
 import { landing } from "@web/content/landing";
+import { RepositoryTree } from "@web/illustrations/repository-tree";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { inlineCode } from "@web/lib/inline-code";
 import { interpolate } from "@web/lib/interpolate";
@@ -11,6 +12,12 @@ import { interpolate } from "@web/lib/interpolate";
 // The vendored accordion in ../components/accordion.tsx stays for pages that want one.
 //
 // Every word comes from ../content/landing.ts. Backticks in an answer render as <code>.
+//
+// The round 10 FAQ: a left-aligned `section-title` in `highlight`, then square bordered
+// rows that share their borders. Each row opens on its chevron, the question in
+// `highlight` and the answer in `muted-foreground`. The section is two columns from `lg`:
+// the left one holds all of the above, the right one the repository drawing. Below `lg`
+// the drawing follows the list.
 
 export interface FaqItem {
   /** Stable key, never the array position (see the content file). */
@@ -43,49 +50,55 @@ export function Faq({
 }: FaqProps) {
   return (
     <section id={id} className="section-y">
-      <div className="section-container-narrow">
-        <div className="text-center">
-          <h2 className="text-section-title text-balance">{title}</h2>
-          <p className="text-lead text-muted-foreground mt-4 text-balance">
-            {description}
-          </p>
+      <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:gap-16">
+        <div>
+          <h2 className="text-section-title text-highlight text-balance">
+            {title}
+          </h2>
+          {description && (
+            <p className="text-lead text-muted-foreground mt-4 text-balance">
+              {description}
+            </p>
+          )}
+
+          <div className="bg-card mt-10 border-x border-t">
+            {items.map((item, index) => (
+              <details
+                key={item.id}
+                name={id}
+                open={index === 0}
+                className="group border-b"
+              >
+                <summary className="text-highlight hover:bg-muted flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
+                  <ChevronRightIcon
+                    aria-hidden="true"
+                    className="size-4 shrink-0 transition-transform group-open:rotate-90"
+                  />
+                  {interpolate(item.question, { siteName })}
+                </summary>
+                <p className="text-muted-foreground pr-4 pb-4 pl-11 text-sm text-pretty">
+                  {inlineCode(interpolate(item.answer, { siteName }))}
+                </p>
+              </details>
+            ))}
+          </div>
+
+          {moreLinkHref && (
+            <p className="text-muted-foreground mt-6 text-sm">
+              {moreLabel}{" "}
+              <a
+                href={moreLinkHref}
+                {...externalLinkProps(moreLinkHref)}
+                className="text-highlight font-medium underline-offset-4 hover:underline"
+              >
+                {moreLinkLabel}
+                {newTabHint(moreLinkHref)}
+              </a>
+            </p>
+          )}
         </div>
 
-        <div className="mt-12 rounded-xl border px-6 py-2 shadow-xs md:mt-16">
-          {items.map((item, index) => (
-            <details
-              key={item.id}
-              name={id}
-              open={index === 0}
-              className="group border-t border-dashed first:border-t-0"
-            >
-              <summary className="flex cursor-pointer list-none items-center justify-between gap-4 py-4 font-medium [&::-webkit-details-marker]:hidden">
-                {interpolate(item.question, { siteName })}
-                <ChevronDownIcon
-                  aria-hidden="true"
-                  className="text-muted-foreground size-4 shrink-0 transition-transform group-open:rotate-180"
-                />
-              </summary>
-              <p className="text-muted-foreground pb-4 text-sm text-pretty">
-                {inlineCode(interpolate(item.answer, { siteName }))}
-              </p>
-            </details>
-          ))}
-        </div>
-
-        {moreLinkHref && (
-          <p className="text-muted-foreground mt-6 text-center text-sm">
-            {moreLabel}{" "}
-            <a
-              href={moreLinkHref}
-              {...externalLinkProps(moreLinkHref)}
-              className="text-foreground font-medium underline-offset-4 hover:underline"
-            >
-              {moreLinkLabel}
-              {newTabHint(moreLinkHref)}
-            </a>
-          </p>
-        )}
+        <RepositoryTree className="text-highlight mx-auto w-full max-w-xl lg:mt-24" />
       </div>
     </section>
   );

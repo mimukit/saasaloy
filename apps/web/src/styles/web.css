@@ -10,25 +10,23 @@
    and a preset or a redesign changes it in one place. None of this is a colour: a theme
    preset replaces the colour tokens in brand.css and leaves these alone.
 
-   Widths. `page` is every section's container. `narrow` is a deliberate reading measure
-   for the FAQ and the closing CTA. `wide` is for the chrome around the page: the navbar
-   and the hero's product frame.
+   Width. `wide` is every section's container, the navbar's and the footer's too.
 
-   Type ramp, on the system font stack. `display` is the hero's one h1, `section-title`
-   every h2, `lead` the paragraph under either. Body text stays on Tailwind's scale. */
+   Type ramp, in Geist (brand.css maps `--font-sans` and `--font-mono`). `display` is the
+   hero's one h1, `section-title` every h2, `lead` the paragraph under either. Body text
+   stays on Tailwind's scale. The sizes and weights are the typography tokens in
+   apps/web/DESIGN.md. */
 @theme {
-  --container-page: 64rem;
-  --container-narrow: 48rem;
   --container-wide: 80rem;
   --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
   --text-display--line-height: 1.05;
   --text-display--letter-spacing: -0.035em;
-  --text-display--font-weight: 500;
+  --text-display--font-weight: 700;
   --text-section-title: clamp(2rem, 1.6rem + 1.6vw, 3rem);
   --text-section-title--line-height: 1.1;
   --text-section-title--letter-spacing: -0.03em;
-  --text-section-title--font-weight: 600;
-  --text-lead: 1.125rem;
+  --text-section-title--font-weight: 700;
+  --text-lead: 1.25rem;
   --text-lead--line-height: 1.75rem;
   --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
 
@@ -40,34 +38,12 @@
     }
   }
 
-  @keyframes beam-in {
-    from {
-      --beam-reach: 0%;
-
-      opacity: 0;
-      scale: 0.3 1;
-    }
-  }
-
-  @keyframes marquee {
-    to {
-      transform: translateX(calc(-50% - var(--marquee-gap, 3rem) / 2));
-    }
-  }
-
-  @keyframes shine {
-    from {
-      background-position: 100% 0;
-    }
-
-    to {
-      background-position: -100% 0;
-    }
-  }
-
   @keyframes nav-float {
+    from {
+      border-color: transparent;
+    }
+
     to {
-      max-width: var(--container-page);
       border-color: var(--border);
       backdrop-filter: blur(12px);
       background-color: color-mix(in oklch, var(--background) 75%, transparent);
@@ -80,21 +56,8 @@
    utility's own selector. Stylelint reads `@utility` as an unknown at-rule and cannot see
    that. Re-enabled after the last utility. */
 
-/* A section's container: the page width, centred, with the gutter every block shares. */
-@utility section-container {
-  width: 100%;
-  max-width: var(--container-page);
-  margin-inline: auto;
-  padding-inline: 1.5rem;
-}
-
-@utility section-container-narrow {
-  width: 100%;
-  max-width: var(--container-narrow);
-  margin-inline: auto;
-  padding-inline: 1.5rem;
-}
-
+/* A section's container: the wide page width, centred, with the gutter every block
+   shares. */
 @utility section-container-wide {
   width: 100%;
   max-width: var(--container-wide);
@@ -102,34 +65,244 @@
   padding-inline: 1.5rem;
 }
 
-/* A square grid of hairlines, for decoration behind the hero, the feature icons and the
-   audience list. Size it with `[--grid-size:64px]` and fade it with a mask. */
-@utility grid-pattern {
+/* The blueprint decoration. Both utilities draw in hairlines of the `border` token and
+   nothing else: no shadow, no glow, no colour ramp. The hard-stop `linear-gradient`s below
+   are how CSS draws a 1px line across a box; each one is a solid line, never a fade.
+
+   `blueprint-grid` is the graph paper behind the whole page. Layout.astro puts it on
+   <body>, so it runs as one continuous background and no section draws a band of its own.
+   A faint line every `--blueprint-cell` (24px) and a firmer one every
+   `--blueprint-major` (five cells). */
+@utility blueprint-grid {
+  --blueprint-line: color-mix(in oklch, var(--border) 35%, transparent);
+  --blueprint-line-major: color-mix(in oklch, var(--border) 70%, transparent);
+
   background-image:
-    linear-gradient(
-      to right,
-      var(--grid-line, color-mix(in oklch, var(--foreground) 8%, transparent))
-        1px,
-      transparent 1px
-    ),
+    linear-gradient(to right, var(--blueprint-line-major) 1px, transparent 1px),
     linear-gradient(
       to bottom,
-      var(--grid-line, color-mix(in oklch, var(--foreground) 8%, transparent))
-        1px,
+      var(--blueprint-line-major) 1px,
       transparent 1px
+    ),
+    linear-gradient(to right, var(--blueprint-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--blueprint-line) 1px, transparent 1px);
+  background-position: center top;
+  background-size:
+    var(--blueprint-major, 120px) var(--blueprint-major, 120px),
+    var(--blueprint-major, 120px) var(--blueprint-major, 120px),
+    var(--blueprint-cell, 24px) var(--blueprint-cell, 24px),
+    var(--blueprint-cell, 24px) var(--blueprint-cell, 24px);
+}
+
+/* `blueprint-rule` is the full-width rule between sections: a hairline with a small
+   crosshair at each end and short tick marks along it. Put it on an empty, aria-hidden
+   element, or on an <hr>, between two sections; it sets its own height and resets an
+   <hr>'s border. `--rule-inset` places the crosshairs from each edge (the 1.5rem page
+   gutter), and `--rule-tick` is the distance between ticks. The crosshairs mix some
+   `highlight` into `border`, so they read as joins rather than as one more tick. */
+@utility blueprint-rule {
+  --rule-line: var(--border);
+  --rule-cross: color-mix(in oklch, var(--highlight) 45%, var(--border));
+
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 1.0625rem;
+  border: 0;
+  margin: 0;
+  background-image:
+    linear-gradient(var(--rule-line), var(--rule-line)),
+    repeating-linear-gradient(
+      to right,
+      var(--rule-line) 0 1px,
+      transparent 1px var(--rule-tick, 8rem)
     );
-  background-size: var(--grid-size, 24px) var(--grid-size, 24px);
+  background-position:
+    0 50%,
+    var(--rule-inset, 1.5rem) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    100% 1px,
+    calc(100% - 2 * var(--rule-inset, 1.5rem)) 0.4375rem;
+
+  &::before,
+  &::after {
+    position: absolute;
+    top: 0;
+    width: 1.0625rem;
+    height: 1.0625rem;
+    background-image:
+      linear-gradient(var(--rule-cross), var(--rule-cross)),
+      linear-gradient(var(--rule-cross), var(--rule-cross));
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size:
+      1px 100%,
+      100% 1px;
+    content: "";
+    translate: -50% 0;
+  }
+
+  &::before {
+    left: var(--rule-inset, 1.5rem);
+  }
+
+  &::after {
+    left: calc(100% - var(--rule-inset, 1.5rem));
+  }
 }
 
 /* The vertical rhythm between sections. One value per breakpoint, used by every section,
    so no two neighbours drift apart. `scroll-margin-top` keeps an anchored heading clear of
    the sticky navbar. */
 @utility section-y {
-  padding-block: 5rem;
-  scroll-margin-top: 5rem;
+  padding-block: 3rem;
+  scroll-margin-top: 4rem;
 
   @media (width >= 48rem) {
-    padding-block: 8rem;
+    padding-block: 4rem;
+  }
+}
+
+/* The module catalog's filter, with no JavaScript. The block (src/blocks/module-catalog.tsx)
+   puts this on its <section>. Each tab is a radio input carrying `data-catalog-tab`, each
+   module tile carries `data-tier`, and `:has()` reads the checked tab from the section.
+   A tab hides every tile of another tier. Then, until the `data-catalog-more` checkbox is
+   checked, only the first 8 tiles of what is left show: `:nth-child(n + 9 of …)` counts
+   the tiles of the chosen tier alone, so each tab gets its own first 8. The 8 is
+   `CATALOG_VISIBLE_ROWS` in the block; change both together. The checkbox hides itself
+   on a tab whose tiles all fit, which the block marks in `data-catalog-fits`. */
+@utility module-catalog {
+  &:has([data-catalog-tab="capability"]:checked)
+    [data-tier]:not([data-tier="capability"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="feature"]:checked)
+    [data-tier]:not([data-tier="feature"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="provider"]:checked)
+    [data-tier]:not([data-tier="provider"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="driver"]:checked)
+    [data-tier]:not([data-tier="driver"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="all"]:checked):not(:has([data-catalog-more]:checked))
+    [data-tier]:nth-child(n + 9) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="capability"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-tier]:nth-child(n + 9 of [data-tier="capability"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="feature"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-tier]:nth-child(n + 9 of [data-tier="feature"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="provider"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-tier]:nth-child(n + 9 of [data-tier="provider"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="driver"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-tier]:nth-child(n + 9 of [data-tier="driver"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="all"]:checked) [data-catalog-fits~="all"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="capability"]:checked)
+    [data-catalog-fits~="capability"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="feature"]:checked) [data-catalog-fits~="feature"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="provider"]:checked) [data-catalog-fits~="provider"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="driver"]:checked) [data-catalog-fits~="driver"] {
+    display: none;
+  }
+}
+
+/* The stages highlight, with no JavaScript. The block (src/blocks/stages.tsx) puts this on
+   its <section>. Each stage row is an <li data-stage="n">, its marker carries
+   `data-stage-marker`, and slab n of the drawing is a <g data-slab="n"> whose faces carry
+   `data-face` and whose lines sit in `data-slab-detail`. One row is active at a time:
+   the hovered row wins, then the row holding keyboard focus (`:focus-visible`, so a
+   mouse click leaves no stale highlight), and with neither the first row. The active row
+   tints with `muted` and fills its marker with `primary`; the matching slab fills with
+   `primary` and its lines turn `primary-foreground`. The slab rules cover five stages;
+   add a rule per stage past that. */
+@utility stage-list {
+  & [data-slab] [data-face] {
+    fill: var(--card);
+    transition: fill 0.15s;
+  }
+
+  & [data-slab] [data-slab-detail] {
+    transition: color 0.15s;
+  }
+
+  & [data-stage]:hover,
+  &:not(:has([data-stage]:hover)) [data-stage]:has(:focus-visible),
+  &:not(:has([data-stage]:hover, [data-stage] :focus-visible))
+    [data-stage="1"] {
+    background-color: var(--muted);
+
+    & [data-stage-marker] {
+      border-color: var(--primary);
+      background-color: var(--primary);
+      color: var(--primary-foreground);
+    }
+  }
+
+  &:has([data-stage="1"]:hover) [data-slab="1"],
+  &:not(:has([data-stage]:hover)):has([data-stage="1"] :focus-visible)
+    [data-slab="1"],
+  &:not(:has([data-stage]:hover, [data-stage] :focus-visible)) [data-slab="1"],
+  &:has([data-stage="2"]:hover) [data-slab="2"],
+  &:not(:has([data-stage]:hover)):has([data-stage="2"] :focus-visible)
+    [data-slab="2"],
+  &:has([data-stage="3"]:hover) [data-slab="3"],
+  &:not(:has([data-stage]:hover)):has([data-stage="3"] :focus-visible)
+    [data-slab="3"],
+  &:has([data-stage="4"]:hover) [data-slab="4"],
+  &:not(:has([data-stage]:hover)):has([data-stage="4"] :focus-visible)
+    [data-slab="4"],
+  &:has([data-stage="5"]:hover) [data-slab="5"],
+  &:not(:has([data-stage]:hover)):has([data-stage="5"] :focus-visible)
+    [data-slab="5"] {
+    & [data-face] {
+      fill: var(--primary);
+    }
+
+    & [data-slab-detail] {
+      color: var(--primary-foreground);
+    }
   }
 }
 
@@ -140,28 +313,6 @@
 @utility blur-in {
   @media (prefers-reduced-motion: no-preference) {
     animation: blur-in 1s var(--ease-out-soft) var(--blur-in-delay, 0s) both;
-  }
-}
-
-/* The hero's light beams. Each one shows from its top-left end along its own axis, through a
-   mask whose edge travels with `--beam-reach`, and widens as it lands. A mask rather than a
-   scale from one end, so the beam's rotation keeps its centre pivot and its final place.
-   It starts as the hero cascade settles; stagger with `[--beam-in-delay:700ms]`. */
-@property --beam-reach {
-  inherits: false;
-  initial-value: 100%;
-  syntax: "<percentage>";
-}
-
-@utility beam-in {
-  mask-image: linear-gradient(
-    to bottom,
-    #000 var(--beam-reach),
-    transparent calc(var(--beam-reach) + 25%)
-  );
-
-  @media (prefers-reduced-motion: no-preference) {
-    animation: beam-in 2.4s var(--ease-out-soft) var(--beam-in-delay, 0.5s) both;
   }
 }
 
@@ -177,33 +328,23 @@
   }
 }
 
-/* An endless horizontal slider. The track holds the items twice; the second copy is
-   aria-hidden. Under reduced motion the block wraps the first copy as a static row. */
-@utility marquee {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: marquee var(--marquee-duration, 40s) linear infinite;
-  }
-}
-
-/* A highlight that sweeps across a line of text, for the hero's announcement pill. */
-@utility shine-text {
-  background-clip: text;
-  background-image: linear-gradient(
-    120deg,
-    var(--muted-foreground) 40%,
-    var(--foreground) 50%,
-    var(--muted-foreground) 60%
-  );
-  background-size: 200% 100%;
-  color: transparent;
-
-  @media (prefers-reduced-motion: no-preference) {
-    animation: shine 3s linear infinite;
-  }
-}
-
-/* The navbar's bar narrows and frosts once the page scrolls past the top. */
+/* The navbar's bar frosts and gains its bottom hairline once the page scrolls past the top.
+   Without scroll timelines, or with reduced motion requested, the bar sits frosted from
+   the start, which is the animation's final state, so page content never shows through
+   the wordmark. */
 @utility nav-float {
+  @supports not (animation-timeline: scroll()) {
+    border-color: var(--border);
+    backdrop-filter: blur(12px);
+    background-color: color-mix(in oklch, var(--background) 75%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    border-color: var(--border);
+    backdrop-filter: blur(12px);
+    background-color: color-mix(in oklch, var(--background) 75%, transparent);
+  }
+
   @supports (animation-timeline: scroll()) {
     @media (prefers-reduced-motion: no-preference) {
       animation: nav-float linear both;
@@ -213,11 +354,9 @@
   }
 }
 
-/* A card that rises a little under the pointer. */
+/* A card that rises a little under the pointer. It moves only; it casts no shadow. */
 @utility hover-lift {
-  transition:
-    translate 0.2s var(--ease-out-soft),
-    box-shadow 0.2s var(--ease-out-soft);
+  transition: translate 0.2s var(--ease-out-soft);
 
   &:hover {
     translate: 0 -2px;

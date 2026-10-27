@@ -41,7 +41,7 @@ export function ThemeToggle({ className }: ThemeToggleProps) {
   return (
     <Button
       variant="ghost"
-      size="icon-sm"
+      size="icon"
       data-theme-toggle=""
       // The script names the painted palette the moment the DOM is ready. Until then the
       // palette is unknown, so this names the action only.

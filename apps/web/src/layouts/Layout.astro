@@ -18,6 +18,14 @@ const { title, description } = Astro.props;
 // `Astro.site` is the `site` origin in astro.config.mjs. It is always set there, so the
 // canonical URL never falls back to the dev server's host.
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
+
+// Cloudflare Web Analytics, cookieless. The token is read at build time, so a build with
+// it unset ships no beacon and no mention of one. `site.yml` passes it from a repository
+// variable once the deploy job exists (plan 0091, Phase 2).
+const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN?.trim();
+const analyticsBeacon = analyticsToken
+  ? JSON.stringify({ token: analyticsToken })
+  : undefined;
 ---
 
 <!doctype html>
@@ -60,8 +68,20 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
       resolver here, and do not turn this into an import.
     */}
     <script is:inline set:html={THEME_INIT_SCRIPT} />
+    {analyticsBeacon && (
+      <script
+        is:inline
+        defer
+        src="https://static.cloudflareinsights.com/beacon.min.js"
+        data-cf-beacon={analyticsBeacon}
+      />
+    )}
   </head>
-  <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
+  {/*
+    `blueprint-grid` (styles/web.css) draws the graph paper behind the whole page as one
+    continuous background, so no section paints a band of its own.
+  */}
+  <body class="bg-background text-foreground blueprint-grid min-h-dvh font-sans antialiased">
     {/*
       The first Tab stop on every page. It stays off screen until focused, then jumps past
       the navbar to the page's <main>. Every page and the error block give their <main>
@@ -69,7 +89,7 @@ const canonical = new URL(Astro.url.pathname, Astro.site).href;
     */}
     <a
       href="#main"
-      class="bg-background focus-visible:ring-ring/50 sr-only z-100 rounded-lg border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus-visible:ring-3"
+      class="bg-background focus-visible:ring-ring/50 sr-only z-100 border px-4 py-2 text-sm font-medium focus:not-sr-only focus:fixed focus:top-4 focus:left-4 focus-visible:ring-3"
     >
       {ui.layout.skipToContent}
     </a>
