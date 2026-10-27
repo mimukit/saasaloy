@@ -1,6 +1,6 @@
 ---
 name: saasaloy-payment
-description: Runbook for the payment capability, a vendor-blind one-time payment core in packages/payment with per-provider modules (payment-console for development, payment-manual for bKash, Nagad, Rocket and bank transfers staff confirm by hand, later payment-sslcommerz, payment-bkash). Use when taking a payment for an order or any other app record, writing the shopper route that starts one, reacting to a status change with a listener, reviewing manual payments, recording a refund, choosing PAYMENT_PROVIDER, or writing a payment provider.
+description: Runbook for the payment capability, a vendor-blind one-time payment core in packages/payment with per-provider modules (payment-console for development, payment-manual for bKash, Nagad, Rocket and bank transfers staff confirm by hand, payment-sslcommerz for the SSLCOMMERZ hosted checkout, later payment-bkash). Use when taking a payment for an order or any other app record, writing the shopper route that starts one, reacting to a status change with a listener, reviewing manual payments, recording a refund, choosing PAYMENT_PROVIDER, or writing a payment provider.
 ---
 
 # payment: one-time payments from `packages/payment`
@@ -168,12 +168,21 @@ A refund is allowed only on a `successful` payment, and the sum of a payment's r
 | --- | --- | --- | --- |
 | `payment-console` | `console` | `card` | Development only. A fake hosted checkout, no account, no network. |
 | `payment-manual` | `manual` | `bkash`, `nagad`, `rocket`, `bank` | The shopper pays outside the site and submits the transaction ID. Staff confirm on the Payments page. Nothing is verified automatically. Accounts are options in `manual({ methods })`. See the section below. |
+| `payment-sslcommerz` | `sslcommerz` | `card` | The SSLCOMMERZ hosted checkout for cards and wallets, BDT only. The IPN is verified against the gateway. See the section below. |
 
 ### payment-console: development only
 
 `saasaloy add payment-console`, then set `PAYMENT_PROVIDER=console`. `create` answers a redirect to `/payment/callback/console/checkout/<id>` on the api origin. That page shows the amount with a Pay and a Cancel button, and the form posts to `/payment/callback/console/complete`. Pay moves the payment to `successful` with `settled_amount` equal to `amount`, Cancel moves it to `cancelled`, and the browser goes to the payment's `returnUrl`. A refund logs a line and returns a fake refund id.
 
 Never list `console` in a deployed environment. Anyone who can reach the api can post Pay for any pending console payment.
+
+### payment-sslcommerz: the SSLCOMMERZ hosted checkout
+
+`saasaloy add payment-sslcommerz` adds `packages/payment/src/providers/sslcommerz.ts` and its env preset at `packages/payment/src/env/sslcommerz.ts`. Set `SSLCOMMERZ_STORE_ID`, `SSLCOMMERZ_STORE_PASSWORD` and `SSLCOMMERZ_RECEIPT_EMAIL` with `saasaloy env`, then run `pnpm env:setup`. `SSLCOMMERZ_MODE` is `sandbox` by default; set it to `live` only on the production deploy. Add `sslcommerz` to `PAYMENT_PROVIDER`, for example `PAYMENT_PROVIDER=manual,sslcommerz`: card goes to SSLCOMMERZ and bKash goes to `manual`.
+
+- `create` takes BDT only. It opens a session with the payment id as `tran_id` and answers a redirect to the gateway page. The session registers four callbacks under `/payment/callback/sslcommerz/`: `ipn`, `return/success`, `return/fail` and `return/cancel`, all on `BETTER_AUTH_URL`. The gateway must reach that origin, so a local api needs a tunnel for the IPN.
+- Nothing the gateway posts is evidence. The provider sends the `val_id` to the Order Validation API, or the `tran_id` to the transaction query API when there is no `val_id`. It then checks `tran_id`, currency and amount against the row. A valid answer moves the payment to `successful` with `settled_amount` set and keeps `bank_tran_id` in `providerData`. A replayed IPN changes nothing. A forged `val_id` or a mismatch answers `callback_invalid` (400). An unreachable gateway answers a retryable `provider_error` (502), so the gateway retries.
+- A refund calls the refund API with the stored `bank_tran_id`. The gateway's `refund_ref_id` becomes the refund's `providerRefundId`; a refused refund answers `declined`.
 
 ### payment-manual: payments a person checks
 
