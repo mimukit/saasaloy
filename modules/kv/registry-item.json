@@ -61,6 +61,11 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },
@@ -69,8 +74,18 @@
           "target": "src/keys.ts"
         },
         {
+          "path": "files/src/keys.vitest.ts",
+          "target": "src/keys.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/cached.ts",
           "target": "src/cached.ts"
+        },
+        {
+          "path": "files/src/cached.vitest.ts",
+          "target": "src/cached.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/providers/.gitkeep",

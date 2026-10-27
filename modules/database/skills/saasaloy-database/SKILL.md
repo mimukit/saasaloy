@@ -283,6 +283,12 @@ those three names. Read the driver skill your project has.
 
 **In production** both drivers ship `db:prod:dump` and `db:prod:migrate`, and `pnpm deploy:production --migrate` is the one command that migrates during a deploy. A deploy without the flag never migrates, and its migration gate stops when a migration file changed since the last deploy tag. The driver skills cover the two commands, and the `saasaloy-deploy` skill covers the gate.
 
+## Schema drift: `pnpm db:check`
+
+Both drivers ship `pnpm db:check`. It runs `drizzle-kit check`, then a generate dry run: it copies `packages/db/migrations/` to a temporary folder, runs `drizzle-kit generate` into the copy, and fails when the copy gained a file. The real migrations folder is never written. A failure means a table in `src/schema/` changed and nobody ran `pnpm db:generate`.
+
+With testing on, the driver patches the root `test:prepare` script to `pnpm db:check`, and the root `test` script runs `test:prepare` first. So `pnpm test` fails at `db:check` on a schema edit with no migration, and passes once `pnpm db:generate` writes it. With testing off, `test:prepare` does not exist and `pnpm test` skips the step.
+
 ## The database health check: `GET /health/db`
 
 `saasaloy add database` mounts `apps/api/src/routes/health-db.ts` at `/health/db` with a `chained-route` patch. It runs one `select 1` through the request's database client, through `withDb`, so the same file serves both drivers.

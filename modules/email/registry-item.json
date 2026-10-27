@@ -5,7 +5,7 @@
   "description": "A packages/email workspace with the provider interface, the escaping html tag and safeUrl; add one email provider.",
   "stage": "mvp",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -57,7 +57,8 @@
         },
         {
           "path": "files/src/define.ts",
-          "target": "src/define.ts"
+          "target": "src/define.ts",
+          "untested": "No test yet: the provider registry and the send path."
         },
         {
           "path": "files/src/provider.ts",
@@ -68,8 +69,14 @@
           "target": "src/render.ts"
         },
         {
+          "path": "files/src/render.vitest.ts",
+          "target": "src/render.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/templates/welcome.ts",
-          "target": "src/templates/welcome.ts"
+          "target": "src/templates/welcome.ts",
+          "untested": "A template over render, which render.test.ts tests."
         },
         {
           "path": "files/src/providers/.gitkeep",

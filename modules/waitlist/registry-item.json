@@ -47,6 +47,11 @@
       "target": "@api/routes/waitlist.ts"
     },
     {
+      "path": "files/api/routes/waitlist.vitest.ts",
+      "target": "@api/routes/waitlist.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/db/schema/waitlist.sqlite.ts",
       "target": "@db/schema/waitlist.ts",
       "onlyWith": "database-d1"

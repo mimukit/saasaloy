@@ -75,6 +75,11 @@
     {
       "path": "files/cloudflare.ts",
       "target": "@kv/providers/cloudflare.ts"
+    },
+    {
+      "path": "files/cloudflare.vitest.ts",
+      "target": "@kv/providers/cloudflare.test.ts",
+      "when": { "testing": true }
     }
   ],
   "scaffolds": []

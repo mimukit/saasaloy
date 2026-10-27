@@ -46,6 +46,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --coverage",
     "test:tooling": "vitest run --config vitest.tooling.config.ts",
+    "test:modules": "vitest run --config vitest.modules.config.ts",
     "test:e2e": "vitest run --config vitest.integration.config.ts test/e2e",
     "test:matrix": "vitest run --config vitest.integration.config.ts test/matrix",
     "release": "release-it",

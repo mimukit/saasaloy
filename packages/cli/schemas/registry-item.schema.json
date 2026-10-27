@@ -151,7 +151,7 @@
           "untested": {
             "type": "string",
             "minLength": 1,
-            "description": "Why this file ships with no test beside it (#242). Reserved for a later descriptor guard (#243), which is to read the reason rather than fail the file."
+            "description": "Why this file ships with no test beside it (#242). `scripts/module-tests.test.ts` and `scripts/route-tests.test.ts` print the reason rather than fail the file (#243)."
           }
         }
       }
@@ -499,7 +499,12 @@
                   "pattern": "^[a-z0-9][a-z0-9-]*$",
                   "description": "Install this file only when the named module is in the resolved install set — this run's dependsOn graph plus what saasaloy.json already records (#99). Same rule as a top-level files[] entry: two entries may share one `target` when their conditions are disjoint, and a target no candidate matches is a plan-time refusal. auth's per-driver db-provider.ts lives here rather than in files[], which is why both shapes carry the keyword."
                 },
-                "when": { "$ref": "#/$defs/when" }
+                "when": { "$ref": "#/$defs/when" },
+                "untested": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Why this workspace file ships with no test beside it. Same rule as a top-level files[] entry: `scripts/module-tests.test.ts` prints the reason rather than fail the file (#243)."
+                }
               }
             }
           }

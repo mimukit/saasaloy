@@ -5,7 +5,7 @@
   "description": "Subscriptions in a packages/billing workspace: the provider contract, plans.ts, the subscription projection and the plan entitlements.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api", "database", "auth", "admin", "queue", "email"],
   "dependencies": [],
   "envVars": {
@@ -140,8 +140,24 @@
       "target": "@api/routes/billing.ts"
     },
     {
+      "path": "files/api/routes/billing.vitest.ts",
+      "target": "@api/routes/billing.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["billing-console", "queue-memory"]
+      }
+    },
+    {
       "path": "files/api/billing-store.ts",
       "target": "@api/billing-store.ts"
+    },
+    {
+      "path": "files/api/billing-entitlements.vitest.ts",
+      "target": "@api/billing-entitlements.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["billing-console", "queue-memory"]
+      }
     },
     {
       "path": "files/config/billing.ts",
@@ -166,6 +182,11 @@
     {
       "path": "files/email/templates/account-locked.ts",
       "target": "@email/templates/account-locked.ts"
+    },
+    {
+      "path": "files/email/templates.vitest.ts",
+      "target": "@email/templates.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/db/schema/billing.sqlite.ts",
@@ -210,52 +231,84 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },
         {
           "path": "files/src/plans.ts",
-          "target": "src/plans.ts"
+          "target": "src/plans.ts",
+          "untested": "The owner's plan table; data, not logic."
         },
         {
           "path": "files/src/entitlements.ts",
-          "target": "src/entitlements.ts"
+          "target": "src/entitlements.ts",
+          "untested": "Tested by apps/api's billing-entitlements.test.ts, which drives it over queue-memory; packages/billing cannot depend on @repo/queue, which depends on it."
         },
         {
           "path": "files/src/subject.ts",
-          "target": "src/subject.ts"
+          "target": "src/subject.ts",
+          "untested": "No test yet: resolves the billable subject from a session."
         },
         {
           "path": "files/src/subscription.ts",
           "target": "src/subscription.ts"
         },
         {
+          "path": "files/src/subscription.vitest.ts",
+          "target": "src/subscription.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/store.ts",
-          "target": "src/store.ts"
+          "target": "src/store.ts",
+          "untested": "The store resolver the tests set through setBillingStoreResolver; no rule of its own."
         },
         {
           "path": "files/src/enqueue.ts",
-          "target": "src/enqueue.ts"
+          "target": "src/enqueue.ts",
+          "untested": "A setter and a getter for the enqueuer; no rule of its own."
         },
         {
           "path": "files/src/notify.ts",
-          "target": "src/notify.ts"
+          "target": "src/notify.ts",
+          "untested": "A setter and a getter for the notifier; subscription.test.ts drives it."
         },
         {
           "path": "files/src/config.ts",
           "target": "src/config.ts"
         },
         {
+          "path": "files/src/config.vitest.ts",
+          "target": "src/config.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/jobs/event.ts",
           "target": "src/jobs/event.ts"
+        },
+        {
+          "path": "files/src/jobs/event.vitest.ts",
+          "target": "src/jobs/event.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/src/jobs/past-due-lockout.ts",
           "target": "src/jobs/past-due-lockout.ts"
         },
         {
+          "path": "files/src/jobs/past-due-lockout.vitest.ts",
+          "target": "src/jobs/past-due-lockout.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/jobs/event-handler.ts",
-          "target": "src/jobs/event-handler.ts"
+          "target": "src/jobs/event-handler.ts",
+          "untested": "The queue job around applyEvent; jobs/event.test.ts covers the event path."
         },
         {
           "path": "files/src/providers/.gitkeep",

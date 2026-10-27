@@ -5,7 +5,7 @@
   "description": "A packages/db workspace with Drizzle ORM and drizzle-kit; pick database-d1 or database-postgres as its driver.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api"],
   "requiresOneOf": ["database-d1", "database-postgres"],
   "dependencies": [],
@@ -69,7 +69,11 @@
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
         { "path": "files/vitest.config.ts", "target": "vitest.config.ts" },
-        { "path": "files/src/schema.ts", "target": "src/schema.ts" },
+        {
+          "path": "files/src/schema.ts",
+          "target": "src/schema.ts",
+          "untested": "Collects the schema files through import.meta.glob; no rule of its own."
+        },
         {
           "path": "files/src/schema/.gitkeep",
           "target": "src/schema/.gitkeep"
@@ -83,28 +87,39 @@
           "target": "src/seed/index.ts"
         },
         {
+          "path": "files/src/seed/engine.vitest.ts",
+          "target": "src/seed/engine.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/seed/id.ts",
-          "target": "src/seed/id.ts"
+          "target": "src/seed/id.ts",
+          "untested": "Tested through seed/engine.test.ts, which imports seedId."
         },
         {
           "path": "files/src/seed/slice.ts",
-          "target": "src/seed/slice.ts"
+          "target": "src/seed/slice.ts",
+          "untested": "defineSlice and its types; seed/engine.test.ts uses it."
         },
         {
           "path": "files/src/seed/order.ts",
-          "target": "src/seed/order.ts"
+          "target": "src/seed/order.ts",
+          "untested": "Tested through seed/engine.test.ts, which covers the order and the cycle error."
         },
         {
           "path": "files/src/seed/plan.ts",
-          "target": "src/seed/plan.ts"
+          "target": "src/seed/plan.ts",
+          "untested": "Tested through seed/engine.test.ts and seed/completeness.test.ts."
         },
         {
           "path": "files/src/seed/table.ts",
-          "target": "src/seed/table.ts"
+          "target": "src/seed/table.ts",
+          "untested": "Reads tables out of a schema module; seed/completeness.test.ts runs it on the real schema."
         },
         {
           "path": "files/src/seed/apply.ts",
-          "target": "src/seed/apply.ts"
+          "target": "src/seed/apply.ts",
+          "untested": "Inserts the planned rows; needs a database, which db:seed exercises."
         },
         {
           "path": "files/src/seed/completeness.vitest.ts",

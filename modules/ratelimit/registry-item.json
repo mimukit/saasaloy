@@ -52,6 +52,11 @@
     {
       "path": "files/api/middleware/ratelimit.ts",
       "target": "@api/middleware/ratelimit.ts"
+    },
+    {
+      "path": "files/api/middleware/ratelimit.vitest.ts",
+      "target": "@api/middleware/ratelimit.test.ts",
+      "when": { "testing": true }
     }
   ],
   "scaffolds": [],

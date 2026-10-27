@@ -1,7 +1,9 @@
-// A module resolve hook for `pnpm test:modules`, registered by importing this file:
-// `node --import ./scripts/ts-resolve-hook.ts --test "modules/*/files/**/*.test.ts"`.
+// A module resolve hook for `pnpm test:base`, registered by importing this file:
+// `node --import ./scripts/ts-resolve-hook.ts --test "packages/cli/templates/base/...".`
+// `pnpm test:modules` ran on it too until the module tests moved to Vitest (issue #243);
+// `packages/cli/test/module-layout.ts` resolves those now.
 //
-// Shipped payload code under `modules/*/files/` imports without a file extension
+// Shipped payload code imports without a file extension
 // (`import { defineQueue } from "./define"`), because the scaffolded project compiles it
 // with `moduleResolution: "Bundler"` and does not set `allowImportingTsExtensions`.
 // Node's ESM resolver is stricter: it wants the real filename, so a payload test that

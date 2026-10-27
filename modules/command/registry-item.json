@@ -32,6 +32,11 @@
       "target": "@ui/lib/command/registry.ts"
     },
     {
+      "path": "files/ui/lib/command/registry.vitest.ts",
+      "target": "@ui/lib/command/registry.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/ui/lib/command/engine.ts",
       "target": "@ui/lib/command/engine.ts"
     },

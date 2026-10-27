@@ -54,6 +54,11 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },

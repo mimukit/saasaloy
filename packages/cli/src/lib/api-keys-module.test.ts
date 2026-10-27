@@ -89,11 +89,12 @@ describe("the api-keys core", () => {
     ]);
   });
 
-  it("ships the shared options and the client plugin, and no owner file", async () => {
+  it("ships the shared options, their test, and the client plugin, and no owner file", async () => {
     const files = (await readDescriptor("api-keys")).files as FileEntry[];
 
     expect(files.map((file) => file.target)).toStrictEqual([
       "@auth/plugins/api-key-options.ts",
+      "@auth/plugins/api-key-options.test.ts",
       "@auth/plugins/api-key-client.ts",
     ]);
   });
@@ -209,6 +210,11 @@ describe("the api-keys-user owner", () => {
       {
         path: "files/auth/api-key-rules.ts",
         target: "@auth/api-key-rules.ts",
+      },
+      {
+        path: "files/auth/api-key-rules.vitest.ts",
+        target: "@auth/api-key-rules.test.ts",
+        when: { installed: ["teams"], testing: true },
       },
       { path: "files/auth/caller.ts", target: "@auth/caller.ts" },
       {

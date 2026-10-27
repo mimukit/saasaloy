@@ -244,23 +244,15 @@ export default defineConfig({
     // The template's own exemptions, so a base file sees exactly what it sees after
     // `saasaloy init`.
     ...templateOverrides,
-    // A module's tests never ship: no descriptor lists a `.test.ts` file. They stay
-    // repo code and take the repo's rules back. oxlint has no negated glob to skip
-    // them above, and this block resets every rule, so Ultracite's test-file blocks
-    // run again after it.
-    {
-      files: ["modules/*/files/**/*.test.ts"],
-      rules,
-    },
+    // Ultracite's own blocks again, after the template's rule map reset every rule for
+    // shipped files, so its test-file blocks reach the base template's tests.
     ...ultracite.overrides,
-    // A module's Vitest file does ship. It is `<name>.vitest.ts` here, so `pnpm
-    // test:modules` (`node --test` over `*.test.ts`) skips it, and its descriptor renames
-    // it to `<name>.test.ts` in the project. Ultracite's test-file globs
+    // A module's test file ships. It is `<name>.vitest.ts` here, and its descriptor
+    // renames it to `<name>.test.ts` in the project (issue #243). Ultracite's test-file globs
     // (`**/*.{test,spec,…}`) miss the `.vitest.ts` name, so without this block the
     // scaffold's Vitest rules reached these files only after `saasaloy add` (issue #266).
     // The blocks are Ultracite's own test-file overrides, re-targeted rather than listed
-    // by hand, so a preset bump cannot open the gap again. They take none of the
-    // node:test exemptions below: the file runs on Vitest in the project.
+    // by hand, so a preset bump cannot open the gap again.
     //
     // Assert it after any change here: plant `expect(await Promise.resolve(1)).toBe(1)`
     // in modules/auth/files/api/routes/auth.vitest.ts and confirm
@@ -354,35 +346,6 @@ export default defineConfig({
         "no-console": "off",
         "vitest/max-expects": "off",
         "vitest/require-top-level-describe": "off",
-      },
-    },
-
-    // --- Module payload tests run on node:test, not vitest -----------------
-    // `pnpm test:modules` runs `modules/*/files/**/*.test.ts` under `node --test`,
-    // because vite cannot transform a payload file: it loads a tsconfig for every
-    // file, and a payload's `tsconfig.json` extends `@repo/tsconfig/base.json`,
-    // which resolves only inside a scaffolded project. See CONTRIBUTING.md.
-    //
-    // So these two rules are pointing the file at a runner it cannot use. Nothing
-    // else in Ultracite's vitest block is turned off: the assertion-shape rules
-    // above still apply, and they read `describe`/`it` the same either way. This
-    // is an override glob rather than an inline directive because the CLI copies
-    // files out of `modules/*/files/`, and a directive in one of them would land
-    // in a user's project.
-    {
-      files: ["modules/*/files/**/*.test.ts"],
-      plugins: ["vitest"],
-      rules: {
-        "vitest/no-import-node-test": "off",
-        "vitest/prefer-importing-vitest-globals": "off",
-        // Same reason: `it.each` is vitest's, and `node:test`'s `it` has no `.each`, so
-        // a table-driven case here is written as a plain loop on purpose.
-        "vitest/prefer-each": "off",
-        // `safeUrl`'s job is to refuse `javascript:alert(...)`, so the test that proves
-        // it has to write that URL out. Splitting the literal to dodge the rule would
-        // hide the one string the assertion is about. Off for these files only; it stays
-        // on for every payload file we ship.
-        "no-script-url": "off",
       },
     },
 

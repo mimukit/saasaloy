@@ -47,6 +47,11 @@
       "target": "@sms/providers/khudebarta.ts"
     },
     {
+      "path": "files/khudebarta.vitest.ts",
+      "target": "@sms/providers/khudebarta.test.ts",
+      "when": { "testing": true }
+    },
+    {
       "path": "files/env.ts",
       "target": "@sms/env/khudebarta.ts"
     }

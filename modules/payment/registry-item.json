@@ -5,7 +5,7 @@
   "description": "One-off payments in a packages/payment workspace: the provider contract, the status machine and staff review routes.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {
@@ -100,8 +100,18 @@
       "target": "@api/routes/payment.ts"
     },
     {
+      "path": "files/api/routes/payment.vitest.ts",
+      "target": "@api/routes/payment.test.ts",
+      "when": { "testing": true, "installed": ["payment-console"] }
+    },
+    {
       "path": "files/api/routes/admin-payment.ts",
       "target": "@api/routes/admin-payment.ts"
+    },
+    {
+      "path": "files/api/routes/admin-payment.vitest.ts",
+      "target": "@api/routes/admin-payment.test.ts",
+      "when": { "testing": true }
     },
     {
       "path": "files/api/payment-store.ts",
@@ -158,12 +168,18 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },
         {
           "path": "files/src/store.ts",
-          "target": "src/store.ts"
+          "target": "src/store.ts",
+          "untested": "The store resolver the tests set through setPaymentStoreResolver; no rule of its own."
         },
         {
           "path": "files/src/env-preset.ts",

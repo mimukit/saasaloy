@@ -5,7 +5,7 @@
   "description": "Background jobs and schedules in a packages/queue workspace, with a cron matcher and the provider registry.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -59,6 +59,11 @@
           "target": "src/define.ts"
         },
         {
+          "path": "files/src/define.vitest.ts",
+          "target": "src/define.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/provider.ts",
           "target": "src/provider.ts"
         },
@@ -67,8 +72,14 @@
           "target": "src/cron.ts"
         },
         {
+          "path": "files/src/cron.vitest.ts",
+          "target": "src/cron.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/jobs/example.ts",
-          "target": "src/jobs/example.ts"
+          "target": "src/jobs/example.ts",
+          "untested": "An example job the owner replaces."
         },
         {
           "path": "files/src/providers/.gitkeep",

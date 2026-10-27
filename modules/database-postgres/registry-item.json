@@ -17,6 +17,25 @@
   },
   "patches": [
     {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:check",
+      "value": "node scripts/check.ts"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:check",
+      "value": "pnpm --filter @repo/db db:check"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "test:prepare",
+      "value": "pnpm db:check",
+      "when": { "testing": true }
+    },
+    {
       "file": "apps/api/wrangler.jsonc",
       "kind": "wrangler-binding",
       "bindingType": "compatibility_flags",
@@ -173,6 +192,10 @@
           "target": "scripts/status.ts"
         },
         {
+          "path": "files/scripts/check.ts",
+          "target": "scripts/check.ts"
+        },
+        {
           "path": "files/scripts/drop.ts",
           "target": "scripts/drop.ts"
         },
@@ -189,6 +212,11 @@
           "target": "scripts/lib/branch-name.ts"
         },
         {
+          "path": "files/scripts/lib/branch-name.vitest.ts",
+          "target": "scripts/lib/branch-name.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/context.ts",
           "target": "scripts/lib/context.ts"
         },
@@ -197,12 +225,27 @@
           "target": "scripts/lib/env-file.ts"
         },
         {
+          "path": "files/scripts/lib/env-file.vitest.ts",
+          "target": "scripts/lib/env-file.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/seed.ts",
           "target": "scripts/lib/seed.ts"
         },
         {
+          "path": "files/scripts/lib/seed.vitest.ts",
+          "target": "scripts/lib/seed.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/scripts/lib/state.ts",
           "target": "scripts/lib/state.ts"
+        },
+        {
+          "path": "files/scripts/lib/state.vitest.ts",
+          "target": "scripts/lib/state.test.ts",
+          "when": { "testing": true }
         },
         {
           "path": "files/scripts/lib/url.ts",

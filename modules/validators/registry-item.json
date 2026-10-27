@@ -5,7 +5,7 @@
   "description": "A packages/validators workspace with the zod request schemas and the shared error envelope.",
   "stage": "validate",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.8.0" },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {},
@@ -26,8 +26,17 @@
       "files": [
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
-        { "path": "files/src/common.ts", "target": "src/common.ts" },
-        { "path": "files/src/phone.ts", "target": "src/phone.ts" }
+        {
+          "path": "files/src/common.ts",
+          "target": "src/common.ts",
+          "untested": "Shared zod schemas; no rule of its own."
+        },
+        { "path": "files/src/phone.ts", "target": "src/phone.ts" },
+        {
+          "path": "files/src/phone.vitest.ts",
+          "target": "src/phone.test.ts",
+          "when": { "testing": true }
+        }
       ]
     }
   ],
