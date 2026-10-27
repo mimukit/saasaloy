@@ -14,7 +14,7 @@ import { errors } from "@web/content/errors";
 import Layout from "../layouts/Layout.astro";
 ---
 
-<Layout title={`${errors.notFound.title} — ${siteName}`}>
+<Layout title={`${errors.notFound.title} — ${siteName}`} noindex>
   <ErrorState
     code={errors.notFound.code}
     title={errors.notFound.title}

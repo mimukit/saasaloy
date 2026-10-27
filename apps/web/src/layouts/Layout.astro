@@ -5,19 +5,37 @@
 // tokens, and brand.css imports the shared globals.css.
 import "@web/styles/web.css";
 import { locale, siteName } from "@web/site";
-import { ui } from "@web/content/landing";
+import { landing, ui } from "@web/content/landing";
+import { interpolate } from "@web/lib/interpolate";
 import { THEME_INIT_SCRIPT } from "@web/lib/theme";
 
 interface Props {
   title: string;
   description?: string;
+  /**
+   * Keep the page out of search indexes. The error pages set it: they get
+   * `<meta name="robots" content="noindex">` and no canonical URL.
+   */
+  noindex?: boolean;
+  /** A JSON-LD object, written into the head as one `application/ld+json` script. */
+  jsonLd?: object;
 }
 
-const { title, description } = Astro.props;
+const { title, description, noindex = false, jsonLd } = Astro.props;
 
 // `Astro.site` is the `site` origin in astro.config.mjs. It is always set there, so the
 // canonical URL never falls back to the dev server's host.
 const canonical = new URL(Astro.url.pathname, Astro.site).href;
+
+// The link preview image, 1200×630. public/og.png is the README module-map banner, padded
+// to that ratio. The URL is absolute, because a preview crawler resolves nothing.
+const ogImage = new URL("/og.png", Astro.site).href;
+const ogImageAlt = interpolate(landing.meta.imageAlt, { siteName });
+
+// `<` escaped so no string in the data can close the script element early.
+const jsonLdScript = jsonLd
+  ? JSON.stringify(jsonLd).replaceAll("<", String.raw`\u003c`)
+  : undefined;
 
 // Cloudflare Web Analytics, cookieless. The token is read at build time, so a build with
 // it unset ships no beacon and no mention of one. `site.yml` passes it from a repository
@@ -42,19 +60,31 @@ const analyticsBeacon = analyticsToken
       link never gets that treatment. Replace public/favicon.svg with the project mark.
     */}
     <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
-    <link rel="canonical" href={canonical} />
+    {noindex ? (
+      <meta name="robots" content="noindex" />
+    ) : (
+      <link rel="canonical" href={canonical} />
+    )}
     {description && <meta name="description" content={description} />}
     {/*
-      The link preview. Every page gets the title, the URL and the card type; a page that
-      passes a description gets it here too. To add a preview image, put a 1200×630 file
-      in public/ and add `og:image` and `twitter:image` tags beside these.
+      The link preview. Every page gets the title, the URL, the image and the card type;
+      a page that passes a description gets it here too.
     */}
     <meta property="og:type" content="website" />
     <meta property="og:site_name" content={siteName} />
     <meta property="og:title" content={title} />
     {description && <meta property="og:description" content={description} />}
     <meta property="og:url" content={canonical} />
-    <meta name="twitter:card" content="summary" />
+    <meta property="og:image" content={ogImage} />
+    <meta property="og:image:width" content="1200" />
+    <meta property="og:image:height" content="630" />
+    <meta property="og:image:alt" content={ogImageAlt} />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:image" content={ogImage} />
+    <meta name="twitter:image:alt" content={ogImageAlt} />
+    {jsonLdScript && (
+      <script is:inline type="application/ld+json" set:html={jsonLdScript} />
+    )}
     {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
       paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro

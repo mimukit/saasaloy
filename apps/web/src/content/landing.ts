@@ -60,12 +60,15 @@ const DOCS = `${REPO}/blob/main/docs/wiki`;
 /** Marketing copy. The whole of what a landing-copy pass may rewrite. */
 export const landing = {
   // The browser tab, the meta description and the link preview. `{siteName}` comes from
-  // ../index.ts.
+  // ../index.ts. `imageAlt` describes public/og.png, the preview image.
   meta: {
-    // Both lines repeat claims from the README's opening paragraph.
+    // Both lines repeat claims from the README's opening paragraph. Keep the
+    // description under about 155 characters, where Google cuts a snippet.
     title: "{siteName}: an open source SaaS starter kit for Cloudflare",
     description:
-      "{siteName} is an open source, composable SaaS starter kit for Cloudflare. Start with a landing page, then add the API, database, auth and other modules one command at a time, as source files you own.",
+      "{siteName} is an open source SaaS starter kit for Cloudflare. Start with a landing page, then add the API, database, auth and more as source files you own.",
+    imageAlt:
+      "The {siteName} wordmark beside a module map: api, auth, database, email and payment.",
   },
 
   // Header. Every navbar link leaves the page, so each one opens in a new tab through

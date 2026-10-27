@@ -45,11 +45,11 @@ const COMPONENT_ENTRIES = ["src/**/*.tsx"];
 // is why wrangler.jsonc points `assets.directory` there — read its comment before you
 // change either file.
 //
-// The public origin. Layout.astro builds each canonical URL from it as `Astro.site`.
-// Phase 2 of docs/plans/0091-plan-public-site-and-brand-2026-10-26.md records the
-// workers.dev URL, and that phase replaces this placeholder.
+// The public origin. Layout.astro builds each canonical URL, `og:url` and `og:image`
+// from it as `Astro.site`, and src/pages/robots.txt.ts and sitemap.xml.ts do the same.
+// The owner chose saasaloy.com on 2026-10-27 (docs/seo/0001-seo-saasaloy-com-2026-10-27.md).
 export default defineConfig({
-  site: "https://example.com",
+  site: "https://saasaloy.com",
   output: "static",
   // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
   // wanted, and writes a `SESSION` KV namespace binding with no id into the config it

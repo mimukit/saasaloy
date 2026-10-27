@@ -1,5 +1,5 @@
 ---
-import { siteName } from "@web/site";
+import { locale, siteName } from "@web/site";
 import { CommandField } from "@web/components/command-field";
 import { Faq } from "@web/blocks/faq";
 import { Footer } from "@web/blocks/footer";
@@ -12,6 +12,7 @@ import { Stages } from "@web/blocks/stages";
 import { landing } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
 import { loadModuleCatalog } from "@web/lib/module-registry";
+import { homeGraph } from "@web/lib/structured-data";
 import Layout from "../layouts/Layout.astro";
 
 // This page carries no copy of its own — the tab title and meta description come from
@@ -22,6 +23,15 @@ import Layout from "../layouts/Layout.astro";
 
 // The catalog rows come from modules/*/registry-item.json, read once at build time.
 const catalogRows = loadModuleCatalog();
+
+const description = interpolate(landing.meta.description, { siteName });
+// The graph names the public origin, never the dev host, so a missing `site` fails the build.
+if (!Astro.site) {
+  throw new Error(
+    "Set `site` in astro.config.mjs; the home page JSON-LD needs it."
+  );
+}
+const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
 ---
 
 {/*
@@ -57,7 +67,8 @@ const catalogRows = loadModuleCatalog();
 */}
 <Layout
   title={interpolate(landing.meta.title, { siteName })}
-  description={interpolate(landing.meta.description, { siteName })}
+  description={description}
+  jsonLd={jsonLd}
 >
   <Navbar client:idle siteName={siteName} />
   <main id="main" tabindex="-1">
