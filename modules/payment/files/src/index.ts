@@ -50,6 +50,7 @@ export {
   setPaymentStoreResolver,
   setPaymentStoreRunner,
 } from "./store";
+export { paymentProviderEnv, setPaymentProviderEnv } from "./provider-env";
 export type {
   NewPayment,
   PaymentEventRecord,

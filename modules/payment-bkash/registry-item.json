@@ -1,0 +1,96 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "payment-bkash",
+  "type": "saasaloy:feature",
+  "description": "A payment provider on bKash Tokenized Checkout: a hosted bKash page, settled by a status re-read, with refunds. Needs a bKash merchant account.",
+  "stage": "money",
+  "needs": ["vendor-account"],
+  "requires": { "saasaloy": ">=0.7.0" },
+  "dependsOn": ["payment", "kv", "queue"],
+  "dependencies": [],
+  "envVars": {
+    "BKASH_APP_KEY": "The app key of your bKash merchant account, from https://developer.bka.sh for the sandbox and from bKash's merchant onboarding for live. Read from apps/api/.env in local dev (saasaloy env, then pnpm env:setup) and from a Workers secret in production. Unset, every bkash call throws PaymentError(\"invalid_request\") naming this key before anything is sent.",
+    "BKASH_APP_SECRET": "The app secret issued with the app key. It is sent on the token grant and the token refresh, so a deployed Worker holds it as a secret (`wrangler secret put BKASH_APP_SECRET`), never in wrangler.jsonc.",
+    "BKASH_USERNAME": "The merchant API username, sent as the `username` header on the two token calls. It is not your bKash wallet number and not your portal login.",
+    "BKASH_PASSWORD": "The merchant API password that goes with the username, sent as the `password` header on the two token calls. A Worker secret for the same reason the app secret is.",
+    "BKASH_MODE": "Which gateway host to use: `live` for https://tokenized.pay.bka.sh, anything else for the sandbox at https://tokenized.sandbox.bka.sh. Optional, and it fails safe: only the exact string `live` selects the live gateway, so a typo sends a test payment to the sandbox."
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "envOptional": ["BKASH_MODE"],
+  "removeWarnings": [
+    "Removing this module does not refund or cancel anything at bKash. Settle open bkash payments in the bKash merchant portal first; a payment row that names provider \"bkash\" can no longer be refunded from the admin page.",
+    "The stored gateway token stays in your kv store under the `payment:bkash:token` key until it expires. Delete it if you are rotating the app key.",
+    "If you handed bKash support a webhook listener URL during onboarding, ask them to remove it. Otherwise bKash keeps posting to an endpoint that now answers 404.",
+    "`@repo/kv` stays in packages/payment/package.json and `@repo/payment` stays in packages/queue/package.json, as every package-json-dependency patch does. Drop them with `pnpm remove` once nothing imports them."
+  ],
+  "patches": [
+    {
+      "file": "packages/payment/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "payment",
+      "arrayProp": "providers",
+      "call": "bkash",
+      "import": {
+        "name": "bkash",
+        "from": "./providers/bkash"
+      }
+    },
+    {
+      "file": "packages/payment/src/env-preset.ts",
+      "kind": "plugin-array",
+      "exportName": "paymentPreset",
+      "arrayProp": "extends",
+      "call": "bkashEnv",
+      "import": {
+        "name": "bkashEnv",
+        "from": "./env/bkash"
+      }
+    },
+    {
+      "file": "packages/payment/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/kv",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/queue/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/payment",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "bkashTokenJob",
+      "import": {
+        "name": "bkashTokenJob",
+        "from": "@repo/payment/providers/bkash"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "bkashTokenSchedule",
+      "import": {
+        "name": "bkashTokenSchedule",
+        "from": "@repo/payment/providers/bkash"
+      }
+    }
+  ],
+  "files": [
+    { "path": "files/bkash.ts", "target": "@payment/providers/bkash.ts" },
+    { "path": "files/env.ts", "target": "@payment/env/bkash.ts" }
+  ],
+  "scaffolds": [],
+  "agent": {
+    "skills": ["skills/saasaloy-payment-bkash"]
+  }
+}
