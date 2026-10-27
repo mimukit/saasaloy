@@ -74,8 +74,8 @@
    A faint line every `--blueprint-cell` (24px) and a firmer one every
    `--blueprint-major` (five cells). */
 @utility blueprint-grid {
-  --blueprint-line: color-mix(in oklch, var(--border) 35%, transparent);
-  --blueprint-line-major: color-mix(in oklch, var(--border) 70%, transparent);
+  --blueprint-line: color-mix(in oklch, var(--border) 15%, transparent);
+  --blueprint-line-major: color-mix(in oklch, var(--border) 30%, transparent);
 
   background-image:
     linear-gradient(to right, var(--blueprint-line-major) 1px, transparent 1px),
