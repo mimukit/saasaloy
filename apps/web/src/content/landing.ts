@@ -84,10 +84,13 @@ export const landing = {
   // The hero. The title is two sentences: the first renders in `foreground`, the second
   // in `highlight`. `command` is the command field's text (5b). Every link leaves the page
   // (5a). `note` is the proof-of-concept line, which stays visible (README, WARNING).
+  // `{version}` is the CLI version, read from packages/cli/package.json at build time.
+  // `description` names the category, because the title does not.
   hero: {
     titleLead: "A landing page today.",
     titleAccent: "Your next module tomorrow.",
-    description: "Start small. Add the capabilities your product needs.",
+    description:
+      "An open source SaaS starter kit for Cloudflare. Start small, and add each module as source files you own.",
     command: "npx saasaloy init my-app",
     links: [
       {
@@ -97,7 +100,7 @@ export const landing = {
       },
       { id: "github", label: "GitHub", href: REPO },
     ],
-    note: "Proof of concept. Not for production use yet.",
+    note: "Version {version}. Proof of concept. Not for production use yet.",
   },
 
   // The stages. Each stage names the command that adds it (5b) and links to its docs
@@ -215,6 +218,12 @@ export const landing = {
     description: "",
     items: [
       {
+        id: "what",
+        question: "What is {siteName}?",
+        answer:
+          "{siteName} is an open source, composable SaaS starter kit for Cloudflare. It is a CLI plus a module registry, not a boilerplate. You start with a landing page, then add the API, database, auth, payments and other modules one command at a time. Each module copies source files into your repository under the MIT license.",
+      },
+      {
         id: "own",
         question: "Do I own the generated code?",
         answer:
@@ -252,9 +261,12 @@ export const landing = {
   },
 
   // Footer navigation. Every link leaves the page (5a). An empty label or href drops a
-  // link.
+  // link. `privacy` is the line under the tagline. Keep it true for Layout.astro's
+  // analytics beacon; an empty string hides it.
   footer: {
     tagline: "Start small. Own the source.",
+    privacy:
+      "This site sets no cookies. Cloudflare Web Analytics counts visits without tracking you.",
     links: [
       { id: "github", label: "GitHub", href: REPO },
       {

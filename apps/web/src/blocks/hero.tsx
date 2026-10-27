@@ -4,8 +4,10 @@ import { ArrowRightIcon, BookOpenIcon } from "lucide-react";
 import { CommandField } from "@web/components/command-field";
 import { landing } from "@web/content/landing";
 import { AppWireframe } from "@web/illustrations/app-wireframe";
+import { cliVersion } from "@web/lib/cli-version";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { GITHUB_MARK } from "@web/lib/github-mark";
+import { interpolate } from "@web/lib/interpolate";
 
 // Static. The command field's copy button is the one interactive part, and index.astro
 // passes it in hydrated through the `commandField` slot. Rendered on its own, the hero
@@ -43,7 +45,7 @@ export function Hero({
   description = landing.hero.description,
   command = landing.hero.command,
   links = landing.hero.links,
-  note = landing.hero.note,
+  note = interpolate(landing.hero.note, { version: cliVersion }),
   commandField,
 }: HeroProps) {
   return (

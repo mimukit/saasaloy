@@ -9,7 +9,8 @@ import { interpolate } from "@web/lib/interpolate";
 
 // Fully static, no script. The round 10 footer: a blueprint rule on top, the large
 // lowercase wordmark and the tagline on the left, and one row of links in `highlight` on
-// the right, each with a small icon. The rows stack on mobile.
+// the right, each with a small icon. The rows stack on mobile. A one-line privacy note
+// sits under the tagline.
 //
 // Words and links come from ../content/landing.ts. An empty label in content drops a
 // link. Every link leaves the site, so each one opens in a new tab.
@@ -35,12 +36,15 @@ const LINK_ICONS: Record<string, ReactNode> = {
 export interface FooterProps {
   siteName?: string;
   tagline?: string;
+  /** The privacy line under the tagline. An empty string hides it. */
+  privacy?: string;
   links?: FooterLink[];
 }
 
 export function Footer({
   siteName = defaultSiteName,
   tagline = interpolate(landing.footer.tagline, { siteName }),
+  privacy = interpolate(landing.footer.privacy, { siteName }),
   links = defaultLinks,
 }: FooterProps) {
   return (
@@ -55,6 +59,9 @@ export function Footer({
             {siteName}
           </a>
           {tagline && <p className="text-muted-foreground">{tagline}</p>}
+          {privacy && (
+            <p className="text-muted-foreground max-w-md text-xs">{privacy}</p>
+          )}
         </div>
 
         {links.length > 0 && (
