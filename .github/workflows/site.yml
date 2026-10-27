@@ -1,0 +1,58 @@
+# The public site's gate, for apps/web (plan 0091, Site workflow and Gate tooling rows).
+# A pull request that touches the site, the module registry it reads or the wiki it
+# links to runs lint, the catalog tests and the build, then checks the built page in a
+# real browser: axe in both themes at 375, 768 and 1440 px, and one mobile Lighthouse
+# run that must score 95 or more in all four categories.
+#
+# The deploy job comes later. Phase 2 of the plan (Cloudflare access and the analytics
+# variable) is deferred, so this file has no secrets, no `wrangler deploy` and no
+# push trigger yet.
+name: site
+
+on:
+  pull_request:
+    paths:
+      - apps/web/**
+      - modules/**
+      - docs/wiki/**
+      - pnpm-lock.yaml
+      - pnpm-workspace.yaml
+      - .github/workflows/site.yml
+
+# A pull request pushed to twice does not need the first run's answer.
+concurrency:
+  group: site-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  site:
+    name: site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version` key: the action reads `packageManager` from package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm lint
+
+      - run: pnpm --filter @saasaloy/web test
+
+      - run: pnpm --filter @saasaloy/web build
+
+      # One browser for both gates: the scripts hand Playwright's Chromium to lhci too.
+      - run: pnpm --filter @saasaloy/web exec playwright install --with-deps chromium
+
+      - run: pnpm --filter @saasaloy/web gate:a11y
+
+      - run: pnpm --filter @saasaloy/web gate:lighthouse

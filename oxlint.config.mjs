@@ -263,6 +263,13 @@ export default defineConfig({
       files: ["apps/web/src/**"],
       env: { browser: true, node: false },
     },
+    // The site gate's scripts (gate:a11y, gate:lighthouse) run on Node, and they report
+    // to the terminal, so they print. Code they hand to the page runs in the browser.
+    {
+      files: ["apps/web/scripts/**"],
+      env: { node: true, browser: true },
+      rules: { "no-console": "off" },
+    },
     {
       files: ["apps/web/src/components/**"],
       rules: { "jsx-a11y/label-has-associated-control": "off" },
