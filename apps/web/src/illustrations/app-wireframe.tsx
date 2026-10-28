@@ -206,7 +206,9 @@ export function AppWireframe({ className }: { className?: string }) {
         to={[540, 72]}
       />
       <Callout x={88} y={504} label="Database" to={[156, 470]} />
-      <Callout x={636} y={508} label="Email" anchor="end" to={[600, 478]} />
+      {/* The Email dot sits on the bottom edge of the box's right face, left of the
+          underline's end, so its leader leans up and in, the mirror of the Database one. */}
+      <Callout x={636} y={508} label="Email" anchor="end" to={[586, 481]} />
     </svg>
   );
 }

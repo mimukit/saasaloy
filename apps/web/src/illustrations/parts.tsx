@@ -53,6 +53,9 @@ export function Sheet({
   );
 }
 
+/** The space between a callout's text and a leader that rises from beside it. */
+const CALLOUT_GAP = 6;
+
 /** A mono callout: the label, an underline under it, and a leader line to a dot. */
 export function Callout({
   x,
@@ -68,9 +71,20 @@ export function Callout({
   to: [number, number];
   anchor?: "start" | "end";
 }) {
-  const width = label.length * 6.2;
-  const left = anchor === "start" ? x : x - width;
-  const foot = anchor === "start" ? left : left + width;
+  const textWidth = label.length * 6.2;
+  const textLeft = anchor === "start" ? x : x - textWidth;
+  const textRight = textLeft + textWidth;
+  // The leader leaves the underline from the anchor end. A target above the label would
+  // pull that line back up through the text, so it leaves from the end nearer the target.
+  // The underline runs CALLOUT_GAP past the text there, so the leader clears the word.
+  const above = to[1] < y;
+  const footRight = above
+    ? to[0] > (textLeft + textRight) / 2
+    : anchor === "end";
+  const left = above && !footRight ? textLeft - CALLOUT_GAP : textLeft;
+  const right = above && footRight ? textRight + CALLOUT_GAP : textRight;
+  const width = right - left;
+  const foot = footRight ? right : left;
   return (
     <g>
       <text
