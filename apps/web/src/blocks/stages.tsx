@@ -96,7 +96,7 @@ export function Stages({
 
         <SourceSlabs
           stages={items}
-          className="text-highlight mx-auto w-full max-w-md lg:order-first"
+          className="text-highlight reveal mx-auto w-full max-w-md lg:order-first"
         />
       </div>
     </section>

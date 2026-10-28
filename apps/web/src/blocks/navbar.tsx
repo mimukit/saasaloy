@@ -186,7 +186,10 @@ export function Navbar({
         </div>
 
         {open && (
-          <div id="navbar-mobile-menu" className="border-t lg:hidden">
+          <div
+            id="navbar-mobile-menu"
+            className="motion-safe:ease-out-soft border-t motion-safe:transition-[opacity,translate] motion-safe:duration-200 lg:hidden motion-safe:starting:-translate-y-1 motion-safe:starting:opacity-0"
+          >
             <nav
               aria-label={ui.navbar.mobileNavLabel}
               className="section-container-wide flex flex-col py-2"

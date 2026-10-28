@@ -63,7 +63,7 @@ export function SiteSource({
           </a>
         </div>
 
-        <SiteLayers className="text-highlight mx-auto w-full max-w-xl" />
+        <SiteLayers className="text-highlight reveal mx-auto w-full max-w-xl" />
       </div>
     </section>
   );

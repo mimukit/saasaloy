@@ -77,7 +77,7 @@ export function ModuleCatalog({
     <section id={id} className="section-y module-catalog">
       <div className="section-container-wide">
         <div className="grid gap-x-16 gap-y-8 lg:grid-cols-2 lg:grid-rows-[1fr_auto]">
-          <div className="min-w-0 lg:self-end">
+          <div className="reveal min-w-0 lg:self-end">
             <h2 className="text-section-title text-highlight text-balance">
               {title}
             </h2>
@@ -88,7 +88,7 @@ export function ModuleCatalog({
             )}
           </div>
 
-          <ModuleInventory className="text-highlight mx-auto w-full max-w-lg lg:row-span-2 lg:max-w-none lg:self-center" />
+          <ModuleInventory className="text-highlight reveal mx-auto w-full max-w-lg lg:row-span-2 lg:max-w-none lg:self-center" />
 
           <fieldset className="min-w-0 lg:self-start">
             <legend className="sr-only">{filterLabel}</legend>
@@ -120,7 +120,7 @@ export function ModuleCatalog({
             <li
               key={row.name}
               data-tier={row.tier}
-              className="bg-card border-border flex flex-col gap-2.5 border-r border-b px-4 py-4"
+              className="bg-card border-border appear flex flex-col gap-2.5 border-r border-b px-4 py-4"
             >
               <div className="flex items-center justify-between gap-2">
                 <span className="flex min-w-0 items-center gap-2">

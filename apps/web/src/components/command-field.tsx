@@ -20,6 +20,10 @@ import { cn } from "@web/lib/utils";
 
 const COPIED_MS = 2000;
 
+// Each icon mounts fresh when the state flips, so it settles in from a little smaller.
+const ICON_SWAP =
+  "size-4 motion-safe:transition-[opacity,scale] motion-safe:duration-150 motion-safe:ease-out-soft motion-safe:starting:scale-75 motion-safe:starting:opacity-0";
+
 export interface CommandFieldProps {
   command: string;
   /** The glyph before the command. Decorative. */
@@ -85,12 +89,12 @@ export function CommandField({
         type="button"
         onClick={copy}
         aria-label={interpolate(ui.commandField.copyLabel, { command })}
-        className="bg-primary text-primary-foreground focus-visible:outline-ring -my-px -mr-px inline-flex min-w-24 shrink-0 cursor-pointer items-center justify-center gap-2 px-3 text-sm font-medium underline-offset-4 transition-colors hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className="bg-primary text-primary-foreground focus-visible:outline-ring press -my-px -mr-px inline-flex min-w-24 shrink-0 cursor-pointer items-center justify-center gap-2 px-3 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
       >
         {copied ? (
-          <CheckIcon aria-hidden="true" className="size-4" />
+          <CheckIcon aria-hidden="true" className={ICON_SWAP} />
         ) : (
-          <CopyIcon aria-hidden="true" className="size-4" />
+          <CopyIcon aria-hidden="true" className={ICON_SWAP} />
         )}
         <span aria-hidden="true">
           {copied ? ui.commandField.copied : ui.commandField.copy}

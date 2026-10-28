@@ -50,7 +50,10 @@ export function Providers({
         <div className="mt-12 grid gap-12 lg:grid-cols-[minmax(0,1fr)_18rem] lg:items-center lg:gap-10">
           <ul className="flex flex-col gap-6 lg:order-2">
             {points.map((point) => (
-              <li key={point.id} className="border-highlight border-l pl-4">
+              <li
+                key={point.id}
+                className="border-highlight reveal border-l pl-4"
+              >
                 <p className="text-highlight font-medium">{point.title}</p>
                 <p className="text-muted-foreground mt-1 text-sm text-pretty [&_code]:whitespace-nowrap">
                   {inlineCode(point.description)}
@@ -58,7 +61,7 @@ export function Providers({
               </li>
             ))}
           </ul>
-          <ProviderModules className="text-highlight w-full lg:order-1" />
+          <ProviderModules className="text-highlight reveal w-full lg:order-1" />
         </div>
       </div>
     </section>

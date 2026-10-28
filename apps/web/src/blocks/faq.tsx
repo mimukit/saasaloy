@@ -53,27 +53,27 @@ export function Faq({
     <section id={id} className="section-y">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:gap-16">
         <div>
-          <h2 className="text-section-title text-highlight text-balance">
+          <h2 className="text-section-title text-highlight reveal text-balance">
             {title}
           </h2>
           {description && (
-            <p className="text-lead text-muted-foreground mt-4 text-balance">
+            <p className="text-lead text-muted-foreground reveal mt-4 text-balance">
               {description}
             </p>
           )}
 
-          <div className="bg-card mt-10 border-x border-t">
+          <div className="bg-card reveal mt-10 border-x border-t">
             {items.map((item, index) => (
               <details
                 key={item.id}
                 name={id}
                 open={index === 0}
-                className="group border-b"
+                className="group disclosure border-b"
               >
                 <summary className="text-highlight hover:bg-muted flex cursor-pointer list-none items-center gap-3 px-4 py-3 text-sm font-medium transition-colors [&::-webkit-details-marker]:hidden">
                   <ChevronRightIcon
                     aria-hidden="true"
-                    className="size-4 shrink-0 transition-transform group-open:rotate-90"
+                    className="size-4 shrink-0 transition-transform duration-200 group-open:rotate-90"
                   />
                   {interpolate(item.question, { siteName })}
                 </summary>
@@ -99,7 +99,7 @@ export function Faq({
           )}
         </div>
 
-        <RepositoryTree className="text-highlight mx-auto w-full max-w-xl lg:order-first lg:mt-24" />
+        <RepositoryTree className="text-highlight reveal mx-auto w-full max-w-xl lg:order-first lg:mt-24" />
       </div>
     </section>
   );

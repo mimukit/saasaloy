@@ -354,12 +354,76 @@
   }
 }
 
-/* A card that rises a little under the pointer. It moves only; it casts no shadow. */
+/* A card that rises a little under the pointer. It moves only; it casts no shadow. A touch
+   screen fires hover on tap and leaves the card raised, so only a fine pointer lifts it. */
 @utility hover-lift {
-  transition: translate 0.2s var(--ease-out-soft);
+  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
+    transition: translate 0.2s var(--ease-out-soft);
 
-  &:hover {
-    translate: 0 -2px;
+    &:hover {
+      translate: 0 -2px;
+    }
+  }
+}
+
+/* Press feedback for a solid control: it shrinks a little while held, label and icon
+   with it. It owns the element's whole transition, colours included, so do not pair it
+   with `transition-colors`. */
+@utility press {
+  transition-duration: 0.15s;
+  transition-property:
+    color, background-color, border-color, text-decoration-color, scale;
+  transition-timing-function: var(--ease-out-soft);
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:active {
+      scale: 0.97;
+    }
+  }
+}
+
+/* An element that settles in when it starts to render: on mount, and each time a
+   `display: none` rule stops matching it. The catalog tiles use it, so a filter tab or
+   "Show all modules" brings its tiles in rather than swapping them in one frame. A
+   transition, not keyframes, so a second press mid-motion retargets instead of
+   restarting. */
+@utility appear {
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity 0.2s var(--ease-out-soft),
+      translate 0.2s var(--ease-out-soft);
+
+    @starting-style {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+}
+
+/* A native <details> whose answer opens and closes over its height instead of in one
+   frame. It needs `::details-content` and `interpolate-size`; a browser without either
+   opens the answer at once. Height is the one layout property the page animates, because
+   no transform grows a box and moves the rows under it. */
+@utility disclosure {
+  @supports (interpolate-size: allow-keywords) {
+    @media (prefers-reduced-motion: no-preference) {
+      interpolate-size: allow-keywords;
+
+      &::details-content {
+        overflow: clip;
+        block-size: 0;
+        opacity: 0;
+        transition:
+          block-size 0.2s var(--ease-out-soft),
+          opacity 0.2s var(--ease-out-soft),
+          content-visibility 0.2s allow-discrete;
+      }
+
+      &[open]::details-content {
+        block-size: auto;
+        opacity: 1;
+      }
+    }
   }
 }
 
