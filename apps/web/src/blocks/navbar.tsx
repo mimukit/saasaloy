@@ -142,7 +142,7 @@ export function Navbar({
           <a
             href="/"
             aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
-            className="text-highlight text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
+            className="text-primary text-2xl leading-8 font-semibold tracking-[-0.02em] lowercase"
           >
             <span aria-hidden="true">{siteName}</span>
           </a>

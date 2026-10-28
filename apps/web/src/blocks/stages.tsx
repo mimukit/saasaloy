@@ -42,7 +42,7 @@ export function Stages({
     <section id={id} className="section-y stage-list">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
         <div className="reveal min-w-0">
-          <h2 className="text-section-title text-highlight max-w-[14ch] text-balance">
+          <h2 className="text-section-title text-primary max-w-[14ch] text-balance">
             {title}
           </h2>
           {description && (

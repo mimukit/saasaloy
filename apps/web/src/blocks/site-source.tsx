@@ -44,7 +44,7 @@ export function SiteSource({
     <section id={id} className="section-y">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
         <div className="reveal flex flex-col gap-6">
-          <h2 className="text-section-title text-highlight max-w-[14ch] text-balance">
+          <h2 className="text-section-title text-primary max-w-[14ch] text-balance">
             {title}
           </h2>
           <p className="text-lead text-muted-foreground max-w-md text-pretty">

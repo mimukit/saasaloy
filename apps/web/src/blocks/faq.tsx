@@ -12,7 +12,7 @@ import { interpolate } from "@web/lib/interpolate";
 //
 // Every word comes from ../content/landing.ts. Backticks in an answer render as <code>.
 //
-// The round 10 FAQ: a left-aligned `section-title` in `highlight`, then square bordered
+// The round 10 FAQ: a left-aligned `section-title` in `primary`, then square bordered
 // rows that share their borders. Each row opens on its chevron, the question in
 // `highlight` and the answer in `muted-foreground`. The section is two columns from `lg`:
 // the left one holds the repository drawing, the right one all of the above, so the
@@ -52,7 +52,7 @@ export function Faq({
     <section id={id} className="section-y">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:gap-16">
         <div>
-          <h2 className="text-section-title text-highlight reveal text-balance">
+          <h2 className="text-section-title text-primary reveal text-balance">
             {title}
           </h2>
           {description && (

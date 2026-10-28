@@ -18,7 +18,7 @@ import { interpolate } from "@web/lib/interpolate";
 //
 // The round 9/10 hero: the copy on the left and the application wireframe on the right
 // from `lg` (64rem); below it the drawing follows the copy at full width. The title's
-// first sentence is `foreground`, the second `highlight`.
+// first sentence is `foreground`, the second `primary`.
 //
 // Every word comes from ../content/landing.ts. Edit the copy there, not here.
 
@@ -55,7 +55,7 @@ export function Hero({
         <div className="flex flex-col gap-6">
           <h1 className="text-display blur-in lg:text-[3.25rem]">
             <span className="text-foreground block">{titleLead}</span>
-            <span className="text-highlight block">{titleAccent}</span>
+            <span className="text-primary block">{titleAccent}</span>
           </h1>
           <p className="text-lead text-muted-foreground blur-in max-w-md text-balance [--blur-in-delay:100ms]">
             {description}

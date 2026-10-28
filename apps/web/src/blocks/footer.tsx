@@ -63,7 +63,7 @@ export function Footer({
         <div className="flex flex-col gap-2">
           <a
             href="/"
-            className="text-highlight text-section-title w-fit font-semibold lowercase"
+            className="text-primary text-section-title w-fit font-semibold lowercase"
           >
             {siteName}
           </a>

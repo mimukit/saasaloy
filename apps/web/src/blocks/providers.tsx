@@ -34,7 +34,7 @@ export function Providers({
     <section id={id} className="section-y">
       <div className="section-container-wide">
         <div className="reveal flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
-          <h2 className="text-section-title text-highlight max-w-[22ch] text-balance">
+          <h2 className="text-section-title text-primary max-w-[22ch] text-balance">
             {title}
           </h2>
           <figure className="border-border bg-card w-full max-w-xs border font-mono text-sm">

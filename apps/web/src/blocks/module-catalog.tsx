@@ -78,7 +78,7 @@ export function ModuleCatalog({
       <div className="section-container-wide">
         <div className="grid gap-x-16 gap-y-8 lg:grid-cols-2 lg:grid-rows-[1fr_auto]">
           <div className="reveal min-w-0 lg:self-end">
-            <h2 className="text-section-title text-highlight text-balance">
+            <h2 className="text-section-title text-primary text-balance">
               {title}
             </h2>
             {description && (

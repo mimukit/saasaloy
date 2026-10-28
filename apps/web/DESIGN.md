@@ -104,22 +104,16 @@ components:
     backgroundColor: "{colors.dark-background}"
     textColor: "{colors.dark-foreground}"
   wordmark:
-    textColor: "{colors.highlight}"
+    textColor: "{colors.primary}"
     typography: "{typography.wordmark}"
-  wordmark-dark:
-    textColor: "{colors.dark-highlight}"
   hero-title:
     textColor: "{colors.foreground}"
     typography: "{typography.headline-display}"
   hero-title-highlight:
-    textColor: "{colors.highlight}"
-  hero-title-highlight-dark:
-    textColor: "{colors.dark-highlight}"
+    textColor: "{colors.primary}"
   section-title:
-    textColor: "{colors.highlight}"
+    textColor: "{colors.primary}"
     typography: "{typography.headline-section}"
-  section-title-dark:
-    textColor: "{colors.dark-highlight}"
   section-lead:
     textColor: "{colors.muted-foreground}"
     typography: "{typography.lead}"
@@ -228,7 +222,7 @@ This file covers the public site, the only app in `apps/web`. It is a fork of th
 
 Cobalt `primary` (#315fe8) is the one chromatic colour, and both themes use it for solid buttons with white labels. The light theme is pale paper (#f6f7f9) with navy text (#0b2253) and gray prose (#626b78). The dark theme is deep navy (#101722) with off-white text (#eef2f8), pale blue (#8fa8ff) and muted prose (#a9b5c7).
 
-`highlight` is the colour of section titles, the wordmark, technical labels and line art. It is cobalt in light and pale blue in dark, because cobalt on deep navy is too dark to read as text. The hero's first sentence uses `foreground`, and its second sentence uses `highlight`.
+Headings and the wordmark use `primary` in both themes: the hero's second sentence, every section title, and the navbar and footer wordmarks. In dark, cobalt on deep navy is 3.37:1, which passes WCAG AA for large text only, so `primary` is never the colour of body-size text. `highlight` is the colour of technical labels, links and line art. It is cobalt in light and pale blue in dark, because cobalt on deep navy is too dark to read at body size. The hero's first sentence uses `foreground`.
 
 The plan supplies the eight values above. The other roles are derived from them, so the palette has no colour of its own outside that set:
 
@@ -247,7 +241,7 @@ The site self-hosts two faces through `@fontsource` packages with `font-display:
 
 Headlines are bold with tight tracking. `text-display` is the hero's one `h1`, fluid from `2.5rem` to `4.5rem`. From 64rem, where the hero splits into copy and drawing, the title steps down to `3.25rem` (`lg:text-[3.25rem]` in `hero.tsx`), so it sets in three lines beside the drawing as the round 10 mockup does. That is the one size outside the scale. `text-section-title` is every section's `h2`, fluid from `2rem` to `3rem`. The token map records the largest size of each fluid step. `text-lead` is the sans paragraph under either title, in `muted-foreground`. Body copy uses `body-sm` through `body-lg`. Mono text uses `code-md` in the command field and the catalog rows, and `code-sm` in tabs, tags and diagram callouts.
 
-The wordmark is the lowercase word `saasaloy` in Geist, in `highlight`. The footer repeats it at section-title size.
+The wordmark is the lowercase word `saasaloy` in Geist, in `primary`. The footer repeats it at section-title size.
 
 ## Layout
 
