@@ -3,8 +3,9 @@ import { SourceSlabs } from "@web/illustrations/source-slabs";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 
 // Fully static, no script. The round 10 stages: the title, a short lead, then a vertical
-// list of numbered stages on a hairline, and the exploded stack of source slabs beside
-// it from `lg` (64rem), under it below that.
+// list of numbered stages on a hairline, and the exploded stack of source slabs under it
+// below `lg` (64rem). From `lg` the slabs move to the left of the list, so the page's
+// drawings alternate sides (round 12, option A).
 //
 // THE HIGHLIGHT IS CSS. The `stage-list` utility in ../styles/web.css reads the hovered
 // or keyboard-focused row through `:has()` on this <section>: it fills that row's marker
@@ -95,7 +96,7 @@ export function Stages({
 
         <SourceSlabs
           stages={items}
-          className="text-highlight mx-auto w-full max-w-md"
+          className="text-highlight mx-auto w-full max-w-md lg:order-first"
         />
       </div>
     </section>

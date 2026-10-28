@@ -251,7 +251,7 @@ The wordmark is the lowercase word `saasaloy` in Geist, in `highlight`. The foot
 
 ## Layout
 
-Every section is two columns on desktop: copy on the left, a line-art illustration on the right. The FAQ follows the same split, with the accordion on the left and a repository tree on the right. On mobile the columns stack, copy first.
+Every section is two columns on desktop, with copy in one column and a line-art illustration in the other. The illustration alternates sides down the page: right in the hero, left in stages, right in the catalog, left in providers, right in this site and left in the FAQ, where the repository tree sits beside the accordion. On mobile the columns stack, copy first.
 
 One container width lives in `web.css`: every section, the navbar and the footer use `section-container-wide` at `80rem`, with a `1.5rem` gutter. `section-y` is the one vertical rhythm between sections: `3rem` on small screens and `4rem` from `48rem` up, which keeps the page near the density of the round 10 mockup. A block uses these names and sets no width or section padding of its own.
 

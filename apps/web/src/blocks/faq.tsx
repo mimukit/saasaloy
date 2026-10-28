@@ -16,8 +16,9 @@ import { interpolate } from "@web/lib/interpolate";
 // The round 10 FAQ: a left-aligned `section-title` in `highlight`, then square bordered
 // rows that share their borders. Each row opens on its chevron, the question in
 // `highlight` and the answer in `muted-foreground`. The section is two columns from `lg`:
-// the left one holds all of the above, the right one the repository drawing. Below `lg`
-// the drawing follows the list.
+// the left one holds the repository drawing, the right one all of the above, so the
+// page's drawings alternate sides (round 12, option A). Below `lg` the drawing follows
+// the list.
 
 export interface FaqItem {
   /** Stable key, never the array position (see the content file). */
@@ -98,7 +99,7 @@ export function Faq({
           )}
         </div>
 
-        <RepositoryTree className="text-highlight mx-auto w-full max-w-xl lg:mt-24" />
+        <RepositoryTree className="text-highlight mx-auto w-full max-w-xl lg:order-first lg:mt-24" />
       </div>
     </section>
   );
