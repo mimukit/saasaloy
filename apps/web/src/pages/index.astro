@@ -57,7 +57,7 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
                                     plain selectable text.
   Every other block ships no JavaScript at all. The FAQ opens and closes with native
   <details>, the catalog filter and the stages highlight are CSS `:has()`, and all motion
-  is CSS. The footer adds one inline script that writes the current year. The theme
+  is CSS. The theme
   toggle sits inside the navbar and needs no island of its own: the pre-paint script
   Layout.astro emits drives it.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.

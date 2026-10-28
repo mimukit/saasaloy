@@ -10,3 +10,6 @@ export const siteName = "Saasaloy";
 
 /** The BCP 47 tag `<html lang>` declares. */
 export const locale = "en";
+
+/** The source repository, which every GitHub link and the JSON-LD `sameAs` build on. */
+export const repoUrl = "https://github.com/mimukit/saasaloy";

@@ -3,13 +3,8 @@
    own stylesheet: web.css for the landing page today, and any later app stylesheet the
    same way. apps/web/DESIGN.md records these values; change a value there and here together.
 
-   This is the file components.json names, so a shadcn preset merges into it. The
-   `dark` variant and the `@theme inline` mapping sit here rather than in globals.css on
-   purpose, and admin.css repeats both for the same reason: shadcn 4.21.0 merges a preset
-   in place only when the target file itself holds them. It does not follow the
-   `@import`, so with either one left in globals.css it appends a second
-   `@custom-variant dark`, or a second `@theme inline` with its own radius formula, to
-   this file. Keep them together here.
+   The `dark` variant and the `@theme inline` mapping sit here with the values, so one
+   file holds the whole brand. Keep them together here.
 
    This file imports the shared layer itself, so an app stylesheet needs one line,
    `@import "./brand.css";`, to get Tailwind, the base layer and the tokens in order.

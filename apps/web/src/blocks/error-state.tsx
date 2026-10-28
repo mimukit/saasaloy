@@ -11,16 +11,14 @@ import {
 import { errors } from "@web/content/errors";
 import { cn } from "@web/lib/utils";
 
-// The one error screen every app in this repo renders: the web app's 404 and 500 pages,
-// the admin app's not-found screen, and the admin app's error boundary. No app writes its
-// own error markup — a second copy is a second thing to restyle when the theme moves.
+// The one error screen the site renders: the 404 and 500 pages. No page writes its own
+// error markup — a second copy is a second thing to restyle when the theme moves.
 //
 // Fully static by default. No state, no effects, no `client:*` directive: an Astro page
 // renders `<ErrorState code="404" />` and ships zero JavaScript for it. The only thing
 // that can pull the browser in is a caller passing an action with `onClick` instead of
-// `href`, which is what the admin error boundary does for its retry. An .astro page must
-// never do that — Astro serializes island props, and a function does not survive the
-// crossing.
+// `href`. An .astro page must never do that — Astro serializes island props, and a
+// function does not survive the crossing.
 //
 // The look is apps/web/DESIGN.md's: one square bordered frame on the blueprint grid,
 // a muted icon, the status label in mono `code-sm`, a `headline-md` title, the

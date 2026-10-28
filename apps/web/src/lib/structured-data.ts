@@ -6,7 +6,9 @@
 // `review`, and the project has neither. No `FAQPage`: Google stopped FAQ rich results,
 // and the visible FAQ is already in the HTML. Every claim here must also be on the page.
 
-const REPO = "https://github.com/mimukit/saasaloy";
+import { repoUrl } from "@web/site";
+
+const REPO = repoUrl;
 const NPM = "https://www.npmjs.com/package/saasaloy";
 
 interface HomeGraphInput {

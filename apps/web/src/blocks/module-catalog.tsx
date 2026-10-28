@@ -21,7 +21,7 @@ import { cn } from "@web/lib/utils";
 // `data-*` attribute here.
 
 /** Tiles a tab shows before "Show all modules". The `module-catalog` utility hard-codes it too. */
-export const CATALOG_VISIBLE_ROWS = 8;
+const CATALOG_VISIBLE_ROWS = 8;
 
 type CatalogTab = "all" | (typeof CATALOG_TIERS)[number];
 

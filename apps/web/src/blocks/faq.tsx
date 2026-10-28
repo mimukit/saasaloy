@@ -9,7 +9,6 @@ import { interpolate } from "@web/lib/interpolate";
 
 // Fully static. Native `<details>` elements sharing one `name`, so the browser keeps a
 // single answer open, the list works with JavaScript off, and the block needs no island.
-// The vendored accordion in ../components/accordion.tsx stays for pages that want one.
 //
 // Every word comes from ../content/landing.ts. Backticks in an answer render as <code>.
 //
