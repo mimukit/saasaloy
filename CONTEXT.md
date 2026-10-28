@@ -2,6 +2,31 @@
 
 Ubiquitous language for Saasaloy — an open-source, composable SaaS accelerator (a CLI + module system, not a boilerplate). This is a glossary of what terms mean in this project; the settled *decisions* and their reasoning live in [`docs/adr/`](docs/adr/).
 
+## Overview
+
+### What it is
+An open-source CLI and module registry for SaaS projects on Cloudflare. `saasaloy init` scaffolds a small base, and `saasaloy add` copies each capability and feature into the project as source the owner keeps.
+
+### Who it is for
+Technical founders who want to test a SaaS idea before they build auth, billing and tenancy. Also the coding agents that build in a generated project, through its `AGENTS.md`, `DESIGN.md` and module skills.
+
+### The problem it solves
+Every SaaS needs the same parts (API, database, auth, admin, billing, email, jobs), and building them first uses up the time that idea validation needs. A boilerplate delivers all of them on day one, so the owner deletes code before testing the idea. See the README section [Why Saasaloy exists](README.md#why-saasaloy-exists).
+
+### Core capabilities
+- Scaffold a base with an Astro landing page and a `@repo/ui` design layer, and no services.
+- Add a module with its `dependsOn` chain resolved and installed first.
+- Swap a vendor at runtime through a provider module, with a local `-console` or `-memory` provider for offline work, or pick a database at `add` time through a driver module.
+- Collect every environment value into one gated key list, and deploy every Worker with one checked command.
+- Remove a module through its manifest, and update the base and modules with a merge plan for edited files.
+- Ship agent context in every project: `AGENTS.md`, `CLAUDE.md`, `DESIGN.md` and a skill per installed module.
+- Author a module with `saasaloy new`, and serve it from any GitHub repo that has a `modules/` directory.
+
+### Non-goals
+- No runtime library. A generated project imports nothing from a Saasaloy package.
+- No hosted service. The owner deploys the project to their own Cloudflare account.
+- No data migration. A provider swap lets a project start on a new vendor, and it moves no data already written.
+
 ## The product
 
 ### Saasaloy
@@ -9,11 +34,15 @@ An open-source **composable SaaS accelerator**: a CLI + module system that scaff
 _Avoid: boilerplate, starter template._
 
 ### Base
-The scaffold `saasaloy init` produces: `apps/web` (Astro) + `packages/ui` + `packages/tsconfig`, and nothing churny. It is inert on *functional* surfaces — no services, auth, database or network dependencies — which is where the anti-rot thesis actually bites. It is not bare, though: `packages/ui` owns the **design layer** (the Tailwind 4 theme, the vendored shadcn primitives, and the [blocks](#block) the landing page is composed from), because presentation dependencies rot aesthetically before they rot dangerously — a smaller blast radius than auth's, not an exemption from dependency auditing ([ADR 0022](docs/adr/0022-adr-design-layer-ships-in-the-base-2026-08-06.md)). Base files are recorded at `init` under the reserved module name `base` in `.saasaloy/manifest.json`, with a `base` record in `saasaloy-lock.json` naming the CLI version and template hash, so `outdated`, `update` and `doctor` treat the base like a module that ships with the CLI ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). Files the template declares as **seed** are recorded but never updated.
+The scaffold `saasaloy init` produces: `apps/web` (Astro), `packages/ui`, `packages/config`, `packages/env`, `packages/tooling` and `packages/tsconfig`, and nothing churny. It is inert on *functional* surfaces — no services, auth, database or network dependencies — which is where the anti-rot thesis actually bites. It is not bare, though: `packages/ui` owns the **design layer** (the Tailwind 4 theme, the vendored shadcn primitives, and the [blocks](#block) the landing page is composed from), because presentation dependencies rot aesthetically before they rot dangerously — a smaller blast radius than auth's, not an exemption from dependency auditing ([ADR 0022](docs/adr/0022-adr-design-layer-ships-in-the-base-2026-08-06.md)). Base files are recorded at `init` under the reserved module name `base` in `.saasaloy/manifest.json`, with a `base` record in `saasaloy-lock.json` naming the CLI version and template hash, so `outdated`, `update` and `doctor` treat the base like a module that ships with the CLI ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). Files the template declares as **seed** are recorded but never updated.
 
 ### Block
-A marketing-page composition in `packages/ui/src/blocks/` — `navbar`, `hero`, `feature-grid`, `pricing-table`, `faq`, `cta`, `footer` — each entirely self-contained in one props-driven `.tsx` with its own copy defaults, and reachable only at its own `@repo/ui/blocks/<name>` subpath (never re-exported from the package root). A block composes vendored shadcn primitives; a primitive is the single control it composes. Filenames are semantic kebab-case, not shadcn's registry-style `{category}-{NN}` numbering. A [module](#module) that ships UI ships it as a block too, at `@ui/blocks/<name>.tsx`, and the owner places it by hand ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)); the base blocks read their copy from `content/landing.ts`, a module's block carries its own. A block is presentational: one that has to reach the network takes a function prop, and a small island under `apps/web/src/components/` supplies it, so `packages/ui` imports no api package.
-_Avoid: section — the `sections/*.astro` glob a module wrote into was retired by ADR 0030. Avoid component — that's a primitive._
+A marketing-page composition in `packages/ui/src/blocks/` (for example `navbar`, `hero`, `pricing-table`, `faq` and `footer`), each entirely self-contained in one props-driven `.tsx` with its own copy defaults, and reachable only at its own `@repo/ui/blocks/<name>` subpath (never re-exported from the package root). A block composes vendored shadcn primitives; a primitive is the single control it composes. Filenames are semantic kebab-case, not shadcn's registry-style `{category}-{NN}` numbering. A [module](#module) that ships page UI ships it as a block under `@ui/blocks/`, and the owner places it by hand ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)); the base blocks read their copy from `content/landing.ts`, a module's block carries its own. The `shell` and `command` modules also ship [containers](#container) and components. A block is presentational: one that has to reach the network takes a function prop, and a small island under `apps/web/src/components/` supplies it, so `packages/ui` imports no api package.
+_Avoid: section, which is a [config section](#section); the `sections/*.astro` glob was retired by ADR 0030. Avoid component, which is a primitive._
+
+### Container
+A shell or layout in `packages/ui/src/containers/` that places blocks and components on a page. It takes data, links and callbacks as props. The base ships none, and `shell` adds `containers/shell/`.
+_Avoid: layout component, wrapper._
 
 ### Wire-up
 The manual step a [block](#block)-shipping module leaves for the owner: the import line and the tag that put the module's UI on a page (the app-side island, when the block takes injected behaviour). It lives in a required `## Wire-up` section of the module's skill, which is the only place the steps exist — `saasaloy add` prints a pointer to it, never the steps, and never edits a page ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)). `saasaloy remove` deletes the block file and leaves the wire-up standing, because nothing recorded where it went.
@@ -23,10 +52,17 @@ _Avoid: placement, install step._
 A unit of capability or feature installed by `saasaloy add`.
 
 ### Capability module
-A module that scaffolds an app or package **and** establishes convention-based extension points: `api`, `database`, `auth`, `admin`, `email`, `sms`, and the Phase-3 set (`queue`, which absorbs `cron` and `workflows`, plus `storage`, `kv`, `realtime`, `ai`, `observability`). A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)). A capability with more than one possible implementation scaffolds only the neutral part and leaves the rest to a [provider module](#provider-module) or a [driver module](#driver-module); the system-of-record test picks which ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `database` splits from `database-d1` and `database-postgres` on the driver side ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md)), `email` from `email-cloudflare` and `email-console` on the provider side.
+A module that scaffolds an app or package **and** establishes convention-based extension points: for example `api`, `database`, `auth`, `admin`, `app`, `shell`, `email`, `queue`, `storage`, `kv` and `billing`. A capability built on a vendor SDK encapsulates it: the scaffolded workspace owns the npm dependency and exports project-facing utilities; no other workspace imports the vendor package directly ([ADR 0020](docs/adr/0020-adr-capability-owns-its-vendor-packages-2026-07-24.md)). A capability with more than one possible implementation scaffolds only the neutral part and leaves the rest to a [provider module](#provider-module) or a [driver module](#driver-module); the system-of-record test picks which ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)). `database` splits from `database-d1` and `database-postgres` on the driver side ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md)), `email` from `email-cloudflare`, `email-plunk` and `email-console` on the provider side.
 
 ### Feature module
-A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `billing`, `teams`, `feedback`, `usage-metering`, `api-keys`, `file-uploads`, …
+A module that drops files into a capability's conventions and declares its `dependsOn`: `waitlist`, `teams`, `multitenant`, `api-keys`, `file-uploads`, `feature-flags`, `command`, …
+
+### Stage
+One step in a SaaS project's life, and the step that usually earns a module: `validate`, `mvp`, `teams`, `money` or `scale`, in that order. A descriptor names it in its `stage` field (`MODULE_STAGES` in `packages/cli/src/lib/schema.ts`), and `saasaloy list` shows it. The README stage table maps each stage to the modules it adds.
+_Avoid: phase. Avoid tier, which is the module kind (capability, feature, provider, driver)._
+
+### Needs
+A descriptor's list of what a module requires outside the code: `cloudflare-paid`, `stripe`, `domain` or `vendor-account` (`MODULE_NEEDS` in `packages/cli/src/lib/schema.ts`).
 
 ### `shell`
 The capability that owns the app frame every signed-in app renders (layout, nav, user menu and theme toggle) and the primitives, page blocks and `shell.css` tokens those apps compose, under `@repo/ui/*/shell`. It holds no auth logic, so each app keeps its own guard ([ADR 0047](docs/adr/0047-adr-the-signed-in-product-lives-in-an-app-module-on-a-shared-shell-2026-10-21.md)).
@@ -57,11 +93,11 @@ The product word for the `teams` feature module, which adds Better Auth organiza
 _Avoid: using team to mean an organization subdivision unless the nested plugin feature is enabled later._
 
 ### Provider module
-A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-console`, `sms-console`, `sms-khudebarta`, `payment-console`, `payment-manual`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. The authoring guide is `.agents/skills/create-provider/`. Several providers coexist in one project and `<CAP>_PROVIDER` picks between them at runtime, with no fallback in either direction. **A three-question test decides the shape**, not the word "stateless": a capability takes providers when the project owns neither the schema nor the migrations, and either a swap moves no data, or the alternate implementation *adds* one file where a [driver module](#driver-module) would *replace* files the core owns. The third question outranks the second, which is why `storage` takes providers although a swap copies every object by hand ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md), amended by [ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md); the stateless/stateful wording of [ADR 0001](docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment no longer decides). A provider promises only that a project can *start* on a different vendor. It promises no migration of data already written. The one-file rule covers the *runtime* surface only: a provider that needs a Workers binding may carry several descriptor patches, and it registers any [handler set](#handler-set) through `apps/api/src/worker.ts`, never through the deploy tooling.
+A module supplying **one implementation of a capability's provider interface**: `email-cloudflare`, `email-plunk`, `email-console`, `sms-console`, `sms-khudebarta`, `payment-console`, `payment-manual`, and the planned `email-resend` and `sms-twilio`. It carries a single file into the capability's `providers/` folder plus the patch that registers it, and it owns the descriptor surface that differs per provider — a binding, an npm dependency, a secret. `sms` shows the surface can be empty on one side and still worth the module: it has no Cloudflare-native provider at all, because Cloudflare has no SMS product. The authoring guide is `.agents/skills/create-provider/`. Several providers coexist in one project and `<CAP>_PROVIDER` picks between them at runtime, with no fallback in either direction (except `logger`, where an unset `LOGGER_PROVIDER` selects the first registered provider). **A three-question test decides the shape**, not the word "stateless": a capability takes providers when the project owns neither the schema nor the migrations, and either a swap moves no data, or the alternate implementation *adds* one file where a [driver module](#driver-module) would *replace* files the core owns. The third question outranks the second, which is why `storage` takes providers although a swap copies every object by hand ([ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md), amended by [ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md); the stateless/stateful wording of [ADR 0001](docs/adr/0001-adr-all-in-on-cloudflare-2026-07-22.md)'s 2026-08-04 amendment no longer decides). A provider promises only that a project can *start* on a different vendor. It promises no migration of data already written. The one-file rule covers the *runtime* surface only: a provider that needs a Workers binding may carry several descriptor patches, and it registers any [handler set](#handler-set) through `apps/api/src/worker.ts`, never through the deploy tooling.
 _Taxonomy wart, on purpose: a provider module is typed `saasaloy:feature`, because `registry-item.schema.json` constrains `type` to `saasaloy:capability | saasaloy:feature`. It isn't a feature in the sense above — it adds no user-facing behavior. A third tier would be a descriptor-format change, and one wart is cheaper than that._
 
 ### Driver module
-A module supplying **one of several mutually exclusive implementations of a capability whose records the project owns**: `database-d1` and `database-postgres`, and the API-key owners `api-keys-organization` and `api-keys-user` ([ADR 0055](docs/adr/0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)). The deciding difference from a [provider module](#provider-module) is a file one: a driver **replaces** files the capability would otherwise own (`src/client.ts`, `drizzle.config.ts`, `tsconfig.json`), carries scaffolds of its own, and ships its own skill folder, where a provider **adds** one file to `providers/` and replaces none ([ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)). Two drivers write the same paths, so they cannot coexist in one build, and that is what `conflictsWith` enforces. And unlike a provider, **exactly one** is ever installed, never zero and never two. Both halves are declared in descriptors and enforced by `saasaloy add`, never selected by a runtime env var: each driver names its siblings in `conflictsWith`, and the capability names its drivers in `requiresOneOf` so the core cannot land without one ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md) and its 2026-08-31 amendment).
+A module supplying **one of several mutually exclusive implementations of a capability whose records the project owns**: `database-d1` and `database-postgres`, and the API-key owners `api-keys-organization` and `api-keys-user` ([ADR 0055](docs/adr/0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)). The deciding difference from a [provider module](#provider-module) is a file one: a driver **replaces** files the capability would otherwise own (`src/client.ts`, `drizzle.config.ts`, `tsconfig.json`), and a database driver also carries a scaffold and a skill folder of its own, where a provider **adds** one file to `providers/` and replaces none ([ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)). Two drivers write the same paths, so they cannot coexist in one build, and that is what `conflictsWith` enforces. And unlike a provider, **exactly one** is ever installed, never zero and never two. Both halves are declared in descriptors and enforced by `saasaloy add`, never selected by a runtime env var: each driver names its siblings in `conflictsWith`, and the capability names its drivers in `requiresOneOf` so the core cannot land without one ([ADR 0026](docs/adr/0026-adr-database-driver-split-2026-08-28.md) and its 2026-08-31 amendment).
 _Avoid: adapter, dialect module. A driver is typed `saasaloy:feature` for the same schema reason a provider is._
 
 ### Backend (development database)
@@ -73,7 +109,7 @@ The run of comment lines `db:setup` writes to `apps/api/.env.db`, naming the [ba
 _Avoid: lock file, manifest. Nothing machine-owned at the repo root records it, and it is per checkout, never committed._
 
 ### Convention-based extension point
-An auto-discovery folder or barrel a module drops into without patching another module's internals — `database`'s schema barrel, and the proposed `consumers/`, `scheduled/`, `uploads/` folders. These are what make granular modules safe. Two of them are gone: `api`'s `routes/` became a [registration table](#registration-table) ([ADR 0028](docs/adr/0028-adr-routes-register-by-chained-route-patch-2026-08-28.md)), and `apps/web`'s `sections/*.astro` glob became a [block](#block) plus a manual [wire-up](#wire-up) ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)). Both went for the same kind of reason: a scan buys authoring convenience and gives the consumer nothing it can name — a type in one case, a position in the other.
+An auto-discovery folder or barrel a module drops into without patching another module's internals — `database`'s schema barrel. These are what make granular modules safe. Two of them are gone: `api`'s `routes/` became a [registration table](#registration-table) ([ADR 0028](docs/adr/0028-adr-routes-register-by-chained-route-patch-2026-08-28.md)), and `apps/web`'s `sections/*.astro` glob became a [block](#block) plus a manual [wire-up](#wire-up) ([ADR 0030](docs/adr/0030-adr-module-ui-ships-as-a-ui-package-block-2026-09-02.md)). Both went for the same kind of reason: a scan buys authoring convenience and gives the consumer nothing it can name — a type in one case, a position in the other.
 _Avoid: extension hook._
 
 ### Registration table
@@ -109,7 +145,7 @@ The answer to "may this [billable subject](#billable-subject) do this", derived 
 _Avoid: permission, role — those are auth's, and they answer "who are you", not "what did you pay for"._
 
 ### Projection table
-A table the project owns, queries and migrates whose rows are a **copy** of a record some vendor holds: `billing_subscriptions` and `billing_events` are the first two. It is written only by the webhook path, keyed by the vendor's own ids, and rebuildable by replaying events, which is why the capability that owns it still takes [provider modules](#provider-module) — [ADR 0033](docs/adr/adr-0033-transient-state-capabilities-take-providers-2026-09-08.md)'s first question says drivers, its second says providers, and the second wins because a vendor swap re-subscribes customers instead of moving rows ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
+A table the project owns, queries and migrates whose rows are a **copy** of a record some vendor holds: `billing_subscriptions` and `billing_events` are the first two. It is written only by the webhook path, keyed by the vendor's own ids, and rebuildable by replaying events, which is why the capability that owns it still takes [provider modules](#provider-module) — [ADR 0033](docs/adr/0033-adr-transient-state-capabilities-take-providers-2026-09-08.md)'s first question says drivers, its second says providers, and the second wins because a vendor swap re-subscribes customers instead of moving rows ([ADR 0034](docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)).
 _Avoid: cache, mirror. A cache may be dropped without consequence; a projection is queried on every request and is rebuilt from the vendor, not from the project._
 
 ### Payment
@@ -143,16 +179,10 @@ _Avoid: namespace, group. A section never reads another section._
 `packages/config/src/project.ts`, the one file in `packages/config` a project owner is expected to edit, and a declared seed file so `saasaloy update` never rewrites it ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)). It is typed as a partial of the composed shape, so a key no installed [section](#section) defines fails `typecheck`. The merge is one level below the section: a leaf value is replaced, a nested record or an array is replaced whole.
 _Avoid: local config, overrides file, user config._
 
-### Proof module
-A feature module whose real job is to validate that the machinery generalizes: *first proof* = `waitlist`, *hard proof* = `billing`, *cheapest proof* = `feedback` (zero new capability).
-
-### Dependency leverage
-The Phase-3 prioritization axis: a capability's rank equals how many downstream features it unblocks; cheapest-to-scaffold breaks ties.
-
 ## Environment values
 
 ### Service
-A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and `saasaloy add api` appends its own with a `const-array` patch.
+A workspace that reads a `.env` at runtime or at build time: `api`, `web`, `admin`, `app`. The name is the workspace directory, not the module that installed it. One service has no workspace and no file: `deploy` holds the Cloudflare credentials `pnpm deploy:production` loads in memory, and `env:setup` writes nothing for it. `packages/env/src/services.ts` holds the table; the base seeds the `web` and `deploy` rows and the `api`, `admin` and `app` modules each append their own with a `const-array` patch.
 _Avoid: "app" as a word for any service: `app` is the name of one service, the customer SPA at `apps/app`. `deploy` is a service and is not an app, and `packages/*` holds no service at all._
 
 ### Key list
@@ -194,7 +224,7 @@ _Avoid: version tag, and deploy tag for this._
 ## Object storage
 
 ### Object
-A blob of bytes plus its metadata, held by whichever [provider module](#provider-module) `STORAGE_PROVIDER` selects and addressed by its [object key](#object-key). The `storage` capability moves objects and knows nothing else about them: no row, no owner, no tenant. The **record** of an object is a separate thing, a `storage_object` row the `file-uploads` feature owns and reads only through `@db/repositories/objects.ts` ([ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)). The two can disagree, which is why `complete` verifies the object's real size against the row, and why deleting a record is a three-state soft delete rather than one write.
+A blob of bytes plus its metadata, held by whichever [provider module](#provider-module) `STORAGE_PROVIDER` selects and addressed by its [object key](#object-key). The `storage` capability moves objects and knows nothing else about them: no row, no owner, no tenant. The **record** of an object is a separate thing, a `storage_objects` row the `file-uploads` feature owns and reads only through `@db/repositories/objects.ts` ([ADR 0037](docs/adr/0037-adr-an-alternate-implementation-that-adds-one-file-is-a-provider-2026-09-08.md)). The two can disagree, which is why `complete` verifies the object's real size against the row, and why deleting a record is a three-state soft delete rather than one write.
 _Avoid: file (that is the user's word for the record), blob, asset._
 
 ### Object key
@@ -202,7 +232,7 @@ The full path an [object](#object) is stored under, always built by `buildKey({ 
 _Avoid: path, filename, object name._
 
 ### Upload target
-What `createUploadUrl` returns: `{ url, method, headers, expiresAt, direct }`, everything a client needs to PUT one object once. `direct: true` is a [presigned](#presign) vendor URL the browser writes to without touching the Worker. `direct: false` is a URL to the proxy route `packages/storage` ships, which streams the body through the binding. The caller does the same PUT either way, which is what lets `storage-memory` and an R2 bucket with no API token both work. `createDownloadUrl` returns the mirror of it. A target expires in 5 minutes for upload and 1 hour for download, and `expiresIn` is clamped at 24 hours.
+What `createUploadUrl` returns: `{ url, method, headers, expiresAt, direct }`, everything a client needs to PUT one object once. `direct: true` is a [presigned](#presign) vendor URL the browser writes to without touching the Worker. `direct: false` is a URL to the `/storage` proxy route the `storage` module adds to `apps/api`, which streams the body through the binding. The caller does the same PUT either way, which is what lets `storage-memory` and an R2 bucket with no API token both work. `createDownloadUrl` returns the mirror of it. A target expires in 5 minutes for upload and 1 hour for download, and `expiresIn` is clamped at 24 hours.
 _Avoid: signed URL (that is only the `direct: true` case), upload link._
 
 ### Presign
@@ -230,13 +260,17 @@ _Avoid: owner (an organization base role), tenant principal._
 The resource-and-action pairs a user-owned key may carry, declared by the project in `API_KEY_SCOPES` in `packages/auth/src/api-key-scopes.ts`. It is the ceiling at issue time, the user-mode stand-in for the creator's statements ([ADR 0055](docs/adr/0055-adr-an-api-key-owner-is-a-driver-chosen-at-add-time-2026-10-22.md)).
 _Avoid: key permissions (that is the `permissions` column a key holds), scope list._
 
+### Statement
+One resource mapped to the actions allowed on it, such as `project: ["create", "read"]`. The vocabulary is declared in `packages/auth/src/access.ts`, and a role or an API key carries a resolved set of statements.
+_Avoid: permission entry, grant._
+
 ### Credential resolver
 A module's answer to "this request carries my kind of credential, and here is the [tenant](#tenant) it resolves to". It is an entry in the `tenantResolvers` [registration table](#registration-table) in `packages/auth/src/tenant.ts`, with a synchronous `claims(headers)` and an async `resolve(c)`. `claims` asks whether the credential is mine, never whether it is valid: once a resolver claims a request, `resolve` either returns a tenant or throws, and the session cookie is never consulted. That is what stops a revoked API key from falling back to a cookie riding along with it. `api-keys-organization` registers the one resolver that ships, for `Authorization: Bearer`. `api-keys-user` has no resolver table and reads the bearer header in `requireCaller`.
 _Avoid: auth strategy, credential provider (a [provider module](#provider-module) is a different thing)._
 
 ### Permissions
-The role-based access control (RBAC) model this project runs: the resource-and-action vocabulary in `packages/auth/src/access.ts`, the [base roles](#base-role) and [custom roles](#custom-role) built from it, the pure `can(principal, permissions)` rule, and the `requirePermission(c, permissions)` gate a route throws on. `teams` ships the vocabulary, the rule and the lock, because it owns the `organization_roles` table; `multitenant` ships the gate and the `/roles` screen, because it owns the request path. `rbac` named a module until 2026-09-20 and now names only the model.
-_Avoid: authorization (that also covers the site roles under [`superadmin` against `admin`](#superadmin-against-admin)), ACL._
+The role-based access control (RBAC) model this project runs: the resource-and-action vocabulary in `packages/auth/src/access.ts`, the [base roles](#base-role) and [custom roles](#custom-role) built from it, the pure `can(principal, permissions)` rule, and the `requirePermission(c, permissions)` gate a route throws on. `teams` ships the vocabulary, the rule and the lock, because it owns the `organization_roles` table; `multitenant` ships the gate and the `/roles` screen, because it owns the request path.
+_Avoid: authorization (that also covers the site roles under [`superadmin` against `admin`](#superadmin-against-admin)), ACL, `rbac` as a module name._
 
 ### Base role
 One of the three organization roles this project declares in `packages/auth/src/access.ts`: `owner`, `admin`, `member`. Their statements are compiled in, so an operator cannot rename, re-scope or delete one. `roleLockGuard`, which ships with `teams`, refuses `create-role`, `update-role` and `delete-role` on any of the three names, whatever permission the caller holds.
@@ -246,7 +280,7 @@ _Avoid: default role, built-in role._
 An organization role an operator creates at runtime, stored as an `organization_roles` row and resolved by `loadStatements` alongside the base roles. It carries only statements declared in `access.ts`, so a custom role can narrow or recombine the vocabulary and never extend it. Deleting one is refused while a member still holds it.
 
 ### `superadmin` against `admin`
-Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, the only one that may change an account in the [admin group](#admin-session) (the [rank guard](#rank-guard)), and the only one that crosses organizations, by sending `x-organization-id` on the admin session. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.
+Two site roles, ranked. `admin` is the site operator; `superadmin` is the one role above it, the only one that may change an account in the [admin group](#admin-app-role) (the [rank guard](#rank-guard)), and the only one that crosses organizations, by sending `x-organization-id` on the admin session. Both are named in the Better Auth admin plugin's `adminRoles`, so the plugin's own endpoints admit either. Neither grants anything *inside* a tenant on its own: a site `admin` is an ordinary member on every tenant route, and only a `superadmin` short-circuits `can()`. The first account to sign up on an empty user table gets `superadmin`.
 _Avoid: root, owner (an organization [base role](#base-role) is called owner)._
 
 ### Client session
@@ -268,7 +302,7 @@ _Avoid: role hierarchy, admin lock._
 ## Registry & applier
 
 ### Applier
-The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default (the `readFile → fetch` swap has landed — [ADR 0012](docs/adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)); a local checkout is a dev/offline override.
+The engine behind `saasaloy add`: it obtains a module descriptor from a [registry source](#registry-source), resolves file targets through the alias map, topologically sorts prerequisite modules, and applies files + npm deps + config patches — all `--dry-run`/`--diff`-able. Descriptors are fetched from a remote GitHub repo by default ([ADR 0012](docs/adr/0012-adr-remote-first-registry-repo-is-the-registry-2026-07-23.md)); a local checkout is a dev/offline override.
 _Avoid: registry (the applier is the engine; the "registry" is a [registry source](#registry-source))._
 
 ### Registry source
@@ -291,7 +325,7 @@ The descriptor field pinning the skill folder(s) a module ships: `{ "skills": ["
 The consumer manifest in a generated project: the alias map plus the list of installed modules (which drives `dependsOn` resolution). A module enters `installed` only when the run that applied it wrote every file it planned, because bookkeeping describes disk. A half-applied module stays out of the list and a plain re-run of `saasaloy add` re-plans and completes it ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
 
 ### `.saasaloy/manifest.json`
-Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Committed `AGENTS.md`/`CLAUDE.md` are **not** managed entries. An entry means those bytes are on disk ([ADR 0006](docs/adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)), which is why entries for a module that `saasaloy.json` does not list as installed mean a partial apply, and `saasaloy doctor` reports it as one ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
+Managed-file tracking: each file or skill a module applied, recorded with a content hash and its owning module, so update and `remove` know exactly what to undo. Base template files, `AGENTS.md` and `CLAUDE.md` included, are entries owned by the `base` module ([ADR 0032](docs/adr/0032-adr-the-base-carries-provenance-and-updates-through-the-module-path-2026-09-06.md)). An entry means those bytes are on disk ([ADR 0006](docs/adr/0006-adr-copy-in-updates-manifest-hash-tracking-2026-07-22.md)), which is why entries for a module that `saasaloy.json` does not list as installed mean a partial apply, and `saasaloy doctor` reports it as one ([ADR 0031](docs/adr/0031-adr-re-run-is-recovery-for-a-partial-add-2026-09-03.md)).
 
 ### Testing mode
 The one value in `saasaloy.json` under `testing.mode` that says how much testing a project wants: `off`, `tests-after` or `tdd`. An absent key reads as `off`, so testing is opt-in. `off` ships no module test file; `tests-after` ships them and asks each change for its test; `tdd` ships them and asks for the test first. `init --testing=<mode>` sets it, and `saasaloy testing <mode>` changes it, rewriting the marked block in the root `AGENTS.md` in the same run. The base skill `saasaloy-testing` maps each kind of change to its test ([ADR 0053](docs/adr/0053-adr-one-testing-mode-in-saasaloy-json-and-a-marked-agents-md-block-2026-10-23.md)).
@@ -302,7 +336,13 @@ Machine-owned provenance at the consumer root: per installed module, its [regist
 _Avoid: putting resolved SHAs in `saasaloy.json`._
 
 ### File aliases
-The descriptor's path targets: `@web` / `@api` / `@db` / `@ui` / `@admin` / `@app`.
+The descriptor's path targets: `@<name>` keys mapped to workspace paths in `saasaloy.json`. The base seeds `@web`, `@ui`, `@env` and `@config`, and each module [scaffold](#scaffold) adds its own, such as `@api` and `@db`.
+
+### Ledger
+The three files that record what Saasaloy wrote into a project: `.saasaloy/manifest.json`, `saasaloy.json` and `saasaloy-lock.json`. They describe what is on disk even after a failed write, and only `lib/ledger.ts` writes them.
+
+### Scaffold
+A descriptor's `scaffolds[]` entry: a new workspace a capability creates, with files relative to that workspace and the aliases it registers into `saasaloy.json` ([ADR 0013](docs/adr/0013-adr-module-dependency-ownership-and-scaffolds-files-split-2026-07-23.md)).
 
 ### Conditional file entry (`onlyWith`)
 A `files[]` or `scaffolds[].files[]` entry that installs **only when a named module is in the resolved install set** — this run's dependency graph plus what `saasaloy.json` and the lock say is already there. Two entries may share one `target` under disjoint conditions, which is how `auth` and `waitlist` ship a `sqlite-core` and a `pg-core` variant of the same table file and let the installed [driver module](#driver-module) pick. `listModuleFiles` (`packages/cli/src/lib/applier.ts`) filters before either engine plans, so the unchosen variant never reaches the lock, the manifest or drift detection. A target whose entries are all conditional and none match is a plan-time error, not a silent skip.
@@ -313,9 +353,9 @@ A `files[]`, `scaffolds[].files[]` or `patches` entry that ships **only while it
 _Avoid: optional file, test flag. `onlyWith` picks one variant of a target; `when` decides whether an entry ships at all._
 
 ### Config-patch engine
-The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings.
+The AST-codemod layer for the structural ~10% of edits: `magicast` for TS/JS module edits (e.g. a Better Auth plugin array) and `jsonc-parser` for `wrangler.jsonc` bindings. The patch kinds are `plugin-array`, `const-array`, `chained-route`, `nav-entry`, `wrangler-binding`, `package-json-dependency`, `package-json-script` and `drizzle-column`.
 
-### Copy-in update (`--diff`)
+### Copy-in update (`saasaloy update`)
 The update path for existing projects: hash a managed file — match → clean overwrite; drift (hand-edited) → route to AI-merge rather than clobber. Two records override the hash and force the merge path: an [adopted entry](#adopted-entry) and an [owned file](#owned-file) ([ADR 0034](docs/adr/0034-adr-update-never-writes-a-file-it-did-not-write-2026-09-09.md)).
 _Avoid: versioned-package update._
 
@@ -331,7 +371,7 @@ _Avoid: user file, editable file._
 A base-template file the owner is meant to rewrite — `apps/web/DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts. A seed the template moved stays in `retiredSeedFiles`, so a project made before the move keeps its copy at the old path instead of losing it to a removal.
 
 ### AI-assisted merge
-The structured, agent-consumable merge plan `--diff` emits for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
+The structured, agent-consumable merge plan `saasaloy update` writes to stdout, or to `--out <path>`, for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
 
 ## AI-agent-native
 
@@ -351,7 +391,7 @@ Agent guidance copied by `init` because every generated project needs it. It dif
 The first 12 hexadecimal characters of the SHA-256 hash for an app's theme file, recorded in that app's `DESIGN.md`: `packages/ui/src/styles/brand.css` for `apps/web/DESIGN.md`. A mismatch proves that the design contract can be stale without inspecting its prose.
 
 ### Module skill (skill folder)
-A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` **copies** into the consumer's `.claude/skills/saasaloy-<name>/` and records in the manifest. Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
+A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasaloy-<name>/SKILL.md`) that `saasaloy add` writes as committed files under `.agents/skills/saasaloy-<name>/`, links `.claude/skills/saasaloy-<name>` to it, and records both in the manifest ([ADR 0015](docs/adr/0015-adr-module-skills-agents-canonical-claude-symlink-2026-07-24.md)). Every module skill is **`saasaloy-`-prefixed** (folder and frontmatter `name` alike) so it never collides with a user's own installed skills.
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
 
 ### Product brief
@@ -363,7 +403,7 @@ A build in which an agent works from a complete product brief that carries `auto
 _Avoid: AFK mode, autopilot. `afk` is only the field value._
 
 ### Build log
-`docs/build-log.md` in a generated project: each stage of an unattended run with its commit, each step left for a human under "Blocked", and the point where a new session resumes.
+`docs/build-log.md` in a generated project: each stage of an unattended run with its commit, what stopped the run under `## Blocked`, each step left for a person under `## Left for a human`, and the point where a new session resumes.
 _Avoid: progress file, stop report._
 
 ### MVP bar
@@ -395,7 +435,7 @@ _Avoid: downtime, outage. Maintenance mode is deliberate._
 ## The two repos
 
 ### Tool repo
-This repo (package `saasaloy-monorepo`): it develops and maintains the CLI, the base template, and the modules. It tracks its own `AGENTS.md`/`CLAUDE.md` directly and **never self-syncs**; its own dev skills are hosted `.agents/`-canonical with a `.claude/skills/` symlink.
+This repo (package `saasaloy-cli`): it develops and maintains the CLI, the base template, and the modules. It tracks its own `AGENTS.md`/`CLAUDE.md` directly and **never self-syncs**; its own dev skills are hosted `.agents/`-canonical with a `.claude/skills/` symlink.
 _Avoid: generated project._
 
 ### Generated project
@@ -403,3 +443,7 @@ The downstream SaaS repo produced by `saasaloy init`.
 
 ### `.dev`
 The git-ignored sandbox directory where the CLI is exercised, so running `init`/`add` never mutates the tool repo.
+
+### Public site
+Saasaloy's own marketing site at `apps/web` in the tool repo, the `@saasaloy/web` package in the root pnpm workspace. It started as a copy of the base landing page, and it is a fork: `saasaloy update` never reaches it ([plan 0091](docs/plans/0091-plan-public-site-and-brand-2026-10-26.md)).
+_Avoid: website, landing page, docs site. The landing page is the base page every generated project gets, and `docs-site` is a separate catalog module._

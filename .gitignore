@@ -129,6 +129,9 @@ next-env.d.ts
 .wrangler/
 .nitro/
 
+# Lighthouse CI reports (apps/web gate:lighthouse)
+.lighthouseci/
+
 # Vite
 vite.config.js.timestamp-*
 vite.config.ts.timestamp-*
