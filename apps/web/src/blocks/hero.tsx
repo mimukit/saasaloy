@@ -14,13 +14,18 @@ import { interpolate } from "@web/lib/interpolate";
 // draws a static field: the command stays selectable and the page ships no JavaScript
 // for it. The motion is CSS: `blur-in` from ../styles/web.css, staggered with
 // `--blur-in-delay`, and still under reduced motion. The drawing plays its own entry
-// through `drawing-load`.
+// through `drawing-load`, then loops. LOOP_SCRIPT, the one script the hero ships, marks
+// the drawing `data-offscreen` while it is out of view, and the CSS pauses every loop in
+// it then. Without JavaScript the loops never pause.
 //
 // The round 9/10 hero: the copy on the left and the application wireframe on the right
 // from `lg` (64rem); below it the drawing follows the copy at full width. The title's
 // first sentence is `foreground`, the second `primary`.
 //
 // Every word comes from ../content/landing.ts. Edit the copy there, not here.
+
+const LOOP_SCRIPT =
+  'for(const e of document.querySelectorAll("[data-loop-in-view]"))new IntersectionObserver(([n])=>e.toggleAttribute("data-offscreen",!n.isIntersecting)).observe(e)';
 
 export interface HeroLink {
   /** `github` draws the GitHub mark, any other id the book icon. */
@@ -91,6 +96,8 @@ export function Hero({
         </div>
 
         <AppWireframe className="text-highlight drawing-load w-full" />
+        {/* oxlint-disable-next-line react/no-danger -- LOOP_SCRIPT is a constant above; no input reaches it. */}
+        <script dangerouslySetInnerHTML={{ __html: LOOP_SCRIPT }} />
       </div>
     </section>
   );

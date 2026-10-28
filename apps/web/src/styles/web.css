@@ -86,27 +86,159 @@
     }
   }
 
+  /* The hero's loops. `float` runs `alternate`, so a part rises (or sinks) by
+     `--float-y` and comes back. The sign-in keyframes share one 6s pass: in ms from
+     the start of a pass, the caret types the email over 0-660 and the password over
+     750-1470, the pointer clicks at 1600, the packet travels over 1800-3800, and the
+     form clears at 5400. */
+  @keyframes float {
+    to {
+      translate: 0 calc(var(--float-y, -5) * 1px);
+    }
+  }
+
   @keyframes packet {
-    0% {
+    0%,
+    30% {
       offset-distance: 0%;
       opacity: 0;
     }
 
-    4%,
-    66% {
+    31.5%,
+    60% {
       opacity: 1;
     }
 
-    70%,
+    63.3%,
     100% {
       offset-distance: 100%;
       opacity: 0;
     }
   }
 
-  @keyframes blink {
-    50% {
+  @keyframes sign-in-email {
+    0% {
+      animation-timing-function: steps(7, end);
+      stroke-dashoffset: 1;
+    }
+
+    11%,
+    90% {
+      animation-timing-function: steps(1, end);
+      stroke-dashoffset: 0;
+    }
+
+    91%,
+    100% {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  /* The caret is drawn after the password. It types the email, jumps to the password
+     field, types six dots, goes when the pointer clicks, and comes back to the email
+     field once the form clears. */
+  @keyframes sign-in-caret {
+    0% {
+      animation-timing-function: steps(7, end);
+      translate: -42px -26px;
+    }
+
+    11% {
+      animation-timing-function: steps(1, end);
+      translate: 3px -26px;
+    }
+
+    12.5% {
+      animation-timing-function: steps(6, end);
+      translate: -42px 0;
+    }
+
+    24.5% {
+      animation-timing-function: steps(1, end);
+      opacity: 1;
+      translate: 0 0;
+    }
+
+    26.7% {
+      animation-timing-function: steps(1, end);
       opacity: 0;
+      translate: 0 0;
+    }
+
+    90% {
+      animation-timing-function: steps(1, end);
+      opacity: 0;
+      translate: -42px -26px;
+    }
+
+    91%,
+    100% {
+      opacity: 1;
+      translate: -42px -26px;
+    }
+  }
+
+  /* A dot's pass starts `--dot` x 120ms late: it appears 870ms in and clears at 90%, so
+     the password clears left to right. */
+  @keyframes sign-in-dot {
+    0%,
+    14.4%,
+    90%,
+    100% {
+      opacity: 0;
+    }
+
+    14.5%,
+    89.9% {
+      opacity: 1;
+    }
+  }
+
+  /* The pointer moves in to the button, presses it, rests, and leaves. */
+  @keyframes sign-in-pointer {
+    0%,
+    13.3% {
+      animation-timing-function: var(--ease-out-soft);
+      opacity: 0;
+      translate: 18px 44px;
+    }
+
+    18% {
+      opacity: 1;
+    }
+
+    25% {
+      scale: 1;
+      translate: 0 0;
+    }
+
+    26.7% {
+      scale: 0.8;
+    }
+
+    29%,
+    80% {
+      animation-timing-function: var(--ease-out-soft);
+      opacity: 1;
+      scale: 1;
+      translate: 0 0;
+    }
+
+    90%,
+    100% {
+      opacity: 0;
+      translate: 18px 44px;
+    }
+  }
+
+  @keyframes sign-in-button {
+    25.8%,
+    34.2% {
+      fill: var(--color-card);
+    }
+
+    27.5% {
+      fill: var(--color-secondary);
     }
   }
 
@@ -545,7 +677,8 @@
    tied to the scroll like the entries: `flow` runs over the drawing's whole pass through
    the viewport, and each turn takes a third of the stretch where the drawing is fully in
    view, so nothing moves unless the reader scrolls. Without scroll timelines they stay
-   still. In the hero, `drawing-load` plays them over time and stops each one under 5s. */
+   still. The hero is the one exception: its loops run on the clock while it is in view
+   (see its section below). */
 @utility drawing {
   view-timeline-name: --drawing;
 }
@@ -586,9 +719,13 @@
     }
 
     & .flow {
-      animation: flow 0.6s linear 8;
+      animation: flow 0.6s linear infinite;
       animation-range: normal;
       animation-timeline: auto;
+    }
+
+    &[data-offscreen] * {
+      animation-play-state: paused;
     }
   }
 }
@@ -625,23 +762,64 @@
   }
 }
 
-/* The hero's loops, in a `drawing-load` <svg>. Each stops under 5s: the flow after eight
-   0.6s cycles, the caret after four blinks, and the packet after one 3.4s trip. */
+/* The hero's loops, in a `drawing-load` <svg>. Unlike every loop below the fold, these
+   run on the clock and never stop: `float` moves each part up and down, `flow` moves the
+   leaders, and the sign-in scene repeats every 6s, starting 1s after load. The pause is
+   the hero's LOOP_SCRIPT, which marks the drawing `data-offscreen` while it is out of view,
+   and `drawing-load` pauses every animation in it then. This is the one exception to the
+   5s rule above; `gate:a11y` exempts animations inside `[data-loop-in-view]` and checks
+   that they pause off screen. With reduced motion every part sits in its final state,
+   the pointer on the button. */
+@utility float {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: float var(--float-s, 3s) ease-in-out var(--float-delay, 0s)
+      infinite alternate;
+  }
+}
+
 @utility packet {
   display: none;
 
   @supports (offset-path: path("M0 0")) {
     @media (prefers-reduced-motion: no-preference) {
       display: inline;
-      animation: packet 3.4s linear 1.4s both;
+      animation: packet 6s linear 1s infinite both;
       offset-rotate: 0deg;
     }
   }
 }
 
-@utility blink {
+@utility sign-in-email {
   @media (prefers-reduced-motion: no-preference) {
-    animation: blink 1.1s steps(1, end) 4;
+    animation: sign-in-email 6s 1s infinite both;
+    stroke-dasharray: 1;
+  }
+}
+
+@utility sign-in-caret {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: sign-in-caret 6s 1s infinite both;
+  }
+}
+
+@utility sign-in-dot {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: sign-in-dot 6s calc(1s + var(--dot, 0) * 120ms) infinite both;
+  }
+}
+
+@utility sign-in-pointer {
+  transform-box: fill-box;
+  transform-origin: 0 0;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: sign-in-pointer 6s 1s infinite both;
+  }
+}
+
+@utility sign-in-button {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: sign-in-button 6s 1s infinite both;
   }
 }
 

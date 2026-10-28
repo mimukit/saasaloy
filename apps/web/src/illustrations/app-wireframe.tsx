@@ -10,9 +10,18 @@
 //
 // Motion: the hero is in view on load, so its <svg> takes `drawing-load`, and the parts
 // play in after the copy: the construction lines, the two back panels, the application,
-// the services, then the callouts. The leaders to the database and the email service
-// flow, a dot travels from the application through the database to the email service,
-// and the sign-in caret blinks.
+// the services, then the callouts. Then three loops run while the hero is in view:
+//
+//   - every panel and service floats up and down on its own period and phase, with its
+//     callout, while the leaders and the construction lines stay still
+//   - the leaders to the database and the email service flow
+//   - every 6s a user signs in: the caret types an email and a password, the pointer
+//     clicks "Sign in", a dot travels from the application through the database to the
+//     email service, and the form clears for the next pass
+//
+// The script in ../blocks/hero.tsx pauses all of it while the hero is off screen.
+
+import type { CSSProperties, ReactNode } from "react";
 
 import {
   Assemble,
@@ -22,6 +31,47 @@ import {
   Plane,
   Sheet,
 } from "@web/illustrations/parts";
+
+/**
+ * A part's float: `y` drawing units of travel, `s` seconds each way, and `delay` seconds
+ * into the loop it starts at, so a negative one sets the phase.
+ */
+interface Float {
+  y: number;
+  s: number;
+  delay?: number;
+}
+
+const FLOATS = {
+  signIn: { y: 6, s: 3, delay: -1 },
+  sourceFiles: { y: -6, s: 3.6, delay: -2.6 },
+  application: { y: 6, s: 3.2 },
+  database: { y: 4, s: 1.6, delay: -0.4 },
+  email: { y: -4, s: 1.8, delay: -1.2 },
+} satisfies Record<string, Float>;
+
+/** A group that floats up and down, in a `drawing-load` <svg>. */
+function Floating({
+  y,
+  s,
+  delay = 0,
+  children,
+}: Float & { children: ReactNode }) {
+  return (
+    <g
+      className="float"
+      style={
+        {
+          "--float-y": y,
+          "--float-s": `${s}s`,
+          "--float-delay": `${delay}s`,
+        } as CSSProperties
+      }
+    >
+      {children}
+    </g>
+  );
+}
 
 /** The dot's route: down the database leader, then along the email leader. */
 const PACKET_PATH = 'path("M190 386V432M250 488H540")';
@@ -124,13 +174,41 @@ function SignIn() {
       </Label>
       <rect x="14" y="44" width="102" height="18" />
       <rect x="20" y="50" width="7" height="6" />
-      <path className="blink" d="M33 49v8" />
+      <path pathLength={1} className="sign-in-email" d="M33 53h42" />
       <rect x="14" y="70" width="102" height="18" />
       <path d="M20 79h7M23.5 76v6" />
-      <rect x="14" y="98" width="102" height="18" />
+      {[0, 1, 2, 3, 4, 5].map((dot) => (
+        <circle
+          key={dot}
+          cx={35 + dot * 7}
+          cy="79"
+          r="1.6"
+          className="sign-in-dot fill-current"
+          stroke="none"
+          style={{ "--dot": dot } as CSSProperties}
+        />
+      ))}
+      {/* Drawn where it stops, after the password; `sign-in-caret` starts it in the
+          email field. */}
+      <path className="sign-in-caret" d="M75 75v8" />
+      <rect
+        x="14"
+        y="98"
+        width="102"
+        height="18"
+        className="sign-in-button fill-card"
+      />
       <Label x={65} y={110} size={7} anchor="middle">
         Sign in
       </Label>
+      {/* The pointer rests on the button. The inner group moves, so its scale centres
+          on the tip. */}
+      <g transform="translate(92 106)">
+        <path
+          className="sign-in-pointer fill-card"
+          d="M0 0v11l3-3 2.5 5 2-1-2.5-5h4.5z"
+        />
+      </g>
     </Plane>
   );
 }
@@ -171,6 +249,7 @@ export function AppWireframe({ className }: { className?: string }) {
       strokeLinejoin="round"
       aria-hidden="true"
       focusable="false"
+      data-loop-in-view
       className={className}
     >
       {/* Construction lines behind everything. */}
@@ -182,22 +261,30 @@ export function AppWireframe({ className }: { className?: string }) {
         />
       </Assemble>
 
-      <Assemble at={10} y={16}>
-        <SignIn />
-      </Assemble>
-      <Assemble at={20} y={16}>
-        <SourceFiles />
-      </Assemble>
-      <Assemble at={30} y={24}>
-        <Application />
-      </Assemble>
+      <Floating {...FLOATS.signIn}>
+        <Assemble at={10} y={16}>
+          <SignIn />
+        </Assemble>
+      </Floating>
+      <Floating {...FLOATS.sourceFiles}>
+        <Assemble at={20} y={16}>
+          <SourceFiles />
+        </Assemble>
+      </Floating>
+      <Floating {...FLOATS.application}>
+        <Assemble at={30} y={24}>
+          <Application />
+        </Assemble>
+      </Floating>
 
       {/* The database, under the application, and the leaders down to both services. */}
-      <Assemble at={50} y={12}>
-        <path d="M156 446v40a34 11 0 0 0 68 0v-40" className="fill-card" />
-        <ellipse cx="190" cy="446" rx="34" ry="11" className="fill-card" />
-        <path d="M156 466a34 11 0 0 0 68 0" />
-      </Assemble>
+      <Floating {...FLOATS.database}>
+        <Assemble at={50} y={12}>
+          <path d="M156 446v40a34 11 0 0 0 68 0v-40" className="fill-card" />
+          <ellipse cx="190" cy="446" rx="34" ry="11" className="fill-card" />
+          <path d="M156 466a34 11 0 0 0 68 0" />
+        </Assemble>
+      </Floating>
       <Assemble at={45}>
         <path
           className="flow"
@@ -216,43 +303,56 @@ export function AppWireframe({ className }: { className?: string }) {
       />
 
       {/* The email service, an envelope in an isometric box. */}
-      <Assemble at={55} y={12}>
-        <polygon
-          points="540,444 580,424 612,440 572,460"
-          className="fill-card"
-        />
-        <polygon
-          points="540,444 572,460 572,488 540,472"
-          className="fill-card"
-        />
-        <polygon
-          points="572,460 612,440 612,468 572,488"
-          className="fill-card"
-        />
-        <path d="M546 452l10 12 10-1M578 466l14 4 14-18" />
-      </Assemble>
+      <Floating {...FLOATS.email}>
+        <Assemble at={55} y={12}>
+          <polygon
+            points="540,444 580,424 612,440 572,460"
+            className="fill-card"
+          />
+          <polygon
+            points="540,444 572,460 572,488 540,472"
+            className="fill-card"
+          />
+          <polygon
+            points="572,460 612,440 612,468 572,488"
+            className="fill-card"
+          />
+          <path d="M546 452l10 12 10-1M578 466l14 4 14-18" />
+        </Assemble>
+      </Floating>
 
-      <Callout x={96} y={40} label="Application" to={[120, 112]} at={60} />
-      <Callout x={364} y={12} label="Sign-in" to={[352, 50]} at={65} />
-      <Callout
-        x={636}
-        y={22}
-        label="Source files"
-        anchor="end"
-        to={[540, 72]}
-        at={70}
-      />
-      <Callout x={88} y={504} label="Database" to={[156, 470]} at={75} />
+      {/* Each callout floats with its part, so its dot stays on it. */}
+      <Floating {...FLOATS.application}>
+        <Callout x={96} y={40} label="Application" to={[120, 112]} at={60} />
+      </Floating>
+      <Floating {...FLOATS.signIn}>
+        <Callout x={364} y={12} label="Sign-in" to={[352, 50]} at={65} />
+      </Floating>
+      <Floating {...FLOATS.sourceFiles}>
+        <Callout
+          x={636}
+          y={22}
+          label="Source files"
+          anchor="end"
+          to={[540, 72]}
+          at={70}
+        />
+      </Floating>
+      <Floating {...FLOATS.database}>
+        <Callout x={88} y={504} label="Database" to={[156, 470]} at={75} />
+      </Floating>
       {/* The Email dot sits on the bottom edge of the box's right face, left of the
           underline's end, so its leader leans up and in, the mirror of the Database one. */}
-      <Callout
-        x={636}
-        y={508}
-        label="Email"
-        anchor="end"
-        to={[586, 481]}
-        at={80}
-      />
+      <Floating {...FLOATS.email}>
+        <Callout
+          x={636}
+          y={508}
+          label="Email"
+          anchor="end"
+          to={[586, 481]}
+          at={80}
+        />
+      </Floating>
     </svg>
   );
 }
