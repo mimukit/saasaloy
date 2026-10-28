@@ -59,23 +59,24 @@
     }
   }
 
-  /* Three turns of a third each. A turn flows five dash cycles, then holds. */
+  /* One turn, played over the third of the scroll that belongs to the part. The
+     connector flows five dash cycles during its turn. */
   @keyframes cycle-flow {
-    33.333%,
-    100% {
+    to {
       stroke-dashoffset: -30px;
     }
   }
 
+  /* Off its turn a part sits 4px low, unplugged; during its turn it plugs in. */
   @keyframes cycle-shift {
     0%,
-    31% {
-      translate: 0 0;
+    100% {
+      translate: 0 4px;
     }
 
-    35%,
-    96% {
-      translate: 0 4px;
+    15%,
+    85% {
+      translate: 0 0;
     }
   }
 
@@ -427,18 +428,6 @@
   }
 }
 
-/* A card that rises a little under the pointer. It moves only; it casts no shadow. A touch
-   screen fires hover on tap and leaves the card raised, so only a fine pointer lifts it. */
-@utility hover-lift {
-  @media (hover: hover) and (pointer: fine) and (prefers-reduced-motion: no-preference) {
-    transition: translate 0.2s var(--ease-out-soft);
-
-    &:hover {
-      translate: 0 -2px;
-    }
-  }
-}
-
 /* Press feedback for a solid control: it shrinks a little while held, label and icon
    with it. It owns the element's whole transition, colours included, so do not pair it
    with `transition-colors`. */
@@ -513,9 +502,15 @@
    The loops: `flow` moves a dashed connector's dashes along the path, in the direction
    the path is drawn, so a moving dash means something travels that way. Only `highlight`
    connectors flow; a `stroke-border` construction line stays still. `cycle-flow` and
-   `cycle-shift` give three parts a 3s turn each, by `--turn` (0, 1 or 2): a turn flows
-   its connector, and off its turn a part drops 4px, unplugged. `packet` moves a dot along
-   the `offset-path` it sets inline. `blink` is a text caret. */
+   `cycle-shift` give three parts a turn each, by `--turn` (0, 1 or 2): a turn flows its
+   connector, and off its turn a part sits 4px low, unplugged. `packet` moves a dot along
+   the `offset-path` it sets inline. `blink` is a text caret.
+
+   No loop runs on a clock for more than 5s (WCAG 2.2.2). Below the fold the loops are
+   tied to the scroll like the entries: `flow` runs over the drawing's whole pass through
+   the viewport, and each turn takes a third of the stretch where the drawing is fully in
+   view, so nothing moves unless the reader scrolls. Without scroll timelines they stay
+   still. In the hero, `drawing-load` plays them over time and stops each one under 5s. */
 @utility drawing {
   view-timeline-name: --drawing;
 }
@@ -554,35 +549,56 @@
       animation: draw 0.8s var(--ease-out-soft) calc(var(--at, 0) * 10ms) both;
       stroke-dasharray: 1;
     }
+
+    & .flow {
+      animation: flow 0.6s linear 8;
+      animation-range: normal;
+      animation-timeline: auto;
+    }
   }
 }
 
 @utility flow {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: flow 0.6s linear infinite;
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: flow linear 40 both;
+      animation-range: cover 0% cover 100%;
+      animation-timeline: --drawing;
+    }
   }
 }
 
 @utility cycle-flow {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: cycle-flow 9s linear calc(var(--turn, 0) * 3s - 9s) infinite;
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: cycle-flow linear both;
+      animation-range: contain calc(var(--turn, 0) * 33.333%) contain
+        calc((var(--turn, 0) + 1) * 33.333%);
+      animation-timeline: --drawing;
+    }
   }
 }
 
 @utility cycle-shift {
-  @media (prefers-reduced-motion: no-preference) {
-    animation: cycle-shift 9s var(--ease-out-soft)
-      calc(var(--turn, 0) * 3s - 9s) infinite;
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: cycle-shift var(--ease-out-soft) both;
+      animation-range: contain calc(var(--turn, 0) * 33.333%) contain
+        calc((var(--turn, 0) + 1) * 33.333%);
+      animation-timeline: --drawing;
+    }
   }
 }
 
+/* The hero's loops, in a `drawing-load` <svg>. Each stops under 5s: the flow after eight
+   0.6s cycles, the caret after four blinks, and the packet after one 3.4s trip. */
 @utility packet {
   display: none;
 
   @supports (offset-path: path("M0 0")) {
     @media (prefers-reduced-motion: no-preference) {
       display: inline;
-      animation: packet 4s linear 1.4s infinite both;
+      animation: packet 3.4s linear 1.4s both;
       offset-rotate: 0deg;
     }
   }
@@ -590,7 +606,7 @@
 
 @utility blink {
   @media (prefers-reduced-motion: no-preference) {
-    animation: blink 1.1s steps(1, end) infinite;
+    animation: blink 1.1s steps(1, end) 4;
   }
 }
 

@@ -1,7 +1,14 @@
 // The accessibility half of the site gate (plan 0091, Gate tooling row). It serves the
 // built site, loads `/` in Chromium at 375, 768 and 1440 px in both themes, and runs
-// axe-core at wcag2a, wcag2aa, wcag21aa and wcag22aa on each load, contrast included.
-// Any violation fails the run. The 404 page gets the same six loads.
+// axe-core at wcag2a, wcag2aa, wcag21a, wcag21aa and wcag22aa on each load, contrast
+// included. Each load also checks two things axe does not, as scripts/verify-a11y.ts does
+// for the base template: the document is never wider than the viewport, and no animation
+// runs under reduced motion. Any finding fails the run. The 404 page gets the same six
+// loads.
+//
+// One more load, with motion allowed, holds the drawings to WCAG 2.2.2: no animation on
+// the clock may run longer than 5s, since the page has no pause control. A scroll-tied
+// animation moves only while the reader scrolls, so it is exempt.
 //
 // The theme is set the way a returning visitor sets it: the stored choice in
 // localStorage, written before the page's own pre-paint script reads it. The script then
@@ -57,6 +64,30 @@ try {
           continue;
         }
 
+        const overflow = await page.evaluate(() => ({
+          scroll: document.documentElement.scrollWidth,
+          view: window.innerWidth,
+        }));
+        if (overflow.scroll > overflow.view) {
+          failures += 1;
+          console.error(
+            `FAIL ${where}: document is ${overflow.scroll}px wide in a ${overflow.view}px viewport`
+          );
+        }
+
+        const running = await page.evaluate(
+          () =>
+            document
+              .getAnimations()
+              .filter((animation) => animation.playState === "running").length
+        );
+        if (running > 0) {
+          failures += 1;
+          console.error(
+            `FAIL ${where}: ${running} animation(s) run although reduced motion is requested`
+          );
+        }
+
         const { violations } = await new AxeBuilder({ page })
           .withTags(AXE_TAGS)
           .analyze();
@@ -83,6 +114,35 @@ try {
       await context.close();
     }
   }
+
+  // WCAG 2.2.2: with motion allowed, every animation on the document clock ends within
+  // 5s of load. An infinite one has an endTime of Infinity.
+  const context = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+  });
+  const page = await context.newPage();
+  await page.goto(`${site.origin}/`, { waitUntil: "networkidle" });
+  const longLoops = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter((animation) => animation.timeline === document.timeline)
+      .filter((animation) => {
+        const end = animation.effect?.getComputedTiming().endTime;
+        return typeof end === "number" && end > 5000;
+      })
+      .map((animation) =>
+        animation instanceof CSSAnimation ? animation.animationName : "unnamed"
+      )
+  );
+  if (longLoops.length > 0) {
+    failures += longLoops.length;
+    console.error(
+      `FAIL / 1440px motion: ${longLoops.length} timed animation(s) run past 5s: ${[...new Set(longLoops)].join(", ")}`
+    );
+  } else {
+    console.log("ok   / 1440px motion: no timed animation runs past 5s");
+  }
+  await context.close();
 } finally {
   await browser.close();
   await site.close();
