@@ -1,7 +1,8 @@
 // The Lighthouse half of the site gate (plan 0091, Gate tooling row). It serves the
-// built site, then runs `lhci autorun` once against `/` with lighthouserc.json, which
-// asks for the mobile profile and asserts 95 or more in performance, accessibility,
-// best practices and SEO. Headless Chromium reports a light OS, so this is the light
+// built site, then runs `lhci autorun` against `/` with lighthouserc.json, which asks
+// for the mobile profile, takes three runs and asserts 95 or more on the median run in
+// performance, accessibility, best practices and SEO. One run left the gate to runner
+// noise: performance scored 94 to 96 on the same build. Headless Chromium reports a light OS, so this is the light
 // theme; gate:a11y covers dark.
 //
 // lhci gets the Chromium Playwright installs (or CHROME_PATH), so CI installs one

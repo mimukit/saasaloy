@@ -8,7 +8,6 @@
     "build": "astro build",
     "clean": "rimraf dist .astro .wrangler .lighthouseci",
     "preview": "astro preview",
-    "deploy": "wrangler deploy",
     "deploy:production": "astro build && wrangler deploy",
     "test": "node --test \"src/**/*.test.ts\"",
     "gate:a11y": "node scripts/gate-a11y.ts",
