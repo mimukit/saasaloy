@@ -8,7 +8,9 @@
 //
 // One more load, with motion allowed, holds the drawings to WCAG 2.2.2: no animation on
 // the clock may run longer than 5s, since the page has no pause control. A scroll-tied
-// animation moves only while the reader scrolls, so it is exempt.
+// animation moves only while the reader scrolls, so it is exempt. So is the hero drawing,
+// marked `data-loop-in-view`: its loops run while it is in view, by the owner's decision.
+// The gate then scrolls it out of view and fails any of its animations that still runs.
 //
 // The theme is set the way a returning visitor sets it: the stored choice in
 // localStorage, written before the page's own pre-paint script reads it. The script then
@@ -127,6 +129,13 @@ try {
       .getAnimations()
       .filter((animation) => animation.timeline === document.timeline)
       .filter((animation) => {
+        const target =
+          animation.effect instanceof KeyframeEffect
+            ? animation.effect.target
+            : null;
+        return !target?.closest("[data-loop-in-view]");
+      })
+      .filter((animation) => {
         const end = animation.effect?.getComputedTiming().endTime;
         return typeof end === "number" && end > 5000;
       })
@@ -141,6 +150,35 @@ try {
     );
   } else {
     console.log("ok   / 1440px motion: no timed animation runs past 5s");
+  }
+
+  // The hero's loops pause once it leaves the viewport.
+  await page.evaluate(() =>
+    window.scrollTo(0, document.documentElement.scrollHeight)
+  );
+  await page.waitForFunction(() =>
+    document.querySelector("[data-loop-in-view][data-offscreen]")
+  );
+  const running = await page.evaluate(() =>
+    document
+      .getAnimations()
+      .filter(
+        (animation) =>
+          animation.effect instanceof KeyframeEffect &&
+          animation.effect.target?.closest("[data-loop-in-view]") &&
+          animation.playState === "running"
+      )
+      .map((animation) =>
+        animation instanceof CSSAnimation ? animation.animationName : "unnamed"
+      )
+  );
+  if (running.length > 0) {
+    failures += running.length;
+    console.error(
+      `FAIL / 1440px motion: ${running.length} hero loop(s) run off screen: ${[...new Set(running)].join(", ")}`
+    );
+  } else {
+    console.log("ok   / 1440px motion: the hero's loops pause off screen");
   }
   await context.close();
 } finally {
