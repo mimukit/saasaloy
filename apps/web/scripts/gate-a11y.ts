@@ -12,8 +12,8 @@
 //
 // The theme is set the way a returning visitor sets it: the stored choice in
 // localStorage, written before the page's own pre-paint script reads it. The script then
-// checks that <html> carries the matching class, so a silent fallback to the OS theme
-// cannot pass for a dark run.
+// checks that <html> carries the matching class, so a silent fallback to the default light
+// theme cannot pass for a dark run.
 //
 // Every load asks for reduced motion. The page's motion is additive, so the still state
 // is the real one, and a blur-in caught half way would make contrast a coin toss.

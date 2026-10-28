@@ -2,7 +2,7 @@
 // built site, then runs `lhci autorun` against `/` with lighthouserc.json, which asks
 // for the mobile profile, takes three runs and asserts 95 or more on the median run in
 // performance, accessibility, best practices and SEO. One run left the gate to runner
-// noise: performance scored 94 to 96 on the same build. Headless Chromium reports a light OS, so this is the light
+// noise: performance scored 94 to 96 on the same build. The site starts on the light theme, so this is the light
 // theme; gate:a11y covers dark.
 //
 // lhci gets the Chromium Playwright installs (or CHROME_PATH), so CI installs one

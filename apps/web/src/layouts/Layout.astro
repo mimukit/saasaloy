@@ -86,12 +86,12 @@ const analyticsBeacon = analyticsToken
     )}
     {/*
       Pre-paint theme resolution. This runs synchronously in <head>, BEFORE the browser
-      paints, so a dark-mode visitor never sees a white flash. `is:inline` keeps Astro
+      paints, so a visitor who chose dark never sees a white flash. `is:inline` keeps Astro
       from bundling it into a deferred module, which would defeat the whole point —
       `<script type="module">` is deferred by specification and always runs too late.
       The script body is lib/theme.ts's THEME_INIT_SCRIPT, imported above and baked into
       this HTML at build time, so the layout holds no copy of it: it reads the stored
-      choice, falls back to the OS preference, and also drives every
+      choice, falls back to the light theme, and also drives every
       `[data-theme-toggle]` on the page through one delegated listener. That is why
       blocks/theme-toggle needs no client directive. Do not inline a second
       resolver here, and do not turn this into an import.

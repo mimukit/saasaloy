@@ -1,10 +1,11 @@
 // The theme state machine — light / dark / system. Framework-free on purpose: no React,
 // no Astro, no imports at all.
 //
-// `system` is the starting state: a visitor who never pressed the toggle follows the OS.
-// The toggle itself has two states. A press flips the PAINTED palette, light to dark or
-// dark to light, and stores that choice. It never steps back to `system`; a visitor who
-// wants the OS again clears the `theme` key, and a host may call `setTheme("system")`.
+// `light` is the starting state: a visitor who never pressed the toggle sees the light
+// palette, whatever the OS prefers. The toggle itself has two states. A press flips the
+// PAINTED palette, light to dark or dark to light, and stores that choice. It never steps
+// to `system`; a host that wants the OS palette may call `setTheme("system")`, which lasts
+// for the current page only, because an absent key reads back as `light`.
 //
 // THIS FILE IS IMPORTED IN NODE. Both hosts pull it in at *build* time (Astro
 // frontmatter, and a Vite config for a React SPA), so there must be no `window`,
@@ -77,15 +78,15 @@ export function isTheme(value: string | null): value is Theme {
   return value === "light" || value === "dark" || value === "system";
 }
 
-/** The stored choice, or `system` when unset, unreadable or not a valid theme. */
+/** The stored choice, or `light` when unset, unreadable or not a valid theme. */
 export function getStoredTheme(): Theme {
   try {
     const stored = localStorage.getItem(THEME_STORAGE_KEY);
-    return stored === "light" || stored === "dark" ? stored : "system";
+    return stored === "dark" ? "dark" : "light";
   } catch {
     // A throwing localStorage (Safari private mode, blocked storage) must degrade to
-    // following the OS, never to an unstyled page.
-    return "system";
+    // the default palette, never to an unstyled page.
+    return "light";
   }
 }
 
@@ -156,8 +157,7 @@ function onClick(event: MouseEvent): void {
     return;
   }
 
-  // Flip what is painted. From `system` that is the opposite of the OS palette, so the
-  // first press always changes what the visitor sees.
+  // Flip what is painted, so the first press always changes what the visitor sees.
   const next: ResolvedTheme = document.documentElement.classList.contains(
     "dark"
   )
@@ -223,10 +223,11 @@ export function revealTheme(trigger: Element, apply: () => void): void {
 // does not have that script, so without this listener a visitor on `system` keeps the
 // palette resolved at load until the next reload.
 //
-// It repaints only while the state is `system`. A visitor who picked light or dark said
-// so deliberately, and the OS must not overrule that.
+// It repaints only while the state is `system`, which only a host's `setTheme("system")`
+// sets. It reads `data-theme`, not storage, because storage never answers `system`. A
+// visitor on light or dark, chosen or default, keeps that palette when the OS changes.
 function onOsChange(): void {
-  if (getStoredTheme() === "system") {
+  if (document.documentElement.getAttribute(THEME_ATTRIBUTE) === "system") {
     setTheme("system");
   }
 }
@@ -261,10 +262,10 @@ export function installThemeToggle(): () => void {
 /**
  * Whether the visitor has ever used a toggle in this origin.
  *
- * A host whose default is the OS preference never needs this — `getStoredTheme()` already
- * answers `system` for an unset key. A host with a different default (the admin app starts
- * on dark) does: without it, a deliberate `system` choice and a first visit are the same
- * absent key, and the default would overwrite the choice on every load.
+ * This site never needs it: `getStoredTheme()` answers the default, `light`, for an unset
+ * key. A host with a different default (the admin app starts on dark) does: without it, a
+ * deliberate choice and a first visit can be the same absent key, and the default would
+ * overwrite the choice on every load.
  */
 export function hasChosenTheme(): boolean {
   try {
@@ -299,7 +300,7 @@ export function hasChosenTheme(): boolean {
 // button needs no JavaScript of its own: a delegated click listener on `document`
 // (registered while <head> parses — `document` exists, the button need not) plus a
 // matchMedia listener that re-resolves only while the state is `system`. A press flips
-// light and dark; `system` is only ever the state a visitor starts in.
+// light and dark; a visitor with no stored choice starts on light.
 //
 // Written as ES5-era syntax with no optional chaining: it ships unminified and
 // untranspiled to every visitor, including the ones the rest of the bundle drops.
@@ -313,12 +314,13 @@ export const THEME_INIT_SCRIPT = `(function () {
   var media = window.matchMedia(${JSON.stringify(OS_DARK_QUERY)});
   var still = window.matchMedia(${JSON.stringify(REDUCED_MOTION_QUERY)});
 
+  // An absent or unknown value is the default, light. The OS preference is never read
+  // here, so a dark OS does not paint a first visit dark.
   function read() {
     try {
-      var stored = localStorage.getItem(STORAGE_KEY);
-      return stored === "light" || stored === "dark" ? stored : "system";
+      return localStorage.getItem(STORAGE_KEY) === "dark" ? "dark" : "light";
     } catch (error) {
-      return "system";
+      return "light";
     }
   }
 
@@ -367,7 +369,7 @@ export const THEME_INIT_SCRIPT = `(function () {
     if (!trigger) return;
     // Two states only: flip the palette that is painted, never step back to "system".
     // Reading the class, not storage, keeps this working where storage is unwritable:
-    // write() is then a no-op and read() would answer "system" forever.
+    // write() is then a no-op and read() would answer "light" forever.
     var next = root.classList.contains("dark") ? "light" : "dark";
     reveal(trigger, function () {
       write(next);

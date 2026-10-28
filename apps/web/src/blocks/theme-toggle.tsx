@@ -23,10 +23,10 @@ import { cn } from "@web/lib/utils";
 // index.astro renders this with no `client:*` directive. Adding one would ship React for
 // a button that does not use it.
 //
-// TWO STATES. A press flips light and dark. `system` is where a first-time visitor starts,
-// and the button shows the palette `system` resolved to, so it has no third icon. The
-// icons key off the `.dark` class through the `dark:` variant every theme file declares,
-// so the swap is pure CSS off <html> and stays right when the OS flips under `system`.
+// TWO STATES. A press flips light and dark. A first-time visitor starts on light, and the
+// button shows the painted palette, so it has no third icon. The icons key off the
+// `.dark` class through the `dark:` variant every theme file declares, so the swap is
+// pure CSS off <html>.
 //
 // A press animates: the new theme grows as a circle from this button. The script starts
 // a view transition, and globals.css holds the animation. Without view transitions, or
