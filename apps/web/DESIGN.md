@@ -271,7 +271,7 @@ The landing page has seven sections in this order: hero, stages, catalog, provid
 - **Providers.** One capability connects to three interchangeable provider modules, with a small `.env` panel that shows the selecting variable. Short callouts in `highlight` name the point of each part.
 - **This site.** A `lead`, the command field again, and an outlined secondary button that links to the site source.
 - **FAQ.** Bordered accordion rows with a chevron. The question is in `highlight`, and the open answer is in `muted-foreground`.
-- **Footer.** The large wordmark, the tagline "Start small. Own the source.", and links to GitHub, Getting started, Changelog and the MIT license in `highlight`.
+- **Footer.** The large wordmark, the tagline "Start small. Own the source.", and links to GitHub, Getting started, Changelog and the MIT license in `highlight`. Under the last blueprint rule, a centred colophon in Geist Mono at `text-xs` and `muted-foreground` carries two lines: the uppercase copyright with the license holder, then the credit to MI Mukit and Brainaloy Labs, with the two names as `foreground` links and a `highlight` heart.
 
 The command field is the page's primary call to action. It is a bordered mono field with a prompt glyph, and a solid `primary` Copy button sits flush against its right edge. Both share the `2.5rem` height and square corners. The copy button shows its copied state in place and never moves the layout.
 

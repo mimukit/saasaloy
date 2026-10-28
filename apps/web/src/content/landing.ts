@@ -264,6 +264,11 @@ export const landing = {
   // link. `privacy` is the line under the tagline, and `analytics` follows it only when
   // the build carries an analytics token (../lib/analytics.ts), so the line stays true.
   // An empty string hides either.
+  //
+  // The colophon sits under the last rule, centred. `copyright` takes `{year}`, which the
+  // build fills and a one-line script brings up to the visitor's year, and `{holder}`,
+  // the name in LICENSE.md. `credit` takes `{heart}`, `{author}` and `{sponsor}`; the two
+  // names are links (5a). An empty `copyright` or `credit` hides its line.
   footer: {
     tagline: "Start small. Own the source.",
     privacy: "This site sets no cookies.",
@@ -286,6 +291,11 @@ export const landing = {
         href: `${REPO}/blob/main/LICENSE.md`,
       },
     ],
+    copyright: "© {year} {holder} · Open source · MIT license",
+    copyrightHolder: "Mukitul Islam Mukit",
+    credit: "Developed with {heart} by {author} · sponsored by {sponsor}",
+    author: { label: "MI Mukit", href: "https://mimukit.com" },
+    sponsor: { label: "Brainaloy Labs", href: "https://brainaloy.com" },
   },
 };
 
@@ -325,5 +335,7 @@ export const ui = {
   footer: {
     /** Accessible name for the footer nav landmark. */
     navLabel: "Footer",
+    /** Screen-reader text for the heart in the credit line. */
+    heart: "love",
   },
 };
