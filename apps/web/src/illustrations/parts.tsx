@@ -2,11 +2,48 @@
 // `stroke="currentColor"` on its <svg> and a `text-highlight` class on it, so a line is
 // in `highlight` unless it asks for `stroke-border`. Text inside a drawing never strokes.
 // Every drawing is decorative (`aria-hidden`); the copy beside it carries the facts.
+//
+// Motion is CSS, from the drawing utilities in ../styles/web.css. A drawing's <svg> takes
+// `drawing` (`drawing-load` in the hero), and its parts enter through <Assemble> and the
+// `draw` class, staggered by `at`. With reduced motion requested, every part sits still.
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
 /** Join numbers into an SVG `points` list. */
 export const points = (...xy: number[]) => xy.join(" ");
+
+/**
+ * A part's entry: when it starts and how long it runs, in percent of the drawing's entry,
+ * and the offset in drawing units it moves in from.
+ */
+export interface Entry {
+  at: number;
+  span?: number;
+  x?: number;
+  y?: number;
+}
+
+/** The custom properties `assemble` and `draw` read. */
+export function enter({ at, span, x, y }: Entry): CSSProperties {
+  return {
+    "--at": at,
+    "--span": span,
+    "--from-x": x,
+    "--from-y": y,
+  } as CSSProperties;
+}
+
+/** A group that fades in from an offset as the drawing enters. */
+export function Assemble({
+  children,
+  ...entry
+}: Entry & { children: ReactNode }) {
+  return (
+    <g className="assemble" style={enter(entry)}>
+      {children}
+    </g>
+  );
+}
 
 /**
  * The isometric panel plane: a flat drawing in local coordinates, sheared so its top
@@ -56,13 +93,17 @@ export function Sheet({
 /** The space between a callout's text and a leader that rises from beside it. */
 const CALLOUT_GAP = 6;
 
-/** A mono callout: the label, an underline under it, and a leader line to a dot. */
+/**
+ * A mono callout: the label, an underline under it, and a leader line to a dot. As the
+ * drawing enters, the label fades in and the line draws from the label to the dot.
+ */
 export function Callout({
   x,
   y,
   label,
   to,
   anchor = "start",
+  at = 60,
 }: {
   x: number;
   y: number;
@@ -70,6 +111,8 @@ export function Callout({
   /** The point the leader ends on. */
   to: [number, number];
   anchor?: "start" | "end";
+  /** When the callout enters, in percent of the drawing's entry. */
+  at?: number;
 }) {
   const textWidth = label.length * 6.2;
   const textLeft = anchor === "start" ? x : x - textWidth;
@@ -87,20 +130,27 @@ export function Callout({
   const foot = footRight ? right : left;
   return (
     <g>
-      <text
-        x={x}
-        y={y}
-        textAnchor={anchor}
-        stroke="none"
-        className="fill-current font-mono"
-        fontSize="10"
-      >
-        {label}
-      </text>
+      <Assemble at={at}>
+        <text
+          x={x}
+          y={y}
+          textAnchor={anchor}
+          stroke="none"
+          className="fill-current font-mono"
+          fontSize="10"
+        >
+          {label}
+        </text>
+      </Assemble>
       <path
+        pathLength={1}
+        className="draw"
+        style={enter({ at })}
         d={`M${left} ${y + 4}h${width}M${foot} ${y + 4}L${to[0]} ${to[1]}`}
       />
-      <circle cx={to[0]} cy={to[1]} r="2" className="fill-background" />
+      <Assemble at={at + 30} span={10}>
+        <circle cx={to[0]} cy={to[1]} r="2" className="fill-background" />
+      </Assemble>
     </g>
   );
 }

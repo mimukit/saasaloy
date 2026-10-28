@@ -88,7 +88,7 @@ export function ModuleCatalog({
             )}
           </div>
 
-          <ModuleInventory className="text-highlight reveal mx-auto w-full max-w-lg lg:row-span-2 lg:max-w-none lg:self-center" />
+          <ModuleInventory className="text-highlight drawing mx-auto w-full max-w-lg lg:row-span-2 lg:max-w-none lg:self-center" />
 
           <fieldset className="min-w-0 lg:self-start">
             <legend className="sr-only">{filterLabel}</legend>

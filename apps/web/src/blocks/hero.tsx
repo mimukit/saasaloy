@@ -13,7 +13,8 @@ import { interpolate } from "@web/lib/interpolate";
 // passes it in hydrated through the `commandField` slot. Rendered on its own, the hero
 // draws a static field: the command stays selectable and the page ships no JavaScript
 // for it. The motion is CSS: `blur-in` from ../styles/web.css, staggered with
-// `--blur-in-delay`, and still under reduced motion.
+// `--blur-in-delay`, and still under reduced motion. The drawing plays its own entry
+// through `drawing-load`.
 //
 // The round 9/10 hero: the copy on the left and the application wireframe on the right
 // from `lg` (64rem); below it the drawing follows the copy at full width. The title's
@@ -89,7 +90,7 @@ export function Hero({
           )}
         </div>
 
-        <AppWireframe className="text-highlight blur-in w-full [--blur-in-delay:300ms]" />
+        <AppWireframe className="text-highlight drawing-load w-full" />
       </div>
     </section>
   );

@@ -7,8 +7,24 @@
 // Geometry: every panel is drawn flat in its own coordinates and sheared by <Plane>, so
 // its top edge falls 0.36 per unit of width. The application panel is 360 x 250 at
 // (40, 90); its bottom edge sits at y = 340 + 0.36 * (x - 40).
+//
+// Motion: the hero is in view on load, so its <svg> takes `drawing-load`, and the parts
+// play in after the copy: the construction lines, the two back panels, the application,
+// the services, then the callouts. The leaders to the database and the email service
+// flow, a dot travels from the application through the database to the email service,
+// and the sign-in caret blinks.
 
-import { Callout, Label, Lines, Plane, Sheet } from "@web/illustrations/parts";
+import {
+  Assemble,
+  Callout,
+  Label,
+  Lines,
+  Plane,
+  Sheet,
+} from "@web/illustrations/parts";
+
+/** The dot's route: down the database leader, then along the email leader. */
+const PACKET_PATH = 'path("M190 386V432M250 488H540")';
 
 function Application() {
   return (
@@ -108,6 +124,7 @@ function SignIn() {
       </Label>
       <rect x="14" y="44" width="102" height="18" />
       <rect x="20" y="50" width="7" height="6" />
+      <path className="blink" d="M33 49v8" />
       <rect x="14" y="70" width="102" height="18" />
       <path d="M20 79h7M23.5 76v6" />
       <rect x="14" y="98" width="102" height="18" />
@@ -157,29 +174,49 @@ export function AppWireframe({ className }: { className?: string }) {
       className={className}
     >
       {/* Construction lines behind everything. */}
-      <path
-        className="stroke-border"
-        strokeDasharray="3 4"
-        d="M20 90h420M40 60v420M400 200v290M300 20v80M470 30v330M590 70v300M20 380l600 0"
-      />
+      <Assemble at={0}>
+        <path
+          className="stroke-border"
+          strokeDasharray="3 4"
+          d="M20 90h420M40 60v420M400 200v290M300 20v80M470 30v330M590 70v300M20 380l600 0"
+        />
+      </Assemble>
 
-      <SignIn />
-      <SourceFiles />
-      <Application />
+      <Assemble at={10} y={16}>
+        <SignIn />
+      </Assemble>
+      <Assemble at={20} y={16}>
+        <SourceFiles />
+      </Assemble>
+      <Assemble at={30} y={24}>
+        <Application />
+      </Assemble>
 
-      {/* The database, under the application. */}
-      <g>
+      {/* The database, under the application, and the leaders down to both services. */}
+      <Assemble at={50} y={12}>
         <path d="M156 446v40a34 11 0 0 0 68 0v-40" className="fill-card" />
         <ellipse cx="190" cy="446" rx="34" ry="11" className="fill-card" />
         <path d="M156 466a34 11 0 0 0 68 0" />
-      </g>
-      <path
-        strokeDasharray="3 3"
-        d="M190 432v-46M184 426l6 6 6-6M250 488h290M534 482l6 6-6 6"
+      </Assemble>
+      <Assemble at={45}>
+        <path
+          className="flow"
+          strokeDasharray="3 3"
+          d="M190 386v46M250 488h290"
+        />
+        <path strokeDasharray="3 3" d="M184 426l6 6 6-6M534 482l6 6-6 6" />
+        <path className="flow" strokeDasharray="3 3" d="M592 400v24" />
+        <path strokeDasharray="3 3" d="M586 418l6 6 6-6" />
+      </Assemble>
+      <circle
+        r="2.5"
+        className="packet fill-current"
+        stroke="none"
+        style={{ offsetPath: PACKET_PATH }}
       />
 
       {/* The email service, an envelope in an isometric box. */}
-      <g>
+      <Assemble at={55} y={12}>
         <polygon
           points="540,444 580,424 612,440 572,460"
           className="fill-card"
@@ -193,22 +230,29 @@ export function AppWireframe({ className }: { className?: string }) {
           className="fill-card"
         />
         <path d="M546 452l10 12 10-1M578 466l14 4 14-18" />
-      </g>
-      <path strokeDasharray="3 3" d="M592 400v24M586 418l6 6 6-6" />
+      </Assemble>
 
-      <Callout x={96} y={40} label="Application" to={[120, 112]} />
-      <Callout x={364} y={12} label="Sign-in" to={[352, 50]} />
+      <Callout x={96} y={40} label="Application" to={[120, 112]} at={60} />
+      <Callout x={364} y={12} label="Sign-in" to={[352, 50]} at={65} />
       <Callout
         x={636}
         y={22}
         label="Source files"
         anchor="end"
         to={[540, 72]}
+        at={70}
       />
-      <Callout x={88} y={504} label="Database" to={[156, 470]} />
+      <Callout x={88} y={504} label="Database" to={[156, 470]} at={75} />
       {/* The Email dot sits on the bottom edge of the box's right face, left of the
           underline's end, so its leader leans up and in, the mirror of the Database one. */}
-      <Callout x={636} y={508} label="Email" anchor="end" to={[586, 481]} />
+      <Callout
+        x={636}
+        y={508}
+        label="Email"
+        anchor="end"
+        to={[586, 481]}
+        at={80}
+      />
     </svg>
   );
 }

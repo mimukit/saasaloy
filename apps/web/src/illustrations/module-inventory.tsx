@@ -7,8 +7,13 @@
 // Geometry: a 2:1 isometric grid. Grid cell (i, j) puts a block's top-face centre at
 // x = 280 + (i - j) * 96, y = 60 + (i + j) * 48. A block's top face is 128 x 64 and its
 // sides are 20 deep. Blocks are listed back to front so nearer ones overlap.
+//
+// Motion: as the drawing scrolls in, the plate fades in and the blocks drop onto it back
+// to front, `auth` last. No loop: the plate's dashed footprint is a construction line.
 
 import type { ReactNode } from "react";
+
+import { Assemble } from "@web/illustrations/parts";
 
 const HALF_W = 64;
 const HALF_H = 32;
@@ -35,22 +40,29 @@ const ICONS: Record<string, ReactNode> = {
 };
 
 const BLOCKS = [
-  { name: "api", i: 0, j: 0, icon: "cube" },
-  { name: "database", i: 0, j: 1, icon: "cylinder" },
-  { name: "waitlist", i: 1, j: 0, icon: "list" },
-  { name: "auth", i: 1, j: 1, icon: "lock", focus: true },
-  { name: "teams", i: 1, j: 2, icon: "people" },
-  { name: "database-postgres", i: 2, j: 1, icon: "cylinder" },
-  { name: "email-console", i: 2, j: 2, icon: "envelope" },
+  { name: "api", i: 0, j: 0, icon: "cube", at: 10 },
+  { name: "database", i: 0, j: 1, icon: "cylinder", at: 16 },
+  { name: "waitlist", i: 1, j: 0, icon: "list", at: 22 },
+  { name: "auth", i: 1, j: 1, icon: "lock", at: 52, focus: true },
+  { name: "teams", i: 1, j: 2, icon: "people", at: 28 },
+  { name: "database-postgres", i: 2, j: 1, icon: "cylinder", at: 34 },
+  { name: "email-console", i: 2, j: 2, icon: "envelope", at: 40 },
 ];
 
 const points = (...xy: number[]) => xy.join(" ");
 
-function Block({ name, i, j, icon, focus = false }: (typeof BLOCKS)[number]) {
+function Block({
+  name,
+  i,
+  j,
+  icon,
+  at,
+  focus = false,
+}: (typeof BLOCKS)[number]) {
   const x = 280 + (i - j) * 96;
   const y = 60 + (i + j) * 48;
   return (
-    <g>
+    <Assemble at={at} span={30} y={-24}>
       <polygon
         className="fill-secondary"
         points={points(
@@ -105,7 +117,7 @@ function Block({ name, i, j, icon, focus = false }: (typeof BLOCKS)[number]) {
       >
         {name}
       </text>
-    </g>
+    </Assemble>
   );
 }
 
@@ -122,28 +134,30 @@ export function ModuleInventory({ className }: { className?: string }) {
       className={className}
     >
       {/* The plate the blocks stand on, and its dashed inner footprint. */}
-      <polygon
-        className="fill-background"
-        points={points(0, 176, 280, 316, 280, 326, 0, 186)}
-      />
-      <polygon
-        className="fill-background"
-        points={points(280, 316, 560, 176, 560, 186, 280, 326)}
-      />
-      <polygon
-        className="fill-card"
-        points={points(280, 36, 560, 176, 280, 316, 0, 176)}
-      />
-      <polygon
-        className="stroke-border"
-        strokeDasharray="4 4"
-        points={points(280, 56, 520, 176, 280, 296, 40, 176)}
-      />
-      {/* Leader ticks at the plate's corners, after the mockup's callouts. */}
-      <path
-        className="stroke-border"
-        d="M280 36V8M0 176h-4M560 176h4M280 326v12M272 8h16"
-      />
+      <Assemble at={0} span={30}>
+        <polygon
+          className="fill-background"
+          points={points(0, 176, 280, 316, 280, 326, 0, 186)}
+        />
+        <polygon
+          className="fill-background"
+          points={points(280, 316, 560, 176, 560, 186, 280, 326)}
+        />
+        <polygon
+          className="fill-card"
+          points={points(280, 36, 560, 176, 280, 316, 0, 176)}
+        />
+        <polygon
+          className="stroke-border"
+          strokeDasharray="4 4"
+          points={points(280, 56, 520, 176, 280, 296, 40, 176)}
+        />
+        {/* Leader ticks at the plate's corners, after the mockup's callouts. */}
+        <path
+          className="stroke-border"
+          d="M280 36V8M0 176h-4M560 176h4M280 326v12M272 8h16"
+        />
+      </Assemble>
       <g className="font-mono" fontSize="9" strokeWidth="1.25">
         {BLOCKS.map((block) => (
           <Block key={block.name} {...block} />

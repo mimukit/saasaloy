@@ -61,7 +61,7 @@ export function Providers({
               </li>
             ))}
           </ul>
-          <ProviderModules className="text-highlight reveal w-full lg:order-1" />
+          <ProviderModules className="text-highlight drawing w-full lg:order-1" />
         </div>
       </div>
     </section>

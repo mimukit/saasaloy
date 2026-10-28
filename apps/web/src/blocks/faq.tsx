@@ -99,7 +99,7 @@ export function Faq({
           )}
         </div>
 
-        <RepositoryTree className="text-highlight reveal mx-auto w-full max-w-xl lg:order-first lg:mt-24" />
+        <RepositoryTree className="text-highlight drawing mx-auto w-full max-w-xl lg:order-first lg:mt-24" />
       </div>
     </section>
   );

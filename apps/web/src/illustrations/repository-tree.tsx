@@ -3,8 +3,18 @@
 // `api`, `database` and `auth` are in: the base's `apps/web` and `packages/ui`, then the
 // workspaces those modules add. Line art in `highlight`, and the one `primary` fill on
 // the front source file. Decorative: the answers beside it carry the facts.
+//
+// Motion: as the drawing scrolls in, the tree rows come in from the top with their
+// branch lines drawing, the source cards come forward from the back of the stack, and
+// the arrow from the tree to the cards flows.
 
-import { Callout, Label, points } from "@web/illustrations/parts";
+import {
+  Assemble,
+  Callout,
+  enter,
+  Label,
+  points,
+} from "@web/illustrations/parts";
 
 const TREE: { name: string; depth: number; folder: boolean }[] = [
   { name: "my-app/", depth: 0, folder: true },
@@ -26,7 +36,7 @@ function SourceCard({ n, front = false }: { n: number; front?: boolean }) {
   const x = 352 + n * 14;
   const y = 150 - n * 10;
   return (
-    <g>
+    <Assemble at={30 + (4 - n) * 6} span={25} x={14} y={-10}>
       <polygon
         className={front ? "fill-primary" : "fill-card"}
         points={points(x, y, x + 70, y + 35, x + 70, y + 125, x, y + 90)}
@@ -59,7 +69,7 @@ function SourceCard({ n, front = false }: { n: number; front?: boolean }) {
           />
         </g>
       )}
-    </g>
+    </Assemble>
   );
 }
 
@@ -75,35 +85,42 @@ export function RepositoryTree({ className }: { className?: string }) {
       focusable="false"
       className={className}
     >
-      <Label
-        x={14}
-        y={20}
-        size={10}
-        sans
-        className="fill-current font-semibold"
-      >
-        Your repository
-      </Label>
-      <rect x="10" y="30" width="250" height="280" className="fill-card" />
+      <Assemble at={0} span={25}>
+        <Label
+          x={14}
+          y={20}
+          size={10}
+          sans
+          className="fill-current font-semibold"
+        >
+          Your repository
+        </Label>
+        <rect x="10" y="30" width="250" height="280" className="fill-card" />
+      </Assemble>
       {TREE.map((entry, index) => {
         const x = 26 + entry.depth * 24;
         const y = 56 + index * ROW;
+        const at = 8 + index * 4;
         return (
           <g key={entry.name}>
             {entry.depth > 0 && (
               <path
-                className="stroke-border"
+                pathLength={1}
+                className="draw stroke-border"
+                style={enter({ at, span: 20 })}
                 d={`M${x - 14} ${y - 18}v16h10`}
               />
             )}
-            {entry.folder ? (
-              <path d={`M${x} ${y - 9}h6l2 2h8v9h-16z`} />
-            ) : (
-              <path d={`M${x + 2} ${y - 10}h8l4 4v10h-12z`} />
-            )}
-            <Label x={x + 24} y={y}>
-              {entry.name}
-            </Label>
+            <Assemble at={at} span={20} y={-6}>
+              {entry.folder ? (
+                <path d={`M${x} ${y - 9}h6l2 2h8v9h-16z`} />
+              ) : (
+                <path d={`M${x + 2} ${y - 10}h8l4 4v10h-12z`} />
+              )}
+              <Label x={x + 24} y={y}>
+                {entry.name}
+              </Label>
+            </Assemble>
           </g>
         );
       })}
@@ -112,11 +129,22 @@ export function RepositoryTree({ className }: { className?: string }) {
         <SourceCard key={n} n={n} />
       ))}
       <SourceCard n={0} front />
-      <Label x={330} y={30} size={10}>
-        Module source files
-      </Label>
-      <Callout x={330} y={44} label="in your repository." to={[356, 132]} />
-      <path strokeDasharray="3 3" d="M262 224h78M334 218l6 6-6 6" />
+      <Assemble at={55}>
+        <Label x={330} y={30} size={10}>
+          Module source files
+        </Label>
+      </Assemble>
+      <Callout
+        x={330}
+        y={44}
+        label="in your repository."
+        to={[356, 132]}
+        at={55}
+      />
+      <Assemble at={50}>
+        <path className="flow" strokeDasharray="3 3" d="M262 224h78" />
+        <path strokeDasharray="3 3" d="M334 218l6 6-6 6" />
+      </Assemble>
     </svg>
   );
 }

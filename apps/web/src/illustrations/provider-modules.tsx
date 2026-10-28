@@ -3,10 +3,19 @@
 // mockup. The capability's source files sit to its left. Line art in `highlight`, module
 // bodies in `card`, and the one `primary` fill on the capability's connector, the
 // interface every provider plugs into. Decorative: the copy beside it carries the facts.
+//
+// Motion: as the drawing scrolls in, the source files, the capability and the bus come
+// in, then the three providers rise into their sockets. After that the providers take
+// 3s turns, as `EMAIL_PROVIDER` picks one at runtime: the bus flows down to the provider
+// on its turn, and the other two drop 4px, unplugged. The source arrow and the trunk
+// under the capability flow all the time.
 
-import type { ReactNode } from "react";
+import type { CSSProperties, ReactNode } from "react";
 
-import { Label, Lines, Sheet } from "@web/illustrations/parts";
+import { Assemble, Label, Lines, Sheet } from "@web/illustrations/parts";
+
+/** The custom property `cycle-flow` and `cycle-shift` read. */
+const turn = (index: number) => ({ "--turn": index }) as CSSProperties;
 
 const PROVIDERS: { name: string; note: string; x: number; icon: ReactNode }[] =
   [
@@ -93,66 +102,89 @@ export function ProviderModules({ className }: { className?: string }) {
       className={className}
     >
       {/* The capability's source files. */}
-      <g transform="translate(20 46)">
-        <Sheet w={150} h={112} depth={6} />
-        <Label x={10} y={16}>
-          src
-        </Label>
-        <path className="stroke-border" d="M0 24h150" />
-        <path d="M14 34h7l2 2h9v9h-18z" />
-        <Label x={38} y={44}>
-          email
-        </Label>
-        <path
-          className="stroke-border"
-          d="M22 48v50M22 62h12M22 80h12M22 98h12"
-        />
-        {["index.ts", "provider.ts", "types.ts"].map((file, index) => (
-          <g key={file}>
-            <path d={`M38 ${56 + index * 18}h7l3 3v9h-10z`} />
-            <Label x={54} y={66 + index * 18}>
-              {file}
-            </Label>
-          </g>
-        ))}
-      </g>
-      <path strokeDasharray="3 3" d="M180 102h44M218 96l6 6-6 6" />
-
-      {/* The capability. */}
-      <Label x={232} y={26} size={10} className="fill-current font-semibold">
-        EMAIL CAPABILITY
-      </Label>
-      <Lines x={232} y={36} widths={[150]} />
-      <ModuleBody x={232} y={50} w={180} h={100} />
-      <path d="M306 82h36v24h-36zM306 82l18 13 18-13" />
-      <Label x={322} y={128} anchor="middle">
-        email
-      </Label>
-      <rect x="296" y="150" width="52" height="10" className="fill-primary" />
-
-      {/* The connections, then the three providers. */}
-      <path
-        strokeDasharray="3 3"
-        d="M322 160v22M110 182h424M110 182v20M534 182v20M322 182v20"
-      />
-      {PROVIDERS.map((provider) => (
-        <g key={provider.name}>
-          <rect
-            x={provider.x - 30}
-            y={202}
-            width={60}
-            height={10}
-            className="fill-card"
-          />
+      <Assemble at={0} x={-16}>
+        <g transform="translate(20 46)">
+          <Sheet w={150} h={112} depth={6} />
+          <Label x={10} y={16}>
+            src
+          </Label>
+          <path className="stroke-border" d="M0 24h150" />
+          <path d="M14 34h7l2 2h9v9h-18z" />
+          <Label x={38} y={44}>
+            email
+          </Label>
           <path
             className="stroke-border"
-            d={`M${provider.x - 24} 202v10M${provider.x - 12} 202v10M${provider.x} 202v10M${provider.x + 12} 202v10M${provider.x + 24} 202v10`}
+            d="M22 48v50M22 62h12M22 80h12M22 98h12"
           />
-          <ModuleBody x={provider.x - 80} y={212} w={160} h={78} />
-          <g transform={`translate(${provider.x} 240)`}>{provider.icon}</g>
-          <Label x={provider.x} y={274} anchor="middle">
-            {provider.name}
-          </Label>
+          {["index.ts", "provider.ts", "types.ts"].map((file, index) => (
+            <g key={file}>
+              <path d={`M38 ${56 + index * 18}h7l3 3v9h-10z`} />
+              <Label x={54} y={66 + index * 18}>
+                {file}
+              </Label>
+            </g>
+          ))}
+        </g>
+      </Assemble>
+      <Assemble at={10}>
+        <path className="flow" strokeDasharray="3 3" d="M180 102h44" />
+        <path strokeDasharray="3 3" d="M218 96l6 6-6 6" />
+      </Assemble>
+
+      {/* The capability. */}
+      <Assemble at={10} y={-12}>
+        <Label x={232} y={26} size={10} className="fill-current font-semibold">
+          EMAIL CAPABILITY
+        </Label>
+        <Lines x={232} y={36} widths={[150]} />
+        <ModuleBody x={232} y={50} w={180} h={100} />
+        <path d="M306 82h36v24h-36zM306 82l18 13 18-13" />
+        <Label x={322} y={128} anchor="middle">
+          email
+        </Label>
+        <rect x="296" y="150" width="52" height="10" className="fill-primary" />
+      </Assemble>
+
+      {/* The connections: the trunk always flows, each half of the bus and each branch on
+          the turn of the provider it leads to. The middle provider takes no half. */}
+      <Assemble at={25}>
+        <g strokeDasharray="3 3">
+          <path className="flow" d="M322 160v22" />
+          <path className="cycle-flow" style={turn(0)} d="M322 182H110" />
+          <path className="cycle-flow" style={turn(2)} d="M322 182H534" />
+          {PROVIDERS.map((provider, index) => (
+            <path
+              key={provider.name}
+              className="cycle-flow"
+              style={turn(index)}
+              d={`M${provider.x} 182v20`}
+            />
+          ))}
+        </g>
+      </Assemble>
+
+      {/* The three providers. */}
+      {PROVIDERS.map((provider, index) => (
+        <Assemble key={provider.name} at={35 + index * 6} y={16}>
+          <g className="cycle-shift" style={turn(index)}>
+            <rect
+              x={provider.x - 30}
+              y={202}
+              width={60}
+              height={10}
+              className="fill-card"
+            />
+            <path
+              className="stroke-border"
+              d={`M${provider.x - 24} 202v10M${provider.x - 12} 202v10M${provider.x} 202v10M${provider.x + 12} 202v10M${provider.x + 24} 202v10`}
+            />
+            <ModuleBody x={provider.x - 80} y={212} w={160} h={78} />
+            <g transform={`translate(${provider.x} 240)`}>{provider.icon}</g>
+            <Label x={provider.x} y={274} anchor="middle">
+              {provider.name}
+            </Label>
+          </g>
           <rect
             x={provider.x - 76}
             y={302}
@@ -172,7 +204,7 @@ export function ProviderModules({ className }: { className?: string }) {
           <Label x={provider.x} y={334} size={8} anchor="middle">
             {provider.note}
           </Label>
-        </g>
+        </Assemble>
       ))}
     </svg>
   );
