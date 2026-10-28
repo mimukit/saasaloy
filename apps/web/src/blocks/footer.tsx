@@ -24,6 +24,36 @@ import { interpolate } from "@web/lib/interpolate";
 // Words and links come from ../content/landing.ts. An empty label in content drops a
 // link. Every link leaves the site, except the wordmark, so each one opens in a new tab.
 
+// The construction guides drawn over the large wordmark (option 1 of the footer pattern
+// mockup): the x-height and baseline, the side bearings, a construction circle on the
+// first "s" and on the "y", and a crosshair at each corner. The viewBox is the wordmark's
+// box, 1210 by 308 at 308px, and the box keeps that ratio at every size, because
+// `wordmark-display` sets both from one value. The guides sit in hairlines of `highlight`
+// and stay still.
+const LETTER_GUIDES = (
+  <svg
+    aria-hidden="true"
+    viewBox="0 0 1210 308"
+    preserveAspectRatio="none"
+    className="text-highlight pointer-events-none absolute inset-0 size-full overflow-visible"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1"
+  >
+    <g opacity="0.55" strokeDasharray="4 4" vectorEffect="non-scaling-stroke">
+      <path d="M-10 93H1220M-30 265H1240M10 -24V332M1200 -24V332" />
+      <circle cx="95" cy="180" r="112" />
+      <circle cx="1150" cy="250" r="88" />
+    </g>
+    <g opacity="0.7">
+      <circle cx="10" cy="93" r="5" />
+      <circle cx="10" cy="265" r="5" />
+      <circle cx="1200" cy="265" r="5" />
+      <path d="M-28 -16H-4M-16 -28V-4M1214 -16H1238M1226 -28V-4M-28 324H-4M-16 312V336M1214 324H1238M1226 312V336" />
+    </g>
+  </svg>
+);
+
 export interface FooterLink {
   /** Picks the icon. An id with no icon below renders the label alone. */
   id: string;
@@ -135,14 +165,17 @@ export function Footer({
           )}
         </div>
 
-        <a
-          href="/"
-          className="text-primary text-wordmark-display mt-8 block w-fit lowercase md:mt-10"
-        >
-          {siteName}
-        </a>
+        <div className="relative mt-10 w-fit md:mt-14">
+          <a
+            href="/"
+            className="text-primary text-wordmark-display block lowercase"
+          >
+            {siteName}
+          </a>
+          {LETTER_GUIDES}
+        </div>
 
-        <div className="text-highlight mt-4 flex items-center gap-3 font-mono text-xs tracking-wide uppercase">
+        <div className="text-highlight mt-8 flex items-center gap-3 font-mono text-xs tracking-wide uppercase">
           <span aria-hidden="true" className="dimension-arm" />
           {notice && (
             <p className="text-center text-balance">
