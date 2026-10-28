@@ -13,7 +13,9 @@
    Width. `wide` is every section's container, the navbar's and the footer's too.
 
    Type ramp, in Geist (brand.css maps `--font-sans` and `--font-mono`). `display` is the
-   hero's one h1, `section-title` every h2, `lead` the paragraph under either. Body text
+   hero's one h1, `section-title` every h2, `lead` the paragraph under either.
+   `wordmark-display` is the footer's large wordmark: it scales with the viewport so the
+   word fills the `wide` container, less its 1.5rem gutters, and stops at 80rem. Body text
    stays on Tailwind's scale. The sizes and weights are the typography tokens in
    apps/web/DESIGN.md. */
 @theme {
@@ -26,6 +28,10 @@
   --text-section-title--line-height: 1.1;
   --text-section-title--letter-spacing: -0.03em;
   --text-section-title--font-weight: 700;
+  --text-wordmark-display: calc((min(100vw, 80rem) - 3rem) * 0.25);
+  --text-wordmark-display--line-height: 1;
+  --text-wordmark-display--letter-spacing: -0.055em;
+  --text-wordmark-display--font-weight: 700;
   --text-lead: 1.25rem;
   --text-lead--line-height: 1.75rem;
   --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
@@ -215,6 +221,35 @@
 
   &::after {
     left: calc(100% - var(--rule-inset, 1.5rem));
+  }
+}
+
+/* `dimension-arm` is one arm of the footer's dimension line, as a technical drawing
+   marks a measured length: a hairline in `highlight` with a short tick at each end. Put
+   two on empty, aria-hidden elements in a flex row, either side of the label. */
+@utility dimension-arm {
+  position: relative;
+  min-width: 1.5rem;
+  height: 1px;
+  flex: 1 1 0;
+  background-color: var(--highlight);
+
+  &::before,
+  &::after {
+    position: absolute;
+    top: -0.25rem;
+    width: 1px;
+    height: 0.5625rem;
+    background-color: var(--highlight);
+    content: "";
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
   }
 }
 

@@ -57,6 +57,12 @@ typography:
     fontWeight: 600
     lineHeight: 2rem
     letterSpacing: -0.02em
+  wordmark-display:
+    fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
+    fontSize: 19.25rem
+    fontWeight: 700
+    lineHeight: 1
+    letterSpacing: -0.055em
   lead:
     fontFamily: "Geist, ui-sans-serif, system-ui, sans-serif"
     fontSize: 1.25rem
@@ -106,6 +112,9 @@ components:
   wordmark:
     textColor: "{colors.primary}"
     typography: "{typography.wordmark}"
+  footer-wordmark:
+    textColor: "{colors.primary}"
+    typography: "{typography.wordmark-display}"
   hero-title:
     textColor: "{colors.foreground}"
     typography: "{typography.headline-display}"
@@ -241,7 +250,7 @@ The site self-hosts two faces through `@fontsource` packages with `font-display:
 
 Headlines are bold with tight tracking. `text-display` is the hero's one `h1`, fluid from `2.5rem` to `4.5rem`. From 64rem, where the hero splits into copy and drawing, the title steps down to `3.25rem` (`lg:text-[3.25rem]` in `hero.tsx`), so it sets in three lines beside the drawing as the round 10 mockup does. That is the one size outside the scale. `text-section-title` is every section's `h2`, fluid from `2rem` to `3rem`. The token map records the largest size of each fluid step. `text-lead` is the sans paragraph under either title, in `muted-foreground`. Body copy uses `body-sm` through `body-lg`. Mono text uses `code-md` in the command field and the catalog rows, and `code-sm` in tabs, tags and diagram callouts.
 
-The wordmark is the lowercase word `saasaloy` in Geist, in `primary`. The footer repeats it at section-title size.
+The wordmark is the lowercase word `saasaloy` in Geist, in `primary`. The footer repeats it at `wordmark-display`, which scales with the viewport so the word fills the `wide` container less its gutters: `calc((min(100vw, 80rem) - 3rem) * 0.25)`, so 19.25rem at the widest. The token map records that largest size. It is the one fluid size tied to a width, not a clamp.
 
 ## Layout
 
@@ -271,7 +280,7 @@ The landing page has seven sections in this order: hero, stages, catalog, provid
 - **Providers.** One capability connects to three interchangeable provider modules, with a small `.env` panel that shows the selecting variable. Short callouts in `highlight` name the point of each part.
 - **This site.** A `lead`, the command field again, and an outlined secondary button that links to the site source.
 - **FAQ.** Bordered accordion rows with a chevron. The question is in `highlight`, and the open answer is in `muted-foreground`.
-- **Footer.** The large wordmark, the tagline "Start small. Own the source.", and links to GitHub, Getting started, Changelog and the MIT license in `highlight`. Under the last blueprint rule, a centred colophon in Geist Mono at `text-xs` and `muted-foreground` carries two lines: the uppercase copyright with the license holder, then the credit to MI Mukit and Brainaloy Labs, with the two names as `foreground` links and a `highlight` heart.
+- **Footer.** Option B of the footer layout mockup, approved by the owner on 2026-10-28. One row holds the tagline "Start small. Own the source." on the left and links to GitHub, Getting started, Changelog and the MIT license in `highlight` on the right. Under it, the `footer-wordmark` runs the full container width. A dimension line in `highlight` sits under the wordmark: two hairline arms with an end tick each (`dimension-arm` in `web.css`) either side of a mono uppercase label, "Open source · MIT license · No cookies", which adds "Cookieless analytics" when the build loads the beacon. Under the line, a colophon in Geist Mono at `text-xs` and `muted-foreground` puts the copyright on the left, with the license holder linked to mimukit.com, and "Developed with ♥ from Bangladesh · sponsored by Brainaloy Labs" on the right. The two names are `foreground` links and the heart is `highlight`. On mobile every row stacks.
 
 The command field is the page's primary call to action. It is a bordered mono field with a prompt glyph, and a solid `primary` Copy button sits flush against its right edge. Both share the `2.5rem` height and square corners. The copy button shows its copied state in place and never moves the layout.
 

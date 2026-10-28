@@ -261,18 +261,21 @@ export const landing = {
   },
 
   // Footer navigation. Every link leaves the page (5a). An empty label or href drops a
-  // link. `privacy` is the line under the tagline, and `analytics` follows it only when
-  // the build carries an analytics token (../lib/analytics.ts), so the line stays true.
-  // An empty string hides either.
+  // link. An empty `tagline` hides it.
   //
-  // The colophon sits under the last rule, centred. `copyright` takes `{year}`, which the
-  // build fills and a one-line script brings up to the visitor's year, and `{holder}`,
-  // the name in LICENSE.md. `credit` takes `{heart}`, `{author}` and `{sponsor}`; the two
-  // names are links (5a). An empty `copyright` or `credit` hides its line.
+  // `notice` labels the dimension line under the large wordmark, and `analytics` joins it
+  // only when the build carries an analytics token (../lib/analytics.ts), so the line
+  // stays true. An empty `notice` hides the label and keeps the line.
+  //
+  // The colophon sits under the dimension line, the copyright on the left and the credit
+  // on the right. `copyright` takes `{year}`, which the build fills and a one-line script
+  // brings up to the visitor's year, and `{holder}`, the name in LICENSE.md, linked to
+  // the holder's site. `credit` takes `{heart}` and `{sponsor}`, and the sponsor is a
+  // link (5a). An empty `copyright` or `credit` hides its line.
   footer: {
     tagline: "Start small. Own the source.",
-    privacy: "This site sets no cookies.",
-    analytics: "Cloudflare Web Analytics counts visits without tracking you.",
+    notice: "Open source · MIT license",
+    analytics: "Cookieless analytics",
     links: [
       { id: "github", label: "GitHub", href: REPO },
       {
@@ -291,10 +294,12 @@ export const landing = {
         href: `${REPO}/blob/main/LICENSE.md`,
       },
     ],
-    copyright: "© {year} {holder} · Open source · MIT license",
-    copyrightHolder: "Mukitul Islam Mukit",
-    credit: "Developed with {heart} by {author} · sponsored by {sponsor}",
-    author: { label: "MI Mukit", href: "https://mimukit.com" },
+    copyright: "© {year} {holder}",
+    copyrightHolder: {
+      label: "Mukitul Islam Mukit",
+      href: "https://mimukit.com",
+    },
+    credit: "Developed with {heart} from Bangladesh · sponsored by {sponsor}",
     sponsor: { label: "Brainaloy Labs", href: "https://brainaloy.com" },
   },
 };
