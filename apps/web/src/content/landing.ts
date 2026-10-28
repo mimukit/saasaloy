@@ -299,7 +299,7 @@ export const landing = {
       label: "Mukitul Islam Mukit",
       href: "https://mimukit.com",
     },
-    credit: "Developed with {heart} from Bangladesh · sponsored by {sponsor}",
+    credit: "Developed with {heart} from Bangladesh · Sponsored by {sponsor}",
     sponsor: { label: "Brainaloy Labs", href: "https://brainaloy.com" },
   },
 };
