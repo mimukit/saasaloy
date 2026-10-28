@@ -45,22 +45,22 @@
 // Inline code: a pair of backticks inside a message (`saasaloy add`) renders as <code>.
 // Translators keep the backticked part as is.
 //
-// The brand is not in this file. `{siteName}` comes from ../index.ts, which the
-// saasaloy-setup skill sets.
+// The brand is not in this file. `{siteName}` comes from ../site.ts.
 //
 // One chrome string set deliberately lives elsewhere: the theme toggle's labels, in
 // ../lib/theme.ts. That file is inlined verbatim into a pre-paint <script> and is
 // declared import-free on purpose, so it keeps its own constants.
 
-// The project's own links, in one place so the copy below stays readable. Replace them
-// with your product's URLs when you rewrite the page.
-const REPO = "https://github.com/mimukit/saasaloy";
+// The project's own links, in one place so the copy below stays readable.
+import { repoUrl } from "@web/site";
+
+const REPO = repoUrl;
 const DOCS = `${REPO}/blob/main/docs/wiki`;
 
 /** Marketing copy. The whole of what a landing-copy pass may rewrite. */
 export const landing = {
   // The browser tab, the meta description and the link preview. `{siteName}` comes from
-  // ../index.ts. `imageAlt` describes public/og.png, the preview image.
+  // ../site.ts. `imageAlt` describes public/og.png, the preview image.
   meta: {
     // Both lines repeat claims from the README's opening paragraph. Keep the
     // description under about 155 characters, where Google cuts a snippet.
@@ -261,12 +261,13 @@ export const landing = {
   },
 
   // Footer navigation. Every link leaves the page (5a). An empty label or href drops a
-  // link. `privacy` is the line under the tagline. Keep it true for Layout.astro's
-  // analytics beacon; an empty string hides it.
+  // link. `privacy` is the line under the tagline, and `analytics` follows it only when
+  // the build carries an analytics token (../lib/analytics.ts), so the line stays true.
+  // An empty string hides either.
   footer: {
     tagline: "Start small. Own the source.",
-    privacy:
-      "This site sets no cookies. Cloudflare Web Analytics counts visits without tracking you.",
+    privacy: "This site sets no cookies.",
+    analytics: "Cloudflare Web Analytics counts visits without tracking you.",
     links: [
       { id: "github", label: "GitHub", href: REPO },
       {

@@ -8,6 +8,7 @@ import { locale, siteName } from "@web/site";
 import { landing, ui } from "@web/content/landing";
 import { interpolate } from "@web/lib/interpolate";
 import { THEME_INIT_SCRIPT } from "@web/lib/theme";
+import { analyticsToken } from "@web/lib/analytics";
 
 interface Props {
   title: string;
@@ -37,10 +38,8 @@ const jsonLdScript = jsonLd
   ? JSON.stringify(jsonLd).replaceAll("<", String.raw`\u003c`)
   : undefined;
 
-// Cloudflare Web Analytics, cookieless. The token is read at build time, so a build with
-// it unset ships no beacon and no mention of one. `site.yml` passes it from a repository
-// variable once the deploy job exists (plan 0091, Phase 2).
-const analyticsToken = import.meta.env.PUBLIC_CF_ANALYTICS_TOKEN?.trim();
+// Cloudflare Web Analytics, cookieless. A build with no token (../lib/analytics.ts)
+// ships no beacon and no mention of one.
 const analyticsBeacon = analyticsToken
   ? JSON.stringify({ token: analyticsToken })
   : undefined;

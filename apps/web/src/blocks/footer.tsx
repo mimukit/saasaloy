@@ -5,12 +5,13 @@ import { siteName as defaultSiteName } from "@web/site";
 import { landing, ui } from "@web/content/landing";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { GITHUB_MARK } from "@web/lib/github-mark";
+import { analyticsToken } from "@web/lib/analytics";
 import { interpolate } from "@web/lib/interpolate";
 
 // Fully static, no script. The round 10 footer: a blueprint rule on top, the large
 // lowercase wordmark and the tagline on the left, and one row of links in `highlight` on
 // the right, each with a small icon. The rows stack on mobile. A one-line privacy note
-// sits under the tagline.
+// sits under the tagline; it names the analytics only when the build loads them.
 //
 // Words and links come from ../content/landing.ts. An empty label in content drops a
 // link. Every link leaves the site, so each one opens in a new tab.
@@ -25,6 +26,14 @@ export interface FooterLink {
 const defaultLinks: FooterLink[] = landing.footer.links.filter(
   (link) => link.label !== "" && link.href !== ""
 );
+
+// The analytics sentence joins the privacy line only when the build loads the beacon.
+const defaultPrivacy = [
+  landing.footer.privacy,
+  analyticsToken ? landing.footer.analytics : "",
+]
+  .filter((line) => line !== "")
+  .join(" ");
 
 const LINK_ICONS: Record<string, ReactNode> = {
   github: GITHUB_MARK,
@@ -44,7 +53,7 @@ export interface FooterProps {
 export function Footer({
   siteName = defaultSiteName,
   tagline = interpolate(landing.footer.tagline, { siteName }),
-  privacy = interpolate(landing.footer.privacy, { siteName }),
+  privacy = interpolate(defaultPrivacy, { siteName }),
   links = defaultLinks,
 }: FooterProps) {
   return (
