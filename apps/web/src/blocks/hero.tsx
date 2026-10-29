@@ -3,7 +3,7 @@ import { ArrowRightIcon, BookOpenIcon } from "lucide-react";
 
 import { CommandField } from "@web/components/command-field";
 import { landing } from "@web/content/landing";
-import { AppWireframe } from "@web/illustrations/app-wireframe";
+import { SourceTree } from "@web/illustrations/source-tree";
 import { cliVersion } from "@web/lib/cli-version";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { GITHUB_MARK } from "@web/lib/github-mark";
@@ -14,18 +14,17 @@ import { interpolate } from "@web/lib/interpolate";
 // draws a static field: the command stays selectable and the page ships no JavaScript
 // for it. The motion is CSS: `blur-in` from ../styles/web.css, staggered with
 // `--blur-in-delay`, and still under reduced motion. The drawing plays its own entry
-// through `drawing-load`, then loops. LOOP_SCRIPT, the one script the hero ships, marks
-// the drawing `data-offscreen` while it is out of view, and the CSS pauses every loop in
-// it then. Without JavaScript the loops never pause.
+// through `drawing-load`, then loops. LOOP_SCRIPT in ../layouts/Layout.astro marks the
+// drawing `data-offscreen` while it is out of view, and the CSS pauses every loop in it
+// then. Without JavaScript the loops never pause.
 //
-// The round 9/10 hero: the copy on the left and the application wireframe on the right
-// from `lg` (64rem); below it the drawing follows the copy at full width. The title's
+// The round 9/10 hero: the copy on the left and the drawing on the right from `lg`
+// (64rem); below it the drawing follows the copy at full width. The drawing is the source
+// tree from plan 0092, approved in round 3: a project that gains a folder per
+// `saasaloy add`. The title's
 // first sentence is `foreground`, the second `primary`.
 //
 // Every word comes from ../content/landing.ts. Edit the copy there, not here.
-
-const LOOP_SCRIPT =
-  'for(const e of document.querySelectorAll("[data-loop-in-view]"))new IntersectionObserver(([n])=>e.toggleAttribute("data-offscreen",!n.isIntersecting)).observe(e)';
 
 export interface HeroLink {
   /** `github` draws the GitHub mark, any other id the book icon. */
@@ -95,9 +94,7 @@ export function Hero({
           )}
         </div>
 
-        <AppWireframe className="text-highlight drawing-load w-full" />
-        {/* oxlint-disable-next-line react/no-danger -- LOOP_SCRIPT is a constant above; no input reaches it. */}
-        <script dangerouslySetInnerHTML={{ __html: LOOP_SCRIPT }} />
+        <SourceTree className="text-highlight drawing-load w-full" />
       </div>
     </section>
   );

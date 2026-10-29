@@ -5,17 +5,19 @@
 // THE ONE `primary` FILL MOVES. Slab n carries `data-slab="n"` (1-based, the same
 // number as its stage row), and the `stage-list` utility in ../styles/web.css fills the
 // active slab's faces with `primary` and turns the lines in its `data-slab-detail` group
-// `primary-foreground`. The active slab follows the hovered or focused stage row, and
-// rests on the first. The utility covers five stages; a sixth needs a rule there too.
+// `primary-foreground`. The active slab follows the hovered or focused stage row. With
+// neither, it moves on with the row every 3s; with reduced motion it rests on the first. The utility covers five stages; a sixth needs a rule there too.
 // The active slab also rises 6px. It moves inside its <Assemble> group, because the
 // entry's fill would hold the slab's own `translate` at rest.
 //
 // Motion: as the drawing scrolls in, the slabs drop in from the top one at a time, and
-// each leader draws out to its command. No loop: the rows beside the drawing are text.
+// each leader draws out to its command. The only loop is the highlight cycle above.
 //
 // Geometry: a 2:1 isometric slab. Slab k has its top-face centre at (CX, CY0 + k * GAP);
 // the face is 2 * HW wide and 2 * HH tall, and the sides are DEPTH deep. Slabs are drawn
 // bottom first, so each one sits in front of the slab below it.
+
+import type { CSSProperties } from "react";
 
 import { Assemble, enter, Label, points } from "@web/illustrations/parts";
 
@@ -60,7 +62,7 @@ function Slab({ stage, index }: { stage: SlabStage; index: number }) {
   const at = index * 12;
   return (
     <Assemble at={at} span={30} y={-24}>
-      <g data-slab={index + 1}>
+      <g data-slab={index + 1} style={{ "--stage": index } as CSSProperties}>
         <polygon
           data-face=""
           points={points(

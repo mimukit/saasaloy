@@ -2,8 +2,8 @@ import { landing } from "@web/content/landing";
 import { ProviderModules } from "@web/illustrations/provider-modules";
 import { inlineCode } from "@web/lib/inline-code";
 
-// Fully static, no script. The round 10 providers section: the title with a small `.env`
-// panel beside it, then the drawing of one capability and its three providers, with the
+// Fully static, no script. The round 10 providers section: the title and its lead with a
+// small `.env` panel beside them, then the drawing of one capability and its three providers, with the
 // short points beside the drawing from `lg` (64rem). Below `lg` the points come before
 // the drawing, so the copy still leads.
 //
@@ -18,6 +18,7 @@ export interface ProviderPoint {
 export interface ProvidersProps {
   id?: string;
   title?: string;
+  description?: string;
   envLabel?: string;
   envExample?: string;
   points?: ProviderPoint[];
@@ -26,6 +27,7 @@ export interface ProvidersProps {
 export function Providers({
   id = "providers",
   title = landing.providers.title,
+  description = landing.providers.description,
   envLabel = landing.providers.envLabel,
   envExample = landing.providers.envExample,
   points = landing.providers.points,
@@ -34,9 +36,14 @@ export function Providers({
     <section id={id} className="section-y">
       <div className="section-container-wide">
         <div className="reveal flex flex-col gap-8 lg:flex-row lg:items-start lg:justify-between">
-          <h2 className="text-section-title text-primary max-w-[22ch] text-balance">
-            {title}
-          </h2>
+          <div className="min-w-0">
+            <h2 className="text-section-title text-primary max-w-[22ch] text-balance">
+              {title}
+            </h2>
+            <p className="text-lead text-muted-foreground mt-6 max-w-xl text-pretty">
+              {description}
+            </p>
+          </div>
           <figure className="border-border bg-card w-full max-w-xs border font-mono text-sm">
             <figcaption className="text-highlight border-border border-b px-3 py-1.5 text-xs">
               {envLabel}

@@ -55,7 +55,7 @@ Rejected alternatives:
 - One pass of motion on entry for the new sections in place of a loop. The owner kept the loop (Q1).
 - Use real screenshots of a generated project for "What you can ship" (report G1). This stays possible later, beside or in place of the map.
 
-### Phase 1: source-tree hero (#290)
+### Phase 1: source-tree hero (#290) (built 2026-10-29)
 
 - Add `apps/web/src/illustrations/source-tree.tsx` from round 2 variant F, with the content in the Hero drawing content row.
 - Swap `AppWireframe` for it in `apps/web/src/blocks/hero.tsx`. Keep `drawing-load` and `data-loop-in-view`.
@@ -65,7 +65,7 @@ Rejected alternatives:
 
 Done when: the built hero matches `after-hero.png` at 1440 px in light, except that `config/` has no marker. `source-tree.tsx` is 20 KB or less. `rg "app-wireframe|sign-in-" apps/web/src` returns nothing. `pnpm lint` passes, and `gate:a11y` passes with the hero loop paused off screen.
 
-### Phase 2: shared in-view loop (#290)
+### Phase 2: shared in-view loop (#290) (built 2026-10-29)
 
 - Move `LOOP_SCRIPT` from `hero.tsx` to `apps/web/src/layouts/Layout.astro`, emitted once per page.
 - Extend `gate-a11y.ts` to scroll each `[data-loop-in-view]` drawing out of view and check that it pauses.
@@ -73,14 +73,14 @@ Done when: the built hero matches `after-hero.png` at 1440 px in light, except t
 
 Done when: the built page has one copy of the script, `gate:a11y` passes, and the gate fails when a drawing keeps running off screen.
 
-### Phase 3: problem section with the module city (#290)
+### Phase 3: problem section with the module city (#290) (built 2026-10-29)
 
 - Add `apps/web/src/blocks/problem.tsx`, `apps/web/src/illustrations/module-city.tsx` and `landing.problem` copy.
 - Add the section after the hero in `index.astro`, with a `blueprint-rule` on each side.
 
 Done when: the section matches `section-problem.png` at 1440 px in light, with no eyebrow and no fill on the crane. `module-city.tsx` is 20 KB or less. No drawing label renders under 10 px at 375 px. The Lighthouse and axe gates pass.
 
-### Phase 4: built-on section with the stack orbits (#290)
+### Phase 4: built-on section with the stack orbits (#290) (built 2026-10-29)
 
 - Add `apps/web/src/blocks/built-on.tsx`, `apps/web/src/illustrations/stack-orbits.tsx` and `landing.builtOn` copy, with each stack name as a text chip.
 - Add the section after `problem`.

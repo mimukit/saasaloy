@@ -103,6 +103,50 @@ export const landing = {
     note: "Version {version}. Proof of concept. Not for production use yet.",
   },
 
+  // The problem section (plan 0092). `title` and `description` repeat README line 23,
+  // whose "billing" is the word a boilerplate uses, not a module name. `contrast` sits in
+  // the bordered block under them.
+  problem: {
+    title: "Boilerplates make you delete code for a week.",
+    description:
+      "You clone one and inherit forty features, twelve environment variables and someone else's opinions about billing.",
+    contrast:
+      "A boilerplate gives you forty features on day one. Saasaloy gives you one, and adds the next when the product needs it.",
+  },
+
+  // The built-on section (plan 0092). The chips name every part of the drawing, which
+  // is aria-hidden, so the names stay readable and searchable. Each name is a framework,
+  // library or tool from the README stack table (5b), shown as is. The page names no
+  // hosting vendor here: the providers section says where a project runs.
+  builtOn: {
+    title: "Built on tools you already know.",
+    description:
+      "Astro, TanStack Router and Hono for the apps, Drizzle and Better Auth for data and sign-in, all in one Turborepo monorepo.",
+    groups: [
+      {
+        id: "frameworks",
+        label: "Frameworks",
+        items: [
+          { id: "astro", label: "Astro" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "vite", label: "Vite" },
+          { id: "hono", label: "Hono" },
+        ],
+      },
+      {
+        id: "libraries",
+        label: "Libraries and tools",
+        items: [
+          { id: "drizzle", label: "Drizzle" },
+          { id: "better-auth", label: "Better Auth" },
+          { id: "postgres", label: "Postgres" },
+          { id: "turborepo", label: "Turborepo" },
+          { id: "pnpm", label: "pnpm" },
+        ],
+      },
+    ],
+  },
+
   // The stages. Each stage names the command that adds it (5b) and links to its docs
   // (5a): the landing page to the getting started guide, every other stage to its
   // module's row in the modules page. The row link uses a text fragment, because a
@@ -153,16 +197,23 @@ export const landing = {
   // The module catalog. The rows are not copy: the page reads them from
   // modules/*/registry-item.json at build time, so a renamed or new module needs no edit
   // here. These are the words around the rows. An empty `description` hides the lead.
+  // `{total}` and the tier tokens in `counts` are module counts, read from the registry
+  // at build time. A tab is a registry `stage`; `variants` labels the provider and driver
+  // chips on a tile.
   catalog: {
     title: "Choose the modules you need.",
-    description: "",
-    filterLabel: "Filter modules by type",
+    description:
+      "{total} modules, and each one adds its source files to your repository. You read and edit every line it writes.",
+    counts:
+      "{capability} capabilities · {feature} features · {provider} providers · {driver} drivers",
+    filterLabel: "Filter modules by stage",
     tabs: {
       all: "All",
-      capability: "Capabilities",
-      feature: "Features",
-      provider: "Providers",
-      driver: "Drivers",
+      validate: "Validate",
+      mvp: "MVP",
+      teams: "Teams",
+      money: "Money",
+      scale: "Scale",
     },
     tiers: {
       capability: "Capability",
@@ -170,13 +221,20 @@ export const landing = {
       provider: "Provider",
       driver: "Driver",
     },
+    variants: {
+      provider: "Providers",
+      driver: "Drivers",
+    },
     showAll: "Show all modules",
   },
 
-  // The providers. `envExample` is the `.env` line the panel shows (5b). Each point is a
-  // title and a sentence; the drawing beside them repeats the same parts as labels.
+  // The providers. `description` is the lead under the title. `envExample` is the `.env`
+  // line the panel shows (5b). Each point is a title and a sentence; the drawing beside
+  // them repeats the same parts as labels.
   providers: {
-    title: "Cloudflare by default. Providers you can change.",
+    title: "Change the vendor, not your code.",
+    description:
+      "Cloudflare is the default provider. One env var moves a capability such as email to another vendor.",
     envLabel: ".env (example)",
     envExample: "EMAIL_PROVIDER=console",
     points: [
@@ -201,16 +259,15 @@ export const landing = {
     ],
   },
 
-  // This site's own source. The site is a copy of the base template's landing page, kept
-  // at `apps/web` in the repository; `saasaloy update` does not reach it. `command` shows
-  // in the command field (5b), and `sourceHref` leaves the page (5a).
+  // Project instructions and the skill files installed with each module.
   siteSource: {
-    title: "This site starts with Saasaloy.",
+    title: "Ready for coding agents from the first commit.",
     description:
-      "It began as the landing page that `saasaloy init` writes, and it lives at `apps/web` in the repository.",
-    command: "npx saasaloy init my-app",
-    sourceLabel: "View this site's source",
-    sourceHref: `${REPO}/tree/main/apps/web`,
+      "A new project starts with `AGENTS.md`, `CLAUDE.md`, a `DESIGN.md` and seven base skills for setup, config, env, design, testing, deploy and landing copy.",
+    detail:
+      "Every module you add brings its own skill file, and one `pnpm check` tells the agent whether its change holds.",
+    sourceLabel: "Read the agent guide",
+    sourceHref: `${DOCS}/how-to/make-it-yours.md`,
   },
 
   faq: {

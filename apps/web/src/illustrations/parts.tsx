@@ -6,6 +6,8 @@
 // Motion is CSS, from the drawing utilities in ../styles/web.css. A drawing's <svg> takes
 // `drawing` (`drawing-load` in the hero), and its parts enter through <Assemble> and the
 // `draw` class, staggered by `at`. With reduced motion requested, every part sits still.
+// One drawing times many parts in a single long pass, which these utilities cannot
+// express: the agent session (agent-crew.tsx) builds its keyframes with ./live.ts.
 
 import type { CSSProperties, ReactNode } from "react";
 

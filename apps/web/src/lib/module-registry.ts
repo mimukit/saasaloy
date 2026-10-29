@@ -14,7 +14,7 @@ const descriptors = import.meta.glob<RegistryDescriptor>(
   { eager: true, import: "default" }
 );
 
-/** Every module in the registry, one catalog row each, in catalog order. */
+/** Every module in the registry: one tile per capability and feature, in catalog order. */
 export function loadModuleCatalog(): CatalogRow[] {
   return catalogRows(Object.values(descriptors));
 }

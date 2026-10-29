@@ -38,6 +38,13 @@ const jsonLdScript = jsonLd
   ? JSON.stringify(jsonLd).replaceAll("<", String.raw`\u003c`)
   : undefined;
 
+// The pause for the looping drawings. Every `[data-loop-in-view]` drawing loops on the
+// clock, and this marks it `data-offscreen` while it is out of view, so the CSS in
+// ../styles/web.css pauses its loops then. One copy per page, at the end of <body>, so
+// it sees every drawing above it. Without JavaScript the loops never pause.
+const LOOP_SCRIPT =
+  'for(const e of document.querySelectorAll("[data-loop-in-view]"))new IntersectionObserver(([n])=>e.toggleAttribute("data-offscreen",!n.isIntersecting)).observe(e)';
+
 // Cloudflare Web Analytics, cookieless. A build with no token (../lib/analytics.ts)
 // ships no beacon and no mention of one.
 const analyticsBeacon = analyticsToken
@@ -123,5 +130,6 @@ const analyticsBeacon = analyticsToken
       {ui.layout.skipToContent}
     </a>
     <slot />
+    <script is:inline set:html={LOOP_SCRIPT} />
   </body>
 </html>
