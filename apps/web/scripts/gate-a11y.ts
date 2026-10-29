@@ -8,9 +8,10 @@
 //
 // One more load, with motion allowed, holds the drawings to WCAG 2.2.2: no animation on
 // the clock may run longer than 5s, since the page has no pause control. A scroll-tied
-// animation moves only while the reader scrolls, so it is exempt. So is the hero drawing,
-// marked `data-loop-in-view`: its loops run while it is in view, by the owner's decision.
-// The gate then scrolls it out of view and fails any of its animations that still runs.
+// animation moves only while the reader scrolls, so it is exempt. So is every drawing
+// marked `data-loop-in-view`: its loops run while it is in view, by the owner's decision
+// (plan 0092). The gate then scrolls each one out of view in turn and fails any of its
+// animations that still runs.
 //
 // The theme is set the way a returning visitor sets it: the stored choice in
 // localStorage, written before the page's own pre-paint script reads it. The script then
@@ -152,33 +153,51 @@ try {
     console.log("ok   / 1440px motion: no timed animation runs past 5s");
   }
 
-  // The hero's loops pause once it leaves the viewport.
-  await page.evaluate(() =>
-    window.scrollTo(0, document.documentElement.scrollHeight)
-  );
-  await page.waitForFunction(() =>
-    document.querySelector("[data-loop-in-view][data-offscreen]")
-  );
-  const running = await page.evaluate(() =>
-    document
-      .getAnimations()
-      .filter(
-        (animation) =>
-          animation.effect instanceof KeyframeEffect &&
-          animation.effect.target?.closest("[data-loop-in-view]") &&
-          animation.playState === "running"
-      )
-      .map((animation) =>
-        animation instanceof CSSAnimation ? animation.animationName : "unnamed"
-      )
-  );
-  if (running.length > 0) {
-    failures += running.length;
-    console.error(
-      `FAIL / 1440px motion: ${running.length} hero loop(s) run off screen: ${[...new Set(running)].join(", ")}`
+  // Each looping drawing pauses once it leaves the viewport. The gate scrolls a drawing
+  // into view, waits for it to run, then scrolls it out and fails any of its animations
+  // that still runs. A drawing that `display: none` hides at this width has nothing to
+  // run; the narrower loads have no motion check of their own.
+  const drawings = await page.locator("[data-loop-in-view]").all();
+  if (drawings.length === 0) {
+    failures += 1;
+    console.error("FAIL / 1440px motion: no [data-loop-in-view] drawing found");
+  }
+  for (const [index, drawing] of drawings.entries()) {
+    if (!(await drawing.isVisible())) {
+      continue;
+    }
+    const where = `/ 1440px motion: looping drawing ${index + 1}`;
+    await drawing.scrollIntoViewIfNeeded();
+    await drawing.and(page.locator(":not([data-offscreen])")).waitFor();
+    // Above the first screen, scroll to the bottom; below it, back to the top.
+    await drawing.evaluate((element) => {
+      const top = element.getBoundingClientRect().top + window.scrollY;
+      window.scrollTo(
+        0,
+        top < window.innerHeight ? document.documentElement.scrollHeight : 0
+      );
+    });
+    await drawing
+      .and(page.locator("[data-offscreen]"))
+      .waitFor({ timeout: 5000 });
+    const running = await drawing.evaluate((element) =>
+      element
+        .getAnimations({ subtree: true })
+        .filter((animation) => animation.playState === "running")
+        .map((animation) =>
+          animation instanceof CSSAnimation
+            ? animation.animationName
+            : "unnamed"
+        )
     );
-  } else {
-    console.log("ok   / 1440px motion: the hero's loops pause off screen");
+    if (running.length > 0) {
+      failures += running.length;
+      console.error(
+        `FAIL ${where}: ${running.length} loop(s) run off screen: ${[...new Set(running)].join(", ")}`
+      );
+    } else {
+      console.log(`ok   ${where}: its loops pause off screen`);
+    }
   }
   await context.close();
 } finally {
