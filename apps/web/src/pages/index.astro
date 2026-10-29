@@ -1,11 +1,13 @@
 ---
 import { locale, siteName } from "@web/site";
 import { CommandField } from "@web/components/command-field";
+import { BuiltOn } from "@web/blocks/built-on";
 import { Faq } from "@web/blocks/faq";
 import { Footer } from "@web/blocks/footer";
 import { Hero } from "@web/blocks/hero";
 import { ModuleCatalog } from "@web/blocks/module-catalog";
 import { Navbar } from "@web/blocks/navbar";
+import { Problem } from "@web/blocks/problem";
 import { Providers } from "@web/blocks/providers";
 import { SiteSource } from "@web/blocks/site-source";
 import { Stages } from "@web/blocks/stages";
@@ -62,7 +64,8 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
   Layout.astro emits drives it.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 
-  The sections follow the round 10 mockup, with a `blueprint-rule` between each pair.
+  The sections follow the round 10 mockup, with the problem and built-on sections of plan
+  0092 after the hero, and a `blueprint-rule` between each pair.
   The footer draws its own rules.
 */}
 <Layout
@@ -79,6 +82,10 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
         command={landing.hero.command}
       />
     </Hero>
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <Problem />
+    <div aria-hidden="true" class="blueprint-rule"></div>
+    <BuiltOn />
     <div aria-hidden="true" class="blueprint-rule"></div>
     <Stages />
     <div aria-hidden="true" class="blueprint-rule"></div>

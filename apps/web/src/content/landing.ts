@@ -103,6 +103,53 @@ export const landing = {
     note: "Version {version}. Proof of concept. Not for production use yet.",
   },
 
+  // The problem section (plan 0092). `title` and `description` repeat README line 23,
+  // whose "billing" is the word a boilerplate uses, not a module name. `contrast` sits in
+  // the bordered block under them.
+  problem: {
+    title: "Boilerplates make you delete code for a week.",
+    description:
+      "You clone one and inherit forty features, twelve environment variables and someone else's opinions about billing.",
+    contrast:
+      "A boilerplate gives you forty features on day one. Saasaloy gives you one, and adds the next when the product needs it.",
+  },
+
+  // The built-on section (plan 0092). The chips name every part of the drawing, which
+  // is aria-hidden, so the names stay readable and searchable. Each name is a product
+  // from the README stack table (5b), shown as is.
+  builtOn: {
+    title: "Built on Cloudflare and tools you know.",
+    description:
+      "Every project runs on Workers, with D1, KV, R2 and Queues for data and background work.",
+    groups: [
+      {
+        id: "runtime",
+        label: "Runtime",
+        items: [
+          { id: "workers", label: "Workers" },
+          { id: "d1", label: "D1" },
+          { id: "kv", label: "KV" },
+          { id: "r2", label: "R2" },
+          { id: "queues", label: "Queues" },
+        ],
+      },
+      {
+        id: "libraries",
+        label: "Libraries",
+        items: [
+          { id: "astro", label: "Astro" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "hono", label: "Hono" },
+          { id: "drizzle", label: "Drizzle" },
+          { id: "better-auth", label: "Better Auth" },
+          { id: "postgres", label: "Postgres" },
+          { id: "turborepo", label: "Turborepo" },
+          { id: "pnpm", label: "pnpm" },
+        ],
+      },
+    ],
+  },
+
   // The stages. Each stage names the command that adds it (5b) and links to its docs
   // (5a): the landing page to the getting started guide, every other stage to its
   // module's row in the modules page. The row link uses a text fragment, because a
