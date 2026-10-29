@@ -64,8 +64,8 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
   Layout.astro emits drives it.
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 
-  The sections follow the round 10 mockup, with the problem and built-on sections of plan
-  0092 after the hero, and a `blueprint-rule` between each pair.
+  The sections follow the round 10 mockup, with the built-on and problem sections of plan
+  0092 after the stages, and a `blueprint-rule` between each pair.
   The footer draws its own rules.
 */}
 <Layout
@@ -83,11 +83,11 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
       />
     </Hero>
     <div aria-hidden="true" class="blueprint-rule"></div>
-    <Problem />
+    <Stages />
     <div aria-hidden="true" class="blueprint-rule"></div>
     <BuiltOn />
     <div aria-hidden="true" class="blueprint-rule"></div>
-    <Stages />
+    <Problem />
     <div aria-hidden="true" class="blueprint-rule"></div>
     <ModuleCatalog rows={catalogRows} />
     <div aria-hidden="true" class="blueprint-rule"></div>
