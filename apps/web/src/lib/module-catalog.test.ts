@@ -3,13 +3,13 @@ import { readFileSync, readdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 
-import { catalogRows, moduleTier } from "./module-catalog.ts";
+import { catalogCounts, catalogRows, moduleTier } from "./module-catalog.ts";
 import type { RegistryDescriptor } from "./module-catalog.ts";
 
 const providersPatch = { kind: "plugin-array", arrayProp: "providers" };
 
 function descriptor(fields: Partial<RegistryDescriptor>): RegistryDescriptor {
-  return { name: "x", type: "saasaloy:feature", ...fields };
+  return { name: "x", type: "saasaloy:feature", stage: "mvp", ...fields };
 }
 
 describe("moduleTier", () => {
@@ -67,18 +67,128 @@ describe("moduleTier", () => {
 });
 
 describe("catalogRows", () => {
-  it("orders rows by tier, then by name", () => {
+  it("orders tiles by stage, then capabilities first, then by name", () => {
     const rows = catalogRows([
-      descriptor({ name: "b-driver", conflictsWith: ["a"] }),
-      descriptor({ name: "z-cap", type: "saasaloy:capability" }),
-      descriptor({ name: "a-provider", patches: [providersPatch] }),
-      descriptor({ name: "a-cap", type: "saasaloy:capability" }),
+      descriptor({ name: "z-feature", stage: "validate" }),
+      descriptor({ name: "b-cap", type: "saasaloy:capability" }),
       descriptor({ name: "a-feature" }),
+      descriptor({
+        name: "y-cap",
+        type: "saasaloy:capability",
+        stage: "validate",
+      }),
+      descriptor({ name: "c-scale", stage: "scale" }),
     ]);
     assert.deepEqual(
       rows.map((row) => row.name),
-      ["a-cap", "z-cap", "a-feature", "a-provider", "b-driver"]
+      ["y-cap", "z-feature", "b-cap", "a-feature", "c-scale"]
     );
+  });
+
+  it("puts each provider and driver on its parent's tile, by name", () => {
+    const rows = catalogRows([
+      descriptor({ name: "email", type: "saasaloy:capability" }),
+      descriptor({
+        name: "email-plunk",
+        dependsOn: ["email"],
+        patches: [providersPatch],
+      }),
+      descriptor({
+        name: "email-console",
+        dependsOn: ["email"],
+        patches: [providersPatch],
+      }),
+      descriptor({ name: "keys" }),
+      descriptor({
+        name: "keys-user",
+        dependsOn: ["auth", "keys"],
+        conflictsWith: ["keys-org"],
+      }),
+    ]);
+    assert.deepEqual(rows, [
+      {
+        name: "email",
+        description: "",
+        tier: "capability",
+        stage: "mvp",
+        variants: [
+          { name: "email-console", label: "console", tier: "provider" },
+          { name: "email-plunk", label: "plunk", tier: "provider" },
+        ],
+      },
+      {
+        name: "keys",
+        description: "",
+        tier: "feature",
+        stage: "mvp",
+        variants: [{ name: "keys-user", label: "user", tier: "driver" }],
+      },
+    ]);
+  });
+
+  it("picks the longest dependsOn prefix as the parent", () => {
+    const rows = catalogRows([
+      descriptor({ name: "api" }),
+      descriptor({ name: "api-keys" }),
+      descriptor({
+        name: "api-keys-user",
+        dependsOn: ["api", "api-keys"],
+        conflictsWith: ["api-keys-org"],
+      }),
+    ]);
+    assert.equal(
+      rows.find((row) => row.name === "api-keys")?.variants.length,
+      1
+    );
+  });
+
+  it("throws on a provider whose name matches no dependsOn entry", () => {
+    assert.throws(() =>
+      catalogRows([
+        descriptor({ name: "email" }),
+        descriptor({
+          name: "mail-plunk",
+          dependsOn: ["email"],
+          patches: [providersPatch],
+        }),
+      ])
+    );
+  });
+
+  it("throws on a provider whose parent is not in the registry", () => {
+    assert.throws(() =>
+      catalogRows([
+        descriptor({
+          name: "email-plunk",
+          dependsOn: ["email"],
+          patches: [providersPatch],
+        }),
+      ])
+    );
+  });
+
+  it("throws on a stage it does not know", () => {
+    assert.throws(() => catalogRows([descriptor({ stage: "later" })]));
+  });
+});
+
+describe("catalogCounts", () => {
+  it("counts the tiles and their variants by tier", () => {
+    const rows = catalogRows([
+      descriptor({ name: "email", type: "saasaloy:capability" }),
+      descriptor({
+        name: "email-plunk",
+        dependsOn: ["email"],
+        patches: [providersPatch],
+      }),
+      descriptor({ name: "teams" }),
+    ]);
+    assert.deepEqual(catalogCounts(rows), {
+      capability: 1,
+      feature: 1,
+      provider: 1,
+      driver: 0,
+    });
   });
 });
 
@@ -95,12 +205,17 @@ describe("the real registry", () => {
   const rows = catalogRows(descriptors);
   const namesOf = (tier: string) =>
     rows
-      .filter((row) => row.tier === tier)
-      .map((row) => row.name)
+      .flatMap((row) => [row, ...row.variants])
+      .filter((module) => module.tier === tier)
+      .map((module) => module.name)
       .toSorted();
 
-  it("gives one row per registry-item.json", () => {
-    assert.equal(rows.length, descriptors.length);
+  it("shows every registry-item.json once, as a tile or a chip", () => {
+    const counts = catalogCounts(rows);
+    assert.equal(
+      Object.values(counts).reduce((sum, n) => sum + n, 0),
+      descriptors.length
+    );
   });
 
   it("gives the README's 17 providers and 4 drivers", () => {

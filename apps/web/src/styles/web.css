@@ -353,63 +353,75 @@
 
 /* The module catalog's filter, with no JavaScript. The block (src/blocks/module-catalog.tsx)
    puts this on its <section>. Each tab is a radio input carrying `data-catalog-tab`, each
-   module tile carries `data-tier`, and `:has()` reads the checked tab from the section.
-   A tab hides every tile of another tier. Then, until the `data-catalog-more` checkbox is
-   checked, only the first 8 tiles of what is left show: `:nth-child(n + 9 of …)` counts
-   the tiles of the chosen tier alone, so each tab gets its own first 8. The 8 is
-   `CATALOG_VISIBLE_ROWS` in the block; change both together. The checkbox hides itself
-   on a tab whose tiles all fit, which the block marks in `data-catalog-fits`. */
+   module tile carries `data-catalog-stage`, and `:has()` reads the checked tab from the
+   section. A tab hides every tile of another stage. Then, until the `data-catalog-more`
+   checkbox is checked, only the first 8 tiles of what is left show:
+   `:nth-child(n + 9 of …)` counts the tiles of the chosen stage alone, so each tab gets
+   its own first 8. The 8 is `CATALOG_VISIBLE_ROWS` in the block; change both together.
+   The checkbox hides itself on a tab whose tiles all fit, which the block marks in
+   `data-catalog-fits`. The stages are CATALOG_STAGES in src/lib/module-catalog.ts; add a
+   rule per stage when that list grows. */
 @utility module-catalog {
-  &:has([data-catalog-tab="capability"]:checked)
-    [data-tier]:not([data-tier="capability"]) {
+  &:has([data-catalog-tab="validate"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="validate"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="feature"]:checked)
-    [data-tier]:not([data-tier="feature"]) {
+  &:has([data-catalog-tab="mvp"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="mvp"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="provider"]:checked)
-    [data-tier]:not([data-tier="provider"]) {
+  &:has([data-catalog-tab="teams"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="teams"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="driver"]:checked)
-    [data-tier]:not([data-tier="driver"]) {
+  &:has([data-catalog-tab="money"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="money"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="scale"]) {
     display: none;
   }
 
   &:has([data-catalog-tab="all"]:checked):not(:has([data-catalog-more]:checked))
-    [data-tier]:nth-child(n + 9) {
+    [data-catalog-stage]:nth-child(n + 9) {
     display: none;
   }
 
-  &:has([data-catalog-tab="capability"]:checked):not(
+  &:has([data-catalog-tab="validate"]:checked):not(
       :has([data-catalog-more]:checked)
     )
-    [data-tier]:nth-child(n + 9 of [data-tier="capability"]) {
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="validate"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="feature"]:checked):not(
-      :has([data-catalog-more]:checked)
-    )
-    [data-tier]:nth-child(n + 9 of [data-tier="feature"]) {
+  &:has([data-catalog-tab="mvp"]:checked):not(:has([data-catalog-more]:checked))
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="mvp"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="provider"]:checked):not(
+  &:has([data-catalog-tab="teams"]:checked):not(
       :has([data-catalog-more]:checked)
     )
-    [data-tier]:nth-child(n + 9 of [data-tier="provider"]) {
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="teams"]) {
     display: none;
   }
 
-  &:has([data-catalog-tab="driver"]:checked):not(
+  &:has([data-catalog-tab="money"]:checked):not(
       :has([data-catalog-more]:checked)
     )
-    [data-tier]:nth-child(n + 9 of [data-tier="driver"]) {
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="money"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="scale"]) {
     display: none;
   }
 
@@ -417,20 +429,23 @@
     display: none;
   }
 
-  &:has([data-catalog-tab="capability"]:checked)
-    [data-catalog-fits~="capability"] {
+  &:has([data-catalog-tab="validate"]:checked) [data-catalog-fits~="validate"] {
     display: none;
   }
 
-  &:has([data-catalog-tab="feature"]:checked) [data-catalog-fits~="feature"] {
+  &:has([data-catalog-tab="mvp"]:checked) [data-catalog-fits~="mvp"] {
     display: none;
   }
 
-  &:has([data-catalog-tab="provider"]:checked) [data-catalog-fits~="provider"] {
+  &:has([data-catalog-tab="teams"]:checked) [data-catalog-fits~="teams"] {
     display: none;
   }
 
-  &:has([data-catalog-tab="driver"]:checked) [data-catalog-fits~="driver"] {
+  &:has([data-catalog-tab="money"]:checked) [data-catalog-fits~="money"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked) [data-catalog-fits~="scale"] {
     display: none;
   }
 }

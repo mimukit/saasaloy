@@ -1,7 +1,13 @@
 import { landing } from "@web/content/landing";
 import { ModuleInventory } from "@web/illustrations/module-inventory";
-import { CATALOG_TIERS } from "@web/lib/module-catalog";
-import type { CatalogRow } from "@web/lib/module-catalog";
+import { interpolate } from "@web/lib/interpolate";
+import { CATALOG_STAGES, catalogCounts } from "@web/lib/module-catalog";
+import type {
+  CatalogRow,
+  CatalogStage,
+  CatalogTier,
+  CatalogVariant,
+} from "@web/lib/module-catalog";
 import { cn } from "@web/lib/utils";
 
 // Fully static, no island. The page reads the rows from the registry at build time
@@ -15,6 +21,10 @@ import { cn } from "@web/lib/utils";
 // shows the module name, its type and the registry description, cut to three lines only
 // in the four-across grid. Below `lg` the drawing sits between the heading and the tabs.
 //
+// Since 2026-10-29 the heading carries a lead and a line of module counts, and the tabs
+// are the registry stages. A capability or a feature gets a tile; its providers and
+// drivers show as chips on that tile, so the grid holds no tile that only swaps a vendor.
+//
 // The tabs are real radio inputs and "Show all modules" is a real checkbox. The
 // `module-catalog` utility in ../styles/web.css reads both through `:has()` and hides
 // tiles, so filtering works with JavaScript off. Read that utility before you change a
@@ -23,7 +33,7 @@ import { cn } from "@web/lib/utils";
 /** Tiles a tab shows before "Show all modules". The `module-catalog` utility hard-codes it too. */
 const CATALOG_VISIBLE_ROWS = 8;
 
-type CatalogTab = "all" | (typeof CATALOG_TIERS)[number];
+type CatalogTab = "all" | CatalogStage;
 
 export interface ModuleCatalogProps {
   id?: string;
@@ -31,13 +41,16 @@ export interface ModuleCatalogProps {
   rows: CatalogRow[];
   title?: string;
   description?: string;
+  counts?: string;
   filterLabel?: string;
   tabs?: Record<CatalogTab, string>;
-  tiers?: Record<(typeof CATALOG_TIERS)[number], string>;
+  tiers?: Record<CatalogTier, string>;
+  variants?: Record<CatalogVariant["tier"], string>;
   showAll?: string;
 }
 
-const TABS: CatalogTab[] = ["all", ...CATALOG_TIERS];
+const TABS: CatalogTab[] = ["all", ...CATALOG_STAGES];
+const VARIANT_TIERS: CatalogVariant["tier"][] = ["provider", "driver"];
 
 function CubeMark() {
   return (
@@ -61,17 +74,21 @@ export function ModuleCatalog({
   rows,
   title = landing.catalog.title,
   description = landing.catalog.description,
+  counts = landing.catalog.counts,
   filterLabel = landing.catalog.filterLabel,
   tabs = landing.catalog.tabs,
   tiers = landing.catalog.tiers,
+  variants = landing.catalog.variants,
   showAll = landing.catalog.showAll,
 }: ModuleCatalogProps) {
   // The tabs whose rows all fit in the first page; the checkbox hides on them.
   const fits = TABS.filter(
     (tab) =>
-      rows.filter((row) => tab === "all" || row.tier === tab).length <=
+      rows.filter((row) => tab === "all" || row.stage === tab).length <=
       CATALOG_VISIBLE_ROWS
   );
+  const tierCounts = catalogCounts(rows);
+  const total = Object.values(tierCounts).reduce((sum, n) => sum + n, 0);
 
   return (
     <section id={id} className="section-y module-catalog">
@@ -82,8 +99,13 @@ export function ModuleCatalog({
               {title}
             </h2>
             {description && (
-              <p className="text-lead text-muted-foreground mt-4 text-balance">
-                {description}
+              <p className="text-lead text-muted-foreground mt-4 max-w-xl text-pretty">
+                {interpolate(description, { total })}
+              </p>
+            )}
+            {counts && (
+              <p className="text-highlight mt-4 font-mono text-sm">
+                {interpolate(counts, tierCounts)}
               </p>
             )}
           </div>
@@ -100,7 +122,7 @@ export function ModuleCatalog({
                 >
                   <input
                     type="radio"
-                    name={`${id}-tier`}
+                    name={`${id}-stage`}
                     value={tab}
                     data-catalog-tab={tab}
                     defaultChecked={tab === "all"}
@@ -119,7 +141,7 @@ export function ModuleCatalog({
           {rows.map((row) => (
             <li
               key={row.name}
-              data-tier={row.tier}
+              data-catalog-stage={row.stage}
               className="bg-card border-border appear flex flex-col gap-2.5 border-r border-b px-4 py-4"
             >
               <div className="flex items-center justify-between gap-2">
@@ -138,6 +160,32 @@ export function ModuleCatalog({
                   {row.description}
                 </p>
               )}
+              {VARIANT_TIERS.map((tier) => {
+                const chips = row.variants.filter(
+                  (variant) => variant.tier === tier
+                );
+                return (
+                  chips.length > 0 && (
+                    <div
+                      key={tier}
+                      className="mt-auto flex flex-wrap items-center gap-1.5 pt-1"
+                    >
+                      <span className="text-muted-foreground font-mono text-xs">
+                        {variants[tier]}
+                      </span>
+                      {chips.map((variant) => (
+                        <span
+                          key={variant.name}
+                          title={variant.name}
+                          className="border-border text-highlight border px-1.5 py-0.5 font-mono text-xs"
+                        >
+                          {variant.label}
+                        </span>
+                      ))}
+                    </div>
+                  )
+                );
+              })}
             </li>
           ))}
         </ul>

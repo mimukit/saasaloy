@@ -197,22 +197,33 @@ export const landing = {
   // The module catalog. The rows are not copy: the page reads them from
   // modules/*/registry-item.json at build time, so a renamed or new module needs no edit
   // here. These are the words around the rows. An empty `description` hides the lead.
+  // `{total}` and the tier tokens in `counts` are module counts, read from the registry
+  // at build time. A tab is a registry `stage`; `variants` labels the provider and driver
+  // chips on a tile.
   catalog: {
     title: "Choose the modules you need.",
-    description: "",
-    filterLabel: "Filter modules by type",
+    description:
+      "{total} modules, and each one adds its source files to your repository. You read and edit every line it writes.",
+    counts:
+      "{capability} capabilities · {feature} features · {provider} providers · {driver} drivers",
+    filterLabel: "Filter modules by stage",
     tabs: {
       all: "All",
-      capability: "Capabilities",
-      feature: "Features",
-      provider: "Providers",
-      driver: "Drivers",
+      validate: "Validate",
+      mvp: "MVP",
+      teams: "Teams",
+      money: "Money",
+      scale: "Scale",
     },
     tiers: {
       capability: "Capability",
       feature: "Feature",
       provider: "Provider",
       driver: "Driver",
+    },
+    variants: {
+      provider: "Providers",
+      driver: "Drivers",
     },
     showAll: "Show all modules",
   },
