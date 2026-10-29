@@ -803,6 +803,9 @@
    drawing is in view, and pause off screen (see the drawings' motion above). The hero's
    source tree gains a module every 2.5s, the problem drawing's city raises a building
    on the same beat, and the built-on drawing's nodes run round their rings (`orbit`).
+   The agent session drawing plays one 16s pass of its own, from keyframes that
+   ../illustrations/live.ts writes into a \3c style> inside its <svg>. That \3c style> is
+   unlayered, so it states the off-screen pause again itself.
 
    `step-loop` goes on a group inside the <svg>, so the pause reaches it, and animates
    `--step` and `--step-show`. A part reads them through `--k`, the step it belongs

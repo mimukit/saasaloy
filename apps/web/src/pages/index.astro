@@ -49,13 +49,11 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
   client directive, and each one is deliberate:
     - Navbar       client:idle    — mobile menu, above the fold, so hydrate when the
                                     browser goes idle rather than waiting for scroll.
-    - CommandField client:visible — the copy button, in the hero and in the site source
-                                    section. It reaches its block through the block's
-                                    `commandField` slot. `visible` hydrates each field once
-                                    it is on screen, so the hero's hydrates right after
-                                    load without competing with the first paint, and the
-                                    one further down waits for the scroll. Before it
-                                    hydrates, or with JavaScript off, the command is
+    - CommandField client:visible — the copy button in the hero. It reaches the hero
+                                    through its `commandField` slot. `visible` hydrates
+                                    the field once it is on screen, which is right after
+                                    load, without competing with the first paint. Before
+                                    it hydrates, or with JavaScript off, the command is
                                     plain selectable text.
   Every other block ships no JavaScript at all. The FAQ opens and closes with native
   <details>, the catalog filter and the stages highlight are CSS `:has()`, and all motion
@@ -93,14 +91,7 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
     <div aria-hidden="true" class="blueprint-rule"></div>
     <Providers />
     <div aria-hidden="true" class="blueprint-rule"></div>
-    <SiteSource>
-      <CommandField
-        slot="commandField"
-        client:visible
-        command={landing.siteSource.command}
-        prompt="$"
-      />
-    </SiteSource>
+    <SiteSource />
     <div aria-hidden="true" class="blueprint-rule"></div>
     <Faq siteName={siteName} />
   </main>

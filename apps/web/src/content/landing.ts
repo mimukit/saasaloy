@@ -259,16 +259,15 @@ export const landing = {
     ],
   },
 
-  // This site's own source. The site is a copy of the base template's landing page, kept
-  // at `apps/web` in the repository; `saasaloy update` does not reach it. `command` shows
-  // in the command field (5b), and `sourceHref` leaves the page (5a).
+  // Project instructions and the skill files installed with each module.
   siteSource: {
-    title: "This site starts with Saasaloy.",
+    title: "Ready for coding agents from the first commit.",
     description:
-      "It began as the landing page that `saasaloy init` writes, and it lives at `apps/web` in the repository.",
-    command: "npx saasaloy init my-app",
-    sourceLabel: "View this site's source",
-    sourceHref: `${REPO}/tree/main/apps/web`,
+      "A new project starts with `AGENTS.md`, `CLAUDE.md`, a `DESIGN.md` and seven base skills for setup, config, env, design, testing, deploy and landing copy.",
+    detail:
+      "Every module you add brings its own skill file, and one `pnpm check` tells the agent whether its change holds.",
+    sourceLabel: "Read the agent guide",
+    sourceHref: `${DOCS}/how-to/make-it-yours.md`,
   },
 
   faq: {
