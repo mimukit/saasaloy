@@ -115,31 +115,28 @@ export const landing = {
   },
 
   // The built-on section (plan 0092). The chips name every part of the drawing, which
-  // is aria-hidden, so the names stay readable and searchable. Each name is a product
-  // from the README stack table (5b), shown as is.
+  // is aria-hidden, so the names stay readable and searchable. Each name is a framework,
+  // library or tool from the README stack table (5b), shown as is. The page names no
+  // hosting vendor here: the providers section says where a project runs.
   builtOn: {
-    title: "Built on Cloudflare and tools you know.",
+    title: "Built on tools you already know.",
     description:
-      "Every project runs on Workers, with D1, KV, R2 and Queues for data and background work.",
+      "Astro, TanStack Router and Hono for the apps, Drizzle and Better Auth for data and sign-in, all in one Turborepo monorepo.",
     groups: [
       {
-        id: "runtime",
-        label: "Runtime",
+        id: "frameworks",
+        label: "Frameworks",
         items: [
-          { id: "workers", label: "Workers" },
-          { id: "d1", label: "D1" },
-          { id: "kv", label: "KV" },
-          { id: "r2", label: "R2" },
-          { id: "queues", label: "Queues" },
+          { id: "astro", label: "Astro" },
+          { id: "tanstack-router", label: "TanStack Router" },
+          { id: "vite", label: "Vite" },
+          { id: "hono", label: "Hono" },
         ],
       },
       {
         id: "libraries",
-        label: "Libraries",
+        label: "Libraries and tools",
         items: [
-          { id: "astro", label: "Astro" },
-          { id: "tanstack-router", label: "TanStack Router" },
-          { id: "hono", label: "Hono" },
           { id: "drizzle", label: "Drizzle" },
           { id: "better-auth", label: "Better Auth" },
           { id: "postgres", label: "Postgres" },
@@ -220,10 +217,13 @@ export const landing = {
     showAll: "Show all modules",
   },
 
-  // The providers. `envExample` is the `.env` line the panel shows (5b). Each point is a
-  // title and a sentence; the drawing beside them repeats the same parts as labels.
+  // The providers. `description` is the lead under the title. `envExample` is the `.env`
+  // line the panel shows (5b). Each point is a title and a sentence; the drawing beside
+  // them repeats the same parts as labels.
   providers: {
-    title: "Cloudflare by default. Providers you can change.",
+    title: "Change the vendor, not your code.",
+    description:
+      "Cloudflare is the default provider. One env var moves a capability such as email to another vendor.",
     envLabel: ".env (example)",
     envExample: "EMAIL_PROVIDER=console",
     points: [

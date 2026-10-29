@@ -1,7 +1,7 @@
 // The built-on section's illustration: `my-app` at the centre with the stack in orbit,
 // after variant H of the round 2 hero exploration and the round 4 mockup the owner
-// approved. The inner ring holds the Cloudflare runtime and the outer ring the
-// libraries. `my-app` is the one `primary` fill. No logos. Decorative: the section repeats
+// approved. The inner ring holds the frameworks and the outer ring the libraries and
+// tools. `my-app` is the one `primary` fill. No logos. Decorative: the section repeats
 // every name as a text chip, so the names stay readable and searchable.
 //
 // Two layouts, because no label may render under 10px on screen. The full one names each
@@ -119,12 +119,12 @@ function Node({
 
 function Orbits({
   layout,
-  runtime,
+  frameworks,
   libraries,
   className,
 }: {
   layout: Layout;
-  runtime: string[];
+  frameworks: string[];
   libraries: string[];
   className: string;
 }) {
@@ -132,7 +132,7 @@ function Orbits({
   const cx = width / 2;
   const cy = height / 2;
   const rings: Ring[] = [
-    { ...layout.inner, s: 48, dash: "6 5", names: runtime },
+    { ...layout.inner, s: 48, dash: "6 5", names: frameworks },
     { ...layout.outer, s: 80, reverse: true, dash: "1 4", names: libraries },
   ];
   return (
@@ -198,11 +198,11 @@ function Orbits({
 
 /** Both layouts in one box; `className` goes on each <svg>. */
 export function StackOrbits({
-  runtime,
+  frameworks,
   libraries,
   className = "",
 }: {
-  runtime: string[];
+  frameworks: string[];
   libraries: string[];
   className?: string;
 }) {
@@ -210,13 +210,13 @@ export function StackOrbits({
     <div className="w-full min-w-0">
       <Orbits
         layout={FULL}
-        runtime={runtime}
+        frameworks={frameworks}
         libraries={libraries}
         className={`${className} mx-auto hidden max-w-2xl md:block lg:hidden xl:block`}
       />
       <Orbits
         layout={COMPACT}
-        runtime={runtime}
+        frameworks={frameworks}
         libraries={libraries}
         className={`${className} mx-auto max-w-md md:hidden lg:block xl:hidden`}
       />

@@ -2,8 +2,8 @@ import { landing } from "@web/content/landing";
 import { StackOrbits } from "@web/illustrations/stack-orbits";
 
 // Fully static, no script. The built-on section from plan 0092, approved in round 4: the
-// stack a project runs on. The title, the lead and the names as chips, in a "Runtime"
-// and a "Libraries" group, sit on the left from `lg` (64rem), and the drawing of the
+// stack a project is built with. The title, the lead and the names as chips, in a
+// "Frameworks" and a "Libraries and tools" group, sit on the left from `lg` (64rem), and the drawing of the
 // same names in orbit round `my-app` sits on the right. Below `lg` the copy comes first.
 // The drawing is aria-hidden, so the chips are where a reader, or a search engine,
 // finds the names. The first group is the drawing's inner ring, the second its outer.
@@ -38,7 +38,7 @@ export function BuiltOn({
   description = landing.builtOn.description,
   groups = landing.builtOn.groups as [StackGroup, StackGroup],
 }: BuiltOnProps) {
-  const [runtime, libraries] = groups.map((group) =>
+  const [frameworks, libraries] = groups.map((group) =>
     group.items.map((item) => item.label)
   );
   return (
@@ -71,7 +71,7 @@ export function BuiltOn({
         </div>
 
         <StackOrbits
-          runtime={runtime}
+          frameworks={frameworks}
           libraries={libraries}
           className="text-highlight drawing-load w-full"
         />
