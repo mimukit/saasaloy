@@ -453,39 +453,98 @@
 /* The stages highlight, with no JavaScript. The block (src/blocks/stages.tsx) puts this on
    its <section>. Each stage row is an <li data-stage="n">, its marker carries
    `data-stage-marker`, and slab n of the drawing is a <g data-slab="n"> whose faces carry
-   `data-face` and whose lines sit in `data-slab-detail`. One row is active at a time:
-   the hovered row wins, then the row holding keyboard focus (`:focus-visible`, so a
-   mouse click leaves no stale highlight), and with neither the first row. The active row
-   tints with `muted` and fills its marker with `primary`; the matching slab fills with
-   `primary`, its lines turn `primary-foreground`, and it rises 6px. The slab rules cover
-   five stages; add a rule per stage past that. */
+   `data-face` and whose lines sit in `data-slab-detail`. Row and slab both carry their
+   0-based `--stage` inline.
+
+   One registered number, `--stage-on`, drives the whole highlight: 0 is at rest, 1 is
+   active, and every colour below mixes between the two by it. The active row tints with
+   `muted` and fills its marker with `primary`; the matching slab fills with `primary`,
+   its lines turn `primary-foreground`, and it rises 6px.
+
+   Which row is active: the hovered row wins, then the row holding keyboard focus
+   (`:focus-visible`, so a mouse click leaves no stale highlight). With neither, the
+   highlight moves on by itself, one stage every 3s (`stage-turn`), and it starts again
+   at the first stage when the pointer leaves. With reduced motion requested it rests on
+   the first row. The block marks the section `data-loop-in-view`, so LOOP_SCRIPT in
+   ../layouts/Layout.astro pauses the cycle off screen. The 15s cycle and the slab rules
+   cover five stages; a sixth needs a rule here and a new `stage-turn` timing. */
+@property --stage-on {
+  inherits: true;
+  initial-value: 0;
+  syntax: "<number>";
+}
+
+@keyframes stage-turn {
+  0%,
+  20%,
+  100% {
+    --stage-on: 0;
+  }
+
+  2%,
+  18% {
+    --stage-on: 1;
+  }
+}
+
 @utility stage-list {
+  & [data-stage],
+  & [data-slab] {
+    transition: --stage-on 0.2s var(--ease-out-soft);
+  }
+
+  & [data-stage] {
+    /* sRGB, because oklch takes a hue from `transparent` and tints the row pink. */
+    background-color: color-mix(
+      in srgb,
+      var(--muted) calc(var(--stage-on) * 100%),
+      transparent
+    );
+  }
+
+  & [data-stage-marker] {
+    border-color: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
+    background-color: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--background)
+    );
+    color: color-mix(
+      in oklch,
+      var(--primary-foreground) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
+  }
+
   & [data-slab] [data-face] {
-    fill: var(--card);
-    transition: fill 0.15s;
+    fill: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--card)
+    );
   }
 
   & [data-slab] [data-slab-detail] {
-    transition: color 0.15s;
+    color: color-mix(
+      in oklch,
+      var(--primary-foreground) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
   }
 
-  & [data-slab] {
-    transition: translate 0.2s var(--ease-out-soft);
+  @media (prefers-reduced-motion: no-preference) {
+    & [data-slab] {
+      translate: 0 calc(var(--stage-on) * -6px);
+    }
   }
 
   & [data-stage]:hover,
   &:not(:has([data-stage]:hover)) [data-stage]:has(:focus-visible),
-  &:not(:has([data-stage]:hover, [data-stage] :focus-visible))
-    [data-stage="1"] {
-    background-color: var(--muted);
-
-    & [data-stage-marker] {
-      border-color: var(--primary);
-      background-color: var(--primary);
-      color: var(--primary-foreground);
-    }
-  }
-
+  &:not(:has([data-stage]:hover, [data-stage] :focus-visible)) [data-stage="1"],
   &:has([data-stage="1"]:hover) [data-slab="1"],
   &:not(:has([data-stage]:hover)):has([data-stage="1"] :focus-visible)
     [data-slab="1"],
@@ -502,16 +561,21 @@
   &:has([data-stage="5"]:hover) [data-slab="5"],
   &:not(:has([data-stage]:hover)):has([data-stage="5"] :focus-visible)
     [data-slab="5"] {
-    @media (prefers-reduced-motion: no-preference) {
-      translate: 0 -6px;
+    --stage-on: 1;
+  }
+
+  /* The cycle. An animation outranks the rest rules above, so it alone sets
+     `--stage-on` while it runs. The negative delay starts stage 1 at once. */
+  @media (prefers-reduced-motion: no-preference) {
+    &:not(:has([data-stage]:hover, [data-stage] :focus-visible))
+      :is([data-stage], [data-slab]) {
+      animation: stage-turn 15s linear calc((var(--stage, 0) - 5) * 3s) infinite;
     }
 
-    & [data-face] {
-      fill: var(--primary);
-    }
-
-    & [data-slab-detail] {
-      color: var(--primary-foreground);
+    /* The same :not(:has()) as above, so this outranks that shorthand's play state. */
+    &[data-offscreen]:not(:has([data-stage]:hover, [data-stage] :focus-visible))
+      :is([data-stage], [data-slab]) {
+      animation-play-state: paused;
     }
   }
 }

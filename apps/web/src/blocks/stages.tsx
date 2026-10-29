@@ -1,8 +1,10 @@
+import type { CSSProperties } from "react";
+
 import { landing } from "@web/content/landing";
 import { SourceSlabs } from "@web/illustrations/source-slabs";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 
-// Fully static, no script. The round 10 stages: the title, a short lead, then a vertical
+// No script. The round 10 stages: the title, a short lead, then a vertical
 // list of numbered stages on a hairline, and the exploded stack of source slabs under it
 // below `lg` (64rem). From `lg` the slabs move to the left of the list, so the page's
 // drawings alternate sides (round 12, option A).
@@ -10,8 +12,11 @@ import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 // THE HIGHLIGHT IS CSS. The `stage-list` utility in ../styles/web.css reads the hovered
 // or keyboard-focused row through `:has()` on this <section>: it fills that row's marker
 // with `primary`, tints the row with `muted`, and fills the matching slab in the drawing.
-// With no row hovered or focused, the highlight rests on the first stage. Rows and slabs
-// pair by their 1-based `data-stage` and `data-slab` numbers.
+// With no row hovered or focused, the highlight moves to the next stage every 3s, and
+// with reduced motion it rests on the first stage. `data-loop-in-view` lets the layout's
+// LOOP_SCRIPT pause that cycle off screen. Rows and slabs pair by their 1-based
+// `data-stage` and `data-slab` numbers, and each carries its 0-based `--stage` for the
+// cycle's delay.
 //
 // Every word comes from ../content/landing.ts. Each title links to its docs and opens
 // in a new tab.
@@ -39,7 +44,7 @@ export function Stages({
   items = landing.stages.items,
 }: StagesProps) {
   return (
-    <section id={id} className="section-y stage-list">
+    <section id={id} className="section-y stage-list" data-loop-in-view="">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
         <div className="reveal min-w-0">
           <h2 className="text-section-title text-primary max-w-[14ch] text-balance">
@@ -61,6 +66,7 @@ export function Stages({
                 <li
                   key={stage.id}
                   data-stage={index + 1}
+                  style={{ "--stage": index } as CSSProperties}
                   className="relative flex gap-4 px-2 py-3 transition-colors"
                 >
                   <span
