@@ -34,7 +34,7 @@ Success: a developer who reads the page sees the copy model in the hero, the rea
 | UI house rules | From `apps/web/DESIGN.md` and plan 0091: square corners, light and dark themes only, the zigzag layout from 64rem with copy first below it, a `blueprint-rule` between each pair of sections, external links open in a new tab through `externalLinkProps`, and blocks ship no JavaScript except the named islands and `LOOP_SCRIPT`. |
 | Plan 0091 | Its Section content and Section layout rows get one line each that points to this plan for the hero drawing and the three new sections (Q6). |
 | Tests | No new kind of test. The existing `gate:a11y`, Lighthouse and axe gates and `pnpm lint` cover every phase. |
-| Outward actions | Approved by the owner on 2026-10-29 (Q14): commit this plan and research report 0007 to `main`, push, and file one issue per phase. Phase 5 is filed `blocked` on #211. |
+| Outward actions | Approved by the owner on 2026-10-29 (Q14): commit this plan and research report 0007 to `main`, push, and file the plan as one issue, #290, with the phases built in sequence. Phase 5 waits on #211 inside that issue. |
 
 ## Approach
 
@@ -55,7 +55,7 @@ Rejected alternatives:
 - One pass of motion on entry for the new sections in place of a loop. The owner kept the loop (Q1).
 - Use real screenshots of a generated project for "What you can ship" (report G1). This stays possible later, beside or in place of the map.
 
-### Phase 1: source-tree hero
+### Phase 1: source-tree hero (#290)
 
 - Add `apps/web/src/illustrations/source-tree.tsx` from round 2 variant F, with the content in the Hero drawing content row.
 - Swap `AppWireframe` for it in `apps/web/src/blocks/hero.tsx`. Keep `drawing-load` and `data-loop-in-view`.
@@ -65,7 +65,7 @@ Rejected alternatives:
 
 Done when: the built hero matches `after-hero.png` at 1440 px in light, except that `config/` has no marker. `source-tree.tsx` is 20 KB or less. `rg "app-wireframe|sign-in-" apps/web/src` returns nothing. `pnpm lint` passes, and `gate:a11y` passes with the hero loop paused off screen.
 
-### Phase 2: shared in-view loop
+### Phase 2: shared in-view loop (#290)
 
 - Move `LOOP_SCRIPT` from `hero.tsx` to `apps/web/src/layouts/Layout.astro`, emitted once per page.
 - Extend `gate-a11y.ts` to scroll each `[data-loop-in-view]` drawing out of view and check that it pauses.
@@ -73,21 +73,21 @@ Done when: the built hero matches `after-hero.png` at 1440 px in light, except t
 
 Done when: the built page has one copy of the script, `gate:a11y` passes, and the gate fails when a drawing keeps running off screen.
 
-### Phase 3: problem section with the module city
+### Phase 3: problem section with the module city (#290)
 
 - Add `apps/web/src/blocks/problem.tsx`, `apps/web/src/illustrations/module-city.tsx` and `landing.problem` copy.
 - Add the section after the hero in `index.astro`, with a `blueprint-rule` on each side.
 
 Done when: the section matches `section-problem.png` at 1440 px in light, with no eyebrow and no fill on the crane. `module-city.tsx` is 20 KB or less. No drawing label renders under 10 px at 375 px. The Lighthouse and axe gates pass.
 
-### Phase 4: built-on section with the stack orbits
+### Phase 4: built-on section with the stack orbits (#290)
 
 - Add `apps/web/src/blocks/built-on.tsx`, `apps/web/src/illustrations/stack-orbits.tsx` and `landing.builtOn` copy, with each stack name as a text chip.
 - Add the section after `problem`.
 
 Done when: the section matches `section-built-on.png` at 1440 px in light. Every name in the drawing also appears as text in the section. `stack-orbits.tsx` is 20 KB or less. No drawing label renders under 10 px at 375 px. The gates pass.
 
-### Phase 5: ship section with the module map
+### Phase 5: ship section with the module map (#290)
 
 - Wait for PR #276 (issue #211, the `billing` to `subscription` rename) to merge.
 - Add `apps/web/src/blocks/ship.tsx`, `apps/web/src/illustrations/module-map.tsx` and `landing.ship` copy.
