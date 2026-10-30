@@ -12,13 +12,25 @@
 //
 // SAASALOY_RELEASE_SKIP_GATE=1 skips the gate scripts on a rerun after a transient
 // failure. It is an environment variable because release-it hooks are fixed strings, so
-// there is nowhere to pass a flag. The staleness check and the smoke always run.
+// there is nowhere to pass a flag. The staleness check, the update-note check and the smoke
+// always run.
 //
-// Imports nothing but node: builtins. Node 24 strips the types, so there is no build step;
-// `pnpm typecheck` checks it via tsconfig.scripts.json.
+// The update-note check reads the commits since the last tag. A breaking commit must add a
+// file under an `update-notes/` folder, or opt out with `Update-Note: none (<reason>)`. It
+// runs before the gate because it costs one `git log` and one `git diff-tree` per breaking
+// commit, so a missing note fails in a second rather than after five minutes of gate.
+//
+// Imports node: builtins and two sibling scripts. Node 24 strips the types, so there is no
+// build step; `pnpm typecheck` checks it via tsconfig.scripts.json.
 
 import { spawnSync } from "node:child_process";
 import { resolve } from "node:path";
+import type { Git } from "./changelog-update-notes.ts";
+import { addedUpdateNotes } from "./changelog-update-notes.ts";
+import { updateNoteOptOut } from "./update-note-footer.ts";
+
+export type { Git } from "./changelog-update-notes.ts";
+export { updateNoteOptOut } from "./update-note-footer.ts";
 
 const root = resolve(import.meta.dirname, "..");
 
@@ -73,6 +85,98 @@ export function staleMainMessage(local: string, remote: string): string {
     "  A release cut here tags code that is not what origin holds.\n" +
     "  Run `git pull --ff-only` and start the release again."
   );
+}
+
+/** `type!:` or `type(scope)!:` on the subject line. */
+const BREAKING_SUBJECT = /^\w+(?:\([^)]*\))?!:/;
+
+/** A `BREAKING CHANGE:` or `BREAKING-CHANGE:` footer, at the start of a body line. */
+const BREAKING_FOOTER = /^BREAKING[ -]CHANGE:/m;
+
+/** Whether a commit message marks a breaking change, by Conventional Commits rules. */
+export function isBreakingCommit(message: string): boolean {
+  const [subject = "", ...body] = message.split("\n");
+  return (
+    BREAKING_SUBJECT.test(subject) || BREAKING_FOOTER.test(body.join("\n"))
+  );
+}
+
+export interface BreakingCommit {
+  hash: string;
+  shortHash: string;
+  subject: string;
+}
+
+export interface OptOut extends BreakingCommit {
+  reason: string;
+}
+
+export interface UpdateNoteCheck {
+  /** Breaking commits with no note and no opt-out. Each one fails the release. */
+  missing: BreakingCommit[];
+  /** Breaking commits that opted out. The preflight prints each reason. */
+  optOuts: OptOut[];
+}
+
+const FIELD = "\u001F";
+const RECORD = "\u001E";
+
+/**
+ * Check every non-merge commit in `<tag>..HEAD`. Merges are skipped: a PR merge commit
+ * adds nothing of its own, and the commits it brings in are read one by one.
+ */
+export function checkUpdateNotes(git: Git, tag: string): UpdateNoteCheck {
+  const log = git([
+    "log",
+    "--no-merges",
+    `--format=%H${FIELD}%B${RECORD}`,
+    `${tag}..HEAD`,
+  ]);
+  const result: UpdateNoteCheck = { missing: [], optOuts: [] };
+  for (const record of log.split(RECORD)) {
+    const separator = record.indexOf(FIELD);
+    if (separator === -1) {
+      continue;
+    }
+    const hash = record.slice(0, separator).trim();
+    const message = record.slice(separator + 1).trim();
+    if (!isBreakingCommit(message)) {
+      continue;
+    }
+    const commit: BreakingCommit = {
+      hash,
+      shortHash: hash.slice(0, 7),
+      subject: message.split("\n")[0] ?? "",
+    };
+    if (addedUpdateNotes(git, hash).length > 0) {
+      continue;
+    }
+    const reason = updateNoteOptOut(message);
+    if (reason === null) {
+      result.missing.push(commit);
+    } else {
+      result.optOuts.push({ ...commit, reason });
+    }
+  }
+  return result;
+}
+
+/** What to print for breaking commits that carry no update note. */
+export function missingUpdateNotesMessage(
+  missing: readonly BreakingCommit[]
+): string {
+  return [
+    "these breaking commits add no update note:",
+    ...missing.map((commit) => `  ${commit.shortHash} ${commit.subject}`),
+    "  Each breaking commit adds a note under packages/cli/update-notes/ or",
+    "  modules/<name>/update-notes/ in the same commit, or carries the footer",
+    "  `Update-Note: none (<reason>)` with a non-empty reason.",
+  ].join("\n");
+}
+
+/** One line for a breaking commit that opted out of a note. */
+export function optOutMessage(optOut: OptOut): string {
+  return `${optOut.shortHash} ${optOut.subject}: no update note (${optOut.reason})`;
 }
 
 function fail(message: string, ...detail: string[]): never {
@@ -132,6 +236,27 @@ async function main(): Promise<void> {
     fail("main is not in sync with origin", staleMainMessage(local, remote));
   }
   step(`main is in sync with origin at ${local}`);
+
+  // --- Does every breaking commit carry an update note? -----------------------------
+
+  const tag = capture(
+    ["describe", "--tags", "--match=v*", "--abbrev=0"],
+    "git describe --tags"
+  );
+  const notes = checkUpdateNotes(
+    (args) => capture(args, `git ${args[0] ?? ""}`),
+    tag
+  );
+  for (const optOut of notes.optOuts) {
+    step(optOutMessage(optOut));
+  }
+  if (notes.missing.length > 0) {
+    fail(
+      "breaking change without an update note",
+      missingUpdateNotesMessage(notes.missing)
+    );
+  }
+  step(`every breaking commit since ${tag} has an update note`);
 
   // --- The gate ----------------------------------------------------------------------
 

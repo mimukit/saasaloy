@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://saasaloy.dev/schemas/update-note.schema.json",
+  "title": "update note frontmatter",
+  "description": "The YAML frontmatter of one update note: a Markdown file under `packages/cli/update-notes/` (the base) or `modules/<name>/update-notes/` (a module) that tells the agent in a project what an upgrade asks of it beyond the files `saasaloy update` merges (#298). The note's id comes from its path, `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, so the frontmatter carries none. The body holds four sections: \"What update does\", \"What the merge plan gets\", \"What you do\" and \"Verify\".",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title"],
+  "$defs": {
+    "when": {
+      "type": "object",
+      "additionalProperties": false,
+      "minProperties": 1,
+      "description": "Ship this entry only while the condition holds (#242, ADR 0054). The keys combine with AND: `testing` ships it only when the project's testing mode is not `off`, and `installed` only when every named module is in the resolved install set. The applier tests it before `onlyWith`, and a target whose entries it drops is skipped, not refused. It decides the first write only: an entry already in the manifest stays managed in every mode. Backfill writes the entry once the condition turns true.",
+      "properties": {
+        "testing": {
+          "const": true,
+          "description": "Ship only when testing.mode is `tests-after` or `tdd`. The one allowed value is `true`; leave the key out for an entry that ships in every mode."
+        },
+        "installed": {
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "description": "Ship only when every named module is installed. `remove` of a named module also removes the entry.",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*$"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One line that names the change, shown as the note's heading in the merge plan."
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-[0-9A-Za-z][0-9A-Za-z.-]*)?$",
+      "description": "The CLI release that ships the change, as plain semver. Required on a base note, which `update` selects by CLI version range; absent on a module note, which `update` selects by the files in the module's `update-notes/` folder at the old and the new revision. The loader enforces both rules, because the schema cannot see the note's folder."
+    },
+    "when": {
+      "$ref": "#/$defs/when"
+    }
+  }
+}

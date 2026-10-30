@@ -356,6 +356,68 @@ describe(runOutdated, () => {
       expect(out).toContain("Everything is up to date");
     });
 
+    // #298 Phase 4. A note an applied `update` showed and nobody cleared is work waiting,
+    // so the report lists it and `--check` fails on it like drift.
+    describe("pending update notes (#298)", () => {
+      async function withPendingNote(): Promise<void> {
+        await trackedBase(await templateHash(await baseTemplateDir()));
+        await writeFile(
+          join(project, ".saasaloy", "manifest.json"),
+          JSON.stringify({
+            managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+            pendingNotes: [
+              {
+                id: "base/0001-brand-css",
+                title: "Move the web tokens",
+                body: "## What you do\n",
+              },
+            ],
+          }),
+          "utf-8"
+        );
+      }
+
+      it("lists a pending note and exits 0 on a bare run", async () => {
+        await withPendingNote();
+        const { code, out } = await runCommand([]);
+
+        expect(code).toBe(0);
+        expect(out).toContain("base/0001-brand-css");
+        expect(out).toContain("Move the web tokens");
+        expect(out).toContain("1 update note pending");
+        expect(out).not.toContain("Everything is up to date");
+      });
+
+      it("exits 2 under --check while a note is pending", async () => {
+        await withPendingNote();
+
+        await expect(runCommand(["--check"]).then((r) => r.code)).resolves.toBe(
+          2
+        );
+      });
+
+      it("carries the pending notes in --json", async () => {
+        await withPendingNote();
+        const { code, doc } = await runJson(runOutdated, ["--json"]);
+
+        expect(code).toBe(0);
+        expect(doc).toMatchObject({
+          drift: 0,
+          pendingNotes: [
+            { id: "base/0001-brand-css", title: "Move the web tokens" },
+          ],
+          schemaVersion: 1,
+        });
+      });
+
+      it("prints an empty list in --json when nothing is pending", async () => {
+        await trackedBase(await templateHash(await baseTemplateDir()));
+        const { doc } = await runJson(runOutdated, ["--json"]);
+
+        expect(doc.pendingNotes).toStrictEqual([]);
+      });
+    });
+
     it("reports a base at another hash as outdated, and gates --check on it", async () => {
       await trackedBase("f".repeat(64));
       const report = await runCommand([]);

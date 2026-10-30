@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { BASE_INTENT, BASE_MODULE, BASE_NO_MERGE_BASE } from "./base.js";
 import { renderMergePlan } from "./merge-plan.js";
+import type { UpdateNote } from "./update-notes.js";
 import type {
   ModuleComparison,
   ModuleUpdatePlan,
@@ -80,6 +81,8 @@ function plan(
     missingLockEntries: [],
     verifyCommand: VERIFY_COMMAND,
     needsMerge: modules.some((m) => m.needsMerge),
+    notes: [],
+    mayApplyNotes: [],
     ...overrides,
   };
 }
@@ -383,5 +386,119 @@ describe(renderMergePlan, () => {
     );
     // A longer fence keeps the embedded ``` from ending the block early.
     expect(doc).toContain("````");
+  });
+});
+
+// #298 Phase 3: update notes carry the work outside the files `update` merges. They ride
+// the merge plan ahead of the file sections, and they alone are enough to emit it.
+describe("renderMergePlan — update notes", () => {
+  const BODY = [
+    "## What update does",
+    "",
+    "It moves the tokens.",
+    "",
+    "## What you do",
+    "",
+    "```md",
+    "## not a heading",
+    "```",
+    "",
+    "### A step",
+    "",
+    "## Verify",
+    "",
+    "Run `pnpm check`.",
+    "",
+  ].join("\n");
+
+  function updateNote(overrides: Partial<UpdateNote> = {}): UpdateNote {
+    return {
+      id: "base/0001-brand-css",
+      owner: "base",
+      serial: 1,
+      slug: "brand-css",
+      title: "Move the web tokens into brand.css",
+      version: "0.8.0",
+      body: BODY,
+      path: "/cli/update-notes/0001-brand-css.md",
+      ...overrides,
+    };
+  }
+
+  it("emits a plan for notes alone, with no file to merge", () => {
+    const doc = renderMergePlan(
+      plan([modulePlan({ needsMerge: false })], { notes: [updateNote()] })
+    );
+    expect(doc).toContain("# Saasaloy merge plan");
+    expect(doc).toContain("## Update notes");
+    expect(doc).toContain(
+      "### base/0001-brand-css: Move the web tokens into brand.css"
+    );
+    expect(doc).not.toContain("## email");
+    expect(doc).not.toContain("--resolved");
+    expect(doc).toContain(`- \`${VERIFY_COMMAND}\``);
+  });
+
+  it("demotes the note's headings under its own, and leaves a fenced block alone", () => {
+    const doc = renderMergePlan(plan([], { notes: [updateNote()] }));
+    expect(doc).toContain("\n#### What update does\n");
+    expect(doc).toContain("\n##### A step\n");
+    expect(doc).toContain("\n## not a heading\n");
+    expect(doc).not.toMatch(/^## What you do$/m);
+  });
+
+  it("puts the update notes ahead of the per-module file sections", () => {
+    const doc = renderMergePlan(
+      plan([modulePlan({ files: [file()] })], { notes: [updateNote()] })
+    );
+    expect(doc.indexOf("## Update notes")).toBeGreaterThan(-1);
+    expect(doc.indexOf("## Update notes")).toBeLessThan(
+      doc.indexOf("## email")
+    );
+    expect(doc).toContain("--resolved");
+  });
+
+  it("gives may-apply notes their own subsection that asks the agent to check each one", () => {
+    const doc = renderMergePlan(
+      plan([], {
+        notes: [updateNote()],
+        mayApplyNotes: [
+          updateNote({
+            id: "shell/0001-admin-kit-move",
+            owner: "shell",
+            slug: "admin-kit-move",
+            title: "The admin ui kit moves into the shell module",
+            version: undefined,
+          }),
+        ],
+      })
+    );
+    const may = doc.indexOf("### Notes that may apply");
+    expect(may).toBeGreaterThan(doc.indexOf("### base/0001-brand-css"));
+    const section = doc.slice(may);
+    expect(section).toMatch(/check whether/i);
+    expect(section).toContain(
+      "#### shell/0001-admin-kit-move: The admin ui kit moves into the shell module"
+    );
+    expect(section).toContain("\n##### What update does\n");
+  });
+
+  it("names the --done command for every note, may apply included (#298 Phase 4)", () => {
+    const doc = renderMergePlan(
+      plan([], {
+        notes: [updateNote()],
+        mayApplyNotes: [updateNote({ id: "shell/0001-admin-kit-move" })],
+      })
+    );
+    const done = doc.indexOf("### When a note is done");
+    expect(done).toBeGreaterThan(doc.indexOf("### Notes that may apply"));
+    expect(doc.slice(done)).toContain(
+      "saasaloy update \\\n  --done base/0001-brand-css \\\n  --done shell/0001-admin-kit-move --yes\n"
+    );
+    expect(doc.slice(done)).toContain("exits `3` until it is cleared");
+  });
+
+  it("still returns an empty document with no merge and no note", () => {
+    expect(renderMergePlan(plan([], {}))).toBe("");
   });
 });

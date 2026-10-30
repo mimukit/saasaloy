@@ -35,6 +35,11 @@
           "type": "string",
           "pattern": "^[a-f0-9]{64}$",
           "description": "sha256 over the sorted (path, sha256) pairs of the template as shipped in the CLI package. Differs whenever any shipped template file differs."
+        },
+        "adoptedAt": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The CLI version that adopted the base, written by `saasaloy update` on a project that had no record and kept through later updates. Absent on a base `init` rendered. While `cliVersion` still equals it, `update` cannot tell which base update notes the project already took, so it shows the older ones as \"may apply\" and accepts `--from <version>`. A lock without it whose base files are adopted reads as adopted at `cliVersion`."
         }
       }
     },

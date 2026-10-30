@@ -41,6 +41,12 @@ export interface LockBase {
   cliVersion: string;
   /** sha256 over the shipped template as `templateHash()` computes it. */
   templateHash: string;
+  /**
+   * The CLI that adopted the base (#298), absent on a base `init` rendered. Kept through
+   * later updates: while `cliVersion` still equals it, no update has run since the
+   * adoption, so the base update notes up to it cannot be placed.
+   */
+  adoptedAt?: string;
 }
 
 export interface Lockfile {

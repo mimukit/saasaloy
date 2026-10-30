@@ -446,6 +446,11 @@ export async function runRemove(argv: string[]): Promise<number> {
     for (const dir of result.prunedDirs) {
       log.step(`${pc.dim("prune")}  ${dir}`);
     }
+    for (const id of result.droppedNotes) {
+      log.step(
+        `${pc.dim("drop")}  update note ${id} ${pc.dim("(its module is gone)")}`
+      );
+    }
     for (const alias of result.droppedAliases) {
       log.warn(
         `Alias ${pc.cyan(alias)} dropped — its target directory is gone.`

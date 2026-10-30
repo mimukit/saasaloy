@@ -26,7 +26,8 @@ import { pathExists, readIfPresent } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
 import type { Output } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
+import { loadManifest, pendingNotesOf } from "../lib/manifest.js";
+import { pendingNoteJson, pendingNoteLines } from "../lib/pending-notes.js";
 import { ROOT_MANIFEST, rootVersion } from "../lib/root-version.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
@@ -150,6 +151,16 @@ async function reportProject(path: string, out: Output): Promise<number> {
     ),
   });
   note(wrapForNote(renderBase(base)), "Base", out.tui);
+  // Update notes an applied `update` showed and nobody cleared (#298). Like base drift,
+  // they are work the project owes, never a finding: the exit code does not move.
+  const pending = pendingNotesOf(manifest);
+  if (pending.length > 0) {
+    note(
+      wrapForNote(pendingNoteLines(pending).join("\n")),
+      `${pc.yellow("Pending update notes")} ${pc.dim(`(${pending.length})`)}`,
+      out.tui
+    );
+  }
   // The deploy rules (ADR 0048) are warnings, like base drift: each prints its fix and
   // none of them turns exit 0 into 2. `pnpm deploy:production` refuses the same state on
   // its own, so this only says it sooner.
@@ -191,6 +202,7 @@ async function reportProject(path: string, out: Output): Promise<number> {
       installed: config.installed,
       mode: "project",
       path,
+      pendingNotes: pending.map(pendingNoteJson),
       problems: findings.length,
       warnings: warnings.map(findingJson),
     });

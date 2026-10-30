@@ -62,12 +62,38 @@ export interface ManifestPatch {
   when?: When;
 }
 
+/**
+ * An update note an applied `saasaloy update` showed and nobody has cleared yet (#298).
+ * The rendered body is stored, not a path: a module note comes from a registry revision
+ * the run fetched into a temp dir and dropped, and a later merge plan has to repeat the
+ * note with no network and no fetch, even when its module no longer moves.
+ */
+export interface PendingNote {
+  /** `base/NNNN-<slug>` or `<module>/NNNN-<slug>`. */
+  id: string;
+  title: string;
+  /** The note's Markdown after the frontmatter, as the merge plan rendered it. */
+  body: string;
+  /** Shown under "Notes that may apply": the run could not place it. */
+  mayApply?: boolean;
+}
+
 export interface Manifest {
   managed: Record<string, ManagedEntry>;
   links: Record<string, string>;
   patches: ManifestPatch[];
   /** Module name to warnings shown before removal. */
   removeWarnings: Record<string, string[]>;
+  /**
+   * Notes waiting on `saasaloy update --done <id>`, in the order they were first shown.
+   * Absent when none is pending, so an older manifest reads as none (#298).
+   */
+  pendingNotes?: PendingNote[];
+  /**
+   * Note ids `saasaloy update --done <id>` cleared, sorted, once each. Selection skips
+   * them, so a note a later run selects again never returns. Absent when empty (#298).
+   */
+  doneNotes?: string[];
 }
 
 export const MANIFEST_FILE = join(".saasaloy", "manifest.json");
@@ -173,6 +199,71 @@ export function untrackLink(manifest: Manifest, target: string): void {
   delete manifest.links[target];
 }
 
+/** The pending update notes, `[]` when the manifest records none (#298). */
+export function pendingNotesOf(manifest: Manifest): PendingNote[] {
+  return manifest.pendingNotes ?? [];
+}
+
+/** Replace the pending notes. An empty list drops the field, as an older manifest has it. */
+export function setPendingNotes(
+  manifest: Manifest,
+  notes: readonly PendingNote[]
+): void {
+  if (notes.length === 0) {
+    delete manifest.pendingNotes;
+    return;
+  }
+  manifest.pendingNotes = notes.map((note) => ({
+    id: note.id,
+    title: note.title,
+    body: note.body,
+    ...(note.mayApply ? { mayApply: true } : {}),
+  }));
+}
+
+/** The cleared update note ids, `[]` when the manifest records none (#298). */
+export function doneNotesOf(manifest: Manifest): string[] {
+  return manifest.doneNotes ?? [];
+}
+
+/** Replace the done ids, sorted and once each. An empty list drops the field. */
+function setDoneNotes(manifest: Manifest, ids: Iterable<string>): void {
+  const sorted = [...new Set(ids)].toSorted();
+  if (sorted.length === 0) {
+    delete manifest.doneNotes;
+    return;
+  }
+  manifest.doneNotes = sorted;
+}
+
+/** Record ids `update --done` cleared, so selection skips them from now on (#298). */
+export function addDoneNotes(manifest: Manifest, ids: Iterable<string>): void {
+  setDoneNotes(manifest, [...doneNotesOf(manifest), ...ids]);
+}
+
+/**
+ * Drop every pending note `module` owns, by the `<module>/` id prefix, and return their
+ * ids. `remove` calls it: a removed module's notes describe code that is gone (#298). The
+ * module's done ids go too, so a re-add starts clean; they are not returned.
+ */
+export function dropModulePendingNotes(
+  manifest: Manifest,
+  module: string
+): string[] {
+  const prefix = `${module}/`;
+  const notes = pendingNotesOf(manifest);
+  const dropped = notes.filter((note) => note.id.startsWith(prefix));
+  setPendingNotes(
+    manifest,
+    notes.filter((note) => !note.id.startsWith(prefix))
+  );
+  setDoneNotes(
+    manifest,
+    doneNotesOf(manifest).filter((id) => !id.startsWith(prefix))
+  );
+  return dropped.map((note) => note.id);
+}
+
 export function emptyManifest(): Manifest {
   return { links: {}, managed: {}, patches: [], removeWarnings: {} };
 }
@@ -209,6 +300,12 @@ export async function loadManifest(root: string): Promise<Manifest> {
     managed: parsed.managed ?? {},
     patches: parsed.patches ?? [],
     removeWarnings: parsed.removeWarnings ?? {},
+    ...(parsed.pendingNotes && parsed.pendingNotes.length > 0
+      ? { pendingNotes: parsed.pendingNotes }
+      : {}),
+    ...(parsed.doneNotes && parsed.doneNotes.length > 0
+      ? { doneNotes: parsed.doneNotes }
+      : {}),
   };
 }
 

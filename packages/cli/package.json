@@ -29,7 +29,8 @@
   "files": [
     "dist",
     "templates",
-    "schemas/*.schema.json"
+    "schemas/*.schema.json",
+    "update-notes"
   ],
   "publishConfig": {
     "access": "public"

@@ -14,31 +14,59 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  checkPlanNotes,
+  compareSemver,
+  expectedNoteIds,
   findRenderErrors,
   findWorkspaceDeps,
   fullScaffolds,
+  installedAfterUpdate,
   parseArgs,
+  parsePlanNotes,
+  previousVersion,
+  readNoteFrontmatter,
 } from "./release-smoke.ts";
 
 describe("parseArgs", () => {
   it("defaults to wiping the scratch directory", () => {
-    assert.deepEqual(parseArgs([]), { keep: false, unknown: [] });
+    assert.deepEqual(parseArgs([]), {
+      keep: false,
+      unknown: [],
+      upgradeOnly: false,
+    });
   });
 
   it("accepts --keep", () => {
-    assert.deepEqual(parseArgs(["--keep"]), { keep: true, unknown: [] });
+    assert.deepEqual(parseArgs(["--keep"]), {
+      keep: true,
+      unknown: [],
+      upgradeOnly: false,
+    });
   });
 
   // A typo'd flag that silently does nothing is the failure mode worth rejecting: the
   // maintainer thinks the scratch tree survived for inspection, and it did not.
+  it("accepts --upgrade-only", () => {
+    assert.deepEqual(parseArgs(["--upgrade-only", "--keep"]), {
+      keep: true,
+      unknown: [],
+      upgradeOnly: true,
+    });
+  });
+
   it("reports an unknown flag", () => {
-    assert.deepEqual(parseArgs(["--kep"]), { keep: false, unknown: ["--kep"] });
+    assert.deepEqual(parseArgs(["--kep"]), {
+      keep: false,
+      unknown: ["--kep"],
+      upgradeOnly: false,
+    });
   });
 
   it("reports a stray positional", () => {
     assert.deepEqual(parseArgs(["smoke"]), {
       keep: false,
       unknown: ["smoke"],
+      upgradeOnly: false,
     });
   });
 });
@@ -264,6 +292,241 @@ describe("fullScaffolds", () => {
         { modules: ["a", "c"], name: "full-a-c" },
         { modules: ["b"], name: "full-b" },
       ]
+    );
+  });
+});
+
+// Issue #298. The upgrade step scaffolds with the release before the packed one, and
+// checks the merge plan's update notes against a table read from the notes on disk.
+describe("compareSemver", () => {
+  it("orders by major, minor and patch as numbers", () => {
+    assert.ok(compareSemver("0.10.0", "0.9.1") > 0);
+    assert.ok(compareSemver("1.0.0", "0.99.99") > 0);
+    assert.equal(compareSemver("0.8.0", "0.8.0"), 0);
+  });
+
+  it("puts a prerelease below its release", () => {
+    assert.ok(compareSemver("0.9.0-rc.1", "0.9.0") < 0);
+    assert.ok(compareSemver("0.9.0-rc.1", "0.8.0") > 0);
+  });
+
+  it("refuses a version that is not semver", () => {
+    assert.throws(() => compareSemver("main", "0.8.0"), /not a semver/);
+  });
+});
+
+describe("previousVersion", () => {
+  const published = ["0.1.0", "0.6.1", "0.7.0", "0.8.0"];
+
+  it("picks the newest release below the packed version", () => {
+    assert.equal(previousVersion(published, "0.8.0"), "0.7.0");
+  });
+
+  it("picks the latest release when the packed version is not published yet", () => {
+    assert.equal(previousVersion(published, "0.9.0"), "0.8.0");
+  });
+
+  it("compares as numbers, not text", () => {
+    assert.equal(previousVersion(["0.9.0", "0.10.0"], "0.11.0"), "0.10.0");
+  });
+
+  it("skips prereleases and labels that are not semver", () => {
+    assert.equal(
+      previousVersion(["0.7.0", "0.8.0-rc.1", "next"], "0.8.0"),
+      "0.7.0"
+    );
+  });
+
+  it("returns undefined when nothing is older", () => {
+    assert.equal(previousVersion(["0.8.0"], "0.8.0"), undefined);
+  });
+});
+
+describe("readNoteFrontmatter", () => {
+  it("reads a base note's version", () => {
+    assert.deepEqual(
+      readNoteFrontmatter(
+        "---\ntitle: Brand\nversion: 0.8.0\n---\n\n## What update does\n"
+      ),
+      { version: "0.8.0" }
+    );
+  });
+
+  it("reads `when.installed` as a block list", () => {
+    assert.deepEqual(
+      readNoteFrontmatter(
+        "---\ntitle: Kit\nwhen:\n  installed:\n    - admin\n    - auth\n---\nbody\n"
+      ),
+      { when: { installed: ["admin", "auth"], testing: false } }
+    );
+  });
+
+  it("reads `when` as a flow map with `testing`", () => {
+    assert.deepEqual(
+      readNoteFrontmatter(
+        '---\ntitle: Kit\nwhen: { installed: [admin, "auth"], testing: true }\n---\n'
+      ),
+      { when: { installed: ["admin", "auth"], testing: true } }
+    );
+  });
+
+  it("refuses a `when` key it cannot judge", () => {
+    assert.throws(
+      () => readNoteFrontmatter("---\ntitle: X\nwhen:\n  driver: d1\n---\n"),
+      /when\.driver/
+    );
+  });
+
+  it("refuses a note with no frontmatter", () => {
+    assert.throws(
+      () => readNoteFrontmatter("## What update does\n"),
+      /no frontmatter/
+    );
+  });
+});
+
+describe("installedAfterUpdate", () => {
+  it("adds every dependency a new descriptor gained", () => {
+    const installed = installedAfterUpdate(
+      ["api", "auth", "admin"],
+      new Map([
+        ["admin", ["api", "auth", "shell"]],
+        ["shell", ["logger"]],
+      ])
+    );
+    assert.deepEqual([...installed].toSorted(), [
+      "admin",
+      "api",
+      "auth",
+      "logger",
+      "shell",
+    ]);
+  });
+});
+
+describe("expectedNoteIds", () => {
+  const notes = [
+    { id: "base/0001-brand-css", version: "0.8.0" },
+    { id: "base/0002-later", version: "0.9.0" },
+    { id: "base/0000-older", version: "0.7.0" },
+    { id: "api/0001-app-origin" },
+    { id: "kv/0001-not-installed" },
+    {
+      id: "shell/0001-admin-kit-move",
+      when: { installed: ["admin"], testing: false },
+    },
+    {
+      id: "shell/0002-needs-billing",
+      when: { installed: ["billing"], testing: false },
+    },
+    { id: "shell/0003-tests", when: { installed: [], testing: true } },
+  ];
+  const installed = new Set(["api", "admin", "shell"]);
+
+  it("takes base notes in (previous, packed] and the notes of installed modules", () => {
+    assert.deepEqual(
+      expectedNoteIds(
+        notes,
+        { packed: "0.8.0", previous: "0.7.0" },
+        installed,
+        "off"
+      ),
+      [
+        "api/0001-app-origin",
+        "base/0001-brand-css",
+        "shell/0001-admin-kit-move",
+      ]
+    );
+  });
+
+  it("keeps a `when.testing` note when testing is on", () => {
+    assert.ok(
+      expectedNoteIds(
+        notes,
+        { packed: "0.8.0", previous: "0.7.0" },
+        installed,
+        "tdd"
+      ).includes("shell/0003-tests")
+    );
+  });
+});
+
+describe("parsePlanNotes", () => {
+  const plan = [
+    "# Saasaloy merge plan",
+    "",
+    "## Update notes",
+    "",
+    "### base/0001-brand-css: Move the web tokens from web.css into brand.css",
+    "",
+    "#### What update does",
+    "",
+    "```md",
+    "### fake/0009-in-a-fence: not a note",
+    "## Not the end",
+    "```",
+    "",
+    "### shell/0001-admin-kit-move: The admin ui kit moves into the shell module",
+    "### Notes that may apply",
+    "",
+    "#### api/0001-app-origin: The api allows the app origin",
+    "##### What update does",
+    "#### email-react/0001-preview-port: The email preview moves",
+    "### When a note is done",
+    "",
+    "```sh",
+    "saasaloy update \\",
+    "  --done api/0001-app-origin --yes",
+    "```",
+    "",
+    "## base",
+    "",
+    "### base/0002-after-the-section: not a note",
+  ].join("\n");
+
+  it("splits the ids into placed and may apply", () => {
+    assert.deepEqual(parsePlanNotes(plan), {
+      mayApply: ["api/0001-app-origin", "email-react/0001-preview-port"],
+      placed: ["base/0001-brand-css", "shell/0001-admin-kit-move"],
+    });
+  });
+
+  it("finds nothing in a plan with no notes section", () => {
+    assert.deepEqual(parsePlanNotes("# Saasaloy merge plan\n\n## api\n"), {
+      mayApply: [],
+      placed: [],
+    });
+  });
+});
+
+describe("checkPlanNotes", () => {
+  it("passes when both groups together hold every expected id", () => {
+    assert.deepEqual(
+      checkPlanNotes(["api/0001-app-origin", "base/0001-brand-css"], {
+        mayApply: ["api/0001-app-origin"],
+        placed: ["base/0001-brand-css"],
+      }),
+      []
+    );
+  });
+
+  it("names each missing id", () => {
+    assert.deepEqual(
+      checkPlanNotes(["api/0001-app-origin", "auth/0001-app-origin"], {
+        mayApply: ["api/0001-app-origin"],
+        placed: [],
+      }),
+      ["missing auth/0001-app-origin"]
+    );
+  });
+
+  it("names an id no rule expects", () => {
+    assert.deepEqual(
+      checkPlanNotes([], {
+        mayApply: [],
+        placed: ["shell/0001-admin-kit-move"],
+      }),
+      ["unexpected shell/0001-admin-kit-move"]
     );
   });
 });
