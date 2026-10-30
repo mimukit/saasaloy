@@ -54,7 +54,7 @@ Reuses:
 
 Rejected in one line each: richer changelog only (no filtering by project, not in the package); root `MIGRATION.md` (same, and it drifts from the code); codemods for everything (break on code the owner edited).
 
-### Phase 1: Repair the v0.8.0 notes
+### Phase 1: Repair the v0.8.0 notes (built 2026-10-30)
 Attended: the owner approves the new GitHub release body before it is published, because editing a published release is an outward action.
 - Move the `## Unreleased` content in `packages/cli/CHANGELOG.md` into the 0.8.0 section and delete the `Unreleased` heading.
 - Inline the shell item's two pointers: the perl command from `modules/shell/skills/saasaloy-shell/SKILL.md:213` and the oxlint rule from `packages/cli/templates/base/oxlint.config.mjs:182`.
