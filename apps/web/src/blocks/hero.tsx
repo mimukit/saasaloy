@@ -44,6 +44,32 @@ export interface HeroProps {
   commandField?: ReactNode;
 }
 
+/** The hero's links, one per row item. ./start.tsx shows the same list. */
+export function HeroLinkList({ links }: { links: HeroLink[] }) {
+  return (
+    <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+      {links.map((link) => (
+        <li key={link.id}>
+          <a
+            href={link.href}
+            {...externalLinkProps(link.href)}
+            className="text-highlight inline-flex items-center gap-2 font-medium underline-offset-4 hover:underline"
+          >
+            {link.id === "github" ? (
+              GITHUB_MARK
+            ) : (
+              <BookOpenIcon aria-hidden="true" className="size-4" />
+            )}
+            {link.label}
+            <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+            {newTabHint(link.href)}
+          </a>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
 export function Hero({
   titleLead = landing.hero.titleLead,
   titleAccent = landing.hero.titleAccent,
@@ -66,26 +92,7 @@ export function Hero({
           </p>
           <div className="blur-in flex flex-col gap-4 [--blur-in-delay:200ms]">
             {commandField ?? <CommandField command={command} />}
-            <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-              {links.map((link) => (
-                <li key={link.id}>
-                  <a
-                    href={link.href}
-                    {...externalLinkProps(link.href)}
-                    className="text-highlight inline-flex items-center gap-2 font-medium underline-offset-4 hover:underline"
-                  >
-                    {link.id === "github" ? (
-                      GITHUB_MARK
-                    ) : (
-                      <BookOpenIcon aria-hidden="true" className="size-4" />
-                    )}
-                    {link.label}
-                    <ArrowRightIcon aria-hidden="true" className="size-3.5" />
-                    {newTabHint(link.href)}
-                  </a>
-                </li>
-              ))}
-            </ul>
+            <HeroLinkList links={links} />
           </div>
           {note && (
             <p className="text-muted-foreground blur-in text-xs [--blur-in-delay:300ms]">

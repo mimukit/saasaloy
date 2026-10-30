@@ -332,6 +332,19 @@ export const landing = {
     sourceHref: `${DOCS}/how-to/make-it-yours.md`,
   },
 
+  // The closing block after the FAQ. `command` is the command field's text (5b), and the
+  // links are the hero's. `source` is the line that says this site began as the base
+  // template's landing page; `sourceHref` leaves the page (5a).
+  start: {
+    title: "Start with a landing page today.",
+    description: "Add the next module when the product needs it.",
+    command: "npx saasaloy init my-app",
+    source:
+      "This site began as the landing page `saasaloy init` writes. Its source lives at `apps/web`.",
+    sourceLabel: "View this site's source",
+    sourceHref: `${REPO}/tree/main/apps/web`,
+  },
+
   faq: {
     title: "Before you start.",
     description: "",
