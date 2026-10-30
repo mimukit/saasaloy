@@ -8,9 +8,11 @@ import {
   BASE_MODULE,
   BASE_NO_MERGE_BASE,
   baseEntries,
+  baseAdoptedAt,
   baseRecord,
   baseUpdateInput,
   isBaseTracked,
+  isFirstUpdateAfterAdoption,
   listTemplateFiles,
   missingBaseTargets,
   compileGlob,
@@ -229,6 +231,62 @@ describe(isBaseTracked, () => {
   });
 });
 
+describe(baseAdoptedAt, () => {
+  const hash = "f".repeat(64);
+
+  it("reads adoptedAt off the lock record", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.9.0", hash), adoptedAt: "0.8.0" },
+    };
+    expect(baseAdoptedAt(lock, emptyManifest())).toBe("0.8.0");
+  });
+
+  it("reads a record with no adoptedAt and an adopted base file as adopted at cliVersion", () => {
+    const lock = { ...emptyLock(), base: baseRecord("0.7.0", hash) };
+    const manifest = emptyManifest();
+    manifest.managed["a.txt"] = {
+      module: BASE_MODULE,
+      hash: hashContent("a"),
+      adopted: true,
+    };
+    expect(baseAdoptedAt(lock, manifest)).toBe("0.7.0");
+  });
+
+  it("is undefined for a base `init` rendered", () => {
+    const lock = { ...emptyLock(), base: baseRecord("0.7.0", hash) };
+    const manifest = emptyManifest();
+    manifest.managed["a.txt"] = { module: BASE_MODULE, hash: hashContent("a") };
+    expect(baseAdoptedAt(lock, manifest)).toBeUndefined();
+    expect(baseAdoptedAt(emptyLock(), manifest)).toBeUndefined();
+  });
+});
+
+describe(isFirstUpdateAfterAdoption, () => {
+  const hash = "f".repeat(64);
+
+  it("is true while the record still sits at the CLI that adopted it", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.8.0", hash), adoptedAt: "0.8.0" },
+    };
+    expect(isFirstUpdateAfterAdoption(lock, emptyManifest())).toBeTruthy();
+  });
+
+  it("is false once an update moved the record", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.9.0", hash), adoptedAt: "0.8.0" },
+    };
+    expect(isFirstUpdateAfterAdoption(lock, emptyManifest())).toBeFalsy();
+  });
+
+  it("is false for a base `init` rendered", () => {
+    const lock = { ...emptyLock(), base: baseRecord("0.8.0", hash) };
+    expect(isFirstUpdateAfterAdoption(lock, emptyManifest())).toBeFalsy();
+  });
+});
+
 describe(adoptBase, () => {
   it("records every template file at the hash it has on disk", async () => {
     await write(template, "a.txt", "template {{PROJECT_NAME}}\n");
@@ -254,9 +312,12 @@ describe(adoptBase, () => {
       adopted: true,
       from: "a.txt",
     });
-    expect(lock.base).toStrictEqual(
-      baseRecord("0.0.0", await templateHash(template))
-    );
+    // #298: the record names the CLI that adopted the base, so `update` knows which
+    // base notes it cannot place.
+    expect(lock.base).toStrictEqual({
+      ...baseRecord("0.0.0", await templateHash(template)),
+      adoptedAt: "0.0.0",
+    });
   });
 
   it("records a template file missing from disk at its rendered hash, so the next update restores it", async () => {
@@ -621,6 +682,29 @@ describe("baseUpdateInput — classifying base files through the module engine",
     expect(base.baseRecord).toStrictEqual(
       baseRecord(CLI, await templateHash(next))
     );
+    await cleanup();
+  });
+
+  // #298: once an update moves the record, `cliVersion` leaves `adoptedAt` behind, and
+  // that gap is how the next run knows the lock range is exact again.
+  it("carries adoptedAt into the record a clean run writes", async () => {
+    await write(template, "AGENTS.md", "v1\n");
+    const state = await scaffold();
+    const adopted = emptyManifest();
+    for (const [target, entry] of Object.entries(state.manifest.managed)) {
+      adopted.managed[target] = { ...entry, adopted: true };
+    }
+    const next = await bumped({ "AGENTS.md": "v2\n" });
+
+    const { base, cleanup } = await planAgainst(next, {
+      manifest: adopted,
+      lock: state.lock,
+    });
+
+    expect(base.baseRecord).toStrictEqual({
+      ...baseRecord(CLI, await templateHash(next)),
+      adoptedAt: CLI,
+    });
     await cleanup();
   });
 

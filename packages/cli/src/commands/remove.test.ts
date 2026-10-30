@@ -11,6 +11,7 @@ import {
   it,
 } from "vitest";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
+import { loadManifest } from "../lib/manifest.js";
 import { stripAnsi } from "../lib/tui.js";
 import { runRemove } from "./remove.js";
 
@@ -159,6 +160,11 @@ describe("runRemove — a ui block leaves its wire-up behind (#62)", () => {
         links: {},
         patches: [],
         removeWarnings: {},
+        pendingNotes: [
+          { id: "widget/0001-move", title: "Widget moves", body: "Body\n" },
+          { id: "base/0001-brand-css", title: "Brand", body: "Body\n" },
+        ],
+        doneNotes: ["base/0002-done", "widget/0002-done"],
       }),
       "utf-8"
     );
@@ -191,6 +197,54 @@ describe("runRemove — a ui block leaves its wire-up behind (#62)", () => {
     ).resolves.toBeFalsy();
     expect(output).toContain(BLOCK);
     expect(output).toContain("not reversed");
+  });
+
+  // #298 Phase 4. A removed module's update notes describe code that is gone.
+  it("drops the removed module's pending update notes and keeps the others", async () => {
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["widget", "--yes"]);
+    } finally {
+      captured.restore();
+    }
+
+    expect(code).toBe(0);
+    expect(captured.lines.join("")).toContain("widget/0001-move");
+    const manifest = await loadManifest(project);
+    expect(manifest.pendingNotes?.map((n) => n.id)).toStrictEqual([
+      "base/0001-brand-css",
+    ]);
+  });
+
+  // A re-add starts clean: the module's cleared notes are selected again.
+  it("drops the removed module's done update notes and keeps the others", async () => {
+    const captured = capture();
+    let code: number;
+    try {
+      code = await runRemove(["widget", "--yes"]);
+    } finally {
+      captured.restore();
+    }
+
+    expect(code).toBe(0);
+    const manifest = await loadManifest(project);
+    expect(manifest.doneNotes).toStrictEqual(["base/0002-done"]);
+  });
+
+  it("keeps every pending update note under --dry-run", async () => {
+    const captured = capture();
+    try {
+      await runRemove(["widget", "--dry-run"]);
+    } finally {
+      captured.restore();
+    }
+
+    const manifest = await loadManifest(project);
+    expect(manifest.pendingNotes?.map((n) => n.id)).toStrictEqual([
+      "widget/0001-move",
+      "base/0001-brand-css",
+    ]);
   });
 
   // #223, ADR 0046. The drift and "Proceed?" confirms used to open with no TTY check, so

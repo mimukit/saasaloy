@@ -93,6 +93,44 @@
         }
       }
     },
+    "pendingNotes": {
+      "type": "array",
+      "description": "Update notes an applied `saasaloy update` showed and nobody has cleared yet (#298), in the order they were first shown. Each prints again in every later merge plan until `saasaloy update --done <id>` clears it, and `saasaloy remove <module>` drops the notes that module owns. The rendered body is stored, so the note repeats with no registry fetch. Optional: a manifest without it has no pending note.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "body"],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*$",
+            "description": "The note id, `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, derived from its path."
+          },
+          "title": {
+            "type": "string",
+            "minLength": 1,
+            "description": "The note's frontmatter `title`."
+          },
+          "body": {
+            "type": "string",
+            "description": "The note's Markdown after the frontmatter, as the merge plan rendered it."
+          },
+          "mayApply": {
+            "type": "boolean",
+            "description": "True when the run could not place the note, so the merge plan lists it under \"Notes that may apply\"."
+          }
+        }
+      }
+    },
+    "doneNotes": {
+      "type": "array",
+      "description": "Update note ids `saasaloy update --done <id>` cleared (#298), sorted, once each. Selection skips every id listed here, so a note a later run selects again (an adopted base at the running CLI, a module with no merge base) never returns. `saasaloy remove <module>` drops the ids that module owns, so a re-add starts clean. Optional: a manifest without it has no done note.",
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*$"
+      }
+    },
     "patches": {
       "type": "array",
       "description": "Structural config patches actually applied to disk, so `remove` can warn which files it can't clean up on its own (reversal is a follow-up issue). Deduped on re-apply (structural equality) so `--force` stays idempotent.",

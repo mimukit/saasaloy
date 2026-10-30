@@ -278,4 +278,31 @@ describe("loadLock — validation on load", () => {
     const lock = await loadLock(bad);
     expect(lock.modules.email?.conflictsWith).toStrictEqual(["email-ses"]);
   });
+
+  it("validates a base record carrying adoptedAt (#298)", async () => {
+    const lock = {
+      ...emptyLock(),
+      base: {
+        name: "web",
+        cliVersion: "0.8.0",
+        templateHash: "a".repeat(64),
+        adoptedAt: "0.8.0",
+      },
+    };
+    const result = await validateLock(lock);
+    expect(result.errors).toStrictEqual([]);
+  });
+
+  it("refuses an empty adoptedAt (#298)", async () => {
+    const lock = {
+      ...emptyLock(),
+      base: {
+        name: "web",
+        cliVersion: "0.8.0",
+        templateHash: "a".repeat(64),
+        adoptedAt: "",
+      },
+    };
+    expect((await validateLock(lock)).valid).toBeFalsy();
+  });
 });

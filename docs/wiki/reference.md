@@ -42,7 +42,7 @@ current project has installed when it is run inside one, and works anywhere.
 | `0` | the command did what it was asked, or you answered no to a confirmation |
 | `1` | something failed, or you cancelled: a fetch died, a write threw, Ctrl-C |
 | `2` | saasaloy refused by design: an unknown flag or command, a module conflict, an unmet `requiresOneOf`, an invalid state file, a `doctor` or `env --check` finding, or a prompt with no terminal to answer it in |
-| `3` | `saasaloy update` only: the run applied what it could and left files waiting on a merge |
+| `3` | `saasaloy update` only: the run applied what it could and left work pending: files waiting on a merge, update notes not yet marked done, or both. The code is named `EXIT_WORK_PENDING` in `packages/cli/src/lib/exit.ts`. |
 
 A wrapper script reads `2` as "the input is wrong, retrying will not help" and `1` as
 "transient, a retry may work".
@@ -51,7 +51,7 @@ A wrapper script reads `2` as "the input is wrong, retrying will not help" and `
 
 `list`, `doctor`, `outdated`, `env --check` and `add --dry-run` take `--json`. It prints one JSON document to stdout, and nothing else goes there: the clack TUI and every warning move to stderr. The one exception is `--help`: help is not a run, so `saasaloy doctor --json --help` prints plain help on stdout and exits 0. Every document starts with a `schemaVersion`. A breaking change to a command's document shape bumps that command's number, and a new field does not. `list`, `doctor`, `outdated` and `env --check` print `"schemaVersion": 1`. `add --dry-run` prints `"schemaVersion": 2`, because its `requested` field changed from a string to a list of names, and its error document carries 2 as well.
 
-`--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
+`--json` never prompts. It changes no exit code: `doctor` with findings, `outdated --check` with drift or a pending update note and `env --check` with unset variables still exit 2, and they still print their report. A run that stops before its report, such as an unknown flag, no project, or a refusal, prints an error document instead, so stdout parses on every exit:
 
 ```json
 { "schemaVersion": 1, "error": { "exitCode": 2, "message": "Unknown argument(s): --nope — usage: …" } }
@@ -238,12 +238,14 @@ Report whether anything has moved, without touching a file. The first row is the
 
 A base row reads `current`, `outdated`, or `untracked`. `untracked` means the project has no usable base record, which includes every project scaffolded before the record existed and a project whose lock has a `base` object but whose manifest has no tracked base entries. It is news, not drift: `outdated --check` does not fail on it, and `saasaloy update` adopts or re-adopts the base. A bare run exits 0 whatever it finds. `--check` exits 2 when the base or any module is `outdated`, so CI can gate on drift without parsing the table. An unreachable source is a row, not a throw, and it does not fail `--check` either. With `SAASALOY_REGISTRY_DIR` set, every module row reads `local` and the run warns that nothing was compared, so `--check` exits 0.
 
-`--json` prints the same rows as one document on stdout (see [JSON output](#json-output)): `base`, the base row, `modules`, one row per installed module, and `drift`, the count `--check` exits 2 on. Each row carries `name`, `source`, `ref`, `current`, `latest` and `status`, plus `detail` when the table prints a note under it. The exit code is the one the same run without `--json` returns.
+A pending update note is work waiting too. `outdated` lists each one by id and title in a **Pending update notes** box, and `--check` exits 2 while any is pending, with or without drift. See [Recording an update note](#recording-an-update-note).
+
+`--json` prints the same rows as one document on stdout (see [JSON output](#json-output)): `base`, the base row, `modules`, one row per installed module, and `drift`, the count of moved rows, and `pendingNotes`, each pending note's `id` and `title` (an empty list when none is pending). `--check` exits 2 when `drift` is above 0 or `pendingNotes` is not empty. Each row carries `name`, `source`, `ref`, `current`, `latest` and `status`, plus `detail` when the table prints a note under it. The exit code is the one the same run without `--json` returns.
 
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--dry-run] [--diff] [--force] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes]
 saasaloy update --abort
 ```
 
@@ -258,6 +260,8 @@ Two cases stop before anything is applied. A project with no usable base record 
 | `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--resolved <path>` | record a file you merged, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge). |
+| `--done <id>` | record an update note whose work is done, so the merge plan stops listing it. Repeatable. See [Recording an update note](#recording-an-update-note). |
+| `--from <version>` | on the first update after adoption, name the CLI version the project was made with, so the base update notes newer than it apply. Without it those notes print under "Notes that may apply". Any other run refuses it with exit 2, because the lock range is already exact. |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
 | `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
@@ -280,8 +284,7 @@ copy back, including deleting the files the run created. The directory is gitign
 
 A module run also backfills: each installed module's entries whose `when` is now true and whose target is untracked are written at the locked SHA, after the dirty-tree and confirmation checks. `--dry-run` and `--diff` only list them, and `update base` reads no module, so it backfills nothing. A project with no `testing` key and a module-owned `*.test.ts` in its manifest gets one line suggesting `saasaloy testing tests-after`.
 
-Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and
-left files waiting on a merge, 2 for a refusal, 1 for a failure.
+Exit codes: 0 when there is nothing left to do, 3 when the run applied what it could and left files waiting on a merge or update notes not yet marked done, 2 for a refusal, 1 for a failure. A preview exits 0. The closing line names the merges and the pending notes apart.
 
 ### Recording a merge
 
@@ -296,6 +299,20 @@ Each named file leaves the merge plan. `update` records the file's current hash 
 The manifest entry also records the hash of the module version the merge took in (`mergedWith`). While the module still ships that version, `update` skips the file even with no merge base, as under `SAASALOY_REGISTRY_DIR`. Once the module moves again, the file goes to the merge plan rather than being overwritten, because it holds your edits.
 
 A path may be relative to the working directory or to the project root, as the merge plan prints it. A path that this run does not send to a merge exits 2 before anything is written and names the path and the files that are waiting.
+
+### Recording an update note
+
+Every update note an applied run shows is recorded as pending in `.saasaloy/manifest.json` (`pendingNotes`), with its title and body. `--dry-run`, `--diff` and a declined prompt record nothing. A pending note prints again in every later merge plan, under its first group, until it is cleared, and `update` exits 3 while any note is pending, even when no file moved. `saasaloy outdated` and `saasaloy doctor` list the pending notes, and `saasaloy remove <module>` drops the notes that module owns.
+
+`--done <id>` clears one note. Like `--resolved`, it rides a normal update run, so with no terminal it needs `--yes` and a dirty working tree needs `--force`. The merge plan ends its "Update notes" section with the exact command for its notes:
+
+```sh
+saasaloy update --done base/0001-brand-css --yes
+```
+
+An id that is not pending exits 2 before anything is written and lists the pending ids. A cleared id moves from `pendingNotes` to `doneNotes` in the manifest, and every later run skips it, so a cleared note never returns. That holds even when a run selects the same note again, as it does on a base adopted at the running CLI or with `SAASALOY_REGISTRY_DIR` set. `saasaloy remove <module>` drops that module's done ids too, so a re-add starts clean.
+
+An applied run that reads the base also records the running CLI as the base's `cliVersion` in `saasaloy-lock.json`, whether the base was current, updated, or still waiting on a merge. The base notes up to that CLI are then out of the next run's range, so a cleared base note does not come back. A module note comes from the module's own update range, so it stops when the module's lock entry moves.
 
 ## `saasaloy remove`
 
@@ -389,13 +406,13 @@ Validate what is on disk. Nothing named checks the current directory. `doctor` p
 
 Registry mode checks one module folder (`saasaloy doctor modules/waitlist`) or a directory of them (`saasaloy doctor modules`); a module folder is one that carries a `registry-item.json`. Besides the schema, it checks what the schema cannot, among them declared files on disk, known aliases, sibling module names, exact-pinned dependencies, the skill folder, and a `description` on every descriptor. The schema keeps `description` optional so a project can still read an older descriptor, but a registry without one fails here. A `description` that still starts with `TODO`, as `new module` writes it, is a warning: it prints in a **Warnings** box and never fails the run. It prints one box per module with findings and a dim line counting how many were clean. A clean run ends with "No problems found." and exit 0. Findings exit 2, which is what makes `doctor` usable as a pre-publish gate in CI.
 
-Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
+Project mode opens with a **Base** box: the recorded template name, the CLI version and short template hash it was recorded at, a count of files that match the record, the files that drifted, the files that are missing, and the seed files it does not check. Base drift never fails the run. A **Pending update notes** box follows when an applied `saasaloy update` showed notes that nobody cleared yet, one line per note with the `saasaloy update --done <id>` command that clears it. Like base drift, a pending note never fails the run. An untracked base prints "untracked — no record of which template scaffolded this project." and points at `saasaloy update` to record it.
 
 Below the base box, project mode asks three questions: a module in `installed` that owns no file in the manifest, a module that owns files but was never marked installed, and, on a project running `kv-cloudflare`, whether every registered rate limit policy has the `RL_<NAME>` binding its `consume` resolves to. No findings exits 0 with "No problems found."; findings exit 2 with "N problems in saasaloy.json."
 
 A path that does not exist exits 2, and so does a directory with no module folders in it.
 
-`--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module`, its `findings` and its `warnings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
+`--json` prints the findings as one document on stdout (see [JSON output](#json-output)), with the exit code unchanged. `mode` is `registry` or `project`. Registry mode carries `path`, `modules` (each with `module`, its `findings` and its `warnings`) and `problems`, the finding count. Project mode carries `path`, `base` (the Base box as data), `pendingNotes` (each pending update note's `id` and `title`), `installed`, `findings`, `warnings` (the deploy warnings) and `problems`. Each finding has `module`, `where` and `message`.
 
 ## Module coordinates
 

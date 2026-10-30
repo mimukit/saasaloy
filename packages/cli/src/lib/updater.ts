@@ -42,6 +42,7 @@ import { classifyTrackedFile } from "./remover.js";
 import type { FileRemoveAction } from "./remover.js";
 import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
 import { readTestingMode } from "./testing.js";
+import type { UpdateNoteText } from "./update-notes.js";
 
 // The deterministic core of `saasaloy update` (issue #48), mirroring the buildPlan/
 // executePlan split of applier.ts and remover.ts. Two things live here:
@@ -516,6 +517,16 @@ export interface UpdatePlan {
   verifyCommand: string;
   /** True when any module needs a merge — i.e. a merge plan document is worth emitting. */
   needsMerge: boolean;
+  /**
+   * Update notes this run selected and placed (#298): base notes by version, then module
+   * notes in plan order. Any one of them is enough to emit the merge plan.
+   */
+  notes: UpdateNoteText[];
+  /**
+   * Update notes the run could not place: from a module with no merge base, or base notes
+   * up to the CLI that adopted the base. The merge plan asks the agent to check each one.
+   */
+  mayApplyNotes: UpdateNoteText[];
 }
 
 /** One module's two revisions plus everything the command learned while fetching them. */
@@ -701,6 +712,9 @@ export async function buildUpdatePlan(
     ...(migrationCommand ? { migrationCommand } : {}),
     verifyCommand: VERIFY_COMMAND,
     needsMerge: modules.some((m) => m.needsMerge),
+    // Selected by the command once the plan exists: it holds both revisions' folders.
+    notes: [],
+    mayApplyNotes: [],
   };
 }
 

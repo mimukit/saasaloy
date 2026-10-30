@@ -291,6 +291,40 @@ export function isBaseTracked(lock: Lockfile, manifest: Manifest): boolean {
 }
 
 /**
+ * The CLI version the base was adopted at (#298), or `undefined` for a base `init`
+ * rendered. A record written before `adoptedAt` existed carries none, yet `adoptBase`
+ * flagged every file it recorded off disk as `adopted`; such a record reads as adopted at
+ * its `cliVersion`, which is what `adoptBase` wrote there.
+ */
+export function baseAdoptedAt(
+  lock: Lockfile,
+  manifest: Manifest
+): string | undefined {
+  if (!lock.base) {
+    return undefined;
+  }
+  if (lock.base.adoptedAt !== undefined) {
+    return lock.base.adoptedAt;
+  }
+  return Object.values(baseEntries(manifest)).some((entry) => entry.adopted)
+    ? lock.base.cliVersion
+    : undefined;
+}
+
+/**
+ * Whether no update has moved the base record since `update` adopted it (#298). Only then
+ * is the lock range inexact: the project may predate the CLI that adopted it, so the base
+ * update notes up to that CLI cannot be placed, and `update --from` may name the start.
+ */
+export function isFirstUpdateAfterAdoption(
+  lock: Lockfile,
+  manifest: Manifest
+): boolean {
+  const adoptedAt = baseAdoptedAt(lock, manifest);
+  return adoptedAt !== undefined && adoptedAt === lock.base?.cliVersion;
+}
+
+/**
  * Base targets the manifest tracks that are not on disk — the files `update` classifies as
  * `restore`. `compareBase` needs this because `templateHash` only says whether the *template*
  * moved: a file deleted from disk (or recorded absent by `adoptBase`) leaves the hash equal,
@@ -437,11 +471,14 @@ export async function adoptBase(args: AdoptBaseArgs): Promise<AdoptBaseResult> {
         });
       }
     }
-    const record = baseRecord(
-      cliVersion,
-      await templateHash(templateDir),
-      lock.base?.name ?? DEFAULT_BASE_NAME
-    );
+    const record: BaseRecord = {
+      ...baseRecord(
+        cliVersion,
+        await templateHash(templateDir),
+        lock.base?.name ?? DEFAULT_BASE_NAME
+      ),
+      adoptedAt: cliVersion,
+    };
     if (!dryRun) {
       recordBaseFiles(manifest, files);
       lock.base = record;
@@ -511,6 +548,9 @@ export async function baseUpdateInput(
   const seed = new Set(declaration.seedFiles);
   const shipped = render.files.filter((file) => !seed.has(file.target));
   const targets = new Set(shipped.map((file) => file.target));
+  // Kept on the new record, so once `cliVersion` moves past it the next run reads the
+  // lock range as exact (#298).
+  const adoptedAt = baseAdoptedAt(lock, manifest);
   return {
     input: {
       comparison,
@@ -537,11 +577,14 @@ export async function baseUpdateInput(
       reapplyPatches: manifest.patches.filter((patch) =>
         targets.has(patch.file)
       ),
-      baseRecord: baseRecord(
-        cliVersion,
-        await templateHash(templateDir),
-        lock.base?.name ?? DEFAULT_BASE_NAME
-      ),
+      baseRecord: {
+        ...baseRecord(
+          cliVersion,
+          await templateHash(templateDir),
+          lock.base?.name ?? DEFAULT_BASE_NAME
+        ),
+        ...(adoptedAt === undefined ? {} : { adoptedAt }),
+      },
     },
     cleanup: render.cleanup,
   };

@@ -4,12 +4,17 @@ import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { RefusalError } from "./exit.js";
 import {
+  addDoneNotes,
+  doneNotesOf,
+  dropModulePendingNotes,
   emptyManifest,
   loadManifest,
+  pendingNotesOf,
   recordLink,
   recordManagedFile,
   recordPatch,
   saveManifest,
+  setPendingNotes,
   untrackLink,
   untrackManagedFile,
   untrackPatch,
@@ -396,5 +401,126 @@ describe("the recorded when (#242)", () => {
     });
 
     await expect(loadManifest(root)).rejects.toThrow(/"always"/);
+  });
+});
+
+// #298 Phase 4. A note an applied `update` showed stays here until `update --done <id>`
+// clears it. The body is stored, so a later merge plan repeats the note without the
+// registry revision it came from.
+describe("pendingNotes (#298)", () => {
+  const NOTE = {
+    id: "email-react/0001-preview-port",
+    title: "The preview moves",
+    body: "## What you do\n\nMove it.\n",
+  };
+
+  it("reads an older manifest with no field as no pending notes", async () => {
+    await writeManifest({ managed: {}, links: {}, patches: [] });
+    const manifest = await loadManifest(root);
+    expect(manifest.pendingNotes).toBeUndefined();
+    expect(pendingNotesOf(manifest)).toStrictEqual([]);
+  });
+
+  it("round-trips a pending note, may apply included", async () => {
+    const manifest = emptyManifest();
+    setPendingNotes(manifest, [
+      NOTE,
+      { ...NOTE, id: "base/0001-brand-css", mayApply: true },
+    ]);
+    await saveManifest(root, manifest);
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
+  it("drops the field when the last note is cleared", () => {
+    const manifest = emptyManifest();
+    setPendingNotes(manifest, [NOTE]);
+    setPendingNotes(manifest, []);
+    expect("pendingNotes" in manifest).toBeFalsy();
+  });
+
+  it("refuses a pending note with no body", async () => {
+    await writeManifest({
+      managed: {},
+      pendingNotes: [{ id: NOTE.id, title: NOTE.title }],
+    });
+    await expect(loadManifest(root)).rejects.toThrow(/body/);
+  });
+
+  it("refuses a pending note whose id is not an update note id", async () => {
+    await writeManifest({
+      managed: {},
+      pendingNotes: [{ ...NOTE, id: "no-slash" }],
+    });
+    await expect(loadManifest(root)).rejects.toThrow(/pendingNotes/);
+  });
+
+  it("drops one module's notes by id prefix and names them", () => {
+    const manifest = emptyManifest();
+    setPendingNotes(manifest, [
+      NOTE,
+      { ...NOTE, id: "email-react/0002-other" },
+      { ...NOTE, id: "email/0001-kept" },
+      { ...NOTE, id: "base/0001-brand-css" },
+    ]);
+    expect(dropModulePendingNotes(manifest, "email-react")).toStrictEqual([
+      "email-react/0001-preview-port",
+      "email-react/0002-other",
+    ]);
+    expect(pendingNotesOf(manifest).map((n) => n.id)).toStrictEqual([
+      "email/0001-kept",
+      "base/0001-brand-css",
+    ]);
+  });
+});
+
+// #298 Phase 4. `update --done <id>` moves the id here, and selection skips it, so a note
+// a run selects again (an adopted base, a module with no merge base) never returns.
+describe("doneNotes (#298)", () => {
+  it("reads an older manifest with no field as no done notes", async () => {
+    await writeManifest({ managed: {}, links: {}, patches: [] });
+    const manifest = await loadManifest(root);
+    expect(manifest.doneNotes).toBeUndefined();
+    expect(doneNotesOf(manifest)).toStrictEqual([]);
+  });
+
+  it("adds ids sorted, once each, and round-trips them", async () => {
+    const manifest = emptyManifest();
+    addDoneNotes(manifest, ["email/0002-b", "base/0001-brand-css"]);
+    addDoneNotes(manifest, ["email/0002-b", "api/0001-a"]);
+    expect(manifest.doneNotes).toStrictEqual([
+      "api/0001-a",
+      "base/0001-brand-css",
+      "email/0002-b",
+    ]);
+    await saveManifest(root, manifest);
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+  });
+
+  it("leaves the field out when nothing is added", () => {
+    const manifest = emptyManifest();
+    addDoneNotes(manifest, []);
+    expect("doneNotes" in manifest).toBeFalsy();
+  });
+
+  it("refuses a done entry that is not a string", async () => {
+    await writeManifest({ managed: {}, doneNotes: [42] });
+    await expect(loadManifest(root)).rejects.toThrow(/doneNotes/);
+  });
+
+  it("refuses a done entry that is not an update note id", async () => {
+    await writeManifest({ managed: {}, doneNotes: ["no-slash"] });
+    await expect(loadManifest(root)).rejects.toThrow(/doneNotes/);
+  });
+
+  it("drops one module's done ids with its pending notes", () => {
+    const manifest = emptyManifest();
+    addDoneNotes(manifest, [
+      "email-react/0001-preview-port",
+      "email/0001-kept",
+    ]);
+    dropModulePendingNotes(manifest, "email-react");
+    expect(manifest.doneNotes).toStrictEqual(["email/0001-kept"]);
+    dropModulePendingNotes(manifest, "email");
+    expect("doneNotes" in manifest).toBeFalsy();
   });
 });
