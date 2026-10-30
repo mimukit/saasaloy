@@ -211,14 +211,19 @@ export const landing = {
   // modules/*/registry-item.json at build time, so a renamed or new module needs no edit
   // here. These are the words around the rows. An empty `description` hides the lead.
   // `{total}` and the tier tokens in `counts` are module counts, read from the registry
-  // at build time. A tab is a registry `stage`; `variants` labels the provider and driver
-  // chips on a tile.
+  // at build time; `{modules}` counts the tiles. A tab is a registry `stage`; `variants`
+  // labels the provider and driver chips on a tile. `needs` takes `{modules}`, the
+  // tile's needs from `dependsOn`, and `addCommand` takes `{name}` (5b).
+  //
+  // `summaries` is the founder-facing line on each tile, keyed by module name. The
+  // registry `description` is written for a contributor; a tile with no summary shows
+  // it instead. The summaries live here and not in registry-item.json, because the
+  // descriptor schema refuses an unknown key and a released CLI would fail on it.
   catalog: {
     title: "Choose the modules you need.",
     description:
-      "{total} modules, and each one adds its source files to your repository. You read and edit every line it writes.",
-    counts:
-      "{capability} capabilities · {feature} features · {provider} providers · {driver} drivers",
+      "Each module adds its source files to your repository. You read and edit every line it writes.",
+    counts: "{modules} modules · {provider} providers · {driver} drivers",
     filterLabel: "Filter modules by stage",
     tabs: {
       all: "All",
@@ -228,17 +233,53 @@ export const landing = {
       money: "Money",
       scale: "Scale",
     },
-    tiers: {
-      capability: "Capability",
-      feature: "Feature",
-      provider: "Provider",
-      driver: "Driver",
-    },
     variants: {
       provider: "Providers",
       driver: "Drivers",
     },
     showAll: "Show all modules",
+    needs: "Needs {modules}",
+    addCommand: "npx saasaloy add {name}",
+    summaries: {
+      api: "A Hono API on Cloudflare Workers for every route the product needs.",
+      database: "A Drizzle database on D1 or Postgres, with migrations.",
+      logger: "Structured logs with levels and field redaction.",
+      validators:
+        "Shared Zod schemas, so the API and the browser check the same input.",
+      waitlist: "A waitlist form and its API route, to collect early sign-ups.",
+      admin:
+        "A staff console behind sign-in. Later modules add their screens to it.",
+      app: "The signed-in app for your users, with sign-in, sign-up and a home screen.",
+      auth: "Sign-in and sessions with Better Auth.",
+      e2e: "Playwright tests that sign in and walk through each installed module.",
+      email:
+        "Send email through one interface. The local provider logs each message.",
+      shell:
+        "The layout, navigation, user menu and data table of every signed-in screen.",
+      command:
+        "A Cmd+K command palette and keyboard shortcuts in every signed-in app.",
+      "email-react": "Write email templates in JSX, with a preview server.",
+      multitenant:
+        "Tenant isolation, where a query without the tenant filter does not compile, plus custom roles.",
+      teams:
+        "Organizations, members, roles and invitations, with an admin screen.",
+      billing:
+        "Subscriptions with plans and entitlements, and a 402 gate on paid features.",
+      payment:
+        "One-off payments with a status machine and a staff review screen.",
+      kv: "A key-value store with tenant-scoped keys and a cache helper.",
+      queue: "Background jobs and cron schedules.",
+      sms: "Send SMS through one interface, with segment counting.",
+      storage: "File storage with signed links.",
+      "api-keys":
+        "Scoped API keys, stored as a hash, owned by a user or an organization.",
+      "env-infisical": "Load secrets from Infisical for setup and deploy.",
+      "feature-flags":
+        "Feature flags with per-tenant overrides, rollouts and kill switches.",
+      "file-uploads":
+        "File uploads with an upload block, an admin screen and a cleanup job.",
+      ratelimit: "Rate limits per route, with a 429 and Retry-After.",
+    } as Record<string, string>,
   },
 
   // The providers. `description` is the lead under the title. `envExample` is the `.env`

@@ -37,6 +37,11 @@ export const CATALOG_STAGES = [
 
 export type CatalogStage = (typeof CATALOG_STAGES)[number];
 
+/** The id of one catalog tab's radio, so a <label> elsewhere on the page can select it. */
+export function catalogTabId(catalogId: string, tab: string): string {
+  return `${catalogId}-stage-${tab}`;
+}
+
 /** The part of a `modules/<name>/registry-item.json` descriptor the catalog reads. */
 export interface RegistryDescriptor {
   name: string;
@@ -61,6 +66,8 @@ export interface CatalogRow {
   description: string;
   tier: CatalogTileTier;
   stage: CatalogStage;
+  /** The modules it needs that have a tile of their own, in `dependsOn` order. */
+  needs: string[];
   /** Its providers and drivers, by name. */
   variants: CatalogVariant[];
 }
@@ -127,6 +134,7 @@ const byName = (a: { name: string }, b: { name: string }) =>
 export function catalogRows(descriptors: RegistryDescriptor[]): CatalogRow[] {
   const rows = new Map<string, CatalogRow>();
   const variants: { parent: string; variant: CatalogVariant }[] = [];
+  const dependsOn = new Map<string, string[]>();
   for (const descriptor of descriptors) {
     const tier = moduleTier(descriptor);
     if (tier === "provider" || tier === "driver") {
@@ -146,8 +154,10 @@ export function catalogRows(descriptors: RegistryDescriptor[]): CatalogRow[] {
       description: descriptor.description ?? "",
       tier,
       stage: moduleStage(descriptor),
+      needs: [],
       variants: [],
     });
+    dependsOn.set(descriptor.name, descriptor.dependsOn ?? []);
   }
   for (const { parent, variant } of variants) {
     const row = rows.get(parent);
@@ -160,6 +170,10 @@ export function catalogRows(descriptors: RegistryDescriptor[]): CatalogRow[] {
   }
   for (const row of rows.values()) {
     row.variants.sort(byName);
+    // A provider or a driver it depends on (`logger-console`) has no tile to point at.
+    row.needs = (dependsOn.get(row.name) ?? []).filter((name) =>
+      rows.has(name)
+    );
   }
   return [...rows.values()].toSorted(
     (a, b) =>

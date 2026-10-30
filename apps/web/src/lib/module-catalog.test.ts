@@ -111,6 +111,7 @@ describe("catalogRows", () => {
         description: "",
         tier: "capability",
         stage: "mvp",
+        needs: [],
         variants: [
           { name: "email-console", label: "console", tier: "provider" },
           { name: "email-plunk", label: "plunk", tier: "provider" },
@@ -121,8 +122,30 @@ describe("catalogRows", () => {
         description: "",
         tier: "feature",
         stage: "mvp",
+        needs: [],
         variants: [{ name: "keys-user", label: "user", tier: "driver" }],
       },
+    ]);
+  });
+
+  it("lists the needs that have a tile, in dependsOn order", () => {
+    const rows = catalogRows([
+      descriptor({ name: "logger", type: "saasaloy:capability" }),
+      descriptor({
+        name: "logger-console",
+        dependsOn: ["logger"],
+        patches: [providersPatch],
+      }),
+      descriptor({ name: "database", type: "saasaloy:capability" }),
+      descriptor({
+        name: "api",
+        type: "saasaloy:capability",
+        dependsOn: ["logger", "logger-console", "database"],
+      }),
+    ]);
+    assert.deepEqual(rows.find((row) => row.name === "api")?.needs, [
+      "logger",
+      "database",
     ]);
   });
 
