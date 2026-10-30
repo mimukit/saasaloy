@@ -31,6 +31,13 @@ import { applyPatch } from "./patch/index.js";
 import { parseDep, readRootPackageJson, writeDeps } from "./pkg-json.js";
 import type { DepChange, PackageJson } from "./pkg-json.js";
 import type { LoadedModule } from "./registry.js";
+import { keepRecordedPatch, keepWorkerName } from "./kept-names.js";
+import {
+  readModuleFile,
+  renderModule,
+  renderModules,
+} from "./module-render.js";
+import type { TemplateVars } from "./scaffold.js";
 import { classifyTrackedFile } from "./remover.js";
 import type { FileRemoveAction } from "./remover.js";
 import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
@@ -560,6 +567,54 @@ export interface BuildUpdatePlanArgs {
   skipped?: ModuleComparison[];
   /** The project root package.json, for dependency-pin bumping. */
   pkg?: PackageJson | null;
+  /**
+   * The `{{VAR}}` values each module renders with (#197), so a file compares as the bytes
+   * `add` wrote. Both revisions render alike, or every templated file reads as changed.
+   */
+  vars?: TemplateVars;
+}
+
+/**
+ * `input` with both revisions and its prerequisites rendered with `vars`. A templated patch
+ * the project already holds under its own names keeps them (`keepRecordedPatch`).
+ */
+function renderInput(
+  input: ModuleUpdateInput,
+  vars: TemplateVars,
+  manifest: Manifest
+): ModuleUpdateInput {
+  const name = input.theirs.item.name;
+  const recorded = manifest.patches.filter((p) => p.module === name);
+  const raw = input.theirs.item.patches ?? [];
+  const rendered = renderModule(input.theirs, vars);
+  const theirs: LoadedModule = {
+    ...rendered,
+    item: {
+      ...rendered.item,
+      ...(rendered.item.patches === undefined
+        ? {}
+        : {
+            patches: rendered.item.patches.map((op, index) =>
+              keepRecordedPatch(raw[index] ?? op, op, recorded)
+            ),
+          }),
+    },
+  };
+  return {
+    ...input,
+    theirs,
+    ...(input.base === undefined
+      ? {}
+      : { base: renderModule(input.base, vars) }),
+    ...(input.prereqs === undefined
+      ? {}
+      : {
+          prereqs: {
+            ...input.prereqs,
+            modules: renderModules(input.prereqs.modules, vars),
+          },
+        }),
+  };
 }
 
 /** Modules that have applied a config patch to this file, per the manifest's record. */
@@ -609,7 +664,8 @@ export async function buildUpdatePlan(
       root,
       config,
       manifest,
-      input: item,
+      input:
+        args.vars === undefined ? item : renderInput(item, args.vars, manifest),
       pkg: pkg ?? null,
       installed,
     });
@@ -757,20 +813,24 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
 
   const files: PlannedUpdateFile[] = [];
   for (const ref of theirsFiles.values()) {
-    const theirsContent = await readFile(ref.abs, "utf-8");
+    const theirsContent = await readModuleFile(theirs, ref.abs);
     const baseRef = baseFiles?.get(ref.target);
-    const baseContent = baseRef
-      ? await readFile(baseRef.abs, "utf-8")
-      : undefined;
+    const baseContent =
+      base && baseRef ? await readModuleFile(base, baseRef.abs) : undefined;
     const targetAbs = resolveWithinRoot(root, ref.target);
     const managed = manifest.managed[ref.target];
     const owned = managed?.module === name ? managed : undefined;
     const mine = await readIfPresent(targetAbs);
-    const { compared, written } = keepRootVersion(
+    const version = keepRootVersion(
       ref.target,
       mine,
       baseContent,
       theirsContent
+    );
+    const { compared, written } = keepWorkerName(
+      ref.target,
+      version.compared,
+      version.written
     );
 
     const projectOwned = input.isOwned?.(ref.target) ?? false;
@@ -832,7 +892,8 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       action: keep
         ? "delete-drift"
         : DELETE_ACTION[classifyTrackedFile(mine, entry.hash)],
-      base: baseRef ? await readFile(baseRef.abs, "utf-8") : undefined,
+      base:
+        base && baseRef ? await readModuleFile(base, baseRef.abs) : undefined,
       mine,
     });
   }

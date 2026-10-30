@@ -2,6 +2,7 @@
 # (camelCase), not in .npmrc — .npmrc is read only for registry/auth tokens.
 
 packages:
+  - "apps/*"
   - "packages/*"
 
 # --- Dependency versioning ---
@@ -24,6 +25,10 @@ engineStrict: true
 # Collapse duplicate peer-dependency installs across the monorepo.
 dedupePeerDependents: true
 # Allow-list of dependencies permitted to run install/build scripts (pnpm 11
-# blocks all by default). esbuild is tsup's bundler and needs its postinstall.
+# blocks all by default). esbuild is tsup's bundler and needs its postinstall. workerd
+# and sharp are apps/web's: the Cloudflare dev runtime and the build-time image
+# optimiser, the same pair the base template allows.
 allowBuilds:
   esbuild: true
+  sharp: true
+  workerd: true

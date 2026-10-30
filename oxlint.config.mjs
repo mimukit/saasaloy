@@ -244,6 +244,36 @@ export default defineConfig({
     // The template's own exemptions, so a base file sees exactly what it sees after
     // `saasaloy init`.
     ...templateOverrides,
+
+    // --- The public site ---------------------------------------------------
+    // apps/web is Saasaloy's own landing page, copied from the base template's apps/web
+    // and packages/ui (plan 0091). It never ships to a project, but its code started as
+    // template code, so it takes the template's rule map and the two template exemptions
+    // its files still match: Node globals for the config files, and the vendored
+    // primitives' label rule. Browser globals for everything under src/.
+    {
+      files: ["apps/web/**"],
+      rules: template.rules,
+    },
+    {
+      files: ["apps/web/*.config.{js,mjs,ts}"],
+      env: { node: true },
+    },
+    {
+      files: ["apps/web/src/**"],
+      env: { browser: true, node: false },
+    },
+    // The site gate's scripts (gate:a11y, gate:lighthouse) run on Node, and they report
+    // to the terminal, so they print. Code they hand to the page runs in the browser.
+    {
+      files: ["apps/web/scripts/**"],
+      env: { node: true, browser: true },
+      rules: { "no-console": "off" },
+    },
+    {
+      files: ["apps/web/src/components/**"],
+      rules: { "jsx-a11y/label-has-associated-control": "off" },
+    },
     // A module's tests never ship: no descriptor lists a `.test.ts` file. They stay
     // repo code and take the repo's rules back. oxlint has no negated glob to skip
     // them above, and this block resets every rule, so Ultracite's test-file blocks
@@ -439,6 +469,21 @@ export default defineConfig({
         "vitest/prefer-importing-vitest-globals": "off",
         // Same reason: `it.each` is vitest's, and `node:test`'s `it` has no `.each`, so
         // a table-driven case here is written as a plain loop on purpose.
+        "vitest/prefer-each": "off",
+      },
+    },
+
+    // --- The public site's tests run on node:test too ----------------------
+    // `apps/web` runs `src/**/*.test.ts` with `node --test` through its own `test`
+    // script, the same runner as `scripts/`, so it installs no test framework for one
+    // pure function (plan 0091, Tests row). Same two vitest rules off, for the same
+    // reason: they point the file at a runner it cannot use.
+    {
+      files: ["apps/web/src/**/*.test.ts"],
+      plugins: ["vitest"],
+      rules: {
+        "vitest/no-import-node-test": "off",
+        "vitest/prefer-importing-vitest-globals": "off",
         "vitest/prefer-each": "off",
       },
     },

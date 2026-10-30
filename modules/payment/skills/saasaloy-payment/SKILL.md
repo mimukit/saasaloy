@@ -296,3 +296,7 @@ A provider is one file, `packages/payment/src/providers/<name>.ts`, exporting a 
 - A provider never writes the database. It returns what happened; the core writes.
 - `payment` does not depend on `queue` or `email`. A listener that needs either imports it in your app.
 - A schema change to the three tables needs `db:generate` and a migration, like any table.
+
+## Next
+
+Run `saasaloy-subscription` to sell a plan on top of the payments this module records.

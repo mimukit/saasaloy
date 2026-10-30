@@ -435,6 +435,27 @@ Then set `requireEmailVerification: true` in `auth`'s `emailAndPassword`. `packa
 
 `auth.ts` builds two instances: `auth` for the client session at `/auth` and `adminAuth` for the admin session at `/admin/auth`. Both mails go on `auth`, where clients sign up. Both instances read one `users` and one `accounts` table, so a verified email and a new password count on both. See the `saasaloy-auth` skill.
 
+## Removal
+
+Remove the providers first. `email-console`, `email-cloudflare`, `email-plunk` and `email-react` each depend on `email`, so `remove email` refuses while any of them is installed. `subscription` depends on `email` too, so remove `subscription` first or keep `email`. `--force` overrides the refusal, and it leaves the dependents broken.
+
+`saasaloy remove email-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that wrote a secret reader (`email-plunk` ships `env.ts`) loses that file too.
+
+`saasaloy remove email` then deletes the `packages/email` workspace (`index.ts`, `define.ts`, `provider.ts`, `render.ts`, `templates/welcome.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the email preset to `apps/api/src/env.ts`. The `@repo/email` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `EMAIL_PROVIDER` and `EMAIL_FROM` lines by hand.
+
+Every route or job that imports `@repo/email` stops compiling. Search for the import before you remove, and delete or replace each call site.
+
+## Failure modes
+
+- `EMAIL_PROVIDER is not set.` thrown by `createEmail(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
+- `EMAIL_PROVIDER is "<x>", which is not registered.` The value names a provider that is not installed. The message lists the registered names. Fix the value or `saasaloy add email-<x>`.
+- `EmailError("invalid_message")` with `No sender address: set EMAIL_FROM, or pass \`from\` on the message.` Set `EMAIL_FROM` or pass `from`.
+- `EmailError("invalid_message")` with `No recipients`. The `to` array is empty. Check the caller.
+- `EmailError("provider_error")` with ``No `<binding>` Email Sending binding on this Worker's env.`` from `email-cloudflare`. Add the `send_email` entry to `apps/api/wrangler.jsonc`.
+- `EmailError("provider_error")` with ``No `PLUNK_API_KEY` on this Worker's env.`` from `email-plunk`. Set the key in `packages/env/.env` and run `pnpm env:setup`, or `wrangler secret put PLUNK_API_KEY` for a deployed Worker.
+- `EmailError("provider_error")` with `<provider>: send failed`. The provider threw a raw error, and the core wrapped it with `retryable: false`. Read `cause` for the vendor error.
+- Any other `EmailError`. Branch on `code` (`sender_not_verified`, `rate_limited`, `too_large`, `invalid_message`, `provider_error`), never on the message. Retry only when `retryable` is true. The vendor code is in `providerCode`.
+
 ## Boundaries to honor
 
 - **`export const email = defineEmail({ providers: [] })` stays in exactly that shape** — a real
@@ -449,3 +470,7 @@ Then set `requireEmailVerification: true` in `auth`'s `emailAndPassword`. `packa
   constructed.
 - **Templates stay plain functions** returning `{ subject, html, text? }` — no rendering framework
   in the api Worker's bundle.
+
+## Next
+
+Run `saasaloy-email-react` to design a template in React, or `saasaloy-auth` to send the password reset mail.

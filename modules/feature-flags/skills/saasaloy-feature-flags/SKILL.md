@@ -184,3 +184,15 @@ This module used to name its tables `feature_flag` and `feature_flag_override`. 
 The `feature_flags` and `feature_flag_overrides` tables survive removal — run `db:generate` and read the drop migration before applying it. The published documents survive too: they have no TTL, so `flags:v1:global` and every `flags:v1:t:<tenantId>` stay in the namespace until `wrangler kv key delete` removes them.
 
 If you wired `maintenance()` into `apps/api/src/index.ts` by hand, remove that line yourself. `saasaloy remove` does not undo an edit you made.
+
+## Wire-up
+
+`add feature-flags` writes the block and the screen that renders it, so no page needs a manual import. The block lands at `packages/ui/src/blocks/admin/feature-flags.tsx`, the route at `apps/admin/src/routes/flags.tsx`, and a `nav-entry` patch adds Flags to `NAV_AREAS` in `apps/admin/src/components/nav.ts`.
+
+1. Run `pnpm db:generate` and apply the migration with your driver's command, so the two flag tables exist.
+2. Run `pnpm dev`, sign in to `admin` as an admin, and open `/flags`. The router plugin regenerates `routeTree.gen.ts` on the first start.
+3. When the screen is missing from the nav, check that `NAV_AREAS` still holds the Flags entry. A hand edit to `nav.ts` can drop it.
+
+## Next
+
+Run `saasaloy-admin` to change the Flags screen or add a staff screen beside it.

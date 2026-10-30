@@ -1,5 +1,67 @@
 # Changelog
 
+## [0.8.0](https://github.com/mimukit/saasaloy/compare/v0.7.0...v0.8.0) (2026-10-27)
+
+### ⚠ BREAKING CHANGES
+
+* **cli:** `requested` in the `add --dry-run --json` document is
+  now an array of names, also for one name, and every `add --json`
+  document carries schemaVersion 2.
+* **shell:** admin's ui kit moved to the new shell module, under
+  @repo/ui/{components,blocks,containers,lib}/shell and assets/shell.
+  A project that installed admin before the move:
+
+    - run saasaloy update for every installed module in one run
+    - move any edit in an old admin file into its new shell path
+    - rewrite own imports with the perl line in the saasaloy-shell skill
+    - copy the oxlint twin-primitive rule from the base template
+    - pnpm install, then pnpm check
+* **app:** the email-react preview now starts on port 3003.
+* **ui:** the web tokens live in brand.css. A project made
+  before this change merges web.css by hand per the changelog.
+
+### Features
+
+* **app:** add the customer app module ([aab7a62](https://github.com/mimukit/saasaloy/commit/aab7a62bd4bf81794b58a085d8541158d6b4aacb)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
+* **app:** reserve port 3002 for the app module ([86b9c7c](https://github.com/mimukit/saasaloy/commit/86b9c7ca9b807f0b9f3effebef670f2f4f099f01)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
+* **auth:** send the password reset mail when email is installed ([9e45724](https://github.com/mimukit/saasaloy/commit/9e45724ff28b1aa890023d70c2c86a62937b8ed7)), references [#225](https://github.com/mimukit/saasaloy/issues/225)
+* **auth:** ship sign-in and sign-up blocks on the shell kit ([cbb8ace](https://github.com/mimukit/saasaloy/commit/cbb8aceb27b9ab47f9dcf819336faa4d40b25321)), references [#225](https://github.com/mimukit/saasaloy/issues/225)
+* **base:** cut the agent guide and add pnpm check ([2bba6eb](https://github.com/mimukit/saasaloy/commit/2bba6eb4eddce59a564af6dbe7bb0c107d2768b5)), references [#224](https://github.com/mimukit/saasaloy/issues/224)
+* **base:** give the base skills an unattended path ([882fa9b](https://github.com/mimukit/saasaloy/commit/882fa9b3a6b97be06630bfdc85d4c4e86a268adc)), references [#224](https://github.com/mimukit/saasaloy/issues/224)
+* **cli:** add several modules in one add run ([3dcbef5](https://github.com/mimukit/saasaloy/commit/3dcbef57104f26fbe02b2affd17dc86ee987c2f0)), references [#233](https://github.com/mimukit/saasaloy/issues/233) [#233](https://github.com/mimukit/saasaloy/issues/233)
+* **command:** add the command palette and shortcut module ([5c9d6fa](https://github.com/mimukit/saasaloy/commit/5c9d6fa31dd25d3c842f55e10b31eddeff974a22)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **command:** declare the admin and app commands and seams ([fb8687c](https://github.com/mimukit/saasaloy/commit/fb8687c7095a4aa3431ad25e4113e1e7e9e45010)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **shell:** add the command contract and the extension seam ([568e465](https://github.com/mimukit/saasaloy/commit/568e465380a49c9926811a512a12203975626f3a)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **shell:** mark the active command and close the detail on esc ([55581cd](https://github.com/mimukit/saasaloy/commit/55581cd316ccaf234ecc6157b5e4918bbf5e8053)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **shell:** move the admin ui kit into a shell module ([ed68964](https://github.com/mimukit/saasaloy/commit/ed68964b40699e09995c623485f20192c301bcf1)), closes [#226](https://github.com/mimukit/saasaloy/issues/226), references [#226](https://github.com/mimukit/saasaloy/issues/226)
+
+### Bug Fixes
+
+* **admin:** regenerate the route tree before typecheck ([c0cd4e5](https://github.com/mimukit/saasaloy/commit/c0cd4e51d24ee42dca4f2c7c36b5023e61fe3986)), references [#220](https://github.com/mimukit/saasaloy/issues/220)
+* **app:** commit the generated route tree the scaffold lists ([5a5b234](https://github.com/mimukit/saasaloy/commit/5a5b234709ab3e39ef94c37c8d767fb806c08118)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
+* **base:** close the gaps review found in the afk skill paths ([8d6fde1](https://github.com/mimukit/saasaloy/commit/8d6fde1eb4d965269ebb6c4582c3cf1e63c4ea54)), references [#224](https://github.com/mimukit/saasaloy/issues/224)
+* **base:** keep pnpm check from editing AGENTS.md ([c2b2457](https://github.com/mimukit/saasaloy/commit/c2b245702647313f0c6c0b43bc98afa3b47b02c2)), references [#224](https://github.com/mimukit/saasaloy/issues/224)
+* **cli:** mark a key blank only when every declarer allows it ([48b6545](https://github.com/mimukit/saasaloy/commit/48b6545935f0cbf76a25d86d11d98e70ccb9ff26)), references [#249](https://github.com/mimukit/saasaloy/issues/249)
+* **command:** gate the default key map on zero conflicts ([dce4c59](https://github.com/mimukit/saasaloy/commit/dce4c59423abd3876b14caf367688d4df3ed32a9)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **command:** keep table keys off focused controls ([e11aa74](https://github.com/mimukit/saasaloy/commit/e11aa747e0079a6d462ae6749a052c898e1ed21c)), references [#264](https://github.com/mimukit/saasaloy/issues/264)
+* **email-cloudflare:** import the sendemail type explicitly ([0abb179](https://github.com/mimukit/saasaloy/commit/0abb179e17ba0dd4b91f3384ff3c148e29f53825)), references [#253](https://github.com/mimukit/saasaloy/issues/253)
+* **kv-cloudflare:** import workers types explicitly ([a9a0661](https://github.com/mimukit/saasaloy/commit/a9a0661f3946385c28aea74627e9b74c4464ac79)), references [#253](https://github.com/mimukit/saasaloy/issues/253)
+* **kv-upstash:** fail a blank KV_KEY_PREFIX at env time ([e188116](https://github.com/mimukit/saasaloy/commit/e188116d872e41338e93ef8244554331be371b66)), references [#249](https://github.com/mimukit/saasaloy/issues/249)
+* **kv:** keep the core prefix description vendor-blind ([ad9105c](https://github.com/mimukit/saasaloy/commit/ad9105c6ae841b7801162e5bd6d4f72fcc1fc814)), references [#270](https://github.com/mimukit/saasaloy/issues/270) [#249](https://github.com/mimukit/saasaloy/issues/249)
+* **lint:** apply the vitest rules to shipped test payloads ([92354db](https://github.com/mimukit/saasaloy/commit/92354dbdb6cbe649b35946087f0f2cd29111d7c0)), references [#266](https://github.com/mimukit/saasaloy/issues/266)
+* **multitenant:** put the insert assertion on the reported line ([d79c9de](https://github.com/mimukit/saasaloy/commit/d79c9de381d44d9892a08f6fa66144758f944194)), references [#220](https://github.com/mimukit/saasaloy/issues/220)
+* **queue-cloudflare:** import workers types explicitly ([bb451ed](https://github.com/mimukit/saasaloy/commit/bb451edc94ca772200368d9a8604244ffdd06d4b)), references [#253](https://github.com/mimukit/saasaloy/issues/253)
+* **shell:** keep effect returns consistent ([5f21366](https://github.com/mimukit/saasaloy/commit/5f21366e73f70642aad32e01dced172e0f762b77))
+* **storage-cloudflare:** import workers types explicitly ([4aacb03](https://github.com/mimukit/saasaloy/commit/4aacb03998b1c45bd5744cb8d378f5533851fd58)), references [#253](https://github.com/mimukit/saasaloy/issues/253)
+
+### Performance Improvements
+
+* **release:** run the full scaffolds side by side ([e29cfdc](https://github.com/mimukit/saasaloy/commit/e29cfdc5086d8959f73b01a2e9692a1a77c31cee))
+
+### Code Refactoring
+
+* **ui:** move the web tokens into brand.css ([b208e20](https://github.com/mimukit/saasaloy/commit/b208e207000b57146a8112369f409b84929d7da3)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
+
 ## Unreleased
 
 ### ⚠ BREAKING CHANGES

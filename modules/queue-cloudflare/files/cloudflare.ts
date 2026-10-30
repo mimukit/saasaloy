@@ -138,8 +138,8 @@ export function cloudflare(
         throw new QueueError(
           "provider_error",
           `No \`${bindingName}\` Queues binding on this Worker's env. Check the ` +
-            "queues.producers entry in apps/api/wrangler.jsonc, and that the queue " +
-            "exists — `wrangler queues create app-jobs`."
+            "queues.producers entry in apps/api/wrangler.jsonc: `wrangler deploy` " +
+            "creates the queue that entry names."
         );
       }
 
@@ -252,7 +252,7 @@ async function handle(
     const failure = asQueueError(error);
     if (failure.retryable) {
       // 30, 60, 120 under the patched `max_retries: 3`; the platform dead-letters the
-      // message itself once the attempts run out, into the same `app-jobs-dlq`.
+      // message itself once the attempts run out, into the same dead-letter queue.
       message.retry({ delaySeconds: backoffBase * 2 ** attempt });
       return;
     }
@@ -276,7 +276,7 @@ interface FailureDetail {
  *
  * When the DLQ write itself fails — or the binding is missing — the message is retried
  * instead. That costs the platform's own `max_retries`, at the end of which
- * `dead_letter_queue: app-jobs-dlq` in wrangler.jsonc routes it to the same place. The
+ * `dead_letter_queue` in wrangler.jsonc routes it to the same place. The
  * slow path beats losing the job.
  */
 async function deadLetter(

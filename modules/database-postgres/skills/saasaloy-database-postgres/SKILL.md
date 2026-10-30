@@ -473,3 +473,7 @@ There is no data migration in either direction; see ADR 0026.
 - **Route tests use `testDatabase()`**, so each one rolls back. Never point a test at the development database.
 - **Hyperdrive is opt-in and code-free.** Add the binding; change nothing in `src/`.
 - **One driver per project.** Adding `database-d1` beside this one is refused, by design.
+
+## Next
+
+Run `saasaloy-database` to add a table, a repository function and a seed slice.

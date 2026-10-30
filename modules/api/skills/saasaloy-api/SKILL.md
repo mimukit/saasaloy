@@ -450,3 +450,7 @@ The api deploys first. `saasaloy add api` appends `{ service: "api", order: 10 }
 - **A new binding patches `wrangler.jsonc`**; it does not hand-edit another module's files.
 - **Request validation belongs in `@repo/validators`**, not in an inline schema in the route.
 - **Test a route in Node with `app.request(path, init, env)`.** A setup step goes in `test/setup/`, not in `vitest.config.ts`.
+
+## Next
+
+Run `saasaloy-app` to add the customer screens that call these routes, or `saasaloy-admin` for staff screens.

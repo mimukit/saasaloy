@@ -187,3 +187,7 @@ There is no budget gate on it: the module is opt-in, so only a project that adds
 different pins put two Reacts, or two sets of React types, in one project. `pnpm verify:pins`
 enforces both matches and runs first inside `pnpm deps:verify`; change one pin and change the other
 in the same commit.
+
+## Next
+
+Run `saasaloy-email` to send the template from a route.

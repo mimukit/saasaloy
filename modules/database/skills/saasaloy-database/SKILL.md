@@ -345,3 +345,7 @@ A slice may also set `after: ["<table>"]` for an order no foreign key shows, and
   add it. Switching driver later means removing and adding those modules too; see the driver skill.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.
 - **Every table has a seed slice.** One file per table in `src/seed/slices/`, changed in the same change as the table.
+
+## Next
+
+Run `saasaloy-validators` to write the request schema for the table you added, then `saasaloy-api` for its route.

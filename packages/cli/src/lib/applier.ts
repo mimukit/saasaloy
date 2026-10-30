@@ -45,7 +45,9 @@ import type { Manifest, ManifestPatch } from "./manifest.js";
 import { applyPatch } from "./patch/index.js";
 import type { PatchMatch } from "./patch/index.js";
 import type { LoadedModule } from "./registry.js";
+import { readModuleFile, renderModules } from "./module-render.js";
 import { resolveTarget } from "./saasaloy-config.js";
+import type { TemplateVars } from "./scaffold.js";
 import type { RegistryPatch, SaasaloyConfig, When } from "./schema.js";
 import { readTestingMode } from "./testing.js";
 import type { TestingMode } from "./testing.js";
@@ -568,7 +570,7 @@ async function planModuleFile(
   root: string,
   manifest: Manifest
 ): Promise<{ file: PlannedFile; ownedBy?: string; staleOwner?: string }> {
-  const content = await readFile(ref.abs, "utf-8");
+  const content = await readModuleFile(module, ref.abs);
   const newHash = hashContent(content);
   // `add` is the one engine whose input is an untrusted remote descriptor, so the target
   // is resolved under the same guard `remover` and `updater` use on their state files
@@ -627,6 +629,11 @@ export interface BuildPlanArgs {
    * keeps them rather than deleting them.
    */
   select?: PlanSelector;
+  /**
+   * The `{{VAR}}` values every module in the run renders with (#197): `templateVars` of the
+   * project's resolved name. Omitted by a caller whose modules are already rendered.
+   */
+  vars?: TemplateVars;
 }
 
 /** Which of an installed module's entries a backfill plan keeps (#242). */
@@ -636,8 +643,11 @@ export interface PlanSelector {
 }
 
 export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
-  const { root, install, alreadyInstalled, modules, config, manifest, select } =
-    args;
+  const { root, install, alreadyInstalled, config, manifest, select } = args;
+  const modules =
+    args.vars === undefined
+      ? args.modules
+      : renderModules(args.modules, args.vars);
   const requested =
     args.requested === undefined ? undefined : requestedLabel(args.requested);
   const testingMode = args.testingMode ?? readTestingMode(config);

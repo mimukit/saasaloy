@@ -136,3 +136,7 @@ The trigger sits in the header: a 240 px "Search commands…" field with the pal
 ## What `remove` leaves behind
 
 `saasaloy remove command` deletes the files above and takes `commandExtension()` and its import back out of each app's `shell-extensions.ts`. It leaves the two dependencies in `packages/ui/package.json` with a warning; delete them by hand and run `pnpm install`. The commands each screen declares stay, and do nothing with no provider mounted. `Mod+B` falls back to the sidebar's own listener.
+
+## Next
+
+Run `saasaloy-app` to register commands for the customer screens.

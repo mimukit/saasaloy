@@ -250,3 +250,28 @@ key checks and the TTL floor, so none of that is re-implemented per vendor.
 
 Map every vendor failure onto a `KvError` code, keep the raw code in `providerCode`, and set
 `retryable` honestly. A caller's `catch` must only ever see one shape.
+
+## Removal
+
+Remove the dependents first. `kv-cloudflare`, `kv-memory` and `kv-upstash` depend on `kv`, and so do `ratelimit` and `feature-flags`. `remove kv` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
+
+`saasaloy remove kv-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that needs a Workers binding also reverses its descriptor patches. `kv-upstash` deletes its `env.ts` too, and it does not delete the Upstash database or its keys. Delete the database in the Upstash console and revoke `UPSTASH_REDIS_REST_TOKEN`.
+
+`saasaloy remove kv` then deletes the `packages/kv` workspace (`index.ts`, `define.ts`, `provider.ts`, `keys.ts`, `cached.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the kv preset to `apps/api/src/env.ts`. The `@repo/kv` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `KV_PROVIDER`, `KV_KEY_PREFIX` and any provider secret lines by hand.
+
+Every route that imports `@repo/kv` stops compiling, and every rate limit policy goes with `define.ts`. The stored entries survive in the vendor namespace.
+
+## Failure modes
+
+- `KV_PROVIDER is not set.` thrown by `createKv(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
+- `KV_PROVIDER is "<x>", which is not registered.` Fix the value or `saasaloy add kv-<x>`.
+- `KvError("invalid_ttl")` with `ttlSeconds <n> is below the "<provider>" provider's floor`. The core does not round up. Raise the TTL to the floor, or omit it.
+- `KvError("not_supported")` with `Rate limit policy "<name>" is not registered.` Add the policy to the `policies` list in the kv `index.ts`.
+- `KvError("not_supported")` with `The "<provider>" provider cannot count, so it has no rate limiting.` Install a provider that implements `consume`, such as `kv-cloudflare` or `kv-memory`, and point `KV_PROVIDER` at it.
+- `KvError("provider_error")` with ``No `<binding>` KV binding on this Worker's env.`` from `kv-cloudflare`. Add the binding to `apps/api/wrangler.jsonc`.
+- `KvError("provider_error")` with `KV_KEY_PREFIX is empty or unset, and kv-upstash requires it.` Set a prefix per project.
+- `KvError("provider_error")` with ``No `UPSTASH_REDIS_REST_URL` on this Worker's env`` or the token. Set both keys. A wrong token returns `providerCode` `401` and `retryable: false`.
+
+## Next
+
+Run `saasaloy-ratelimit` to put a rate limit policy on a route.

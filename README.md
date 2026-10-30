@@ -1,3 +1,5 @@
+![Saasaloy module map with API, auth, database, email, and payment modules on a dark technical grid.](assets/branding/readme-banners/06-module-map.png)
+
 # Saasaloy
 
 **Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, subscription and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
@@ -71,6 +73,8 @@ saasaloy add admin
 `saasaloy add <name> --dry-run` prints what a module would do to your project before it does it.
 
 Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make the project yours](docs/wiki/how-to/make-it-yours.md) for the bundled skills that write your product brief, landing copy and theme.
+
+To have an AI agent build the MVP with nobody at the keyboard, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
 
 ## A project through its stages
 

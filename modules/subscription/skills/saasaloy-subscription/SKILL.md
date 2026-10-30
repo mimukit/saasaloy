@@ -320,3 +320,7 @@ One file in `src/providers/`, exporting a factory that returns a `SubscriptionPr
 A provider whose vendor ships a Better Auth plugin also exports a plugin factory and registers it into the `plugins` arrays of both `auth` and `adminAuth` with two more `plugin-array` patches (`exportName` `auth` and `adminAuth`), the way `subscription-stripe` does. A provider file that reaches the plugin's endpoints casts the `auth` it is handed, which is whichever instance `authFor(c)` picked. If a new provider would need a second runtime file or a scaffold of its own, the contract is wrong. Fix the contract.
 
 Run `.agents/skills/create-provider/` in its `subscription` mode rather than writing the descriptor by hand.
+
+## Next
+
+Run `saasaloy-admin` to read the subscription state on the staff screens.

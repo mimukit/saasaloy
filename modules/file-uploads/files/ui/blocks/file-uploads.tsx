@@ -1,5 +1,5 @@
-import { useRef, useState } from "react";
-import type { ChangeEvent, SubmitEvent } from "react";
+import { useState } from "react";
+import type { SubmitEvent } from "react";
 
 import { Badge } from "@repo/ui/components/badge";
 import { Button, buttonVariants } from "@repo/ui/components/button";
@@ -10,8 +10,8 @@ import {
   CardHeader,
   CardTitle,
 } from "@repo/ui/components/card";
-import { Input } from "@repo/ui/components/input";
-import { Label } from "@repo/ui/components/label";
+import { FileDrop } from "@repo/ui/components/file-drop";
+import type { FileDropLabels } from "@repo/ui/components/file-drop";
 import {
   Table,
   TableBody,
@@ -20,6 +20,7 @@ import {
   TableHeader,
   TableRow,
 } from "@repo/ui/components/table";
+import { interpolate } from "@repo/ui/lib/interpolate";
 import { imageUrl } from "@repo/ui/lib/public-image";
 import { cn } from "@repo/ui/lib/utils";
 
@@ -35,6 +36,30 @@ import { cn } from "@repo/ui/lib/utils";
 // why `onUpload` takes a whole `File` rather than a form value: the app asks the api for a
 // target, PUTs the bytes straight to it, then calls `complete`. The bytes never pass
 // through this component.
+//
+// Several files go up in one submit. The block calls `onUpload` once per file, in order,
+// and waits for each before it starts the next, so a failure stops the run with the
+// remaining files still in the list. `FileDrop` comes from the `storage` module.
+
+/** `STORAGE_MAX_UPLOAD_BYTES`'s default, 100 MiB. */
+const DEFAULT_MAX_BYTES = 104_857_600;
+
+/** The FileDrop copy for this screen. */
+const dropLabels: FileDropLabels = {
+  prompt: "Drop files here, or {action}",
+  action: "choose them",
+  dropActive: "Drop them to add them",
+  hint: "Up to {max} files, {size} MB each",
+  addMore: "Add more, or drop files here",
+  sizeKb: "{size} KB",
+  sizeMb: "{size} MB",
+  remove: "Remove {name}",
+  progress: "{done} of {total} · {percent}%",
+  badType: "{name} is not a type this screen takes.",
+  empty: "{name} is empty.",
+  tooLarge: "{name} is over the {max} MB limit.",
+  tooMany: "You can upload at most {max} files at once. {name} was not added.",
+};
 
 export interface FileRow {
   id: string;
@@ -52,8 +77,14 @@ export interface FileRow {
 
 export interface FileUploadsProps {
   files: FileRow[];
-  /** Ask the app to run the upload. It resolves once the file is `ready`. */
-  onUpload: (file: File, visibility: "private" | "public") => void;
+  /**
+   * Ask the app to run one upload. Return a promise that settles once the file is
+   * `ready`, so the block can start the next file; a rejection stops the run.
+   */
+  onUpload: (
+    file: File,
+    visibility: "private" | "public"
+  ) => void | Promise<void>;
   /** Ask the app for a signed link and follow it. Private rows only. */
   onDownload: (id: string) => void;
   onDelete: (id: string) => void;
@@ -68,6 +99,10 @@ export interface FileUploadsProps {
   publicUploads?: boolean;
   /** `STORAGE_IMAGE_TRANSFORMS`, passed down so the avatar below can resize on the CDN. */
   imageTransforms?: boolean;
+  /** The per-file cap the picker checks. The api checks `STORAGE_MAX_UPLOAD_BYTES` again. */
+  maxBytes?: number;
+  /** The most files one submit takes. */
+  maxFiles?: number;
 }
 
 export function FileUploads({
@@ -79,26 +114,41 @@ export function FileUploads({
   error = null,
   publicUploads = false,
   imageTransforms = false,
+  maxBytes = DEFAULT_MAX_BYTES,
+  maxFiles = 10,
 }: FileUploadsProps) {
   const [visibility, setVisibility] = useState<"private" | "public">("private");
-  const [picked, setPicked] = useState<File | null>(null);
-  const input = useRef<HTMLInputElement>(null);
+  const [picked, setPicked] = useState<File[]>([]);
+  const [sending, setSending] = useState(false);
+  const locked = busy || sending;
 
-  function pick(event: ChangeEvent<HTMLInputElement>) {
-    setPicked(event.target.files?.[0] ?? null);
-  }
-
-  function submit(event: SubmitEvent<HTMLFormElement>) {
+  async function submit(event: SubmitEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (!picked || busy) {
+    if (picked.length === 0 || locked) {
       return;
     }
-    onUpload(picked, visibility);
-    setPicked(null);
-    if (input.current) {
-      input.current.value = "";
+    setSending(true);
+    let remaining = picked;
+    try {
+      // One at a time, in order. A finished file leaves the list; a failure leaves the
+      // file it stopped on and every file after it, ready to send again.
+      for (const file of picked) {
+        // oxlint-disable-next-line no-await-in-loop -- the uploads run in order on purpose
+        await onUpload(file, visibility);
+        remaining = remaining.slice(1);
+        setPicked(remaining);
+      }
+    } catch {
+      // The app reports the failure through `error`.
     }
+    setSending(false);
   }
+
+  // The file going up shows as started. The api's PUT gives no byte count, so there is
+  // no percentage to show beyond "on its way".
+  const progress = picked.map((_, index) =>
+    sending && index === 0 ? 0 : undefined
+  );
 
   const images = files.filter(
     (file) => file.url !== undefined && file.contentType.startsWith("image/")
@@ -125,15 +175,31 @@ export function FileUploads({
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <form onSubmit={submit} className="grid gap-4 sm:max-w-md">
-            <div className="grid gap-2">
-              <Label htmlFor="file-uploads-file">File</Label>
-              <Input
-                id="file-uploads-file"
-                ref={input}
-                type="file"
-                onChange={pick}
-                disabled={busy}
+          <form
+            onSubmit={(event) => {
+              void submit(event);
+            }}
+            className="grid gap-4 sm:max-w-md"
+          >
+            <div className="grid min-w-0 gap-2">
+              <span className="text-sm font-medium">Files</span>
+              <FileDrop
+                id="file-uploads-files"
+                multiple
+                files={picked}
+                onFilesChange={setPicked}
+                accept={[]}
+                maxBytes={maxBytes}
+                maxFiles={maxFiles}
+                progress={progress}
+                disabled={locked}
+                labels={{
+                  ...dropLabels,
+                  hint: interpolate(dropLabels.hint, {
+                    max: maxFiles,
+                    size: Math.round(maxBytes / 1024 / 1024),
+                  }),
+                }}
               />
             </div>
 
@@ -149,7 +215,7 @@ export function FileUploads({
                     onChange={() => {
                       setVisibility("private");
                     }}
-                    disabled={busy}
+                    disabled={locked}
                   />
                   Private
                 </label>
@@ -162,7 +228,7 @@ export function FileUploads({
                     onChange={() => {
                       setVisibility("public");
                     }}
-                    disabled={busy || !publicUploads}
+                    disabled={locked || !publicUploads}
                   />
                   Public
                 </label>
@@ -175,8 +241,12 @@ export function FileUploads({
               )}
             </fieldset>
 
-            <Button type="submit" disabled={busy || !picked}>
-              {busy ? "Uploading…" : "Upload"}
+            <Button type="submit" disabled={locked || picked.length === 0}>
+              {locked
+                ? "Uploading…"
+                : picked.length > 1
+                  ? `Upload ${picked.length} files`
+                  : "Upload"}
             </Button>
           </form>
         </CardContent>

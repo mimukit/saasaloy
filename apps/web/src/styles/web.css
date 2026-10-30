@@ -1,0 +1,916 @@
+/* The web app's stylesheet: the brand tokens, then the landing page's layout, type and
+   motion vocabulary. apps/web/src/layouts/Layout.astro imports this file once.
+   brand.css holds the token values, the colour mapping, the radius scale and the `dark`
+   variant, and it imports the shared layer first. A shadcn preset merges into
+   brand.css, never here. apps/web/DESIGN.md records the vocabulary below. */
+@import "./brand.css";
+
+/* The landing page's layout, type and motion vocabulary. Blocks use these names and write
+   no widths, no section padding, no keyframes of their own, so the page keeps one rhythm
+   and a preset or a redesign changes it in one place. None of this is a colour: a theme
+   preset replaces the colour tokens in brand.css and leaves these alone.
+
+   Width. `wide` is every section's container, the navbar's and the footer's too.
+
+   Type ramp, in Geist (brand.css maps `--font-sans` and `--font-mono`). `display` is the
+   hero's one h1, `section-title` every h2, `lead` the paragraph under either.
+   `wordmark-display` is the footer's large wordmark: it scales with the viewport so the
+   word fills the `wide` container, less its 1.5rem gutters, and stops at 80rem. Body text
+   stays on Tailwind's scale. The sizes and weights are the typography tokens in
+   apps/web/DESIGN.md. */
+@theme {
+  --container-wide: 80rem;
+  --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
+  --text-display--line-height: 1.05;
+  --text-display--letter-spacing: -0.035em;
+  --text-display--font-weight: 700;
+  --text-section-title: clamp(2rem, 1.6rem + 1.6vw, 3rem);
+  --text-section-title--line-height: 1.1;
+  --text-section-title--letter-spacing: -0.03em;
+  --text-section-title--font-weight: 700;
+  --text-wordmark-display: calc((min(100vw, 80rem) - 3rem) * 0.25);
+  --text-wordmark-display--line-height: 1;
+  --text-wordmark-display--letter-spacing: -0.055em;
+  --text-wordmark-display--font-weight: 700;
+  --text-lead: 1.25rem;
+  --text-lead--line-height: 1.75rem;
+  --ease-out-soft: cubic-bezier(0.2, 0.7, 0.2, 1);
+
+  @keyframes blur-in {
+    from {
+      filter: blur(12px);
+      opacity: 0;
+      transform: translateY(12px);
+    }
+  }
+
+  /* The drawings' motion. `assemble` and `draw` are entries, the rest loop. */
+  @keyframes assemble {
+    from {
+      opacity: 0;
+      translate: calc(var(--from-x, 0) * 1px) calc(var(--from-y, 0) * 1px);
+    }
+  }
+
+  @keyframes draw {
+    from {
+      stroke-dashoffset: 1;
+    }
+  }
+
+  /* One cycle of the `3 3` dash pattern every connector uses. */
+  @keyframes flow {
+    to {
+      stroke-dashoffset: -6px;
+    }
+  }
+
+  /* One turn, played over the third of the scroll that belongs to the part. The
+     connector flows five dash cycles during its turn. */
+  @keyframes cycle-flow {
+    to {
+      stroke-dashoffset: -30px;
+    }
+  }
+
+  /* Off its turn a part sits 4px low, unplugged; during its turn it plugs in. */
+  @keyframes cycle-shift {
+    0%,
+    100% {
+      translate: 0 4px;
+    }
+
+    15%,
+    85% {
+      translate: 0 0;
+    }
+  }
+
+  /* The step loop the looping drawings share, one 12.5s pass in five 2.5s steps. It
+     holds each step for 2s and moves to the next over 0.5s, so part n arrives over
+     2-2.5s into step n. At 94% the added parts fade (`--step-show`), and the step falls
+     back to 0 while they are hidden. `tree-type` restarts the hero editor's lines on each
+     step: it shares the 2.5s step, and its -0.25s delay lines a restart up with each tab
+     change. The crane in the problem drawing runs its trolley out and lowers its hook
+     once per step. */
+  @keyframes step-loop {
+    0%,
+    16% {
+      --step: 0;
+      --step-show: 1;
+    }
+
+    20%,
+    36% {
+      --step: 1;
+    }
+
+    40%,
+    56% {
+      --step: 2;
+    }
+
+    60%,
+    76% {
+      --step: 3;
+    }
+
+    80%,
+    94% {
+      --step: 4;
+      --step-show: 1;
+    }
+
+    98% {
+      --step: 4;
+      --step-show: 0;
+    }
+
+    100% {
+      --step: 0;
+      --step-show: 0;
+    }
+  }
+
+  @keyframes tree-type {
+    0% {
+      scale: 0 1;
+    }
+
+    30%,
+    100% {
+      scale: 1 1;
+    }
+  }
+
+  @keyframes crane-trolley {
+    0%,
+    15% {
+      translate: 0 0;
+    }
+
+    50%,
+    65% {
+      translate: calc(var(--crane-run, 30) * 1px) 0;
+    }
+  }
+
+  @keyframes crane-hook {
+    0%,
+    20%,
+    70%,
+    100% {
+      translate: 0 0;
+    }
+
+    35%,
+    55% {
+      translate: 0 calc(var(--crane-drop, 20) * 1px);
+    }
+  }
+
+  @keyframes crane-cable {
+    0%,
+    20%,
+    70%,
+    100% {
+      scale: 1 1;
+    }
+
+    35%,
+    55% {
+      scale: 1 var(--crane-stretch, 2);
+    }
+  }
+
+  /* A lap of the ring a node's `offset-path` draws. */
+  @keyframes orbit {
+    to {
+      offset-distance: 100%;
+    }
+  }
+
+  @keyframes blink {
+    50% {
+      opacity: 0;
+    }
+  }
+
+  @keyframes nav-float {
+    from {
+      border-color: transparent;
+    }
+
+    to {
+      border-color: var(--border);
+      backdrop-filter: blur(12px);
+      background-color: color-mix(in oklch, var(--background) 75%, transparent);
+    }
+  }
+}
+
+/* stylelint-disable no-invalid-position-declaration -- a Tailwind `@utility` body may nest
+   `@media` and `@supports` with bare declarations inside, and Tailwind applies them to the
+   utility's own selector. Stylelint reads `@utility` as an unknown at-rule and cannot see
+   that. Re-enabled after the last utility. */
+
+/* A section's container: the wide page width, centred, with the gutter every block
+   shares. */
+@utility section-container-wide {
+  width: 100%;
+  max-width: var(--container-wide);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+}
+
+/* The blueprint decoration. Both utilities draw in hairlines of the `border` token and
+   nothing else: no shadow, no glow, no colour ramp. The hard-stop `linear-gradient`s below
+   are how CSS draws a 1px line across a box; each one is a solid line, never a fade.
+
+   `blueprint-grid` is the graph paper behind the whole page. Layout.astro puts it on
+   <body>, so it runs as one continuous background and no section draws a band of its own.
+   A faint line every `--blueprint-cell` (24px) and a firmer one every
+   `--blueprint-major` (five cells). */
+@utility blueprint-grid {
+  --blueprint-line: color-mix(in oklch, var(--border) 15%, transparent);
+  --blueprint-line-major: color-mix(in oklch, var(--border) 30%, transparent);
+
+  background-image:
+    linear-gradient(to right, var(--blueprint-line-major) 1px, transparent 1px),
+    linear-gradient(
+      to bottom,
+      var(--blueprint-line-major) 1px,
+      transparent 1px
+    ),
+    linear-gradient(to right, var(--blueprint-line) 1px, transparent 1px),
+    linear-gradient(to bottom, var(--blueprint-line) 1px, transparent 1px);
+  background-position: center top;
+  background-size:
+    var(--blueprint-major, 120px) var(--blueprint-major, 120px),
+    var(--blueprint-major, 120px) var(--blueprint-major, 120px),
+    var(--blueprint-cell, 24px) var(--blueprint-cell, 24px),
+    var(--blueprint-cell, 24px) var(--blueprint-cell, 24px);
+}
+
+/* `blueprint-rule` is the full-width rule between sections: a hairline with a small
+   crosshair at each end and short tick marks along it. Put it on an empty, aria-hidden
+   element, or on an <hr>, between two sections; it sets its own height and resets an
+   <hr>'s border. `--rule-inset` places the crosshairs from each edge (the 1.5rem page
+   gutter), and `--rule-tick` is the distance between ticks. The crosshairs mix some
+   `highlight` into `border`, so they read as joins rather than as one more tick. */
+@utility blueprint-rule {
+  --rule-line: var(--border);
+  --rule-cross: color-mix(in oklch, var(--highlight) 45%, var(--border));
+
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 1.0625rem;
+  border: 0;
+  margin: 0;
+  background-image:
+    linear-gradient(var(--rule-line), var(--rule-line)),
+    repeating-linear-gradient(
+      to right,
+      var(--rule-line) 0 1px,
+      transparent 1px var(--rule-tick, 8rem)
+    );
+  background-position:
+    0 50%,
+    var(--rule-inset, 1.5rem) 50%;
+  background-repeat: no-repeat;
+  background-size:
+    100% 1px,
+    calc(100% - 2 * var(--rule-inset, 1.5rem)) 0.4375rem;
+
+  &::before,
+  &::after {
+    position: absolute;
+    top: 0;
+    width: 1.0625rem;
+    height: 1.0625rem;
+    background-image:
+      linear-gradient(var(--rule-cross), var(--rule-cross)),
+      linear-gradient(var(--rule-cross), var(--rule-cross));
+    background-position: center;
+    background-repeat: no-repeat;
+    background-size:
+      1px 100%,
+      100% 1px;
+    content: "";
+    translate: -50% 0;
+  }
+
+  &::before {
+    left: var(--rule-inset, 1.5rem);
+  }
+
+  &::after {
+    left: calc(100% - var(--rule-inset, 1.5rem));
+  }
+}
+
+/* `dimension-arm` is one arm of the footer's dimension line, as a technical drawing
+   marks a measured length: a hairline in `highlight` with a short tick at each end. Put
+   two on empty, aria-hidden elements in a flex row, either side of the label. */
+@utility dimension-arm {
+  position: relative;
+  min-width: 1.5rem;
+  height: 1px;
+  flex: 1 1 0;
+  background-color: var(--highlight);
+
+  &::before,
+  &::after {
+    position: absolute;
+    top: -0.25rem;
+    width: 1px;
+    height: 0.5625rem;
+    background-color: var(--highlight);
+    content: "";
+  }
+
+  &::before {
+    left: 0;
+  }
+
+  &::after {
+    right: 0;
+  }
+}
+
+/* The vertical rhythm between sections. One value per breakpoint, used by every section,
+   so no two neighbours drift apart. `scroll-margin-top` keeps an anchored heading clear of
+   the sticky navbar. */
+@utility section-y {
+  padding-block: 3rem;
+  scroll-margin-top: 4rem;
+
+  @media (width >= 48rem) {
+    padding-block: 4rem;
+  }
+}
+
+/* The module catalog's filter, with no JavaScript. The block (src/blocks/module-catalog.tsx)
+   puts this on its <section>. Each tab is a radio input carrying `data-catalog-tab`, each
+   module tile carries `data-catalog-stage`, and `:has()` reads the checked tab from the
+   section. A tab hides every tile of another stage. Then, until the `data-catalog-more`
+   checkbox is checked, only the first 8 tiles of what is left show:
+   `:nth-child(n + 9 of …)` counts the tiles of the chosen stage alone, so each tab gets
+   its own first 8. The 8 is `CATALOG_VISIBLE_ROWS` in the block; change both together.
+   The checkbox hides itself on a tab whose tiles all fit, which the block marks in
+   `data-catalog-fits`. The stages are CATALOG_STAGES in src/lib/module-catalog.ts; add a
+   rule per stage when that list grows. */
+@utility module-catalog {
+  &:has([data-catalog-tab="validate"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="validate"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="mvp"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="mvp"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="teams"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="teams"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="money"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="money"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked)
+    [data-catalog-stage]:not([data-catalog-stage="scale"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="all"]:checked):not(:has([data-catalog-more]:checked))
+    [data-catalog-stage]:nth-child(n + 9) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="validate"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="validate"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="mvp"]:checked):not(:has([data-catalog-more]:checked))
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="mvp"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="teams"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="teams"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="money"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="money"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked):not(
+      :has([data-catalog-more]:checked)
+    )
+    [data-catalog-stage]:nth-child(n + 9 of [data-catalog-stage="scale"]) {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="all"]:checked) [data-catalog-fits~="all"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="validate"]:checked) [data-catalog-fits~="validate"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="mvp"]:checked) [data-catalog-fits~="mvp"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="teams"]:checked) [data-catalog-fits~="teams"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="money"]:checked) [data-catalog-fits~="money"] {
+    display: none;
+  }
+
+  &:has([data-catalog-tab="scale"]:checked) [data-catalog-fits~="scale"] {
+    display: none;
+  }
+}
+
+/* The stages highlight, with no JavaScript. The block (src/blocks/stages.tsx) puts this on
+   its <section>. Each stage row is an <li data-stage="n">, its marker carries
+   `data-stage-marker`, and slab n of the drawing is a <g data-slab="n"> whose faces carry
+   `data-face` and whose lines sit in `data-slab-detail`. Row and slab both carry their
+   0-based `--stage` inline.
+
+   One registered number, `--stage-on`, drives the whole highlight: 0 is at rest, 1 is
+   active, and every colour below mixes between the two by it. The active row tints with
+   `muted` and fills its marker with `primary`; the matching slab fills with `primary`,
+   its lines turn `primary-foreground`, and it rises 6px.
+
+   Which row is active: the hovered row wins, then the row holding keyboard focus
+   (`:focus-visible`, so a mouse click leaves no stale highlight). With neither, the
+   highlight moves on by itself, one stage every 3s (`stage-turn`), and it starts again
+   at the first stage when the pointer leaves. With reduced motion requested it rests on
+   the first row. The block marks the section `data-loop-in-view`, so LOOP_SCRIPT in
+   ../layouts/Layout.astro pauses the cycle off screen. The 15s cycle and the slab rules
+   cover five stages; a sixth needs a rule here and a new `stage-turn` timing. */
+@property --stage-on {
+  inherits: true;
+  initial-value: 0;
+  syntax: "<number>";
+}
+
+@keyframes stage-turn {
+  0%,
+  20%,
+  100% {
+    --stage-on: 0;
+  }
+
+  2%,
+  18% {
+    --stage-on: 1;
+  }
+}
+
+@utility stage-list {
+  & [data-stage],
+  & [data-slab] {
+    transition: --stage-on 0.2s var(--ease-out-soft);
+  }
+
+  & [data-stage] {
+    /* sRGB, because oklch takes a hue from `transparent` and tints the row pink. */
+    background-color: color-mix(
+      in srgb,
+      var(--muted) calc(var(--stage-on) * 100%),
+      transparent
+    );
+  }
+
+  & [data-stage-marker] {
+    border-color: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
+    background-color: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--background)
+    );
+    color: color-mix(
+      in oklch,
+      var(--primary-foreground) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
+  }
+
+  & [data-slab] [data-face] {
+    fill: color-mix(
+      in oklch,
+      var(--primary) calc(var(--stage-on) * 100%),
+      var(--card)
+    );
+  }
+
+  & [data-slab] [data-slab-detail] {
+    color: color-mix(
+      in oklch,
+      var(--primary-foreground) calc(var(--stage-on) * 100%),
+      var(--highlight)
+    );
+  }
+
+  @media (prefers-reduced-motion: no-preference) {
+    & [data-slab] {
+      translate: 0 calc(var(--stage-on) * -6px);
+    }
+  }
+
+  & [data-stage]:hover,
+  &:not(:has([data-stage]:hover)) [data-stage]:has(:focus-visible),
+  &:not(:has([data-stage]:hover, [data-stage] :focus-visible)) [data-stage="1"],
+  &:has([data-stage="1"]:hover) [data-slab="1"],
+  &:not(:has([data-stage]:hover)):has([data-stage="1"] :focus-visible)
+    [data-slab="1"],
+  &:not(:has([data-stage]:hover, [data-stage] :focus-visible)) [data-slab="1"],
+  &:has([data-stage="2"]:hover) [data-slab="2"],
+  &:not(:has([data-stage]:hover)):has([data-stage="2"] :focus-visible)
+    [data-slab="2"],
+  &:has([data-stage="3"]:hover) [data-slab="3"],
+  &:not(:has([data-stage]:hover)):has([data-stage="3"] :focus-visible)
+    [data-slab="3"],
+  &:has([data-stage="4"]:hover) [data-slab="4"],
+  &:not(:has([data-stage]:hover)):has([data-stage="4"] :focus-visible)
+    [data-slab="4"],
+  &:has([data-stage="5"]:hover) [data-slab="5"],
+  &:not(:has([data-stage]:hover)):has([data-stage="5"] :focus-visible)
+    [data-slab="5"] {
+    --stage-on: 1;
+  }
+
+  /* The cycle. An animation outranks the rest rules above, so it alone sets
+     `--stage-on` while it runs. The negative delay starts stage 1 at once. */
+  @media (prefers-reduced-motion: no-preference) {
+    &:not(:has([data-stage]:hover, [data-stage] :focus-visible))
+      :is([data-stage], [data-slab]) {
+      animation: stage-turn 15s linear calc((var(--stage, 0) - 5) * 3s) infinite;
+    }
+
+    /* The same :not(:has()) as above, so this outranks that shorthand's play state. */
+    &[data-offscreen]:not(:has([data-stage]:hover, [data-stage] :focus-visible))
+      :is([data-stage], [data-slab]) {
+      animation-play-state: paused;
+    }
+  }
+}
+
+/* Motion. Every utility is additive: with reduced motion requested, or in a browser that
+   lacks the feature, the element simply sits in its final state.
+
+   `blur-in` is the hero's load-time cascade. Stagger it with `[--blur-in-delay:100ms]`. */
+@utility blur-in {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: blur-in 1s var(--ease-out-soft) var(--blur-in-delay, 0s) both;
+  }
+}
+
+/* Below-the-fold entrance, tied to scroll position. No JavaScript and no
+   IntersectionObserver: a browser without scroll timelines shows the element as is. */
+@utility reveal {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: blur-in linear both;
+      animation-range: entry 0% entry 35%;
+      animation-timeline: view();
+    }
+  }
+}
+
+/* The navbar's bar frosts and gains its bottom hairline once the page scrolls past the top.
+   Without scroll timelines, or with reduced motion requested, the bar sits frosted from
+   the start, which is the animation's final state, so page content never shows through
+   the wordmark. */
+@utility nav-float {
+  @supports not (animation-timeline: scroll()) {
+    border-color: var(--border);
+    backdrop-filter: blur(12px);
+    background-color: color-mix(in oklch, var(--background) 75%, transparent);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    border-color: var(--border);
+    backdrop-filter: blur(12px);
+    background-color: color-mix(in oklch, var(--background) 75%, transparent);
+  }
+
+  @supports (animation-timeline: scroll()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: nav-float linear both;
+      animation-range: 0 120px;
+      animation-timeline: scroll(root);
+    }
+  }
+}
+
+/* Press feedback for a solid control: it shrinks a little while held, label and icon
+   with it. It owns the element's whole transition, colours included, so do not pair it
+   with `transition-colors`. */
+@utility press {
+  transition-duration: 0.15s;
+  transition-property:
+    color, background-color, border-color, text-decoration-color, scale;
+  transition-timing-function: var(--ease-out-soft);
+
+  @media (prefers-reduced-motion: no-preference) {
+    &:active {
+      scale: 0.97;
+    }
+  }
+}
+
+/* An element that settles in when it starts to render: on mount, and each time a
+   `display: none` rule stops matching it. The catalog tiles use it, so a filter tab or
+   "Show all modules" brings its tiles in rather than swapping them in one frame. A
+   transition, not keyframes, so a second press mid-motion retargets instead of
+   restarting. */
+@utility appear {
+  @media (prefers-reduced-motion: no-preference) {
+    transition:
+      opacity 0.2s var(--ease-out-soft),
+      translate 0.2s var(--ease-out-soft);
+
+    @starting-style {
+      opacity: 0;
+      translate: 0 6px;
+    }
+  }
+}
+
+/* A native <details> whose answer opens and closes over its height instead of in one
+   frame. It needs `::details-content` and `interpolate-size`; a browser without either
+   opens the answer at once. Height is the one layout property the page animates, because
+   no transform grows a box and moves the rows under it. */
+@utility disclosure {
+  @supports (interpolate-size: allow-keywords) {
+    @media (prefers-reduced-motion: no-preference) {
+      interpolate-size: allow-keywords;
+
+      &::details-content {
+        overflow: clip;
+        block-size: 0;
+        opacity: 0;
+        transition:
+          block-size 0.2s var(--ease-out-soft),
+          opacity 0.2s var(--ease-out-soft),
+          content-visibility 0.2s allow-discrete;
+      }
+
+      &[open]::details-content {
+        block-size: auto;
+        opacity: 1;
+      }
+    }
+  }
+}
+
+/* The drawings' motion. A drawing's <svg> takes `drawing`, which names its view timeline
+   `--drawing`, and its parts take `assemble` (fade in from `--from-x`, `--from-y`) or
+   `draw` (a solid line strokes on from its start; the path needs `pathLength="1"`). Both
+   are tied to the scroll: a part runs over `--span` percent of the drawing's entry,
+   starting `--at` percent in, so `--at` staggers the parts. The hero is in view on load,
+   so its <svg> takes `drawing-load` instead, which plays the same entries over time and
+   reads `--at` as tens of milliseconds. The illustrations' `Assemble` and `enter` set
+   these properties. Drawing motion is decorative, so the 200ms interface cap does not
+   apply to it; an entry stays under a second.
+
+   The loops: `flow` moves a dashed connector's dashes along the path, in the direction
+   the path is drawn, so a moving dash means something travels that way. Only `highlight`
+   connectors flow; a `stroke-border` construction line stays still. `cycle-flow` and
+   `cycle-shift` give three parts a turn each, by `--turn` (0, 1 or 2): a turn flows its
+   connector, and off its turn a part sits 4px low, unplugged. `blink` is a text caret.
+
+   No loop runs on a clock for more than 5s (WCAG 2.2.2). Below the fold the loops are
+   tied to the scroll like the entries: `flow` runs over the drawing's whole pass through
+   the viewport, and each turn takes a third of the stretch where the drawing is fully in
+   view, so nothing moves unless the reader scrolls. Without scroll timelines they stay
+   still. The exception is every drawing marked `data-loop-in-view`, by the owner's
+   decision in plan 0092: the hero and the drawings that loop like it take
+   `drawing-load`, and their loops run on the clock while they are in view. LOOP_SCRIPT
+   in ../layouts/Layout.astro marks such a drawing `data-offscreen` while it is out of
+   view, and `drawing-load` pauses every animation in it then. `gate:a11y` exempts
+   these drawings from the 5s rule and checks that each one pauses off screen. */
+@utility drawing {
+  view-timeline-name: --drawing;
+}
+
+@utility assemble {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: assemble linear both;
+      animation-range: entry calc(var(--at, 0) * 1%) entry
+        calc((var(--at, 0) + var(--span, 40)) * 1%);
+      animation-timeline: --drawing;
+    }
+  }
+}
+
+@utility draw {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: draw linear both;
+      animation-range: entry calc(var(--at, 0) * 1%) entry
+        calc((var(--at, 0) + var(--span, 40)) * 1%);
+      animation-timeline: --drawing;
+      stroke-dasharray: 1;
+    }
+  }
+}
+
+@utility drawing-load {
+  @media (prefers-reduced-motion: no-preference) {
+    & .assemble {
+      animation: assemble 0.8s var(--ease-out-soft) calc(var(--at, 0) * 10ms)
+        both;
+    }
+
+    & .draw {
+      animation: draw 0.8s var(--ease-out-soft) calc(var(--at, 0) * 10ms) both;
+      stroke-dasharray: 1;
+    }
+
+    & .flow {
+      animation: flow 0.6s linear infinite;
+      animation-range: normal;
+      animation-timeline: auto;
+    }
+
+    &[data-offscreen] * {
+      animation-play-state: paused;
+    }
+  }
+}
+
+@utility flow {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: flow linear 40 both;
+      animation-range: cover 0% cover 100%;
+      animation-timeline: --drawing;
+    }
+  }
+}
+
+@utility cycle-flow {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: cycle-flow linear both;
+      animation-range: contain calc(var(--turn, 0) * 33.333%) contain
+        calc((var(--turn, 0) + 1) * 33.333%);
+      animation-timeline: --drawing;
+    }
+  }
+}
+
+@utility cycle-shift {
+  @supports (animation-timeline: view()) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: cycle-shift var(--ease-out-soft) both;
+      animation-range: contain calc(var(--turn, 0) * 33.333%) contain
+        calc((var(--turn, 0) + 1) * 33.333%);
+      animation-timeline: --drawing;
+    }
+  }
+}
+
+/* The loops of the `data-loop-in-view` drawings, in a `drawing-load` <svg>. Unlike
+   every other loop below the fold, these run on the clock and never stop while the
+   drawing is in view, and pause off screen (see the drawings' motion above). The hero's
+   source tree gains a module every 2.5s, the problem drawing's city raises a building
+   on the same beat, and the built-on drawing's nodes run round their rings (`orbit`).
+   The agent session drawing plays one 16s pass of its own, from keyframes that
+   ../illustrations/live.ts writes into a \3c style> inside its <svg>. That \3c style> is
+   unlayered, so it states the off-screen pause again itself.
+
+   `step-loop` goes on a group inside the <svg>, so the pause reaches it, and animates
+   `--step` and `--step-show`. A part reads them through `--k`, the step it belongs
+   to: `step-add` slides in and stays from step `--k` on, `step-rise` grows up from its
+   base and stays, and `step-only` shows on step `--k` alone. Their look is a function of
+   the step, so they need no keyframes of their own. With reduced motion the step stays
+   at 4, every part added. */
+@property --step {
+  inherits: true;
+  initial-value: 4;
+  syntax: "<number>";
+}
+
+@property --step-show {
+  inherits: true;
+  initial-value: 1;
+  syntax: "<number>";
+}
+
+@utility step-loop {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: step-loop 12.5s linear infinite;
+  }
+}
+
+@utility step-add {
+  --step-in: clamp(0, var(--step) - var(--k, 0) + 1, 1);
+
+  opacity: calc(var(--step-in) * var(--step-show));
+  translate: calc((var(--step-in) - 1) * 10px) 0;
+}
+
+@utility step-rise {
+  --step-in: clamp(0, var(--step) - var(--k, 0) + 1, 1);
+
+  opacity: calc(min(1, var(--step-in) * 4) * var(--step-show));
+  scale: 1 var(--step-in);
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+
+@utility step-only {
+  --step-off: calc(var(--step) - var(--k, 0));
+
+  /* Step 0 stays out of the fade, so the base tab is back as the pass ends. */
+  opacity: calc(
+    clamp(0, 1 - 4 * var(--step-off) * var(--step-off), 1) *
+      max(var(--step-show), 1 - var(--k, 0))
+  );
+}
+
+@utility tree-type {
+  transform-box: fill-box;
+  transform-origin: left;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: tree-type 2.5s var(--ease-out-soft)
+      calc(var(--line, 0) * 60ms - 0.25s) infinite both;
+  }
+}
+
+/* The crane: the trolley runs `--crane-run` units out along the jib, the hook drops
+   `--crane-drop` units, and its cable stretches by `--crane-stretch` from the trolley to
+   keep up. One run per 2.5s step. */
+@utility crane-trolley {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: crane-trolley 2.5s ease-in-out infinite;
+  }
+}
+
+@utility crane-hook {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: crane-hook 2.5s ease-in-out infinite;
+  }
+}
+
+@utility crane-cable {
+  transform-box: fill-box;
+  transform-origin: 50% 0;
+
+  @media (prefers-reduced-motion: no-preference) {
+    animation: crane-cable 2.5s ease-in-out infinite;
+  }
+}
+
+/* A node of the built-on drawing runs round its ring: `--orbit-path` is the ring, and a
+   lap takes `--orbit-s`, starting `--orbit-delay` in, in `--orbit-direction`. The
+   node's `transform` attribute places it on the ring for reduced motion and for a
+   browser without `offset-path`; the orbit replaces it. */
+@utility orbit {
+  @supports (offset-path: path("M0 0")) {
+    @media (prefers-reduced-motion: no-preference) {
+      animation: orbit var(--orbit-s, 60s) linear var(--orbit-delay, 0s)
+        infinite var(--orbit-direction, normal);
+      offset-path: var(--orbit-path);
+      offset-rotate: 0deg;
+      transform: none;
+    }
+  }
+}
+
+@utility blink {
+  @media (prefers-reduced-motion: no-preference) {
+    animation: blink 1s steps(1) infinite;
+  }
+}
+
+/* stylelint-enable no-invalid-position-declaration */

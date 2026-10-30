@@ -81,9 +81,8 @@ export function cloudflare(options: CloudflareKvOptions = {}): KvProvider {
         "provider_error",
         `No \`${bindingName}\` KV binding on this Worker's env. Add one to ` +
           `apps/api/wrangler.jsonc:\n\n` +
-          `  "kv_namespaces": [{ "binding": "${bindingName}", "id": "<id>" }]\n\n` +
-          `Create the namespace with \`wrangler kv namespace create app-kv\` and paste ` +
-          `the id it prints.`
+          `  "kv_namespaces": [{ "binding": "${bindingName}" }]\n\n` +
+          `\`wrangler deploy\` creates the namespace the binding names in that file.`
       );
     }
     return binding;

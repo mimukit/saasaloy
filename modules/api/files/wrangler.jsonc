@@ -1,6 +1,6 @@
 {
   "$schema": "node_modules/wrangler/config-schema.json",
-  "name": "api",
+  "name": "{{PROJECT_NAME}}-api",
   "main": "src/worker.ts",
   "compatibility_date": "2026-07-21",
   // Same port `vite dev` uses (see vite.config.ts), so `wrangler dev` is a drop-in

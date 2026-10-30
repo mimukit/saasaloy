@@ -138,7 +138,8 @@ async function copyTree(
   return written;
 }
 
-function applyVars(content: string, vars: TemplateVars): string {
+/** Replace each `{{VAR}}` named in `vars`; an unknown token stays as authored. */
+export function applyVars(content: string, vars: TemplateVars): string {
   return content.replaceAll(
     /\{\{(\w+)\}\}/g,
     (match, key: string) => vars[key] ?? match

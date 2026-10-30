@@ -83,9 +83,26 @@ There is no `phone({ country })` option and no optional variant. Write `banglade
 
 This schema and the `sms` capability check the same country at different layers, which is not duplication. The `khudebarta` provider checks `/^\+880\d{10}$/` on a recipient that is already E.164, and it stays dependency-free because `packages/sms` takes no runtime dependency (ADR 0020). This schema guards whatever a person typed at the api request boundary, and every value it returns satisfies the provider's regex. See the `saasaloy-sms` skill for the provider side.
 
+## Removal
+
+Remove the dependents first. `waitlist`, `feature-flags`, `file-uploads` and `payment-manual` depend on `validators`, so `remove validators` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
+
+`saasaloy remove validators` deletes the `packages/validators` workspace (`common.ts`, `phone.ts`). It has no reversible patch. The `@repo/validators` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. A schema file you added to the workspace is untracked, so `remove` leaves it.
+
+Every route that imports `@repo/validators` stops compiling. Move the schemas you still need next to their routes first.
+
+## Failure modes
+
+- `Cannot find module '@repo/validators'` in `apps/api`. The workspace is not installed, or `pnpm install` has not run since `add`. Run `pnpm install`.
+- A route returns 400 for a valid Bangladeshi number. The input uses a form that `phone.ts` does not normalize. Read "Bangladeshi mobile numbers" above for the accepted forms.
+
 ## Rules
 
 - Export the schema and its inferred type together: `export const createInput = z.object({...})` and `export type CreateInput = z.infer<typeof createInput>`.
 - Keep every schema isomorphic. No Workers types, no Node APIs, no `process.env`, no imports from `@repo/db` or `@repo/api`. The file must run unchanged in a browser bundle.
 - Validate input only. Database column shapes belong in `packages/db`.
 - Return errors through `errorSchema` so every response carries the same envelope.
+
+## Next
+
+Run `saasaloy-api` to validate a request body in a route with the schema.

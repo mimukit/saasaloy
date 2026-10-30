@@ -16,7 +16,7 @@
       "bindingType": "queues.producers",
       "entry": {
         "binding": "JOBS",
-        "queue": "app-jobs"
+        "queue": "{{PROJECT_NAME}}-jobs"
       }
     },
     {
@@ -25,7 +25,7 @@
       "bindingType": "queues.producers",
       "entry": {
         "binding": "JOBS_DLQ",
-        "queue": "app-jobs-dlq"
+        "queue": "{{PROJECT_NAME}}-jobs-dlq"
       }
     },
     {
@@ -33,11 +33,11 @@
       "kind": "wrangler-binding",
       "bindingType": "queues.consumers",
       "entry": {
-        "queue": "app-jobs",
+        "queue": "{{PROJECT_NAME}}-jobs",
         "max_batch_size": 10,
         "max_batch_timeout": 5,
         "max_retries": 3,
-        "dead_letter_queue": "app-jobs-dlq"
+        "dead_letter_queue": "{{PROJECT_NAME}}-jobs-dlq"
       },
       "matchOn": "queue"
     },

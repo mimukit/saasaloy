@@ -583,3 +583,7 @@ Every existing session ends, because the cookie names change from `better-auth.s
 - **The dialect lives in the two schema variants and in `db-provider.ts`, nowhere else.** A
   `sqlite-core` or `pg-core` import outside `files/db/schema/auth.*.ts`, or a `provider:` string
   written inline in `auth.ts`, pins this module to one driver again.
+
+## Next
+
+Run `saasaloy-app` to give a signed-in user a home, with the sign-in and sign-up blocks on its routes.

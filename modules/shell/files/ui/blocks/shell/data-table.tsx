@@ -258,16 +258,15 @@ export function DataTable<TRow extends object>({
   // Drop the highlight when the focus moves to a control outside the table, so no
   // highlight is left that the table's keys could not act on.
   useEffect(() => {
-    if (highlight === null) {
-      return;
-    }
     const onFocusIn = (event: FocusEvent): void => {
       const target = event.target instanceof Element ? event.target : null;
       if (!tableKeysLive(target, containerRef.current)) {
         setHighlightedId(null);
       }
     };
-    document.addEventListener("focusin", onFocusIn);
+    if (highlight !== null) {
+      document.addEventListener("focusin", onFocusIn);
+    }
     return () => {
       document.removeEventListener("focusin", onFocusIn);
     };
