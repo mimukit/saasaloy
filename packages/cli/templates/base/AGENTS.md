@@ -128,7 +128,7 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 ### The Base Skills
 
-Nine skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
+Ten skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
 
 1. **`saasaloy-setup`** interviews the owner once and writes `docs/product-brief.md`, then sets `config.app.name` and `config.app.locale`. Other skills read the brief rather than ask again.
 2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
@@ -138,13 +138,14 @@ Two build the product once modules are installed:
 - **`saasaloy-build`** runs the whole MVP build in stages from a complete brief, with one commit per stage on `build/mvp` and a resumable `docs/build-log.md`. Start here when you are asked to build the product.
 - **`saasaloy-feature`** builds one product entity across the stack: table, migration, seed slice, validator, route, `hc` client, an `app` screen, an `admin` list and a route test.
 
-The other five run when the thing they own moves:
+The other six run when the thing they own moves:
 
 - **`saasaloy-design`** keeps each app's `DESIGN.md` true, and swaps the web theme for a shadcn preset.
 - **`saasaloy-config`** covers `@repo/config`: a section, the merge rule, config versus `.env`.
 - **`saasaloy-env`** covers `packages/env`: adding a key, the server and client split, `pnpm env:setup`.
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
 - **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates and the rollback.
+- **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the merge plan, the update notes, `--resolved` and `--done`.
 
 ### Naming Conventions
 
