@@ -21,6 +21,12 @@
 // that project's own `pnpm lint` (issue #152). Only there do imports between workspaces
 // resolve, the type-aware pass reach the installed blocks, and `add` format its patches.
 //
+// The upgrade step needs the network too (issue #298). It installs the previous published
+// CLI, which scaffolds a project with modules fetched from GitHub at that release's tag,
+// and then runs the packed CLI's `update --dry-run` against the repo's `modules/`. The
+// merge plan must list the update notes that project is owed. `--upgrade-only` runs this
+// step alone after the pack.
+//
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
 //
@@ -114,11 +120,13 @@ export interface FullScaffold {
 export interface SmokeOptions {
   /** Leave `.dev/release-smoke/` in place after a green run, for inspection. */
   keep: boolean;
+  /** Pack and install, then run the upgrade step alone (issue #298). */
+  upgradeOnly: boolean;
   /** Flags and positionals this script does not accept. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--keep"]);
+const KNOWN_FLAGS = new Set(["--keep", "--upgrade-only"]);
 
 /**
  * Split this script's argv. Exported for its own test: a typo'd `--kep` that silently
@@ -127,7 +135,11 @@ const KNOWN_FLAGS = new Set(["--keep"]);
  */
 export function parseArgs(argv: string[]): SmokeOptions {
   const unknown = argv.filter((arg) => !KNOWN_FLAGS.has(arg));
-  return { keep: argv.includes("--keep"), unknown };
+  return {
+    keep: argv.includes("--keep"),
+    unknown,
+    upgradeOnly: argv.includes("--upgrade-only"),
+  };
 }
 
 /**
@@ -245,6 +257,305 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
         name: `full-${ordered.join("-")}`,
       };
     });
+}
+
+// --- Upgrade step (issue #298) ------------------------------------------------------
+
+/** The repository the previous CLI fetches its modules from, at the tag of its release. */
+const UPGRADE_SOURCE = "mimukit/saasaloy";
+
+/**
+ * What the upgrade project takes from the previous release, one `add` each, in order.
+ * `admin` brings `api` and `auth` with it, and its `when.installed` gate is what lets the
+ * shell note through. `email-react` ships a note of its own. Add a module here when a
+ * note needs one the set does not hold.
+ */
+const UPGRADE_ADDS: readonly (readonly string[])[] = [
+  ["email-react"],
+  ["admin", "--with", "database-d1"],
+];
+
+/**
+ * The testing mode the upgrade project takes. Off, so a note gated on `when.testing` is
+ * expected to stay out of the merge plan.
+ */
+const UPGRADE_TESTING = "off";
+
+/** What `update --dry-run` exits with: a preview stays 0 even while notes are pending. */
+const DRY_RUN_EXIT = 0;
+
+/** A note id: `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, as `lib/update-notes.ts` derives it. */
+const NOTE_ID = "[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*";
+
+/** A note heading in the merge plan: `### <id>: <title>`, or one level down under "may apply". */
+const NOTE_HEADING = new RegExp(`^#{3,4} (${NOTE_ID}): `);
+
+const MAY_APPLY_HEADING = "### Notes that may apply";
+
+/** A version as `[major, minor, patch, prerelease]`, or undefined when it is not semver. */
+function parseSemver(
+  version: string
+): [number, number, number, string] | undefined {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(version);
+  if (match === null) {
+    return undefined;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3]), match[4] ?? ""];
+}
+
+/**
+ * Compare two semver strings. A prerelease sorts below its release, and two prereleases
+ * compare as text, which is all the smoke needs. Exported for its own test.
+ */
+export function compareSemver(a: string, b: string): number {
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  if (left === undefined || right === undefined) {
+    throw new Error(`not a semver version: ${left === undefined ? a : b}`);
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (left[index] as number) - (right[index] as number);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  if (left[3] === right[3]) {
+    return 0;
+  }
+  if (left[3] === "") {
+    return 1;
+  }
+  if (right[3] === "") {
+    return -1;
+  }
+  return left[3] < right[3] ? -1 : 1;
+}
+
+/**
+ * The newest published release below `current`, from the list `npm view saasaloy
+ * versions --json` prints. A prerelease is never the previous CLI: a project scaffolded
+ * with one is not what a user upgrades from. Exported for its own test.
+ */
+export function previousVersion(
+  published: readonly string[],
+  current: string
+): string | undefined {
+  return published
+    .filter((version) => {
+      const parsed = parseSemver(version);
+      return (
+        parsed !== undefined &&
+        parsed[3] === "" &&
+        compareSemver(version, current) < 0
+      );
+    })
+    .toSorted(compareSemver)
+    .at(-1);
+}
+
+/** The frontmatter fields the expected-notes table reads. */
+export interface NoteFrontmatter {
+  version?: string;
+  when?: { installed: string[]; testing: boolean };
+}
+
+/**
+ * Read `version` and `when` out of a note's frontmatter. Only the forms the notes use:
+ * `when` as a block map or a flow map, `installed` as a block list or a flow list, and
+ * `testing: true`. A `when` key past those two throws, so a new condition fails the smoke
+ * loudly and is not skipped. Exported for its own test.
+ */
+export function readNoteFrontmatter(source: string): NoteFrontmatter {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
+  if (match === null) {
+    throw new Error("the note has no frontmatter");
+  }
+  const lines = match[1]!.split(/\r?\n/);
+  const result: NoteFrontmatter = {};
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const top = /^(\w+):\s*(.*)$/.exec(line);
+    if (top === null) {
+      continue;
+    }
+    const [, key, rest] = top as unknown as [string, string, string];
+    if (key === "version") {
+      result.version = rest.replaceAll(/^["']|["']$/g, "").trim();
+    } else if (key === "when") {
+      let text = rest;
+      while (index + 1 < lines.length && /^\s/.test(lines[index + 1] ?? "")) {
+        index += 1;
+        text += `\n${lines[index]!}`;
+      }
+      result.when = readWhen(text);
+    }
+  }
+  return result;
+}
+
+function readWhen(text: string): { installed: string[]; testing: boolean } {
+  for (const [, key] of text.matchAll(/(\w+):/g)) {
+    if (key !== "installed" && key !== "testing") {
+      throw new Error(
+        `the smoke cannot judge \`when.${String(key)}\`; teach readNoteFrontmatter the key`
+      );
+    }
+  }
+  const flow = /installed:\s*\[([^\]]*)\]/.exec(text);
+  const block = /installed:\s*\n((?:[ \t]*-[^\n]*(?:\n|$))+)/.exec(text);
+  const unquote = (item: string): string =>
+    item.trim().replaceAll(/^["']|["']$/g, "");
+  let installed: string[] = [];
+  if (flow !== null) {
+    installed = flow[1]!.split(",").map(unquote).filter(Boolean);
+  } else if (block !== null) {
+    installed = block[1]!
+      .split("\n")
+      .map((item) => unquote(item.replace(/^\s*-/, "")))
+      .filter(Boolean);
+  }
+  return { installed, testing: /testing:\s*true\b/.test(text) };
+}
+
+/** One note on disk, as the expected-notes table reads it. */
+export interface NoteOnDisk extends NoteFrontmatter {
+  id: string;
+}
+
+/**
+ * The note ids the upgrade's merge plan must list, in no particular group. A base note
+ * counts when its `version` is newer than the previous CLI and no newer than the packed
+ * one. A module note counts when its module is installed after the update: with
+ * SAASALOY_REGISTRY_DIR no module has a merge base, so every note it ships prints. A note
+ * whose `when` fails against that install set and the testing mode does not count.
+ * Exported for its own test.
+ */
+export function expectedNoteIds(
+  notes: readonly NoteOnDisk[],
+  range: { previous: string; packed: string },
+  installed: ReadonlySet<string>,
+  testing: string
+): string[] {
+  return notes
+    .filter((note) => {
+      const owner = note.id.split("/")[0]!;
+      if (owner === "base") {
+        return (
+          note.version !== undefined &&
+          compareSemver(note.version, range.previous) > 0 &&
+          compareSemver(note.version, range.packed) <= 0
+        );
+      }
+      return installed.has(owner);
+    })
+    .filter((note) => {
+      if (note.when === undefined) {
+        return true;
+      }
+      if (note.when.testing && testing === "off") {
+        return false;
+      }
+      return note.when.installed.every((name) => installed.has(name));
+    })
+    .map((note) => note.id)
+    .toSorted();
+}
+
+/**
+ * The modules installed after the update: what the lock holds now, plus every module the
+ * new descriptors make a dependency of one, which `update` installs fresh (the shell
+ * module that `admin` gained in 0.8.0 is the case). Exported for its own test.
+ */
+export function installedAfterUpdate(
+  locked: readonly string[],
+  dependsOn: ReadonlyMap<string, readonly string[]>
+): Set<string> {
+  const installed = new Set<string>();
+  const visit = (name: string): void => {
+    if (installed.has(name)) {
+      return;
+    }
+    installed.add(name);
+    for (const dependency of dependsOn.get(name) ?? []) {
+      visit(dependency);
+    }
+  };
+  for (const name of locked) {
+    visit(name);
+  }
+  return installed;
+}
+
+/** The note ids a merge plan lists, split by the group each sits in. */
+export interface PlanNotes {
+  placed: string[];
+  mayApply: string[];
+}
+
+/**
+ * Every note id in the "Update notes" section of a merge plan on stdout. A note heading
+ * before "### Notes that may apply" is placed, one after it may apply. A heading inside a
+ * fenced block is a note's own text, and the section ends at the next level-2 heading.
+ * Exported for its own test.
+ */
+export function parsePlanNotes(stdout: string): PlanNotes {
+  const result: PlanNotes = { mayApply: [], placed: [] };
+  let inSection = false;
+  let mayApply = false;
+  let fence: string | undefined;
+  for (const line of stdout.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) {
+        fence = marker;
+      } else if (marker.startsWith(fence)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (fence !== undefined) {
+      continue;
+    }
+    if (line === "## Update notes") {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) {
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      break;
+    }
+    if (line === MAY_APPLY_HEADING) {
+      mayApply = true;
+      continue;
+    }
+    const id = NOTE_HEADING.exec(line)?.[1];
+    if (id !== undefined) {
+      (mayApply ? result.mayApply : result.placed).push(id);
+    }
+  }
+  return result;
+}
+
+/**
+ * What is wrong with the notes a merge plan listed against the ids expected: each id it
+ * missed and each it listed that no rule expects. Empty when they match. Both groups
+ * count, so a note the local registry pushes under "may apply" still matches. Exported for
+ * its own test.
+ */
+export function checkPlanNotes(
+  expected: readonly string[],
+  found: PlanNotes
+): string[] {
+  const listed = new Set([...found.placed, ...found.mayApply]);
+  const wanted = new Set(expected);
+  return [
+    ...expected.filter((id) => !listed.has(id)).map((id) => `missing ${id}`),
+    ...[...listed]
+      .filter((id) => !wanted.has(id))
+      .map((id) => `unexpected ${id}`),
+  ];
 }
 
 function fail(message: string, ...detail: string[]): never {
@@ -417,6 +728,222 @@ async function lintFullScaffold(
   step(`${scaffold.name} passes \`pnpm lint\` (${seconds(started)})`);
 }
 
+/** A finished command's exit code and its two streams, kept apart. */
+interface Captured {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Run a command and hold both streams apart, so stdout can be parsed on its own. */
+function capture(
+  command: string,
+  args: readonly string[],
+  label: string,
+  options: { cwd: string; env?: NodeJS.ProcessEnv }
+): Promise<Captured> {
+  return new Promise((done, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      reject(new StepError(`${label} could not start`, [String(error)]));
+    });
+    child.on("close", (code) => {
+      done({ code, stderr, stdout });
+    });
+  });
+}
+
+/** Every update note in this checkout: the base's and each module's. */
+async function readNotesOnDisk(registryDir: string): Promise<NoteOnDisk[]> {
+  const folders: [string, string][] = [["base", join(cliDir, "update-notes")]];
+  for (const dirent of await readdir(registryDir, { withFileTypes: true })) {
+    if (dirent.isDirectory()) {
+      folders.push([
+        dirent.name,
+        join(registryDir, dirent.name, "update-notes"),
+      ]);
+    }
+  }
+  const notes: NoteOnDisk[] = [];
+  for (const [owner, folder] of folders) {
+    let names: string[];
+    try {
+      names = await readdir(folder);
+    } catch {
+      continue;
+    }
+    for (const name of names.filter((file) =>
+      /^\d{4}-[a-z0-9][a-z0-9-]*\.md$/.test(file)
+    )) {
+      const file = join(folder, name);
+      let frontmatter: NoteFrontmatter;
+      try {
+        frontmatter = readNoteFrontmatter(await readFile(file, "utf-8"));
+      } catch (error) {
+        throw new StepError(`could not read ${relative(root, file)}`, [
+          String(error),
+        ]);
+      }
+      notes.push({ ...frontmatter, id: `${owner}/${name.slice(0, -3)}` });
+    }
+  }
+  return notes;
+}
+
+/**
+ * Scaffold a project with the previous published CLI and its modules at the previous
+ * release's tag, then run `update --dry-run` with the packed CLI against this checkout's
+ * `modules/` (issue #298). The merge plan on stdout must list exactly the update notes
+ * this project is owed, and the preview must exit as a preview does.
+ *
+ * It needs the network twice: npm for the previous CLI, and GitHub for the modules that
+ * CLI fetches at its tag. The project is built the way a user's was, so the update meets
+ * the files and the lock the previous release really wrote.
+ */
+async function checkUpgrade(
+  bin: string,
+  version: string,
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  const started = Date.now();
+  const registryDir = env.SAASALOY_REGISTRY_DIR!;
+  const view = await capture(
+    "npm",
+    ["view", "saasaloy", "versions", "--json"],
+    "npm view saasaloy versions",
+    { cwd: workDir }
+  );
+  if (view.code !== 0) {
+    throw new StepError("npm view saasaloy versions failed", [
+      `exit code ${String(view.code)}`,
+      ...view.stderr.trim().split("\n").slice(-10),
+    ]);
+  }
+  const parsed = JSON.parse(view.stdout) as unknown;
+  const published = (Array.isArray(parsed) ? parsed : [parsed]).filter(
+    (entry): entry is string => typeof entry === "string"
+  );
+  const previous = previousVersion(published, version);
+  if (previous === undefined) {
+    throw new StepError(
+      `no published saasaloy release is older than ${version}`,
+      [`npm lists: ${published.join(", ")}`]
+    );
+  }
+
+  const previousDir = join(scratch, "previous");
+  await mkdir(previousDir, { recursive: true });
+  await writeFile(
+    join(previousDir, "package.json"),
+    `${JSON.stringify({ name: "saasaloy-release-smoke-previous", private: true, version: "0.0.0" }, null, 2)}\n`
+  );
+  step(`installing saasaloy@${previous} for the upgrade step`);
+  await runQuiet(
+    "npm",
+    ["install", "--no-audit", "--no-fund", `saasaloy@${previous}`],
+    `npm install saasaloy@${previous}`,
+    { cwd: previousDir }
+  );
+  const previousBin = join(previousDir, "node_modules/.bin/saasaloy");
+
+  // The previous CLI fetches its modules from GitHub at its own tag, the way a user's
+  // project got them. SAASALOY_REGISTRY_DIR would hand it this checkout's modules, which
+  // it was never released with.
+  const remoteEnv = { ...process.env };
+  delete remoteEnv.SAASALOY_REGISTRY_DIR;
+  const projectName = "upgrade";
+  const dir = join(workDir, projectName);
+  step(`scaffolding ${projectName} with saasaloy@${previous}`);
+  await runQuiet(
+    previousBin,
+    [
+      "init",
+      projectName,
+      "--no-install",
+      "--no-git",
+      `--testing=${UPGRADE_TESTING}`,
+    ],
+    `saasaloy@${previous} init ${projectName}`,
+    { cwd: workDir, env: remoteEnv }
+  );
+  for (const [name, ...flags] of UPGRADE_ADDS) {
+    const target = `${UPGRADE_SOURCE}@v${previous}/${String(name)}`;
+    await runQuiet(
+      previousBin,
+      ["add", target, ...flags, "--yes"],
+      `saasaloy@${previous} add ${target}`,
+      { cwd: dir, env: remoteEnv }
+    );
+  }
+
+  const lock = await readManifest(join(dir, "saasaloy-lock.json"));
+  const locked = Object.keys(
+    typeof lock.modules === "object" && lock.modules !== null
+      ? lock.modules
+      : {}
+  );
+  const modules = await readModules(registryDir);
+  const installed = installedAfterUpdate(
+    locked,
+    new Map(modules.map((entry) => [entry.name, entry.dependsOn ?? []]))
+  );
+  const expected = expectedNoteIds(
+    await readNotesOnDisk(registryDir),
+    { packed: version, previous },
+    installed,
+    UPGRADE_TESTING
+  );
+  if (expected.length === 0) {
+    throw new StepError(
+      `the upgrade from ${previous} expects no update note, so the step proves nothing`,
+      ["Add a module to UPGRADE_ADDS whose notes reach this range."]
+    );
+  }
+
+  step(`running \`saasaloy update --dry-run\` (${version}) in ${projectName}`);
+  const update = await capture(
+    bin,
+    ["update", "--dry-run"],
+    `saasaloy update --dry-run in ${projectName}`,
+    { cwd: dir, env }
+  );
+  if (update.code !== DRY_RUN_EXIT) {
+    throw new StepError(
+      `saasaloy update --dry-run in ${projectName} exited ${String(update.code)}, not ${String(DRY_RUN_EXIT)}`,
+      update.stderr.trim().split("\n").slice(-30)
+    );
+  }
+  const found = parsePlanNotes(update.stdout);
+  const problems = checkPlanNotes(expected, found);
+  if (problems.length > 0) {
+    throw new StepError(
+      `the merge plan from ${previous} to ${version} lists the wrong update notes`,
+      [...problems, `expected: ${expected.join(", ")}`]
+    );
+  }
+  for (const id of found.placed) {
+    step(`update note ${id} listed`);
+  }
+  for (const id of found.mayApply) {
+    step(`update note ${id} listed (may apply)`);
+  }
+  step(
+    `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
+  );
+}
+
 /** The time since `started`, as `12s`. */
 function seconds(started: number): string {
   return `${String(Math.round((Date.now() - started) / 1000))}s`;
@@ -534,7 +1061,7 @@ async function main(): Promise<void> {
   if (options.unknown.length > 0) {
     fail(
       `unknown argument(s): ${options.unknown.join(", ")}`,
-      "usage: pnpm release:smoke [--keep]"
+      "usage: pnpm release:smoke [--keep] [--upgrade-only]"
     );
   }
 
@@ -627,6 +1154,34 @@ async function main(): Promise<void> {
     );
   }
 
+  // --- Upgrade from the previous release (needs the network) ------------------------
+
+  // Issue #298. A project the previous release scaffolded must get the update notes it is
+  // owed. `--upgrade-only` runs this step alone, after the pack and install above.
+  const upgrade = checkUpgrade(bin, version, offlineEnv);
+  // The full run reads the outcome later, through `Promise.allSettled`. A handler now keeps
+  // an early rejection from counting as unhandled, which would end the process.
+  upgrade.catch(() => {
+    // Read below.
+  });
+  if (options.upgradeOnly) {
+    try {
+      await upgrade;
+    } catch (error) {
+      if (error instanceof StepError) {
+        fail(error.message, ...error.detail);
+      }
+      throw error;
+    }
+    if (!options.keep) {
+      await rm(scratch, { force: true, recursive: true });
+    }
+    console.log(
+      `release-smoke: saasaloy@${version} packs, installs, and lists every update note a project from the previous release is owed.`
+    );
+    return;
+  }
+
   step("running `saasaloy init smoke --no-install --no-git`");
   run(bin, ["init", "smoke", "--no-install", "--no-git"], "saasaloy init", {
     cwd: workDir,
@@ -670,6 +1225,7 @@ async function main(): Promise<void> {
     await readModules(offlineEnv.SAASALOY_REGISTRY_DIR)
   );
   const results = await Promise.allSettled([
+    upgrade,
     webDev,
     ...scaffolds.map((scaffold) => lintFullScaffold(bin, scaffold, offlineEnv)),
   ]);
@@ -694,7 +1250,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s).${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s), and lists every update note a project from the previous release is owed.${kept}`
   );
 }
 
