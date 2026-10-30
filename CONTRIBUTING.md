@@ -521,6 +521,17 @@ Before `1.0.0`:
 
 `1.0.0` is a deliberate decision about the applier being stable. It is never the answer to a prompt you clicked through.
 
+### Breaking changes need an update note
+
+A breaking commit is one with `!` before the colon (`feat!:`, `feat(cli)!:`) or a `BREAKING CHANGE:` footer. It does one of two things in the same commit:
+
+- It adds a note under `packages/cli/update-notes/` or `modules/<name>/update-notes/`. The note tells the agent in a scaffolded project what to change by hand.
+- It carries the footer `Update-Note: none (<reason>)`, for a break that needs nothing from a project. The reason must not be empty.
+
+The preflight fails on a breaking commit since the last tag that does neither, and it prints each opt-out reason with the commit's short SHA and subject. The commit-msg hook rejects an `Update-Note:` footer that is not `none (<reason>)` with a non-empty reason.
+
+The changelog stays short. For each breaking item, `packages/cli/.release-it.js` appends a link to the note file that commit added, at the release tag. The full steps live only in the note. `scripts/changelog-update-notes.ts` holds that logic, and `scripts/update-note-footer.ts` holds the footer rule both checks share.
+
 ### Before you run it
 
 Run the agent benchmark when the release changes a base skill or the CLI's unattended contract (no-TTY refusals, `--json`, `env --from-file`): `node scripts/agent-bench.ts`. It runs an unattended agent from `scripts/agent-bench/brief.md` to an MVP in `.dev/bench/` and prints PASS or FAIL for each MVP bar line. Run it when no other dev server holds ports 3000 to 3003 or 4000, because the scorer starts the project's servers there. A FAIL line that was a PASS in the last report blocks the release until it is fixed or filed. Save the run as a research report beside `docs/research/0005-research-agent-bench-baseline-2026-10-24.md`.
@@ -566,16 +577,17 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
-3. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
-4. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices, with testing on so the module tests reach that lint. Each database driver runs with each API key owner, and each project adds its driver first. The projects and the development server check run at the same time.
+3. Fails if a breaking commit since the last tag adds no update note and carries no `Update-Note: none (<reason>)` footer, and prints each opt-out reason. See [Breaking changes need an update note](#breaking-changes-need-an-update-note).
+4. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree.
+5. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It checks the web app's development server and runs `pnpm lint` in each compatible combination of module choices, with testing on so the module tests reach that lint. Each database driver runs with each API key owner, and each project adds its driver first. The projects and the development server check run at the same time.
 
-On a rerun after a transient failure you can skip step 3:
+On a rerun after a transient failure you can skip step 4:
 
 ```sh
 SAASALOY_RELEASE_SKIP_GATE=1 pnpm release
 ```
 
-Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2 and 4 always run.
+Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3 and 5 always run.
 
 ### Modules that need a new CLI
 
