@@ -294,6 +294,18 @@ export const landing = {
           "{siteName} is an open source, composable SaaS starter kit for Cloudflare. It is a CLI plus a module registry, not a boilerplate. You start with a landing page, then add the API, database, auth, payments and other modules one command at a time. Each module copies source files into your repository under the MIT license.",
       },
       {
+        id: "boilerplate",
+        question: "How is it different from a boilerplate?",
+        answer:
+          "A boilerplate gives you every feature on day one, and you spend the first week deleting the ones you do not need. {siteName} starts with a landing page and adds each module when the product needs it. Later fixes reach the files you own through `saasaloy update`.",
+      },
+      {
+        id: "first",
+        question: "Which modules should I add first?",
+        answer:
+          "Follow the stages. Add `waitlist` to test the idea, `auth` when people sign up, `teams` when they ask for a team account, and `payment` when someone wants to pay. `saasaloy add` installs the modules each one needs first.",
+      },
+      {
         id: "own",
         question: "Do I own the generated code?",
         answer:
@@ -304,6 +316,12 @@ export const landing = {
         question: "Do I need a Cloudflare account?",
         answer:
           "Not until you deploy. Every capability ships a console or in-memory provider, so the whole project runs on your machine with no cloud account.",
+      },
+      {
+        id: "cost",
+        question: "What does it cost to host?",
+        answer:
+          "Close to nothing while you test the idea. The base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare free tier. `email-cloudflare` and `queue-cloudflare` need a paid Workers plan, and a vendor provider such as `email-plunk` needs that vendor's account.",
       },
       {
         id: "providers",
