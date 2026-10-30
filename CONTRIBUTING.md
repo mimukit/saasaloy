@@ -521,6 +521,10 @@ Before `1.0.0`:
 
 `1.0.0` is a deliberate decision about the applier being stable. It is never the answer to a prompt you clicked through.
 
+### Before you run it
+
+Run the agent benchmark when the release changes a base skill or the CLI's unattended contract (no-TTY refusals, `--json`, `env --from-file`): `node scripts/agent-bench.ts`. It runs an unattended agent from `scripts/agent-bench/brief.md` to an MVP in `.dev/bench/` and prints PASS or FAIL for each MVP bar line. Run it when no other dev server holds ports 3000 to 3003 or 4000, because the scorer starts the project's servers there. A FAIL line that was a PASS in the last report blocks the release until it is fixed or filed. Save the run as a research report beside `docs/research/0005-research-agent-bench-baseline-2026-10-24.md`.
+
 ### Running it
 
 From a clean `main` checkout — not a worktree, because the release commit and tag belong on `main`:

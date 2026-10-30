@@ -193,3 +193,7 @@ Until 2026-09-20 a separate `rbac` module shipped the rule, the lock, the gate, 
 6. In your own code, change `@repo/auth/rbac` to `@repo/auth/permissions`, `@repo/auth/rbac-rules` to `@repo/auth/permission-rules`, and `requireCan` to `requirePermission`. Then run `pnpm typecheck`.
 
 No table changes. Stored custom roles in `organization_roles` keep working.
+
+## Next
+
+Run `saasaloy-feature` to build a product entity that is scoped to the active organization.

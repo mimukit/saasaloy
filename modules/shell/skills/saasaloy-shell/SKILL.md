@@ -236,3 +236,7 @@ Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move
 - **`@tanstack/react-table` is imported by `data-table.tsx` and by nothing else.**
 - **A shortcut lives on a command.** Declare it through `useCommands`, never with a raw `keydown` listener. The sidebar's fallback listener is the one exception, and it stands down while a command provider is mounted.
 - **The copy is frozen.** A fix is a hand edit, from coss's MIT registry folder only.
+
+## Next
+
+Run `saasaloy-app` to add the customer screens that render inside the shell, or `saasaloy-admin` for staff screens.

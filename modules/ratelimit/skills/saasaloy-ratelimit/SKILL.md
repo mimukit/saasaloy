@@ -112,3 +112,7 @@ Work down this list:
 ## Removing it
 
 `saasaloy remove ratelimit` takes the three `definePolicy` calls back out of `packages/kv/src/index.ts` and deletes both files. It does **not** edit routes: a route still calling `rateLimit(...)` stops compiling, which is the visible failure. Delete the middleware calls first. The `RL_*` entries in `wrangler.jsonc` belong to `kv-cloudflare` and stay until that module is removed.
+
+## Next
+
+Run `saasaloy-api` to put a policy on a route.

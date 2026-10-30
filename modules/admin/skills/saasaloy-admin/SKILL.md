@@ -490,3 +490,7 @@ files.
   refresh by invalidating the key.
 - **Browser env vars are `PUBLIC_*`.** A `VITE_*` name is not exposed here.
 - **No bindings and no Worker entry.** Anything needing D1, R2 or a secret belongs in `apps/api`.
+
+## Next
+
+Run `saasaloy-feature` to build the first product entity end to end, with its list on an admin screen.

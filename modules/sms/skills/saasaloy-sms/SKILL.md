@@ -404,6 +404,27 @@ Contract notes:
   package touches provider SDKs (ADR 0020). A REST call over `fetch` needs none at all, which is
   how every provider so far avoids the question.
 
+## Removal
+
+Remove the providers first. `sms-console` and `sms-khudebarta` depend on `sms`, so `remove sms` refuses while either is installed. `--force` overrides the refusal, and it leaves the provider broken.
+
+`saasaloy remove sms-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array.
+
+`saasaloy remove sms` then deletes the `packages/sms` workspace (`index.ts`, `define.ts`, `provider.ts`, `segments.ts`, `templates/verification-code.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the sms preset to `apps/api/src/env.ts`. The `@repo/sms` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `SMS_PROVIDER`, `SMS_FROM` and any provider secret such as `KHUDEBARTA_API_KEY` lines by hand.
+
+Every route or job that imports `@repo/sms` stops compiling. Search for the import before you remove, and delete or replace each call site.
+
+## Failure modes
+
+- `SMS_PROVIDER is not set.` thrown by `createSms(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
+- `SMS_PROVIDER is "<x>", which is not registered.` The value names a provider that is not installed. Fix the value or `saasaloy add sms-<x>`.
+- `SmsError("invalid_message")` with `"<number>" is not an E.164 number.` Write the number as `+` and digits, for example `+8801712345678`.
+- `SmsError("invalid_message")` with `No recipients`. The `to` array is empty. Check the caller.
+- `SmsError("provider_error")` before any request, from `sms-khudebarta`. `KHUDEBARTA_API_KEY` is unset. Set it in `packages/env/.env` and run `pnpm env:setup`, or use `wrangler secret put` for a deployed Worker.
+- `SmsError("account_error")` with `providerCode` `"-66"`. The Khudebarta key is set but wrong. Replace it.
+- `SmsError("provider_error")` with `<provider>: send failed`. The provider threw a raw error. The core wraps it with `retryable: false`, because the gateway may already have accepted and billed the message. Do not retry it blindly.
+- `retryable` is true only for codes in the core's retryable set. A provider cannot mark any other code retryable. Branch on `code`, never on the message.
+
 ## Boundaries to honor
 
 - **`export const sms = defineSms({ providers: [] })` stays in exactly that shape** — a real array
@@ -418,3 +439,7 @@ Contract notes:
   given.
 - **Templates stay plain functions** returning `{ body }` — no rendering framework, and no
   `render.ts`.
+
+## Next
+
+Run `saasaloy-api` to send a message from a route.

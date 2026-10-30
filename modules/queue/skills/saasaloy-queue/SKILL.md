@@ -195,3 +195,26 @@ It matches the schedule table against that UTC minute and **enqueues** each hit 
 One file in `src/providers/`, exporting a factory that returns a `QueueProvider`: a `name` and an `enqueue(env, job, payload, options)`. The core has already looked the job up and validated the payload by the time you are called, so serialize `{ job: job.name, payload }` and send it. Read the binding or secret off `env` inside that file and nowhere else, map every vendor failure onto `QueueError`, and set `retryable` honestly; a wrong `true` means the job runs twice. Honour `delaySeconds`, and refuse `job.durable` unless you can genuinely checkpoint.
 
 A provider whose service pushes work back into the Worker ships a second exported factory returning `{ queue?, scheduled? }` and appends it to the `handlers` array in `apps/api/src/worker.ts` with a second `plugin-array` patch. That handler must gate on `QUEUE_PROVIDER` and settle every message on every branch. `queue-cloudflare` is the worked binding example and `queue-memory` the local one; the authoring rules are in `.agents/skills/create-provider/`, mode `queue`.
+
+## Removal
+
+Remove the dependents first. `queue-cloudflare` and `queue-memory` depend on `queue`, and so does `billing`. `remove queue` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
+
+`saasaloy remove queue-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. `queue-cloudflare` also reverses its `wrangler-binding` patches and its `handlers` entry in `apps/api/src/worker.ts`. Messages still in the Cloudflare queue survive. Drain them before you remove, or they are never consumed.
+
+`saasaloy remove queue` then deletes the `packages/queue` workspace (`index.ts`, `define.ts`, `provider.ts`, `cron.ts`, `jobs/example.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the queue preset to `apps/api/src/env.ts`. A job file you added under `src/jobs/` is untracked, so `remove` leaves it. The `@repo/queue` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `QUEUE_PROVIDER` lines by hand.
+
+Every route that imports `@repo/queue` to enqueue stops compiling.
+
+## Failure modes
+
+- `QUEUE_PROVIDER is not set.` thrown by `createQueue(env)`. The key is required even with one provider installed. Set it in `packages/env/.env` and run `pnpm env:setup`.
+- `QUEUE_PROVIDER is "<x>", which is not registered.` Fix the value or `saasaloy add queue-<x>`.
+- `QueueError("unknown_job")` with `No job named "<name>" is registered.` Add the job to the `jobs` list in the queue `index.ts`.
+- `QueueError("invalid_job")` with `Payload for job "<name>" failed validation`. The payload does not match the job schema. Fix the caller. The consumer sends it to the dead-letter queue, because it is never retryable.
+- `QueueError("provider_error")` with ``No `<binding>` Queues binding on this Worker's env.`` from `queue-cloudflare`. Check the queue producer entry in `apps/api/wrangler.jsonc`.
+- Any other `QueueError`. Branch on `code` (`invalid_job`, `unknown_job`, `too_large`, `rate_limited`, `provider_error`). The package never retries. The consumer reads `retryable` to decide.
+
+## Next
+
+Run `saasaloy-api` to enqueue a job from a route.

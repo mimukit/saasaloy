@@ -122,6 +122,23 @@ Run `pnpm --filter @repo/db db:generate` after a schema change. Review the migra
 
 Removing `teams` deletes its managed files and reverses the plugin and navigation patches. It does not drop deployed tables. The remove command warns that the `organizations`, `members`, `invitations`, and `organization_roles` tables survive, so review any generated drop migration before applying it. Remove `multitenant` first, since it depends on this module; its own removal warns about the custom roles, because it takes the `/roles` screen while this module keeps them live.
 
+## Removal
+
+Remove the dependents first. `multitenant` depends on `teams`, so `remove teams` refuses while it is installed. `--force` overrides the refusal, and it leaves `multitenant` broken.
+
+`saasaloy remove teams` reverses seven patches. It removes `organizationPlugin` and `roleLockGuard` from the `plugins` array of both `auth` and `adminAuth` in `packages/auth/src/auth.ts`, and `organizationClientPlugin` from `authClientPlugins` and `adminAuthClientPlugins` in `packages/auth/src/client.ts`. It also removes the `/teams` entry from `NAV_AREAS` in `apps/admin/src/components/nav.ts`.
+
+It deletes the schema file `teams.ts` in the database package, `access.ts`, `permission-rules.ts` and the three plugin files in `packages/auth`, the `/teams` admin route and its two components, and the four seed slices. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it.
+
+The `organizations`, `members`, `invitations` and `organization_roles` tables survive, and `remove` prints that warning. Run `pnpm db:generate` and read the drop migration before you apply it, because it deletes every organization and membership. Every file that imports `@repo/auth/access` or `can()` from `@repo/auth/permission-rules` stops compiling, so remove those call sites first.
+
+## Failure modes
+
+- An auth call fails at runtime with a missing model, while the build passes. A schema export key is singular. `usePlural: true` needs `organizations`, `members`, `invitations` and `organizationRoles`. Read "Upgrading from singular table names" below.
+- A role update or delete fails for `owner`, `admin` or `member`. `roleLockGuard` blocks changes to the base roles on purpose. Create a custom role.
+- `can()` returns false for a new resource. The resource is not in the permission vocabulary. Add it in `access.ts`, as "Adding a resource" above describes.
+- The admin `/teams` page shows no tables or a database error. The migration has not run. Run `pnpm db:generate` and apply the migration.
+
 ## Conventions to honor
 
 - Keep the nested teams feature off unless a separate product decision adds its tables and UI.
@@ -147,3 +164,7 @@ A project that installed `teams` before the tables became plural has `organizati
 ## Upgrading from rbac
 
 A project that installed the retired `rbac` module gets `permission-rules.ts`, `plugins/role-lock.ts` and the two `roleLockGuard()` patches from `saasaloy update teams`, after `saasaloy remove rbac`. Run the whole sequence in the `saasaloy-multitenant` skill's "Upgrading from rbac" section, in its order: `remove rbac`, then `update teams`, then `update multitenant`, then `update api-keys` when it is installed. `add multitenant` is not a step, because `add` skips an installed module.
+
+## Next
+
+Run `saasaloy-multitenant` to scope product data to the active organization.

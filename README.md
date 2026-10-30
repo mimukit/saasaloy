@@ -74,6 +74,8 @@ saasaloy add admin
 
 Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make the project yours](docs/wiki/how-to/make-it-yours.md) for the bundled skills that write your product brief, landing copy and theme.
 
+To have an AI agent build the MVP with nobody at the keyboard, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
+
 ## A project through its stages
 
 | Stage | What you need | What you add |
