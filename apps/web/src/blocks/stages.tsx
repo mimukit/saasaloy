@@ -3,6 +3,9 @@ import type { CSSProperties } from "react";
 import { landing } from "@web/content/landing";
 import { SourceSlabs } from "@web/illustrations/source-slabs";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
+import { interpolate } from "@web/lib/interpolate";
+import { catalogTabId } from "@web/lib/module-catalog";
+import type { CatalogRow, CatalogStage } from "@web/lib/module-catalog";
 
 // No script. The round 10 stages: the title, a short lead, then a vertical
 // list of numbered stages on a hairline, and the exploded stack of source slabs under it
@@ -18,13 +21,21 @@ import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 // `data-stage` and `data-slab` numbers, and each carries its 0-based `--stage` for the
 // cycle's delay.
 //
-// Every word comes from ../content/landing.ts. Each title links to its docs and opens
-// in a new tab.
+// ONE STAGE LIST. Each stage is a registry `stage`, and its name is the catalog tab's
+// label, so the stages and the catalog tabs read the same five words. Under each stage,
+// "N modules in the catalog" is a <label> for that stage's tab radio in the catalog:
+// a click checks the tab, which filters the tiles, and focuses the radio, which scrolls
+// the catalog into view. It needs no script. A label takes no keyboard focus, so a
+// keyboard reader reaches the same tabs by moving on to the catalog.
+//
+// Every word comes from ../content/landing.ts. Each name links to its module's docs and
+// opens in a new tab.
 
 export interface Stage {
-  id: string;
-  title: string;
-  /** The `saasaloy` subcommand that adds the stage, shown in Geist Mono. */
+  id: CatalogStage;
+  /** The module whose folder the stage's slab names. */
+  module: string;
+  /** The `saasaloy` subcommand that adds the stage's module, shown in Geist Mono. */
   command: string;
   description: string;
   href: string;
@@ -32,16 +43,28 @@ export interface Stage {
 
 export interface StagesProps {
   id?: string;
+  /** The catalog rows, which give each stage its module count. */
+  rows: CatalogRow[];
+  /** The catalog section's id, which its tab radios' ids start with. */
+  catalogId?: string;
   title?: string;
   description?: string;
+  /** Takes `{count}`. */
+  modulesLabel?: string;
+  /** The stage names: the catalog's tab labels. */
+  names?: Record<CatalogStage, string>;
   items?: Stage[];
 }
 
 export function Stages({
   id = "stages",
+  rows,
+  catalogId = "catalog",
   title = landing.stages.title,
   description = landing.stages.description,
-  items = landing.stages.items,
+  modulesLabel = landing.stages.modulesLabel,
+  names = landing.catalog.tabs,
+  items = landing.stages.items as Stage[],
 }: StagesProps) {
   return (
     <section id={id} className="section-y stage-list" data-loop-in-view="">
@@ -83,7 +106,7 @@ export function Stages({
                         {...externalLinkProps(stage.href)}
                         className="text-highlight font-mono text-base font-medium underline-offset-4 hover:underline"
                       >
-                        {stage.title}
+                        {names[stage.id]}
                         {newTabHint(stage.href)}
                       </a>
                       <code className="bg-secondary text-secondary-foreground px-1.5 py-0.5 font-mono text-xs">
@@ -93,6 +116,16 @@ export function Stages({
                     <p className="text-muted-foreground font-mono text-xs leading-5">
                       {stage.description}
                     </p>
+                    <label
+                      htmlFor={catalogTabId(catalogId, stage.id)}
+                      className="text-highlight w-fit cursor-pointer font-mono text-xs underline-offset-4 hover:underline"
+                    >
+                      {interpolate(modulesLabel, {
+                        count: rows.filter((row) => row.stage === stage.id)
+                          .length,
+                      })}{" "}
+                      <span aria-hidden="true">→</span>
+                    </label>
                   </div>
                 </li>
               ))}
@@ -101,7 +134,10 @@ export function Stages({
         </div>
 
         <SourceSlabs
-          stages={items}
+          stages={items.map((stage) => ({
+            folder: stage.module,
+            command: stage.command,
+          }))}
           className="text-highlight drawing mx-auto w-full max-w-md lg:order-first"
         />
       </div>

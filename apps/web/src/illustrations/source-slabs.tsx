@@ -32,7 +32,8 @@ const UX = 0.894;
 const UY = 0.447;
 
 export interface SlabStage {
-  id: string;
+  /** The folder the slab names, with no trailing slash. */
+  folder: string;
   command: string;
 }
 
@@ -57,7 +58,7 @@ function Slab({ stage, index }: { stage: SlabStage; index: number }) {
   const cy = CY0 + index * GAP;
   const left = CX - HW;
   const right = CX + HW;
-  const folder = `${stage.id}/`;
+  const folder = `${stage.folder}/`;
   const serial = String(index + 1).padStart(2, "0");
   const at = index * 12;
   return (
@@ -162,7 +163,7 @@ export function SourceSlabs({
       />
       {stages
         .map((stage, index) => (
-          <Slab key={stage.id} stage={stage} index={index} />
+          <Slab key={stage.folder} stage={stage} index={index} />
         ))
         .toReversed()}
     </svg>

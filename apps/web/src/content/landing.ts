@@ -160,49 +160,57 @@ export const landing = {
     ],
   },
 
-  // The stages. Each stage names the command that adds it (5b) and links to its docs
-  // (5a): the landing page to the getting started guide, every other stage to its
-  // module's row in the modules page. The row link uses a text fragment, because a
-  // Markdown table row has no anchor; a browser without text fragments opens the page
-  // at the top. The page never says `billing`: payments come from the `payment` module.
+  // The stages. One stage per registry `stage`, in `CATALOG_STAGES` order, and the
+  // stage's name is its catalog tab label (`catalog.tabs`), so the two sections say one
+  // thing. `module` names the folder on the stage's slab in the drawing, `command` is the
+  // command beside the name (5b), and `href` links the name to that module's docs (5a).
+  // The row link uses a text fragment, because a Markdown table row has no anchor; a
+  // browser without text fragments opens the page at the top. `modulesLabel` takes
+  // `{count}`, the stage's tile count, and selects the stage's catalog tab.
   stages: {
     title: "Add code when the product needs it.",
     description: "Each module adds source files to your repository.",
+    modulesLabel: "{count} modules in the catalog",
     items: [
       {
-        id: "landing",
-        title: "Landing page",
-        command: "init",
-        description: "Start with an Astro landing page and a UI package.",
-        href: `${DOCS}/getting-started.md`,
-      },
-      {
-        id: "waitlist",
-        title: "Waitlist",
+        id: "validate",
+        module: "waitlist",
         command: "add waitlist",
-        description: "Add a waitlist to collect early interest.",
+        description:
+          "Start with the landing page, then collect sign-ups to test the idea.",
         href: `${DOCS}/modules.md#:~:text=a%20waitlist%20form%20plus%20its%20API%20route`,
       },
       {
-        id: "auth",
-        title: "Sign-in",
+        id: "mvp",
+        module: "auth",
         command: "add auth",
-        description: "Add auth so people can sign in as registered users.",
+        description:
+          "Add sign-in, the user app and the admin console when people sign up.",
         href: `${DOCS}/modules.md#:~:text=workspace%20wrapping%20Better%20Auth`,
       },
       {
         id: "teams",
-        title: "Teams",
+        module: "teams",
         command: "add teams",
-        description: "Add teams when users ask for a team account.",
+        description:
+          "Add team accounts and tenant isolation when users ask for them.",
         href: `${DOCS}/modules.md#:~:text=Better%20Auth%20organizations%2C%20memberships`,
       },
       {
-        id: "payment",
-        title: "Payments",
+        id: "money",
+        module: "payment",
         command: "add payment",
-        description: "Add payments when someone wants to pay.",
+        description:
+          "Add one-off payments and subscriptions when someone wants to pay.",
         href: `${DOCS}/modules.md#:~:text=workspace%20with%20the%20provider%20contract%2C%20the%20status%20machine`,
+      },
+      {
+        id: "scale",
+        module: "queue",
+        command: "add queue",
+        description:
+          "Add background jobs, file uploads, feature flags, API keys and rate limits as usage grows.",
+        href: `${DOCS}/modules.md#:~:text=a%20job%20table%2C%20a%20schedule%20table`,
       },
     ],
   },
