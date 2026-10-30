@@ -8,6 +8,7 @@ import {
   MODULE_STAGES,
   validateManifest,
   validateRegistryItem,
+  validateUpdateNote,
 } from "./schema.js";
 
 // #98 fix round. Two schemas describe the same patch op: `registry-item.schema.json`
@@ -366,5 +367,54 @@ describe("description, stage and needs (#223)", () => {
       const result = await validateRegistryItem({ ...base, ...extra });
       expect(result.valid).toBeFalsy();
     }
+  });
+});
+
+// #298 Phase 2: an update note's frontmatter reuses the descriptor's `when` (ADR 0054),
+// so the two schemas hold one copy of it each. This keeps the copies equal.
+describe("update-note schema (#298)", () => {
+  it("describes when exactly as the descriptor schema does", async () => {
+    const note = await readSchema("update-note.schema.json");
+    const item = await readSchema("registry-item.schema.json");
+    expect((note.$defs as Record<string, unknown>).when).toStrictEqual(
+      (item.$defs as Record<string, unknown>).when
+    );
+  });
+
+  it("accepts a title, a version and a when", async () => {
+    await expect(
+      validateUpdateNote({
+        title: "Move the web tokens",
+        version: "0.8.0",
+        when: { installed: ["admin"] },
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+
+  it("requires a title", async () => {
+    await expect(
+      validateUpdateNote({ version: "0.8.0" })
+    ).resolves.toStrictEqual({
+      errors: ['(root): missing required property "title"'],
+      valid: false,
+    });
+  });
+
+  it("rejects an unknown key, such as an id", async () => {
+    await expect(
+      validateUpdateNote({ id: "base/0001-x", title: "X" })
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("rejects a version that is not semver", async () => {
+    await expect(
+      validateUpdateNote({ title: "X", version: "v0.8" })
+    ).resolves.toMatchObject({ valid: false });
+  });
+
+  it("rejects an empty when", async () => {
+    await expect(
+      validateUpdateNote({ title: "X", when: {} })
+    ).resolves.toMatchObject({ valid: false });
   });
 });

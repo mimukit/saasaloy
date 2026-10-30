@@ -12,6 +12,7 @@ modules/
     registry-item.json     # name, type, description, stage, needs[], dependsOn[], dependencies[], devDependencies[], files[], patches, scaffolds[], agent{}
     files/                 # template files, copied to alias (or scaffold-root) targets in the consumer project
     skills/saasaloy-<name>/  # skill folder, installed to the consumer's .agents/skills/saasaloy-<name>/ (+ a .claude/skills symlink)
+    update-notes/          # optional: NNNN-<slug>.md notes that `saasaloy update` hands to the agent (#298)
 ```
 
 See `docs/plans/0001-plan-saasaloy-build-spec-2026-07-21.md` §3.3 for the descriptor shape. Modules land in
