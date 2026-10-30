@@ -473,6 +473,7 @@ file routes to the AI-merge path instead of being clobbered. Author with this in
 - **Name every module skill `saasaloy-<module>`** — folder and frontmatter `name` alike — so it
   can't collide with a user's own installed skills (ADR 0014).
 - Declare `dependsOn` so the applier can resolve and topologically sort prerequisites.
+- **Prefix every account-scoped name with `{{PROJECT_NAME}}`**: a Worker `name`, a D1 `database_name`, a queue, an R2 bucket. `saasaloy add` renders the token in module files and in patch entries, as `init` does for the base, so two projects in one Cloudflare account never deploy over each other. The token renders in every module file, skills included, so a skill that means the placeholder writes `<project>` instead.
 
 ## Authoring checklist
 

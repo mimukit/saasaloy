@@ -71,12 +71,12 @@ The generated project ships the `saasaloy-deploy` skill for an agent: it runs th
 
 ## Resources
 
-Wrangler creates a missing resource on deploy and reuses it on the next one:
+Wrangler creates a missing resource on deploy and reuses it on the next one. Each name starts with the project name `saasaloy add` read from `saasaloy.json`, shown here as `<project>`, so two projects share one Cloudflare account without touching each other's Workers or data. A project that installed a module before the prefix existed keeps the names already in its files.
 
-- **`database-d1`**: the D1 database named in `database_name` (`app-db`). `db:prod:migrate` creates it on the first `pnpm deploy:production --migrate`, and the deploy connects the binding to it by name.
+- **`database-d1`**: the D1 database named in `database_name` (`<project>-db`). `db:prod:migrate` creates it on the first `pnpm deploy:production --migrate`, and the deploy connects the binding to it by name.
 - **`kv-cloudflare`**: a namespace titled `<worker name>-kv`. A later deploy reuses the namespace the deployed Worker already holds.
-- **`storage-cloudflare`**: the R2 bucket named in `bucket_name` (`app-storage`).
-- **`queue-cloudflare`**: both queues, `app-jobs` and `app-jobs-dlq`. Queues need a Workers paid plan.
+- **`storage-cloudflare`**: the R2 bucket named in `bucket_name` (`<project>-storage`).
+- **`queue-cloudflare`**: both queues, `<project>-jobs` and `<project>-jobs-dlq`. Queues need a Workers paid plan.
 
 A deploy in an interactive terminal offers to write the new ids back into `wrangler.jsonc`. Keep them or discard them; later deploys work either way.
 
@@ -141,15 +141,15 @@ pnpm --filter @repo/api exec wrangler secret delete OLD_KEY
 There is no command that destroys a project. Each piece goes with its own wrangler command, run from a workspace that has wrangler, in this order. With `queue-cloudflare`, remove the api Worker as the queue's consumer first: Cloudflare refuses to delete a Worker that consumes a queue, and refuses to delete a queue that a Worker still binds.
 
 ```bash
-pnpm --filter @repo/api exec wrangler queues consumer remove app-jobs api   # queue-cloudflare only; use your api Worker name
+pnpm --filter @repo/api exec wrangler queues consumer remove <project>-jobs <project>-api   # queue-cloudflare only
 pnpm --filter @repo/api exec wrangler delete                          # the api Worker
 pnpm --filter @repo/web exec wrangler delete                          # the web Worker
-pnpm --filter @repo/api exec wrangler d1 delete app-db                # the D1 database and its data
+pnpm --filter @repo/api exec wrangler d1 delete <project>-db                # the D1 database and its data
 pnpm --filter @repo/api exec wrangler kv namespace list               # find the KV namespace id
 pnpm --filter @repo/api exec wrangler kv namespace delete --namespace-id <id>
-pnpm --filter @repo/api exec wrangler r2 bucket delete app-storage    # the bucket must be empty
-pnpm --filter @repo/api exec wrangler queues delete app-jobs
-pnpm --filter @repo/api exec wrangler queues delete app-jobs-dlq
+pnpm --filter @repo/api exec wrangler r2 bucket delete <project>-storage    # the bucket must be empty
+pnpm --filter @repo/api exec wrangler queues delete <project>-jobs
+pnpm --filter @repo/api exec wrangler queues delete <project>-jobs-dlq
 ```
 
 Every one of these deletes data that no backup in this repo holds.

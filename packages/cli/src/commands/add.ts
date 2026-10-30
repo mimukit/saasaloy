@@ -67,6 +67,8 @@ import { readVersion } from "../version.js";
 import { reportBackfill } from "./backfill-report.js";
 import { DESCRIPTIONS } from "./descriptions.js";
 import { reportBlockOutcome, setTestingMode } from "./testing.js";
+import { resolveProjectName } from "../lib/project-name.js";
+import { templateVars } from "../lib/scaffold.js";
 
 // `saasaloy add <module>...` — the local applier. Resolve the dependsOn graph, show the
 // plan behind a confirmation prompt, then drop files into their convention-based
@@ -1139,6 +1141,9 @@ export async function runAdd(argv: string[]): Promise<number> {
       modules: graph.modules,
       requested,
       root,
+      // `{{PROJECT_NAME}}` in module files and patches, rendered as `init` renders the
+      // base (#197), so two projects in one account never share a Worker or a database.
+      vars: templateVars((await resolveProjectName(root, config)).name),
       ...(enabler === undefined ? {} : { testingMode: ENABLED_MODE }),
     });
 

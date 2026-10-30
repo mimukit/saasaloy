@@ -17,7 +17,7 @@
       "bindingType": "d1_databases",
       "entry": {
         "binding": "DB",
-        "database_name": "app-db",
+        "database_name": "{{PROJECT_NAME}}-db",
         "migrations_dir": "../../packages/db/migrations"
       }
     },
