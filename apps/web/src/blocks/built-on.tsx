@@ -3,10 +3,12 @@ import { StackOrbits } from "@web/illustrations/stack-orbits";
 
 // Fully static, no script. The built-on section from plan 0092, approved in round 4: the
 // stack a project is built with. The title, the lead and the names as chips, in a
-// "Frameworks" and a "Libraries and tools" group, sit on the left from `lg` (64rem), and the drawing of the
-// same names in orbit round `my-app` sits on the right. Below `lg` the copy comes first.
-// The drawing is aria-hidden, so the chips are where a reader, or a search engine,
-// finds the names. The first group is the drawing's inner ring, the second its outer.
+// "Runtime", a "Frameworks" and a "Libraries and tools" group, sit on the left from `lg`
+// (64rem), and the drawing of the stack in orbit round `my-app` sits on the right. Below
+// `lg` the copy comes first. The drawing is aria-hidden, so the chips are where a
+// reader, or a search engine, finds the names. The `frameworks` group is the drawing's
+// inner ring and the `libraries` group its outer; the `runtime` group shows as chips
+// only.
 //
 // The drawing loops while it is in view: `drawing-load` and `data-loop-in-view` on its
 // <svg>, and LOOP_SCRIPT in ../layouts/Layout.astro pauses it off screen.
@@ -28,19 +30,24 @@ export interface BuiltOnProps {
   id?: string;
   title?: string;
   description?: string;
-  /** The inner ring, then the outer ring. */
-  groups?: [StackGroup, StackGroup];
+  /** The chip groups, in order. The `frameworks` and `libraries` groups are the rings. */
+  groups?: StackGroup[];
+}
+
+/** The labels of one group, by id; an absent group draws an empty ring. */
+function ringNames(groups: StackGroup[], id: string): string[] {
+  return (
+    groups.find((group) => group.id === id)?.items.map((item) => item.label) ??
+    []
+  );
 }
 
 export function BuiltOn({
   id = "built-on",
   title = landing.builtOn.title,
   description = landing.builtOn.description,
-  groups = landing.builtOn.groups as [StackGroup, StackGroup],
+  groups = landing.builtOn.groups,
 }: BuiltOnProps) {
-  const [frameworks, libraries] = groups.map((group) =>
-    group.items.map((item) => item.label)
-  );
   return (
     <section id={id} className="section-y">
       <div className="section-container-wide grid gap-12 lg:grid-cols-2 lg:items-center lg:gap-16">
@@ -71,8 +78,8 @@ export function BuiltOn({
         </div>
 
         <StackOrbits
-          frameworks={frameworks}
-          libraries={libraries}
+          frameworks={ringNames(groups, "frameworks")}
+          libraries={ringNames(groups, "libraries")}
           className="text-highlight drawing-load w-full"
         />
       </div>

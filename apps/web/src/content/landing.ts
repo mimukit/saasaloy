@@ -85,12 +85,13 @@ export const landing = {
   // in `highlight`. `command` is the command field's text (5b). Every link leaves the page
   // (5a). `note` is the proof-of-concept line, which stays visible (README, WARNING).
   // `{version}` is the CLI version, read from packages/cli/package.json at build time.
-  // `description` names the category, because the title does not.
+  // `description` names the category, because the title does not, and its last
+  // sentence repeats the README's opening paragraph.
   hero: {
     titleLead: "A landing page today.",
     titleAccent: "Your next module tomorrow.",
     description:
-      "An open source SaaS starter kit for Cloudflare. Start small, and add each module as source files you own.",
+      "An open source SaaS starter kit for Cloudflare. Start small, and add each module as source files you own. Think shadcn/ui for a full-stack SaaS.",
     command: "npx saasaloy init my-app",
     links: [
       {
@@ -115,14 +116,26 @@ export const landing = {
   },
 
   // The built-on section (plan 0092). The chips name every part of the drawing, which
-  // is aria-hidden, so the names stay readable and searchable. Each name is a framework,
-  // library or tool from the README stack table (5b), shown as is. The page names no
-  // hosting vendor here: the providers section says where a project runs.
+  // is aria-hidden, so the names stay readable and searchable. Each name is a runtime
+  // service, framework, library or tool from the README stack table (5b), shown as is.
+  // The `frameworks` and `libraries` groups are the drawing's two rings, so keep those
+  // ids; `runtime` shows as chips only. The free tier claim repeats README line 27.
   builtOn: {
-    title: "Built on tools you already know.",
+    title: "Built on Cloudflare and tools you already know.",
     description:
-      "Astro, TanStack Router and Hono for the apps, Drizzle and Better Auth for data and sign-in, all in one Turborepo monorepo.",
+      "Every project runs on Cloudflare, where Workers, D1, KV and R2 keep most modules on the free tier. Astro, TanStack Router and Hono build the apps, with Drizzle and Better Auth for data and sign-in.",
     groups: [
+      {
+        id: "runtime",
+        label: "Runtime",
+        items: [
+          { id: "workers", label: "Workers" },
+          { id: "d1", label: "D1" },
+          { id: "kv", label: "KV" },
+          { id: "r2", label: "R2" },
+          { id: "queues", label: "Queues" },
+        ],
+      },
       {
         id: "frameworks",
         label: "Frameworks",
