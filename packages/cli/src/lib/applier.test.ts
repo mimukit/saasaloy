@@ -1279,7 +1279,7 @@ describe("applier — chained-route end to end", () => {
   it("appends a second module's link without disturbing the first", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();
-    const billing = await writeModule("billing", {
+    const subscription = await writeModule("subscription", {
       type: "saasaloy:feature",
       dependsOn: ["api"],
       patches: [
@@ -1287,16 +1287,20 @@ describe("applier — chained-route end to end", () => {
           file: ENTRY_TARGET,
           kind: "chained-route",
           exportName: "default",
-          path: "/billing",
-          call: "billing",
-          import: { name: "billing", from: "./routes/billing.js" },
+          path: "/subscription",
+          call: "subscription",
+          import: { name: "subscription", from: "./routes/subscription.js" },
         },
       ],
     });
-    const mods = [await apiWorkspace(), await waitlistWithRoute(), billing];
+    const mods = [
+      await apiWorkspace(),
+      await waitlistWithRoute(),
+      subscription,
+    ];
     await executePlan(
       await plan({
-        install: ["api", "waitlist", "billing"],
+        install: ["api", "waitlist", "subscription"],
         modules: mods,
         config,
         manifest,
@@ -1311,7 +1315,7 @@ describe("applier — chained-route end to end", () => {
       "utf-8"
     );
     expect(entry).toContain('.route("/waitlist", waitlist)');
-    expect(entry).toContain('.route("/billing", billing)');
+    expect(entry).toContain('.route("/subscription", subscription)');
     expect(manifest.patches).toHaveLength(2);
   });
 });
@@ -3496,10 +3500,10 @@ function sectionModule(name: string, key: string): Promise<LoadedModule> {
 describe("buildPlan — config section keys", () => {
   it("plans two modules contributing different sections", async () => {
     const built = await plan({
-      install: ["auth", "billing"],
+      install: ["auth", "subscription"],
       modules: [
         await sectionModule("auth", "auth"),
-        await sectionModule("billing", "billing"),
+        await sectionModule("subscription", "subscription"),
       ],
     });
     expect(built.patches).toHaveLength(2);

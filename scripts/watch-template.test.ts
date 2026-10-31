@@ -23,9 +23,9 @@ describe("moduleChange", () => {
   });
 
   it("flags a registry-item.json edit as a descriptor change", () => {
-    assert.deepEqual(moduleChange("billing/registry-item.json"), {
+    assert.deepEqual(moduleChange("subscription/registry-item.json"), {
       descriptor: true,
-      module: "billing",
+      module: "subscription",
     });
   });
 

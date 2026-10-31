@@ -2,7 +2,7 @@
 
 # Saasaloy
 
-**Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, billing and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
+**Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, subscription and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
 
 [![npm version](https://img.shields.io/npm/v/saasaloy)](https://www.npmjs.com/package/saasaloy)
 [![CI](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml/badge.svg)](https://github.com/mimukit/saasaloy/actions/workflows/ci.yml)
@@ -18,11 +18,11 @@ You know the feeling. It is Saturday morning, you have an idea, and you are sure
 
 Every technical founder has a folder of dead SaaS projects. Open one. There is a polished auth flow, a role system, a Stripe webhook handler with retries, a multi-tenant schema with careful indexes. But there are no real users. The idea was never tested because the builder spent the first month building the parts every SaaS needs and never reached the part that made this one different.
 
-In the age of AI, a vibe-coded demo takes an afternoon. A production-grade SaaS still takes the same components it always did: API, database, auth, admin, teams, billing, email, jobs, rate limits. Each one has to be crafted with precision. None of them proves that your idea is worth building.
+In the age of AI, a vibe-coded demo takes an afternoon. A production-grade SaaS still takes the same components it always did: API, database, auth, admin, teams, subscription, email, jobs, rate limits. Each one has to be crafted with precision. None of them proves that your idea is worth building.
 
-The ready-made boilerplates promise to fix this, and they make it worse. You clone one and inherit forty features, twelve environment variables and someone else's opinions about billing, all on a day when the only thing you need is a form that collects email addresses. You spend the first week deleting code instead of testing an idea.
+The ready-made boilerplates promise to fix this, and they make it worse. You clone one and inherit forty features, twelve environment variables and someone else's opinions about subscription, all on a day when the only thing you need is a form that collects email addresses. You spend the first week deleting code instead of testing an idea.
 
-Saasaloy starts the other way around. Saasaloy is built on one rule: a SaaS has stages, and the code scaffold should match the stage. `saasaloy init` gives you a landing page and nothing else. Proably then add a waitlist module to collect potential customer's data. When the waitlist fills up, you add auth to make them registered users. When users ask for a team account, you add teams and tenancy. When someone wants to pay, you add billing. Every module is production-grade code copied into your repo, arriving on the day the product earns it, and not one day sooner.
+Saasaloy starts the other way around. Saasaloy is built on one rule: a SaaS has stages, and the code scaffold should match the stage. `saasaloy init` gives you a landing page and nothing else. Proably then add a waitlist module to collect potential customer's data. When the waitlist fills up, you add auth to make them registered users. When users ask for a team account, you add teams and tenancy. When someone wants to pay, you add subscription. Every module is production-grade code copied into your repo, arriving on the day the product earns it, and not one day sooner.
 
 The second philosophy is that validation stage of a SaaS idea should be free. Saasaloy is Cloudflare-native serverless architecture by default, it runs on Cloudflare by default because you never should be worried about server managment and cost just to explore your SaaS ideas. Workers, D1, KV and R2 keep most modules on the free tier, so you can go from a Saturday idea to a first paying customer with a hosting bill close to zero.
 
@@ -34,7 +34,7 @@ These are the reasons behind the born of Saasaloy.
 
 - **You own the code.** Nothing is imported from a Saasaloy package at runtime. The CLI writes files into your repo and gets out of the way. Edit anything.
 - **Start small, add on demand.** `saasaloy init` gives you an Astro landing page and a UI package. Everything else arrives with `saasaloy add <module>`, with its dependencies resolved and installed first.
-- **Swappable providers.** `email`, `sms`, `queue`, `kv`, `storage`, `logger` and `billing` each expose one interface. Pick the vendor with a `*_PROVIDER` env var, or drop in a `-console` or `-memory` provider for local work.
+- **Swappable providers.** `email`, `sms`, `queue`, `kv`, `storage`, `logger` and `subscription` each expose one interface. Pick the vendor with a `*_PROVIDER` env var, or drop in a `-console` or `-memory` provider for local work.
 - **Agent-native.** Every generated project ships `AGENTS.md`, `CLAUDE.md`, a `DESIGN.md` contract, and a skill per installed module for Claude Code and other coding agents.
 - **Reversible and updatable.** `saasaloy remove` undoes a module from its manifest. `saasaloy update` re-applies the base and modules at a newer version with a merge plan for the files you edited.
 
@@ -83,7 +83,7 @@ To have an AI agent build the MVP with nobody at the keyboard, see [Build with a
 | Validate the idea | a landing page and a waitlist | `init`, then `waitlist` |
 | Build the MVP | sign-in, a customer app, an admin app, transactional email | `auth`, `app`, `admin`, `email` + a provider |
 | Onboard teams | organizations, tenant isolation, roles | `teams`, `multitenant` |
-| Charge money | subscriptions, plan limits, webhooks | `billing`, `billing-stripe` |
+| Charge money | subscriptions, plan limits, webhooks | `subscription`, `subscription-stripe` |
 | Scale the backend | jobs, caching, files, rate limits, API access | `queue`, `kv`, `storage`, `ratelimit`, `api-keys` |
 
 Each row installs on top of the previous one. Nothing from a later row lands in your repo until you ask for it.
@@ -97,7 +97,7 @@ Each row installs on top of the previous one. Nothing from a later row lands in 
 | Backend (`apps/api`) | Hono on Cloudflare Workers |
 | Database | Drizzle ORM on D1 (SQLite) or Postgres |
 | Auth | Better Auth |
-| Billing | Stripe, or a console provider |
+| Subscription | Stripe, or a console provider |
 | Email | Cloudflare Email Sending, Plunk, or a console logger |
 | Storage | Cloudflare R2, or in memory |
 | Background work | Cloudflare Queues and Cron Triggers, or an in-process runner |
@@ -110,9 +110,9 @@ Modules come in tiers. A **capability** scaffolds a workspace and sets conventio
 
 | Tier | Modules |
 |---|---|
-| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `billing`, `payment` |
+| Capability | `api`, `database`, `validators`, `logger`, `auth`, `admin`, `email`, `sms`, `queue`, `kv`, `storage`, `subscription`, `payment` |
 | Feature | `waitlist`, `teams`, `multitenant`, `api-keys`, `email-react`, `ratelimit`, `feature-flags`, `command` |
-| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `billing-console`, `billing-stripe`, `payment-console`, `payment-manual` |
+| Provider | `email-console`, `email-cloudflare`, `email-plunk`, `logger-console`, `sms-console`, `sms-khudebarta`, `queue-cloudflare`, `queue-memory`, `kv-cloudflare`, `kv-upstash`, `kv-memory`, `storage-cloudflare`, `storage-memory`, `subscription-console`, `subscription-stripe`, `payment-console`, `payment-manual` |
 | Driver | `database-d1`, `database-postgres`, `api-keys-organization`, `api-keys-user` |
 
 What each module gives you and what it depends on is on the [Modules](docs/wiki/modules.md) page. Which ones need a paid Cloudflare plan or a third-party account is in the [Reference](docs/wiki/reference.md#email-providers). The short version: the base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the free tier, and every local provider runs with no account at all.

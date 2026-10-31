@@ -128,7 +128,7 @@ The rule holds for the first migration only. Postgres adds a new column at the e
 
 ## Table names
 
-Every table name is plural and snake_case: `users`, `feature_flags`, `billing_subscriptions`. The Drizzle export is the camelCase form of the same plural (`featureFlags`), and the file is kebab-case (`feature-flags.ts`). A singular table name is never the rule, whichever module defines the table.
+Every table name is plural and snake_case: `users`, `feature_flags`, `subscriptions`. The Drizzle export is the camelCase form of the same plural (`featureFlags`), and the file is kebab-case (`feature-flags.ts`). A singular table name is never the rule, whichever module defines the table.
 
 - **Pluralize the last word only.** `feature_flag_overrides`, not `feature_flags_overrides`. A join table names both sides and pluralizes the last one: `team_members`.
 - **Keep a column singular.** A foreign key names the singular row it points at, `user_id` and `organization_id`, never `users_id`.
@@ -139,7 +139,7 @@ Every table name is plural and snake_case: `users`, `feature_flags`, `billing_su
 
 - Removing `usePlural`, or exporting a singular key, makes every auth call throw `The model "user" was not found in the schema object`. Sign-up and sign-in stop working, and `tsc` does not catch it.
 - A Better Auth plugin, or a module that adds auth tables, must export plural keys and plural table names: `organizations`, `members`, `invitations`. A snapshot that arrives singular fails the same way, so rename it when you add it.
-- `usePlural` only appends an `s`, and it appends it to a custom `modelName` too (`getModelName` in `@better-auth/core`). The export key must therefore be `<modelName>s`. When a plain `s` gives the wrong word, set the plugin's `modelName` to the stem that takes the `s`, and name the SQL table correctly in `pgTable()` or `sqliteTable()`. The adapter never reads the SQL name, so the two can differ. `api-keys` does this: `modelName: "apiKey"` gives the export `apiKeys` on the `api_keys` table. `billing-stripe` sets `modelName: "billingSubscription"`, so the export is `billingSubscriptions`. Re-check each plugin's model names when you add it and on every `better-auth` version bump.
+- `usePlural` only appends an `s`, and it appends it to a custom `modelName` too (`getModelName` in `@better-auth/core`). The export key must therefore be `<modelName>s`. When a plain `s` gives the wrong word, set the plugin's `modelName` to the stem that takes the `s`, and name the SQL table correctly in `pgTable()` or `sqliteTable()`. The adapter never reads the SQL name, so the two can differ. `api-keys` does this: `modelName: "apiKey"` gives the export `apiKeys` on the `api_keys` table. `subscription-stripe` sets `modelName: "subscription"`, so the export is `subscriptions`. Re-check each plugin's model names when you add it and on every `better-auth` version bump.
 
 A raw SQL statement uses the plural name without quotes: `select email, role from users`. The singular `user` is a reserved word in Postgres, and the plural form avoids the quoting.
 
@@ -316,7 +316,7 @@ The engine in `packages/db/src/seed/` is driver-neutral. `index.ts` globs `slice
 
 **Rows are keyed by slug, and the slug makes the id.** A table with a single text primary key gets `id = seedId("<table>", "<slug>")` when the row leaves `id` out. `seedId` is a UUIDv5 of the table name and the slug, so a row in another slice points at it with the same call: `userId: seedId("users", "superadmin")`. Every id is known before the first write, which is what lets Postgres run the whole seed in one transaction and D1 in one batch.
 
-**The conflict key is the primary key, with one exception.** Every row is an `insert … on conflict do update` on the table's primary key, read from the Drizzle schema. A composite key such as `billing_events` (`provider`, `provider_event_id`) needs nothing extra. A primary key the database generates (an identity or autoincrement column, such as `waitlist_entries.id`) cannot be named by a row, so the slice names a unique key instead: `key: ["email"]`. No other slice may point at those rows by slug; the plan refuses a `seedId` of a generated-key table.
+**The conflict key is the primary key, with one exception.** Every row is an `insert … on conflict do update` on the table's primary key, read from the Drizzle schema. A composite key such as `subscription_events` (`provider`, `provider_event_id`) needs nothing extra. A primary key the database generates (an identity or autoincrement column, such as `waitlist_entries.id`) cannot be named by a row, so the slice names a unique key instead: `key: ["email"]`. No other slice may point at those rows by slug; the plan refuses a `seedId` of a generated-key table.
 
 **A rerun is an upsert.** `pnpm db:seed` twice prints the same counts. Each seed row goes back to its slice values, and every row you made by hand stays, including one that points at a seed row: a session, an organization you made as the superadmin.
 

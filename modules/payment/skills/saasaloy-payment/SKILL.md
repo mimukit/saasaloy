@@ -299,4 +299,4 @@ A provider is one file, `packages/payment/src/providers/<name>.ts`, exporting a 
 
 ## Next
 
-Run `saasaloy-billing` to sell a plan on top of the payments this module records.
+Run `saasaloy-subscription` to sell a plan on top of the payments this module records.

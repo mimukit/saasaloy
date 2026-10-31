@@ -1177,7 +1177,7 @@ describe(checkConfigValues, () => {
   it("passes a project that does not set it", () => {
     expect(
       checkConfigValues({
-        envFiles: { "apps/api/.env": "BILLING_APP_URL=https://ledger.ly" },
+        envFiles: { "apps/api/.env": "SUBSCRIPTION_APP_URL=https://ledger.ly" },
       })
     ).toStrictEqual([]);
   });
@@ -1190,7 +1190,7 @@ describe(checkConfigValues, () => {
     const [found] = checkConfigValues({
       envFiles: { "apps/api/.env": 'BILLING_APP_NAME="Acme"' },
     });
-    expect(found?.module).toBe("billing");
+    expect(found?.module).toBe("subscription");
     expect(found?.where).toBe("/env/BILLING_APP_NAME");
     expect(found?.message).toContain("apps/api/.env");
   });
@@ -1220,7 +1220,7 @@ describe(checkConfigValues, () => {
   it("reports each service file, in path order, when the values file is clean", () => {
     const found = checkConfigValues({
       envFiles: {
-        "packages/env/.env": "BILLING_APP_URL=x",
+        "packages/env/.env": "SUBSCRIPTION_APP_URL=x",
         "apps/web/.env": "BILLING_APP_NAME=Acme",
         "apps/api/.env": "BILLING_APP_NAME=Acme",
       },
@@ -1239,7 +1239,7 @@ describe(readConfigState, () => {
       await mkdir(join(root, "packages/env"), { recursive: true });
       await mkdir(join(root, "apps/api"), { recursive: true });
       await writeFile(join(root, "packages/env/.env"), "BILLING_APP_NAME=Acme");
-      await writeFile(join(root, "apps/api/.env"), "BILLING_APP_URL=x");
+      await writeFile(join(root, "apps/api/.env"), "SUBSCRIPTION_APP_URL=x");
       await writeFile(
         join(root, "apps/api/.dev.vars"),
         "BILLING_APP_NAME=Acme"

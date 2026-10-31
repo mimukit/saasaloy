@@ -14,7 +14,7 @@ export interface CacheAsideStore {
  * Read `key`; on a miss run `load`, write the result and return it.
  *
  * ```ts
- * const plans = await kv.cached(kv.key({ namespace: "billing", parts: ["plans"] }), 300, () =>
+ * const plans = await kv.cached(kv.key({ namespace: "subscription", parts: ["plans"] }), 300, () =>
  *   fetchPlans()
  * );
  * ```

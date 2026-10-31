@@ -13,7 +13,7 @@ import { index, integer, sqliteTable, text } from "drizzle-orm/sqlite-core";
 // that can list a tenant's files, tell a finished upload from an abandoned one, or say
 // whether an object is world-readable.
 //
-// Timestamps use `timestamp_ms`, matching `auth.sqlite.ts` and `billing.sqlite.ts`.
+// Timestamps use `timestamp_ms`, matching `auth.sqlite.ts` and `subscription.sqlite.ts`.
 //
 // This module owns no `db:generate` step of its own: dropping the file into
 // `packages/db/src/schema/` means database's barrel and migration scripts pick the table

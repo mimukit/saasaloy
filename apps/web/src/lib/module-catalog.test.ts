@@ -243,8 +243,6 @@ describe("the real registry", () => {
 
   it("gives the README's 17 providers and 4 drivers", () => {
     assert.deepEqual(namesOf("provider"), [
-      "billing-console",
-      "billing-stripe",
       "email-cloudflare",
       "email-console",
       "email-plunk",
@@ -260,6 +258,8 @@ describe("the real registry", () => {
       "sms-khudebarta",
       "storage-cloudflare",
       "storage-memory",
+      "subscription-console",
+      "subscription-stripe",
     ]);
     assert.deepEqual(namesOf("driver"), [
       "api-keys-organization",

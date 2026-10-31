@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (subscription/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -89,7 +89,7 @@ included. That is deliberate. D1 is the default driver, so most development happ
 permissive D1 path would let the mistake pass every local test and surface only after a project
 switched to Postgres. The cost on D1 is one property lookup per call. See ADR 0029.
 
-## The plugin-array patch points (read this before adding billing/teams)
+## The plugin-array patch points (read this before adding subscription/teams)
 
 `packages/auth/src/auth.ts` exports two **module-scope singletons**, each with its own literal plugin array:
 
@@ -111,7 +111,7 @@ export const adminAuth = betterAuth({
 
 This is deliberately a top-level `export const`, not a per-request `c.env`-scoped factory (every other capability's convention): the plugin arrays must exist at module scope for the codemod to patch. Keep `audience(...)` first in each array, so the session row carries its audience before any other plugin reads it.
 
-**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, billing), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `billing-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
+**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, subscription), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `subscription-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
 
 ```json
 "patches": [
@@ -199,11 +199,11 @@ headers to prove it.
 | `requireAdminApp(c)` | always the admin session | the session | as `requireRole(c, ADMIN_APP_ROLES)` |
 | `requireSuperadmin(c)` | always the admin session | the session | as `requireRole(c, "superadmin")` |
 
-**The `x-auth-audience` header picks the session for the generic helpers.** Its values are `client` and `admin`. No header means `client`. Any other value, the empty string included, gets 400 `x-auth-audience must be "client" or "admin"` rather than a quiet fallback to the client session. The admin app's `api` client sends `x-auth-audience: admin` on every request, so a teams or billing screen there reads the admin who is signed in, not a client signed in on another tab. The header picks between the caller's own two cookies, so it grants nothing. Hono's `cors()` with no `allowHeaders` echoes the preflight's headers, so CORS needs no change for it.
+**The `x-auth-audience` header picks the session for the generic helpers.** Its values are `client` and `admin`. No header means `client`. Any other value, the empty string included, gets 400 `x-auth-audience must be "client" or "admin"` rather than a quiet fallback to the client session. The admin app's `api` client sends `x-auth-audience: admin` on every request, so a teams or subscription screen there reads the admin who is signed in, not a client signed in on another tab. The header picks between the caller's own two cookies, so it grants nothing. Hono's `cors()` with no `allowHeaders` echoes the preflight's headers, so CORS needs no change for it.
 
 **The role gates ignore the header.** `requireRole`, `requireAdmin`, `requireAdminApp` and `requireSuperadmin` read `adminAuth` through `getAdminSession`, whatever the request says. Every site role lives in the admin group, so a client session never passes a role gate, even one that belongs to a `superadmin`. A request with only a client cookie gets 401 from them, not 403.
 
-**A route that calls Better Auth itself uses `authFor(c)`.** `authFor(c).api.getActiveMember({ headers })` reads the session the request names, so the same route serves the client app and the admin app. Calling `auth.api.*` directly reads only the client session, which is the bug `billing`, `entitlements` and `multitenant` had before the split. Wrap the call in `withAuthScope` as above.
+**A route that calls Better Auth itself uses `authFor(c)`.** `authFor(c).api.getActiveMember({ headers })` reads the session the request names, so the same route serves the client app and the admin app. Calling `auth.api.*` directly reads only the client session, which is the bug `subscription`, `entitlements` and `multitenant` had before the split. Wrap the call in `withAuthScope` as above.
 
 All of them take the whole Hono context, not `c.req.raw`. They need `c.env` to open this request's database client and `c.executionCtx` to close it, and they enter `withAuthScope` for you. See "Either database driver" below.
 
@@ -545,7 +545,7 @@ after the edit.
 
 A project that installed auth before the tables became plural has `user`, `session`, `account` and `verification` in its database. Move them to the new names like this:
 
-1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `billing`.
+1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `subscription`.
 2. Run `pnpm db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `user` → `users`, `session` → `sessions`, `account` → `accounts`, `verification` → `verifications`.
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `session_user_id_idx` → `sessions_user_id_idx`, `account_user_id_idx` → `accounts_user_id_idx`, `verification_identifier_idx` → `verifications_identifier_idx`). It must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -559,7 +559,7 @@ A project made before the split has one instance and one `better-auth.session_to
 1. Run `saasaloy update auth admin`.
 2. Resolve the merge plan for `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
 3. Run `pnpm db:generate`. It writes one migration that adds `sessions.audience` with default `'client'`. Read it, then apply it with `pnpm db:migrate:local`, or the production migrate command from the installed driver's skill.
-4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `billing-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
+4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `subscription-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
 
 Run step 4 after step 2. Before the merge, `auth.ts` has no `adminAuth` export, and the patch prints a warning that names the missing export. That warning means "merge `auth.ts` first", and the module's lock entry stays where it was, so running `saasaloy update <module>` again after the merge applies the patch.
 

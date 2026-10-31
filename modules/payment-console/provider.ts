@@ -1,4 +1,4 @@
-// Test-only resolution shim, the same one `modules/billing-console` carries. Not shipped:
+// Test-only resolution shim, the same one `modules/subscription-console` carries. Not shipped:
 // the descriptor's `files` list names `files/console.ts` and nothing else.
 //
 // `files/console.ts` reads `../provider`, which is `packages/payment/src/provider.ts` once

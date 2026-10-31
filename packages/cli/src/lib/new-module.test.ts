@@ -18,7 +18,12 @@ import type { ModuleSpec } from "./new-module.js";
 import { validateRegistryItem } from "./schema.js";
 
 function spec(over: Partial<ModuleSpec> = {}): ModuleSpec {
-  return { dependsOn: [], name: "billing", type: "saasaloy:feature", ...over };
+  return {
+    dependsOn: [],
+    name: "subscription",
+    type: "saasaloy:feature",
+    ...over,
+  };
 }
 
 function descriptor(over: Partial<ModuleSpec> = {}): Record<string, unknown> {
@@ -33,7 +38,14 @@ describe(isValidModuleName, () => {
   });
 
   it("rejects anything the schema would reject", () => {
-    for (const name of ["", "-lead", "Billing", "my module", "a/b", "a_b"]) {
+    for (const name of [
+      "",
+      "-lead",
+      "Subscription",
+      "my module",
+      "a/b",
+      "a_b",
+    ]) {
       expect(isValidModuleName(name)).toBeFalsy();
     }
   });
@@ -41,11 +53,11 @@ describe(isValidModuleName, () => {
 
 describe(nameProblem, () => {
   it("says nothing about a usable name", () => {
-    expect(nameProblem("billing")).toBeUndefined();
+    expect(nameProblem("subscription")).toBeUndefined();
   });
 
   it("quotes the name it refused", () => {
-    expect(nameProblem("Billing")).toContain('"Billing"');
+    expect(nameProblem("Subscription")).toContain('"Subscription"');
   });
 });
 
@@ -108,7 +120,7 @@ describe(renderDescriptor, () => {
 
   it("names the module and its tier", () => {
     expect(descriptor({ type: "saasaloy:capability" })).toMatchObject({
-      name: "billing",
+      name: "subscription",
       type: "saasaloy:capability",
     });
   });
@@ -131,13 +143,13 @@ describe(renderDescriptor, () => {
 
   it("points agent.skills at the prefixed folder the scaffold writes", () => {
     expect(descriptor().agent).toStrictEqual({
-      skills: ["skills/saasaloy-billing"],
+      skills: ["skills/saasaloy-subscription"],
     });
   });
 
   it("carries a description, a stage and needs, so doctor passes it (#223)", () => {
     expect(descriptor()).toMatchObject({
-      description: expect.stringContaining("billing"),
+      description: expect.stringContaining("subscription"),
       needs: [],
       stage: "mvp",
     });
@@ -150,7 +162,7 @@ describe(renderDescriptor, () => {
 
 describe(renderSkill, () => {
   it("names the skill after the prefixed folder", () => {
-    expect(renderSkill(spec())).toContain("name: saasaloy-billing");
+    expect(renderSkill(spec())).toContain("name: saasaloy-subscription");
   });
 
   it("opens with frontmatter carrying a description", () => {
@@ -183,7 +195,7 @@ describe(moduleFiles, () => {
     expect(moduleFiles(spec()).map((file) => file.path)).toStrictEqual([
       "registry-item.json",
       "files/.gitkeep",
-      "skills/saasaloy-billing/SKILL.md",
+      "skills/saasaloy-subscription/SKILL.md",
     ]);
   });
 });
@@ -200,7 +212,7 @@ describe(writeModule, () => {
   });
 
   it("puts every file on disk and reports what it wrote", async () => {
-    const target = join(dir, "billing");
+    const target = join(dir, "subscription");
 
     const written = await writeModule(target, spec());
 
@@ -213,7 +225,7 @@ describe(writeModule, () => {
   });
 
   it("writes the descriptor the renderer produced, byte for byte", async () => {
-    const target = join(dir, "billing");
+    const target = join(dir, "subscription");
 
     await writeModule(target, spec({ requires: ">=0.3" }));
 
@@ -223,7 +235,7 @@ describe(writeModule, () => {
   });
 
   it("leaves files/ empty apart from the keep file", async () => {
-    const target = join(dir, "billing");
+    const target = join(dir, "subscription");
 
     await writeModule(target, spec());
 
