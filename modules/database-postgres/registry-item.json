@@ -101,6 +101,15 @@
       "value": "pnpm --filter @repo/db db:prod:migrate"
     },
     {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "ci:prepare:database",
+      "value": "docker compose up -d --wait",
+      "when": {
+        "installed": ["ci"]
+      }
+    },
+    {
       "file": "packages/db/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
