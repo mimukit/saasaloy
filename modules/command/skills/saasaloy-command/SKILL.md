@@ -13,13 +13,13 @@ A project gets one keyboard model for every signed-in SPA on the shell. Cmd+K (C
 
 | File | Lands at |
 | --- | --- |
-| `files/ui/lib/command/registry.ts` | `packages/ui/src/lib/command/registry.ts`: the pure rules. It merges the registrations, parses shortcuts, finds conflicts, and builds the palette groups and the sheet sections |
-| `files/ui/lib/command/engine.ts` | `packages/ui/src/lib/command/engine.ts`: the only file that imports `@tanstack/react-hotkeys` |
+| `files/ui/lib/command/registry.ts` | `packages/ui/src/lib/command/registry.ts`: the pure rules. It merges the registrations, parses shortcuts, finds conflicts, and builds the palette groups, the sheet sections and the pending-sequence hints (`pendingShortcuts`) |
+| `files/ui/lib/command/engine.ts` | `packages/ui/src/lib/command/engine.ts`: the only file that imports `@tanstack/react-hotkeys`. It also reports the sequences in progress (`usePendingSequences`) |
 | `files/ui/lib/command/filter.ts` | `packages/ui/src/lib/command/filter.ts`: the palette filter on `@leeoniya/ufuzzy` |
 | `files/ui/blocks/command/keycaps.tsx` | `packages/ui/src/blocks/command/keycaps.tsx`: a shortcut drawn as shell `Kbd` caps |
 | `files/ui/blocks/command/command-palette.tsx` | `packages/ui/src/blocks/command/command-palette.tsx`: the palette |
 | `files/ui/blocks/command/shortcut-help.tsx` | `packages/ui/src/blocks/command/shortcut-help.tsx`: the `?` sheet |
-| `files/ui/containers/command/command-root.tsx` | `packages/ui/src/containers/command/command-root.tsx`: the provider, the two bindings that open the views, the header trigger, and `commandExtension()` |
+| `files/ui/containers/command/command-root.tsx` | `packages/ui/src/containers/command/command-root.tsx`: the provider, the two bindings that open the views, the key hints it puts in the shell's `ShortcutHintsContext`, the header trigger, and `commandExtension()` |
 
 It also adds two exact-pinned dependencies to `packages/ui/package.json`: `@tanstack/react-hotkeys` and `@leeoniya/ufuzzy`. Run `pnpm install` after `add`.
 
@@ -102,6 +102,19 @@ Every mounted scope overlaps the others: a page's table, the page and the shell 
 | `Escape` | drop the row highlight, and close the detail panel when the page passes `onDismiss` to `DataTable` | while a row is highlighted or selected |
 
 `Mod` is Cmd on macOS and Ctrl elsewhere, and the keycaps follow the platform: `⌘ K` on a Mac, `Ctrl K` on Windows and Linux. Every key is logical, so it follows the typed character: `?` works on every keyboard layout. A single key or a sequence never fires inside a text field. A chord that holds Mod, Ctrl or Alt does. While a dialog or an alert dialog is open, every binding is off, Mod+K included. While the palette or the sheet is open, only Mod+K and `?` act, to switch or close them. Sign out, the theme choices and the page filters are palette-only.
+
+## Sequence hints
+
+A sequence such as `G U` allows 2500 ms between its steps (`SEQUENCE_TIMEOUT_MS` in `engine.ts`), so a person has time to read the hints. The shell sidebar shows them; see "Key hints in the sidebar" in the `saasaloy-shell` skill.
+
+- `usePendingSequences()` in `engine.ts` reads the engine's own state through `useHotkeyRegistrations()`: every sequence binding with `matchedStepCount > 0`, by its binding id. There is no second key listener.
+- The provider waits 300 ms (`HINT_DELAY_MS` in `command-root.tsx`) with the same set in progress before it publishes the hints, so a person who types `G U` without stopping sees none.
+- `pendingShortcuts(bound, ids, platform)` in `registry.ts` turns the ids into `{ shortcut, title, rest }`, where `rest` holds the keycaps still to press. It is pure and tested in `registry.test.ts`.
+- The hints close when the sequence completes, on a key that matches no next step (Escape included), at the timeout, on a pointer press anywhere, and when the window loses focus. The last two call `resetSequenceProgress()`, so the next letter typed does not jump to a screen. The click itself still lands.
+
+A nav row's `shortcut` must equal its command's `shortcut`, or its hint lands in the "Also" panel rather than on the row. The admin and app `commands.ts` files derive both from the same `NAV_AREAS` field, so they match by construction.
+
+**This version needs the matching `shell`.** `command-root.tsx` imports `ShortcutHintsContext` from the shell's `lib/shell/commands.ts`, so `command` updated alone against an older `shell` fails `pnpm typecheck`. Run `saasaloy update` with no module name, which moves every installed module together. The update note `command/0001-shortcut-hints-need-shell` says the same.
 
 ## Reserved keys
 

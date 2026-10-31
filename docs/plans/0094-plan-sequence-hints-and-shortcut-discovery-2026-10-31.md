@@ -46,7 +46,7 @@ Reuse:
 
 Rejected: shell imports the hints from `command` directly (breaks the requirement that the shell works alone, and ADR 0056). A second `keydown` listener in the shell to track the sequence (two sources of truth that drift, for example on Escape).
 
-### Phase 1: the shell contract and the sidebar (#300)
+### Phase 1: the shell contract and the sidebar (#300) (built 2026-10-31)
 
 - `modules/shell/files/ui/lib/shell/commands.ts`: add `PendingShortcut`, `ShortcutHints`, `ShortcutHintsContext` and `useShortcutHints()`.
 - `modules/shell/files/ui/containers/shell/shell-nav.tsx`: add `ShellNavItem.shortcut?: string` with its doc comment.
@@ -56,7 +56,7 @@ Rejected: shell imports the hints from `command` directly (breaks the requiremen
 
 Done when: `pnpm test:modules` passes with the two `sidebarHints` cases, and a `.dev` scaffold with `admin` and without `command` builds and typechecks, and its sidebar shows no keycaps and no menu item.
 
-### Phase 2: the command engine and provider (#300)
+### Phase 2: the command engine and provider (#300) (built 2026-10-31)
 
 - `modules/command/files/ui/lib/command/engine.ts`: raise `SEQUENCE_TIMEOUT_MS` to 2500 and add `usePendingSequences()` with the `pointerdown` and `blur` reset.
 - `modules/command/files/ui/lib/command/registry.ts`: add `pendingShortcuts()`.
@@ -73,7 +73,7 @@ Done when: `pnpm test:modules` passes with the `pendingShortcuts` cases, and in 
 - at a width below `md`, `G` and a pause shows no badge and no panel;
 - the menu item opens the `?` sheet.
 
-### Phase 3: skills and the full gate (#300)
+### Phase 3: skills and the full gate (#300) (built 2026-10-31)
 
 - `modules/shell/skills/saasaloy-shell/SKILL.md`: document `ShellNavItem.shortcut`, `useShortcutHints()` and its `null` case, the tooltip, the next-key badge, the "Also" panel, the mobile rule, the menu item, and `shortcut-hints.ts` in the file table.
 - `modules/command/skills/saasaloy-command/SKILL.md`: document the 2500 ms timeout, the 300 ms hint delay, the close events, `usePendingSequences()`, `pendingShortcuts()`, and that the provider fills `ShortcutHintsContext`. Say that a nav row's `shortcut` must equal its command's, or its hint lands in the "Also" panel. Say that this version needs the matching `shell`, so update both together.

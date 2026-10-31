@@ -16,6 +16,12 @@ export interface ShellNavItem {
   readonly icon: ComponentType<{ className?: string }>;
   /** An optional count shown at the right of the row. A static zero renders. */
   readonly count?: number;
+  /**
+   * The row's key sequence, the same string as its command's `shortcut` (`"G R"`). With
+   * the `command` module mounted, the row's tooltip shows it, and the row shows the next
+   * key while the sequence is in progress.
+   */
+  readonly shortcut?: string;
 }
 
 export interface ShellNavGroup {

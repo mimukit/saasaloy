@@ -14,7 +14,7 @@ It holds **no auth logic and no router**. Each app reads its own session and rou
 | `components/shell/` | the primitives and `NOTICE.md` (the MIT notice the copy needs) |
 | `blocks/shell/` | `PageHeader`, `DataTable`, `DetailPanel`, `FilterChips`, `AttributeList`, `EmptyState`, `ErrorState`, `PageSkeleton`, `BrandMark`, `ThemeMenuItem` |
 | `containers/shell/` | `ShellLayout`, `ShellSidebar`, `ShellNav` types, `PageFrame`, `PageLayout`, `PageBody` |
-| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants, the command contract (`commands.ts`) and the extension seam (`extensions.ts`) |
+| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants, the command contract and the key-hint context (`commands.ts`), the sidebar's hint split (`shortcut-hints.ts`) and the extension seam (`extensions.ts`) |
 | `assets/shell/` | `brand-mark.svg` (replace it with your own single-colour mark) and `assets.d.ts` |
 | `styles/shell.css` | the `@source` line for the primitives, the status and sort tokens with defaults, the skeleton and toast motion |
 
@@ -74,7 +74,8 @@ The guard stays in the app's root `beforeLoad`. The shell renders whatever the a
 
 The nav data lives in the app, in `src/components/nav.ts`, as `NAV_AREAS` with `as const`. The shell reads it through the structural types in `containers/shell/shell-nav.tsx`, where `to` is a plain string, because `@repo/ui` imports no router.
 
-- **A row** is one `{ to, label, icon, count? }` in a group's `items`. A module adds it with a `nav-entry` patch on `apps/<app>/src/components/nav.ts`.
+- **A row** is one `{ to, label, icon, count?, shortcut? }` in a group's `items`. A module adds it with a `nav-entry` patch on `apps/<app>/src/components/nav.ts`.
+- **`shortcut`** is the row's key sequence, the same string as its "Go to …" command's `shortcut` (`"G U"`). The sidebar matches a hint to a row by that string, so a row whose `shortcut` differs from its command's gets no hint, and the command shows in the "Also" panel instead. See [Key hints in the sidebar](#key-hints-in-the-sidebar).
 - **A group** is one `{ label, items }` in an area's `groups`.
 - **An area** is one entry in `NAV_AREAS`. The header's page path starts with its label.
 
@@ -162,6 +163,20 @@ The `scope` says how long a registration lives and which keys may overlap:
 | `data-table` | the table keys `DataTable` declares | a `DataTable` is mounted |
 
 The shell declares two sets itself. `SidebarProvider` declares `shell.toggle-sidebar` on `Mod+B` in `global`; it keeps its raw Cmd/Ctrl+B listener only while `useCommandProvider()` is `false`, so the key works with or without `command` and never toggles twice. `DataTable` declares `J` (next row), `K` (previous row), `Enter` (open the highlighted row, the same call a row click makes) and `Escape` (drop the highlight) in `data-table`. The highlight takes the rows' hover tone, so it never reads as the selection. The route owns the selection: pass `onDismiss` and Escape also calls it while a row is selected, so the page closes its detail panel (`routes/users.tsx` in admin does). With no `onDismiss`, Escape only drops the highlight. The four keys stand down while a button, a link, a field or an ARIA widget outside the table has the focus, so Enter on a filter chip presses the chip; a focus move to such a control also drops the highlight. The rule is `tableKeysLive` in `blocks/shell/data-table-highlight.ts`. A screen mounts one `DataTable` at a time: every table declares the same four command ids, and `command` throws on a repeated id in development. Tabs that unmount the inactive panel, as `TabsPanel` does by default, keep that rule. The ids and keys live in `lib/shell/shell-keys.ts`; change a key there, not in `sidebar.tsx` or `data-table.tsx`.
+
+### Key hints in the sidebar
+
+The sidebar reads key data through `useShortcutHints()` from `@repo/ui/lib/shell/commands`. The `command` module's provider fills `ShortcutHintsContext`; with no provider mounted the hook returns `null`, and the sidebar draws no keys and no menu item, exactly as before. The shell never imports `lib/command/*`.
+
+With `command` mounted:
+
+- A row with a `shortcut` shows its label and keycaps in a tooltip, in the open sidebar and the icon strip. The tooltip stays hidden below `md`. A row with no `shortcut` keeps the label-only tooltip of the icon strip.
+- While a sequence waits for its next key (the person pressed `G` and paused for 300 ms), each row it reaches shows that key in place of its count. In the icon strip the key sits on the icon's corner.
+- A command the sequence reaches that has no row, such as a "Go to New order" with no nav entry, is listed in an "Also" panel beside the sidebar footer, over the page.
+- The next keys and the panel show at desktop only. Below `md` the sidebar is a sheet, and the panel would sit outside its edge.
+- The account menu gets a "Keyboard shortcuts" item, between Theme and Sign out, that shows the sheet key and opens the shortcut sheet.
+
+`sidebarHints(rowShortcuts, pending)` in `lib/shell/shortcut-hints.ts` splits the pending hints between the rows and the panel. It is JSX-free, so `pnpm test:modules` covers it in this repo. The `saasaloy-command` skill says when a sequence counts as pending and when the hints close.
 
 Before you bind a key, read the reserved key table in the `saasaloy-command` skill. `C`, `E`, `Mod+Backspace`, `/` and `G` then a letter carry one meaning each across every app. Use a reserved key only for its meaning, or pick an unreserved key. Two bindings that clash in overlapping scopes throw in dev.
 
