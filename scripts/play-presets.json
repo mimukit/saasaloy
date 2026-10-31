@@ -1,0 +1,53 @@
+{
+  "$comment": "The presets pnpm play:up reads (#187), and that examples/full (#184) and CI read too. `modules` is the saasaloy add list; play:up adds the database driver --db picks. `env` is written to packages/env/.env as is. BETTER_AUTH_SECRET stays unset on purpose: Better Auth then uses its dev key, which the api allows only on a loopback BETTER_AUTH_URL.",
+  "minimal": {
+    "description": "The base template only: the web app, no modules.",
+    "modules": [],
+    "env": {
+      "PUBLIC_API_URL": "http://localhost:4000",
+      "PUBLIC_SITE_URL": "http://localhost:3000"
+    }
+  },
+  "full": {
+    "description": "Every module with a local provider (-console, -memory, manual), so the stack needs no vendor account and no network.",
+    "modules": [
+      "admin",
+      "api-keys-organization",
+      "app",
+      "billing-console",
+      "command",
+      "e2e",
+      "email-console",
+      "email-react",
+      "feature-flags",
+      "file-uploads",
+      "kv-memory",
+      "logger-console",
+      "multitenant",
+      "payment-console",
+      "payment-manual",
+      "queue-memory",
+      "ratelimit",
+      "sms-console",
+      "storage-memory",
+      "teams",
+      "waitlist"
+    ],
+    "env": {
+      "BETTER_AUTH_URL": "http://localhost:4000",
+      "BILLING_PROVIDER": "console",
+      "EMAIL_FROM": "playground@example.test",
+      "EMAIL_PROVIDER": "console",
+      "KV_PROVIDER": "memory",
+      "LOGGER_PROVIDER": "console",
+      "PAYMENT_PROVIDER": "console,manual",
+      "PUBLIC_API_URL": "http://localhost:4000",
+      "PUBLIC_SITE_URL": "http://localhost:3000",
+      "QUEUE_PROVIDER": "memory",
+      "SMS_PROVIDER": "console",
+      "STORAGE_PROVIDER": "memory",
+      "STORAGE_PUBLIC_URL": "http://localhost:4000",
+      "STORAGE_URL_SECRET": "playground-only-storage-url-secret"
+    }
+  }
+}

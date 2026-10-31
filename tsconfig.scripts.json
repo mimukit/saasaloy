@@ -11,5 +11,5 @@
     "declaration": false,
     "sourceMap": false
   },
-  "include": ["scripts/**/*.ts"]
+  "include": ["scripts/**/*.ts", "modules/*/smoke.ts"]
 }
