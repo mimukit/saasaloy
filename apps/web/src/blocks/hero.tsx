@@ -12,9 +12,11 @@ import { interpolate } from "@web/lib/interpolate";
 // Static. The command field's copy button is the one interactive part, and index.astro
 // passes it in hydrated through the `commandField` slot. Rendered on its own, the hero
 // draws a static field: the command stays selectable and the page ships no JavaScript
-// for it. The motion is CSS: `blur-in` from ../styles/web.css, staggered with
-// `--blur-in-delay`, and still under reduced motion. The drawing plays its own entry
-// through `drawing-load`, then loops. LOOP_SCRIPT in ../layouts/Layout.astro marks the
+// for it. The motion is CSS: `blur-in` from ../styles/web.css on the command field and
+// the note, staggered with `--blur-in-delay`, and still under reduced motion. The title
+// and the description paint at once: the description is the page's LCP element, and an
+// entry that starts at `opacity: 0` held LCP at 2.7 s (docs/seo/0002). The drawing plays
+// its own entry through `drawing-load`, then loops. LOOP_SCRIPT in ../layouts/Layout.astro marks the
 // drawing `data-offscreen` while it is out of view, and the CSS pauses every loop in it
 // then. Without JavaScript the loops never pause.
 //
@@ -83,19 +85,19 @@ export function Hero({
     <section className="pt-24 pb-16 md:pt-28">
       <div className="section-container-wide grid items-center gap-12 lg:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:gap-12">
         <div className="flex flex-col gap-6">
-          <h1 className="text-display blur-in lg:text-[3.25rem]">
+          <h1 className="text-display lg:text-[3.25rem]">
             <span className="text-foreground block">{titleLead}</span>
             <span className="text-primary block">{titleAccent}</span>
           </h1>
-          <p className="text-lead text-muted-foreground blur-in max-w-md text-balance [--blur-in-delay:100ms]">
+          <p className="text-lead text-muted-foreground max-w-md text-balance">
             {description}
           </p>
-          <div className="blur-in flex flex-col gap-4 [--blur-in-delay:200ms]">
+          <div className="blur-in flex flex-col gap-4">
             {commandField ?? <CommandField command={command} />}
             <HeroLinkList links={links} />
           </div>
           {note && (
-            <p className="text-muted-foreground blur-in text-xs [--blur-in-delay:300ms]">
+            <p className="text-muted-foreground blur-in text-xs [--blur-in-delay:100ms]">
               {note}
             </p>
           )}

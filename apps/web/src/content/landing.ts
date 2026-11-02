@@ -380,10 +380,11 @@ export const landing = {
           "Not until you deploy. Every capability ships a console or in-memory provider, so the whole project runs on your machine with no cloud account.",
       },
       {
+        // The free-tier limits are Cloudflare's Workers and D1 pricing pages, read 2026-11-02.
         id: "cost",
         question: "What does it cost to host?",
         answer:
-          "Close to nothing while you test the idea. The base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare free tier. `email-cloudflare` and `queue-cloudflare` need a paid Workers plan, and a vendor provider such as `email-plunk` needs that vendor's account.",
+          "Close to nothing while you test the idea. The base, `api`, `database-d1`, `auth`, `admin`, `waitlist` and `teams` run on the Cloudflare free tier, which allows 100,000 Worker requests a day and, for D1, 5 million rows read, 100,000 rows written and 5 GB of storage. `email-cloudflare` and `queue-cloudflare` need a paid Workers plan, and a vendor provider such as `email-plunk` needs that vendor's account.",
       },
       {
         id: "providers",
