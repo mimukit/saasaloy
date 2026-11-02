@@ -135,9 +135,9 @@ describe("buildRemovePlan — file classification", () => {
     );
     await writeManaged(
       manifest,
-      "apps/api/src/routes/billing.ts",
-      "billing\n",
-      "billing"
+      "apps/api/src/routes/subscription.ts",
+      "subscription\n",
+      "subscription"
     );
     // A file the manifest never tracked at all.
     await mkdir(join(root, "apps/api/src"), { recursive: true });
@@ -158,13 +158,13 @@ describe("buildRemovePlan — dependents", () => {
   it("refuses via named dependents when an installed module's lock dependsOn names this one", async () => {
     const config: SaasaloyConfig = {
       aliases: {},
-      installed: ["auth", "billing"],
+      installed: ["auth", "subscription"],
     };
     const lock: Lockfile = {
       ...emptyLock(),
       modules: {
         auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) },
-        billing: {
+        subscription: {
           source: "s/r",
           ref: "main",
           resolved: "b".repeat(40),
@@ -173,7 +173,7 @@ describe("buildRemovePlan — dependents", () => {
       },
     };
     const plan = await build("auth", config, emptyManifest(), lock);
-    expect(plan.dependents).toStrictEqual(["billing"]);
+    expect(plan.dependents).toStrictEqual(["subscription"]);
   });
 
   it("has no dependents when nothing installed depends on the module", async () => {
@@ -309,7 +309,7 @@ describe("buildRemovePlan — links", () => {
   });
 
   it("excludes a link owned by another module", async () => {
-    const manifest = await skillManifest("billing");
+    const manifest = await skillManifest("subscription");
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.links).toHaveLength(0);
   });
@@ -329,18 +329,18 @@ describe("buildRemovePlan — patches", () => {
         range: "workspace:*",
       },
     };
-    const billingPatch: ManifestPatch = {
-      module: "billing",
+    const subscriptionPatch: ManifestPatch = {
+      module: "subscription",
       file: "apps/api/package.json",
       patch: {
         file: "apps/api/package.json",
         kind: "package-json-dependency",
         section: "dependencies",
-        name: "@repo/billing",
+        name: "@repo/subscription",
         range: "workspace:*",
       },
     };
-    manifest.patches.push(authPatch, billingPatch);
+    manifest.patches.push(authPatch, subscriptionPatch);
 
     const plan = await build("auth", emptyConfig(), manifest, emptyLock());
     expect(plan.patches).toStrictEqual([
@@ -693,18 +693,18 @@ describe("executeRemovePlan — patches", () => {
         range: "workspace:*",
       },
     };
-    const billingPatch: ManifestPatch = {
-      module: "billing",
+    const subscriptionPatch: ManifestPatch = {
+      module: "subscription",
       file: "apps/api/package.json",
       patch: {
         file: "apps/api/package.json",
         kind: "package-json-dependency",
         section: "dependencies",
-        name: "@repo/billing",
+        name: "@repo/subscription",
         range: "workspace:*",
       },
     };
-    manifest.patches.push(authPatch, billingPatch);
+    manifest.patches.push(authPatch, subscriptionPatch);
 
     const config: SaasaloyConfig = { aliases: {}, installed: ["auth"] };
     const lock: Lockfile = emptyLock();
@@ -718,7 +718,7 @@ describe("executeRemovePlan — patches", () => {
 
     expect(result.patchesDropped).toStrictEqual([authPatch]);
     expect(result.patchesReversed).toStrictEqual([]);
-    expect(manifest.patches).toStrictEqual([billingPatch]);
+    expect(manifest.patches).toStrictEqual([subscriptionPatch]);
   });
 
   // #83 Phase 4: the `package-json-script` kind has no inverse either, so `remove` must
@@ -829,32 +829,34 @@ export default app;
 
   it("leaves another module's link in the same chain alone", async () => {
     const abs = await writeEntry(`import { Hono } from "hono";
-import { billing } from "./routes/billing.js";
+import { subscription } from "./routes/subscription.js";
 import { waitlist } from "./routes/waitlist.js";
 
-const app = new Hono().route("/billing", billing).route("/waitlist", waitlist);
+const app = new Hono().route("/subscription", subscription).route("/waitlist", waitlist);
 
 export default app;
 `);
     const manifest = emptyManifest();
     manifest.patches.push(
       routePatch("waitlist", "/waitlist", "waitlist"),
-      routePatch("billing", "/billing", "billing")
+      routePatch("subscription", "/subscription", "subscription")
     );
 
     const config: SaasaloyConfig = {
       aliases: {},
-      installed: ["waitlist", "billing"],
+      installed: ["waitlist", "subscription"],
     };
     const lock: Lockfile = emptyLock();
     const plan = await build("waitlist", config, manifest, lock);
     await executeRemovePlan(plan, { root, config, manifest, lock });
 
     const after = await readFile(abs, "utf-8");
-    expect(after).toContain('.route("/billing", billing)');
-    expect(after).toContain('from "./routes/billing.js"');
+    expect(after).toContain('.route("/subscription", subscription)');
+    expect(after).toContain('from "./routes/subscription.js"');
     expect(after).not.toContain("/waitlist");
-    expect(manifest.patches.map((p) => p.module)).toStrictEqual(["billing"]);
+    expect(manifest.patches.map((p) => p.module)).toStrictEqual([
+      "subscription",
+    ]);
   });
 
   it("drops without reverting when the link was already hand-removed", async () => {
@@ -1636,21 +1638,21 @@ describe("executeRemovePlan — state reconciliation", () => {
 
     const config: SaasaloyConfig = {
       aliases: {},
-      installed: ["auth", "billing"],
+      installed: ["auth", "subscription"],
     };
     const lock: Lockfile = {
       ...emptyLock(),
       modules: {
         auth: { source: "s/r", ref: "main", resolved: "a".repeat(40) },
-        billing: { source: "s/r", ref: "main", resolved: "b".repeat(40) },
+        subscription: { source: "s/r", ref: "main", resolved: "b".repeat(40) },
       },
     };
     const plan = await build("auth", config, manifest, lock);
     await executeRemovePlan(plan, { root, config, manifest, lock });
 
-    expect(config.installed).toStrictEqual(["billing"]);
+    expect(config.installed).toStrictEqual(["subscription"]);
     expect(lock.modules.auth).toBeUndefined();
-    expect(lock.modules.billing).toBeDefined();
+    expect(lock.modules.subscription).toBeDefined();
   });
 
   it("carries stored warnings into the plan and deletes them after removal", async () => {

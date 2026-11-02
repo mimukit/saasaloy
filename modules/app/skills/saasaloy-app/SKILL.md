@@ -212,14 +212,14 @@ A form's `max-w-*` is the field column's width inside the page, not the page's w
 **A role.** Ask the api, not the session object. The client session this app holds is not typed with `role`: `adminClient()` rides on the admin client only (see `saasaloy-auth`). So a role-gated screen calls a route the api guards with `requireRole`, in its `beforeLoad`, and sends the visitor home on a `403`:
 
 ```tsx
-export const Route = createFileRoute("/billing")({
+export const Route = createFileRoute("/subscription")({
   beforeLoad: async () => {
-    const res = await api.billing.$get();
+    const res = await api.subscription.$get();
     if (res.status === 403) {
       throw redirect({ to: "/" });
     }
   },
-  component: Billing,
+  component: Subscription,
 });
 ```
 

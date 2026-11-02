@@ -271,7 +271,7 @@ export const landing = {
         "Tenant isolation, where a query without the tenant filter does not compile, plus custom roles.",
       teams:
         "Organizations, members, roles and invitations, with an admin screen.",
-      billing:
+      subscription:
         "Subscriptions with plans and entitlements, and a 402 gate on paid features.",
       payment:
         "One-off payments with a status machine and a staff review screen.",

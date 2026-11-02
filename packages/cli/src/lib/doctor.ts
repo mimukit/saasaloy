@@ -1319,7 +1319,7 @@ export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
 /** The values file `saasaloy env` writes and `pnpm env:setup` copies from. */
 const ENV_VALUES_FILE = "packages/env/.env";
 /**
- * The env var `config.app.name` superseded. Billing no longer declares it, so a fresh
+ * The env var `config.app.name` superseded. `subscription` (then `billing`) no longer declares it, so a fresh
  * project never lists it; an older project's key list keeps the line, because `add` never
  * removes one, and this is how its owner learns the value does nothing.
  */
@@ -1359,9 +1359,9 @@ export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   for (const file of reported) {
     findings.push(
       finding(
-        "billing",
+        "subscription",
         `/env/${DEPRECATED_APP_NAME}`,
-        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
+        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the subscription emails take their name from config.app.name (or config.subscription.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
       )
     );
   }

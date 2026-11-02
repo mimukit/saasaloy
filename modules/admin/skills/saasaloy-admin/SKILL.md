@@ -307,7 +307,7 @@ Four properties are load-bearing:
 - **`init.credentials: "include"`** is why this file exists instead of a one-line `hc()` per call
   site. `fetch` omits cookies cross-origin by default, so without it every request from `:3001`
   arrives anonymous and the api answers 401.
-- **`x-auth-audience: admin`** names which of the browser's two sessions each call means. The browser sends both cookies to the api host, the client one included when a client is signed in on another app in the same browser. The `requireAdmin*` gates read the admin session whatever the header says, but a generic gate (`requireSession`, `requireTenant`, `authFor(c)`) reads the session the header names. Without it, a teams or billing screen here would act as the client in the other tab. Any value other than `client` or `admin` gets 400.
+- **`x-auth-audience: admin`** names which of the browser's two sessions each call means. The browser sends both cookies to the api host, the client one included when a client is signed in on another app in the same browser. The `requireAdmin*` gates read the admin session whatever the header says, but a generic gate (`requireSession`, `requireTenant`, `authFor(c)`) reads the session the header names. Without it, a teams or subscription screen here would act as the client in the other tab. Any value other than `client` or `admin` gets 400.
 
 `@repo/api/client` is a **types-only** export (its `package.json` maps `./client` under a `types`
 condition alone), which is why `@repo/api` is a `devDependency`. No Worker code enters this bundle.

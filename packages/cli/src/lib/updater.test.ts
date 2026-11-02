@@ -861,13 +861,13 @@ describe("buildUpdatePlan — config patches", () => {
       "utf-8"
     );
     manifest.patches.push({
-      module: "billing",
+      module: "subscription",
       file: "apps/api/src/package.json",
       patch: {
         file: "apps/api/src/package.json",
         kind: "package-json-dependency",
         section: "dependencies",
-        name: "@repo/billing",
+        name: "@repo/subscription",
         range: "workspace:*",
       },
     });
@@ -875,7 +875,7 @@ describe("buildUpdatePlan — config patches", () => {
     const plan = await build({ manifest, inputs: [input({ theirs, base })] });
     expect(plan.modules[0]?.files[0]).toMatchObject({
       action: "drift",
-      patchedBy: ["billing"],
+      patchedBy: ["subscription"],
     });
   });
 });

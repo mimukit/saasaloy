@@ -204,7 +204,7 @@ After `saasaloy add shell`:
 Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move a project across in one pass:
 
 1. Commit or stash your work, so the update's merge plan is the only change in the tree.
-2. Update every installed module in one run: `saasaloy update`. The new `admin` depends on `shell`, so the plan installs `shell`, removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`, and writes the new imports into `admin` and every module with an admin screen (`teams`, `billing`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`).
+2. Update every installed module in one run: `saasaloy update`. The new `admin` depends on `shell`, so the plan installs `shell`, removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`, and writes the new imports into `admin` and every module with an admin screen (`teams`, `subscription`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`).
 3. Resolve the merge plan. A shell file you edited under the old path stays there, and the update lists it. Move your edit into the file at the new path, delete the old file, then run `saasaloy update --resolved <path>` for a file the plan marks as a conflict. A replaced logo is the common case: copy your `packages/ui/src/assets/brand-mark.svg` over `packages/ui/src/assets/shell/brand-mark.svg`, then delete the old one.
 4. Change the imports in your own files. The pattern skips `blocks/admin/feature-flags`, the one admin-only block, which the update already points at the right place:
 
