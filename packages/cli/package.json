@@ -1,7 +1,7 @@
 {
   "name": "saasaloy",
   "version": "0.8.0",
-  "description": "Composable SaaS accelerator kit.",
+  "description": "An open source SaaS starter kit for Cloudflare: a CLI plus a module registry that copies source files you own.",
   "keywords": [
     "saas",
     "scaffold",
