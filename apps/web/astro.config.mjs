@@ -47,11 +47,11 @@ const COMPONENT_ENTRIES = ["src/**/*.tsx"];
 //
 // The public origin. Layout.astro builds each canonical URL, `og:url` and `og:image`
 // from it as `Astro.site`, and src/pages/robots.txt.ts and sitemap.xml.ts do the same.
-// The owner chose saasaloy.com on 2026-10-27 (docs/seo/0001-seo-saasaloy-com-2026-10-27.md),
-// but until that domain is on Cloudflare the site deploys to the Brainaloy Labs
-// workers.dev subdomain (2026-10-28). Change this and wrangler.jsonc together.
+// The owner chose saasaloy.com on 2026-10-27 (docs/seo/0001-seo-saasaloy-com-2026-10-27.md)
+// and attached it to the Brainaloy Labs account on 2026-11-02. Change this and
+// wrangler.jsonc together.
 export default defineConfig({
-  site: "https://saasaloy.brainaloy.workers.dev",
+  site: "https://saasaloy.com",
   output: "static",
   // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
   // wanted, and writes a `SESSION` KV namespace binding with no id into the config it
