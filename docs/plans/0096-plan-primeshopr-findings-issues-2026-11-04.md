@@ -19,7 +19,7 @@ Reference implementation: the PrimeShopr repo at `/home/dev/projects/primeshopr`
 
 Eight new issues. Order of work: 1 and 2 first (no dependencies, highest benefit), then 3, 4 and 5 in any order, then 6, 7 and 8.
 
-### Issue 1: `fix(base): harden the template dev loop, lint, web and module defaults`
+### Issue 1: `fix(base): harden the template dev loop, lint, web and module defaults` (#306)
 
 Small, confirmed bugs in the base template and in the `api`, `admin`, `storage-cloudflare` and `sms-khudebarta` modules. Each task is a few lines plus a test or an update note.
 
@@ -45,7 +45,7 @@ Tasks:
 
 Acceptance: `pnpm lint`, `pnpm typecheck` and `pnpm test` pass on a fresh scaffold. The web scaffold typechecks. A commit of only `routeTree.gen.ts` passes the hook.
 
-### Issue 2: `feat(base): run parallel worktrees and remote dev without port or origin clashes`
+### Issue 2: `feat(base): run parallel worktrees and remote dev without port or origin clashes` (#307)
 
 The largest time loss in PrimeShopr. Fixed `strictPort` ports 3000, 3001 and 4000 forced agents to stub the API, skip browser checks, or wait on a `flock`. Cookies ignore the port, so two worktrees on localhost overwrite each other's session. The tailnet origin broke CORS, `crypto.randomUUID` and the clipboard.
 
@@ -64,7 +64,7 @@ Tasks:
 
 Acceptance: two worktrees of one project run `pnpm dev` at the same time, each signs in, and neither session cookie overwrites the other. A dev server reached on a tailnet IP passes CORS and saves a form.
 
-### Issue 3: `feat(auth-phone): add phone number sign-in over the sms capability`
+### Issue 3: `feat(auth-phone): add phone number sign-in over the sms capability` (#308)
 
 PrimeShopr wired Better Auth's `phoneNumber` plugin to `sms` by hand across about 15 sessions.
 
@@ -83,7 +83,7 @@ Depends on: none. Coordinate with #294 (show a phone sign-up by its phone) and #
 
 Acceptance: a new project with `auth-phone` and `sms-console` signs up, signs in, and resets a password by phone with no vendor account.
 
-### Issue 4: `feat(database-postgres): add production operator tools`
+### Issue 4: `feat(database-postgres): add production operator tools` (#309)
 
 Before this, PrimeShopr agents debugged production as the superuser owner role.
 
@@ -99,7 +99,7 @@ Tasks:
 
 Acceptance: an agent reads masked production rows and logs with no write access, and the class test fails on a new unclassed column.
 
-### Issue 5: `feat(admin): add the admin audit log, members screen and route gate`
+### Issue 5: `feat(admin): add the admin audit log, members screen and route gate` (#310)
 
 Every later PrimeShopr admin brief repeated the audit wrapper rules.
 
@@ -117,7 +117,7 @@ Depends on: none. Decide in the grill whether this issue extends #142 or stays s
 
 Acceptance: every admin write route in a fresh scaffold has an audit action, and the coverage test fails when one is removed.
 
-### Issue 6: `feat(ui): add the missing primitives and shell blocks`
+### Issue 6: `feat(ui): add the missing primitives and shell blocks` (#311)
 
 PrimeShopr added 17 primitives and several shell features by hand.
 
@@ -137,7 +137,7 @@ Tasks:
 
 Depends on: none. Coordinate with #293, #300 and #203 (DOM test runner).
 
-### Issue 7: `feat(cli): make saasaloy update survive skipped releases and local deletions`
+### Issue 7: `feat(cli): make saasaloy update survive skipped releases and local deletions` (#312)
 
 The 0.6.1 to 0.8.0 update in PrimeShopr became an 8-phase plan with 157 file operations.
 
@@ -156,7 +156,7 @@ Coordinate with #298 (update notes in the merge plan) and #301 (move `dependsOn`
 
 Acceptance: an update from a 0.5.0 base to the current release runs with no alias error, keeps a deleted block deleted, and makes a three-way merge.
 
-### Issue 8: `feat(notifications): add in-app notifications`
+### Issue 8: `feat(notifications): add in-app notifications` (#313)
 
 PrimeShopr built a bell, a menu with the 5 newest items, unread counts, categories and a promotions opt-out.
 
