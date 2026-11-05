@@ -25,8 +25,10 @@ import { config } from "@repo/config";
 export const ADMIN_ROLE = config.auth.adminRole;
 
 /**
- * The role above `admin`. The first account to sign up wins it (the hook in
- * `./auth.ts`), and only it may act inside an organization it does not belong to,
+ * The role above `admin`. No sign-up wins it: a first sign-up gets `user` like any other.
+ * The seed writes one in development, and `pnpm db:prod:superadmin` (Postgres) or the
+ * auth skill's SQL (D1) makes the first one in production. Only it may act inside an
+ * organization it does not belong to,
  * through the `x-organization-id` header the `multitenant` module reads. Everything
  * `admin` may do, `superadmin` may do, which is why `requireAdmin` admits either.
  */
@@ -168,7 +170,7 @@ export type RoleDemand = string | readonly string[];
  * `admin()` plugin disagrees: its `has-permission.mjs` splits `user.role` on `,`, so a row
  * holding `"admin,support"` is an admin to `auth.api.listUsers` and is refused here. The
  * divergence is deliberate and it fails closed. Nothing in a scaffolded project writes a
- * joined string (the first-user hook writes `"superadmin"`), and `apps/admin`'s browser guard
+ * joined string (the seed and `pnpm db:prod:superadmin` write `"superadmin"`), and `apps/admin`'s browser guard
  * compares with `===` against its own copy of the constant. Splitting here alone would
  * admit a caller the SPA still refuses. Store one role, or change both halves together.
  */

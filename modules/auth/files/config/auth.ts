@@ -24,8 +24,10 @@ export function authConfig() {
      */
     adminRole: "admin",
     /**
-     * The role above `admin`. The first account to sign up wins it, and only it may act
-     * inside an organization it does not belong to.
+     * The role above `admin`. Only it may act inside an organization it does not
+     * belong to. No sign-up wins it: the seed writes one in development, and
+     * `pnpm db:prod:superadmin` (Postgres) or the auth skill's SQL (D1) makes the first
+     * one in production.
      */
     superadminRole: "superadmin",
     /**

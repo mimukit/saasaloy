@@ -32,10 +32,29 @@ signup() { # sign up, or sign in when a re-run finds the account already there
 as() { u=$1; shift; curl -s -b "$J/$u.txt" -c "$J/$u.txt" "${O[@]}" "$@"; }
 code() { u=$1; shift; curl -s -o /dev/null -w '%{http_code}' -b "$J/$u.txt" "${O[@]}" "$@"; }
 
-echo "== 0. accounts (first user wins superadmin)"
+# No sign-up promotes an account, the first one included, so step 0 promotes u1 by SQL,
+# the way an owner makes the first superadmin on a deployed D1 database. Set PG, as for
+# scripts/qa-tenant-scoping-serve.sh, to take the Postgres path. The session reads the
+# role from the `users` row on every request, so u1's cookie needs no new sign-in.
+ROOT=${ROOT:-$(cd "$(dirname "$0")/.." && pwd)}
+PG=${PG:-}
+promote() { # email
+  q="update users set role = 'superadmin' where email = '$1'"
+  if [ -n "$PG" ]; then
+    docker exec qa128-pg psql -U pg -d pg -q -c "$q" >/dev/null
+  else
+    pnpm -C "$ROOT/.dev/playground/apps/api" exec wrangler d1 execute DB --local \
+      --persist-to .wrangler/state --command "$q" >/dev/null 2>&1
+  fi
+}
+
+echo "== 0. accounts (a first sign-up gets user; SQL makes u1 the superadmin)"
 r1=$(signup u1); r2=$(signup u2); r3=$(signup u3)
-check "u1 is superadmin" superadmin "$(echo "$r1" | jq -r .user.role)"
+check "a first sign-up is a plain user" user "$(echo "$r1" | jq -r .user.role)"
 check "u2 is a plain user" user "$(echo "$r2" | jq -r .user.role)"
+promote u1@x.test
+check "u1 is superadmin after the SQL" superadmin \
+  "$(as u1 "$API/auth/get-session" | jq -r .user.role)"
 U3=$(echo "$r3" | jq -r .user.id)
 
 echo

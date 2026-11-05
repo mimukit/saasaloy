@@ -55,7 +55,7 @@ Every path below sits under `/auth`, on the client instance.
 3. Sign-in: `POST /sign-in/phone-number` with `{ phoneNumber, password }`.
 4. Set or reset: `POST /phone-number/request-password-reset` with `{ phoneNumber }`, then `POST /phone-number/check-reset-code` with `{ phoneNumber, otp }`, then `POST /phone-number/reset-password` with `{ phoneNumber, otp, newPassword }`. `check-reset-code` exists because Better Auth checks a reset code only together with the new password. It keeps a right code for `reset-password` and spends one try on a wrong one. `reset-password` also sets a first password, and it marks the phone verified.
 
-A phone sign-up never becomes the superadmin. The first-user rule in `packages/auth/src/auth.ts` skips the `/phone-number/verify` path, so only an email sign-up can take that role.
+A phone sign-up never becomes the superadmin, and no email sign-up does either. `packages/auth/src/auth.ts` promotes no account. The first superadmin comes from the seed or from `pnpm db:prod:superadmin`.
 
 ## Better Auth facts this module depends on
 

@@ -32,9 +32,7 @@ import {
 //   current one on `/change-password` or with a code on the reset endpoints.
 //
 // A phone sign-up gets role `user`, the `admin()` plugin's default, even on an empty
-// table: `auth.ts`'s first-user hook skips `/phone-number/verify`. A role hook here could
-// not do it. Better Auth runs the instance's own `databaseHooks` after every plugin's, so
-// that hook's `{ data }` would write `superadmin` over whatever a plugin set.
+// table. `auth.ts` has no hook that writes a role, so nothing here has to keep one off.
 
 /** The `phoneNumber` field of a request body, or `null`. */
 function phoneOf(body: unknown): string | null {
