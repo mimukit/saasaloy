@@ -9,17 +9,28 @@
  * a clean one. A name with no word characters at all (better-auth allows an empty `name`)
  * gives `?` rather than an empty circle.
  */
+// Graphemes, not UTF-16 code units: `"🦊"[0]` is half a surrogate pair and renders as
+// "�", and an accent typed as a combining mark is a second code unit of one letter.
+const GRAPHEMES = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+
+function graphemes(text: string): string[] {
+  return Array.from(GRAPHEMES.segment(text), (part) => part.segment);
+}
+
 export function initialsOf(name: string): string {
-  const initials = name
-    .trim()
-    .split(/\s+/)
-    .map((part) => part[0] ?? "")
-    .join("")
-    // Uppercase BEFORE slicing. `toUpperCase` can expand one character into two —
-    // "ß" becomes "SS" — so slicing first would return three characters and break the
-    // two-initial contract the avatar circle is sized for.
-    .toUpperCase()
-    .slice(0, 2);
+  const initials = graphemes(
+    name
+      .trim()
+      .split(/\s+/)
+      .map((part) => graphemes(part)[0] ?? "")
+      .join("")
+      // Uppercase BEFORE slicing. `toUpperCase` can expand one character into two —
+      // "ß" becomes "SS" — so slicing first would return three characters and break the
+      // two-initial contract the avatar circle is sized for.
+      .toUpperCase()
+  )
+    .slice(0, 2)
+    .join("");
 
   return initials || "?";
 }

@@ -50,18 +50,22 @@ export function rangeStart(
   return new Date(now.getTime() - RANGE_DAYS[range] * DAY_MS).toISOString();
 }
 
-/** The filters the address holds. The defaults (everyone, every area, 7 days) stay out. */
+/**
+ * The filters the address holds: person, area, range and the settled search text. The
+ * defaults (everyone, every area, 7 days, no search) stay out.
+ */
 export interface ActivitySearch {
   actor?: string;
   area?: string;
   range?: Exclude<ActivityRange, "7d">;
+  q?: string;
 }
 
 /** The route's `validateSearch`: keeps each known filter and drops the rest. */
 export function activitySearch(
   search: Record<string, unknown>
 ): ActivitySearch {
-  const { actor, area, range } = search;
+  const { actor, area, range, q } = search;
   return {
     ...(typeof actor === "string" && actor !== "" ? { actor } : {}),
     ...(typeof area === "string" && area !== "" && area !== "all"
@@ -70,6 +74,9 @@ export function activitySearch(
     ...(typeof range === "string" && isActivityRange(range) && range !== "7d"
       ? { range }
       : {}),
+    // The router parses a hand-typed `?q=1004` as a number, so a number is kept as text.
+    ...(typeof q === "string" && q.trim() !== "" ? { q } : {}),
+    ...(typeof q === "number" && Number.isFinite(q) ? { q: String(q) } : {}),
   };
 }
 
@@ -77,12 +84,15 @@ export function activitySearch(
 export function searchOf(
   actor: string | undefined,
   area: string,
-  range: ActivityRange
+  range: ActivityRange,
+  q = ""
 ): ActivitySearch {
+  const text = q.trim();
   return {
     ...(actor === undefined ? {} : { actor }),
     ...(area === "all" ? {} : { area }),
     ...(range === "7d" ? {} : { range }),
+    ...(text === "" ? {} : { q: text }),
   };
 }
 
@@ -114,6 +124,33 @@ export function activityParams(
     ...(from === undefined ? {} : { from }),
     ...(cursor === undefined ? {} : { cursor }),
   };
+}
+
+/** The query one Activity list sends, with no cursor: the part every page shares. */
+export type ActivityListQuery = Omit<
+  ReturnType<typeof activityParams>,
+  "cursor"
+>;
+
+/**
+ * The cache key of one Activity list. It holds the query itself, the range start
+ * included, so `now` is read once when the list starts: "Load older" reuses the key and
+ * therefore the same `from`, and a list started later has a key of its own.
+ */
+export function activityListKey(
+  filters: ActivityFilters,
+  now: Date
+): readonly [...typeof ACTIVITY_KEY, "list", ActivityListQuery] {
+  return [...ACTIVITY_KEY, "list", activityParams(filters, now)];
+}
+
+/** The query one page of a list sends: the key's query, plus the page's cursor. */
+export function activityPageQuery(
+  key: ReturnType<typeof activityListKey>,
+  cursor?: string
+): ReturnType<typeof activityParams> {
+  const { 3: query } = key;
+  return cursor === undefined ? { ...query } : { ...query, cursor };
 }
 
 // Times read the way the approved mockup writes them: "Today, 10:41", "Yesterday, 17:40",

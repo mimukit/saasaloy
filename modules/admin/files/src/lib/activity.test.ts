@@ -5,6 +5,8 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  activityListKey,
+  activityPageQuery,
   activityParams,
   activitySearch,
   agoLabel,
@@ -45,6 +47,15 @@ describe("activitySearch and searchOf", () => {
     assert.deepEqual(activitySearch({ range: "forever", area: 3 }), {});
   });
 
+  it("keep the search text, and drop a blank one", () => {
+    assert.deepEqual(activitySearch({ q: "INV-2041" }), { q: "INV-2041" });
+    assert.deepEqual(activitySearch({ q: "   " }), {});
+    assert.deepEqual(activitySearch({ q: 1004 }), { q: "1004" });
+    assert.deepEqual(activitySearch({ q: true }), {});
+    assert.deepEqual(searchOf(undefined, "all", "7d", " 1004 "), { q: "1004" });
+    assert.deepEqual(searchOf(undefined, "all", "7d", "  "), {});
+  });
+
   it("write a filter change with the defaults left out", () => {
     assert.deepEqual(searchOf(undefined, "all", "7d"), {});
     assert.deepEqual(searchOf("u1", "members", "today"), {
@@ -74,6 +85,34 @@ describe("activityParams", () => {
         from: new Date(2026, 10, 4).toISOString(),
         q: "INV",
       }
+    );
+  });
+});
+
+describe("activityListKey and activityPageQuery", () => {
+  it("fix the range start in the key, so every page of one list sends the same from", () => {
+    const key = activityListKey(
+      { area: "all", q: "", range: "7d" },
+      new Date(2026, 10, 4, 12, 0, 0)
+    );
+    const from = new Date(
+      new Date(2026, 10, 4, 12, 0, 0).getTime() - 7 * 24 * 60 * 60 * 1000
+    ).toISOString();
+    assert.deepEqual(key, ["admin", "activity", "list", { from }]);
+    assert.deepEqual(activityPageQuery(key), { from });
+    assert.deepEqual(activityPageQuery(key, "c1"), { cursor: "c1", from });
+    assert.deepEqual(activityPageQuery(key, "c2"), { cursor: "c2", from });
+  });
+
+  it("give a later start a different key, so the lists never mix", () => {
+    const filters = { area: "all", q: "", range: "today" } as const;
+    assert.notDeepEqual(
+      activityListKey(filters, new Date(2026, 10, 4, 12)),
+      activityListKey(filters, new Date(2026, 10, 5, 12))
+    );
+    assert.deepEqual(
+      activityListKey({ area: "all", q: "", range: "all" }, now),
+      ["admin", "activity", "list", {}]
     );
   });
 });

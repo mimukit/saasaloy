@@ -137,14 +137,22 @@ function PersonCell({
       </Avatar>
       <div className="flex min-w-0 flex-col">
         <span className="flex min-w-0 items-center gap-1.5">
-          <span className="truncate font-medium">{name}</span>
+          <span dir="auto" title={name} className="truncate font-medium">
+            {name}
+          </span>
           {you ? (
             <Badge variant="outline" size="sm">
               You
             </Badge>
           ) : null}
         </span>
-        <span className="text-muted-foreground truncate text-xs">{email}</span>
+        <span
+          dir="auto"
+          title={email}
+          className="text-muted-foreground truncate text-xs"
+        >
+          {email}
+        </span>
       </div>
     </div>
   );
@@ -230,6 +238,10 @@ function removedColumns(
       header: "Removed by",
       value: (member) => member.removedBy,
       sortable: true,
+      cell: (member) =>
+        member.removedBy === null ? null : (
+          <span dir="auto">{member.removedBy}</span>
+        ),
     },
   ];
   if (onRestore !== null) {
@@ -243,6 +255,9 @@ function removedColumns(
           variant="outline"
           size="sm"
           disabled={restoring === member.id}
+          // Each row's button names its member, so a screen reader's button list tells
+          // two removed members apart.
+          aria-label={`Restore ${member.name}`}
           onClick={(event) => {
             // The button restores; it does not also select the row.
             event.stopPropagation();
@@ -296,7 +311,7 @@ function RecentActivity({ member }: { member: ActiveMember }) {
         {data.events.map((event) => (
           <li key={event.id} className="text-muted-foreground">
             {event.label}{" "}
-            <span className="text-foreground font-medium">
+            <span dir="auto" className="text-foreground font-medium">
               {event.target.label}
             </span>{" "}
             · {agoLabel(event.createdAt, now)}
@@ -342,7 +357,11 @@ function MemberDetail({
   return (
     <DetailPanel
       title={member.name}
-      description={member.email}
+      description={
+        <span dir="auto" title={member.email}>
+          {member.email}
+        </span>
+      }
       media={
         <Avatar className="size-10">
           <AvatarFallback>{initialsOf(member.name)}</AvatarFallback>
@@ -1165,6 +1184,7 @@ function Members() {
               </InputGroupAddon>
               <InputGroupInput
                 type="search"
+                dir="auto"
                 aria-label="Search name or email"
                 placeholder="Search name or email"
                 value={search}

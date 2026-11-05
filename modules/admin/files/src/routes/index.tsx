@@ -229,7 +229,13 @@ function NewestCard() {
               <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
             </Avatar>
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{user.name}</p>
+              <p
+                dir="auto"
+                title={user.name}
+                className="truncate text-sm font-medium"
+              >
+                {user.name}
+              </p>
               <time
                 dateTime={user.createdAt}
                 className="text-muted-foreground block text-xs tabular-nums"
@@ -263,8 +269,10 @@ function Dashboard() {
       <PageBody>
         {/* Each card reads its own query and owns its own loading and failure, so one
             slow or failed request never blanks the other two. The users and newest
-            cards share one request. */}
-        <div className="grid gap-4 lg:grid-cols-3">
+            cards share one request. `grid-cols-1` gives the single column a zero
+            minimum, so a long name truncates inside its card instead of widening
+            every card past a phone screen. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
           <HealthCard />
           <UsersCard />
           <NewestCard />

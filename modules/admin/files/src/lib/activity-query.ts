@@ -1,6 +1,10 @@
 import { infiniteQueryOptions, queryOptions } from "@tanstack/react-query";
 
-import { ACTIVITY_KEY, activityParams } from "@admin/lib/activity";
+import {
+  ACTIVITY_KEY,
+  activityListKey,
+  activityPageQuery,
+} from "@admin/lib/activity";
 import type { ActivityFilters } from "@admin/lib/activity";
 import { api } from "@admin/lib/api";
 
@@ -9,16 +13,17 @@ import { api } from "@admin/lib/api";
 // with no environment.
 
 /**
- * The log under the filters, 50 rows a page, with "Load older" fetching the next. The
- * range's start is fixed when the first page runs, so a later page does not move it.
+ * The log under the filters, 50 rows a page, with "Load older" fetching the next. `now`
+ * fixes the range start, and the key holds it, so every page of one list sends the same
+ * `from`. The route reads `now` in its loader, once per filter set.
  */
-export function activityQuery(filters: ActivityFilters) {
+export function activityQuery(filters: ActivityFilters, now: Date) {
   return infiniteQueryOptions({
-    queryKey: [...ACTIVITY_KEY, "list", filters],
+    queryKey: activityListKey(filters, now),
     initialPageParam: undefined as string | undefined,
-    queryFn: async ({ pageParam }) => {
+    queryFn: async ({ queryKey, pageParam }) => {
       const res = await api.admin["audit-events"].$get({
-        query: activityParams(filters, new Date(), pageParam),
+        query: activityPageQuery(queryKey, pageParam),
       });
       if (res.status !== 200) {
         throw new Error(`The api answered ${res.status}.`);

@@ -58,9 +58,10 @@ import { initialsOf } from "@admin/lib/initials";
 
 // The Activity page at `/activity`: the admin audit log. Every change an admin made
 // through an admin write route, newest first, 50 rows a page with "Load older". The
-// person, the area and the date range live in the address (`validateSearch`), so a link
-// such as the Members panel's `/activity?actor=<id>` opens it filtered. The search box
-// narrows by target label on the api, a moment after the typing stops.
+// person, the area, the date range and the search live in the address (`validateSearch`),
+// so a link such as the Members panel's `/activity?actor=<id>` opens it filtered and a
+// reload keeps every filter. The search box narrows by target label on the api, and it
+// writes `q` to the address a moment after the typing stops.
 //
 // A row shows the plain words the api sends with it (`label`, from the action's entry in
 // the module's action file). The raw action key shows in the detail panel only, beside
@@ -68,6 +69,13 @@ import { initialsOf } from "@admin/lib/initials";
 
 export const Route = createFileRoute("/activity")({
   validateSearch: activitySearch,
+  // The range start of the list under these filters. The loader runs once per filter
+  // set, outside render, and the list's query key holds the start, so "Load older" sends
+  // the same `from` as the first page. An endless `staleTime` keeps a repeat navigation
+  // to the same filters (a second click on the selected chip) from starting a new list.
+  loaderDeps: ({ search }) => search,
+  loader: () => ({ startedAt: new Date() }),
+  staleTime: Number.POSITIVE_INFINITY,
   component: Activity,
   errorComponent: ActivityError,
 });
@@ -102,7 +110,9 @@ function Person({ event }: { event: ActivityEvent }) {
           {initialsOf(event.actor.name)}
         </AvatarFallback>
       </Avatar>
-      <span className="truncate">{event.actor.name}</span>
+      <span dir="auto" title={event.actor.name} className="truncate">
+        {event.actor.name}
+      </span>
     </div>
   );
 }
@@ -138,6 +148,17 @@ const COLUMNS: readonly DataTableColumn<ActivityEvent>[] = [
     id: "target",
     header: "Target",
     value: (event) => event.target.label,
+    // A target label can be a whole URL. It truncates inside the column, and the title
+    // holds the full value, so the table never grows past its box.
+    cell: (event) => (
+      <span
+        dir="auto"
+        title={event.target.label}
+        className="block max-w-xs truncate"
+      >
+        {event.target.label}
+      </span>
+    ),
   },
 ];
 
@@ -154,10 +175,12 @@ function ChangeTable({ event }: { event: ActivityEvent }) {
           No field is stored for this change.
         </p>
       ) : (
-        <Table className="font-mono text-xs">
+        // Fixed columns: Before and After share the width evenly, so a 2,000-character
+        // value wraps inside its own column and never starves the other two.
+        <Table className="table-fixed font-mono text-xs">
           <TableHeader>
             <TableRow>
-              <TableHead>Field</TableHead>
+              <TableHead className="w-28">Field</TableHead>
               <TableHead>Before</TableHead>
               <TableHead>After</TableHead>
             </TableRow>
@@ -165,11 +188,13 @@ function ChangeTable({ event }: { event: ActivityEvent }) {
           <TableBody>
             {rows.map((row) => (
               <TableRow key={row.field}>
-                <TableCell className="align-top">{row.field}</TableCell>
-                <TableCell className="text-destructive-foreground align-top break-words whitespace-normal">
+                <TableCell className="align-top wrap-anywhere whitespace-pre-wrap">
+                  {row.field}
+                </TableCell>
+                <TableCell className="text-destructive-foreground align-top wrap-anywhere whitespace-pre-wrap">
                   {valueText(row.before)}
                 </TableCell>
-                <TableCell className="text-success-foreground align-top break-words whitespace-normal">
+                <TableCell className="text-success-foreground align-top wrap-anywhere whitespace-pre-wrap">
                   {valueText(row.after)}
                 </TableCell>
               </TableRow>
@@ -198,12 +223,19 @@ function EventDetail({
           label: "Who",
           value: (
             <span className="flex items-center gap-1.5">
-              {event.actor.name}
+              <span dir="auto">{event.actor.name}</span>
               <StatusPill label={event.actor.role} tone="open" />
             </span>
           ),
         },
-        { label: "Target", value: event.target.label },
+        {
+          label: "Target",
+          value: (
+            <span dir="auto" className="wrap-anywhere">
+              {event.target.label}
+            </span>
+          ),
+        },
         {
           label: "Action",
           value: <span className="font-mono text-xs">{event.action}</span>,
@@ -234,11 +266,34 @@ function Activity() {
   const area = search.area ?? "all";
   const range: ActivityRange = search.range ?? "7d";
   const { actor } = search;
-  const [text, setText] = useState("");
-  const q = useSettled(text);
+  const q = search.q?.trim() ?? "";
+  const [text, setText] = useState(q);
+  const settled = useSettled(text);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const log = useInfiniteQuery(activityQuery({ actor, area, q, range }));
+  // The settled search text goes to the address, as the other filters do. `replace`, so
+  // each pause in the typing does not add a history entry.
+  useEffect(() => {
+    void navigate({
+      replace: true,
+      search: (prev) =>
+        searchOf(prev.actor, prev.area ?? "all", prev.range ?? "7d", settled),
+    });
+  }, [settled, navigate]);
+
+  // Back and forward change `q` with no typing, so the box follows the address.
+  const [seenQ, setSeenQ] = useState(q);
+  if (seenQ !== q) {
+    setSeenQ(q);
+    if (settled.trim() !== q) {
+      setText(q);
+    }
+  }
+
+  const { startedAt } = Route.useLoaderData();
+  const log = useInfiniteQuery(
+    activityQuery({ actor, area, q, range }, startedAt)
+  );
   const people = useQuery(activityPeopleQuery);
 
   const events = useMemo(
@@ -284,7 +339,8 @@ function Activity() {
       search: searchOf(
         "actor" in next ? next.actor : actor,
         next.area ?? area,
-        next.range ?? range
+        next.range ?? range,
+        q
       ),
     });
   };
@@ -411,6 +467,7 @@ function Activity() {
             </InputGroupAddon>
             <InputGroupInput
               type="search"
+              dir="auto"
               aria-label="Search target"
               placeholder="Search target"
               value={text}
