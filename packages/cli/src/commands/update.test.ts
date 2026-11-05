@@ -54,6 +54,13 @@ const ORIGINAL_CWD = process.cwd();
 const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
 const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
 
+// The base update notes the CLI ships in `update-notes/`, oldest first. The tests that read
+// the real folder expect every one of them, so the next real note is one more id here.
+const BASE_NOTE_IDS = [
+  "base/0001-brand-css",
+  "base/0002-ui-primitives-and-date-logic",
+];
+
 let dir: string;
 
 beforeAll(async () => {
@@ -497,7 +504,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
   });
 
   // #298 Phase 3: a project whose lock predates the v0.8.0 notes gets, on stdout, exactly
-  // the notes whose `when` holds for it. The base note comes from the real folder the CLI
+  // the notes whose `when` holds for it. The base notes come from the real folder the CLI
   // ships; the module notes come from the fixture registry. `shell` arrives as a new
   // prerequisite, so its old folder is empty and its note applies outright; `widget` is a
   // working copy with no merge base, so its note may apply.
@@ -528,7 +535,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       expect(code).toBe(0);
       expect(out).toContain("## Update notes");
       expect(noteIds(out)).toStrictEqual({
-        notes: ["base/0001-brand-css", "shell/0002-shell-css"],
+        notes: [...BASE_NOTE_IDS, "shell/0002-shell-css"],
         mayApply: ["widget/0001-widget-port"],
       });
     });
@@ -541,7 +548,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       expect(code).toBe(0);
       expect(noteIds(out)).toStrictEqual({
         notes: [
-          "base/0001-brand-css",
+          ...BASE_NOTE_IDS,
           "shell/0001-admin-kit-move",
           "shell/0002-shell-css",
         ],
@@ -579,7 +586,9 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       expect(code).toBe(EXIT_WORK_PENDING);
       expect(out).toContain("No file needs a merge");
       expect(out).toContain("### shell/0002-shell-css: Shell css");
-      expect(err).toMatch(/3 update notes/);
+      expect(err).toMatch(
+        new RegExp(`${BASE_NOTE_IDS.length + 2} update notes`)
+      );
     });
   });
 
@@ -1270,7 +1279,7 @@ describe("runUpdate — the base template (#120)", () => {
       expect(code).toBe(0);
       expect(noteIds(out)).toStrictEqual({
         notes: [],
-        mayApply: ["base/0001-brand-css"],
+        mayApply: BASE_NOTE_IDS,
       });
     });
 
@@ -1281,23 +1290,24 @@ describe("runUpdate — the base template (#120)", () => {
 
       expect(code).toBe(0);
       expect(noteIds(out)).toStrictEqual({
-        notes: ["base/0001-brand-css"],
+        notes: BASE_NOTE_IDS,
         mayApply: [],
       });
     });
 
     // The adoption window stays open while the base sits at the running CLI, so every
-    // run selects the note again. `--done` records the id, and selection skips it.
+    // run selects the notes again. `--done` records each id, and selection skips them.
     it("keeps a cleared note cleared while the adopted base sits at the running CLI", async () => {
       await adopted();
 
       const shown = await runBoth(["--yes"]);
       expect(shown.code).toBe(EXIT_WORK_PENDING);
-      expect(noteIds(shown.out).mayApply).toStrictEqual([
-        "base/0001-brand-css",
-      ]);
+      expect(noteIds(shown.out).mayApply).toStrictEqual(BASE_NOTE_IDS);
 
-      const done = await runBoth(["--done", "base/0001-brand-css", "--yes"]);
+      const done = await runBoth([
+        ...BASE_NOTE_IDS.flatMap((id) => ["--done", id]),
+        "--yes",
+      ]);
       expect(done.code).toBe(0);
 
       const next = await runBoth(["--yes"]);
@@ -1306,7 +1316,7 @@ describe("runUpdate — the base template (#120)", () => {
       expect(next.out).toBe("");
       const manifest = await loadManifest(project);
       expect(manifest.pendingNotes).toBeUndefined();
-      expect(manifest.doneNotes).toStrictEqual(["base/0001-brand-css"]);
+      expect(manifest.doneNotes).toStrictEqual(BASE_NOTE_IDS);
     });
 
     it("refuses `--from` on a run that is not the first after adoption, and writes nothing", async () => {
@@ -1374,7 +1384,7 @@ describe("runUpdate — the base template (#120)", () => {
 
     expect(code).toBe(EXIT_WORK_PENDING);
     expect(noteIds(out)).toStrictEqual({
-      notes: ["base/0001-brand-css"],
+      notes: BASE_NOTE_IDS,
       mayApply: [],
     });
     expect(err).not.toContain("Everything is up to date");
@@ -1383,9 +1393,10 @@ describe("runUpdate — the base template (#120)", () => {
   // #298 Phase 4. A note an applied run shows stays pending in the manifest until
   // `update --done <id>`, keeps the run at exit 3, and prints in every later merge plan.
   describe("pending update notes (#298)", () => {
-    const NOTE_ID = "base/0001-brand-css";
+    const NOTE_ID = BASE_NOTE_IDS[0]!;
+    const DONE_ALL = BASE_NOTE_IDS.flatMap((id) => ["--done", id]);
 
-    /** A current base recorded at 0.7.0, so the run selects the brand.css note. */
+    /** A current base recorded at 0.7.0, so the run selects every base note. */
     async function belowTheNote(): Promise<void> {
       const state = await scaffolded();
       state.lock.base = baseRecord("0.7.0", runningHash);
@@ -1403,16 +1414,23 @@ describe("runUpdate — the base template (#120)", () => {
 
       const first = await runBoth(["--yes"]);
       expect(first.code).toBe(EXIT_WORK_PENDING);
-      expect(noteIds(first.out).notes).toStrictEqual([NOTE_ID]);
-      expect(first.out).toContain(`--done ${NOTE_ID}`);
-      expect(first.err).toContain("1 update note pending");
-      await expect(pendingIds()).resolves.toStrictEqual([NOTE_ID]);
-      // The range moves to the running CLI, so the note is never selected again.
+      expect(noteIds(first.out).notes).toStrictEqual(BASE_NOTE_IDS);
+      for (const id of BASE_NOTE_IDS) {
+        expect(first.out).toContain(`--done ${id}`);
+      }
+      expect(first.err).toContain(
+        `${BASE_NOTE_IDS.length} update notes pending`
+      );
+      await expect(pendingIds()).resolves.toStrictEqual(BASE_NOTE_IDS);
+      // The range moves to the running CLI, so the notes are never selected again.
       expect((await lockOnDisk()).base?.cliVersion).toBe(cliVersion);
 
-      const done = await runBoth(["--done", NOTE_ID, "--yes"]);
+      // `--done` repeats, so one run clears every pending base note.
+      const done = await runBoth([...DONE_ALL, "--yes"]);
       expect(done.code).toBe(0);
-      expect(done.err).toContain(`done  ${NOTE_ID}`);
+      for (const id of BASE_NOTE_IDS) {
+        expect(done.err).toContain(`done  ${id}`);
+      }
       expect(done.out).toBe("");
       await expect(pendingIds()).resolves.toStrictEqual([]);
       expect((await loadManifest(project)).pendingNotes).toBeUndefined();
@@ -1429,12 +1447,12 @@ describe("runUpdate — the base template (#120)", () => {
 
       const preview = await runBoth(["--dry-run"]);
       expect(preview.code).toBe(0);
-      expect(noteIds(preview.out).notes).toStrictEqual([NOTE_ID]);
+      expect(noteIds(preview.out).notes).toStrictEqual(BASE_NOTE_IDS);
 
       const again = await runBoth(["--yes"]);
       expect(again.code).toBe(EXIT_WORK_PENDING);
-      expect(noteIds(again.out).notes).toStrictEqual([NOTE_ID]);
-      await expect(pendingIds()).resolves.toStrictEqual([NOTE_ID]);
+      expect(noteIds(again.out).notes).toStrictEqual(BASE_NOTE_IDS);
+      await expect(pendingIds()).resolves.toStrictEqual(BASE_NOTE_IDS);
     });
 
     it("repeats a pending note in `update base` and keeps exit 3", async () => {
@@ -1443,7 +1461,7 @@ describe("runUpdate — the base template (#120)", () => {
 
       const named = await runBoth(["base", "--yes"]);
       expect(named.code).toBe(EXIT_WORK_PENDING);
-      expect(noteIds(named.out).notes).toStrictEqual([NOTE_ID]);
+      expect(noteIds(named.out).notes).toStrictEqual(BASE_NOTE_IDS);
     });
 
     it("moves the recorded CLI of a base still waiting on a merge, and keeps its hash", async () => {
@@ -1457,13 +1475,13 @@ describe("runUpdate — the base template (#120)", () => {
       const first = await runBoth(["--yes"]);
       expect(first.code).toBe(EXIT_WORK_PENDING);
       expect(first.out).toContain("## base");
-      expect(noteIds(first.out).notes).toStrictEqual([NOTE_ID]);
+      expect(noteIds(first.out).notes).toStrictEqual(BASE_NOTE_IDS);
       expect((await lockOnDisk()).base).toStrictEqual(
         baseRecord(cliVersion, "f".repeat(64))
       );
 
-      // Cleared while the merge still waits: the next run offers the merge, not the note.
-      await runBoth(["--done", NOTE_ID, "--yes"]);
+      // Cleared while the merge still waits: the next run offers the merge, not the notes.
+      await runBoth([...DONE_ALL, "--yes"]);
       const next = await runBoth(["--yes"]);
       expect(next.code).toBe(EXIT_WORK_PENDING);
       expect(next.out).toContain("## base");
@@ -1476,7 +1494,7 @@ describe("runUpdate — the base template (#120)", () => {
 
       const preview = await runBoth(["--dry-run"]);
       expect(preview.code).toBe(0);
-      expect(noteIds(preview.out).notes).toStrictEqual([NOTE_ID]);
+      expect(noteIds(preview.out).notes).toStrictEqual(BASE_NOTE_IDS);
       expect((await loadManifest(project)).pendingNotes).toBeUndefined();
       expect((await lockOnDisk()).base?.cliVersion).toBe("0.7.0");
     });
@@ -1492,7 +1510,7 @@ describe("runUpdate — the base template (#120)", () => {
       const refused = await runBoth(["--done", "api/0001-nope", "--yes"]);
       expect(refused.code).toBe(2);
       expect(refused.err).toContain("api/0001-nope");
-      expect(refused.err).toContain(`Pending: ${NOTE_ID}`);
+      expect(refused.err).toContain(`Pending: ${BASE_NOTE_IDS.join(", ")}.`);
       await expect(
         readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
       ).resolves.toBe(before);
