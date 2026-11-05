@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database-postgres
-description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, dumping and migrating the production database with db:prod:dump and db:prod:migrate, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, seeding it with db:seed, writing route tests against the test database with testDatabase(), opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
+description: Runbook for the database-postgres driver — Postgres over postgres.js behind packages/db. Use when reading the DB from a route (withDb(c, …)), setting DATABASE_URL in packages/env/.env.example or as a production Workers secret, applying migrations with db:migrate, dumping and migrating the production database with db:prod:dump and db:prod:migrate, setting up the read-only production role with db:prod:readonly-grants (its password, rotation and the ~/.config/<project>/prod-readonly.env file, plus the Workers Observability token for logs:prod), querying production with db:prod:query, creating the first superadmin with db:prod:superadmin, creating or dropping a development database with db:setup / db:status / db:drop and its docker, server and neon backends, seeding it with db:seed, writing route tests against the test database with testDatabase(), opting into a Hyperdrive binding, or switching a project between this driver and database-d1. The tables, the repositories and db:generate belong to the core skill, saasaloy-database.
 ---
 
 # database-postgres — the Postgres driver
@@ -188,11 +188,14 @@ pnpm --filter @repo/db db:generate   # core: diff schema → emit SQL under migr
 pnpm --filter @repo/db db:migrate    # apply pending migrations
 ```
 
-`db:migrate` acts on the development database `apps/api/.env` names. Production has its own two commands:
+`db:migrate` acts on the development database `apps/api/.env` names. Production has its own commands:
 
 ```sh
-pnpm db:prod:dump      # pg_dump the production database into the backup folder
-pnpm db:prod:migrate   # dump first, then drizzle-kit migrate against production
+pnpm db:prod:dump              # pg_dump the production database into the backup folder
+pnpm db:prod:migrate           # dump first, then drizzle-kit migrate, then the read-only grants
+pnpm db:prod:readonly-grants   # create the read-only role and match its grants to the column classes
+pnpm db:prod:query "<sql>"     # read production as the read-only role, masked
+pnpm db:prod:superadmin --email <address>   # the first superadmin (with auth only)
 ```
 
 `drizzle-kit migrate` records what it applied in a `drizzle.__drizzle_migrations` table, so
@@ -213,6 +216,90 @@ A refused target stops the command with nothing dumped or migrated.
 `db:prod:migrate` takes that dump first and stops when it fails or comes out empty. Then it runs `drizzle-kit migrate`. When the migration fails, the message names the dump that holds the database as it was before.
 
 **A deploy migrates only when you ask.** `pnpm deploy:production` stops at its migration gate when a file in `packages/db/migrations/` changed since the last deploy tag, and names the files. Read the SQL, then run `pnpm deploy:production --migrate`, which runs `db:prod:migrate` once before any Worker uploads. The `saasaloy-deploy` skill covers the gate, and `docs/runbook-deploy.md` holds this project's restore steps.
+
+After the migration, `db:prod:migrate` brings the read-only role's grants up to the column classes, as `pnpm db:prod:readonly-grants` does (see "The read-only role" below). A failed grant step prints `The read-only grants failed (...). The migration stands, and the role keeps its old grants. Run pnpm db:prod:readonly-grants.` and does not change the migrate result. The old grants stay, so a column the migration added stays unreadable to the role until the grants run again.
+
+## The read-only role: `db:prod:readonly-grants` and `db:prod:query`
+
+An agent that debugs production reads it as `<project>_ro`, a login role that the server keeps read-only, never as the owner role in `packages/env/.env.prod`. The role name is `databasePrefix` with `_dev` replaced by `_ro`, so `acme_shop_dev` gives `acme_shop_ro`. The `saasaloy-prod-debug` skill is the agent's runbook; this section is the owner's setup.
+
+### What `pnpm db:prod:readonly-grants` does
+
+It runs `node scripts/readonly-grants.ts` under `env-deploy --run api`, with the same target check as `db:prod:dump`: `<project>_production` on a server other than the dev one. Then, in one transaction, it:
+
+- creates `<project>_ro` with `LOGIN` when it is missing, and never gives it a password;
+- sets `NOSUPERUSER NOCREATEDB NOCREATEROLE NOINHERIT NOREPLICATION NOBYPASSRLS CONNECTION LIMIT 2`, and the role defaults `default_transaction_read_only = on`, `statement_timeout = '15s'` and `idle_in_transaction_session_timeout = '30s'`;
+- sets `log_statement = 'all'` on the role only when the connecting role is a superuser, so the server log records each statement the role runs. Otherwise it prints `Skipped log_statement: ...` and the role runs without that audit log. A managed host's owner role is often not a superuser;
+- grants `CONNECT` on the database and `USAGE` on `public`;
+- for each live table in `public`, runs `REVOKE ALL` and then `GRANT SELECT (<columns>)` on its `pii` and `plain` columns only.
+
+The classes come from `packages/db/src/column-classes/`; the `saasaloy-database` skill has the rule. There is no table-level grant and no `ALTER DEFAULT PRIVILEGES`, so a `secret` column, a column with no class and a table with no class file get nothing. A classified column the database does not have yet is skipped. The output has one line per table (`accounts: 9 column(s) readable, 4 secret withheld`) and names every unclassified column. Running it again is safe: each run makes the grants match the classes exactly, so a column moved to `secret` loses its grant.
+
+Creating and altering the role needs `CREATEROLE` on the connecting role. Without it the command fails with the server's error, and nothing in the transaction lands.
+
+### One-time setup
+
+1. Run the grants once:
+   ```sh
+   pnpm db:prod:readonly-grants
+   ```
+2. Give the role a password, in a SQL console open on `<project>_production` as the owner. The command prints this line with the real role name:
+   ```sql
+   ALTER ROLE "<project>_ro" PASSWORD '<a new password>';
+   ```
+3. Write the URL file the command names, `~/.config/<project>/prod-readonly.env`, with mode 0600. It holds one key, `PROD_READONLY_DATABASE_URL`. Percent-encode any special character in the password, and add the `sslmode` the "TLS" section above asks for:
+   ```sh
+   mkdir -p ~/.config/<project> && chmod 700 ~/.config/<project>
+   ( umask 077; echo 'PROD_READONLY_DATABASE_URL=postgres://<project>_ro:<password>@<host>:5432/<project>_production?sslmode=verify-full' > ~/.config/<project>/prod-readonly.env )
+   chmod 600 ~/.config/<project>/prod-readonly.env
+   ```
+   Never put this key in `packages/env/.env`, `.env.prod` or `.env.example`: no service reads it.
+4. For `pnpm logs:prod`, create a Cloudflare API token with one permission, Account > Workers Observability > Read, in the dashboard under My Profile > API Tokens > Create Token > Custom token. Write it with the account id to `~/.config/<project>/cloudflare-logs.env`, mode 0600:
+   ```sh
+   CLOUDFLARE_LOGS_API_TOKEN=<the token>
+   CLOUDFLARE_ACCOUNT_ID=<the account id>
+   ```
+   `<project>` there is the root `package.json` name as `databasePrefix` slugs it, so both files share one folder. Never use the deploy token: it can deploy.
+5. Check both:
+   ```sh
+   pnpm db:prod:query "select count(*) from users"
+   pnpm logs:prod --since 1h
+   ```
+
+### Rotate or lock the role
+
+Rotate the password with the same `ALTER ROLE ... PASSWORD` statement, then edit the URL file. To lock the role out, run `ALTER ROLE "<project>_ro" PASSWORD NULL`. Do not use `NOLOGIN`: the next `db:prod:readonly-grants` or `db:prod:migrate` sets `LOGIN` again, and it never touches the password.
+
+### `pnpm db:prod:query`
+
+`node scripts/query.ts`, with no `env-deploy`: it reads `PROD_READONLY_DATABASE_URL` from `~/.config/<project>/prod-readonly.env` and nothing else. It refuses to start when the file is missing, has a mode wider than 0600, or holds a URL that is not `<project>_production` as `<project>_ro` on a server other than the dev one. After it connects, it checks `current_user` and `default_transaction_read_only` before the first statement. Each refusal ends with `Nothing ran.`
+
+```sh
+pnpm db:prod:query "select id, role, created_at from users order by created_at desc limit 5"
+pnpm db:prod:query --auth-trace ana@example.com
+pnpm db:prod:query --max-rows 1000 < query.sql
+```
+
+It runs one statement per call through the extended protocol, in `begin read only`, and rolls back. It prints at most 200 rows (`--max-rows` takes 1 to 5000), masks each output column whose name some table classes `pii`, and never prints the URL. The `saasaloy-prod-debug` skill covers the masker, `--auth-trace` and what the role cannot read.
+
+## The first superadmin: `db:prod:superadmin`
+
+No sign-up promotes an account: every sign-up gets `user`, the first one included. On this driver production gets its first superadmin from this command. It ships only when `auth` is installed, because it writes the auth tables. Run it once before the first `pnpm deploy:production`, so the admin app has an owner the moment the api answers:
+
+```sh
+pnpm db:prod:superadmin --email you@example.com [--name "Your Name"] [--keep-password]
+```
+
+It runs `node scripts/superadmin.ts` under `env-deploy --run api`, with the same production target check as the other `db:prod:*` commands. It also accepts this project's own development databases, so you can try it before launch: from `packages/db`, run `node scripts/superadmin.ts --email ...` with `DATABASE_URL` exported. Every other database is refused before a connection opens.
+
+- `--email` is required, and it is trimmed and lowercased. A `.test` or `.invalid` address is refused.
+- At a terminal it asks for the password twice, without echo. From a pipe, such as a password manager, it reads the first line once. The password needs 12 to 128 characters and no leading or trailing space, the same rule as sign-up.
+- It hashes the password the way Better Auth does (scrypt, `<salt>:<key>` in hex), and prints neither the password nor the hash.
+- In one transaction it creates the `users` row and its `credential` account, or promotes an existing account: it sets the role from `config.auth.superadminRole`, marks the email verified, and lifts a ban. Setting a password on an existing account ends all its sessions.
+- `--keep-password` promotes without a prompt, and refuses an account that has no password yet.
+- It ends with the other accounts that hold the role. Check that each one should.
+
+Then sign in on the admin app with that email. D1 has no such command: the `saasaloy-auth` skill has the D1 steps.
 
 ## The lifecycle commands: `db:setup`, `db:status`, `db:drop`
 
@@ -470,10 +557,12 @@ There is no data migration in either direction; see ADR 0026.
   Never hand-edit that config.
 - **Migrations are manual** — generate, review, then apply with `db:migrate`.
 - **`db:seed` writes only to a database `db:setup` named**, never with `NODE_ENV=production`.
+- **An agent reads production only through `pnpm db:prod:query`**, as `<project>_ro`. Never through `env-deploy --run api` or the owner URL. The `saasaloy-prod-debug` skill is the runbook.
+- **The read-only URL lives in `~/.config/<project>/prod-readonly.env`, mode 0600**, never in `packages/env/`.
 - **Route tests use `testDatabase()`**, so each one rolls back. Never point a test at the development database.
 - **Hyperdrive is opt-in and code-free.** Add the binding; change nothing in `src/`.
 - **One driver per project.** Adding `database-d1` beside this one is refused, by design.
 
 ## Next
 
-Run `saasaloy-database` to add a table, a repository function and a seed slice.
+Run `saasaloy-database` to add a table, a repository function and a seed slice. Run `saasaloy-prod-debug` to answer a question about production data.
