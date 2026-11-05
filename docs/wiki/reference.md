@@ -179,6 +179,8 @@ An entry in `files[]`, a scaffold's `files[]` or `patches` may also declare `whe
 
 Two more descriptor fields belong to testing. `untested` on a file entry is a one-line reason the file ships with no test beside it, and the test guards print it instead of failing. `enablesTesting: true` marks a module whose whole point is tests: adding it to a project whose mode is `off` sets `tests-after` once the apply lands, prints one line saying so, and backfills. It leaves `tdd` alone, and `remove` never changes the mode ([ADR 0054](../adr/0054-adr-when-gates-optional-entries-and-feature-modules-own-their-journeys-2026-10-23.md)).
 
+A file entry in `files[]` or a scaffold's `files[]` may declare `"seed": true`. A seed file is the project's once written: `add` and backfill write it once, and the manifest records it with `seed: true`. `update` never overwrites or merges it, and writes it again only when it is missing from disk. `remove` deletes it while its hash still matches and keeps it, untracked and named in a warning, once the project changed it. A module uses one for an extension point a managed file imports, so a project changes the seed and the managed file stays clean ([ADR 0059](../adr/0059-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md)).
+
 See [Add a module](how-to/add-a-module.md) for the workflow.
 
 ## `saasaloy env`

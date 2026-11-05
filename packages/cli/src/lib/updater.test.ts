@@ -2127,3 +2127,89 @@ describe("buildUpdatePlan — when (#242)", () => {
     ]);
   });
 });
+
+// A module seed file (#310, ADR 0059) is written once and is the project's afterwards:
+// `update` never overwrites or merges it, and puts it back only when it is missing.
+describe("update — module seed files", () => {
+  const SEED = "apps/api/src/extend/email.ts";
+
+  async function seedRevisions(base: string, theirs: string) {
+    const item = {
+      type: "saasaloy:feature" as const,
+      files: [
+        {
+          path: "files/extend/email.ts",
+          target: "@api/extend/email.ts",
+          seed: true,
+        },
+      ],
+    };
+    return {
+      base: await writeModule("old", "email", item, {
+        "files/extend/email.ts": base,
+      }),
+      theirs: await writeModule("new", "email", item, {
+        "files/extend/email.ts": theirs,
+      }),
+    };
+  }
+
+  async function seedState(content: string) {
+    const state = {
+      config: config(),
+      manifest: emptyManifest(),
+      lock: emailLock(),
+    };
+    await trackFile(state.manifest, SEED, content, "files/extend/email.ts");
+    state.manifest.managed[SEED] = {
+      ...state.manifest.managed[SEED]!,
+      seed: true,
+    };
+    return state;
+  }
+
+  it("leaves a changed seed file untouched when the module changed it too", async () => {
+    const { base, theirs } = await seedRevisions("v1\n", "v2\n");
+    const state = await seedState("v1\n");
+    await writeFile(join(root, SEED), "mine\n", "utf-8");
+
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+    await executeUpdatePlan(plan, { root, ...state });
+
+    expect(plan.modules[0]?.files[0]?.action).toBe("skip");
+    expect(plan.needsMerge).toBeFalsy();
+    await expect(onDisk(SEED)).resolves.toBe("mine\n");
+    expect(state.manifest.managed[SEED]).toMatchObject({
+      hash: hashContent("v1\n"),
+      seed: true,
+    });
+  });
+
+  it("restores a deleted seed file even when the module did not change it", async () => {
+    const { base, theirs } = await seedRevisions("v1\n", "v1\n");
+    const state = await seedState("v1\n");
+    await rm(join(root, SEED));
+
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+    await executeUpdatePlan(plan, { root, ...state });
+
+    expect(plan.modules[0]?.files[0]?.action).toBe("restore");
+    await expect(onDisk(SEED)).resolves.toBe("v1\n");
+    expect(state.manifest.managed[SEED]).toMatchObject({
+      hash: hashContent("v1\n"),
+      seed: true,
+    });
+  });
+
+  it("records the seed flag on a file a new revision first marks seed", async () => {
+    const { base, theirs } = await seedRevisions("v1\n", "v2\n");
+    const state = await seedState("v1\n");
+    delete state.manifest.managed[SEED]!.seed;
+
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+    await executeUpdatePlan(plan, { root, ...state });
+
+    await expect(onDisk(SEED)).resolves.toBe("v1\n");
+    expect(state.manifest.managed[SEED]?.seed).toBeTruthy();
+  });
+});
