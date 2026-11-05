@@ -75,6 +75,27 @@
           "target": "src/schema/.gitkeep"
         },
         {
+          "path": "files/src/column-class-check.ts",
+          "target": "src/column-class-check.ts"
+        },
+        {
+          "path": "files/src/column-class.ts",
+          "target": "src/column-class.ts"
+        },
+        {
+          "path": "files/src/column-classes.ts",
+          "target": "src/column-classes.ts"
+        },
+        {
+          "path": "files/src/column-classes.vitest.ts",
+          "target": "src/column-classes.test.ts",
+          "when": { "testing": true }
+        },
+        {
+          "path": "files/src/column-classes/.gitkeep",
+          "target": "src/column-classes/.gitkeep"
+        },
+        {
           "path": "files/src/repositories/.gitkeep",
           "target": "src/repositories/.gitkeep"
         },
