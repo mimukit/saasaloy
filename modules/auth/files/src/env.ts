@@ -1,8 +1,8 @@
-// The two env rules `src/auth.ts` applies at module scope, kept in their own file with
+// The env rules `src/auth.ts` applies at module scope, kept in their own file with
 // no imports at all. That is what makes them testable: `src/auth.ts` pulls in
 // `cloudflare:workers`, Better Auth and the D1 client the moment it loads, so a test
 // that wanted `deriveCookieDomain` out of it would have to boot a Worker to get one
-// pure string function. Both rules decide how sessions are signed and where the cookie
+// pure string function. The rules decide how sessions are signed and where the cookie
 // is scoped, which is exactly the code worth covering.
 //
 // Keep this file free of imports and free of Workers types. The repo's own
@@ -11,6 +11,7 @@
 
 /** The string-valued vars this package reads. `DB` and the rest live in `src/auth.ts`. */
 export interface AuthEnv {
+  AUTH_COOKIE_PREFIX?: string;
   BETTER_AUTH_SECRET?: string;
   BETTER_AUTH_URL?: string;
   COOKIE_DOMAIN?: string;
@@ -111,4 +112,52 @@ export function deriveCookieDomain(env: AuthEnv): string | undefined {
     }
   }
   return undefined; // conservative: never guess a domain shape we don't recognize
+}
+
+/** What `AUTH_COOKIE_PREFIX` may hold: lowercase letters, digits and hyphens. */
+export const AUTH_COOKIE_PREFIX_PATTERN = /^[a-z0-9-]+$/u;
+
+/** True only when `baseURL` parses and its scheme is plain `http:`. */
+function isHttpUrl(baseURL: string | undefined): boolean {
+  if (!baseURL) {
+    return false;
+  }
+  try {
+    return new URL(baseURL).protocol === "http:";
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * The Better Auth `cookiePrefix` of each instance: `client` and `admin`, or
+ * `<prefix>-client` and `<prefix>-admin` when `AUTH_COOKIE_PREFIX` is set.
+ *
+ * Browsers scope a cookie by host, never by port. Two worktrees of one project that run
+ * side by side on `localhost` (or on one tailnet host) would overwrite each other's
+ * `client.session_token`, so each linked worktree signs in on its own names.
+ * `pnpm dev:ports` writes the key there and nowhere else.
+ *
+ * The prefix applies only on an `http:` `BETTER_AUTH_URL`, loopback or not. A deployed
+ * api is always `https:`, so a key copied into production by mistake changes nothing
+ * and signs nobody out. An unset or unparseable URL gets the plain names too.
+ *
+ * @throws {Error} when the prefix applies and does not match `AUTH_COOKIE_PREFIX_PATTERN`.
+ */
+export function cookiePrefixes(env: AuthEnv): {
+  client: string;
+  admin: string;
+} {
+  const prefix = env.AUTH_COOKIE_PREFIX?.trim();
+  if (!prefix || !isHttpUrl(env.BETTER_AUTH_URL)) {
+    return { admin: "admin", client: "client" };
+  }
+  if (!AUTH_COOKIE_PREFIX_PATTERN.test(prefix)) {
+    throw new Error(
+      `AUTH_COOKIE_PREFIX must match ${AUTH_COOKIE_PREFIX_PATTERN.source} ` +
+        `(lowercase letters, digits and hyphens), got ${JSON.stringify(prefix)}. ` +
+        "Run pnpm dev:ports to write a valid one, or remove the key."
+    );
+  }
+  return { admin: `${prefix}-admin`, client: `${prefix}-client` };
 }
