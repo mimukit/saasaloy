@@ -1,6 +1,6 @@
 ---
 name: saasaloy-sms
-description: Runbook for the sms capability — a provider-agnostic text sender in packages/sms with per-provider modules (sms-console for development, sms-khudebarta for Bangladesh). Use when sending an SMS from a route, authoring an SMS template, choosing or switching SMS_PROVIDER, estimating what a body costs in segments, writing a custom SMS provider, or working out what consent and STOP handling the project still owes.
+description: Runbook for the sms capability — a provider-agnostic text sender in packages/sms with per-provider modules (sms-console for development, sms-khudebarta for Bangladesh). Use when sending an SMS from a route, authoring an SMS template, choosing or switching SMS_PROVIDER, estimating what a body costs in segments, writing a custom SMS provider, logging a send to the sms_messages table, counting sends for a send limit, reading the admin SMS log, or working out what consent and STOP handling the project still owes.
 ---
 
 # sms — provider-agnostic texting from `packages/sms`
@@ -404,13 +404,52 @@ Contract notes:
   package touches provider SDKs (ADR 0020). A REST call over `fetch` needs none at all, which is
   how every provider so far avoids the question.
 
+## The message log: `sms_messages`
+
+With `database` installed, `sms` also ships an SMS log: the `sms_messages` table (`packages/db/src/schema/sms-messages.ts`, one file per driver), its queries in `packages/db/src/repositories/sms-messages.ts`, and a seed slice with one sent row and one failed row. `packages/sms` itself still has no database dependency. `createSms(env).send()` writes nothing, so a caller that wants a send on the record calls `logSms()` after the send, on success and on failure.
+
+The columns are `id`, `user_id`, `purpose`, `to_phone`, `template`, `provider`, `provider_ref`, `status` (`sent` or `failed`), `error` and `created_at`. **The body is never stored**, because it can hold a one-time code. `template` names the template the body came from. `purpose` is free text that the caller names, such as `sign_up` or `password_reset`. `user_id` is plain nullable text with no foreign key: `sms` does not depend on `auth`, and a code can go to a number with no account yet.
+
+```ts
+import { createSms, SmsError } from "@repo/sms";
+import { verificationCode } from "@repo/sms/templates/verification-code";
+import { logSms } from "@repo/db/repositories/sms-messages";
+
+const texts = createSms(c.env);
+const entry = { purpose: "sign_up", toPhone: phone, template: "verification-code", provider: texts.provider };
+try {
+  const { messageId } = await texts.send({ to: phone, ...verificationCode({ code, appName: "Acme" }) });
+  await logSms(db, { ...entry, status: "sent", providerRef: messageId });
+} catch (error) {
+  await logSms(db, { ...entry, status: "failed", error: error instanceof Error ? error.message : String(error) });
+  throw error;
+}
+```
+
+`countSmsSince(db, { toPhone, purpose, since })` counts the rows for one number since a moment. `purpose` takes one string or an array, so two purposes can share one budget. A failed send counts too, so a provider outage does not turn into unlimited retries. The index `sms_messages_to_phone_purpose_created_at_idx` covers the query. This is how a send limit over a long window works: the `ratelimit` module cannot hold an hour-long window on `kv-cloudflare`, and a row count needs no extra store.
+
+```ts
+const lastHour = await countSmsSince(db, { toPhone: phone, purpose: ["sign_up", "password_reset"], since: new Date(Date.now() - 3_600_000) });
+if (lastHour >= 5) return c.json({ error: { code: "rate_limited", message: "Too many codes" } }, 429);
+```
+
+Inside `withAuthScope` (an `authGuards` middleware, or a route that opened the scope), pass `authDb` from `@repo/auth/server` as `db`. Anywhere else, use `withDb(c, (db) => ...)` from `@repo/db/client`.
+
+`maskCodes(text)` from `@repo/sms/mask-codes` replaces every standalone run of 4 to 8 digits with bullets of the same length. Run it over any provider error text before you show it to a person. An E.164 number and a hyphenated reference such as `INV-2026-000001` stay as they are.
+
+### The admin SMS screen
+
+With `admin` and `database` installed, `sms` adds an **SMS** row to the admin nav (group Manage) and the screen `apps/admin/src/routes/sms.tsx`. It lists the log newest first, 50 rows a page, with All, Sent and Failed chips and a detail panel. It is read only. The api half is `GET /admin/sms` in `apps/api/src/routes/admin-sms.ts`, mounted by a `chained-route` patch. It takes `?page=` (from 1) and `?status=sent|failed`, answers 401 or 403 without an admin session, and passes every `error` through `maskCodes()`. A row shows `user_id` as text: the screen does not join `users`.
+
 ## Removal
 
 Remove the providers first. `sms-console` and `sms-khudebarta` depend on `sms`, so `remove sms` refuses while either is installed. `--force` overrides the refusal, and it leaves the provider broken.
 
 `saasaloy remove sms-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array.
 
-`saasaloy remove sms` then deletes the `packages/sms` workspace (`index.ts`, `define.ts`, `provider.ts`, `segments.ts`, `templates/verification-code.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the sms preset to `apps/api/src/env.ts`. The `@repo/sms` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `SMS_PROVIDER`, `SMS_FROM` and any provider secret such as `KHUDEBARTA_API_KEY` lines by hand.
+`saasaloy remove sms` then deletes the `packages/sms` workspace (`index.ts`, `define.ts`, `provider.ts`, `segments.ts`, `mask-codes.ts`, `templates/verification-code.ts`, `env-preset.ts`) and reverses the `plugin-array` patch that adds the sms preset to `apps/api/src/env.ts`. The `@repo/sms` line in `apps/api/package.json` survives, because a `package-json-dependency` patch has no removal inverse. Drop it by hand and run `pnpm install`. A file you edited by hand since `add` counts as drift, and `remove` asks before it deletes it. `remove` does not edit `packages/env/.env`, so delete the `SMS_PROVIDER`, `SMS_FROM` and any provider secret such as `KHUDEBARTA_API_KEY` lines by hand.
+
+The `sms_messages` table, its repository and seed slice, and the admin screen leave with `sms`. The deployed table survives: run `pnpm --filter @repo/db db:generate` and review the drop migration before you apply it.
 
 Every route or job that imports `@repo/sms` stops compiling. Search for the import before you remove, and delete or replace each call site.
 
