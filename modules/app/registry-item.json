@@ -130,6 +130,10 @@
           "target": "src/lib/initials.ts"
         },
         {
+          "path": "files/src/lib/contact.ts",
+          "target": "src/lib/contact.ts"
+        },
+        {
           "path": "files/src/components/app-shell.tsx",
           "target": "src/components/app-shell.tsx"
         },
