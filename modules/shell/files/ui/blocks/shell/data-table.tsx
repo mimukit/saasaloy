@@ -22,6 +22,7 @@ import {
 } from "@repo/ui/components/shell/table";
 import { useCommands } from "@repo/ui/lib/shell/commands";
 import type { Command } from "@repo/ui/lib/shell/commands";
+import { groupRows } from "@repo/ui/lib/shell/group-rows";
 import { TABLE_KEYS } from "@repo/ui/lib/shell/shell-keys";
 import { useMediaQuery } from "@repo/ui/lib/shell/use-media-query";
 import { cn } from "@repo/ui/lib/utils";
@@ -61,6 +62,12 @@ import { stepHighlight, tableKeysLive } from "./data-table-highlight";
 // link or a field outside the table has the focus (`tableKeysLive`), so Enter presses a
 // focused filter chip instead of opening a row, and the highlight clears when the focus
 // moves to such a control.
+//
+// Three opt-ins shape a wide table. A `grow` column takes the spare width and truncates,
+// so one long title cannot push the other columns out of the panel. A `pin: "end"` column
+// stays at the right edge when the table scrolls sideways. `groupBy` draws the sorted rows
+// under group header rows, in the table and the cards. `initialSort` sets the sort the
+// table starts with.
 
 /**
  * What a column reads out of a row: the sort key, and the cell content when the column
@@ -94,7 +101,56 @@ export interface DataTableColumn<TRow> {
    * `title`, the first column is the title; every other unhinted column is a line.
    */
   card?: CardSlot;
+  /**
+   * The column takes the width the others leave, and its content must truncate in it. The
+   * others keep their natural width, so a long title cannot push them off the panel. Give
+   * one column `grow`, and render its text with `truncate` or OverflowTooltip.
+   */
+  grow?: boolean;
+  /**
+   * `end` keeps the column at the right edge while the table scrolls sideways, for the
+   * row's actions. Give it to the last column only.
+   */
+  pin?: "end";
 }
+
+/** Rows drawn in groups, each under a header row. */
+export interface DataTableGroupBy<TRow> {
+  /** The group a row belongs to. Groups keep the order their first row has. */
+  key: (row: TRow) => string;
+  /** The group's header line, given its key and its rows in display order. */
+  header: (key: string, rows: readonly TRow[]) => ReactNode;
+}
+
+/** The column the table sorts by before anyone presses a header. */
+export interface DataTableSort {
+  id: string;
+  desc?: boolean;
+}
+
+/** One run of rows under an optional header: a group, or the whole table ungrouped. */
+interface Section<TRow> {
+  key: string;
+  header: ReactNode;
+  rows: TRow[];
+}
+
+/** The classes a column's `grow` and `pin` give its header and its cells. */
+function columnClassName<TRow>(column: DataTableColumn<TRow>): string {
+  return cn(
+    // `max-w-0` lets the cell shrink below its content, and `w-full` hands it the spare
+    // width. The minimum keeps a title readable when the panel is narrow.
+    column.grow === true && "w-full max-w-0 min-w-48",
+    // An opaque fill, so the cells that scroll under it do not show through. The inset
+    // shadow is the hairline at its left; a border would scroll away with the row.
+    column.pin === "end" &&
+      "bg-card sticky end-0 z-[1] shadow-[inset_1px_0_0_var(--border)]"
+  );
+}
+
+/** The row tones a pinned cell repeats, because the row's own fill sits under it. */
+const PINNED_ROW_TONES =
+  "in-[tr:hover]:bg-[color-mix(in_srgb,var(--card),var(--accent)_50%)] in-[tr[data-highlighted]]:bg-[color-mix(in_srgb,var(--card),var(--accent)_50%)] in-[tr[data-state=selected]]:bg-accent";
 
 // Registered once, at module scope. v9 has no global feature set: a table only has
 // sorting state and sorting methods because `rowSortingFeature` and a sorted row model
@@ -120,9 +176,15 @@ export function DataTable<TRow extends object>({
   emptyState,
   caption,
   className,
+  groupBy,
+  initialSort,
 }: {
   columns: readonly DataTableColumn<TRow>[];
   rows: readonly TRow[];
+  /** Draw the rows in groups, each under a header row. Omit it for one flat list. */
+  groupBy?: DataTableGroupBy<TRow>;
+  /** The sort the table starts with. Omit it and the rows keep the order they came in. */
+  initialSort?: DataTableSort;
   /**
    * The row's identity. It keys the rows, matches `selectedId`, and is what `onRowClick`
    * is expected to store — an index would break the moment a sort reorders the table.
@@ -170,13 +232,31 @@ export function DataTable<TRow extends object>({
     // Two states, not three. A header that cycles asc → desc → unsorted leaves the table
     // in an order nobody asked for, and the reference's sort indicator has no "off" look.
     enableSortingRemoval: false,
+    initialState:
+      initialSort === undefined
+        ? undefined
+        : {
+            sorting: [{ id: initialSort.id, desc: initialSort.desc === true }],
+          },
   });
 
   const modelRows = table.getRowModel().rows;
   const isDesktop = useMediaQuery("md");
 
-  // The ids in displayed order, so J and K follow the active sort.
-  const displayedIds = modelRows.map((modelRow) => modelRow.id);
+  // The sorted rows, split into the groups `groupBy` asks for, or one section with no
+  // header. Both layouts below draw sections, so a group reads the same at every width.
+  const sortedRows = modelRows.map((modelRow) => modelRow.original);
+  const sections: Section<TRow>[] =
+    groupBy === undefined
+      ? [{ key: "", header: null, rows: sortedRows }]
+      : groupRows(sortedRows, groupBy.key).map((group) => ({
+          key: group.key,
+          header: groupBy.header(group.key, group.rows),
+          rows: group.rows,
+        }));
+
+  // The ids in displayed order, so J and K follow the active sort and the groups.
+  const displayedIds = sections.flatMap((section) => section.rows.map(rowId));
   const [highlightedId, setHighlightedId] = useState<string | null>(null);
   // A filter or a refetch can take the highlighted row away; treat it as no highlight.
   const highlight =
@@ -186,7 +266,7 @@ export function DataTable<TRow extends object>({
   const highlightedRow =
     highlight === null
       ? undefined
-      : modelRows.find((modelRow) => modelRow.id === highlight)?.original;
+      : sortedRows.find((row) => rowId(row) === highlight);
 
   // The table's root element, for the focus rule and for scrolling the highlight.
   const containerRef = useRef<HTMLDivElement>(null);
@@ -286,9 +366,9 @@ export function DataTable<TRow extends object>({
     return (
       <DataTableCards
         columns={columns}
-        // The sorted row model, so the cards keep whatever order the table's sort state
+        // The sorted sections, so the cards keep whatever order the table's sort state
         // gives. The card list shows no sort control of its own.
-        rows={modelRows.map((modelRow) => modelRow.original)}
+        sections={sections}
         rowId={rowId}
         onRowClick={onRowClick}
         selectedId={selectedId}
@@ -334,7 +414,8 @@ export function DataTable<TRow extends object>({
                   }
                   className={cn(
                     "text-muted-foreground h-9 px-3 text-xs font-medium first:ps-(--page-gutter) last:pe-(--page-gutter)",
-                    column.align === "end" && "text-right"
+                    column.align === "end" && "text-right",
+                    columnClassName(column)
                   )}
                 >
                   {column.sortable === true && modelColumn !== undefined ? (
@@ -367,8 +448,8 @@ export function DataTable<TRow extends object>({
           </TableRow>
         </TableHeader>
 
-        <TableBody>
-          {modelRows.length === 0 ? (
+        {modelRows.length === 0 ? (
+          <TableBody>
             <TableRow className="hover:bg-transparent">
               <TableCell
                 colSpan={columns.length}
@@ -377,84 +458,110 @@ export function DataTable<TRow extends object>({
                 {emptyState ?? "Nothing to show."}
               </TableCell>
             </TableRow>
-          ) : (
-            modelRows.map((modelRow) => {
-              const row = modelRow.original;
-              const id = rowId(row);
-
-              return (
-                <TableRow
-                  key={id}
-                  // The vendored TableRow already styles this attribute, so the selected
-                  // look comes from the same place every other table's does.
-                  data-state={selectedId === id ? "selected" : undefined}
-                  // The J/K highlight, in the rows' hover tone.
-                  data-highlighted={highlight === id ? "" : undefined}
-                  // Pointer convenience only, and deliberately WITHOUT role or tabIndex.
-                  // `role="button"` on a <tr> takes the row out of the table's
-                  // accessibility tree: a screen reader in table mode stops seeing the row,
-                  // its cells, and their header associations. The keyboard path is the
-                  // button in the first cell below.
-                  onClick={
-                    onRowClick === undefined
-                      ? undefined
-                      : () => {
-                          onRowClick(row);
-                        }
-                  }
-                  className={cn(
-                    "border-border",
-                    onRowClick === undefined ? undefined : "cursor-pointer",
-                    highlight === id && "bg-accent/50"
-                  )}
-                >
-                  {columns.map((column, index) => {
-                    const content =
-                      column.cell === undefined
-                        ? renderValue(column.value(row))
-                        : column.cell(row);
-
-                    const body = isEmptyValue(content) ? (
-                      <span className="text-muted-foreground">{EMPTY}</span>
-                    ) : (
-                      content
-                    );
-
-                    return (
-                      <TableCell
-                        key={column.id}
-                        className={cn(
-                          "h-11 px-3 text-sm first:ps-(--page-gutter) last:pe-(--page-gutter)",
-                          column.align === "end" && "text-right"
-                        )}
-                      >
-                        {onRowClick === undefined || index !== 0 ? (
-                          body
-                        ) : (
-                          // One real control per row, in the first cell, so the row is
-                          // reachable by Tab and answers Enter and Space for free. It
-                          // stops the click from reaching the row's own handler, which
-                          // would otherwise fire `onRowClick` twice for one press.
-                          <button
-                            type="button"
-                            aria-current={selectedId === id ? true : undefined}
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onRowClick(row);
-                            }}
-                            className="focus-visible:ring-ring/50 -mx-1 flex min-w-0 items-center rounded px-1 text-left focus-visible:ring-[3px] focus-visible:outline-none"
-                          >
-                            {body}
-                          </button>
-                        )}
-                      </TableCell>
-                    );
-                  })}
+          </TableBody>
+        ) : (
+          // One body per section, so a group's header row and its rows stay one unit for
+          // assistive tech. An ungrouped table is one section with no header row.
+          sections.map((section) => (
+            <TableBody key={section.key}>
+              {section.header === null ? null : (
+                <TableRow className="bg-muted/40 hover:bg-muted/40 border-border">
+                  <TableHead
+                    scope="colgroup"
+                    colSpan={columns.length}
+                    className="text-foreground h-9 px-(--page-gutter) text-sm font-medium"
+                  >
+                    {section.header}
+                  </TableHead>
                 </TableRow>
-              );
-            })
-          )}
-        </TableBody>
+              )}
+              {section.rows.map((row) => {
+                const id = rowId(row);
+
+                return (
+                  <TableRow
+                    key={id}
+                    // The vendored TableRow already styles this attribute, so the selected
+                    // look comes from the same place every other table's does.
+                    data-state={selectedId === id ? "selected" : undefined}
+                    // The J/K highlight, in the rows' hover tone.
+                    data-highlighted={highlight === id ? "" : undefined}
+                    // Pointer convenience only, and deliberately WITHOUT role or tabIndex.
+                    // `role="button"` on a <tr> takes the row out of the table's
+                    // accessibility tree: a screen reader in table mode stops seeing the row,
+                    // its cells, and their header associations. The keyboard path is the
+                    // button in the first cell below.
+                    onClick={
+                      onRowClick === undefined
+                        ? undefined
+                        : () => {
+                            onRowClick(row);
+                          }
+                    }
+                    className={cn(
+                      "border-border",
+                      onRowClick === undefined ? undefined : "cursor-pointer",
+                      highlight === id && "bg-accent/50"
+                    )}
+                  >
+                    {columns.map((column, index) => {
+                      const content =
+                        column.cell === undefined
+                          ? renderValue(column.value(row))
+                          : column.cell(row);
+
+                      const body = isEmptyValue(content) ? (
+                        <span className="text-muted-foreground">{EMPTY}</span>
+                      ) : (
+                        content
+                      );
+
+                      return (
+                        <TableCell
+                          key={column.id}
+                          className={cn(
+                            "h-11 px-3 text-sm first:ps-(--page-gutter) last:pe-(--page-gutter)",
+                            column.align === "end" && "text-right",
+                            columnClassName(column),
+                            column.pin === "end" && PINNED_ROW_TONES
+                          )}
+                        >
+                          {onRowClick === undefined || index !== 0 ? (
+                            body
+                          ) : (
+                            // One real control per row, in the first cell, so the row is
+                            // reachable by Tab and answers Enter and Space for free. It
+                            // stops the click from reaching the row's own handler, which
+                            // would otherwise fire `onRowClick` twice for one press.
+                            <button
+                              type="button"
+                              aria-current={
+                                selectedId === id ? true : undefined
+                              }
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onRowClick(row);
+                              }}
+                              // `max-w-full`, with `w-full` on a `grow` column: a button
+                              // sizes to its content, so without them a long title runs
+                              // past the cell instead of truncating in it.
+                              className={cn(
+                                "focus-visible:ring-ring/50 -mx-1 flex max-w-full min-w-0 items-center rounded px-1 text-left focus-visible:ring-[3px] focus-visible:outline-none",
+                                column.grow === true && "w-full"
+                              )}
+                            >
+                              {body}
+                            </button>
+                          )}
+                        </TableCell>
+                      );
+                    })}
+                  </TableRow>
+                );
+              })}
+            </TableBody>
+          ))
+        )}
       </Table>
     </div>
   );
@@ -468,7 +575,7 @@ export function DataTable<TRow extends object>({
  */
 function DataTableCards<TRow extends object>({
   columns,
-  rows,
+  sections,
   rowId,
   onRowClick,
   selectedId,
@@ -479,7 +586,7 @@ function DataTableCards<TRow extends object>({
   containerRef,
 }: {
   columns: readonly DataTableColumn<TRow>[];
-  rows: readonly TRow[];
+  sections: readonly Section<TRow>[];
   rowId: (row: TRow) => string;
   onRowClick?: (row: TRow) => void;
   selectedId?: string | null;
@@ -506,74 +613,87 @@ function DataTableCards<TRow extends object>({
         {caption}
       </p>
 
-      {rows.length === 0 ? (
+      {sections.every((section) => section.rows.length === 0) ? (
         <p className="text-muted-foreground px-(--page-gutter) py-3 text-center text-sm">
           {emptyState ?? "Nothing to show."}
         </p>
       ) : (
         <ul aria-labelledby={captionId} className="flex flex-col">
-          {rows.map((row) => {
-            const id = rowId(row);
-            const selected = selectedId === id;
-            const highlighted = highlightedId === id;
+          {sections.map((section) => {
+            const cards = section.rows.map((row) => {
+              const id = rowId(row);
+              const selected = selectedId === id;
+              const highlighted = highlightedId === id;
 
-            const body = (
-              <>
-                <span className="flex min-w-0 items-start gap-2">
-                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
-                    {slots.title.map((column) => (
-                      <span key={column.id}>{cellBody(column, row)}</span>
+              const body = (
+                <>
+                  <span className="flex min-w-0 items-start gap-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                      {slots.title.map((column) => (
+                        <span key={column.id}>{cellBody(column, row)}</span>
+                      ))}
+                    </span>
+                    {slots.trailing.map((column) => (
+                      <span key={column.id} className="shrink-0 text-sm">
+                        {cellBody(column, row)}
+                      </span>
                     ))}
                   </span>
-                  {slots.trailing.map((column) => (
-                    <span key={column.id} className="shrink-0 text-sm">
-                      {cellBody(column, row)}
-                    </span>
-                  ))}
-                </span>
 
-                {slots.lines.length === 0 ? null : (
-                  <dl className="text-muted-foreground mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
-                    {slots.lines.map((column) => (
-                      <div key={column.id} className="contents">
-                        <dt>{column.header}</dt>
-                        <dd className="text-foreground min-w-0 truncate">
-                          {cellBody(column, row)}
-                        </dd>
-                      </div>
-                    ))}
-                  </dl>
-                )}
-              </>
-            );
+                  {slots.lines.length === 0 ? null : (
+                    <dl className="text-muted-foreground mt-1 grid grid-cols-[auto_minmax(0,1fr)] gap-x-3 gap-y-0.5 text-xs">
+                      {slots.lines.map((column) => (
+                        <div key={column.id} className="contents">
+                          <dt>{column.header}</dt>
+                          <dd className="text-foreground min-w-0 truncate">
+                            {cellBody(column, row)}
+                          </dd>
+                        </div>
+                      ))}
+                    </dl>
+                  )}
+                </>
+              );
 
-            return (
-              <li
-                key={id}
-                data-highlighted={highlighted ? "" : undefined}
-                // The same accent fill the table's selected row takes, and its hover
-                // tone for the J/K highlight.
-                className={cn(
-                  "border-border border-b",
-                  selected ? "bg-accent" : highlighted && "bg-accent/50"
-                )}
-              >
-                {onRowClick === undefined ? (
-                  <div className="block px-(--page-gutter) py-3">{body}</div>
-                ) : (
-                  <button
-                    type="button"
-                    aria-current={selected ? true : undefined}
-                    onClick={() => {
-                      onRowClick(row);
-                    }}
-                    // The table row button's focus ring, so focus looks the same at
-                    // every width.
-                    className="hover:bg-accent/50 focus-visible:ring-ring/50 block w-full px-(--page-gutter) py-3 text-left transition-colors focus-visible:ring-[3px] focus-visible:outline-none focus-visible:ring-inset"
-                  >
-                    {body}
-                  </button>
-                )}
+              return (
+                <li
+                  key={id}
+                  data-highlighted={highlighted ? "" : undefined}
+                  // The same accent fill the table's selected row takes, and its hover
+                  // tone for the J/K highlight.
+                  className={cn(
+                    "border-border border-b",
+                    selected ? "bg-accent" : highlighted && "bg-accent/50"
+                  )}
+                >
+                  {onRowClick === undefined ? (
+                    <div className="block px-(--page-gutter) py-3">{body}</div>
+                  ) : (
+                    <button
+                      type="button"
+                      aria-current={selected ? true : undefined}
+                      onClick={() => {
+                        onRowClick(row);
+                      }}
+                      // The table row button's focus ring, so focus looks the same at
+                      // every width.
+                      className="hover:bg-accent/50 focus-visible:ring-ring/50 block w-full px-(--page-gutter) py-3 text-left transition-colors focus-visible:ring-[3px] focus-visible:outline-none focus-visible:ring-inset"
+                    >
+                      {body}
+                    </button>
+                  )}
+                </li>
+              );
+            });
+            // A group is one item holding its header and its own list of cards.
+            return section.header === null ? (
+              cards
+            ) : (
+              <li key={section.key}>
+                <p className="bg-muted/40 border-border border-b px-(--page-gutter) py-2 text-sm font-medium">
+                  {section.header}
+                </p>
+                <ul className="flex flex-col">{cards}</ul>
               </li>
             );
           })}

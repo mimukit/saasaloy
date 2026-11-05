@@ -1,6 +1,6 @@
 ---
 name: saasaloy-shell
-description: Runbook for the shell capability — the frame, the coss primitive set, the page blocks, the command contract, the shell extension seam and shell.css under @repo/ui/*/shell that every signed-in SPA (admin, app) renders. Use when adding a nav entry or an area, declaring a screen's commands or keyboard shortcuts with useCommands, adding a shell extension, using the shell in a new app, wiring ShellLayout (areas, link, account, signOut, counts, subtitle, trail), composing a page from PageHeader, PageLayout, PageBody, DataTable, DetailPanel, FilterChips, EmptyState, ErrorState or StatusPill, picking a primitive, setting the status, sort-accent or motion tokens an app stylesheet overrides, fixing an unstyled primitive or a transparent status pill, upgrading a project that installed admin before the shell moved out of it, or removing the module.
+description: Runbook for the shell capability — the frame, the coss primitive set, the page blocks, the command contract, the shell extension seam and shell.css under @repo/ui/*/shell that every signed-in SPA (admin, app) renders. Use when adding a nav entry or an area, declaring a screen's commands or keyboard shortcuts with useCommands, adding a shell extension, using the shell in a new app, wiring ShellLayout (areas, link, account, signOut, counts, subtitle, trail), composing a page from PageHeader, PageLayout, PageBody, DataTable, DetailPanel, FilterChips, EmptyState, ErrorState or StatusPill, adding a date picker, a password input, an attention menu or a grouped table, replacing the brand mark, picking a primitive, setting the status, sort-accent or motion tokens an app stylesheet overrides, fixing an unstyled primitive or a transparent status pill, upgrading a project that installed admin before the shell moved out of it, or removing the module.
 ---
 
 # shell — the frame every signed-in app renders
@@ -12,10 +12,10 @@ It holds **no auth logic and no router**. Each app reads its own session and rou
 | Folder in `packages/ui/src/` | What it holds |
 |---|---|
 | `components/shell/` | the primitives and `NOTICE.md` (the MIT notice the copy needs) |
-| `blocks/shell/` | `PageHeader`, `DataTable`, `DetailPanel`, `FilterChips`, `AttributeList`, `EmptyState`, `ErrorState`, `PageSkeleton`, `BrandMark`, `ThemeMenuItem` |
+| `blocks/shell/` | `PageHeader`, `DataTable`, `DetailPanel`, `FilterChips`, `AttributeList`, `EmptyState`, `ErrorState`, `PageSkeleton`, `AttentionMenu`, `BrandMark`, `ThemeMenuItem` |
 | `containers/shell/` | `ShellLayout`, `ShellSidebar`, `ShellNav` types, `PageFrame`, `PageLayout`, `PageBody` |
-| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants, the command contract (`commands.ts`) and the extension seam (`extensions.ts`) |
-| `assets/shell/` | `brand-mark.svg` (replace it with your own single-colour mark) and `assets.d.ts` |
+| `lib/shell/` | `withLiveCounts`, `useMediaQuery`, the segmented-control variants, `attentionRows`, `groupRows`, `updatedLabel`, the command contract (`commands.ts`) and the extension seam (`extensions.ts`) |
+| `assets/shell/` | `brand-mark-light.svg` and `brand-mark-dark.svg` (replace both with your own mark, see [The brand mark](#the-brand-mark)) and `assets.d.ts` |
 | `styles/shell.css` | the `@source` line for the primitives, the status and sort tokens with defaults, the skeleton and toast motion |
 
 It also adds `@tanstack/react-table` to `packages/ui/package.json`, for `DataTable` alone.
@@ -65,6 +65,7 @@ A new signed-in app is a Vite SPA like `apps/admin` or `apps/app`. Four steps pu
    | `trail?` | `readonly { label: string; to?: string }[]`, the page path after the area when it goes deeper than the nav label, for example Projects / New project. A step with `to` renders through `link`; the last step is the current page |
    | `organizationPicker?` | the #141 organization picker slot |
    | `extensions?` | the app's `shellExtensions` list; see [Shell extensions](#shell-extensions) |
+   | `attention?` | a node rendered last in the header, after the extension headers; the admin passes an `AttentionMenu` (see [The attention menu](#the-attention-menu)) |
 
 4. **Wrap the routes** in `PageFrame` in the root route, and set the router's `defaultPendingComponent` to `PageSkeleton` and `defaultErrorComponent` to a route error that renders `ErrorState`. Mount the toast provider from `components/shell/toast` once.
 
@@ -84,10 +85,10 @@ Keep the `as const`: it holds every `to` at a literal type the router checks, so
 
 This module writes the whole UI kit of the signed-in apps into `packages/ui/src/`, and their code uses nothing else:
 
-- **`components/shell/`** holds the primitives: 41 components adapted from coss ui on Base UI, plus `StatusPill`. Alert, alert dialog, autocomplete, avatar, badge, breadcrumb, button, card, checkbox, collapsible, combobox, command, dialog, empty, field, fieldset, form, group, input, input group, kbd, label, menu, meter, popover, radio group, scroll area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, toggle, toggle group and tooltip. The names are coss's: `*Popup` and `*Panel` for the parts shadcn calls `*Content`, `Menu*` for the dropdown menu, and a `render` prop instead of `asChild`. A few shadcn aliases (`DialogContent`, `DropdownMenu*`, `TabsTrigger`) are exported too. `NOTICE.md` in the folder carries the MIT notice the copy needs; keep it there.
-- **`blocks/shell/`** holds the page blocks below, plus `BrandMark`, `ThemeMenuItem` and `ErrorState`. `ThemeMenuItem` (in `theme-toggle.tsx`) and `ErrorState` are the shell twins of the base blocks; the theme control is a row in the sidebar's account menu, not a header button.
+- **`components/shell/`** holds the primitives: 41 components adapted from coss ui on Base UI, plus `StatusPill`, the date pickers, `OverflowTooltip` and `PasswordInput` (see [Dates, overflow and passwords](#dates-overflow-and-passwords)). Alert, alert dialog, autocomplete, avatar, badge, breadcrumb, button, card, checkbox, collapsible, combobox, command, dialog, empty, field, fieldset, form, group, input, input group, kbd, label, menu, meter, popover, radio group, scroll area, select, separator, sheet, sidebar, skeleton, spinner, switch, table, tabs, textarea, toast, toggle, toggle group and tooltip. The names are coss's: `*Popup` and `*Panel` for the parts shadcn calls `*Content`, `Menu*` for the dropdown menu, and a `render` prop instead of `asChild`. A few shadcn aliases (`DialogContent`, `DropdownMenu*`, `TabsTrigger`) are exported too. `NOTICE.md` in the folder carries the MIT notice the copy needs; keep it there.
+- **`blocks/shell/`** holds the page blocks below, plus `AttentionMenu`, `BrandMark`, `ThemeMenuItem` and `ErrorState`. `ThemeMenuItem` (in `theme-toggle.tsx`) and `ErrorState` are the shell twins of the base blocks; the theme control is a row in the sidebar's account menu, not a header button.
 - **`containers/shell/`** holds `ShellLayout`, `ShellSidebar`, `PageFrame`, `PageLayout` and `PageBody`.
-- **`lib/shell/`** holds two helpers the primitives use, and **`assets/`** holds the brand mark.
+- **`lib/shell/`** holds the helpers the primitives and blocks use, and **`assets/shell/`** holds the brand mark pair.
 
 A lint rule in `oxlint.config.mjs` fails any import of a base `@repo/ui/components/*`, `@repo/ui/blocks/error-state` or `@repo/ui/blocks/theme-toggle` under `apps/admin/**`, `apps/app/**` and the `shell/` folders of `@repo/ui`. Both sets have a `button`, and without the rule an editor's autocomplete picks the wrong one with no error.
 
@@ -97,10 +98,10 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 
 | Block | Import | Props | Notes |
 |---|---|---|---|
-| `PageHeader` | `blocks/shell/page-header` | `title`, `count?`, `description?`, `actions?` | The page's only `h1`. `count` stays out of the heading text; `0` renders, `undefined` does not. `actions` holds the page-level buttons, such as Refresh or New. |
-| `PageBody` | `containers/shell/page-body` | `children` | The padded, scrolling body under the header, for cards, forms and editors. A list page that hands its height to `DataTable` does not need it. |
+| `PageHeader` | `blocks/shell/page-header` | `title`, `count?`, `total?`, `countLabel?`, `badges?`, `description?`, `status?`, `updated?`, `actions?` | The page's only `h1`. See [The page header](#the-page-header). |
+| `PageBody` | `containers/shell/page-body` | `children`, `aside?` | The padded, scrolling body under the header, for cards, forms and editors. With `aside`, the body is two columns at `lg` and up (the main column and a `20rem` aside, `gap-6`), the aside sticks to the top, and below `lg` it stacks under the main column. Without it the body is one column. A list page that hands its height to `DataTable` does not need it. |
 | `PageLayout` | `containers/shell/page-layout` | `children`, `detail?`, `detailLabel?`, `onDetailClose?` | Puts a list beside its detail. `detail` docks as a column at `md` and up and opens as a bottom sheet below it; the same node either way. Passing `undefined` closes both. |
-| `DataTable` | `blocks/shell/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `onDismiss?`, `emptyState?` | See below. |
+| `DataTable` | `blocks/shell/data-table` | `columns`, `rows`, `rowId`, `caption`, `onRowClick?`, `selectedId?`, `onDismiss?`, `emptyState?`, `groupBy?`, `initialSort?` | See below. |
 | `DetailPanel` | `blocks/shell/detail-panel` | `title`, `onClose`, `description?`, `media?`, `status?`, `banner?`, `attributes?`, `groups?`, `tabs?`, `actions?`, `footer?`, `onOpenInNew?` | A header with the record's avatar, name and second line, optional tabs, then the attributes, collapsible groups and the record's actions. `status` renders after the title in the header, for one `StatusPill` or two; when the header shows the status, drop the status attribute row. `banner` renders under the header and above the tabs and does not scroll; pass an `Alert` from `components/shell/alert`. `footer` is pinned under the scrolling body behind a hairline, for the record's main decision such as Confirm and Reject. `actions` stays inside the scrolling body, for in-body controls such as a role select. A panel with none of the three renders as before. It draws no border; `PageLayout` supplies the edge. |
 | `FilterChips` | `blocks/shell/filter-chips` | `chips`, `selectedId`, `onSelect`, `label` | Each chip is a real `button` with `aria-pressed`. Filtering is the route's. |
 | `AttributeList` | `blocks/shell/attribute-list` | `items` | A `dl` of label and value. An empty value renders as an em dash. |
@@ -111,12 +112,64 @@ The page blocks take plain props and callbacks. None imports `@repo/api`, `hono/
 `DataTable` is the only file that imports `@tanstack/react-table`, and that is the point: a caller describes its screen with `columns` and `rows` and never sees a `ColumnDef` or a sorting state. A column is:
 
 ```tsx
-{ id, header, value, cell?, sortable?, align?, card? }
+{ id, header, value, cell?, sortable?, align?, card?, grow?, pin? }
 ```
 
 `value(row)` is both the sort key and the cell content when `cell` is absent, so the two cannot fall out of step. `cell(row)` renders anything richer. `rowId(row)` keys the rows, matches `selectedId`, and is what `onRowClick` should store, because an index breaks the moment a sort reorders the table. Sorting is client side and two-state, and the active header is the one place `--accent-sort` appears. Empty cells render `—`, a boolean renders `Yes`/`No`, and a `Date` renders through `toLocaleDateString()`.
 
+Three opt-ins shape a wide table, and each works in the card view too:
+
+- **`grow: true`** on one column gives it the width the others leave, and its content truncates there, so a long title cannot push the other columns off the panel. Render its text with `truncate` or `OverflowTooltip`.
+- **`pin: "end"`** on the last column keeps it at the right edge while the table scrolls sideways, for the row's actions.
+- **`groupBy: { key, header }`** draws the sorted rows under group header rows. `key(row)` names the group, and the groups keep the order of their first row. `header(key, rows)` returns the header line. Below `md` each group is one list item with its header and its own cards. The rule is `groupRows` in `lib/shell/group-rows.ts`.
+
+`initialSort: { id, desc? }` sets the sort the table opens with, before anyone presses a header.
+
 Below `md` the same rows render as a `<ul>` of cards, so a list has no sideways scroll at 360 px. The table and the card list never mount together: `DataTable` reads the width through `useMediaQuery("md")` from `lib/shell/use-media-query`, the same call `PageLayout` makes. A card is a title row over a `<dl>` of label and value lines, each label the column's `header`. The column's `card` hint picks its place: `title` heads the card, `trailing` sits at the right of the title row (an amount, a status, a role), `line` is a label and value line, and `hidden` leaves the column out. With no column hinted `title`, the first column is the title, and every other unhinted column is a line, so a page with no hints still gets usable cards. The cards keep the order the table's sort state gives and show no sort control. With `onRowClick`, each card is one `<button>` with `aria-current` on the selected one and the table's focus ring; the selected card takes the same accent fill as the selected row. The empty state and the caption carry over. The slot rule is `cardSlots(columns)` in `blocks/shell/data-table-cards.ts`, JSX-free so `pnpm test:modules` covers it in this repo. Set `card: "trailing"` on the one column a reader scans for, and `card: "hidden"` on a column that only makes sense beside the others in a table.
+
+## The page header
+
+`PageHeader` is a `header` with the page's only `h1`, padded with `--page-gutter`.
+
+- **The count.** `count` renders beside the title in tabular figures and stays out of the heading text; `0` renders, `undefined` does not. With `total` set and `count` below it, the header reads "3 of 6". Pass `countLabel={(count, total) => ...}` to say it in other words, such as "3 of 6 orders" or another language.
+- **`badges`** sit after the title and outside the heading, for a copy button or a `StatusPill`.
+- **The status line.** `status` is the second line, which the page builds, usually links to the queues that follow from the page's state. It replaces `description` when both are set. A page with neither keeps no second line. The line wraps, so a long link is never cut.
+- **`updated`, not a Refresh button.** Pass `updated={{ at: query.dataUpdatedAt, refreshing: query.isFetching, onRefresh: () => query.refetch(), words }}`. The header ends the status line with "Updated 12s ago" as a button that refetches, and redraws it every 5 seconds. `at: 0` shows nothing. `words` holds `justNow`, `seconds`, `minutes`, `hours` (with `{n}` where the number goes), `refreshing` and `refresh`, from the app's content. Do not add a separate Refresh button to `actions`.
+- **`actions`** hold the page-level buttons, such as New. The title block has a 12rem basis and the actions row wraps, so on a phone the actions move under the title and the `h1` stays visible.
+
+## The attention menu
+
+`AttentionMenu` (`blocks/shell/attention-menu`) is the "Needs attention" bell for the header's `attention` slot. A badge shows the total, and the menu lists each queue with work in it as a link. It takes `rows`, `total`, `link`, `title` and `emptyText`; the app fetches the counts. Build `rows` and `total` with `attentionRows(sources, counts)` from `lib/shell/attention`: `sources` is a `{ to, label }[]` in menu order, and `counts` is keyed by `to`. A queue with a count of zero, or an unknown count, is left out. The admin builds its sources from `NAV_COUNTS`, with each label from its nav row, so a module that adds a nav count gets a menu row with no second patch:
+
+```tsx
+const attention = attentionRows(ATTENTION_SOURCES, counts);
+
+<ShellLayout
+  attention={
+    <AttentionMenu
+      rows={attention.rows}
+      total={attention.total}
+      link={ShellNavLink}
+      title="Needs attention"
+      emptyText="Nothing waits for you."
+    />
+  }
+/>
+```
+
+## Dates, overflow and passwords
+
+- **`DatePicker`, `DateRangePicker` and `DateTimePicker`** (`components/shell/date-picker`) take and return the strings a native field holds: `YYYY-MM-DD`, `YYYY-MM-DDTHH:mm`, and `""` for empty. A page swaps a native date field for one and its URL params and payloads keep their shape. Each is a text field with a calendar button; a person types a day or picks one, and typed text applies on Enter or blur. Each takes `min?`, `max?`, `required?`, `disabled?`, `size?`, `aria-invalid?`, `calendarLabel?` and `weekStartsOn?`. `DateRangePicker` adds `quickChoices` (Today, Last 7 days, Last 30 days, This month) and `clearable`. The fields show and read days in `config.app.locale`, and the calendar starts the week on that locale's first weekday; `weekStartsOn` (0 is Sunday) overrides it. `Calendar` (`components/shell/calendar`) is the grid alone. The logic is in the base `lib/calendar.ts`, `lib/date-picker.ts` and `lib/date-field.ts`, and the words in `content/date-picker.ts`.
+- **`OverflowTooltip`** (`components/shell/overflow-tooltip`) renders one line that truncates with an ellipsis, and shows the whole text in a tooltip only while the ellipsis shows. Use it in a `grow` column or a long heading.
+- **`PasswordInput`** (`components/shell/password-input`) is an input with a show and hide button. It takes the `Input` props plus `showLabel` and `hideLabel`, the button's names, from the app's content. It is the shell twin of the base `PasswordField`.
+
+## The brand mark
+
+`BrandMark` renders `assets/shell/brand-mark-light.svg` on the light theme and `brand-mark-dark.svg` on the dark one, as two `<img>` that the `dark:` classes switch. `variant="icon"` (the default) is the square mark alone, with the product name as its `alt`. `variant="full"` adds `config.app.name` as text beside the mark. Pass `decorative` when the caller already shows the name as text beside the mark, as the sidebar and the sign-in card do, so a screen reader reads the name once. The sidebar, the mobile header, the sign-in card and the admin's access-denied screen render it. The admin and app builds also use the light file as the favicon, and take the tab title from `config.app.name`.
+
+To use your own mark, replace the two SVG files and keep their names and their square shape; the icon box is `size-7`. Each file carries real colours: the light file must read on a light background and the dark file on a dark one. For a wordmark that already holds the name, add a `brand-wordmark-light.svg` and `brand-wordmark-dark.svg` pair beside them and render the pair in the `full` branch of `blocks/shell/brand-mark.tsx` in place of the icon and the text, with `alt={siteName}`.
+
+## Build a page
 
 Inside a page, build every control from the primitive set: `Field` with `FieldLabel` and `Input`, `Select` or `Checkbox` in a form; `Switch` for an on/off setting; `Dialog` for a create flow; `AlertDialog` before a revoke, a delete or a cancel; and `toastManager.add({ type, title, description })` from `components/shell/toast` for the result of every mutation. Each app mounts the toast provider once in its `__root.tsx`.
 
@@ -205,7 +258,7 @@ Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move
 
 1. Commit or stash your work, so the update's merge plan is the only change in the tree.
 2. Update every installed module in one run: `saasaloy update`. The new `admin` depends on `shell`, so the plan installs `shell`, removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`, and writes the new imports into `admin` and every module with an admin screen (`teams`, `billing`, `payment`, `feature-flags`, `multitenant`, `file-uploads`, `api-keys-organization`).
-3. Resolve the merge plan. A shell file you edited under the old path stays there, and the update lists it. Move your edit into the file at the new path, delete the old file, then run `saasaloy update --resolved <path>` for a file the plan marks as a conflict. A replaced logo is the common case: copy your `packages/ui/src/assets/brand-mark.svg` over `packages/ui/src/assets/shell/brand-mark.svg`, then delete the old one.
+3. Resolve the merge plan. A shell file you edited under the old path stays there, and the update lists it. Move your edit into the file at the new path, delete the old file, then run `saasaloy update --resolved <path>` for a file the plan marks as a conflict. A replaced logo is the common case: the mark is now a light and dark pair, so make your old `packages/ui/src/assets/brand-mark.svg` into `assets/shell/brand-mark-light.svg` and `brand-mark-dark.svg` as the `shell/0002-brand-pair-and-new-blocks` update note says, then delete the old file.
 4. Change the imports in your own files. The pattern skips `blocks/admin/feature-flags`, the one admin-only block, which the update already points at the right place:
 
    ```sh
@@ -226,6 +279,8 @@ Before `shell`, the `admin` module wrote this kit under `@repo/ui/*/admin`. Move
 - **A status pill or an alert has no fill.** A token is missing: the stylesheet imports `shell.css` before its theme instead of after, or a shell file reads a token no file defines. Run the token check.
 - **Dark mode shows a light status colour.** An app overrides that token in `:root` and not in `.dark`.
 - **A button looks like the landing page's.** A base primitive slipped in. `pnpm lint` names the import.
+- **The brand mark shows black on black in dark mode.** The dark file is a copy of the light one, or a one-colour mask file. Give `brand-mark-dark.svg` colours that read on a dark background.
+- **A select shows the raw value, such as `standard`.** Pass `items` to `Select`.
 - **`failed to resolve import @tanstack/react-table`** after an update. pnpm linked the package without its React peers; run `pnpm install --fix-lockfile` once.
 
 ## Conventions to honor
