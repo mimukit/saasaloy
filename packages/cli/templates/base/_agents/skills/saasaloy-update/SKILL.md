@@ -1,6 +1,6 @@
 ---
 name: saasaloy-update
-description: Runbook for an AI agent that updates this project to a newer Saasaloy CLI and newer module versions with saasaloy update. Use when the owner says "update saasaloy", "upgrade the CLI", "pull the latest modules", "update the base template", "work the merge plan", "clear the update notes", when saasaloy update or saasaloy outdated --check exits 3 or 2, when a merge plan or .saasaloy/merge-plan.md is handed to you, or when an adopted project takes its first update. Covers the CLI upgrade, the preview, --out, the file merges, the update notes and "Notes that may apply", --resolved and --done, --from, the verify commands, and the exit codes.
+description: Runbook for an AI agent that updates this project to a newer Saasaloy CLI and newer module versions with saasaloy update. Use when the owner says "update saasaloy", "upgrade the CLI", "pull the latest modules", "update the base template", "work the merge plan", "clear the update notes", when saasaloy update or saasaloy outdated --check exits 3 or 2, when a merge plan or .saasaloy/merge-plan.md is handed to you, or when an adopted project takes its first update. Covers the CLI upgrade, the preview, --out, the file merges, the update notes and "Notes that may apply", --resolved and --done, a file deleted locally and --restore, a three-way or two-way base, an update that skips releases, --from, the verify commands, and the exit codes.
 ---
 
 # saasaloy-update
@@ -68,6 +68,21 @@ Each file under a module's section changed in the module and in this project. Th
 3. Do not edit a file the merge plan does not list. The run already updated every other file.
 4. Never edit `.saasaloy/manifest.json` or `saasaloy-lock.json`. The CLI owns both, and the `--resolved` and `--done` flags are the only way to write them.
 
+### A file deleted locally
+
+A file under `Files to merge` that reads "deleted locally" is a file Saasaloy tracks and the project deleted. The run wrote nothing for it. Ask whether the project still wants the file. When the owner is not there, keep it deleted and name it in your report.
+
+- To keep it deleted, record it with `--resolved <path>`. The manifest then marks the file as kept deleted, and no later update writes it or lists it again. When upstream changes it, the summary prints one `kept deleted` line.
+- To bring it back, record it with `--resolved <path>` first, then run `saasaloy update --restore <path> --yes`. `--restore` writes the current upstream file. A path that is not kept deleted refuses with exit `2`.
+
+`saasaloy doctor` lists each file kept deleted on an info line.
+
+### The base section header
+
+The base section's header says whether its diffs are three-way. With no reason line, the CLI fetched the template at the release this project recorded, and each file shows `base → theirs` and `base → mine`. A file the template did not change since that release is not in the merge plan.
+
+A line that starts with `no merge base` gives the reason the diffs are two-way: the version is not a release, the fetch failed, or the template differs from the one the lock records. Judge which side each difference came from. On a fetch failure, check the network or set `GITHUB_TOKEN`, then run the update again. For an adopted project, name its version with `--from <version>` on the first applied update, as [An adopted project](#an-adopted-project) says, so the base merges three-way.
+
 A section titled "Config patches that moved" is not a file. Reconcile the change by hand. The module's lock stays at the old version, and `--resolved` does not apply to it.
 
 ## Record the work
@@ -87,6 +102,16 @@ saasaloy update \
 - Record a note in the same run as the merges of its module. A `--done` before that module's `--resolved` can make the note come back once. When in doubt, put every `--resolved` and every `--done` in one run.
 - A path that waits on no merge, or an id that is not pending, refuses the run with exit `2`. The message lists what is pending. Nothing is written.
 - The record run is an update run, so it needs `--yes` with no terminal, and it refuses a dirty tree. Commit the work first, or add `--force`. Commit only when the owner allows commits in this session.
+
+## An update that skips releases
+
+A project that skipped one or more releases can take every change in one update. Stage the run when a module's change breaks the rest:
+
+1. **Preview.** Run `saasaloy update --dry-run`. Read the `alias` lines: each one is an alias the run adds to `saasaloy.json`. A line `Alias <name> stays <value>` means the project holds that alias with another value. The run keeps the project value; check that the update's files still resolve. Read the `install` lines: each one is a new prerequisite module the run installs once, before the first module.
+2. **Read the update notes.** The preview prints the merge plan on stdout. Read each note in it, as [An update note](#an-update-note) says. Each note holds the work of its own release, and this recipe repeats none of it.
+3. **Update a breaking module alone.** When a note says to update a module by itself first, run `saasaloy update <module> --yes --out .saasaloy/merge-plan.md`. Work that merge plan to exit `0`, as [Procedure](#procedure) steps 4 to 7 say.
+4. **Update the rest.** Run `saasaloy update --yes --out .saasaloy/merge-plan.md` and work it to exit `0`.
+5. **Verify.** Run `pnpm check`. Fix each failure before you report.
 
 ## An adopted project
 
