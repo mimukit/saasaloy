@@ -182,7 +182,8 @@ function isMergeFile(file: PlannedUpdateFile): boolean {
   return (
     file.action === "drift" ||
     file.action === "conflict" ||
-    file.action === "delete-drift"
+    file.action === "delete-drift" ||
+    file.action === "deleted"
   );
 }
 
@@ -245,7 +246,11 @@ function renderModule(mod: ModuleUpdatePlan): string[] {
   if (mergeFiles.length > 0 || droppedFiles.length > 0) {
     out.push("### Files to merge", "");
     for (const file of mergeFiles) {
-      out.push(...renderFile(file));
+      out.push(
+        ...(file.action === "deleted"
+          ? renderDeletedFile(file)
+          : renderFile(file))
+      );
     }
     for (const file of droppedFiles) {
       out.push(...renderDroppedFile(file));
@@ -348,6 +353,45 @@ function renderFile(file: PlannedUpdateFile): string[] {
       "**base → mine** (what you changed):",
       "",
       ...fenced(toDiff(base, mine, file.target), "diff")
+    );
+  }
+  return out;
+}
+
+/**
+ * A tracked file the owner deleted (#312, ADR 0059). Nothing was written. The agent picks
+ * one of two commands; the upstream diff says what keeping it deleted gives up.
+ */
+function renderDeletedFile(file: PlannedUpdateFile): string[] {
+  const where = file.module === BASE_MODULE ? "template" : "module";
+  const out: string[] = [
+    `#### \`${file.target}\``,
+    "",
+    `Source in the ${where}: \`${file.from}\` — deleted locally.`,
+    "",
+    `Saasaloy tracks this file, and it is not on disk. Nothing was written. Decide whether ` +
+      `the project still wants it, then run one of these:`,
+    "",
+    `- Keep it deleted: \`saasaloy update --resolved ${shellQuote(file.target)}\`. No later ` +
+      "update writes it again or lists it here.",
+    `- Bring it back: run the command above, then \`saasaloy update --restore ${shellQuote(file.target)}\`. ` +
+      "`--restore` takes only a file kept deleted, and it writes the current upstream file.",
+    "",
+  ];
+  const theirs = file.theirs ?? "";
+  if (file.base === undefined) {
+    out.push(
+      `**theirs** (the file the ${where} ships now):`,
+      "",
+      ...fenced(toDiff("", theirs, file.target), "diff")
+    );
+  } else if (file.base === theirs) {
+    out.push(`The ${where} did not change this file since your version.`, "");
+  } else {
+    out.push(
+      `**base → theirs** (what the ${where} changed):`,
+      "",
+      ...fenced(toDiff(file.base, theirs, file.target), "diff")
     );
   }
   return out;
