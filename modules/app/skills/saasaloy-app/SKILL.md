@@ -33,7 +33,9 @@ After `saasaloy add app`:
 
 ## Add a screen
 
-Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`; never edit that file by hand.
+Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`; never edit that file by hand. A module that drops a route file leaves the committed tree one route behind, so the `typecheck` script runs `tsr generate` before `tsc`. `tsr.config.json` holds the generator options the plugin also passes in `vite.config.ts`.
+
+A screen an anonymous visitor must open, such as a second sign-in screen, needs a row in `AUTH_SCREENS` in `src/lib/redirect.ts`. The root guard lets an anonymous visitor in on those paths and sends a signed-in one to `/`, and `resolveDestination()` never returns to one. A module adds its row with a `const-array` patch (`constName: "AUTH_SCREENS"`, `key: "path"`), as `auth-phone` does.
 
 Then put it in the sidebar: add a row to `NAV_AREAS` in `src/components/nav.ts`. The `to` is checked against the route tree, so a typo fails `pnpm typecheck`. A row takes an optional `shortcut`, `G` then a letter written as `"G P"`; pick the letter by hand and keep it unique, because the tool repo's `commands.test.ts` fails on two rows with one shortcut. Every row becomes a "Go to <label>" command in `src/components/commands.ts`, which `AppShell` declares next to sign out and the three theme choices. A screen declares its own with `useCommands(commands, { scope: "route", label })`. They do nothing until the `command` module is installed, which appends itself to `src/components/shell-extensions.ts`.
 

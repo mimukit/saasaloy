@@ -2,9 +2,19 @@
 // cannot be trusted.
 export const DEFAULT_DESTINATION = "/";
 
-// The two screens a signed-in visitor never returns to. Sending someone back to the
-// sign-in form they just used would look like the sign-in failed.
-const AUTH_PATHS = new Set(["/sign-in", "/sign-up"]);
+/**
+ * The auth screens: the ones an anonymous visitor may open, and the ones a signed-in
+ * visitor never returns to. Sending someone back to the sign-in form they just used would
+ * look like the sign-in failed. A module that ships its own auth screen adds a row with a
+ * `const-array` patch (`constName: "AUTH_SCREENS"`, `key: "path"`), and both the root
+ * guard and `resolveDestination()` read it.
+ */
+export const AUTH_SCREENS = [{ path: "/sign-in" }, { path: "/sign-up" }];
+
+/** The paths of `AUTH_SCREENS`. */
+export const AUTH_PATHS: ReadonlySet<string> = new Set(
+  AUTH_SCREENS.map(({ path }) => path)
+);
 
 const SPACE = 0x20;
 const DELETE = 0x7f;
@@ -72,8 +82,8 @@ export function resolveDestination(
   // Match on the pathname alone; the route tree knows nothing about a query or a fragment.
   const pathname = path.split(/[?#]/)[0] ?? path;
 
-  // Bouncing back to /sign-in or /sign-up would loop: the root guard redirects a
-  // signed-in visitor straight off both again.
+  // Bouncing back to an auth screen would loop: the root guard redirects a signed-in
+  // visitor straight off each one again.
   if (AUTH_PATHS.has(pathname) || !isKnownRoute(pathname)) {
     return DEFAULT_DESTINATION;
   }
