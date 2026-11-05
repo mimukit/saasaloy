@@ -31,6 +31,12 @@ export type { Audience, RoleDemand } from "./authorize";
 export { withAuthScope } from "./db-provider";
 export type { AuthDbBindings } from "./db-provider";
 
+// The request-scoped client, for code that already runs inside `withAuthScope`: an
+// `authGuards` middleware on `/auth`, or a route body. It reads the client the scope
+// opened, so it adds no second connection under `database-postgres`, and it throws
+// outside a scope. Code with no scope open uses `withDb(c, ...)` from `@repo/db/client`.
+export { authDb } from "./db-provider";
+
 /**
  * The part of a Hono `Context` `getSession` reads.
  *

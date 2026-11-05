@@ -1,6 +1,22 @@
 import { Hono } from "hono";
+import type { MiddlewareHandler } from "hono";
 import { adminAuth, auth, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
+
+/** Identity, so `authGuards` keeps the call shape the `plugin-array` codemod reads. */
+function defineGuards(config: { guards: MiddlewareHandler[] }) {
+  return config;
+}
+
+// The guard patch point. A feature module appends a factory call here with a
+// `plugin-array` patch (`exportName: "authGuards"`, `arrayProp: "guards"`), and the call
+// returns a Hono middleware that runs ahead of Better Auth on `/auth` only, never on
+// `/admin/auth`. A guard owns a few paths: on every other path it calls `next()` and
+// returns. It runs inside `withAuthScope`, so `authDb` from `@repo/auth/server` is this
+// request's client. Keep the line in this exact shape and never omit `guards`.
+//
+// The array is read once, when this module loads, so a guard cannot be added at runtime.
+export const authGuards = defineGuards({ guards: [] });
 
 // Two forwards, one per Better Auth instance: `authRoute` at `/auth` for the client group
 // and `adminAuthRoute` at `/admin/auth` for the admin group. This module's two
@@ -31,7 +47,11 @@ import type { AuthDbBindings } from "@repo/auth/server";
 export const authRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",
-  (c) => withAuthScope(c, () => auth.handler(c.req.raw))
+  // The scope opens first and stays open across the guards, so a guard reads the
+  // database through `authDb` on the same client the handler uses.
+  (c, next) => withAuthScope(c, () => next()),
+  ...authGuards.guards,
+  (c) => auth.handler(c.req.raw)
 );
 
 // The admin group's forward, mounted at `/admin/auth`. Everything said above holds for

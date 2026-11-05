@@ -89,6 +89,39 @@ included. That is deliberate. D1 is the default driver, so most development happ
 permissive D1 path would let the mistake pass every local test and surface only after a project
 switched to Postgres. The cost on D1 is one property lookup per call. See ADR 0029.
 
+## `authGuards`: middleware ahead of Better Auth on `/auth`
+
+`apps/api/src/routes/auth.ts` exports a third patch point, `export const authGuards = defineGuards({ guards: [] })`. Each entry is a Hono `MiddlewareHandler`. `authRoute` runs them in order after it opens `withAuthScope` and before `auth.handler`. `adminAuthRoute` has no guards. Use a guard for a check that must answer before Better Auth does: a send limit on a code endpoint, a clearer refusal than the plugin gives, a log line per refusal. A second route on `/auth` cannot do this, because a `chained-route` patch appends after `auth`'s catch-all.
+
+A feature module registers a factory call with a `plugin-array` patch:
+
+```json
+{ "file": "apps/api/src/routes/auth.ts", "kind": "plugin-array", "exportName": "authGuards", "arrayProp": "guards", "call": "phoneGuard", "import": { "name": "phoneGuard", "from": "../middleware/phone-guard" } }
+```
+
+The factory returns the middleware. A guard owns a few paths and calls `next()` on every other one. The path it sees includes the `/auth` prefix.
+
+```ts
+import { authDb } from "@repo/auth/server";
+import type { MiddlewareHandler } from "hono";
+
+export function phoneGuard(): MiddlewareHandler {
+  return async (c, next) => {
+    if (c.req.method !== "POST" || c.req.path !== "/auth/phone-number/send-otp") {
+      return next();
+    }
+    // Read the database through `authDb`: the scope is already open, so this is the
+    // request's own client, with no second connection under `database-postgres`.
+    // ...answer with c.json(..., 429) to refuse, or fall through:
+    return next();
+  };
+}
+```
+
+`authDb` from `@repo/auth/server` is the request-scoped client typed as the driver's `Db`, so it takes any repository function such as `countSmsSince(authDb, ...)` from `sms`, or a Drizzle query on `users`. It throws outside `withAuthScope`. `@repo/db/client`'s `withDb(c, fn)` opens a fresh client instead, which is the right call outside a scope and a wasted connection inside one. A guard that reads the request body must use `c.req.raw.clone()`, so Better Auth can still read the original.
+
+The array is read once, when the route module loads. A test cannot push a guard into it after import, so test a guard through the route with the guard installed by its module.
+
 ## The plugin-array patch points (read this before adding billing/teams)
 
 `packages/auth/src/auth.ts` exports two **module-scope singletons**, each with its own literal plugin array:
