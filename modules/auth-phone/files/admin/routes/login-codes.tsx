@@ -92,9 +92,14 @@ const COLUMNS: readonly DataTableColumn<LoginCodeRow>[] = [
     value: (row) => row.phone,
     sortable: true,
     cell: (row) => (
-      <div className="flex min-w-0 flex-col">
+      // Capped, so a long account email truncates instead of pushing the other columns
+      // past the table's edge.
+      <div className="flex max-w-[20rem] min-w-0 flex-col">
         <span className="truncate font-medium tabular-nums">{row.phone}</span>
-        <span className="text-muted-foreground truncate text-xs">
+        <span
+          className="text-muted-foreground truncate text-xs"
+          title={accountLabel(row)}
+        >
           {accountLabel(row)}
         </span>
       </div>
@@ -128,10 +133,15 @@ const COLUMNS: readonly DataTableColumn<LoginCodeRow>[] = [
     sortable: true,
     cell: (row) =>
       row.sendStatus === "failed" ? (
-        <div className="flex min-w-0 flex-col items-start gap-1">
+        // Capped, and the span takes the full width: `items-start` sizes a child to its
+        // content, so a long provider error would widen the table and never truncate.
+        <div className="flex max-w-[20rem] min-w-0 flex-col items-start gap-1">
           <StatusPill label="Failed" tone="bad" />
           {row.error === null ? null : (
-            <span className="text-muted-foreground truncate text-xs">
+            <span
+              className="text-muted-foreground max-w-full truncate text-xs"
+              title={row.error}
+            >
               {row.error}
             </span>
           )}
