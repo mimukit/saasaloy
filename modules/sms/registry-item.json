@@ -5,7 +5,9 @@
   "description": "A packages/sms workspace with the provider interface and segment counting; add one sms provider.",
   "stage": "scale",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": {
+    "saasaloy": ">=0.7.0"
+  },
   "dependsOn": ["api"],
   "dependencies": [],
   "envVars": {
@@ -34,9 +36,94 @@
         "name": "smsEnv",
         "from": "@repo/sms/env-preset"
       }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin/sms",
+      "call": "adminSms",
+      "import": {
+        "name": "adminSms",
+        "from": "./routes/admin-sms"
+      },
+      "when": {
+        "installed": ["admin", "database"]
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/sms",
+        "label": "SMS"
+      },
+      "icon": {
+        "name": "MessageSquareTextIcon",
+        "from": "lucide-react"
+      },
+      "when": {
+        "installed": ["admin", "database"]
+      }
     }
   ],
-  "files": [],
+  "files": [
+    {
+      "path": "files/db/schema/sms-messages.sqlite.ts",
+      "target": "@db/schema/sms-messages.ts",
+      "onlyWith": "database-d1",
+      "when": {
+        "installed": ["database"]
+      }
+    },
+    {
+      "path": "files/db/schema/sms-messages.pg.ts",
+      "target": "@db/schema/sms-messages.ts",
+      "onlyWith": "database-postgres",
+      "when": {
+        "installed": ["database"]
+      }
+    },
+    {
+      "path": "files/db/repositories/sms-messages.ts",
+      "target": "@db/repositories/sms-messages.ts",
+      "when": {
+        "installed": ["database"]
+      }
+    },
+    {
+      "path": "files/db/seed/sms-messages.ts",
+      "target": "@db/seed/slices/sms-messages.ts",
+      "when": {
+        "installed": ["database"]
+      }
+    },
+    {
+      "path": "files/api/routes/admin-sms.ts",
+      "target": "@api/routes/admin-sms.ts",
+      "when": {
+        "installed": ["admin", "database"]
+      }
+    },
+    {
+      "path": "files/api/routes/admin-sms.vitest.ts",
+      "target": "@api/routes/admin-sms.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["admin", "database"]
+      }
+    },
+    {
+      "path": "files/admin/routes/sms.tsx",
+      "target": "@admin/routes/sms.tsx",
+      "when": {
+        "installed": ["admin", "database"]
+      }
+    }
+  ],
   "scaffolds": [
     {
       "workspace": "packages/sms",
@@ -59,6 +146,10 @@
         {
           "path": "files/src/define.ts",
           "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/mask-codes.ts",
+          "target": "src/mask-codes.ts"
         },
         {
           "path": "files/src/provider.ts",
@@ -85,5 +176,8 @@
   ],
   "agent": {
     "skills": ["skills/saasaloy-sms"]
-  }
+  },
+  "removeWarnings": [
+    "The deployed sms_messages table survives this removal. Run db:generate and review the resulting drop migration before you apply it."
+  ]
 }
