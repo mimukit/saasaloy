@@ -74,6 +74,35 @@ describe("the local source", () => {
     assert.deepEqual([...(await local.load(request(root)))], [["A", "one"]]);
   });
 
+  it("gives a key the file does not hold the example's default", async () => {
+    const root = makeRoot("A=one\n", "# @services api\nA=\nB=fallback\n");
+    assert.deepEqual(
+      [...(await local.load(request(root)))],
+      [
+        ["A", "one"],
+        ["B", "fallback"],
+      ]
+    );
+  });
+
+  it("keeps a key the file holds blank, blank", async () => {
+    const root = makeRoot("A=one\nB=\n", "# @services api\nA=\nB=fallback\n");
+    assert.deepEqual(
+      [...(await local.load(request(root)))],
+      [
+        ["A", "one"],
+        ["B", ""],
+      ]
+    );
+  });
+
+  it("gives production no default", async () => {
+    const root = makeRoot("A=dev\n", "# @services api\nA=\nB=fallback\n");
+    writeFileSync(path.join(root, "packages/env/.env.prod"), "A=prod\n");
+    const prod = { ...request(root), environment: "prod" as const };
+    assert.deepEqual([...(await local.load(prod))], [["A", "prod"]]);
+  });
+
   it("reads packages/env/.env.prod for production, never the dev file", async () => {
     const root = makeRoot("A=dev\n");
     writeFileSync(path.join(root, "packages/env/.env.prod"), "A=prod\n");
