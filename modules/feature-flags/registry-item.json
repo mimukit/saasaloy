@@ -24,7 +24,7 @@
       "file": "apps/api/src/index.ts",
       "kind": "chained-route",
       "exportName": "default",
-      "path": "/flags",
+      "path": "/admin/flags",
       "call": "featureFlags",
       "import": {
         "name": "featureFlags",
@@ -64,9 +64,24 @@
         "name": "featureFlagsEnv",
         "from": "@repo/feature-flags/env-preset"
       }
+    },
+    {
+      "file": "apps/api/src/lib/audit-actions.ts",
+      "kind": "plugin-array",
+      "exportName": "AUDIT_ACTIONS",
+      "arrayProp": "actions",
+      "call": "featureFlagsAuditActions",
+      "import": {
+        "name": "featureFlagsAuditActions",
+        "from": "../audit/feature-flags"
+      }
     }
   ],
   "files": [
+    {
+      "path": "files/api/audit/feature-flags.ts",
+      "target": "@api/audit/feature-flags.ts"
+    },
     {
       "path": "files/api/routes/feature-flags.ts",
       "target": "@api/routes/feature-flags.ts"
