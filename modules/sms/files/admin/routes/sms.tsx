@@ -122,9 +122,14 @@ const COLUMNS: readonly DataTableColumn<SmsRow>[] = [
     value: (row) => purposeLabel(row.purpose),
     sortable: true,
     cell: (row) => (
-      <div className="flex min-w-0 flex-col">
+      // Capped, or a long template name widens the table past its box once the detail
+      // panel opens, and `truncate` never takes effect.
+      <div className="flex max-w-[24rem] min-w-0 flex-col">
         <span className="truncate">{purposeLabel(row.purpose)}</span>
-        <span className="text-muted-foreground truncate font-mono text-xs">
+        <span
+          className="text-muted-foreground truncate font-mono text-xs"
+          title={row.template}
+        >
           {row.template}
         </span>
       </div>
@@ -143,6 +148,12 @@ const COLUMNS: readonly DataTableColumn<SmsRow>[] = [
     header: "Provider",
     value: (row) => row.provider,
     sortable: true,
+    // Capped like the message cell, so a long provider name truncates.
+    cell: (row) => (
+      <span className="block max-w-[12rem] truncate" title={row.provider}>
+        {row.provider}
+      </span>
+    ),
   },
   {
     id: "sent",
