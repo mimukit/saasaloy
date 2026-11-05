@@ -35,8 +35,9 @@
      - only one app renders it → add an `@source` line in THAT app's own stylesheet
        instead, the way admin.css does for the shell primitives.
 
-   Get this wrong and the failure is the silent one the comment above describes: the class
-   never reaches the CSS and the component renders unstyled. */
+   Get this wrong and the class never reaches the CSS and the component renders unstyled.
+   `pnpm test` catches the first case: apps/web/src/lib/ui-sources.test.ts follows the
+   imports of the site and of src/blocks/ and fails on a primitive with no line here. */
 @source "../components/accordion.tsx";
 @source "../components/badge.tsx";
 @source "../components/button.tsx";
