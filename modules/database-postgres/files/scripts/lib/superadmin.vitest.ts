@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { TestProject } from "vitest/node";
-import { setup, testDatabaseUrl } from "../test-setup.ts";
+import { setupLocked, testDatabaseUrl } from "../test-setup.ts";
 import { loadContext } from "./context.ts";
 import { hashPassword, verifyPassword } from "./password.ts";
 import { ensureSuperadmin, loadSuperadminRole, newId } from "./superadmin.ts";
@@ -38,7 +37,7 @@ describe.skipIf(!URL_OF_TEST_DATABASE)(ensureSuperadmin, () => {
   let role: string;
 
   beforeAll(async () => {
-    await setup({ provide: () => {} } as unknown as TestProject);
+    await setupLocked();
     sql = postgres(URL_OF_TEST_DATABASE ?? "", { max: 1, onnotice: () => {} });
     role = await loadSuperadminRole(ROOT);
   }, 120_000);
