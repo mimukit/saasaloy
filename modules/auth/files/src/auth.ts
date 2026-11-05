@@ -3,13 +3,11 @@ import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { admin } from "better-auth/plugins";
 import { adminAc, defaultRoles } from "better-auth/plugins/admin/access";
-import { users as userTable } from "@repo/db/schema/auth";
 import {
   ADMIN_APP_ROLES,
   ADMIN_AUDIENCE,
   ADMIN_ROLES,
   CLIENT_AUDIENCE,
-  SUPERADMIN_ROLE,
   siteRoleMap,
 } from "./authorize";
 import type { Audience } from "./authorize";
@@ -57,22 +55,6 @@ const MIN_PASSWORD_LENGTH = 12;
 // the Worker fails on its first request rather than serving sessions signed with Better
 // Auth's published development key. See ./env.ts for the rule and the escape hatch.
 const secret = requireAuthSecret(authEnv);
-
-// Is the `users` table still empty? A one-row `select` rather than a `count(*)`, because
-// the only question is existence and the driver stops at the first row.
-//
-// Reads through `authDb`, the same request-scoped proxy the adapter below takes, not a
-// module-scope client. This runs inside the `create.before` hook, which Better Auth only
-// reaches from an `auth.api.*` or `auth.handler` call, and every one of those already
-// runs inside `withAuthScope`. A client bound at module scope would serve the first
-// request and throw on the second under `database-postgres`.
-async function noUsersYet(): Promise<boolean> {
-  const rows = await authDb
-    .select({ id: userTable.id })
-    .from(userTable)
-    .limit(1);
-  return rows.length === 0;
-}
 
 // Two instances, one per user group, on the same four tables. A project has clients (the
 // shopper, the customer, the app user) and an admin group (`superadmin`, `admin`, and any
@@ -127,45 +109,20 @@ function sharedOptions(group: Audience) {
       drizzleAdapter(authDb, { provider, usePlural: true }),
       group
     ),
-    // First user wins, and it wins `superadmin`. This is the ONLY automatic role promotion
-    // in the system, and it fires at most once per project: the hook reads the `users` table
-    // before the row is written, so it can only match on the very first sign-up. Without it
-    // a fresh `saasaloy add admin` scaffolds an admin app that denies every account, and the
-    // only way in is the `update users set role` SQL in the auth skill.
+    // No database hook writes a role, and nothing promotes an account. Every sign-up gets
+    // the `admin()` plugin's default `"user"`, the first one on an empty `users` table
+    // included. Client sign-up is open, so a "first account wins superadmin" hook handed the
+    // admin app to whoever reached /auth/sign-up first on a deployed api.
     //
-    // Both instances carry it, and in practice it fires on `auth`: `adminAuth` has no
-    // sign-up, so the first account always signs up as a client. It then signs in on the
-    // admin app with the same email and password, because both instances read one
-    // `accounts` table.
+    // The first superadmin comes from outside the api instead:
     //
-    // `superadmin` rather than `admin` because the first account has to be able to grant the
-    // rest, and only `superadmin` may change an admin-group role (`./plugins/rank-guard.ts`).
+    //   development       the seed (`@db/seed/users.ts`) writes one
+    //   Postgres prod     `pnpm db:prod:superadmin --email <address>`
+    //   D1 prod           sign up, then `wrangler d1 execute <db> --remote --command
+    //                     "update users set role = 'superadmin' where email = '<email>'"`
     //
-    // WARNING — client sign-up is open. Any account that reaches /auth/sign-up before you do
-    // becomes the superadmin, and on a deployed api with a public origin that window is
-    // real. Sign up yourself as soon as the api answers, and check with
-    // `select email, role from users`. The auth skill carries the recovery SQL for when
-    // somebody else got there first.
-    //
-    // Two first sign-ups that land at the same instant both read an empty table and both
-    // become superadmin. That is accepted, not engineered away: a unique index on
-    // `role = 'superadmin'` would also block a deliberate second one.
-    databaseHooks: {
-      user: {
-        create: {
-          // Returning `{ data }` replaces the row being written; returning nothing leaves
-          // it alone, so the `admin()` plugin's own hook — which runs first and writes the
-          // default `"user"` — stands. Plugin hooks run before these, which is why this
-          // one wins when it does answer.
-          before: async (newUser: Record<string, unknown>) => {
-            if (!(await noUsersYet())) {
-              return;
-            }
-            return { data: { ...newUser, role: SUPERADMIN_ROLE } };
-          },
-        },
-      },
-    },
+    // The auth skill carries the D1 SQL. From then on a superadmin grants every other
+    // admin-group role on the admin app (`./plugins/rank-guard.ts`).
     advanced: {
       // Each instance names its own cookies, so the two sessions never overwrite each
       // other: `client.session_token` and `admin.session_token`, with the `__Secure-`
