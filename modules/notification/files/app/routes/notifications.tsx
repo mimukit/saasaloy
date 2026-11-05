@@ -31,6 +31,9 @@ import {
   useUnreadCount,
 } from "@app/lib/notifications";
 
+/** The unread count in the app's locale, so 1284 reads "1,284" in English. */
+const UNREAD_FORMAT = new Intl.NumberFormat(config.app.locale);
+
 // The notifications page: the Inbox, every row newest first with "Load more", and the
 // Preferences, one switch per category.
 //
@@ -87,7 +90,7 @@ function Notifications() {
             Inbox
             {unread !== undefined && unread > 0 ? (
               <span className="text-muted-foreground text-xs font-normal tabular-nums">
-                {unread} unread
+                {`${UNREAD_FORMAT.format(unread)} unread`}
               </span>
             ) : null}
           </TabsTab>

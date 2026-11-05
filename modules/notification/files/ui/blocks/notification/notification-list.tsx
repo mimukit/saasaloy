@@ -60,7 +60,7 @@ function ListRow({
         <span className="flex min-w-0 flex-col gap-0.5">
           <span
             className={cn(
-              "text-sm",
+              "text-sm wrap-anywhere",
               item.read ? "font-normal" : "font-semibold"
             )}
           >
@@ -70,7 +70,11 @@ function ListRow({
             {item.title}
           </span>
           {item.body === null ? null : (
-            <span className="text-muted-foreground text-sm">{item.body}</span>
+            // `wrap-anywhere` on the title and the body: a long word with no break, such as
+            // a file name, wraps inside the row instead of running past its edge at 375 px.
+            <span className="text-muted-foreground text-sm wrap-anywhere">
+              {item.body}
+            </span>
           )}
         </span>
         {/* Below 640 px the time and the category drop under the text; above it they

@@ -122,6 +122,10 @@
           "target": "src/lib/api.ts"
         },
         {
+          "path": "files/src/lib/nav-count.ts",
+          "target": "src/lib/nav-count.ts"
+        },
+        {
           "path": "files/src/lib/redirect.ts",
           "target": "src/lib/redirect.ts"
         },

@@ -11,17 +11,15 @@ import {
 import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
 import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
 import { useCommands } from "@repo/ui/lib/shell/commands";
-import { navCountFromBody } from "@repo/ui/lib/shell/nav-counts";
 
 import { appCommands } from "@app/components/commands";
 import { NAV_AREAS, areaFor } from "@app/components/nav";
 import { NAV_COUNTS } from "@app/components/nav-counts";
 import { shellExtensions } from "@app/components/shell-extensions";
 import { useSignOut } from "@app/components/use-sign-out";
-import { API_CREDENTIALS } from "@app/lib/api";
-import { apiBaseUrl } from "@app/lib/auth";
 import type { AppSession } from "@app/lib/auth";
 import { initialsOf } from "@app/lib/initials";
+import { navCountQuery } from "@app/lib/nav-count";
 
 // The app's frame: the `shell` layout with this app's nav, its session and its sign-out.
 // The shell owns the markup and holds no auth logic; this file hands it the data. The live
@@ -39,34 +37,10 @@ function ShellNavLink({ to, exact, ...props }: ShellLinkProps) {
   );
 }
 
-/** How often the sidebar's live counts refetch while the tab is visible. */
-const NAV_COUNT_INTERVAL_MS = 60_000;
-
-/**
- * One live nav count.
- *
- * Plain `fetch` rather than the typed `api` client: a NAV_COUNTS `path` is data a module's
- * patch wrote, so there is no route type to call it through. The origin and the cookie
- * are the same two `src/lib/api.ts` uses, for the same reasons.
- *
- * Every failure (network, a non-OK status, a body that is not `{ count: number }`) throws,
- * so TanStack Query keeps the last count it read and the badge never drops because of a
- * failure. The query has no error UI, so a failure never reaches the screen.
- */
-async function fetchNavCount(path: string): Promise<number> {
-  const response = await fetch(`${apiBaseUrl}${path}`, {
-    credentials: API_CREDENTIALS,
-  });
-  if (!response.ok) {
-    throw new Error(`The nav count at ${path} answered ${response.status}.`);
-  }
-  return navCountFromBody(await response.json());
-}
-
 /**
  * The live counts for every NAV_COUNTS entry, keyed by the row's `to`.
  *
- * One query per entry under `["nav-count", to]`, so a page that changes a count
+ * One query per entry, from `navCountQuery` in src/lib/nav-count.ts, under `["nav-count", to]`, so a page that changes a count
  * invalidates its own key after the mutation and the badge follows with no reload.
  * TanStack Query refetches on every window focus and does not run the interval in a hidden
  * tab.
@@ -91,14 +65,7 @@ function useNavCounts(): Record<string, number | undefined> {
   }, [queryClient]);
 
   return useQueries({
-    queries: NAV_COUNTS.map(({ to, path }) => ({
-      queryKey: ["nav-count", to],
-      queryFn: () => fetchNavCount(path),
-      refetchInterval: NAV_COUNT_INTERVAL_MS,
-      // "always", not `true`: `true` skips a count fetched inside the 30 s staleTime, so
-      // a row marked read in another tab would not show here until the next interval.
-      refetchOnWindowFocus: "always",
-    })),
+    queries: NAV_COUNTS.map((source) => navCountQuery(source)),
     combine: (results) =>
       Object.fromEntries(
         NAV_COUNTS.map(({ to }, index) => [to, results[index]?.data])

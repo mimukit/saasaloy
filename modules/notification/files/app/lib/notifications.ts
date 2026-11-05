@@ -7,6 +7,7 @@ import { toastManager } from "@repo/ui/components/shell/toast";
 import { relativeTime } from "@repo/ui/lib/notification/format";
 
 import { api } from "@app/lib/api";
+import { navCountQuery } from "@app/lib/nav-count";
 
 // The queries and mutations the bell (components/notification-extension.tsx) and the
 // page (routes/notifications.tsx) share, so the two read and write one cache.
@@ -14,14 +15,19 @@ import { api } from "@app/lib/api";
 // Query keys:
 //
 // - `["nav-count", "/notifications"]` is the unread count. The sidebar badge and the bell
-//   read it, and app-shell.tsx owns its fetch through the NAV_COUNTS entry this module
-//   patches in. Nothing here fetches it.
+//   read it through `navCountQuery`, with the NAV_COUNTS entry this module patches in.
 // - `["notifications", ...]` is every list: the menu's rows, the page's pages and the
 //   preferences. A mark-read invalidates the whole prefix and the count, so every open
 //   view follows at once.
 
+/** The NAV_COUNTS entry this module patches in, for the bell to read the same count. */
+const UNREAD_COUNT_SOURCE = {
+  to: "/notifications",
+  path: "/notifications/unread-count",
+} as const;
+
 /** The unread count's query key, shared with the sidebar badge. */
-export const UNREAD_COUNT_KEY = ["nav-count", "/notifications"] as const;
+export const UNREAD_COUNT_KEY = navCountQuery(UNREAD_COUNT_SOURCE).queryKey;
 
 /** The prefix of every notification list query. */
 export const NOTIFICATIONS_KEY = ["notifications"] as const;
@@ -43,20 +49,15 @@ export async function fetchNotificationPage(cursor?: string) {
 }
 
 /**
- * The unread count, read from the cache the sidebar badge fills.
+ * The unread count, the same query the sidebar badge runs.
  *
- * This observer is disabled and has no `queryFn`: app-shell.tsx's NAV_COUNTS query is the
- * one observer that fetches, on its 60 s interval, on focus and on a back-forward cache
- * restore. Both read one key, so the bell and the badge can never disagree, and a failed
- * fetch keeps the last number for both.
- *
- * Not `queryFn: skipToken`. The options of the last observer to render become the
- * query's own, and `invalidateQueries` fetches with those. With `skipToken` there, the
- * invalidation after a mark-read fetched nothing and the count stayed. With no `queryFn`,
- * TanStack Query takes the fetch from the observer that has one.
+ * `navCountQuery` gives this observer the same `queryFn` and the same timing as the
+ * sidebar's, so the two share one fetch and can never disagree, and a failed fetch keeps
+ * the last number for both. An observer with no `queryFn` of its own made TanStack Query
+ * log "No queryFn was passed" each time it took that observer's options for a refetch.
  */
 export function useUnreadCount(): number | undefined {
-  return useQuery<number>({ enabled: false, queryKey: UNREAD_COUNT_KEY }).data;
+  return useQuery(navCountQuery(UNREAD_COUNT_SOURCE)).data;
 }
 
 /** The category's label from the config section, or its id for a category since removed. */
