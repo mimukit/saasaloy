@@ -1,0 +1,398 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "auth-phone",
+  "type": "saasaloy:feature",
+  "description": "Phone number sign-up, sign-in and password reset by SMS code on Better Auth's client instance, with the send log and the number rules.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.8"
+  },
+  "dependsOn": ["auth", "sms", "ratelimit"],
+  "dependencies": [],
+  "envVars": {},
+  "removeWarnings": [
+    "Phone accounts lose their only sign-in path. The users.phone_number and users.phone_number_verified columns leave the schema: run pnpm --filter @repo/db db:generate and review the drop migration before you apply it."
+  ],
+  "patches": [
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "authPhoneConfig",
+      "import": {
+        "name": "authPhoneConfig",
+        "from": "./sections/auth-phone"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "phoneNumberPlugin",
+      "import": {
+        "name": "phoneNumberPlugin",
+        "from": "./plugins/phone-number"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "phoneAccount",
+      "import": {
+        "name": "phoneAccount",
+        "from": "./plugins/phone-account"
+      }
+    },
+    {
+      "file": "packages/auth/src/client.ts",
+      "kind": "plugin-array",
+      "exportName": "authClientPlugins",
+      "arrayProp": "plugins",
+      "call": "phoneNumberClient",
+      "import": {
+        "name": "phoneNumberClient",
+        "from": "better-auth/client/plugins"
+      }
+    },
+    {
+      "file": "apps/api/src/routes/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "authGuards",
+      "arrayProp": "guards",
+      "call": "phoneSendGuard",
+      "import": {
+        "name": "phoneSendGuard",
+        "from": "../middleware/auth-phone"
+      }
+    },
+    {
+      "file": "apps/api/src/routes/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "authGuards",
+      "arrayProp": "guards",
+      "call": "phoneSignInGuard",
+      "import": {
+        "name": "phoneSignInGuard",
+        "from": "../middleware/auth-phone"
+      }
+    },
+    {
+      "file": "packages/auth/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/sms",
+      "range": "workspace:*"
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "phoneNumber",
+      "value": "text(\"phone_number\").unique()"
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "phoneNumberVerified",
+      "value": "boolean(\"phone_number_verified\").notNull().default(false)",
+      "when": {
+        "installed": ["database-postgres"]
+      }
+    },
+    {
+      "file": "packages/db/src/schema/auth.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "phoneNumberVerified",
+      "value": "integer(\"phone_number_verified\", { mode: \"boolean\" }).notNull().default(false)",
+      "when": {
+        "installed": ["database-d1"]
+      }
+    },
+    {
+      "file": "packages/db/src/seed/slices/users.ts",
+      "kind": "plugin-array",
+      "exportName": "extraUsers",
+      "arrayProp": "rows",
+      "call": "phoneUsers",
+      "import": {
+        "name": "phoneUsers",
+        "from": "../phone-accounts"
+      }
+    },
+    {
+      "file": "packages/db/src/seed/slices/accounts.ts",
+      "kind": "plugin-array",
+      "exportName": "extraAccounts",
+      "arrayProp": "accounts",
+      "call": "phoneAccounts",
+      "import": {
+        "name": "phoneAccounts",
+        "from": "../phone-accounts"
+      }
+    },
+    {
+      "file": "apps/app/src/lib/redirect.ts",
+      "kind": "const-array",
+      "constName": "AUTH_SCREENS",
+      "key": "path",
+      "entry": {
+        "path": "/phone/sign-in"
+      },
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "file": "apps/app/src/lib/redirect.ts",
+      "kind": "const-array",
+      "constName": "AUTH_SCREENS",
+      "key": "path",
+      "entry": {
+        "path": "/phone/sign-up"
+      },
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "file": "apps/app/src/lib/redirect.ts",
+      "kind": "const-array",
+      "constName": "AUTH_SCREENS",
+      "key": "path",
+      "entry": {
+        "path": "/phone/reset"
+      },
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin/login-codes",
+      "call": "adminLoginCodes",
+      "import": {
+        "name": "adminLoginCodes",
+        "from": "./routes/admin-login-codes"
+      },
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Manage",
+      "entry": {
+        "to": "/login-codes",
+        "label": "Login codes"
+      },
+      "icon": {
+        "name": "KeyRoundIcon",
+        "from": "lucide-react"
+      },
+      "when": {
+        "installed": ["admin"]
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/auth/phone-rules.ts",
+      "target": "@auth/phone-rules.ts"
+    },
+    {
+      "path": "files/auth/phone.ts",
+      "target": "@auth/phone.ts"
+    },
+    {
+      "path": "files/auth/plugins/phone-number.ts",
+      "target": "@auth/plugins/phone-number.ts"
+    },
+    {
+      "path": "files/auth/plugins/phone-account.ts",
+      "target": "@auth/plugins/phone-account.ts"
+    },
+    {
+      "path": "files/config/auth-phone.ts",
+      "target": "@config/sections/auth-phone.ts"
+    },
+    {
+      "path": "files/db/seed/phone-accounts.ts",
+      "target": "@db/seed/phone-accounts.ts"
+    },
+    {
+      "path": "files/db/repositories/phone-logins.ts",
+      "target": "@db/repositories/phone-logins.ts"
+    },
+    {
+      "path": "files/api/middleware/auth-phone-rules.ts",
+      "target": "@api/middleware/auth-phone-rules.ts"
+    },
+    {
+      "path": "files/api/middleware/auth-phone.ts",
+      "target": "@api/middleware/auth-phone.ts"
+    },
+    {
+      "path": "files/api/routes/auth-phone.vitest.ts",
+      "target": "@api/routes/auth-phone.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/routes/auth-phone-guards.vitest.ts",
+      "target": "@api/routes/auth-phone-guards.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/ui/blocks/auth/phone-sign-in.tsx",
+      "target": "@ui/blocks/auth/phone-sign-in.tsx",
+      "when": {
+        "installed": ["shell"]
+      }
+    },
+    {
+      "path": "files/ui/blocks/auth/phone-sign-up.tsx",
+      "target": "@ui/blocks/auth/phone-sign-up.tsx",
+      "when": {
+        "installed": ["shell"]
+      }
+    },
+    {
+      "path": "files/ui/blocks/auth/phone-reset.tsx",
+      "target": "@ui/blocks/auth/phone-reset.tsx",
+      "when": {
+        "installed": ["shell"]
+      }
+    },
+    {
+      "path": "files/ui/blocks/auth/code-input.tsx",
+      "target": "@ui/blocks/auth/code-input.tsx",
+      "when": {
+        "installed": ["shell"]
+      }
+    },
+    {
+      "path": "files/ui/blocks/auth/new-password.tsx",
+      "target": "@ui/blocks/auth/new-password.tsx",
+      "when": {
+        "installed": ["shell"]
+      }
+    },
+    {
+      "path": "files/app/lib/phone-results.ts",
+      "target": "@app/lib/phone-results.ts",
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "path": "files/app/lib/phone-auth.ts",
+      "target": "@app/lib/phone-auth.ts",
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "path": "files/app/routes/phone/sign-in.tsx",
+      "target": "@app/routes/phone/sign-in.tsx",
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "path": "files/app/routes/phone/sign-up.tsx",
+      "target": "@app/routes/phone/sign-up.tsx",
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "path": "files/app/routes/phone/reset.tsx",
+      "target": "@app/routes/phone/reset.tsx",
+      "when": {
+        "installed": ["app"]
+      }
+    },
+    {
+      "path": "files/db/repositories/login-code-rules.ts",
+      "target": "@db/repositories/login-code-rules.ts",
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/db/repositories/login-codes.ts",
+      "target": "@db/repositories/login-codes.ts",
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/api/routes/admin-login-codes.ts",
+      "target": "@api/routes/admin-login-codes.ts",
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/api/routes/admin-login-codes.vitest.ts",
+      "target": "@api/routes/admin-login-codes.test.ts",
+      "when": {
+        "testing": true,
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/admin/lib/contact.ts",
+      "target": "@admin/lib/contact.ts",
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/admin/routes/login-codes.tsx",
+      "target": "@admin/routes/login-codes.tsx",
+      "when": {
+        "installed": ["admin"]
+      }
+    },
+    {
+      "path": "files/e2e/lib/sms-log.ts",
+      "target": "@e2e/lib/sms-log.ts",
+      "when": {
+        "installed": ["e2e"]
+      }
+    },
+    {
+      "path": "files/e2e/lib/sms.ts",
+      "target": "@e2e/lib/sms.ts",
+      "when": {
+        "installed": ["e2e"]
+      }
+    },
+    {
+      "path": "files/e2e/specs/auth-phone-journey.spec.ts",
+      "target": "@e2e/specs/auth-phone-journey.spec.ts",
+      "when": {
+        "installed": ["e2e"]
+      }
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-auth-phone"]
+  }
+}
