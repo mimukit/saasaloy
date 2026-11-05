@@ -27,6 +27,12 @@
 // merge plan must list the update notes that project is owed. `--upgrade-only` runs this
 // step alone after the pack.
 //
+// The skipped-release step needs the network as well (issue #312). It scaffolds a project
+// with CLI 0.5.0 from npm, deletes one demo block, and runs the packed CLI's `update`. The
+// run must add the aliases the project lacks, list the block as "deleted locally", keep it
+// deleted after `--resolved`, and merge the base three-way against the template at the
+// `v0.5.0` tag. `--skipped-only` runs this step alone after the pack.
+//
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
 //
@@ -122,11 +128,13 @@ export interface SmokeOptions {
   keep: boolean;
   /** Pack and install, then run the upgrade step alone (issue #298). */
   upgradeOnly: boolean;
+  /** Pack and install, then run the skipped-release step alone (issue #312). */
+  skippedOnly: boolean;
   /** Flags and positionals this script does not accept. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--keep", "--upgrade-only"]);
+const KNOWN_FLAGS = new Set(["--keep", "--upgrade-only", "--skipped-only"]);
 
 /**
  * Split this script's argv. Exported for its own test: a typo'd `--kep` that silently
@@ -137,6 +145,7 @@ export function parseArgs(argv: string[]): SmokeOptions {
   const unknown = argv.filter((arg) => !KNOWN_FLAGS.has(arg));
   return {
     keep: argv.includes("--keep"),
+    skippedOnly: argv.includes("--skipped-only"),
     unknown,
     upgradeOnly: argv.includes("--upgrade-only"),
   };
@@ -558,6 +567,89 @@ export function checkPlanNotes(
   ];
 }
 
+// --- Skipped-release step (issue #312) -----------------------------------------------
+
+/**
+ * The release the skipped-release project starts from. PrimeShopr's base was recorded at
+ * 0.5.0 and skipped to 0.8.0 (issue #312), and 0.5.0 already writes the lock's `base`
+ * record, so the update reads its snapshot version from the lock with no `--from`.
+ */
+const SKIPPED_FROM = "0.5.0";
+
+/**
+ * What the skipped-release project takes from 0.5.0, one `add` each, in order. `auth`
+ * now writes `@config/sections/auth.ts`, under an alias 0.5.0's `saasaloy.json` lacks,
+ * so the update proves it adds the alias. 0.5.0 has no `--with`, so the driver goes first.
+ */
+const SKIPPED_ADDS: readonly string[] = ["database-d1", "auth"];
+
+/**
+ * The demo block the skipped-release step deletes. 0.5.0 ships it and the packed template
+ * still does, so the update tracks it and must ask about it rather than drop it.
+ */
+export const SKIPPED_BLOCK = "packages/ui/src/blocks/faq.tsx";
+
+/** What `update` exits with when a merge or a note waits on the owner. */
+const PENDING_EXIT = 3;
+
+/**
+ * The lines of a merge plan's base section that say its diffs are two-way: the header's
+ * "no merge base" line and a file's "no base available" diff. Empty when the base merged
+ * three-way, or when the plan has no base section. A line inside a fenced block is a
+ * diff of the file, not the plan's own text. Exported for its own test.
+ */
+export function baseTwoWayLines(plan: string): string[] {
+  const found: string[] = [];
+  let inBase = false;
+  let fence: string | undefined;
+  for (const line of plan.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) {
+        fence = marker;
+      } else if (marker.startsWith(fence)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (fence !== undefined) {
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      inBase = line === "## base";
+      continue;
+    }
+    if (
+      inBase &&
+      (line.startsWith("- **no merge base") ||
+        line.includes("no base available"))
+    ) {
+      found.push(line);
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether a merge plan lists `target` as a file deleted locally: its `#### \`target\``
+ * heading, then the source line that ends "deleted locally." Exported for its own test.
+ */
+export function listsDeletedLocally(plan: string, target: string): boolean {
+  const lines = plan.split(/\r?\n/);
+  const heading = lines.indexOf(`#### \`${target}\``);
+  if (heading === -1) {
+    return false;
+  }
+  return lines
+    .slice(heading + 1, heading + 4)
+    .some((line) => line.endsWith("— deleted locally."));
+}
+
+/** Every output line that reports an alias the project does not declare. Exported for its own test. */
+export function findUnknownAliases(output: string): string[] {
+  return output.split("\n").filter((line) => line.includes("Unknown alias"));
+}
+
 function fail(message: string, ...detail: string[]): never {
   console.error(`release-smoke: ${message}`);
   for (const line of detail) {
@@ -843,26 +935,8 @@ async function checkUpgrade(
     );
   }
 
-  const previousDir = join(scratch, "previous");
-  await mkdir(previousDir, { recursive: true });
-  await writeFile(
-    join(previousDir, "package.json"),
-    `${JSON.stringify({ name: "saasaloy-release-smoke-previous", private: true, version: "0.0.0" }, null, 2)}\n`
-  );
-  step(`installing saasaloy@${previous} for the upgrade step`);
-  await runQuiet(
-    "npm",
-    ["install", "--no-audit", "--no-fund", `saasaloy@${previous}`],
-    `npm install saasaloy@${previous}`,
-    { cwd: previousDir }
-  );
-  const previousBin = join(previousDir, "node_modules/.bin/saasaloy");
-
-  // The previous CLI fetches its modules from GitHub at its own tag, the way a user's
-  // project got them. SAASALOY_REGISTRY_DIR would hand it this checkout's modules, which
-  // it was never released with.
-  const remoteEnv = { ...process.env };
-  delete remoteEnv.SAASALOY_REGISTRY_DIR;
+  const previousBin = await installPublished(previous, "previous", "upgrade");
+  const remoteEnv = publishedEnv();
   const projectName = "upgrade";
   const dir = join(workDir, projectName);
   step(`scaffolding ${projectName} with saasaloy@${previous}`);
@@ -942,6 +1016,187 @@ async function checkUpgrade(
   step(
     `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
   );
+}
+
+/**
+ * Install a published CLI into `.dev/release-smoke/<folder>/`, outside the workspace, and
+ * return its bin. A package.json of its own stops npm walking up into the repo.
+ */
+async function installPublished(
+  version: string,
+  folder: string,
+  purpose: string
+): Promise<string> {
+  const dir = join(scratch, folder);
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "package.json"),
+    `${JSON.stringify({ name: `saasaloy-release-smoke-${folder}`, private: true, version: "0.0.0" }, null, 2)}\n`
+  );
+  step(`installing saasaloy@${version} for the ${purpose} step`);
+  await runQuiet(
+    "npm",
+    ["install", "--no-audit", "--no-fund", `saasaloy@${version}`],
+    `npm install saasaloy@${version}`,
+    { cwd: dir }
+  );
+  return join(dir, "node_modules/.bin/saasaloy");
+}
+
+/**
+ * The environment a published CLI runs in. It fetches its modules from GitHub at its own
+ * tag, the way a user's project got them. SAASALOY_REGISTRY_DIR would hand it this
+ * checkout's modules, which it was never released with.
+ */
+function publishedEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.SAASALOY_REGISTRY_DIR;
+  return env;
+}
+
+/** Both streams of a run, the last `count` lines, for a failure's detail. */
+function outputTail(result: Captured, count = 30): string[] {
+  return `${result.stdout}\n${result.stderr}`.trim().split("\n").slice(-count);
+}
+
+/**
+ * Scaffold a project with CLI 0.5.0 and its modules at the `v0.5.0` tag, delete one demo
+ * block, and drive the packed CLI's `update` against this checkout's `modules/` (issue
+ * #312). Three things must hold. No run reports an unknown alias. The merge plan lists the
+ * block as deleted locally, `--resolved` keeps it deleted, and a second update leaves it
+ * absent. The base section merges three-way, from the template at `v0.5.0` that the lock's
+ * `base.cliVersion` names, so it carries no "no merge base" line.
+ *
+ * It needs the network three times: npm for 0.5.0, GitHub for the modules 0.5.0 fetches,
+ * and GitHub for the base snapshot the packed CLI fetches. `GITHUB_TOKEN` lifts the rate
+ * limit on the last two.
+ */
+async function checkSkippedRelease(
+  bin: string,
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  const started = Date.now();
+  const oldBin = await installPublished(
+    SKIPPED_FROM,
+    "skipped-cli",
+    "skipped-release"
+  );
+  const remoteEnv = publishedEnv();
+  const projectName = "skipped";
+  const dir = join(workDir, projectName);
+  step(`scaffolding ${projectName} with saasaloy@${SKIPPED_FROM}`);
+  await runQuiet(
+    oldBin,
+    ["init", projectName, "--no-install", "--no-git"],
+    `saasaloy@${SKIPPED_FROM} init ${projectName}`,
+    { cwd: workDir, env: remoteEnv }
+  );
+  for (const name of SKIPPED_ADDS) {
+    const target = `${UPGRADE_SOURCE}@v${SKIPPED_FROM}/${name}`;
+    await runQuiet(
+      oldBin,
+      ["add", target, "--yes"],
+      `saasaloy@${SKIPPED_FROM} add ${target}`,
+      { cwd: dir, env: remoteEnv }
+    );
+  }
+  const block = join(dir, ...SKIPPED_BLOCK.split("/"));
+  await rm(block);
+  step(`deleted ${SKIPPED_BLOCK} in ${projectName}`);
+
+  // The project sits under this repo's gitignored `.dev/`, so the tree check would read
+  // clean anyway; `--force` keeps the step from depending on that.
+  const update = async (
+    extra: readonly string[],
+    label: string
+  ): Promise<{ result: Captured; plan: string }> => {
+    const out = join(scratch, `${projectName}-${label}.md`);
+    const result = await capture(
+      bin,
+      ["update", ...extra, "--yes", "--force", "--out", out],
+      `saasaloy update ${extra.join(" ")} in ${projectName}`,
+      { cwd: dir, env }
+    );
+    if (result.code !== 0 && result.code !== PENDING_EXIT) {
+      throw new StepError(
+        `saasaloy update ${extra.join(" ")} in ${projectName} exited ${String(result.code)}`,
+        outputTail(result)
+      );
+    }
+    const unknown = findUnknownAliases(`${result.stdout}\n${result.stderr}`);
+    if (unknown.length > 0) {
+      throw new StepError(
+        `saasaloy update ${extra.join(" ")} in ${projectName} met an alias the project lacks`,
+        unknown
+      );
+    }
+    let plan = "";
+    try {
+      plan = await readFile(out, "utf-8");
+    } catch {
+      // A run with nothing left to merge writes no plan.
+    }
+    return { plan, result };
+  };
+
+  step(`running \`saasaloy update\` in ${projectName} from ${SKIPPED_FROM}`);
+  const first = await update([], "first");
+  if (first.result.code !== PENDING_EXIT) {
+    throw new StepError(
+      `the first update in ${projectName} exited ${String(first.result.code)}, not ${String(PENDING_EXIT)}`,
+      outputTail(first.result)
+    );
+  }
+  step(`no \`Unknown alias\` in the update from ${SKIPPED_FROM}`);
+  if (!listsDeletedLocally(first.plan, SKIPPED_BLOCK)) {
+    throw new StepError(
+      `the merge plan does not list ${SKIPPED_BLOCK} as deleted locally`,
+      first.plan.split("\n").filter((line) => line.includes("deleted"))
+    );
+  }
+  step(`the merge plan lists ${SKIPPED_BLOCK} as deleted locally`);
+  const twoWay = baseTwoWayLines(first.plan);
+  if (twoWay.length > 0) {
+    throw new StepError(
+      `the base section of the merge plan from ${SKIPPED_FROM} is two-way`,
+      twoWay.slice(0, 10)
+    );
+  }
+  if (!first.plan.split("\n").includes("## base")) {
+    throw new StepError(
+      `the merge plan from ${SKIPPED_FROM} has no base section, so the three-way check proves nothing`,
+      []
+    );
+  }
+  step("the base section merges three-way: no `no merge base` line");
+
+  step(`running \`saasaloy update --resolved ${SKIPPED_BLOCK}\``);
+  await update(["--resolved", SKIPPED_BLOCK], "resolved");
+  const second = await update([], "second");
+  if (await pathPresent(block)) {
+    throw new StepError(
+      `${SKIPPED_BLOCK} came back after \`--resolved\` and a second update`,
+      outputTail(second.result)
+    );
+  }
+  if (listsDeletedLocally(second.plan, SKIPPED_BLOCK)) {
+    throw new StepError(
+      `the second update lists ${SKIPPED_BLOCK} as deleted locally again`,
+      []
+    );
+  }
+  step(
+    `${projectName} from ${SKIPPED_FROM} keeps ${SKIPPED_BLOCK} deleted, adds its aliases, and merges the base three-way (${seconds(started)})`
+  );
+}
+
+async function pathPresent(file: string): Promise<boolean> {
+  try {
+    await readFile(file);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 /** The time since `started`, as `12s`. */
@@ -1061,8 +1316,11 @@ async function main(): Promise<void> {
   if (options.unknown.length > 0) {
     fail(
       `unknown argument(s): ${options.unknown.join(", ")}`,
-      "usage: pnpm release:smoke [--keep] [--upgrade-only]"
+      "usage: pnpm release:smoke [--keep] [--upgrade-only] [--skipped-only]"
     );
+  }
+  if (options.upgradeOnly && options.skippedOnly) {
+    fail("pass --upgrade-only or --skipped-only, not both");
   }
 
   // --- Pack ----------------------------------------------------------------------
@@ -1158,15 +1416,11 @@ async function main(): Promise<void> {
 
   // Issue #298. A project the previous release scaffolded must get the update notes it is
   // owed. `--upgrade-only` runs this step alone, after the pack and install above.
-  const upgrade = checkUpgrade(bin, version, offlineEnv);
-  // The full run reads the outcome later, through `Promise.allSettled`. A handler now keeps
-  // an early rejection from counting as unhandled, which would end the process.
-  upgrade.catch(() => {
-    // Read below.
-  });
-  if (options.upgradeOnly) {
+  if (options.upgradeOnly || options.skippedOnly) {
     try {
-      await upgrade;
+      await (options.upgradeOnly
+        ? checkUpgrade(bin, version, offlineEnv)
+        : checkSkippedRelease(bin, offlineEnv));
     } catch (error) {
       if (error instanceof StepError) {
         fail(error.message, ...error.detail);
@@ -1177,9 +1431,21 @@ async function main(): Promise<void> {
       await rm(scratch, { force: true, recursive: true });
     }
     console.log(
-      `release-smoke: saasaloy@${version} packs, installs, and lists every update note a project from the previous release is owed.`
+      options.upgradeOnly
+        ? `release-smoke: saasaloy@${version} packs, installs, and lists every update note a project from the previous release is owed.`
+        : `release-smoke: saasaloy@${version} packs, installs, and updates a ${SKIPPED_FROM} project with no alias error, a deleted block kept deleted, and a three-way base.`
     );
     return;
+  }
+  const upgrade = checkUpgrade(bin, version, offlineEnv);
+  // Issue #312. A 0.5.0 project takes one update. `--skipped-only` runs this step alone.
+  const skipped = checkSkippedRelease(bin, offlineEnv);
+  // The full run reads the outcomes later, through `Promise.allSettled`. A handler now
+  // keeps an early rejection from counting as unhandled, which would end the process.
+  for (const check of [upgrade, skipped]) {
+    check.catch(() => {
+      // Read below.
+    });
   }
 
   step("running `saasaloy init smoke --no-install --no-git`");
@@ -1226,6 +1492,7 @@ async function main(): Promise<void> {
   );
   const results = await Promise.allSettled([
     upgrade,
+    skipped,
     webDev,
     ...scaffolds.map((scaffold) => lintFullScaffold(bin, scaffold, offlineEnv)),
   ]);
@@ -1250,7 +1517,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s), and lists every update note a project from the previous release is owed.${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a deleted block kept deleted and a three-way base.${kept}`
   );
 }
 

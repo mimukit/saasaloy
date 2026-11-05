@@ -14,13 +14,16 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  baseTwoWayLines,
   checkPlanNotes,
   compareSemver,
   expectedNoteIds,
   findRenderErrors,
+  findUnknownAliases,
   findWorkspaceDeps,
   fullScaffolds,
   installedAfterUpdate,
+  listsDeletedLocally,
   parseArgs,
   parsePlanNotes,
   previousVersion,
@@ -32,6 +35,7 @@ describe("parseArgs", () => {
     assert.deepEqual(parseArgs([]), {
       keep: false,
       unknown: [],
+      skippedOnly: false,
       upgradeOnly: false,
     });
   });
@@ -40,6 +44,7 @@ describe("parseArgs", () => {
     assert.deepEqual(parseArgs(["--keep"]), {
       keep: true,
       unknown: [],
+      skippedOnly: false,
       upgradeOnly: false,
     });
   });
@@ -49,8 +54,18 @@ describe("parseArgs", () => {
   it("accepts --upgrade-only", () => {
     assert.deepEqual(parseArgs(["--upgrade-only", "--keep"]), {
       keep: true,
+      skippedOnly: false,
       unknown: [],
       upgradeOnly: true,
+    });
+  });
+
+  it("accepts --skipped-only", () => {
+    assert.deepEqual(parseArgs(["--skipped-only"]), {
+      keep: false,
+      skippedOnly: true,
+      unknown: [],
+      upgradeOnly: false,
     });
   });
 
@@ -58,6 +73,7 @@ describe("parseArgs", () => {
     assert.deepEqual(parseArgs(["--kep"]), {
       keep: false,
       unknown: ["--kep"],
+      skippedOnly: false,
       upgradeOnly: false,
     });
   });
@@ -66,6 +82,7 @@ describe("parseArgs", () => {
     assert.deepEqual(parseArgs(["smoke"]), {
       keep: false,
       unknown: ["smoke"],
+      skippedOnly: false,
       upgradeOnly: false,
     });
   });
@@ -527,6 +544,89 @@ describe("checkPlanNotes", () => {
         placed: ["shell/0001-admin-kit-move"],
       }),
       ["unexpected shell/0001-admin-kit-move"]
+    );
+  });
+});
+
+describe("baseTwoWayLines", () => {
+  const header =
+    "- **no merge base — the template at v0.5.0 could not be fetched**: the original file can't be refetched, so the diffs below are two-way.";
+
+  it("finds the no-merge-base header and a two-way file diff in the base section", () => {
+    const plan = [
+      "## base",
+      "",
+      header,
+      "",
+      "**theirs → mine** (no base available — two-way):",
+      "## api",
+    ].join("\n");
+    assert.deepEqual(baseTwoWayLines(plan), [
+      header,
+      "**theirs → mine** (no base available — two-way):",
+    ]);
+  });
+
+  it("ignores a module section's two-way header", () => {
+    const plan = [
+      "## base",
+      "",
+      "**base → theirs** (what the template changed):",
+      "## api",
+      "",
+      "- **no merge base — local install**: the diffs below are two-way.",
+    ].join("\n");
+    assert.deepEqual(baseTwoWayLines(plan), []);
+  });
+
+  it("ignores the marker inside a fenced diff", () => {
+    const plan = [
+      "## base",
+      "```diff",
+      "+- **no merge base — quoted**",
+      "```",
+    ].join("\n");
+    assert.deepEqual(baseTwoWayLines(plan), []);
+  });
+});
+
+describe("listsDeletedLocally", () => {
+  const target = "packages/ui/src/blocks/faq.tsx";
+
+  it("finds the file heading and its deleted-locally source line", () => {
+    const plan = [
+      `#### \`${target}\``,
+      "",
+      `Source in the template: \`${target}\` — deleted locally.`,
+    ].join("\n");
+    assert.equal(listsDeletedLocally(plan, target), true);
+  });
+
+  it("is false for a file merged, not deleted", () => {
+    const plan = [
+      `#### \`${target}\``,
+      "",
+      `Source in the template: \`${target}\``,
+    ].join("\n");
+    assert.equal(listsDeletedLocally(plan, target), false);
+  });
+
+  it("is false when the plan does not name the file", () => {
+    assert.equal(listsDeletedLocally("## base\n", target), false);
+  });
+});
+
+describe("findUnknownAliases", () => {
+  it("returns each line that reports an unknown alias", () => {
+    const line =
+      '└  Unknown alias "@config" in target "@config/sections/auth.ts". Known aliases: @web, @ui.';
+    assert.deepEqual(findUnknownAliases(`plan\n${line}\ndone`), [line]);
+  });
+
+  it("returns nothing for a clean run", () => {
+    assert.deepEqual(
+      findUnknownAliases("alias  @config → packages/config/src"),
+      []
     );
   });
 });
