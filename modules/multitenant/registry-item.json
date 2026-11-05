@@ -91,6 +91,10 @@
       "path": "files/db/seed/projects.ts",
       "target": "@db/seed/slices/projects.ts"
     },
+    {
+      "path": "files/db/column-classes/projects.ts",
+      "target": "@db/column-classes/projects.ts"
+    },
     { "path": "files/auth/permissions.ts", "target": "@auth/permissions.ts" },
     { "path": "files/admin/lib/tenant.ts", "target": "@admin/lib/tenant.ts" },
     {

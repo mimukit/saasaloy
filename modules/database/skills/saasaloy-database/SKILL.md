@@ -1,6 +1,6 @@
 ---
 name: saasaloy-database
-description: Runbook for the database capability — the driver-neutral Drizzle ORM data layer in packages/db. Use when adding or changing tables, writing repositories, writing seed slices for db:seed, generating migrations, or choosing between the database-d1 and database-postgres drivers. Covers the schema-barrel drop convention, the thin repository pattern, seed slices, and db:generate. The connection, the dialect and the migrate commands belong to the driver skills, saasaloy-database-d1 and saasaloy-database-postgres.
+description: Runbook for the database capability — the driver-neutral Drizzle ORM data layer in packages/db. Use when adding or changing tables, writing repositories, writing seed slices for db:seed, generating migrations, or choosing between the database-d1 and database-postgres drivers. Also use when classifying a column as secret, pii or plain in packages/db/src/column-classes/, or when the column-classes test fails. Covers the schema-barrel drop convention, the thin repository pattern, seed slices, column classes, and db:generate. The connection, the dialect and the migrate commands belong to the driver skills, saasaloy-database-d1 and saasaloy-database-postgres.
 ---
 
 # database — the driver-neutral data layer
@@ -331,6 +331,44 @@ The engine in `packages/db/src/seed/` is driver-neutral. `index.ts` globs `slice
 
 A slice may also set `after: ["<table>"]` for an order no foreign key shows, and `message` for a line `db:seed` prints after the counts. The `auth` slices use it to print the dev password every seed user signs in with.
 
+## Column classes
+
+Every column of every table has a **class** that says how a production read-only role may read it. The `database-postgres` driver builds its read-only role's grants from the classes (`pnpm db:prod:readonly-grants`), and `pnpm db:prod:query` masks by them. The class files and their test ship on both drivers, because they live in this core.
+
+| Class | What goes in it | The read-only role |
+| --- | --- | --- |
+| `secret` | Credentials, tokens, password and key hashes, one-time codes. | Gets no grant. It cannot select the column or name it in a `WHERE`. |
+| `pii` | Names, emails, phones, addresses, IP addresses, free text a person wrote. | Gets `SELECT`, so a search by email works. Query output masks it. |
+| `plain` | Everything else. | Gets `SELECT`, printed as it is. |
+
+When a column could be either, pick the stricter class. A column that holds a token for part of its life is `secret`: `verifications.identifier` stores `reset-password:<token>` for a password reset, so it is `secret` even though it holds an email for other flows.
+
+**One file per table** at `packages/db/src/column-classes/<table>.ts`, named after the SQL table name in kebab-case (`payment_events` becomes `payment-events.ts`), shipped by the module that owns the table, the same shape as a seed slice. `src/column-classes.ts` collects every file with an eager `import.meta.glob`, so a new file needs no edit anywhere else.
+
+```ts
+// packages/db/src/column-classes/waitlist-entries.ts
+import { defineColumnClasses } from "../column-class";
+import { waitlistEntries as waitlistEntriesTable } from "../schema/waitlist";
+
+export const waitlistEntries = defineColumnClasses(waitlistEntriesTable, {
+  id: "plain",
+  // The person's email.
+  email: "pii",
+  createdAt: "plain",
+});
+```
+
+`defineColumnClasses(table, classes)` is typed against the Drizzle table. The keys are the table's column keys (`createdAt`, not `created_at`), and it needs every key and no other, so a missing, extra or misspelled key fails `tsc`. One file serves both drivers when the `.pg.ts` and `.sqlite.ts` variants have the same column keys. Put a short comment above each `pii` and `secret` entry that says what the column holds.
+
+**A table change updates its class file in the same change.** Add a table, add its class file; add a column, classify it. Two checks hold the rule:
+
+- `packages/db/src/column-classes.test.ts` runs with `pnpm test`. It fails on a schema table with no class file, a column with no class, a class for a column or table the schema lacks, and a table classified in two files. The message names each problem and the fix: `Add or edit packages/db/src/column-classes/<table>.ts, the table name in kebab-case, for:` followed by lines such as `users.phone: column has no class`.
+- In the saasaloy repo, `scripts/column-classes.test.ts` fails when a module ships a table without `@db/column-classes/<table>.ts`, when a class file misses a column key of either driver variant, and when a schema `drizzle-column` patch has no matching class patch.
+
+**A module that adds a column to another module's table classifies it with a second patch.** `billing` adds `users.billingCustomerId` through a `drizzle-column` patch on `packages/db/src/schema/auth.ts`, so it carries a `drizzle-column` patch on `packages/db/src/column-classes/users.ts` too, with `"exportName": "users"`, `"column": "billingCustomerId"` and `"value": "\"plain\""`. Without it, `tsc` and the class test fail in every project that installs `billing`.
+
+A column with no class never reaches the read-only role: the grants are per column, with no table-level grant, so the role cannot read a new column until someone classifies it and the grants run again. `pnpm db:prod:migrate` runs them after each migration on Postgres.
+
 ## Boundaries to honor
 
 - **Drop `src/schema/<name>.ts` to add a table.** Never hand-edit the barrel.
@@ -345,6 +383,7 @@ A slice may also set `after: ["<table>"]` for an order no foreign key shows, and
   add it. Switching driver later means removing and adding those modules too; see the driver skill.
 - **Migrations are manual.** Generate, review, then apply with the driver's command.
 - **Every table has a seed slice.** One file per table in `src/seed/slices/`, changed in the same change as the table.
+- **Every column has a class.** One file per table in `src/column-classes/`, changed in the same change as the table. When in doubt, pick the stricter class.
 
 ## Next
 

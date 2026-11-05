@@ -149,6 +149,22 @@
       "target": "@db/seed/slices/verifications.ts"
     },
     {
+      "path": "files/db/column-classes/accounts.ts",
+      "target": "@db/column-classes/accounts.ts"
+    },
+    {
+      "path": "files/db/column-classes/sessions.ts",
+      "target": "@db/column-classes/sessions.ts"
+    },
+    {
+      "path": "files/db/column-classes/users.ts",
+      "target": "@db/column-classes/users.ts"
+    },
+    {
+      "path": "files/db/column-classes/verifications.ts",
+      "target": "@db/column-classes/verifications.ts"
+    },
+    {
       "path": "files/ui/blocks/auth/auth-card.tsx",
       "target": "@ui/blocks/auth/auth-card.tsx",
       "when": { "installed": ["shell"] }

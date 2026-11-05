@@ -112,6 +112,14 @@
     {
       "path": "files/db/seed/feature-flag-overrides.ts",
       "target": "@db/seed/slices/feature-flag-overrides.ts"
+    },
+    {
+      "path": "files/db/column-classes/feature-flag-overrides.ts",
+      "target": "@db/column-classes/feature-flag-overrides.ts"
+    },
+    {
+      "path": "files/db/column-classes/feature-flags.ts",
+      "target": "@db/column-classes/feature-flags.ts"
     }
   ],
   "scaffolds": [
