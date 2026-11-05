@@ -16,6 +16,7 @@ description: Runbook for the app capability — the customer SPA at apps/app on 
 | `apps/app/src/routes/sign-in.tsx`, `sign-up.tsx` | the `auth` module's `SignInCard` and `SignUpCard`, with the calls to the client instance |
 | `apps/app/src/routes/index.tsx` | the home screen: a welcome card and an empty state that points at `saasaloy-feature` |
 | `apps/app/src/components/nav.ts` | the sidebar's nav data |
+| `apps/app/src/components/nav-counts.ts` | the sidebar's live counts, `NAV_COUNTS`, empty until a module adds a row |
 | `apps/app/src/lib/auth.ts`, `api.ts`, `redirect.ts` | the auth client and session cache, the typed api client, the safe-destination check |
 | `packages/ui/src/styles/app.css` | the app's one stylesheet: `brand.css`, `shell.css`, two canvas values |
 
@@ -33,7 +34,7 @@ After `saasaloy add app`:
 
 ## Add a screen
 
-Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`; never edit that file by hand.
+Drop `src/routes/<screen>.tsx` with a `createFileRoute` whose id matches the file path. The file is a child of `src/routes/__root.tsx`, so it gets the shell and the session guard with no work of its own. `@tanstack/router-plugin` rewrites `src/routeTree.gen.ts` on the next `pnpm dev` or `pnpm build`, and `pnpm typecheck` runs `tsr generate` first, so a new route typechecks before Vite has run. Both read the generator options in `tsr.config.json`. Never edit `src/routeTree.gen.ts` by hand.
 
 Then put it in the sidebar: add a row to `NAV_AREAS` in `src/components/nav.ts`. The `to` is checked against the route tree, so a typo fails `pnpm typecheck`. A row takes an optional `shortcut`, `G` then a letter written as `"G P"`; pick the letter by hand and keep it unique, because the tool repo's `commands.test.ts` fails on two rows with one shortcut. Every row becomes a "Go to <label>" command in `src/components/commands.ts`, which `AppShell` declares next to sign out and the three theme choices. A screen declares its own with `useCommands(commands, { scope: "route", label })`. They do nothing until the `command` module is installed, which appends itself to `src/components/shell-extensions.ts`.
 
@@ -42,6 +43,30 @@ items: [
   { to: "/", label: "Home", icon: HouseIcon, shortcut: "G H" },
   { to: "/projects", label: "Projects", icon: FolderIcon, shortcut: "G P" },
 ],
+```
+
+### Add a live count to a nav row
+
+A static `count` in `NAV_AREAS` is a number fixed at build time. A number that changes, such as how many notifications are unread, is a live count. `NAV_COUNTS` in `src/components/nav-counts.ts` lists them, one `{ to, path }` per row. `to` is the row's `to` in `NAV_AREAS`. `path` is an api path that answers `{ count: number }` behind the user's session.
+
+A module adds its entry with a `const-array` patch keyed on `to`:
+
+```json
+{
+  "file": "apps/app/src/components/nav-counts.ts",
+  "kind": "const-array",
+  "constName": "NAV_COUNTS",
+  "key": "to",
+  "entry": { "to": "/notifications", "path": "/notifications/unread-count" }
+}
+```
+
+`AppShell` runs one TanStack query per entry under the key `["nav-count", to]` and passes the numbers to `ShellLayout` as `counts`. Each query fetches `PUBLIC_API_URL` plus `path` with the session cookie. It refetches every 60 s while the tab is visible, on every window focus (`refetchOnWindowFocus: "always"`, so a count fetched inside the 30 s `staleTime` still refetches), and on a `pageshow` with `persisted` set, which is a back-forward cache restore. A live count replaces the row's static `count`, and a live 0 hides the badge.
+
+A failed fetch (a network error, a non-OK answer or a body without a numeric `count`) throws, so TanStack Query keeps the last count it read. The badge never drops to 0 or disappears because of a failure. Before the first success the row keeps its static `count`. A screen whose action changes a count invalidates the key after the mutation, so the badge follows with no reload:
+
+```ts
+await queryClient.invalidateQueries({ queryKey: ["nav-count", "/notifications"] });
 ```
 
 Every screen renders inside the shell's page frame, which owns the width, the background and the gutter. Never set a page's own `max-w-*`, padding or background. Compose from the `shell` set only: `@repo/ui/components/shell/*`, `@repo/ui/blocks/shell/*`, `@repo/ui/containers/shell/*`. The base `oxlint.config.mjs` makes a base primitive under `apps/app/**` a lint error. `saasaloy-shell` lists the blocks.
