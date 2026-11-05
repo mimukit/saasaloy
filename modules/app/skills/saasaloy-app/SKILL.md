@@ -11,7 +11,7 @@ description: Runbook for the app capability — the customer SPA at apps/app on 
 
 | Path | What it is |
 |---|---|
-| `apps/app/` | the SPA: `vite.config.ts` (port 3002, `strictPort`), `wrangler.jsonc` (assets only), `src/env.ts` |
+| `apps/app/` | the SPA: `vite.config.ts` (`DEV_PORT`, fallback 3002, `strictPort`), `wrangler.jsonc` (assets only), `src/env.ts` |
 | `apps/app/src/routes/__root.tsx` | the one guard: no session sends the visitor to `/sign-in?redirect=…` |
 | `apps/app/src/routes/sign-in.tsx`, `sign-up.tsx` | the `auth` module's `SignInCard` and `SignUpCard`, with the calls to the client instance |
 | `apps/app/src/routes/index.tsx` | the home screen: a welcome card and an empty state that points at `saasaloy-feature` |
@@ -28,8 +28,8 @@ After `saasaloy add app`:
 1. Run `pnpm install`.
 2. Run `saasaloy env`, then `pnpm env:setup`. `apps/app/.env` gets `PUBLIC_API_URL` (`http://localhost:4000` in dev).
 3. Run `pnpm db:seed` if the database is empty, then `pnpm dev`. Open `http://localhost:3002` and sign in as `member@example.test` with the password `saasaloy-dev-password`, or create an account on `/sign-up`.
-4. **A project made before the `app` release** has no `http://localhost:3002` in `DEV_ORIGINS`, in `apps/api/src/index.ts` and in `packages/auth/src/auth.ts`. Run `saasaloy update api auth` first, or every call from :3002 fails CORS (see Failure modes).
-5. **In production**, add the app's origin to `CORS_ORIGINS`, the one list the api CORS spine and `auth`'s `trustedOrigins` both read: `CORS_ORIGINS=https://x.com,https://app.x.com,https://admin.x.com`. A set value replaces the localhost list, so name every frontend. Put the app and the api on sibling subdomains of one domain you own, and set `COOKIE_DOMAIN=.x.com` when the derived one does not match. Set `PUBLIC_API_URL` for the `app` service to the api's origin.
+4. **In dev, run `pnpm env:setup` after the add.** It runs `pnpm dev:ports`, which puts the app's origin into the api's `CORS_ORIGINS` in `apps/api/.env.local`. Until then every call from the app fails CORS (see Failure modes).
+5. **In production**, add the app's origin to `CORS_ORIGINS`, the one list the api CORS spine and `auth`'s `trustedOrigins` both read: `CORS_ORIGINS=https://x.com,https://app.x.com,https://admin.x.com`. There is no localhost fallback, so name every frontend. Put the app and the api on sibling subdomains of one domain you own, and set `COOKIE_DOMAIN=.x.com` when the derived one does not match. Set `PUBLIC_API_URL` for the `app` service to the api's origin.
 
 ## Add a screen
 
@@ -249,7 +249,9 @@ The app starts light on a first visit and keeps the visitor's choice after that,
 | `email-react` preview | 3003 |
 | `apps/api` | 4000 |
 
-`http://localhost:3002` is in the api's `DEV_ORIGINS` and in `auth`'s `trustedOrigins` fallback. `strictPort` makes a busy port fail at once rather than move to 3003, where nothing allows it. Cookies ignore the port, so the app at :3002 and the api at :4000 share the `localhost` jar, and the client cookie (`client.session_token`) never replaces the admin app's `admin.session_token`.
+These are the main checkout's ports, each the `devPort` on its row in `packages/env/src/services.ts`. A linked worktree takes its own block from `pnpm dev:ports`, which writes `DEV_PORT` into each service's `.env.local` and records the ports in `.devports.json`. Restart `pnpm dev` after it changes a value.
+
+`pnpm dev:ports` writes `http://localhost:3002` (and the `DEV_HOST` origin) into the api's `CORS_ORIGINS`, which the CORS spine and `auth`'s `trustedOrigins` both read. `strictPort` makes a busy port fail at once rather than move to 3003, where nothing allows it. Cookies ignore the port, so the app at :3002 and the api at :4000 share the `localhost` jar, and the client cookie (`client.session_token`) never replaces the admin app's `admin.session_token`.
 
 ## Deploy
 
@@ -261,11 +263,11 @@ The app starts light on a first visit and keeps the visitor's choice after that,
 
 ## Failure modes
 
-- **The browser console says the request was blocked by CORS, or sign-in answers `403` with `INVALID_ORIGIN`.** The origin is not in the list. In dev, the project predates the `app` release: run `saasaloy update api auth`, so `http://localhost:3002` joins `DEV_ORIGINS`. In production, add the app's origin to `CORS_ORIGINS` and redeploy the api; a set `CORS_ORIGINS` replaces the localhost list, so it has to name every frontend.
+- **The browser console says the request was blocked by CORS, or sign-in answers `403` with `INVALID_ORIGIN`.** The origin is not in the list. In dev, run `pnpm env:setup` (or `pnpm dev:ports`) so the app's origin joins `CORS_ORIGINS` in `apps/api/.env.local`, then restart `pnpm dev`. In production, add the app's origin to `CORS_ORIGINS` and redeploy the api; there is no localhost fallback, so the list has to name every frontend.
 - **Sign-in succeeds, then the guard sends the visitor straight back to `/sign-in`.** The browser did not keep the session cookie, or does not send it to the api. The app and the api must be same-site: sibling subdomains of one domain you own, such as `app.x.com` and `api.x.com`. Set `COOKIE_DOMAIN=.x.com` when the domain derived from `BETTER_AUTH_URL` is not the shared parent.
 - **The same loop on `*.workers.dev`.** `workers.dev` is on the public suffix list, so `app.<account>.workers.dev` and `api.<account>.workers.dev` are two different sites, and no `COOKIE_DOMAIN` can join them. Browsers treat the session cookie as third-party and drop it. Put both Workers on custom domains of one zone.
 - **The build fails naming `PUBLIC_API_URL`.** `apps/app/.env` lacks it. Run `saasaloy env` and `pnpm env:setup`; for a deploy, set it for the `app` service.
-- **`pnpm dev` fails with "Port 3002 is already in use".** Another process holds it, often an older `email-react` preview from before it moved to 3003. Stop that process; do not change the port, or CORS breaks.
+- **`pnpm dev` fails with "Port 3002 is already in use".** Another process holds it, often an older `email-react` preview from before it moved to 3003. Stop that process with `pnpm dev:stop` if it belongs to this checkout; do not change the port. To run a second checkout beside this one, use a linked worktree and `pnpm dev:ports`.
 - **The pages render with no styles.** `src/main.tsx` no longer imports `@repo/ui/styles/app.css`, or `app.css` lost its `shell.css` import. Restore both.
 - **The sign-in card renders unstyled.** The blocks are missing: `packages/ui/src/blocks/auth/` is empty because `shell` was installed before `auth`'s blocks existed. Run `saasaloy update auth`.
 

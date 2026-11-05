@@ -393,12 +393,14 @@ It is exact-pinned. Template and module-descriptor dependencies are invisible to
 | Service | Port | Pinned in |
 |---|---|---|
 | `apps/web` (Astro) | **3000** | `astro.config.mjs` |
-| `apps/admin` (this app) | **3001** | `vite.config.ts` (`server.port` + `strictPort`) |
+| `apps/admin` (this app) | **3001** | `vite.config.ts` (`DEV_PORT` with fallback 3001, `strictPort`) |
 | `apps/api` (Worker) | **4000** | `vite.config.ts` and `wrangler.jsonc` (`dev.port`) |
 
-`3001` is not cosmetic. The api's `DEV_ORIGINS` allowlist and better-auth's `trustedOrigins` both
-hardcode `http://localhost:3001` as the keyless dev fallback, so a drifting port turns into a CORS
-rejection that reads like a code bug. `strictPort` makes a busy port fail loudly instead of quietly
+These are the main checkout's ports, each the `devPort` on its row in `packages/env/src/services.ts`. A linked worktree takes its own block from `pnpm dev:ports`, which writes `DEV_PORT` into each service's `.env.local` and records the ports in `.devports.json`. Restart `pnpm dev` after it changes a value.
+
+`3001` is not cosmetic. `pnpm dev:ports` writes the admin origin into the api's `CORS_ORIGINS`
+(in `apps/api/.env.local`), the one list the api's CORS spine and better-auth's `trustedOrigins`
+both read, so a drifting port turns into a CORS rejection that reads like a code bug. `strictPort` makes a busy port fail loudly instead of quietly
 shifting to `3002`, the port `apps/app` holds.
 
 In production the origin comes from `PUBLIC_API_URL`, and the api needs the admin origin in
@@ -413,8 +415,8 @@ production, put the api and the admin app on sibling subdomains and set `COOKIE_
 ## Run it
 
 ```sh
-pnpm --filter @repo/api dev    # :4000, the real workerd runtime
-pnpm --filter @repo/admin dev  # :3001
+pnpm --filter @repo/api dev    # :4000 in the main checkout, the real workerd runtime
+pnpm --filter @repo/admin dev  # :3001 in the main checkout
 ```
 
 Both, in two terminals. Admin on its own serves a login screen that cannot sign anyone in.
