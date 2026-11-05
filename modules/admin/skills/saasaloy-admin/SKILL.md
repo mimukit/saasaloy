@@ -1,6 +1,6 @@
 ---
 name: saasaloy-admin
-description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, composing an admin screen from the shell blocks and primitives (the reference is saasaloy-shell), adding a nav group or an area to the sidebar shell, changing the admin theme in admin.css or the dark-by-default rule, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin or requireAdminApp, changing the admin-role guard, the login screen or the admin session client (createAdminClient, /admin/auth, x-auth-audience), debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, removing the module, or deploying the static bundle to Workers.
+description: Runbook for the admin capability — a role-gated TanStack Router + Vite SPA in apps/admin. Use when adding an admin screen, composing an admin screen from the shell blocks and primitives (the reference is saasaloy-shell), adding a nav group or an area to the sidebar shell, changing the admin theme in admin.css or the dark-by-default rule, wiring the typed hc<AppType> client and TanStack Query, gating a new admin api route with requireAdmin or requireAdminApp, changing the admin-role guard, the login screen or the admin session client (createAdminClient, /admin/auth, x-auth-audience), debugging the :3001 → :4000 cookie and CORS flow, reading a typecheck error that points into apps/api, managing admin members on the members screen, reading the audit log on the Activity page, adding an audited admin write route with adminWrite or adminAuthWrite, adding a provider around the shell or a search param to a module screen through the extend/ seed files, removing the module, or deploying the static bundle to Workers.
 ---
 
 # admin — the role-gated backoffice SPA
@@ -188,7 +188,8 @@ The `shell` module writes the UI kit this app uses into `packages/ui/src/{compon
 
 `src/routes/users.tsx` is the worked example, and every row in it is real data from `GET /admin/users`.
 
-- `usersQuery` in `src/lib/users-query.ts` is a `queryOptions` over `api.admin.users.$get()`, keyed `["admin", "users"]`. The overview reads the same query for its user count and newest sign-ups, so a refresh on either screen updates the other.
+- `usersQuery` in `src/lib/users-query.ts` is a `queryOptions` over `api.admin.users.$get({ query: {} })`, keyed `["admin", "users"]`. `newestUsersQuery` beside it asks `?limit=5&sortBy=createdAt&sortDirection=desc` for the overview and is keyed `["admin", "users", "newest"]`, so invalidating `usersQuery.queryKey` refreshes both.
+- `GET /admin/users` takes `limit` (1 to 100, default 100), `sortBy` (`createdAt` or `name`) and `sortDirection` (`asc` or `desc`), validated after `adminGate`, and passes them to `listUsers`. `total` is always the count of every account.
 - The row type is derived from the query's own return type, so a field dropped in `apps/api` lands as a typecheck failure here.
 - `PageHeader` shows `data.total`, the api's count. The endpoint caps its answer at 100 users, so the loaded page and the real total can differ.
 - `FilterChips` narrows the loaded rows by role, in the component, with no refetch.
@@ -232,13 +233,39 @@ The first half is `requireAdmin` (or `requireAdminApp`) in `@repo/auth/server`, 
 ```ts
 // apps/api/src/routes/reports.ts — the server half
 import { Hono } from "hono";
-import { requireAdmin } from "@repo/auth/server";
+import { adminGate, requireAdmin } from "@repo/auth/server";
 
-export const reports = new Hono().get("/", async (c) => {
-  await requireAdmin(c);
-  return c.json({ reports: await listReports() }, 200);
-});
+export const reports = new Hono()
+  .get("/", adminGate, async (c) => {
+    await requireAdmin(c);
+    return c.json({ reports: await listReports() }, 200);
+  })
+  .post("/", adminGate, validReport, async (c) => {
+    const session = await requireAdmin(c);
+    return c.json(await createReport(c.req.valid("json"), session.user.id), 201);
+  });
 ```
+
+`adminGate` goes first on every admin route, before any validator. Hono runs a route's handlers in the order they are listed, so a validator listed first answers a caller with no session with a 400 that names the field it rejected, which tells a stranger what the route expects. With the gate first, every such caller gets the same 401. The handler still calls `requireAdmin` (or `requireAdminApp`) itself, because that call returns the session it needs. `adminGate` demands the `requireAdmin` roles; a route open to every admin-app role skips it and opens with `requireAdminApp`, and it must then take no validator before that call.
+
+The shipped `apps/api/src/routes/admin-gate.test.ts` holds the rule for you. It walks `app.routes`, sends every `/admin/*` route except `/admin/auth/*` a request with no cookie, a malformed body and a junk query, and fails on any answer but 401. A new route under `/admin` is checked with no new test. Run it with `pnpm -C apps/api test`.
+
+Every admin write route also needs an audit action. `apps/api/src/routes/audit-coverage.test.ts` walks `app.routes` the same way and fails on any `POST`, `PUT`, `PATCH` or `DELETE` under `/admin/` (outside `/admin/auth/*`) that no module's action file in `apps/api/src/audit/` names. The header of `apps/api/src/lib/admin-write.ts` holds the recipe. The audited routes that ship today:
+
+| Module | Route | Actions |
+| --- | --- | --- |
+| `payment` | `POST /admin/payment/payments/:id/review` | `payment.review.confirm`, `payment.review.reject` |
+| `payment` | `POST /admin/payment/payments/:id/refunds` | `payment.refund.create` |
+| `feature-flags` | `PUT /admin/flags/:key` | `flag.value.set` |
+| `feature-flags` | `PUT /admin/flags/:key/tenants/:tenantId` | `flag.tenant.set` |
+| `feature-flags` | `DELETE /admin/flags/:key/tenants/:tenantId` | `flag.tenant.clear` |
+| `admin` | `POST /admin/members` | `member.add` |
+| `admin` | `PATCH /admin/members/:id` | `member.profile.update` |
+| `admin` | `POST /admin/members/:id/password` | `member.password.set` |
+| `admin` | `DELETE /admin/members/:id` | `member.remove` |
+| `admin` | `POST /admin/members/:id/restore` | `member.restore` |
+
+The `admin()` plugin's own endpoints answer 404 on `/admin/auth/admin/*` over HTTP, so a staff change to a user goes through an api route under `/admin/` that calls `adminAuth.api.*` inside `adminAuthWrite`, never through `auth.admin.*` in the browser.
 
 ```tsx
 // apps/admin/src/routes/reports.tsx — the client half
@@ -250,7 +277,7 @@ export const Route = createFileRoute("/reports")({
 
 The screen needs no guard of its own. It is a child of `__root.tsx`, so it inherits `beforeLoad`, and a non-admin never reaches its loader. That inheritance is exactly what makes the server half easy to forget: the screen behaves correctly while the endpoint behind it answers anyone.
 
-`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` calls `requireAdmin`, then `adminAuth.api.listUsers` (the admin plugin's endpoints answer only on the admin instance), and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
+`GET /admin/users` is the shipped example. `modules/admin/files/api/routes/admin-users.ts` lists `adminGate` and its query validator, calls `requireAdmin` for the session, then `adminAuth.api.listUsers` (the admin plugin's endpoints answer only on the admin instance, and only to server code: the forward answers 404 to `/admin/auth/admin/*`), and answers `{ users, total }`. A `chained-route` patch registers it on api's exported chain, so `hc<AppType>` types it here for free. `src/routes/users.tsx` renders it, so both halves of the gate are live in the scaffold and the next route has a pattern to copy on each side.
 
 Prove the server half yourself rather than trusting the screen. Sign in as a client through `POST /auth/sign-in/email`, take the cookie jar, and call the endpoint directly:
 
@@ -285,6 +312,54 @@ new screen needs nothing here — it is in the generated route tree, so it is al
 destination.
 
 There is deliberately **no sign-up route** here, and `adminAuth` sets `disableSignUp: true`. An admin account is made by promoting an existing user, never by self-service at the backoffice door. Only a superadmin may grant `admin` or `superadmin` (the rank guard in the `saasaloy-auth` skill).
+
+## Add an admin write route, in four steps
+
+1. **Name the action.** Add an entry to your module's action file, `apps/api/src/audit/<module>.ts`: the route as `METHOD /admin/...` exactly as Hono lists it, the target type, the area, and a `label` such as "Confirmed a payment". Give one entry of a new area an `areaLabel`. A module ships that file with a `plugin-array` patch into `AUDIT_ACTIONS` in `apps/api/src/lib/audit-actions.ts`, the way `payment` and `feature-flags` do, so `saasaloy remove` takes the actions with the module.
+2. **Gate the route.** List `adminGate` first, then the validator, then a handler that opens with `adminWrite(c, async ({ db, actor, audit, afterCommit }) => ...)`. Use `db` for every query of the change. When Better Auth makes the change, use `adminAuthWrite(c, async ({ actor, audit }) => ...)` and call `adminAuth.api.*` with `headers: c.req.raw.headers`, so the plugin's permissions and `rank-guard` run as the caller.
+3. **Write the row.** Call `audit({ action, target: { id, label }, before, after })` once per change, with the fields the change touched. A create passes `after` only, a delete `before` only. Never pass a password: `adminWrite` throws on a key that matches `/password/i`, and `adminAuthWrite` drops it and logs at `error`. Put an email or any other side effect in `afterCommit`.
+4. **Prove it.** `audit-coverage.test.ts` fails until step 1 names the route, and `admin-gate.test.ts` fails if the validator runs before the gate. Neither proves the row is written, so add a route test beside the route that signs in a seeded admin, calls it, and reads `audit_events` for the row. `admin-members.test.ts` is the model.
+
+## What the D1 driver guarantees
+
+Under `database-postgres`, `adminWrite` is one transaction. The change and its audit rows commit together, and a body that throws or answers 4xx keeps nothing.
+
+Under `database-d1` there is no interactive transaction. Each statement of the body commits as it runs, and the audit rows go in one batch after it. A body that writes and then fails keeps its write and gets no row. A failed audit insert is logged at `error` and the change stands. Validate before you write, and a D1 route keeps nothing on a 4xx either. `adminAuthWrite` gives this weaker guarantee on both drivers, because Better Auth makes the change outside our transaction.
+
+## The members screen
+
+`src/routes/members.tsx` manages the admin group, the accounts in `ADMIN_ROLES`. Users lists every account; Members manages only the admin group. The api is `apps/api/src/routes/admin-members.ts` at `/admin/members`, and `membersQuery` in `src/lib/members-query.ts` reads `GET /admin/members`, which answers `{ me, members, removed }`. The route pages `listUsers` with a role filter until it has the whole group, so nothing is cut off at 100.
+
+- Active and Removed tabs. Removing a member bans the account and ends its sessions. The account keeps its id, so its audit rows still name a real person, and a restore unbans the same account with its password.
+- The Removed tab's "Removed" date and "Removed by" name come from the newest `member.remove` row. An account banned outside the screen falls back to `updatedAt` and no name.
+- "Added by" comes from the `member.add` row. "Last sign-in" is the newest admin session still on record. Better Auth deletes a session at sign-out, so the column shows a dash, never "Never".
+- A member changes their own name (`PATCH /:id`, Better Auth's own `/update-user`) and password (`POST /:id/password` with `currentPassword`, through `changePassword`; "Sign out my other sessions" is on by default, and the route passes the fresh session cookie back). A superadmin also adds members, resets another member's password (`setUserPassword`, then `revokeUserSessions`), removes, and restores. The route answers 403 for each of those before Better Auth runs, and self-removal answers 400.
+- The rank guard stands behind the route and is stricter: it refuses an `admin` any change to an admin-group account, so an `admin` who adds even an `admin` gets 403. The screen shows "Add member" and registers its command only for a superadmin; the 403 stays the server's rule.
+- Adding the email of a removed member answers 409 `member_removed` with the member, and the dialog offers a superadmin "Restore <name>".
+- The member panel lists the member's three newest changes as actor (`GET /admin/audit-events?actor=<id>&limit=3`) and links to `/activity?actor=<id>`. The remove asks first in an alert dialog, and every save reports in a toast.
+
+## The Activity page
+
+`src/routes/activity.tsx` lists `audit_events` newest first, 50 rows a page, through `useInfiniteQuery` and a "Load older" button. The api is `apps/api/src/routes/admin-audit.ts` at `/admin/audit-events`, with `adminGate` before the validator on both routes.
+
+- `GET /admin/audit-events` takes `actor`, `area`, `q`, `from`, `to`, `cursor` and `limit`, and answers `{ events, counts, areas, nextCursor }`. The cursor is `<ISO time>~<id>`, and any other cursor answers 400. `counts` holds `all` and each area under the filter minus the area, so a chip keeps its number when another chip is pressed.
+- `GET /admin/audit-events/people` lists the person menu: the admin group plus every actor in the log, removed admins marked.
+- Each event carries `label`, the action's words from its action file, and `areas` carries each area's words. The page shows the label; the raw action key shows only in the detail panel. An action no module registers any more reads as its key.
+- The person, area and range live in the address through `validateSearch` (`activitySearch` in `src/lib/activity.ts`). The search box narrows by target label 300 ms after the typing stops.
+- A row opens the detail panel with the exact time, the actor and role, the target, the action key, and a "What changed" table of each stored field before and after.
+
+## Extension seams
+
+Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it, and writes it again only when it is missing, because a managed file imports it. Put your change in the seed file and leave the managed file alone, and it keeps taking updates with no merge (ADR 0059).
+
+| Seed file | Shipped by | Read by | What goes in it |
+| --- | --- | --- | --- |
+| `src/extend/root.tsx` | `admin` | `src/components/app-shell.tsx` | `rootWrappers`, components that take `children`. AppShell renders `ShellLayout` inside each one, the first entry outermost, so the sidebar, the header and every page can read what a wrapper provides. They render inside the toast provider and only for a signed-in admin, never on `/login` or the access-denied screen. |
+| `src/extend/payments.ts` | `payment` | `src/routes/payments.tsx` | `paymentsSearchExtension`, a zod object shape. `payments.tsx` spreads it into its `validateSearch` schema, so a key added here is typed on `Route.useSearch()` and on every link to `/payments`. |
+
+A search key such as `payment: z.string().optional().catch(undefined)` keeps a malformed value in a pasted link from failing the screen. A key does nothing by itself: read it with `Route.useSearch()` in the screen, and that edit is the one change left in the managed file.
+
+`__root.tsx` takes no edit for a wrapper; `app-shell.tsx` applies them. The overview, `index.tsx`, has no seam yet.
 
 ## The typed client
 
@@ -355,6 +430,8 @@ ones. An admin clicks between a handful of screens, so a short stale window keep
 and one retry absorbs a dropped packet without sitting on a down api for seconds.
 
 A data route needs no `errorComponent` of its own: the router's default renders the shell `ErrorState` for a loader's throw and for a render failure. Add one only when the words should say more, as `/users` and the overview do.
+
+The overview at `/` is the exception to awaiting in the loader. Its loader calls `prefetchQuery` for `/health` and for `newestUsersQuery` and awaits neither, so the page paints at once, and each card renders its own skeleton, its data, or its own failure. A down api shows "Unreachable" in the health card and never swaps the page for an error screen. Copy that shape for a dashboard whose cards read separate requests; await in the loader for a screen that is one list.
 
 ## Theme and font
 
@@ -484,6 +561,8 @@ files.
   check is redundant, because every deny there is a throw and no child loader runs after one. Keep
   it that way: a deny that returns instead of throwing silently re-opens the loaders it was meant to
   stop. Do not turn `AccessDenied` into a redirect either.
+- **`adminGate` comes before every validator on an admin route.** A validator listed first answers a signed-out caller with a 400 that describes the input. `admin-gate.test.ts` fails on it.
+- **Project code goes in `src/extend/`, not in a managed file.** A wrapper goes in `rootWrappers`, a payments search key in `paymentsSearchExtension`. An edit in place sends the file to the merge plan on every update.
 - **Every admin endpoint calls `requireAdmin` or `requireAdminApp`**, whatever the guard in `__root.tsx` does. The screen inheriting `beforeLoad` is not authorization; it is the reason a missing server check looks fine in a browser.
 - **`forgetSession()` before `router.invalidate()`**, on every sign-in and sign-out path.
 - **Describe a request once with `queryOptions`**, prefetch in the loader, read with `useQuery`,

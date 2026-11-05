@@ -1,6 +1,13 @@
-import { adminAuth, requireAdmin, withAuthScope } from "@repo/auth/server";
+import { zValidator } from "@hono/zod-validator";
+import {
+  adminAuth,
+  adminGate,
+  requireAdmin,
+  withAuthScope,
+} from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
 import { Hono } from "hono";
+import { z } from "zod";
 
 // The worked example of the server half of the admin gate. `apps/admin`'s root route
 // denies a non-admin in the browser, and its own comment says why that is not enough:
@@ -22,8 +29,46 @@ import { Hono } from "hono";
 // `CORS_ORIGINS` allowlist to `*` before this sub-app is mounted, and a sub-app that
 // sets no `onError` inherits api's — which is what turns the `HTTPException` below into
 // `{ "error": { "code": "forbidden", "message": "role required: admin" } }` with a 403.
+// The query `GET /admin/users` takes. The users screen sends none and gets the first 100
+// in the plugin's order; the overview asks for `?limit=5&sortBy=createdAt&sortDirection=desc`
+// and reads the five newest straight off the answer. `sortBy` is an allowlist on purpose:
+// the plugin sorts by any column it is handed, and these two have an index or a reason.
+const listQuery = z.object({
+  limit: z.coerce.number().int().min(1).max(100).default(100),
+  sortBy: z.enum(["createdAt", "name"]).optional(),
+  sortDirection: z.enum(["asc", "desc"]).optional(),
+});
+
+/** The api's error envelope for a rejected input, so `hc` sees one 400 shape. */
+function issueMessage(
+  issues: readonly { path: PropertyKey[]; message: string }[]
+) {
+  const [issue] = issues;
+  return issue
+    ? `${issue.path.map(String).join(".") || "input"}: ${issue.message}`
+    : "invalid input";
+}
+
+const validListQuery = zValidator("query", listQuery, (result, c) => {
+  if (!result.success) {
+    return c.json(
+      {
+        error: {
+          code: "invalid_request",
+          message: issueMessage(result.error.issues),
+        },
+      },
+      400
+    );
+  }
+});
+
 export const adminUsers = new Hono<{ Bindings: AuthDbBindings }>().get(
   "/users",
+  // `adminGate` before the validator, so a signed-out caller with a bad query gets 401 and
+  // never a 400 that names the field. The shipped admin-gate test checks the order.
+  adminGate,
+  validListQuery,
   // One scope around the whole handler, because both halves below reach the database and
   // `adminAuth` is a module-scope singleton whose client is not. `requireAdmin` would
   // enter its own scope if this did not, but `adminAuth.api.listUsers` has no such
@@ -41,9 +86,16 @@ export const adminUsers = new Hono<{ Bindings: AuthDbBindings }>().get(
       // `packages/auth` (ADR 0020) and keeps the shape in step with the plugin across a
       // bump. It re-checks the caller's role itself;
       // `requireAdmin` runs first so the refusal is api's envelope, not the plugin's.
+      // `total` is the plugin's count of every account, whatever `limit` says.
+      const { limit, sortBy, sortDirection } = c.req.valid("query");
       const { users, total } = await adminAuth.api.listUsers({
         headers: c.req.raw.headers,
-        query: { limit: 100 },
+        query: {
+          limit,
+          ...(sortBy === undefined
+            ? {}
+            : { sortBy, sortDirection: sortDirection ?? "asc" }),
+        },
       });
 
       // Pass the status explicitly. `hc` keys the response type by status code, so an
