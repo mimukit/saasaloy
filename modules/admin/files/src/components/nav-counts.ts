@@ -11,8 +11,9 @@
 // A page whose action changes a count invalidates that key, so the badge follows at once.
 //
 // A live count replaces the row's static `count` in NAV_AREAS, and a live 0 hides the
-// badge; the rule lives in ../lib/nav-counts.ts. A failed fetch shows no count, never an
-// error.
+// badge; the rule lives in @repo/ui/lib/shell/nav-counts. A failed fetch keeps the last
+// count it read and never shows an error. Before the first success the row keeps its
+// static `count`.
 
 /** One live count: the nav row it belongs to and the api path that answers it. */
 export interface NavCountSource {

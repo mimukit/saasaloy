@@ -167,7 +167,8 @@ The sidebar applies `withLiveCounts` from `@repo/ui/lib/shell/nav-counts`:
 
 - A live count replaces the row's static `count`.
 - A live 0 hides the badge. A static 0 still renders.
-- With no live count (loading, a failed fetch, a non-OK answer or a body without a numeric `count`) the static `count` stays. A failed count shows no error.
+- Before the first successful fetch the static `count` stays.
+- A failed fetch (a network error, a non-OK answer or a body without a numeric `count`) throws, so TanStack Query keeps the last count it read. The badge never drops to 0 or disappears because of a failure, and a failed count shows no error.
 
 A screen whose action changes a count invalidates the key after the mutation, so the badge follows with no reload:
 

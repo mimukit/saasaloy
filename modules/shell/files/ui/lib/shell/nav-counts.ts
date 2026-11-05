@@ -9,8 +9,11 @@
 //
 // - A live count that is a finite number replaces the row's static `count`.
 // - A live count of 0 hides the badge. A queue with nothing waiting has nothing to say.
-// - With no live count (no entry, still loading, or a failed fetch) the static `count`
-//   stays, and a static 0 still renders, as NAV_AREAS documents.
+// - With no live count (no entry, still loading, or a first fetch that failed) the static
+//   `count` stays, and a static 0 still renders, as NAV_AREAS documents.
+//
+// A fetch that fails after a success never reaches this rule as "no count": the app's
+// fetch throws through `navCountFromBody`, and TanStack Query keeps the last number.
 
 /** Live counts keyed by a nav row's `to`. A missing or `undefined` value is "not known". */
 export type LiveCounts = Readonly<Record<string, number | undefined>>;
@@ -53,4 +56,20 @@ export function withLiveCounts<Area extends CountedArea>(
       })),
     })),
   }));
+}
+
+/**
+ * The count in a nav count response body, which must be `{ count: number }` with a
+ * finite number. Anything else throws, so the app's query fails and keeps its last count
+ * rather than showing a wrong one.
+ */
+export function navCountFromBody(body: unknown): number {
+  const count =
+    typeof body === "object" && body !== null && "count" in body
+      ? body.count
+      : undefined;
+  if (typeof count !== "number" || !Number.isFinite(count)) {
+    throw new TypeError("A nav count response is not { count: number }.");
+  }
+  return count;
 }
