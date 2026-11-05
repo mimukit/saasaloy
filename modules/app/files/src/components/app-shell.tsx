@@ -18,6 +18,7 @@ import { NAV_COUNTS } from "@app/components/nav-counts";
 import { shellExtensions } from "@app/components/shell-extensions";
 import { useSignOut } from "@app/components/use-sign-out";
 import type { AppSession } from "@app/lib/auth";
+import { contactOf } from "@app/lib/contact";
 import { initialsOf } from "@app/lib/initials";
 import { navCountQuery } from "@app/lib/nav-count";
 
@@ -113,8 +114,10 @@ export function AppShell({
   const signOut = useSignOut();
   const counts = useNavCounts();
 
-  // A name is optional at sign-up in Better Auth's schema, so fall back to the email.
-  const name = session.user.name || session.user.email;
+  // A name is optional at sign-up in Better Auth's schema, so fall back to the email. A
+  // phone sign-up's email is a placeholder, so `contactOf` shows its phone instead.
+  const contact = contactOf(session.user.email);
+  const name = session.user.name || contact;
 
   return (
     <ShellLayout
@@ -122,7 +125,7 @@ export function AppShell({
       area={areaFor(pathname)}
       currentPath={pathname}
       link={ShellNavLink}
-      account={{ name, email: session.user.email, initials: initialsOf(name) }}
+      account={{ name, email: contact, initials: initialsOf(name) }}
       signOut={signOut}
       extensions={shellExtensions}
       counts={counts}
