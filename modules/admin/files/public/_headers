@@ -1,0 +1,12 @@
+# Cache rules for Workers Static Assets.
+#
+# Vite puts a content hash in the name of every file it writes to /assets/, so a changed
+# file always gets a new name. The browser can keep these for a year and never ask again.
+# Without this rule Cloudflare sends `max-age=0, must-revalidate`, and each reload checks
+# every script and stylesheet of the login page with the server.
+#
+# index.html and the favicon keep their names across releases, so they keep the default
+# and are checked on every load.
+
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
