@@ -2,8 +2,7 @@ import { randomBytes } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import postgres from "postgres";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import type { TestProject } from "vitest/node";
-import { setup, testDatabaseUrl } from "../test-setup.ts";
+import { setupLocked, testDatabaseUrl } from "../test-setup.ts";
 import { loadContext } from "./context.ts";
 import { AUTH_TRACE } from "./query.ts";
 import { applyReadonlyGrants, loadColumnClasses } from "./readonly-grants.ts";
@@ -65,7 +64,7 @@ describe.skipIf(SKIP_REASON !== undefined)(applyReadonlyGrants, () => {
   let plan: GrantPlan;
 
   beforeAll(async () => {
-    await setup({ provide: () => {} } as unknown as TestProject);
+    await setupLocked();
     const url = URL_OF_TEST_DATABASE ?? "";
     admin = postgres(url, { max: 1, onnotice: () => {} });
     plan = await applyReadonlyGrants(url, {
