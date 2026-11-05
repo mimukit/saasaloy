@@ -34,7 +34,7 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/shell/shell-nav";
-import { withLiveCounts } from "@repo/ui/lib/shell/nav-counts";
+import { navCountLabel, withLiveCounts } from "@repo/ui/lib/shell/nav-counts";
 import type { LiveCounts } from "@repo/ui/lib/shell/nav-counts";
 
 // The shell sidebar: the brand row, the organization picker's slot, every area's nav
@@ -140,7 +140,9 @@ export function ShellSidebar({
                           <span>{item.label}</span>
                         </SidebarMenuButton>
                         {item.count === undefined ? null : (
-                          <SidebarMenuBadge>{item.count}</SidebarMenuBadge>
+                          <SidebarMenuBadge>
+                            {navCountLabel(item.count)}
+                          </SidebarMenuBadge>
                         )}
                       </SidebarMenuItem>
                     );

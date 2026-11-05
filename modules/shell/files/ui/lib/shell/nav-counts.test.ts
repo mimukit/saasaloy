@@ -11,7 +11,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { liveCount, navCountFromBody, withLiveCounts } from "./nav-counts.ts";
+import {
+  liveCount,
+  navCountFromBody,
+  navCountLabel,
+  withLiveCounts,
+} from "./nav-counts.ts";
 
 const areas = [
   {
@@ -121,5 +126,18 @@ describe("navCountFromBody", () => {
     ]) {
       assert.throws(() => navCountFromBody(body), TypeError, String(body));
     }
+  });
+});
+
+describe("navCountLabel", () => {
+  it("shows a count up to 99 as itself", () => {
+    assert.equal(navCountLabel(0), "0");
+    assert.equal(navCountLabel(7), "7");
+    assert.equal(navCountLabel(99), "99");
+  });
+
+  it("caps a count above 99 at 99+", () => {
+    assert.equal(navCountLabel(100), "99+");
+    assert.equal(navCountLabel(1284), "99+");
   });
 });

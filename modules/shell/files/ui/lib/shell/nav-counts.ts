@@ -73,3 +73,15 @@ export function navCountFromBody(body: unknown): number {
   }
   return count;
 }
+
+/** A nav badge stops counting here. A larger count reads `99+`. */
+export const NAV_COUNT_MAX = 99;
+
+/**
+ * The text a nav badge shows for a count: the count itself, or `99+` above NAV_COUNT_MAX,
+ * so a badge keeps one width however far behind the reader is. The notification bell
+ * caps at the same number, so the bell and its sidebar row always read alike.
+ */
+export function navCountLabel(count: number): string {
+  return count > NAV_COUNT_MAX ? `${NAV_COUNT_MAX}+` : String(count);
+}
