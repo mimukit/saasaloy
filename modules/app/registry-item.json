@@ -24,7 +24,8 @@
         "name": "app",
         "file": "apps/app/.env",
         "environment": "dev",
-        "omit": []
+        "omit": [],
+        "devPort": 3002
       }
     },
     {

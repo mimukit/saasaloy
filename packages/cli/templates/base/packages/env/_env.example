@@ -52,3 +52,15 @@ CLOUDFLARE_API_TOKEN=
 # Blank on purpose: unset, wrangler uses the one account the token or login can reach,
 # and asks or fails when there are several.
 CLOUDFLARE_ACCOUNT_ID=
+
+# =============================================================================
+# Dev ports
+# =============================================================================
+# @services dev-ports
+
+# The machine name the browser uses to reach the dev servers: localhost on this machine,
+# or a remote dev box's name (e.g. devaloy). `pnpm dev:ports` reads it and writes the
+# api, site and auth URLs on this host, because a page and its api must share one host
+# for the session cookie. The CORS list takes both localhost and this host. Unset, it is
+# localhost. `pnpm dev:ports --host <name>` overrides it for one run.
+DEV_HOST=localhost

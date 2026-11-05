@@ -2,12 +2,16 @@ import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { devPort } from "@repo/env/dev-port";
+import { devGzip, restartOnLockfile } from "@repo/tooling/vite";
+import { defineConfig, loadEnv } from "vite";
 
 // Plain SPA build: Vite emits static assets into dist/ and wrangler.jsonc serves them
 // with a single-page-application fallback. There is no Worker entry and no SSR — the
 // admin app talks to apps/api over the credentialed CORS spine instead.
-export default defineConfig({
+const ENV_LOCAL = "apps/admin/.env.local";
+
+export default defineConfig(({ mode }) => ({
   plugins: [
     // MUST run before the React plugin. It rewrites the route files (and generates
     // src/routeTree.gen.ts from src/routes/**) before React's JSX transform sees them;
@@ -31,6 +35,11 @@ export default defineConfig({
     // src/main.tsx imports via `@repo/ui/styles/admin.css`. Do not declare a second
     // entrypoint here.
     tailwindcss(),
+    // Dev only. `devGzip()` compresses what the dev server sends, which matters when the
+    // app is opened from another machine. `restartOnLockfile()` restarts the server after
+    // an install, so a package added while it runs resolves on the next reload.
+    devGzip(),
+    restartOnLockfile(),
   ],
   // `PUBLIC_` replaces Vite's default `VITE_` prefix, so the browser bundle only ever
   // inlines a variable a human deliberately named PUBLIC_*. It also unifies this app
@@ -43,10 +52,18 @@ export default defineConfig({
     // is what makes the dropped source's own `@admin/...` imports actually resolve.
     alias: { "@admin": fileURLToPath(new URL("src", import.meta.url)) },
   },
-  // Fixed dev port. The api Worker's CORS allowlist and better-auth's `trustedOrigins`
-  // both hardcode http://localhost:3001, so this port cannot be allowed to drift.
-  // `strictPort` turns a busy port into a loud failure instead of a silent +1 that
-  // later shows up as an unexplained CORS rejection. web is 3000, admin is 3001,
-  // api is 4000.
-  server: { port: 3001, strictPort: true },
-});
+  // The dev port is `DEV_PORT` from this workspace's `.env.local`, which `pnpm dev:ports`
+  // writes: a per-worktree port in a linked worktree, 3001 in the main checkout. Unset,
+  // it falls back to 3001; a bad value fails here, naming the file. The api's
+  // `CORS_ORIGINS` and auth's trusted origins come from the same run, so the port and the
+  // allow-lists move together. `strictPort` turns a busy port into a loud failure
+  // instead of a silent +1 that later shows up as an unexplained CORS rejection.
+  server: {
+    port: devPort(
+      loadEnv(mode, process.cwd(), "DEV_PORT").DEV_PORT,
+      3001,
+      ENV_LOCAL
+    ),
+    strictPort: true,
+  },
+}));

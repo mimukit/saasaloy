@@ -3,10 +3,12 @@
   "name": "{{PROJECT_NAME}}-api",
   "main": "src/worker.ts",
   "compatibility_date": "2026-07-21",
-  // Same port `vite dev` uses (see vite.config.ts), so `wrangler dev` is a drop-in
-  // swap for the Vite loop — useful because Vite's dev middleware reflects an
-  // `Access-Control-Allow-Origin` for every loopback origin, which masks the Worker's
-  // own CORS allowlist. Test CORS against `wrangler dev`.
+  // The main checkout's api port, which `vite dev` also falls back to (see
+  // vite.config.ts), so `wrangler dev` is a drop-in swap for the Vite loop. Vite's dev
+  // middleware reflects an `Access-Control-Allow-Origin` for every loopback origin, which
+  // masks the Worker's own CORS allowlist, so test CORS against `wrangler dev`. This file
+  // cannot read `DEV_PORT`: in a linked worktree run `wrangler dev --port <DEV_PORT>`, with
+  // the port from `apps/api/.env.local` or `.devports.json`.
   "dev": {
     "port": 4000,
   },
