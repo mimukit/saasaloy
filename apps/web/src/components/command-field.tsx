@@ -8,8 +8,8 @@ import { cn } from "@web/lib/utils";
 // The page's primary call to action: a bordered mono field holding one command, with a
 // solid Copy button flush against its right edge (the `command-field` component in
 // apps/web/DESIGN.md). Both share the 2.5rem height and square corners. `size="lg"` is
-// the hero's field from the mockup approved on 2026-11-06: 3.25rem tall, wider, with a
-// larger command and label (`command-field-lg` in DESIGN.md).
+// the hero's field: 3rem tall, wider, with a larger command (`command-field-lg` in
+// DESIGN.md).
 //
 // THE ONE ISLAND THIS FILE ADDS. index.astro renders it with `client:visible`, so the
 // copy handler hydrates only once the field scrolls into view and never competes with
@@ -80,7 +80,7 @@ export function CommandField({
     <div
       className={cn(
         "border-border bg-card flex w-full items-stretch border",
-        large ? "h-13 max-w-xl" : "h-10 max-w-md",
+        large ? "h-12 max-w-lg" : "h-10 max-w-md",
         className
       )}
     >
@@ -88,7 +88,7 @@ export function CommandField({
         className={cn(
           "flex min-w-0 flex-1 items-center gap-2 overflow-x-auto font-mono whitespace-nowrap",
           large
-            ? "px-3 text-[0.8125rem] sm:gap-3 sm:px-4 sm:text-lg"
+            ? "px-3 text-[0.8125rem] sm:gap-3 sm:px-4 sm:text-base"
             : "px-3 text-[0.8125rem] sm:text-sm"
         )}
       >
@@ -106,7 +106,7 @@ export function CommandField({
         className={cn(
           "bg-primary text-primary-foreground focus-visible:outline-ring press -my-px -mr-px inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2",
           large
-            ? "min-w-24 px-3 text-sm sm:min-w-32 sm:px-4 sm:text-base"
+            ? "min-w-24 px-3 text-sm sm:min-w-28 sm:px-4"
             : "min-w-24 px-3 text-sm"
         )}
       >

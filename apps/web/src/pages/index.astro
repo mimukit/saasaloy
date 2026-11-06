@@ -77,7 +77,7 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
 >
   <Navbar client:idle siteName={siteName} />
   <main id="main" tabindex="-1">
-    <Hero>
+    <Hero rows={catalogRows}>
       <CommandField
         slot="commandField"
         client:visible
