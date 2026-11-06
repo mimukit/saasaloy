@@ -92,14 +92,15 @@ export const landing = {
   // module names (5b), shown in this order when the registry has them. `modulesMore`
   // takes `{count}`, the catalog tiles the strip leaves out, and links to the catalog.
   // `{version}` is the CLI version, read from packages/cli/package.json at build time.
-  // `description` names the category, because the title does not, and its last
-  // sentence repeats the README's opening paragraph.
+  // `description` names the category, because the title does not. Its first sentence is
+  // the product sentence GitHub and npm use (packages/cli/package.json, SEO AEO-ENTITY),
+  // and its last repeats the README's opening paragraph.
   hero: {
     eyebrow: "Open source · MIT · Cloudflare Workers",
     titleLead: "A landing page today.",
     titleAccent: "Your next module tomorrow.",
     description:
-      "An open source SaaS starter kit for Cloudflare. Start small, and add each module as source files you own. Think shadcn/ui for a full-stack SaaS.",
+      "An open source SaaS starter kit for Cloudflare: a CLI plus a module registry that copies source files you own. Start with a landing page, and add auth, teams and payments when the product needs them. Think shadcn/ui for a full-stack SaaS.",
     command: "npx saasaloy init my-app",
     links: [
       {
