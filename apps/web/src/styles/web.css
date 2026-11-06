@@ -10,19 +10,25 @@
    and a preset or a redesign changes it in one place. None of this is a colour: a theme
    preset replaces the colour tokens in brand.css and leaves these alone.
 
-   Width. `wide` is every section's container, the navbar's and the footer's too.
+   Width. `wide` is every section's container and the footer's. `hero` is the wider
+   container of the hero and the navbar above it, from the two-column hero mockup the
+   owner approved on 2026-11-06.
 
    Type ramp, in Geist (brand.css maps `--font-sans` and `--font-mono`). `display` is the
-   hero's one h1, `section-title` every h2, `lead` the paragraph under either.
+   hero's one h1, `section-title` every h2, `lead` the paragraph under either. `display`
+   scales with its column (`cqi`, so its parent needs `@container`): 10.3% of the column
+   sets "A landing page today." (9.6em at this tracking) on one line, from 2.25rem on a phone to 5.5rem at the
+   widest.
    `wordmark-display` is the footer's large wordmark: it scales with the viewport so the
    word fills the `wide` container, less its 1.5rem gutters, and stops at 80rem. Body text
    stays on Tailwind's scale. The sizes and weights are the typography tokens in
    apps/web/DESIGN.md. */
 @theme {
   --container-wide: 80rem;
-  --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
-  --text-display--line-height: 1.05;
-  --text-display--letter-spacing: -0.035em;
+  --container-hero: 90rem;
+  --text-display: clamp(2.25rem, 10.3cqi, 5.5rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.045em;
   --text-display--font-weight: 700;
   --text-section-title: clamp(2rem, 1.6rem + 1.6vw, 3rem);
   --text-section-title--line-height: 1.1;
@@ -89,7 +95,7 @@
   /* The step loop the looping drawings share, one 12.5s pass in five 2.5s steps. It
      holds each step for 2s and moves to the next over 0.5s, so part n arrives over
      2-2.5s into step n. At 94% the added parts fade (`--step-show`), and the step falls
-     back to 0 while they are hidden. `tree-type` restarts the hero editor's lines on each
+     back to 0 while they are hidden. `tree-type` types the hero editor's lines in again on each
      step: it shares the 2.5s step, and its -0.25s delay lines a restart up with each tab
      change. The crane in the problem drawing runs its trolley out and lowers its hook
      once per step. */
@@ -134,12 +140,12 @@
 
   @keyframes tree-type {
     0% {
-      scale: 0 1;
+      clip-path: inset(-4px 100% -4px 0);
     }
 
     30%,
     100% {
-      scale: 1 1;
+      clip-path: inset(-4px -4px -4px 0);
     }
   }
 
@@ -221,6 +227,19 @@
   max-width: var(--container-wide);
   margin-inline: auto;
   padding-inline: 1.5rem;
+}
+
+/* The hero's container, and the navbar's, so the wordmark lines up with the title: the
+   wider `hero` width with the 1.5rem gutter, and a 3rem gutter from `lg`. */
+@utility section-container-hero {
+  width: 100%;
+  max-width: var(--container-hero);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+
+  @media (width >= 64rem) {
+    padding-inline: 3rem;
+  }
 }
 
 /* The blueprint decoration. Both utilities draw in hairlines of the `border` token and
@@ -857,10 +876,8 @@
   );
 }
 
+/* `tree-type` reveals a code line from the left, so the text never squashes. */
 @utility tree-type {
-  transform-box: fill-box;
-  transform-origin: left;
-
   @media (prefers-reduced-motion: no-preference) {
     animation: tree-type 2.5s var(--ease-out-soft)
       calc(var(--line, 0) * 60ms - 0.25s) infinite both;

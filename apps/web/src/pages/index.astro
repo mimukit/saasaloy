@@ -66,7 +66,8 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
   Never reach for a blanket `client:load` here — it would hydrate the whole page.
 
   The sections follow the round 10 mockup, with the built-on and problem sections of plan
-  0092 after the stages, and a `blueprint-rule` between each pair.
+  0092 after the stages, and a `blueprint-rule` between each pair. The hero draws its own
+  rule at its foot, the bottom edge of the first viewport, so no rule follows it here.
   The footer draws its own rules.
 */}
 <Layout
@@ -80,10 +81,10 @@ const jsonLd = homeGraph({ site: Astro.site, siteName, description, locale });
       <CommandField
         slot="commandField"
         client:visible
+        size="lg"
         command={landing.hero.command}
       />
     </Hero>
-    <div aria-hidden="true" class="blueprint-rule"></div>
     <Stages rows={catalogRows} />
     <div aria-hidden="true" class="blueprint-rule"></div>
     <BuiltOn />

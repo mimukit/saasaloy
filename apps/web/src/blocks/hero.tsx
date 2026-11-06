@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import { ArrowRightIcon, BookOpenIcon } from "lucide-react";
+import { ArrowDownIcon, ArrowRightIcon, BookOpenIcon } from "lucide-react";
 
 import { CommandField } from "@web/components/command-field";
 import { landing } from "@web/content/landing";
@@ -8,6 +8,7 @@ import { cliVersion } from "@web/lib/cli-version";
 import { externalLinkProps, newTabHint } from "@web/lib/external-link";
 import { GITHUB_MARK } from "@web/lib/github-mark";
 import { interpolate } from "@web/lib/interpolate";
+import { cn } from "@web/lib/utils";
 
 // Static. The command field's copy button is the one interactive part, and index.astro
 // passes it in hydrated through the `commandField` slot. Rendered on its own, the hero
@@ -20,11 +21,15 @@ import { interpolate } from "@web/lib/interpolate";
 // drawing `data-offscreen` while it is out of view, and the CSS pauses every loop in it
 // then. Without JavaScript the loops never pause.
 //
-// The round 9/10 hero: the copy on the left and the drawing on the right from `lg`
-// (64rem); below it the drawing follows the copy at full width. The drawing is the source
-// tree from plan 0092, approved in round 3: a project that gains a folder per
-// `saasaloy add`. The title's
-// first sentence is `foreground`, the second `primary`.
+// The hero is the two-column mockup the owner approved on 2026-11-06. It fills the first
+// viewport, the navbar included: `min-h-svh`, a minimum and never a fixed height, so
+// nothing clips when the text needs more room. Copy on the left and the drawing on the
+// right from `lg` (64rem); below it the drawing follows the copy at full width, and the
+// section grows past the viewport. A hairline under the navbar spans the container, and
+// the foot holds the link down to the catalog over a `blueprint-rule` at the bottom of the
+// viewport. The title's first sentence is `foreground`, the second `primary`, and its
+// size follows the copy column (`text-display` reads `cqi`). The drawing is the source
+// workspace in ../illustrations/source-tree.tsx.
 //
 // Every word comes from ../content/landing.ts. Edit the copy there, not here.
 
@@ -42,28 +47,53 @@ export interface HeroProps {
   command?: string;
   links?: HeroLink[];
   note?: string;
+  /** The label of the link down to the module catalog. Empty hides the link. */
+  explore?: string;
   /** A hydrated command field from index.astro. Defaults to a static one. */
   commandField?: ReactNode;
 }
 
-/** The hero's links, one per row item. ./start.tsx shows the same list. */
-export function HeroLinkList({ links }: { links: HeroLink[] }) {
+/**
+ * The hero's links, one per row item. ./start.tsx shows the same list. `size="lg"` is the
+ * hero's: mono labels, larger icons and no trailing arrow, as the approved mockup shows.
+ */
+export function HeroLinkList({
+  links,
+  size = "md",
+}: {
+  links: HeroLink[];
+  size?: "md" | "lg";
+}) {
+  const large = size === "lg";
   return (
-    <ul className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
+    <ul
+      className={cn(
+        "flex flex-wrap items-center gap-y-2",
+        large ? "gap-x-10 font-mono text-sm sm:text-base" : "gap-x-6 text-sm"
+      )}
+    >
       {links.map((link) => (
         <li key={link.id}>
           <a
             href={link.href}
             {...externalLinkProps(link.href)}
-            className="text-highlight inline-flex items-center gap-2 font-medium underline-offset-4 hover:underline"
+            className={cn(
+              "text-highlight inline-flex items-center font-medium underline-offset-4 hover:underline",
+              large ? "gap-3" : "gap-2"
+            )}
           >
             {link.id === "github" ? (
               GITHUB_MARK
             ) : (
-              <BookOpenIcon aria-hidden="true" className="size-4" />
+              <BookOpenIcon
+                aria-hidden="true"
+                className={large ? "size-5" : "size-4"}
+              />
             )}
             {link.label}
-            <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+            {!large && (
+              <ArrowRightIcon aria-hidden="true" className="size-3.5" />
+            )}
             {newTabHint(link.href)}
           </a>
         </li>
@@ -79,25 +109,29 @@ export function Hero({
   command = landing.hero.command,
   links = landing.hero.links,
   note = interpolate(landing.hero.note, { version: cliVersion }),
+  explore = landing.hero.explore,
   commandField,
 }: HeroProps) {
   return (
-    <section className="pt-24 pb-16 md:pt-28">
-      <div className="section-container-wide grid items-center gap-12 lg:grid-cols-[minmax(0,34rem)_minmax(0,1fr)] lg:gap-12">
-        <div className="flex flex-col gap-6">
-          <h1 className="text-display lg:text-[3.25rem]">
+    <section className="flex min-h-svh flex-col pt-14">
+      <div aria-hidden="true" className="section-container-hero">
+        <div className="border-border border-t" />
+      </div>
+      <div className="section-container-hero grid flex-1 items-center gap-12 py-12 lg:grid-cols-[minmax(0,1.05fr)_minmax(0,1fr)] lg:gap-8 lg:py-10 min-[90rem]:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
+        <div className="@container flex flex-col gap-7">
+          <h1 className="text-display">
             <span className="text-foreground block">{titleLead}</span>
             <span className="text-primary block">{titleAccent}</span>
           </h1>
-          <p className="text-lead text-muted-foreground max-w-md text-balance">
+          <p className="text-lead text-muted-foreground max-w-xl text-pretty">
             {description}
           </p>
-          <div className="blur-in flex flex-col gap-4">
-            {commandField ?? <CommandField command={command} />}
-            <HeroLinkList links={links} />
+          <div className="blur-in mt-2 flex flex-col gap-6">
+            {commandField ?? <CommandField size="lg" command={command} />}
+            <HeroLinkList links={links} size="lg" />
           </div>
           {note && (
-            <p className="text-muted-foreground blur-in text-xs [--blur-in-delay:100ms]">
+            <p className="text-muted-foreground blur-in font-mono text-xs [--blur-in-delay:100ms] sm:text-sm">
               {note}
             </p>
           )}
@@ -105,6 +139,21 @@ export function Hero({
 
         <SourceTree className="text-highlight drawing-load w-full" />
       </div>
+      {explore && (
+        <div className="section-container-hero flex justify-center pt-2 pb-3">
+          <a
+            href="#catalog"
+            className="text-foreground hover:text-highlight inline-flex items-center gap-2 font-mono text-sm underline-offset-4 transition-colors hover:underline"
+          >
+            {explore}
+            <ArrowDownIcon aria-hidden="true" className="size-4" />
+          </a>
+        </div>
+      )}
+      <div
+        aria-hidden="true"
+        className="blueprint-rule [--rule-inset:1.5rem] lg:[--rule-inset:3rem]"
+      />
     </section>
   );
 }

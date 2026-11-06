@@ -84,6 +84,7 @@ export const landing = {
   // The hero. The title is two sentences: the first renders in `foreground`, the second
   // in `highlight`. `command` is the command field's text (5b). Every link leaves the page
   // (5a). `note` is the proof-of-concept line, which stays visible (README, WARNING).
+  // `explore` labels the link at the foot of the hero, down to the module catalog.
   // `{version}` is the CLI version, read from packages/cli/package.json at build time.
   // `description` names the category, because the title does not, and its last
   // sentence repeats the README's opening paragraph.
@@ -102,6 +103,7 @@ export const landing = {
       { id: "github", label: "GitHub", href: REPO },
     ],
     note: "Version {version}. Proof of concept. Not for production use yet.",
+    explore: "Explore the modules",
   },
 
   // The problem section (plan 0092). `title` and `description` repeat README line 23,
