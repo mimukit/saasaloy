@@ -16,6 +16,7 @@ import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { NAV_COUNTS } from "@admin/components/nav-counts";
 import { shellExtensions } from "@admin/components/shell-extensions";
 import { useSignOut } from "@admin/components/sign-out-button";
+import { rootWrappers } from "@admin/extend/root";
 import { API_CREDENTIALS, API_HEADERS } from "@admin/lib/api";
 import { apiBaseUrl } from "@admin/lib/auth";
 import type { AdminSession } from "@admin/lib/auth";
@@ -41,6 +42,19 @@ function ShellNavLink({ to, exact, ...props }: ShellLinkProps) {
   return (
     <Link {...props} to={to as LinkProps["to"]} activeOptions={{ exact }} />
   );
+}
+
+/**
+ * Wraps `children` in each of the project's root wrappers, the first entry outermost.
+ * The list lives in src/extend/root.tsx, a seed file the project owns, so a provider the
+ * project adds there needs no edit to this file or to src/routes/__root.tsx.
+ */
+function RootWrappers({ children }: { children: ReactNode }) {
+  let tree = children;
+  for (const Wrapper of rootWrappers.toReversed()) {
+    tree = <Wrapper>{tree}</Wrapper>;
+  }
+  return tree;
 }
 
 /** How often the sidebar's live counts refetch while the tab is visible. */
@@ -148,21 +162,29 @@ export function AppShell({
 
   const name = session.user.name || session.user.email;
 
+  // The project's root wrappers go around the whole layout, so the sidebar, the header and
+  // every page sit inside them. A wrapper here renders only for a signed-in admin.
   return (
-    <ShellLayout
-      areas={NAV_AREAS}
-      // With a single seeded area this always resolves to it, and adding a second area
-      // needs no change here.
-      area={areaFor(pathname)}
-      currentPath={pathname}
-      link={ShellNavLink}
-      account={{ name, email: session.user.email, initials: initialsOf(name) }}
-      signOut={signOut}
-      extensions={shellExtensions}
-      counts={counts}
-    >
-      <AdminCommands signOut={signOut.signOut} />
-      {children}
-    </ShellLayout>
+    <RootWrappers>
+      <ShellLayout
+        areas={NAV_AREAS}
+        // With a single seeded area this always resolves to it, and adding a second area
+        // needs no change here.
+        area={areaFor(pathname)}
+        currentPath={pathname}
+        link={ShellNavLink}
+        account={{
+          name,
+          email: session.user.email,
+          initials: initialsOf(name),
+        }}
+        signOut={signOut}
+        extensions={shellExtensions}
+        counts={counts}
+      >
+        <AdminCommands signOut={signOut.signOut} />
+        {children}
+      </ShellLayout>
+    </RootWrappers>
   );
 }

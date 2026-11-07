@@ -1,29 +1,30 @@
 import { queryOptions, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { RefreshCwIcon } from "lucide-react";
-import { useMemo } from "react";
+import { ArrowRightIcon, RefreshCwIcon } from "lucide-react";
 
 import { ErrorState } from "@repo/ui/blocks/shell/error-state";
 import { PageHeader } from "@repo/ui/blocks/shell/page-header";
 import { Avatar, AvatarFallback } from "@repo/ui/components/shell/avatar";
-import { Button, buttonVariants } from "@repo/ui/components/shell/button";
+import { Button } from "@repo/ui/components/shell/button";
 import {
   Card,
   CardAction,
   CardDescription,
+  CardFooter,
   CardHeader,
   CardPanel,
-  CardTitle,
 } from "@repo/ui/components/shell/card";
+import { Skeleton } from "@repo/ui/components/shell/skeleton";
 import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import { PageBody } from "@repo/ui/containers/shell/page-body";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 import { errors } from "@repo/ui/content/errors";
 
+import { whenLabel } from "@admin/lib/activity";
 import { api } from "@admin/lib/api";
 import { initialsOf } from "@admin/lib/initials";
-import { usersQuery } from "@admin/lib/users-query";
+import { NEWEST_USERS_COUNT, newestUsersQuery } from "@admin/lib/users-query";
 
 // The convention every admin screen follows, written once here so a feature module can
 // copy it: describe the request as `queryOptions(...)`, prefetch it in the route's
@@ -50,183 +51,248 @@ const healthQuery = queryOptions({
 });
 
 // The dashboard at `/`: the api's health, the user count, and the five newest sign-ups.
-// Both requests are ones the app already makes — `GET /health` and `GET /admin/users` —
-// so the overview adds no api route. `createFileRoute("/")` is generated from this file's
-// path under src/routes/; the router plugin writes the id, so never rename it by hand.
+// Two requests, `GET /health` and `GET /admin/users?limit=5&sortBy=createdAt&sortDirection=desc`.
+// The api sorts and counts: the answer holds the five newest rows and `total`, the count
+// of every account, so the overview fetches five rows to show five.
+// `createFileRoute("/")` is generated from this file's path under src/routes/; the router
+// plugin writes the id, so never rename it by hand.
 //
-// `ensureQueryData` in the loader means both requests start while the route is still
-// resolving, and `defaultPreload: "intent"` starts them on hover. By the time the
-// component mounts the cache is warm, so `useQuery` below returns data on its first
-// render instead of flashing a skeleton. A cached, unexpired entry skips the fetch.
+// The loader starts both requests and awaits neither. `prefetchQuery` never throws, so a
+// down api cannot hold the first paint or swap the page for an error screen: the page
+// paints at once, and each card shows its own skeleton, then its data or its own failure.
+// Starting them here rather than on mount still buys the head start `defaultPreload:
+// "intent"` gives on hover, and a cached, unexpired entry skips the fetch.
 export const Route = createFileRoute("/")({
-  loader: ({ context }) =>
-    Promise.all([
-      context.queryClient.ensureQueryData(healthQuery),
-      context.queryClient.ensureQueryData(usersQuery),
-    ]),
+  loader: ({ context }) => {
+    void context.queryClient.prefetchQuery(healthQuery);
+    void context.queryClient.prefetchQuery(newestUsersQuery);
+  },
   component: Dashboard,
   errorComponent: DashboardError,
 });
 
-/** How many sign-ups the overview lists. */
-const NEWEST_COUNT = 5;
+/** One line that says a card's request failed, with the error's own message under it. */
+function CardFailure({ label, error }: { label: string; error: Error }) {
+  return (
+    <div className="flex flex-col items-start gap-1.5" role="alert">
+      <StatusPill label={label} tone="bad" />
+      <p className="text-muted-foreground text-xs">{error.message}</p>
+    </div>
+  );
+}
+
+function HealthCard() {
+  const queryClient = useQueryClient();
+  const health = useQuery(healthQuery);
+  const status = health.data?.status;
+
+  let body;
+  if (health.isPending) {
+    body = (
+      <div className="flex flex-col gap-2" aria-busy="true">
+        <Skeleton className="h-6 w-28" />
+        <Skeleton className="h-3 w-44" />
+        <p className="text-muted-foreground text-xs">Checking…</p>
+      </div>
+    );
+  } else if (health.isError) {
+    body = (
+      <div className="flex flex-col items-start gap-1.5" role="alert">
+        <StatusPill label="Unreachable" tone="bad" />
+        <p className="text-muted-foreground text-xs">
+          The api did not answer <code className="font-mono">/health</code>.
+          Retry, or check the api logs.
+        </p>
+      </div>
+    );
+  } else {
+    body = (
+      <div className="flex flex-col items-start gap-1.5">
+        {/* "ok" is the one healthy answer; anything else is worth a second look,
+            so it takes the `warn` tone rather than a quiet neutral one. */}
+        {status === "ok" ? (
+          <StatusPill label="Healthy" tone="ok" />
+        ) : (
+          <StatusPill label={status ?? "Unknown"} tone="warn" />
+        )}
+        <p className="text-muted-foreground text-xs">
+          Checked {new Date(health.dataUpdatedAt).toLocaleTimeString()}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>API health</CardDescription>
+        <CardAction>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            aria-label="Check the api again"
+            loading={health.isFetching}
+            // Invalidation, not `refetch()`: marking the key stale refreshes every screen
+            // holding it, and it is the same call a mutation's `onSuccess` makes.
+            onClick={() =>
+              queryClient.invalidateQueries({ queryKey: healthQuery.queryKey })
+            }
+          >
+            <RefreshCwIcon />
+          </Button>
+        </CardAction>
+      </CardHeader>
+      <CardPanel className="pt-0">{body}</CardPanel>
+    </Card>
+  );
+}
+
+function UsersCard() {
+  const users = useQuery(newestUsersQuery);
+
+  let body;
+  if (users.isPending) {
+    body = (
+      <div className="flex flex-col gap-2" aria-busy="true">
+        <Skeleton className="h-8 w-24" />
+        <Skeleton className="h-3 w-40" />
+      </div>
+    );
+  } else if (users.isError) {
+    body = <CardFailure label="Not loaded" error={users.error} />;
+  } else {
+    body = (
+      <div className="flex flex-col gap-1">
+        <p className="text-3xl font-semibold tracking-tight tabular-nums">
+          {users.data.total.toLocaleString()}
+        </p>
+        <p className="text-muted-foreground text-xs">
+          Every account in this project.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>Users</CardDescription>
+      </CardHeader>
+      <CardPanel className="flex-1 pt-0">{body}</CardPanel>
+      <CardFooter>
+        <Link
+          to="/users"
+          className="flex items-center gap-1 text-sm font-medium hover:underline"
+        >
+          Open users
+          <ArrowRightIcon className="size-3.5" />
+        </Link>
+      </CardFooter>
+    </Card>
+  );
+}
+
+function NewestCard() {
+  const users = useQuery(newestUsersQuery);
+  // The fetch time, not `Date.now()`, so the render stays pure.
+  const now = new Date(users.dataUpdatedAt);
+
+  let body;
+  if (users.isPending) {
+    body = (
+      <ul className="flex flex-col gap-3" aria-busy="true">
+        {Array.from({ length: NEWEST_USERS_COUNT }, (_, index) => (
+          <li key={index} className="flex items-center gap-3">
+            <Skeleton className="size-7 rounded-full" />
+            <div className="flex flex-col gap-1.5">
+              <Skeleton className="h-3 w-28" />
+              <Skeleton className="h-3 w-20" />
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  } else if (users.isError) {
+    body = <CardFailure label="Not loaded" error={users.error} />;
+  } else if (users.data.users.length === 0) {
+    body = (
+      <p className="text-muted-foreground text-sm">Nobody has signed up yet.</p>
+    );
+  } else {
+    // The api answers newest first (`sortBy=createdAt&sortDirection=desc`), so the rows
+    // render in the order they arrive.
+    body = (
+      <ul className="flex flex-col gap-3">
+        {users.data.users.map((user) => (
+          <li key={user.id} className="flex items-center gap-3">
+            <Avatar className="size-7">
+              <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
+            </Avatar>
+            <div className="min-w-0 flex-1">
+              <p
+                dir="auto"
+                title={user.name}
+                className="truncate text-sm font-medium"
+              >
+                {user.name}
+              </p>
+              <time
+                dateTime={user.createdAt}
+                className="text-muted-foreground block text-xs tabular-nums"
+              >
+                {whenLabel(user.createdAt, now, { withTime: false })}
+              </time>
+            </div>
+          </li>
+        ))}
+      </ul>
+    );
+  }
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardDescription>Newest sign-ups</CardDescription>
+      </CardHeader>
+      <CardPanel className="pt-0">{body}</CardPanel>
+    </Card>
+  );
+}
 
 function Dashboard() {
-  const queryClient = useQueryClient();
-  // The loader already resolved both, so `data` is present on the first render. The hooks
-  // are still what the component reads, because they subscribe: an invalidation anywhere
-  // in the app re-renders this screen, which a value returned from the loader would not.
-  const health = useQuery(healthQuery);
-  const users = useQuery(usersQuery);
-
-  // The api returns at most 100 users and promises no order, so the newest five are
-  // picked here. With more than 100 accounts the list is the newest of the first page.
-  const newest = useMemo(
-    () =>
-      (users.data?.users ?? [])
-        .toSorted(
-          (left, right) =>
-            new Date(right.createdAt).getTime() -
-            new Date(left.createdAt).getTime()
-        )
-        .slice(0, NEWEST_COUNT),
-    [users.data]
-  );
-
-  const status = health.data?.status;
-  const refreshing = health.isFetching || users.isFetching;
-
   return (
     // No `detail` prop here: the overview has nothing to select, so PageLayout renders a
     // single column. /users is the screen that passes one.
     <PageLayout>
-      <PageHeader
-        title="Overview"
-        actions={
-          <Button
-            variant="outline"
-            size="sm"
-            loading={refreshing}
-            // Invalidation, not `refetch()`: marking the keys stale refreshes every screen
-            // holding these queries, and it is the same call a mutation's `onSuccess` makes.
-            onClick={() =>
-              Promise.all([
-                queryClient.invalidateQueries({
-                  queryKey: healthQuery.queryKey,
-                }),
-                queryClient.invalidateQueries({
-                  queryKey: usersQuery.queryKey,
-                }),
-              ])
-            }
-          >
-            <RefreshCwIcon />
-            Refresh
-          </Button>
-        }
-      />
+      <PageHeader title="Overview" />
 
       <PageBody>
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Card>
-            <CardHeader>
-              <CardDescription>API health</CardDescription>
-              <CardTitle className="flex flex-wrap items-center gap-2">
-                {/* "ok" is the one healthy answer; anything else is worth a second look,
-                    so it takes the `warn` tone rather than a quiet neutral one. */}
-                {status === "ok" ? (
-                  <StatusPill label="Healthy" tone="ok" />
-                ) : (
-                  <StatusPill label={status ?? "Unknown"} tone="warn" />
-                )}
-                <span className="text-muted-foreground text-sm font-normal">
-                  {health.dataUpdatedAt === 0
-                    ? null
-                    : `Checked ${new Date(health.dataUpdatedAt).toLocaleTimeString()}`}
-                </span>
-              </CardTitle>
-            </CardHeader>
-            <CardPanel className="text-muted-foreground pt-0 text-xs">
-              <code className="font-mono">GET /health</code>, typed by the route
-              file in apps/api through <code className="font-mono">hc</code>.
-            </CardPanel>
-          </Card>
-
-          <Card>
-            <CardHeader>
-              <CardDescription>Users</CardDescription>
-              <CardTitle className="text-3xl font-semibold tracking-tight tabular-nums">
-                {users.data?.total.toLocaleString() ?? "—"}
-              </CardTitle>
-            </CardHeader>
-            <CardPanel className="text-muted-foreground pt-0 text-xs">
-              Every account in this project.
-            </CardPanel>
-          </Card>
+        {/* Each card reads its own query and owns its own loading and failure, so one
+            slow or failed request never blanks the other two. The users and newest
+            cards share one request. `grid-cols-1` gives the single column a zero
+            minimum, so a long name truncates inside its card instead of widening
+            every card past a phone screen. */}
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
+          <HealthCard />
+          <UsersCard />
+          <NewestCard />
         </div>
-
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-sm">Newest sign-ups</CardTitle>
-            <CardAction>
-              <Link
-                to="/users"
-                className={buttonVariants({ variant: "ghost", size: "sm" })}
-              >
-                View all
-              </Link>
-            </CardAction>
-          </CardHeader>
-          <CardPanel className="px-0 pt-0 pb-2">
-            {newest.length === 0 ? (
-              <p className="text-muted-foreground px-6 py-4 text-sm">
-                Nobody has signed up yet.
-              </p>
-            ) : (
-              <ul className="divide-border divide-y">
-                {newest.map((user) => (
-                  <li
-                    key={user.id}
-                    className="flex items-center gap-3 px-6 py-2.5"
-                  >
-                    <Avatar className="size-7">
-                      <AvatarFallback>{initialsOf(user.name)}</AvatarFallback>
-                    </Avatar>
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium">
-                        {user.name}
-                      </p>
-                      <p className="text-muted-foreground truncate text-xs">
-                        {user.email}
-                      </p>
-                    </div>
-                    <time
-                      dateTime={user.createdAt}
-                      className="text-muted-foreground shrink-0 text-xs tabular-nums"
-                    >
-                      {new Date(user.createdAt).toLocaleDateString()}
-                    </time>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </CardPanel>
-        </Card>
       </PageBody>
     </PageLayout>
   );
 }
 
-// A down api is the ordinary case in dev, not an exception worth a blank screen. The
-// route's `errorComponent` catches the loader's throw, and the retry re-runs the loader.
+// A real render failure, not a down api: the cards above catch every request failure
+// themselves, so this boundary only sees a throw from rendering. The retry re-runs the
+// match in place.
 function DashboardError({ error, reset }: ErrorComponentProps) {
   return (
     <PageLayout>
       <PageHeader title="Overview" />
       <ErrorState
         code={errors.renderFailure.code}
-        title="The api did not answer"
-        description="Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev)."
+        title={errors.renderFailure.title}
+        description={errors.renderFailure.description}
         detail={error instanceof Error ? error.message : undefined}
         primaryAction={{
           label: errors.renderFailure.retryLabel,

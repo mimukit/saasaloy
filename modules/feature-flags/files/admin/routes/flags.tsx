@@ -23,11 +23,11 @@ import { api } from "@admin/lib/api";
 // and no page width of its own. The toggle list is an editor, not a list of records, so it
 // sits in PageBody rather than in a DataTable.
 //
-// Every value on this screen comes from `GET /flags`, which reads the database directly. The
-// published kv document is deliberately up to ~70 seconds behind, and showing an operator a
-// stale copy of the switch they just moved is the failure this whole split exists to
-// prevent. The cost is that the number here can be *ahead* of what a live request sees, for
-// about a minute after a toggle. That is the right way round.
+// Every value on this screen comes from `GET /admin/flags`, which reads the database
+// directly. The published kv document is deliberately up to ~70 seconds behind, and showing
+// an operator a stale copy of the switch they just moved is the failure this whole split
+// exists to prevent. The cost is that the number here can be *ahead* of what a live request
+// sees, for about a minute after a toggle. That is the right way round.
 
 interface FlagsPayload {
   flags: {
@@ -50,7 +50,7 @@ interface FlagsPayload {
 const flagsQuery = queryOptions({
   queryKey: ["flags"],
   queryFn: async (): Promise<FlagsPayload> => {
-    const response = await api.flags.$get();
+    const response = await api.admin.flags.$get();
     if (!response.ok) {
       throw new Error("The api refused the flag list.");
     }
@@ -169,18 +169,18 @@ function describeWrite(input: Write): { title: string; description: string } {
 
 function sendWrite(input: Write) {
   if (input.kind === "global") {
-    return api.flags[":key"].$put({
+    return api.admin.flags[":key"].$put({
       json: input.value,
       param: { key: input.key },
     });
   }
   if (input.kind === "override") {
-    return api.flags[":key"].tenants[":tenantId"].$put({
+    return api.admin.flags[":key"].tenants[":tenantId"].$put({
       json: input.value,
       param: { key: input.key, tenantId: input.tenantId },
     });
   }
-  return api.flags[":key"].tenants[":tenantId"].$delete({
+  return api.admin.flags[":key"].tenants[":tenantId"].$delete({
     param: { key: input.key, tenantId: input.tenantId },
   });
 }

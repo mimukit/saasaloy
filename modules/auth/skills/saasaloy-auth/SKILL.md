@@ -24,7 +24,9 @@ Everything the two share (the adapter, the secret, `trustedOrigins`, the first-u
 
 **`adminAuth` refuses a user outside the admin group.** The admin instance registers `audience("admin", { roles: ADMIN_APP_ROLES })`, whose `session.create.before` hook refuses to open a session for a user whose role is not in the list. The answer is Better Auth's own `INVALID_EMAIL_OR_PASSWORD` ("Invalid email or password"), so the admin login tells an attacker nothing about which addresses hold an account. The `accounts` table is shared, so an admin signs in on the admin app with the same email and password the account uses on the client side.
 
-**The client instance refuses every admin endpoint.** Both instances keep the `admin()` plugin, because it writes the default `"user"` role, types `user.role` and refuses a banned account at sign-in. On `auth`, `clientAdminGuard()` (`packages/auth/src/plugins/client-admin-guard.ts`) answers 403 `ADMIN_SESSION_REQUIRED` on every `/auth/admin/*` path. It matches the path prefix, so an endpoint a Better Auth bump adds is refused too. The same endpoints answer on `/admin/auth/admin/*`, behind the admin session and the rank guard below.
+**The client instance refuses every admin endpoint.** Both instances keep the `admin()` plugin, because it writes the default `"user"` role, types `user.role` and refuses a banned account at sign-in. On `auth`, `clientAdminGuard()` (`packages/auth/src/plugins/client-admin-guard.ts`) answers 403 `ADMIN_SESSION_REQUIRED` on every `/auth/admin/*` path. It matches the path prefix, so an endpoint a Better Auth bump adds is refused too.
+
+**The admin forward closes the same endpoints over HTTP.** `adminAuthRoute` in `apps/api/src/routes/auth.ts` answers 404 on every `/admin/auth/admin/*` path, reads and impersonation included, before it forwards to `adminAuth.handler`. It decodes the path and folds case and repeated slashes, so an encoded path gets the same 404. No browser code calls these endpoints, and an open `set-role` or `ban-user` would be a staff write with no audit row, under `/admin/auth/*` where the `admin` module's audit coverage test cannot see it (issue #310). Server code still reaches them: an api route under `/admin/` calls `adminAuth.api.*` with the caller's headers inside `withAuthScope`, and `adminAuthWrite` from the `admin` module when it changes something. That call runs the admin session check and the rank guard below.
 
 **`/admin/auth/*` is reserved.** The `auth` module mounts `adminAuthRoute` at `/admin/auth` with a second `chained-route` patch on `base`, beside `authRoute` at `/auth`. The path sits under `/admin` so one edge rule (WAF, Access, a log filter) covers the whole admin group on the api. A middleware a project adds on `/admin/*` must skip `/admin/auth/*`, or the sign-in endpoint itself demands a session. A project without the `admin` module still has the `/admin/auth` route; nothing calls it.
 
@@ -227,7 +229,7 @@ Each gate returns the session, so the caller reads `session.user.id` without a s
 
 `AuthDbBindings` is whichever binding shape the installed driver declares, so this route is one file under both drivers.
 
-**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `auth.admin.setRole({ userId, role: "admin" })` on the admin client writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
+**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `adminAuth.api.setRole({ body: { userId, role: "admin" }, headers })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
 
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
@@ -240,7 +242,7 @@ If you do hand-write a deny, write the body out rather than importing a helper: 
 
 Every helper wraps `getSession({ headers })` on the instance it reads, so both httpOnly cookies ride along on `c.req.raw` automatically and the instance reads only its own. No route imports `better-auth` (ADR 0020); everything goes through `@repo/auth/server`.
 
-Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way.
+Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way: it lists `adminGate` before its query validator, so a signed-out caller with a bad `?limit=` gets 401, not 400.
 
 **The gate is the api's, not the browser's.** `apps/admin` also refuses an account outside `ADMIN_APP_ROLES`, in `beforeLoad`. That guard stops the SPA from asking; it cannot stop `curl`. A route that skips `requireAdmin` because the admin app already checks is open to anyone holding any session cookie.
 
@@ -296,13 +298,13 @@ function siteRoles() {
 ```
 
 3. Open each api route support may call with `requireAdminApp(c)`. Every `requireAdmin` route keeps refusing support with 403.
-4. Grant the role as a superadmin: `auth.admin.setRole({ userId, role: "support" })` from the admin app. Only a superadmin may grant a role in `ADMIN_APP_ROLES`.
+4. Grant the role as a superadmin, through an api route under `/admin/` that calls `adminAuth.api.setRole({ body: { userId, role: "support" }, headers: c.req.raw.headers })` inside `adminAuthWrite`. Only a superadmin may grant a role in `ADMIN_APP_ROLES`. The browser cannot call `/admin/auth/admin/set-role`: the forward answers 404.
 
 Support is then in the admin group for the rank guard too: an `admin` may not change a support account, and only a superadmin may.
 
 ### Rank: superadmin owns the admin group
 
-`adminAc` gives `admin` and `superadmin` the same `set-role`, so the `admin()` plugin alone would let an `admin` promote anyone to `superadmin`. `rankGuard()` (`packages/auth/src/plugins/rank-guard.ts`) runs before every `/admin/*` endpoint on `adminAuth` and asks `rankDenial()` in `authorize.ts`. In order:
+`adminAc` gives `admin` and `superadmin` the same `set-role`, so the `admin()` plugin alone would let an `admin` promote anyone to `superadmin`. `rankGuard()` (`packages/auth/src/plugins/rank-guard.ts`) runs before every `/admin/*` endpoint on `adminAuth`, on an `adminAuth.api.*` call with the caller's headers as well as over HTTP, and asks `rankDenial()` in `authorize.ts`. Over HTTP the forward already answers 404 on those paths, so in practice the guard runs on the api's own calls. In order:
 
 - **Impersonation is refused for everyone**, `superadmin` included: `/admin/impersonate-user` gets 403 "impersonation is not available between the client and admin sessions". An impersonated session would be an admin-audience row for a client account, which the split forbids; without this refusal the admin sign-in hook would answer the call with a wrong-credentials message. Cross-audience impersonation is out of scope, and `auth` refuses every `/admin/*` path anyway.
 - **A caller who is not `superadmin` may read** (`list-users`, `get-user`, `list-user-sessions`, `has-permission`) and may change client accounts.
@@ -333,7 +335,7 @@ needs no quotes: Postgres reserves `user`, not `users`.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role is read off the user row, and `cookieCache` is off (see the last boundary below). An account that is already signed in on the admin session needs no re-login. An account promoted from `user` has no admin session yet: it signs in on the admin app, because `adminAuth` refused it before the promotion. Demoting an account works the other way: its admin session stays in the table, but every role gate and the admin app's guard refuse it from the next request, and the admin app shows the refusal page.
 
-Once one superadmin exists, promote the rest through the API instead of SQL: `auth.admin.setRole({ userId, role: "admin" })` on the admin client, which calls `/admin/auth/admin/set-role`. The server authorizes it against the caller's own role and the rank guard above, so only a superadmin may grant `admin` or `superadmin`. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that own the admin group and may cross an organization boundary. The plugin also carries `listUsers`, `banUser` and friends on the same namespace. `impersonateUser` is there too, and the rank guard refuses it.
+Once one superadmin exists, promote the rest through the API instead of SQL: an api route under `/admin/` that calls `adminAuth.api.setRole({ body: { userId, role: "admin" }, headers: c.req.raw.headers })` inside `adminAuthWrite`, so the change leaves an audit row. `/admin/auth/admin/set-role` itself answers 404 over HTTP. The call authorizes against the caller's own role and the rank guard above, so only a superadmin may grant `admin` or `superadmin`. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that own the admin group and may cross an organization boundary. The plugin also carries `listUsers`, `banUser` and friends on `adminAuth.api`. `impersonateUser` is there too, and the rank guard refuses it.
 
 **A project that installed auth before this shipped needs a migration.** The four new `users` fields and `sessions.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is neither site role, so the guard denies them until you promote one.
 
@@ -403,7 +405,7 @@ await client.signIn.email({ email, password });
 
 `fetchOptions: { credentials: "include" }` is baked into both. The calling origin must be in `CORS_ORIGINS` (api's spine) for the cookie to be set and sent cross-origin.
 
-`adminClient()` rides on the admin client only, mirroring the server's `admin()`, because its endpoints answer only on `/admin/auth`. That is what types `session.user.role` and puts `auth.admin.*` on the admin app's client. Handing those methods to a browser grants nothing; the server authorizes every call. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
+`adminClient()` rides on the admin client only, mirroring the server's `admin()`. That is what types `session.user.role`. It also puts `auth.admin.*` on the admin app's client, but the api's forward answers 404 to every `/admin/auth/admin/*` path, so no browser code calls those methods. A staff screen calls an api route under `/admin/` instead, which writes the audit row. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
 
 ## Wire-up: the sign-in and sign-up blocks
 

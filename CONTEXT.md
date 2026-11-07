@@ -370,6 +370,10 @@ _Avoid: user file, editable file._
 ### Seed file
 A base-template file the owner is meant to rewrite — `apps/web/DESIGN.md`, `README.md`, `saasaloy.json`, the landing page and its copy. Listed in `_saasaloy-base.json`'s `seedFiles`, recorded in the manifest and never updated, however far it drifts. A seed the template moved stays in `retiredSeedFiles`, so a project made before the move keeps its copy at the old path instead of losing it to a removal.
 
+### Module seed file
+A module file entry marked `"seed": true` in `files[]` or `scaffolds[].files[]`: written once by `add` or backfill, then the project's. The manifest records it with its owning module and `seed: true`. `saasaloy update` never overwrites or merges it and writes it again only when it is missing. `saasaloy remove` deletes it while its hash still matches and keeps one the project changed, with a warning naming the path. A managed file imports its extension point from one, at `apps/admin/src/extend/<name>.ts(x)` or `apps/api/src/extend/<name>.ts`, so the project edits the seed and the managed file stays clean ([ADR 0059](docs/adr/0059-adr-a-module-file-may-be-a-seed-written-once-2026-11-04.md)).
+_Avoid: extension file, user file. A base [seed file](#seed-file) is never restored; a module seed file is._
+
 ### AI-assisted merge
 The structured, agent-consumable merge plan `saasaloy update` writes to stdout, or to `--out <path>`, for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
 

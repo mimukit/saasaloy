@@ -99,7 +99,12 @@ const FILE_ACTION_LABEL: Record<FileRemoveAction, string> = {
 // Under --yes the confirm loop never runs (see the `if (!opts.yes)` gate below), so a
 // drifted file always survives untracked rather than pausing for a prompt — label it
 // accordingly instead of implying a confirmation that won't happen.
-function fileActionLabel(action: FileRemoveAction, yes: boolean): string {
+function fileActionLabel(file: PlannedRemoveFile, yes: boolean): string {
+  const { action } = file;
+  // A seed file the project changed is kept without asking (#310, ADR 0059).
+  if (action === "drift" && file.seed) {
+    return pc.yellow("seed, changed → kept (untracked)");
+  }
   if (action === "drift" && yes) {
     return pc.yellow("drift → kept (untracked)");
   }
@@ -153,17 +158,22 @@ function summarizeRemovePlan(
   const lines = [`will remove: ${pc.cyan(name)}`, ""];
   for (const file of plan.files) {
     lines.push(
-      `  ${fileActionLabel(file.action, yes)}  ${file.target}${gatedNote(file.module, file.gatedOn)}`
+      `  ${fileActionLabel(file, yes)}  ${file.target}${gatedNote(file.module, file.gatedOn)}`
     );
   }
   const toDelete = plan.files.filter((f) => f.action === "delete").length;
-  const drifted = plan.files.filter((f) => f.action === "drift").length;
+  const drifted = plan.files.filter(
+    (f) => f.action === "drift" && !f.seed
+  ).length;
+  const seedKept = plan.files.filter(
+    (f) => f.action === "drift" && f.seed
+  ).length;
   const missing = plan.files.filter((f) => f.action === "missing").length;
   lines.push("");
   const driftNote = yes ? "kept untracked" : "need confirmation";
   lines.push(
     pc.dim(
-      `${toDelete} file(s) to delete, ${drifted} drifted (${driftNote}), ${missing} already missing`
+      `${toDelete} file(s) to delete, ${drifted} drifted (${driftNote}), ${missing} already missing${seedKept > 0 ? `, ${seedKept} changed seed file(s) kept` : ""}`
     )
   );
   note(wrapForNote(lines.join("\n")), "Plan");
@@ -312,7 +322,7 @@ export async function runRemove(argv: string[]): Promise<number> {
         }
         note(
           renderDeleteDiff(file),
-          `${fileActionLabel(file.action, opts.yes)}  ${file.target}`
+          `${fileActionLabel(file, opts.yes)}  ${file.target}`
         );
       }
       // A reversal is a destructive edit to someone else's file, so it previews like one.
@@ -342,7 +352,7 @@ export async function runRemove(argv: string[]): Promise<number> {
     const deleteDrifted = new Set<string>();
     if (!opts.yes) {
       for (const file of plan.files) {
-        if (file.action !== "drift") {
+        if (file.action !== "drift" || file.seed) {
           continue;
         }
         const proceed = await confirm({
@@ -471,6 +481,13 @@ export async function runRemove(argv: string[]): Promise<number> {
           `${blockLines}\n\n${pc.dim("The wire-up you added by hand is not reversed — nothing recorded which page you put it on. Take the import and its tag out yourself, or the build fails.")}`
         ),
         "Wire-up left behind"
+      );
+    }
+
+    // A seed file is the project's once written, so a changed one stays (#310).
+    if (result.seedSurvivors.length > 0) {
+      log.warn(
+        `Kept ${result.seedSurvivors.length} seed file(s) the project changed, now untracked: ${result.seedSurvivors.map((f) => f.target).join(", ")}. Delete them by hand if nothing imports them.`
       );
     }
 

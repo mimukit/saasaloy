@@ -3713,3 +3713,94 @@ describe("buildPlan — envOptional needs every declaring module", () => {
     expect(p.envOptional).toStrictEqual(["KV_KEY_PREFIX"]);
   });
 });
+
+// A module seed file (#310, ADR 0059): `add` writes it once and records it as a seed, in
+// `files[]` and in a scaffold alike, and a re-add leaves one already written as it stands.
+describe("module seed files", () => {
+  const SEED = "apps/api/src/extend/root.ts";
+
+  async function seedModule(): Promise<LoadedModule> {
+    return writeModule(
+      "api",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "apps/api",
+            aliases: { "@api": "apps/api/src" },
+            files: [
+              { path: "files/src/index.ts", target: "src/index.ts" },
+              {
+                path: "files/src/extend/root.ts",
+                target: "src/extend/root.ts",
+                seed: true,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        "files/src/index.ts": "export default {};\n",
+        "files/src/extend/root.ts": "export const wrappers = [];\n",
+      }
+    );
+  }
+
+  it("writes a seed file and records it as a seed in a manifest that validates", async () => {
+    const mod = await seedModule();
+    const manifest = emptyManifest();
+    const config = emptyConfig();
+
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    await expect(readFile(join(root, SEED), "utf-8")).resolves.toBe(
+      "export const wrappers = [];\n"
+    );
+    expect(manifest.managed[SEED]).toMatchObject({ module: "api", seed: true });
+    expect(manifest.managed["apps/api/src/index.ts"]?.seed).toBeUndefined();
+    await expect(validateManifest(manifest)).resolves.toMatchObject({
+      valid: true,
+    });
+  });
+
+  it("leaves a seed file the project changed out of a re-add", async () => {
+    const mod = await seedModule();
+    const manifest = emptyManifest();
+    const config = emptyConfig();
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+    await writeFile(join(root, SEED), "export const wrappers = [mine];\n");
+
+    const again = await plan({
+      install: ["api"],
+      modules: [mod],
+      config,
+      manifest,
+    });
+    await executePlan(again, root, config, manifest);
+
+    expect(again.files.map((f) => f.target)).not.toContain(SEED);
+    await expect(readFile(join(root, SEED), "utf-8")).resolves.toBe(
+      "export const wrappers = [mine];\n"
+    );
+  });
+
+  it("accepts `seed` on a files[] entry and a scaffold entry in the schema", async () => {
+    const mod = await seedModule();
+    await expect(
+      validateRegistryItem({
+        ...mod.item,
+        files: [{ path: "files/x.ts", target: "@api/x.ts", seed: true }],
+      })
+    ).resolves.toMatchObject({ valid: true });
+  });
+});

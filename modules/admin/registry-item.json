@@ -6,9 +6,9 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.9.0"
   },
-  "dependsOn": ["api", "auth", "shell"],
+  "dependsOn": ["api", "database", "auth", "shell"],
   "dependencies": [],
   "envVars": {
     "PUBLIC_API_URL": "Origin the admin SPA calls for api and auth requests (e.g. https://api.x.com). Falls back to http://localhost:4000 in dev. The `PUBLIC_` prefix is what vite.config.ts exposes to the browser bundle."
@@ -16,6 +16,9 @@
   "envServices": {
     "default": ["admin"]
   },
+  "removeWarnings": [
+    "The deployed audit_events table survives this removal. It is the only record of which staff member changed what, so export it before you run db:generate and apply the resulting drop migration."
+  ],
   "patches": [
     {
       "file": "apps/api/src/index.ts",
@@ -26,6 +29,28 @@
       "import": {
         "name": "adminUsers",
         "from": "./routes/admin-users"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin/members",
+      "call": "adminMembers",
+      "import": {
+        "name": "adminMembers",
+        "from": "./routes/admin-members"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/admin/audit-events",
+      "call": "adminAudit",
+      "import": {
+        "name": "adminAudit",
+        "from": "./routes/admin-audit"
       }
     },
     {
@@ -75,12 +100,107 @@
       "when": {
         "installed": ["command"]
       }
+    },
+    {
+      "file": "apps/api/src/lib/audit-actions.ts",
+      "kind": "plugin-array",
+      "exportName": "AUDIT_ACTIONS",
+      "arrayProp": "actions",
+      "call": "adminAuditActions",
+      "import": {
+        "name": "adminAuditActions",
+        "from": "../audit/admin"
+      }
     }
   ],
   "files": [
     {
       "path": "files/api/routes/admin-users.ts",
       "target": "@api/routes/admin-users.ts"
+    },
+    {
+      "path": "files/api/routes/admin-users.vitest.ts",
+      "target": "@api/routes/admin-users.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/api/routes/admin-gate.vitest.ts",
+      "target": "@api/routes/admin-gate.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/api/lib/admin-write.ts",
+      "target": "@api/lib/admin-write.ts"
+    },
+    {
+      "path": "files/api/lib/changed-fields.ts",
+      "target": "@api/lib/changed-fields.ts"
+    },
+    {
+      "path": "files/api/lib/audit-actions.ts",
+      "target": "@api/lib/audit-actions.ts"
+    },
+    {
+      "path": "files/api/audit/admin.ts",
+      "target": "@api/audit/admin.ts"
+    },
+    {
+      "path": "files/api/routes/audit-coverage.vitest.ts",
+      "target": "@api/routes/audit-coverage.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/api/routes/admin-write.vitest.ts",
+      "target": "@api/routes/admin-write.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/db/schema/audit.sqlite.ts",
+      "target": "@db/schema/audit.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/audit.pg.ts",
+      "target": "@db/schema/audit.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/audit.ts",
+      "target": "@db/repositories/audit.ts"
+    },
+    {
+      "path": "files/api/routes/admin-members.ts",
+      "target": "@api/routes/admin-members.ts"
+    },
+    {
+      "path": "files/api/routes/admin-audit.ts",
+      "target": "@api/routes/admin-audit.ts"
+    },
+    {
+      "path": "files/api/lib/members.ts",
+      "target": "@api/lib/members.ts"
+    },
+    {
+      "path": "files/api/lib/audit-query.ts",
+      "target": "@api/lib/audit-query.ts"
+    },
+    {
+      "path": "files/api/routes/admin-members.vitest.ts",
+      "target": "@api/routes/admin-members.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/api/routes/admin-audit.vitest.ts",
+      "target": "@api/routes/admin-audit.test.ts",
+      "when": { "testing": true }
+    },
+    {
+      "path": "files/db/repositories/members.ts",
+      "target": "@db/repositories/members.ts"
+    },
+    {
+      "path": "files/db/seed/audit-events.ts",
+      "target": "@db/seed/slices/audit-events.ts"
     },
     {
       "path": "files/ui/styles/admin.css",
@@ -155,6 +275,11 @@
           "target": "src/components/app-shell.tsx"
         },
         {
+          "path": "files/src/extend/root.tsx",
+          "target": "src/extend/root.tsx",
+          "seed": true
+        },
+        {
           "path": "files/src/components/nav.ts",
           "target": "src/components/nav.ts"
         },
@@ -201,6 +326,26 @@
         {
           "path": "files/src/lib/users-query.ts",
           "target": "src/lib/users-query.ts"
+        },
+        {
+          "path": "files/src/routes/members.tsx",
+          "target": "src/routes/members.tsx"
+        },
+        {
+          "path": "files/src/routes/activity.tsx",
+          "target": "src/routes/activity.tsx"
+        },
+        {
+          "path": "files/src/lib/members-query.ts",
+          "target": "src/lib/members-query.ts"
+        },
+        {
+          "path": "files/src/lib/activity.ts",
+          "target": "src/lib/activity.ts"
+        },
+        {
+          "path": "files/src/lib/activity-query.ts",
+          "target": "src/lib/activity-query.ts"
         }
       ]
     }

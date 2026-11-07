@@ -9,7 +9,13 @@
 // plugin wires it up with no patch. Adding it to NAV_AREAS below is the separate, optional
 // step that puts it in the sidebar.
 
-import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
+import {
+  GaugeIcon,
+  HistoryIcon,
+  LayoutDashboardIcon,
+  ShieldIcon,
+  UsersIcon,
+} from "lucide-react";
 
 // The `to` values are checked against the generated route tree, so a nav entry pointing at
 // a route that does not exist fails `pnpm typecheck` instead of 404-ing at runtime. That is
@@ -40,6 +46,18 @@ export const NAV_AREAS = [
         items: [
           { to: "/", label: "Overview", icon: GaugeIcon, shortcut: "G O" },
           { to: "/users", label: "Users", icon: UsersIcon, shortcut: "G U" },
+          {
+            to: "/members",
+            label: "Members",
+            icon: ShieldIcon,
+            shortcut: "G M",
+          },
+          {
+            to: "/activity",
+            label: "Activity",
+            icon: HistoryIcon,
+            shortcut: "G A",
+          },
         ],
       },
     ],
