@@ -16,11 +16,17 @@ import { defineConfig } from "vitest/config";
 //   `*.vitest.ts`, so `pnpm test:modules` (`node --test` over `*.test.ts`) skips them, and
 //   the descriptor ships them as `*.test.ts`. They import only Vitest and the files beside
 //   them.
+// - `base-ui`: the tests for the base template's `packages/ui/src/lib` date modules. Every
+//   template file ships to projects, so these tests stay in this repo, in `test/base-ui/`,
+//   and import the template source by relative path. The source imports its neighbours as
+//   `@repo/ui/<layer>/<name>`, which nothing links here either, so the alias below points
+//   each one at the template's `packages/ui/src/<layer>/<name>.ts`.
 //
 // The root `test:base` script runs the template's `node:test` files and skips
 // `packages/tooling` and `packages/config`, so each file runs on the one runner it imports.
 const base = fileURLToPath(new URL("templates/base/", import.meta.url));
 const modules = fileURLToPath(new URL("../../modules/", import.meta.url));
+const baseUi = fileURLToPath(new URL("test/base-ui", import.meta.url));
 
 export default defineConfig({
   test: {
@@ -61,6 +67,23 @@ export default defineConfig({
           name: "db-scripts",
           environment: "node",
           include: ["database-*/files/scripts/**/*.vitest.ts"],
+        },
+      },
+      {
+        root: baseUi,
+        oxc: { tsconfig: false },
+        resolve: {
+          alias: [
+            {
+              find: /^@repo\/ui\/(.*)$/,
+              replacement: `${base}packages/ui/src/$1.ts`,
+            },
+          ],
+        },
+        test: {
+          name: "base-ui",
+          environment: "node",
+          include: ["**/*.test.ts"],
         },
       },
     ],

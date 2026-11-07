@@ -92,7 +92,7 @@ export function ShellSidebar({
     <Sidebar collapsible="icon" variant="inset">
       <SidebarHeader>
         <div className="flex h-10 items-center gap-2.5 px-1.5 group-data-[collapsible=icon]:px-0.5">
-          <BrandMark />
+          <BrandMark decorative />
           <div className="flex min-w-0 flex-col leading-tight group-data-[collapsible=icon]:hidden">
             <span className="truncate text-sm font-semibold">{siteName}</span>
             {subtitle === null ? null : (

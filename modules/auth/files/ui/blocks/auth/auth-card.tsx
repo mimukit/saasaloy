@@ -29,7 +29,7 @@ export function AuthCard({
   return (
     <div className="bg-card text-card-foreground border-border w-full max-w-sm rounded-2xl border p-6 shadow-xs/5 sm:p-7">
       <div className="mb-5 flex items-center gap-2.5">
-        <BrandMark />
+        <BrandMark decorative />
         <span className="text-sm font-semibold">{siteName}</span>
       </div>
       <h1 className="text-lg font-semibold tracking-tight">{title}</h1>
