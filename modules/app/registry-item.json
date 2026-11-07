@@ -94,6 +94,10 @@
           "target": "vite.config.ts"
         },
         {
+          "path": "files/tsr.config.json",
+          "target": "tsr.config.json"
+        },
+        {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
         },
@@ -124,6 +128,10 @@
         {
           "path": "files/src/lib/initials.ts",
           "target": "src/lib/initials.ts"
+        },
+        {
+          "path": "files/src/lib/contact.ts",
+          "target": "src/lib/contact.ts"
         },
         {
           "path": "files/src/components/app-shell.tsx",

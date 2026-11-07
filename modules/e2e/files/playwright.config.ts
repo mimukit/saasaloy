@@ -1,13 +1,18 @@
+import path from "node:path";
+
 import { defineConfig, devices } from "@playwright/test";
 
 import {
+  API_LOG,
   hasModule,
   installedApps,
+  PORTS,
   READY,
   readConfig,
   ROOT,
   SPEC_TAGS,
 } from "./lib/project.ts";
+import type { App } from "./lib/project.ts";
 
 // The browser suite's whole configuration, derived from `saasaloy.json` rather than
 // written out by hand. Two things come from that file.
@@ -20,8 +25,9 @@ import {
 // to catch.
 //
 // **Which apps are started.** `webServer` gets one entry per installed app on its pinned
-// dev port. Playwright owns those processes and kills every one it started, so a headless
-// run leaves nothing holding a port.
+// dev port, or on the port `E2E_<APP>_PORT` names (`lib/project.ts`). Playwright owns those
+// processes and kills every one it started, so a headless run leaves nothing holding a
+// port.
 //
 // The database is NOT set up here. `prepare.ts` does it, and the `e2e` script runs that
 // before `playwright test`, because the api Worker reads `apps/api/.env` when it boots — a
@@ -40,8 +46,28 @@ function uncollected(): RegExp | undefined {
     : undefined;
 }
 
+/**
+ * The command that starts `app` on its port for this run (`PORTS`, which `E2E_<APP>_PORT`
+ * moves). The `--port` flag wins over the app's own `vite.config.ts` or Astro default.
+ *
+ * The api's output also goes to `API_LOG`, through `lib/tee-log.ts`, for every project: a
+ * spec runs in a worker process and cannot read the `webServer` pipe, so a spec that needs
+ * what the api printed, such as a code the console SMS provider wrote, reads that file.
+ */
+function devCommand(app: App): string {
+  const dev = `pnpm --filter @repo/${app} dev --port ${String(PORTS[app])}`;
+  if (app !== "api") {
+    return dev;
+  }
+  const tee = path.relative(
+    ROOT,
+    path.resolve(import.meta.dirname, "lib/tee-log.ts")
+  );
+  return `node "${tee}" "${path.relative(ROOT, API_LOG)}" ${dev}`;
+}
+
 const webServer = installedApps(config).map((app) => ({
-  command: `pnpm --filter @repo/${app} dev`,
+  command: devCommand(app),
   cwd: ROOT,
   url: READY[app],
   // Astro's `astro dev` detaches itself when it detects an AI-agent environment, and a
@@ -50,7 +76,9 @@ const webServer = installedApps(config).map((app) => ({
   // `--background` stays the opt-in. Harmless for the two vite apps, which never detach.
   env: { ASTRO_DEV_BACKGROUND: "1" },
   // Off CI, attach to a `pnpm dev` you already have running rather than failing on a busy
-  // port. On CI nothing is running, and reusing would hide a start-up failure.
+  // port. On CI nothing is running, and reusing would hide a start-up failure. A reused
+  // api was not started through `lib/tee-log.ts`, so it writes no `API_LOG` unless you
+  // started it that way yourself: see "The api log" in the `saasaloy-e2e` skill.
   reuseExistingServer: !process.env.CI,
   // A cold `vite dev` in a fresh checkout compiles the whole graph on first request.
   timeout: 120_000,

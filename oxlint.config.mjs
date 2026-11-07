@@ -541,9 +541,12 @@ export default defineConfig({
     // `prepare.ts` and `global-teardown.ts` are node scripts: they report to stdout and
     // exit with a status the `e2e` script reads.
     //
+    // `modules/*/files/e2e/**` is the same workspace: a module such as `auth-phone` ships its
+    // own flow and helpers into it under `@e2e/`.
+    //
     // KEEP THIS LAST. oxlint lets the last matching override win.
     {
-      files: ["modules/e2e/files/**"],
+      files: ["modules/e2e/files/**", "modules/*/files/e2e/**"],
       plugins: ["vitest"],
       rules: {
         ...Object.fromEntries(

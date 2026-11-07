@@ -37,16 +37,33 @@ Steps 1 and 2 are a script rather than a `globalSetup` hook because of step 3. T
 | `apps/api` | 4000 | `api` is installed |
 | `apps/web` | 3000 | always, it is the base app |
 | `apps/admin` | 3001 | `admin` is installed |
+| `apps/app` | 3002 | `app` is installed |
 
 These are the project's pinned dev ports, the same ones in `AGENTS.md`. Off CI, `reuseExistingServer` is on, so a `pnpm dev` you already have running is used instead of a second one on a busy port. On CI it is off, because reusing would hide a start-up failure.
 
+`E2E_WEB_PORT`, `E2E_ADMIN_PORT`, `E2E_APP_PORT` and `E2E_API_PORT` move an app for one run, for a second checkout whose own dev servers hold the pinned ports: `E2E_API_PORT=4100 E2E_APP_PORT=3102 pnpm e2e`. The suite starts the app with `--port` and polls the new origin, and `lib/project.ts` throws on a value that is not a port. The apps' `.env` files must name the same origins, or the browser calls the wrong api: set `PUBLIC_API_URL` and `BETTER_AUTH_URL` to the api's new origin and list each moved app in `CORS_ORIGINS` in `packages/env/.env`, then run `pnpm env:setup`. Check that each port is free before the run. A busy port is reused off CI, and if another checkout holds it, the specs drive that checkout's app.
+
 Playwright waits on `http://localhost:4000/health` for the api, not on its origin. The Worker answers `GET /` with a 404 envelope, and Playwright reads any status at or above 400 as "not ready".
+
+## The api log
+
+Whenever the suite starts the api, it also writes the api's output to `packages/e2e/logs/api.log`, `API_LOG` in `lib/project.ts`. A spec runs in a worker process and cannot read the `webServer` pipe, so a spec that needs what the api printed reads this file. `auth-phone`'s journey reads the codes the console SMS provider prints there. Issue #303 (the e2e database guard and its CI recipe) builds on the same file and on `auth-phone`'s code reader, so keep the path and the file name as they are.
+
+`lib/tee-log.ts` does the copy: `node lib/tee-log.ts <log file> <command...>` runs the command and writes its output to the file and to the terminal. A shell `2>&1 | tee` does the same on macOS and Linux, but `tee` is not on Windows. The file starts empty on each run. `logs/` is gitignored in `packages/e2e/.gitignore`, and `pnpm --filter @repo/e2e clean` removes it.
+
+A reused api writes no log, because the suite did not start it. Off CI, if you keep your own api running for the suite, start it through the same script from the repo root:
+
+```sh
+node packages/e2e/lib/tee-log.ts packages/e2e/logs/api.log pnpm --filter @repo/api dev
+```
 
 ## Adding a flow
 
 1. Write `specs/<name>.spec.ts`.
 2. Wrap it in a `test.describe` that declares the modules it needs as tags.
 3. Add any new tag to `SPEC_TAGS` in `lib/project.ts`.
+
+A module can ship a flow of its own into this suite: a `files[]` row targets `@e2e/specs/<name>.spec.ts` under `"when": { "installed": ["e2e"] }`, and its helpers go to `@e2e/lib/`. `auth-phone` is the worked example. The tool repo's `scripts/e2e-tags.test.ts` reads those specs too.
 
 ```ts
 import { expect, test } from "@playwright/test";
@@ -84,6 +101,7 @@ Every **other** row a spec writes is unique, with `uniqueEmail()` from `lib/fixt
 | `waitlist.spec.ts` | `@waitlist` | A real browser fills the real form on `apps/web`, the island posts, and the route answers 201. |
 | `admin-login.spec.ts` | `@admin` `@auth` | The login form signs the seeded admin in, the guard redirects, and `GET /admin/users` answers 200. |
 | `admin-unauthenticated.spec.ts` | `@admin` `@auth` | The same guarded route answers 401 with the api's error envelope when nobody is signed in. |
+| `auth-phone-journey.spec.ts` | `@app` `@auth-phone` `@sms-console` | Shipped by `auth-phone`. A new number signs up with the SMS code, sets a password, signs in, and resets the password with a code, on `apps/app`. |
 
 `admin-unauthenticated.spec.ts` is its own flow rather than a second assertion, because the admin SPA's guard runs in the browser and would hide a server that stopped checking.
 

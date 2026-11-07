@@ -13,13 +13,12 @@ import { errors } from "@repo/ui/content/errors";
 
 import { AppShell } from "@app/components/app-shell";
 import { loadSession } from "@app/lib/auth";
+import { AUTH_PATHS } from "@app/lib/redirect";
 
-// The one guard for the whole app. Every route but the two auth screens needs a session;
-// any signed-in account passes. A screen that needs a role checks it itself, and the api
-// checks it again on every call, so hiding a screen is never the only gate.
-
-/** The two screens an anonymous visitor may open. */
-const AUTH_PATHS = new Set(["/sign-in", "/sign-up"]);
+// The one guard for the whole app. Every route but the auth screens (`AUTH_PATHS` in
+// `src/lib/redirect.ts`) needs a session; any signed-in account passes. A screen that
+// needs a role checks it itself, and the api checks it again on every call, so hiding a
+// screen is never the only gate.
 
 /**
  * What every route's `beforeLoad` and `loader` is handed. `src/main.tsx` supplies the value
@@ -61,7 +60,7 @@ export const Route = createRootRouteWithContext<AppRouterContext>()({
 function RootLayout() {
   const { session } = Route.useRouteContext();
 
-  // The two auth screens render bare, centred on the shell canvas.
+  // The auth screens render bare, centred on the shell canvas.
   if (!session) {
     return (
       <ToastProvider>

@@ -20,7 +20,7 @@
 
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
-import { join } from "node:path";
+import { join, relative } from "node:path";
 import { describe, it } from "node:test";
 import { fileURLToPath } from "node:url";
 
@@ -46,13 +46,25 @@ export function usedTags(source: string): string[] {
   );
 }
 
+/** The spec folders: `e2e`'s own, and `files/e2e/specs/` in any module that ships one. */
+function specDirs(): string[] {
+  return [
+    SPECS,
+    ...readdirSync(MODULES)
+      .map((name) => join(MODULES, name, "files", "e2e", "specs"))
+      .filter((dir) => existsSync(dir)),
+  ];
+}
+
 function specSources(): { file: string; source: string }[] {
-  return readdirSync(SPECS)
-    .filter((file) => file.endsWith(".spec.ts"))
-    .map((file) => ({
-      file,
-      source: readFileSync(join(SPECS, file), "utf-8"),
-    }));
+  return specDirs().flatMap((dir) =>
+    readdirSync(dir)
+      .filter((file) => file.endsWith(".spec.ts"))
+      .map((file) => ({
+        file: relative(MODULES, join(dir, file)),
+        source: readFileSync(join(dir, file), "utf-8"),
+      }))
+  );
 }
 
 describe("e2e tag vocabulary", () => {
@@ -78,7 +90,7 @@ describe("e2e tag vocabulary", () => {
       for (const tag of usedTags(source)) {
         assert.ok(
           tags.includes(tag),
-          `specs/${file} uses "@${tag}", which SPEC_TAGS does not declare. An undeclared tag gates nothing, so the spec runs in a project without the module.`
+          `modules/${file} uses "@${tag}", which SPEC_TAGS does not declare. An undeclared tag gates nothing, so the spec runs in a project without the module.`
         );
       }
     }
