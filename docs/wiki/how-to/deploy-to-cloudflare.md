@@ -37,7 +37,7 @@ The command runs `packages/tooling/src/deploy-production.ts`. It stops at the fi
 5. **Smoke checks.** Each `SMOKE_CHECKS` row in `targets.ts` is requested on every custom domain of its service, three tries 5 seconds apart. The host comes from a `routes[]` entry with `custom_domain: true` in the Worker's `wrangler.jsonc`. A service with no custom domain gets no check, and the run says so.
 6. **Tag.** HEAD gets an annotated `deploy-<UTC yyyymmdd-hhmm>` tag, pushed to origin. The newest tag is what is live, and `git log <tag>..main` lists what the next deploy ships.
 
-A variable your shell exports wins over the value source, for both the check and the build. That is how CI passes values.
+A variable your shell exports wins over the value source, for both the check and the build. That is how CI passes the Cloudflare credentials. To deploy from GitHub Actions on every push to `main`, run `saasaloy add infra-ci-deploy`; its skill lists the repository secrets to set.
 
 What lands in the secrets file: the service's values, minus every `CLOUDFLARE_*` key, minus each key the Worker's `wrangler.jsonc` already sets in `vars`, minus empty values. An assets-only Worker gets no secrets file.
 

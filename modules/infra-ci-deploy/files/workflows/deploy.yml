@@ -1,0 +1,102 @@
+# Written by the saasaloy `infra-ci-deploy` module. It runs `pnpm deploy:production` on
+# every push to main, so each deploy leaves a run in the Actions tab and a deploy tag on
+# the commit. Every credential comes from a repository secret; the list is in
+# .agents/skills/saasaloy-infra-ci-deploy/SKILL.md.
+name: deploy
+
+on:
+  push:
+    branches: [main]
+  # A push that adds a migration stops at the migration gate. Read the SQL, then run this
+  # workflow by hand from the Actions tab with `migrate` checked.
+  workflow_dispatch:
+    inputs:
+      migrate:
+        description: Run the production migration first (pnpm deploy:production --migrate)
+        type: boolean
+        default: false
+
+# One deploy at a time, and never cancel one that has started: a cancelled deploy can
+# leave some Workers on the new commit and some on the old one.
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
+
+permissions:
+  # The deploy pushes a deploy tag when every Worker is live.
+  contents: write
+  # The CI gate reads the ci workflow's runs on this commit.
+  actions: read
+
+jobs:
+  deploy:
+    name: deploy
+    runs-on: ubuntu-latest
+    env:
+      CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+      CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+      # `local` (or unset) reads the production values from the ENV_PROD secret below;
+      # `infisical` reads them from Infisical with the machine identity.
+      ENV_SOURCE: ${{ secrets.ENV_SOURCE }}
+      INFISICAL_CLIENT_ID: ${{ secrets.INFISICAL_CLIENT_ID }}
+      INFISICAL_CLIENT_SECRET: ${{ secrets.INFISICAL_CLIENT_SECRET }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      # The whole history and every tag: the deploy finds the last deploy tag, and the
+      # migrations changed since it.
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      # No `version` key: the action reads `packageManager` from package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # The local source reads packages/env/.env.prod, which git ignores. The ENV_PROD
+      # secret holds that whole file.
+      - name: Write packages/env/.env.prod
+        if: env.ENV_SOURCE != 'infisical'
+        env:
+          ENV_PROD: ${{ secrets.ENV_PROD }}
+        run: |
+          if [ -z "$ENV_PROD" ]; then
+            echo "::error::Set the ENV_PROD repository secret to the contents of packages/env/.env.prod, or set ENV_SOURCE to infisical."
+            exit 1
+          fi
+          umask 077
+          printf '%s\n' "$ENV_PROD" > packages/env/.env.prod
+
+      - name: Install the Infisical CLI
+        if: env.ENV_SOURCE == 'infisical'
+        run: npm install --global @infisical/cli@0.44.9
+
+      # With the ci module installed, the deploy's CI gate needs ci.yml to have passed on
+      # this commit, and that run started with this push. Wait for it.
+      - name: Wait for the ci workflow
+        if: hashFiles('.github/workflows/ci.yml') != ''
+        run: |
+          for attempt in $(seq 1 30); do
+            run=$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json databaseId -q '.[0].databaseId')
+            if [ -n "$run" ]; then
+              gh run watch "$run" --exit-status --interval 15 > /dev/null
+              exit $?
+            fi
+            sleep 10
+          done
+          echo "::error::ci.yml has no run on $GITHUB_SHA after five minutes."
+          exit 1
+
+      # The deploy writes an annotated tag, and git refuses one with no identity.
+      - name: Set the git identity for the deploy tag
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: pnpm deploy:production
+        run: pnpm deploy:production ${{ inputs.migrate && '--migrate' || '' }}
