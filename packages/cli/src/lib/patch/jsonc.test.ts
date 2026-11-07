@@ -1,3 +1,5 @@
+import { readFile } from "node:fs/promises";
+import { parse } from "jsonc-parser";
 import { describe, expect, it } from "vitest";
 import {
   removeWranglerBinding,
@@ -465,3 +467,43 @@ function stripComments(text: string): string {
     .map((line) => line.replace(/\s*\/\/.*$/, ""))
     .join("\n");
 }
+
+describe("assets.run_worker_first on the web wrangler.jsonc", () => {
+  // The cms module routes /blog to the web Worker with two string patches. Without them a
+  // browser navigation to an on-demand page gets the assets layer's 404 page, because
+  // `not_found_handling: "404-page"` answers navigations before the Worker runs. The
+  // template file is the fixture, so a reshaped config fails here first.
+  const ROUTES = ["/blog", "/blog/*"].map((entry) => ({
+    bindingType: "assets.run_worker_first",
+    entry,
+  }));
+
+  it("adds both patterns under assets, and removes back to the original bytes", async () => {
+    const source = await readFile(
+      new URL(
+        "../../../templates/base/apps/web/wrangler.jsonc",
+        import.meta.url
+      ),
+      "utf-8"
+    );
+    let out = source;
+    for (const route of ROUTES) {
+      out = upsertWranglerBinding(out, route);
+    }
+    const parsed = parse(out) as {
+      assets: { run_worker_first: string[]; not_found_handling: string };
+    };
+    expect(parsed.assets.run_worker_first).toStrictEqual(["/blog", "/blog/*"]);
+    expect(parsed.assets.not_found_handling).toBe("404-page");
+    let again = out;
+    for (const route of ROUTES) {
+      again = upsertWranglerBinding(again, route);
+    }
+    expect(again).toBe(out);
+    let removed = out;
+    for (const route of ROUTES.toReversed()) {
+      removed = removeWranglerBinding(removed, route);
+    }
+    expect(removed).toBe(source);
+  });
+});

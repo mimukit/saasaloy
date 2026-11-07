@@ -61,6 +61,33 @@ describe(insertIntoConstArray, () => {
   });
 });
 
+describe("const-array on the web navbar's pageLinks", () => {
+  // The cms module appends its Blog link to an empty, typed array literal in
+  // packages/ui/src/blocks/navbar.tsx. The template file is the fixture, so a reshaped
+  // navbar fails here rather than silently at `saasaloy add cms`.
+  const BLOG = {
+    constName: "pageLinks",
+    key: "href",
+    entry: { label: "Blog", href: "/blog" },
+  } as const;
+
+  it("appends to the empty array, and removes back to the original bytes", async () => {
+    const navbar = await readFile(
+      new URL(
+        "../../../templates/base/packages/ui/src/blocks/navbar.tsx",
+        import.meta.url
+      ),
+      "utf-8"
+    );
+    const out = insertIntoConstArray(navbar, BLOG);
+    expect(out).toMatch(
+      /const pageLinks: NavbarLink\[\] = \[\s*\{ label: "Blog", href: "\/blog" \},?\s*\];/
+    );
+    expect(insertIntoConstArray(out, BLOG)).toBe(out);
+    expect(removeFromConstArray(out, BLOG)).toBe(navbar);
+  });
+});
+
 describe(removeFromConstArray, () => {
   it("removes the object with the recorded key and value", () => {
     const applied = insertIntoConstArray(NAV, TEAMS);
