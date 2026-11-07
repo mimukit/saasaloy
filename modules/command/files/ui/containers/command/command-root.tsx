@@ -1,7 +1,7 @@
 import { KeyboardIcon, SearchIcon } from "lucide-react";
 import type * as React from "react";
 import type { ReactNode } from "react";
-import { createContext, useContext, useMemo, useState } from "react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
 
 import { CommandPalette } from "@repo/ui/blocks/command/command-palette";
 import { Keycaps } from "@repo/ui/blocks/command/keycaps";
@@ -9,6 +9,7 @@ import { ShortcutHelp } from "@repo/ui/blocks/command/shortcut-help";
 import { Button } from "@repo/ui/components/shell/button";
 import {
   formatKeycaps,
+  usePendingSequences,
   usePlatform,
   useShortcutEngine,
 } from "@repo/ui/lib/command/engine";
@@ -21,6 +22,7 @@ import {
   pageExample,
   paletteGroups,
   parseShortcut,
+  pendingShortcuts,
   placeRegistration,
   resolveBindings,
   shortcutSections,
@@ -31,17 +33,23 @@ import type {
   ReportOptions,
   ResolvedCommand,
 } from "@repo/ui/lib/command/registry";
-import { CommandRegistryContext } from "@repo/ui/lib/shell/commands";
+import {
+  CommandRegistryContext,
+  ShortcutHintsContext,
+} from "@repo/ui/lib/shell/commands";
 import type {
   Command,
   CommandRegistration,
   CommandRegistry,
+  PendingShortcut,
+  ShortcutHints,
 } from "@repo/ui/lib/shell/commands";
 import type { ShellExtension } from "@repo/ui/lib/shell/extensions";
 
 // The `command` module's root: the provider every `useCommands` call registers with, the
-// two key bindings that open its views, the palette and the shortcut sheet, and the header
-// trigger. An app mounts it through its shell extension list:
+// two key bindings that open its views, the palette and the shortcut sheet, the key hints
+// the shell chrome reads through `useShortcutHints`, and the header trigger. An app mounts
+// it through its shell extension list:
 //
 //   export const shellExtensions = defineShellExtensions({ extensions: [commandExtension()] });
 //
@@ -75,6 +83,44 @@ const REPORT: ReportOptions = {
 };
 
 type Overlay = "palette" | "shortcuts" | null;
+/**
+ * How long the first step of a sequence waits before its hints show, in milliseconds. A
+ * person who knows `G R` types it inside this pause and never sees a hint.
+ */
+const HINT_DELAY_MS = 300;
+
+const NO_PENDING: readonly PendingShortcut[] = [];
+
+/**
+ * The commands that continue the sequences in progress, once they have been in progress
+ * for `HINT_DELAY_MS`. Empty at once when the sequence ends.
+ */
+function usePendingHints(
+  bound: readonly ResolvedCommand[],
+  platform: Platform
+): readonly PendingShortcut[] {
+  const ids = usePendingSequences();
+
+  // The timer always runs and records which set of sequences it waited on. The hints show
+  // once that record matches the set still in progress, so a new set waits again and an
+  // ended one hides at once, with no state set inside the effect itself.
+  const key = ids.join("\n");
+  const [waited, setWaited] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setWaited(key);
+    }, HINT_DELAY_MS);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [key]);
+  const shown = key !== "" && waited === key;
+
+  return useMemo(
+    () => (shown ? pendingShortcuts(bound, ids, platform) : NO_PENDING),
+    [shown, ids, bound, platform]
+  );
+}
 
 interface CommandUi {
   openPalette: () => void;
@@ -203,6 +249,19 @@ function CommandProvider({
     },
   });
 
+  const pending = usePendingHints(bound, platform);
+  const hints = useMemo<ShortcutHints>(
+    () => ({
+      keycaps: (shortcut) => formatKeycaps(parseShortcut(shortcut), platform),
+      pending,
+      sheetKeycaps: formatKeycaps(shortcutsSteps, platform),
+      openShortcuts: () => {
+        setOverlay("shortcuts");
+      },
+    }),
+    [pending, platform, shortcutsSteps]
+  );
+
   const ui = useMemo<CommandUi>(
     () => ({
       openPalette: () => {
@@ -217,7 +276,7 @@ function CommandProvider({
   return (
     <CommandRegistryContext value={registry}>
       <CommandUiContext value={ui}>
-        {children}
+        <ShortcutHintsContext value={hints}>{children}</ShortcutHintsContext>
         <CommandPalette
           open={overlay === "palette"}
           onOpenChange={(open) => {
