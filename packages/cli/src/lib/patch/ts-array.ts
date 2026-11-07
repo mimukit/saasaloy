@@ -11,6 +11,15 @@ export function findConstArray(
   program: Program,
   constName: string
 ): ArrayExpression | undefined {
+  const init = findConstInit(program, constName);
+  return init ? asArray(init) : undefined;
+}
+
+/** The initializer of a module-scope `const <name>`, exported or not. */
+export function findConstInit(
+  program: Program,
+  constName: string
+): AstNode | undefined {
   for (const statement of program.body) {
     const declaration =
       statement.type === "ExportNamedDeclaration"
@@ -25,16 +34,23 @@ export function findConstArray(
     for (const declarator of (declaration as VariableDeclaration)
       .declarations) {
       if (
-        declarator.id.type !== "Identifier" ||
-        (declarator.id as Identifier).name !== constName ||
-        !declarator.init
+        declarator.id.type === "Identifier" &&
+        (declarator.id as Identifier).name === constName &&
+        declarator.init
       ) {
-        continue;
+        return declarator.init;
       }
-      return asArray(declarator.init);
     }
   }
   return undefined;
+}
+
+/** The node as an object literal, `as const` / `satisfies` unwrapped, or `undefined`. */
+export function asObject(node: AstNode): ObjectExpression | undefined {
+  const value = unwrapTypeExpression(node);
+  return value.type === "ObjectExpression"
+    ? (value as ObjectExpression)
+    : undefined;
 }
 
 /** The node as an array literal, `as const` / `satisfies` unwrapped, or `undefined`. */
@@ -180,7 +196,8 @@ export function renderKey(key: string): string {
   return /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
 }
 
-function renderValue(value: unknown): string {
+/** A JSON value as TS source. Throws on anything JSON cannot hold. */
+export function renderValue(value: unknown): string {
   if (
     value === null ||
     typeof value === "string" ||
@@ -207,7 +224,8 @@ function propertyName(node: AstNode): string | undefined {
   return literalValue(node) as string | undefined;
 }
 
-function literalValue(node: AstNode): unknown {
+/** A literal node's value, or `undefined` for any other node. */
+export function literalValue(node: AstNode): unknown {
   if (
     node.type !== "StringLiteral" &&
     node.type !== "NumericLiteral" &&

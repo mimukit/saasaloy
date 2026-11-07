@@ -242,9 +242,10 @@
               "const-array",
               "chained-route",
               "drizzle-column",
-              "nav-entry"
+              "nav-entry",
+              "const-property"
             ],
-            "description": "Which codemod applies this patch. `const-array`, `plugin-array`, `chained-route`, `wrangler-binding`, `drizzle-column` and `nav-entry` have removal inverses."
+            "description": "Which codemod applies this patch. `const-array`, `const-property`, `plugin-array`, `chained-route`, `wrangler-binding`, `drizzle-column` and `nav-entry` have removal inverses."
           },
           "when": { "$ref": "#/$defs/when" }
         },
@@ -271,6 +272,31 @@
                   "type": "object",
                   "minProperties": 1,
                   "description": "JSON object literal appended to the named array."
+                }
+              }
+            }
+          },
+          {
+            "if": {
+              "properties": { "kind": { "const": "const-property" } },
+              "required": ["kind"]
+            },
+            "then": {
+              "required": ["constName", "property", "value"],
+              "properties": {
+                "constName": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Name of the module-scope const object that holds the property (e.g. deployConfig)."
+                },
+                "property": {
+                  "type": "string",
+                  "minLength": 1,
+                  "description": "Top-level property to fill (e.g. ciWorkflow). The patch writes only while it reads `undefined`, so a value the owner set stays."
+                },
+                "value": {
+                  "type": ["string", "number", "boolean"],
+                  "description": "JSON value written in place of `undefined`. `remove` puts `undefined` back while the property still holds it."
                 }
               }
             }
