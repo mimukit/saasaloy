@@ -58,6 +58,12 @@ The `saasaloy-shell` skill lists the whole set and how a page composes it.
 
 **One rule covers the whole package: no IO in `@repo/ui`.** No fetch, no persistence, no auth, no router, in any layer. Client-state stores (nanostores) live in `src/lib/`; the app that owns the data hydrates the store and passes what a block needs as props. When a store-shaped need shows up in a block, move the binding up into the app instead of importing the store in place.
 
+## A new dependency and the running dev server
+
+**Restart the dev server after an install while `pnpm dev` runs.** Vite 8 caches a failed import until the server restarts, and its watcher ignores `node_modules`. So a block that imports a package before `pnpm --filter @repo/ui add <package>` keeps failing with `Failed to resolve import` on every reload. `apps/admin`, `apps/app` and `apps/api` restart themselves when `pnpm-lock.yaml` changes (`restartOnLockfile()` from `@repo/tooling/vite`). `apps/web` does not, so stop `pnpm dev` and start it again.
+
+**Plain `http` on a remote host is not a secure context.** A dev server reached at `http://<DEV_HOST>:<port>` has no `crypto.randomUUID` and no `navigator.clipboard`. Browser code makes an id with `randomId()` from `@repo/ui/lib/random-id`, and copies text with `copyText()` from `@repo/ui/lib/clipboard`, which falls back to `execCommand` and rejects when both paths fail.
+
 ## Primitives and presets
 
 **Adding a primitive the base doesn't vendor.** `shadcn` is already an exact-pinned dependency of `@repo/ui`, so reach it with `--filter … exec` — that runs in the package directory, where `components.json` lives:

@@ -14,7 +14,7 @@ import {
 } from "./authorize";
 import type { Audience } from "./authorize";
 import { authDb, provider } from "./db-provider";
-import { deriveCookieDomain, requireAuthSecret } from "./env";
+import { cookiePrefixes, deriveCookieDomain, requireAuthSecret } from "./env";
 import type { AuthEnv } from "./env";
 import { audience } from "./plugins/audience";
 import { clientAdminGuard } from "./plugins/client-admin-guard";
@@ -31,23 +31,25 @@ import { scopeSessionsTo } from "./scoped-adapter";
 // ships once per driver. That is what lets one `auth.ts` serve both.
 const authEnv = env as unknown as AuthEnv;
 
-// Same localhost dev fallback `modules/api`'s CORS spine uses — one origin list, two
-// readers (api's `cors()` middleware and this file's `trustedOrigins`), no drift.
-// :3000 is apps/web, :3001 is apps/admin, :3002 is apps/app; the api Worker itself is :4000.
-const DEV_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:3002",
-];
-
+// The browser origins allowed to call either instance: the same `CORS_ORIGINS` list
+// `modules/api`'s `cors()` middleware reads, so the two never drift. There is no
+// fallback list. The api env gate makes the key required, and in dev `pnpm dev:ports`
+// writes it into `apps/api/.env.local`, so an empty list means a broken setup and every
+// cross-origin call fails loudly rather than trusting a guessed origin.
 function trustedOrigins(): string[] {
-  const configured = authEnv.CORS_ORIGINS?.split(",")
-    .map((o) => o.trim())
-    .filter(Boolean);
-  return configured && configured.length > 0 ? configured : DEV_ORIGINS;
+  return (
+    authEnv.CORS_ORIGINS?.split(",")
+      .map((o) => o.trim())
+      .filter(Boolean) ?? []
+  );
 }
 
 const cookieDomain = deriveCookieDomain(authEnv);
+
+// `client` and `admin`, or `<AUTH_COOKIE_PREFIX>-client` and `-admin` in a linked worktree
+// on an http dev URL. Read once at module scope, so a malformed prefix throws on the first
+// request. See `cookiePrefixes` in ./env.ts.
+const cookiePrefix = cookiePrefixes(authEnv);
 
 // One rule for both instances: they share the `accounts` table, so a password set on one
 // side has to pass on the other. Better Auth's default is 8.
@@ -82,6 +84,11 @@ async function noUsersYet(): Promise<boolean> {
 //
 //   auth       client  basePath /auth         cookie client.session_token
 //   adminAuth  admin   basePath /admin/auth   cookie admin.session_token
+//
+// In a linked worktree on an http dev URL, `AUTH_COOKIE_PREFIX` goes in front of both
+// names (`wt5ddad8-client.session_token`), because a browser scopes cookies by host and
+// not by port, and two worktrees on one host would otherwise overwrite each other's
+// sessions. `pnpm dev:ports` writes the key; production never reads it.
 //
 // The cookie names alone separate an honest browser, because the browser sends both
 // cookies to the api host and each instance reads only its own. The `audience` column
@@ -168,9 +175,9 @@ function sharedOptions(group: Audience) {
     },
     advanced: {
       // Each instance names its own cookies, so the two sessions never overwrite each
-      // other: `client.session_token` and `admin.session_token`, with the `__Secure-`
-      // prefix on https.
-      cookiePrefix: group,
+      // other: `client.session_token` and `admin.session_token` (or the worktree-prefixed
+      // pair from `cookiePrefixes`), with the `__Secure-` prefix on https.
+      cookiePrefix: cookiePrefix[group],
       // The adapter's schema check is off, and it has to be. Better Auth 1.7.6 registers
       // `findDrizzleSchemaProblems(config.schema ?? db._?.fullSchema ?? {})` on every
       // adapter (`@better-auth/drizzle-adapter/dist/index.mjs`, and `checksSchema` in

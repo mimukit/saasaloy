@@ -9,6 +9,7 @@
   "dependsOn": ["api", "database"],
   "dependencies": [],
   "envVars": {
+    "AUTH_COOKIE_PREFIX": "Optional, dev only. Lowercase letters, digits and hyphens. When set and BETTER_AUTH_URL is an http: URL, both session cookies become <prefix>-client.session_token and <prefix>-admin.session_token, so two worktrees on one host keep separate sessions. pnpm dev:ports writes it into apps/api/.env.local in a linked worktree and leaves it out in the main checkout. It is ignored on an https: BETTER_AUTH_URL, so production never reads it.",
     "BETTER_AUTH_SECRET": "Workers secret used to sign sessions. Required: auth throws while the Worker initializes when it is unset, unless BETTER_AUTH_URL names a loopback host.",
     "BETTER_AUTH_URL": "The API's own origin (e.g. https://api.x.com, or http://localhost:4000 locally). Used as the auth baseURL, to derive the cookie domain, and to allow the keyless local dev loop. When unset there is no loopback exception, so BETTER_AUTH_SECRET becomes mandatory, and the session cookie stays host-only unless COOKIE_DOMAIN sets it.\nFIRST USER WINS: the first account to sign up on an empty users table gets role 'superadmin', the role above 'admin'. Client sign-up at /auth is open, so once this origin is public anyone who reaches /auth/sign-up/email before you becomes the superadmin. Sign up yourself as soon as the API answers, then sign in on the admin app with the same email and password. Run /saasaloy-auth for the recovery SQL if somebody else got there first.",
     "COOKIE_DOMAIN": "Optional. Explicit cookie domain (e.g. .x.com) for cross-subdomain sessions. Derived from BETTER_AUTH_URL when unset. It scopes both session cookies, client.session_token (signed in at /auth) and admin.session_token (signed in at /admin/auth); their names keep the two sessions apart."
@@ -16,7 +17,7 @@
   "envServices": {
     "default": ["api"]
   },
-  "envOptional": ["BETTER_AUTH_SECRET", "COOKIE_DOMAIN"],
+  "envOptional": ["AUTH_COOKIE_PREFIX", "BETTER_AUTH_SECRET", "COOKIE_DOMAIN"],
   "devVars": {
     "BETTER_AUTH_URL": "http://localhost:4000"
   },

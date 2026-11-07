@@ -11,7 +11,7 @@ import { apiBaseUrl } from "@app/lib/auth";
 // one this app holds. The admin app sends `admin` instead.
 //
 // `credentials: "include"` sends the session cookie across origins (:3002 → :4000 in dev).
-// The api's CORS spine allows it for the origins in `DEV_ORIGINS` or `CORS_ORIGINS`.
+// The api's CORS spine allows it for the origins in `CORS_ORIGINS`.
 export const API_CREDENTIALS: RequestCredentials = "include";
 
 export const api = hc<AppType>(apiBaseUrl, {

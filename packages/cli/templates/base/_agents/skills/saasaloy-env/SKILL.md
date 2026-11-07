@@ -1,6 +1,6 @@
 ---
 name: saasaloy-env
-description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, the pnpm deploy:production deploy with env-deploy, and the typed createEnv gate each service reads its values through. Use when deploying to Cloudflare, when a deploy stops naming a blank production key, adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a key is checkout-owned, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
+description: Runbook for the env capability in packages/env — the one tracked key list, the pnpm env:setup distribution command, the pnpm deploy:production deploy with env-deploy, and the typed createEnv gate each service reads its values through. Use when deploying to Cloudflare, when a deploy stops naming a blank production key, adding an environment key, when a build or a request fails naming an unset key, when choosing which services read a key, when a value must stay blank, when a key is checkout-owned, when giving a worktree its own dev ports with pnpm dev:ports or DEV_HOST, when picking a value source, or when a leftover .dev.vars is hiding .env from wrangler.
 ---
 
 # env — one key list, one command, one typed gate
@@ -9,7 +9,7 @@ description: Runbook for the env capability in packages/env — the one tracked 
 
 The **node half** is a tracked key list (`packages/env/.env.example`), a gitignored value file (`packages/env/.env`), and `pnpm env:setup`, which writes every service's own `.env` from the two. The **runtime half** is `createEnv`, which validates the values a service actually got and hands back typed ones.
 
-A *service* is a workspace that reads a `.env`: `api`, `web`, `admin`. The name is the workspace directory. `packages/env/src/services.ts` holds the table, and `saasaloy add api` appends a row to it. One row has no workspace and no file: `deploy` holds `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which a deploy loads in memory.
+A *service* is a workspace that reads a `.env`: `api`, `web`, `admin`. The name is the workspace directory. `packages/env/src/services.ts` holds the table, and `saasaloy add api` appends a row to it. Two rows have no workspace and no file: `deploy` holds `CLOUDFLARE_API_TOKEN` and `CLOUDFLARE_ACCOUNT_ID`, which a deploy loads in memory, and `dev-ports` holds `DEV_HOST`, which `pnpm dev:ports` reads. A row with a dev server also carries `devPort`, the port it listens on in the main checkout.
 
 ## Adding a key, in two steps
 
@@ -84,6 +84,22 @@ STORAGE_PROXY_URL=
 ## Checkout-owned keys
 
 `CHECKOUT_OWNED_KEYS` in `packages/env/src/services.ts` lists keys this checkout sets for itself. A key named there keeps whatever value is already on disk, whoever wrote it, so a per-branch `DATABASE_URL` survives every `pnpm env:setup`. `packages/env` never learns what a database is — only that some key is the checkout's to set.
+
+## Dev ports: `pnpm dev:ports`
+
+`pnpm dev:ports` (`packages/env/scripts/dev-ports.ts`, core in `src/dev-ports.ts`) gives this checkout its own dev ports, so two worktrees of one project run `pnpm dev` at the same time. `pnpm env:setup` runs it at the end of every dev run, and it also runs alone.
+
+- **The main checkout keeps the pinned ports**: each row's `devPort` (web 3000, admin 3001, app 3002, the email preview 3003, api 4000). It writes no cookie prefix.
+- **A linked worktree takes a block.** The command hashes the checkout root to a block `k` from 0 to 999, and each port is `10000 + 10k + slot`. A frontend's slot is `devPort - 3000`, and a backend's slot is `devPort - 4000 + 5`. When a port in the block listens now, or another worktree's record claims the block, it tries `k+1`, then `k+2`. A rerun keeps the recorded block while it is free.
+- **It writes a marked block into each service's `.env.local`**, between `# >>> dev:ports` and `# <<< dev:ports`: `DEV_PORT`, and the origin keys that service reads (`PUBLIC_API_URL`, `PUBLIC_SITE_URL`, `BETTER_AUTH_URL`, `CORS_ORIGINS`). In a linked worktree the api block also gets `AUTH_COOKIE_PREFIX`, so the session cookies of two worktrees on one host do not overwrite each other. Lines outside the block are yours, and the block always comes last, so it wins over a key typed above it. `pnpm env:setup` never touches `.env.local`.
+- **It records the result in `.devports.json`** at the checkout root (gitignored): the block, the host, the cookie prefix and each service's port. `pnpm dev:stop`, the e2e suite and the collision check read it.
+- **`DEV_HOST` names the host the browser uses.** Set it in `packages/env/.env` to a remote dev box's name (`DEV_HOST=devaloy`), or pass `pnpm dev:ports --host <name>` for one run. The URLs use that host, because a page and its api must share one host for the session cookie. `CORS_ORIGINS` lists both the `localhost` and the `DEV_HOST` origin of each browser service.
+- **Restart `pnpm dev` after a change.** A dev server does not watch `.env.local`. The command prints "restart pnpm dev to load the new ports" when a value changed.
+- **`pnpm dev:ports --clean`** removes every block and `.devports.json`. It deletes a `.env.local` that held only the block.
+
+A dev config reads its port with `loadEnv` and `devPort()` from `@repo/env/dev-port`, with the row's `devPort` as the fallback, and keeps `strictPort`. A bad `DEV_PORT` fails at startup and names the file. `wrangler dev` reads no `DEV_PORT`, so in a worktree run it as `wrangler dev --port <DEV_PORT>`; `vite dev` in `apps/api` reads the key itself.
+
+A new service with a dev server adds `devPort` to its `SERVICES` row: 3000 to 3004 for a frontend, 4000 to 4004 for a backend. Any other value fails `pnpm dev:ports`.
 
 ## Value sources
 

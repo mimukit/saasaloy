@@ -1,8 +1,12 @@
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 
 // What the suite needs to know about the project it is testing: which modules are
 // installed, which apps therefore exist, and on which port each one answers.
+//
+// The ports come from `.devports.json` at the repo root when `pnpm dev:ports` wrote one, so
+// a run in a linked worktree drives that worktree's own servers. With no record, each app
+// answers on its pinned port on localhost.
 //
 // Everything here reads `saasaloy.json`, the file `saasaloy add` maintains. Nothing is
 // inferred from a directory listing: a half-removed workspace would still be on disk, and
@@ -38,13 +42,66 @@ export const SPEC_TAGS = ["api", "admin", "auth", "waitlist"] as const;
 export type SpecTag = (typeof SPEC_TAGS)[number];
 
 /** Each app's pinned dev port. These match the port map in the project's `AGENTS.md`. */
-export const PORTS = { web: 3000, admin: 3001, api: 4000 } as const;
+export const PINNED_PORTS = { web: 3000, admin: 3001, api: 4000 } as const;
 
-export const URLS = {
-  web: `http://localhost:${PORTS.web}`,
-  admin: `http://localhost:${PORTS.admin}`,
-  api: `http://localhost:${PORTS.api}`,
-} as const;
+export type App = keyof typeof PINNED_PORTS;
+
+/**
+ * The host and each app's port, from the text of `.devports.json`, or the pinned ports on
+ * localhost when there is none. A record that does not parse throws rather than falling
+ * back: the pinned ports may belong to another checkout's servers, and a suite that
+ * attached to them would test the wrong code.
+ */
+export function portsFrom(text?: string): {
+  host: string;
+  ports: Record<App, number>;
+} {
+  if (text === undefined) {
+    return { host: "localhost", ports: { ...PINNED_PORTS } };
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(text) as unknown;
+  } catch (error) {
+    throw new Error(
+      ".devports.json is not valid JSON. Run pnpm dev:ports to write it again.",
+      { cause: error }
+    );
+  }
+  const record = (
+    typeof parsed === "object" && parsed !== null ? parsed : {}
+  ) as {
+    host?: unknown;
+    services?: Record<string, unknown>;
+  };
+  const ports = { ...PINNED_PORTS } as Record<App, number>;
+  for (const app of Object.keys(PINNED_PORTS) as App[]) {
+    const port = record.services?.[app];
+    if (typeof port === "number") {
+      ports[app] = port;
+    }
+  }
+  return {
+    host: typeof record.host === "string" ? record.host : "localhost",
+    ports,
+  };
+}
+
+const DEV_PORTS_FILE = path.resolve(ROOT, ".devports.json");
+
+const devPorts = portsFrom(
+  existsSync(DEV_PORTS_FILE) ? readFileSync(DEV_PORTS_FILE, "utf-8") : undefined
+);
+
+/** Each app's dev port in this checkout. */
+export const PORTS: Readonly<Record<App, number>> = devPorts.ports;
+
+/** Each app's origin, on the host `pnpm dev:ports` wrote the origins for. */
+export const URLS: Readonly<Record<App, string>> = {
+  web: `http://${devPorts.host}:${PORTS.web}`,
+  admin: `http://${devPorts.host}:${PORTS.admin}`,
+  api: `http://${devPorts.host}:${PORTS.api}`,
+};
 
 /**
  * `saasaloy.json`, read from the repo root.
@@ -89,8 +146,6 @@ export function readConfig(): SaasaloyConfig {
 export function hasModule(config: SaasaloyConfig, name: string): boolean {
   return config.installed.includes(name);
 }
-
-export type App = keyof typeof PORTS;
 
 /** The apps this project actually holds, in the order Playwright should start them. */
 export function installedApps(config: SaasaloyConfig): App[] {

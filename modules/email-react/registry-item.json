@@ -11,6 +11,19 @@
   "envVars": {},
   "patches": [
     {
+      "file": "packages/env/src/services.ts",
+      "kind": "const-array",
+      "constName": "SERVICES",
+      "key": "name",
+      "entry": {
+        "name": "email-react",
+        "file": "packages/email-react/.env",
+        "environment": "dev",
+        "omit": [],
+        "devPort": 3003
+      }
+    },
+    {
       "file": "apps/api/package.json",
       "kind": "package-json-dependency",
       "section": "dependencies",
@@ -26,6 +39,7 @@
       "files": [
         { "path": "files/package.json", "target": "package.json" },
         { "path": "files/tsconfig.json", "target": "tsconfig.json" },
+        { "path": "files/scripts/dev.ts", "target": "scripts/dev.ts" },
         { "path": "files/src/index.ts", "target": "src/index.ts" },
         { "path": "files/src/define.tsx", "target": "src/define.tsx" },
         {

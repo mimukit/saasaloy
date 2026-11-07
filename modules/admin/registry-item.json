@@ -37,7 +37,8 @@
         "name": "admin",
         "file": "apps/admin/.env",
         "environment": "dev",
-        "omit": []
+        "omit": [],
+        "devPort": 3001
       }
     },
     {
