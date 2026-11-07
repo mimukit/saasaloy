@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -22,6 +23,7 @@ import {
 import {
   BASE_INTENT,
   BASE_MODULE,
+  BASE_SNAPSHOT_ENV,
   baseEntries,
   baseRecord,
   recordBaseFiles,
@@ -42,6 +44,7 @@ import {
 import { TESTING_BLOCKS } from "../lib/testing.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
+import { runOutdated } from "./outdated.js";
 import { finishUpToDate, runUpdate } from "./update.js";
 import type { UpToDateSteps } from "./update.js";
 
@@ -55,8 +58,13 @@ const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
 const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
 
 let dir: string;
+// The base snapshot (#312) reads this folder of `<version>/` templates, never the
+// network. Empty unless a test fills it, so every base update here is two-way by default.
+let snapshots: string;
 
 beforeAll(async () => {
+  snapshots = await mkdtemp(join(tmpdir(), "saasaloy-update-snapshots-"));
+  process.env[BASE_SNAPSHOT_ENV] = snapshots;
   dir = await mkdtemp(join(tmpdir(), "saasaloy-update-guards-"));
   await writeFile(
     join(dir, "saasaloy.json"),
@@ -68,6 +76,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   process.chdir(ORIGINAL_CWD);
+  delete process.env[BASE_SNAPSHOT_ENV];
+  await rm(snapshots, { recursive: true, force: true });
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -96,6 +106,21 @@ async function runCaptured(argv: string[]): Promise<[number, string]> {
     captured.restore();
   }
   return [code, captured.lines.join("")];
+}
+
+/** Any command with its TUI captured, so its output stays out of the test log. */
+async function captureCode(
+  run: () => Promise<number>
+): Promise<[number, string]> {
+  const captured = capture();
+  const originalOut = process.stdout.write.bind(process.stdout);
+  process.stdout.write = () => true;
+  try {
+    return [await run(), captured.lines.join("")];
+  } finally {
+    process.stdout.write = originalOut;
+    captured.restore();
+  }
 }
 
 /** stderr (the TUI) and stdout (the merge plan), both captured. */
@@ -326,7 +351,11 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     await writeFile(
       join(project, ".saasaloy", "manifest.json"),
       JSON.stringify({
-        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+        // A tombstone (#312): tracked, so the base counts as recorded, and kept
+        // deleted, so it reads current and no run plans it.
+        managed: {
+          "AGENTS.md": { module: "base", hash: "a".repeat(64), deleted: true },
+        },
       }),
       "utf-8"
     );
@@ -372,6 +401,29 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     ]);
   });
 
+  // #312: the backfill plans every installed module's targets before the apply writes the
+  // alias, so it must see the aliases the update adds. A 0.5.0 project with `auth` refused
+  // here with `Unknown alias "@config"` (the release smoke's skipped-release step).
+  it("plans the backfill with the aliases the update adds", async () => {
+    await state(["widget"], { widget: localEntry });
+    await descriptor("widget", {
+      files: [
+        { path: "files/widget.ts", target: "@config/sections/widget.ts" },
+      ],
+    });
+    await mkdir(join(registry, "widget", "files"), { recursive: true });
+    await writeFile(
+      join(registry, "widget", "files", "widget.ts"),
+      "export const widget = {};\n",
+      "utf-8"
+    );
+
+    const [code, output] = await runCaptured(["--dry-run"]);
+    expect(output).not.toContain("Unknown alias");
+    expect(output).toMatch(/alias\s+@config/);
+    expect(code).toBe(0);
+  });
+
   it("refuses a pair that arrives across two separate prerequisite graphs", async () => {
     // Neither graph alone holds both drivers, so the per-module check passes twice and
     // only the combined pass sees the pair.
@@ -406,6 +458,78 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     const [code, output] = await runCaptured(["widget", "--yes"]);
     expect(code).toBe(0);
     expect(output).not.toContain("module conflict");
+  });
+
+  // #312. Two modules that both start to depend on `shell` used to plan its skill link
+  // twice, and the second link refused the run. The run now plans `shell` once.
+  it("installs a prerequisite two modules share once, with one link and one lock entry", async () => {
+    await state(["alpha", "beta"], { alpha: localEntry, beta: localEntry });
+    await descriptor("alpha", { dependsOn: ["shell"] });
+    await descriptor("beta", { dependsOn: ["shell"] });
+    await descriptor("shell", {
+      type: "saasaloy:capability",
+      agent: { skills: ["skills/saasaloy-shell"] },
+    });
+    await mkdir(join(registry, "shell", "skills", "saasaloy-shell"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(registry, "shell", "skills", "saasaloy-shell", "SKILL.md"),
+      "---\nname: saasaloy-shell\ndescription: The shell.\n---\n\n# Shell\n",
+      "utf-8"
+    );
+
+    const [code, output] = await runCaptured(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(output.match(/install {2}shell \(new prerequisite\)/g)).toHaveLength(
+      2
+    );
+    const manifest = await loadManifest(project);
+    expect(
+      Object.keys(manifest.links).filter(
+        (target) => target === ".agents/skills/saasaloy-shell"
+      )
+    ).toHaveLength(1);
+    await expect(
+      readlink(join(project, ".claude", "skills", "saasaloy-shell"))
+    ).resolves.toBe(join("..", "..", ".agents", "skills", "saasaloy-shell"));
+    const lock = await loadLock(project);
+    expect(lock.modules.shell).toMatchObject({ source: "local" });
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as { installed: string[] };
+    expect(config.installed.filter((name) => name === "shell")).toHaveLength(1);
+  });
+
+  // #312: `--restore` names a file one module keeps deleted, so a run that does not read
+  // that module refuses rather than ignoring the flag.
+  it("refuses --restore of a module's file on a run that reads only the base", async () => {
+    await state(["alpha"], { alpha: localEntry });
+    const manifestPath = join(project, ".saasaloy", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as {
+      managed: Record<string, unknown>;
+    };
+    manifest.managed["src/alpha.ts"] = {
+      module: "alpha",
+      hash: "b".repeat(64),
+      deleted: true,
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf-8");
+    await descriptor("alpha", {});
+
+    const [code, output] = await runCaptured([
+      "base",
+      "--restore",
+      "src/alpha.ts",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(output).toContain("saasaloy update alpha --restore");
+    await expect(
+      pathExists(join(project, "src", "alpha.ts"))
+    ).resolves.toBeFalsy();
   });
 
   // #229. A module split moves files out of a core into an owner the project must pick.
@@ -736,7 +860,11 @@ describe("runUpdate — backfill (#242)", () => {
     await writeFile(
       join(project, ".saasaloy", "manifest.json"),
       JSON.stringify({
-        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+        // A tombstone (#312): tracked, so the base counts as recorded, and kept
+        // deleted, so it reads current and no run plans it.
+        managed: {
+          "AGENTS.md": { module: "base", hash: "a".repeat(64), deleted: true },
+        },
       }),
       "utf-8"
     );
@@ -961,7 +1089,9 @@ describe("finishUpToDate (#242)", () => {
 // #120. The base rides the module engine. These run offline: the template ships with the
 // CLI, so a "newer template" is simply a project whose lock records another hash and
 // whose files differ from today's render.
-describe("runUpdate — the base template (#120)", () => {
+// Every test here renders the whole bundled template at least once, which runs near the
+// 5 s default on a loaded box, so the group takes the 30 s the snapshot tests use.
+describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
   let project: string;
   let templateDir: string;
   let runningHash: string;
@@ -1080,9 +1210,15 @@ describe("runUpdate — the base template (#120)", () => {
 
     expect(code).toBe(0);
     expect(err).toContain("Adopted");
+    // Only the files on disk are recorded (#312); the template files the project never
+    // held are named and left for a later base update to create.
     expect(
       Object.keys(baseEntries(await loadManifest(project))).length
-    ).toBeGreaterThan(10);
+    ).toBeGreaterThan(0);
+    expect(err).toMatch(/not on disk and were not recorded/);
+    expect((await loadLock(project)).base?.templateHash).not.toBe(
+      "f".repeat(64)
+    );
   });
 
   it("previews the adoption under --dry-run and writes nothing", async () => {
@@ -1169,6 +1305,208 @@ describe("runUpdate — the base template (#120)", () => {
     expect((await lockOnDisk()).base).toStrictEqual(
       baseRecord(cliVersion, "f".repeat(64))
     );
+  });
+
+  // #312 Phase 3: `--from` names the merge base's version too. The snapshot folder holds
+  // the template at 0.5.0, which differs from today's in `AGENTS.md` alone.
+  describe("the merge base from the recorded release (#312)", () => {
+    async function adoptedWithEdit(): Promise<void> {
+      const state = await scaffolded();
+      for (const entry of Object.values(state.manifest.managed)) {
+        entry.adopted = true;
+      }
+      await writeFile(
+        join(project, "AGENTS.md"),
+        "old agent rules, plus mine\n",
+        "utf-8"
+      );
+      state.lock.base = {
+        ...baseRecord(cliVersion, "f".repeat(64)),
+        adoptedAt: cliVersion,
+      };
+      await saveManifest(project, state.manifest);
+      await saveLock(project, state.lock);
+      const old = join(snapshots, "0.5.0");
+      await cp(templateDir, old, { recursive: true });
+      await writeFile(join(old, "AGENTS.md"), "old agent rules\n", "utf-8");
+    }
+
+    afterEach(async () => {
+      await rm(join(snapshots, "0.5.0"), { recursive: true, force: true });
+    });
+
+    it(
+      "renders a drifted base file three-way against the `--from` release",
+      { timeout: 30_000 },
+      async () => {
+        await adoptedWithEdit();
+
+        const { code, out } = await runBoth(["--dry-run", "--from", "0.5.0"]);
+
+        expect(code).toBe(0);
+        expect(out).toContain("#### `AGENTS.md`");
+        expect(out).toContain("**base → theirs**");
+        expect(out).not.toContain("no merge base");
+      }
+    );
+
+    it(
+      "falls back to two-way with the reason when no snapshot holds the version",
+      { timeout: 30_000 },
+      async () => {
+        await adoptedWithEdit();
+
+        const { code, out } = await runBoth(["--dry-run"]);
+
+        expect(code).toBe(0);
+        expect(out).toContain(
+          `no merge base — ${BASE_SNAPSHOT_ENV} holds no template for ${cliVersion}`
+        );
+        expect(out).toContain("**theirs → mine**");
+      }
+    );
+  });
+
+  // #312 Phase 4, ADR 0059: a deleted base file is offered once, kept deleted once the
+  // owner says so, and stays deleted when the template later changes it.
+  describe("a deleted base file (#312)", () => {
+    const BLOCK = "packages/ui/src/blocks/audience.tsx";
+
+    afterEach(async () => {
+      await rm(join(snapshots, cliVersion), { recursive: true, force: true });
+    });
+
+    /** A scaffolded project whose owner deleted `BLOCK`, kept deleted when `tombstoned`. */
+    async function withDeletedBlock(tombstoned: boolean) {
+      const state = await scaffolded();
+      await rm(join(project, ...BLOCK.split("/")));
+      if (tombstoned) {
+        state.manifest.managed[BLOCK]!.deleted = true;
+        await saveManifest(project, state.manifest);
+      }
+      return state;
+    }
+
+    it(
+      "offers it as deleted, keeps it deleted with --resolved, and keeps it absent when the template changes it",
+      { timeout: 60_000 },
+      async () => {
+        await withDeletedBlock(false);
+
+        const first = await runBoth(["--yes"]);
+        expect(first.code).toBe(EXIT_WORK_PENDING);
+        expect(first.err).toContain("deleted locally");
+        expect(first.out).toContain(`#### \`${BLOCK}\``);
+        expect(first.out).toContain("deleted locally");
+        expect(first.out).toContain(`saasaloy update --restore ${BLOCK}`);
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+
+        const resolved = await runBoth(["--resolved", BLOCK, "--yes"]);
+        expect(resolved.code).toBe(0);
+        expect((await loadManifest(project)).managed[BLOCK]).toMatchObject({
+          module: BASE_MODULE,
+          deleted: true,
+        });
+
+        // The record now names an older template whose copy of the block differs, so
+        // the running template changed it: the snapshot at the recorded version is that
+        // older template, and the merge runs three-way.
+        const old = join(snapshots, cliVersion);
+        await cp(templateDir, old, { recursive: true });
+        await writeFile(
+          join(old, ...BLOCK.split("/")),
+          "export const Audience = () => null;\n",
+          "utf-8"
+        );
+        const lock = await lockOnDisk();
+        lock.base = baseRecord(cliVersion, await templateHash(old));
+        await saveLock(project, lock);
+
+        const changed = await runBoth(["--yes"]);
+        expect(changed.code).toBe(0);
+        expect(changed.err).toMatch(
+          new RegExp(
+            `kept deleted\\s+${BLOCK.replaceAll(".", "\\.")}\\s+\\(upstream changed it\\)`
+          )
+        );
+        expect(changed.out).not.toContain(BLOCK);
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+        expect((await lockOnDisk()).base?.templateHash).toBe(runningHash);
+        expect(
+          (await loadManifest(project)).managed[BLOCK]?.deleted
+        ).toBeTruthy();
+
+        const [outdatedCode] = await captureCode(() =>
+          runOutdated(["--check"])
+        );
+        expect(outdatedCode).toBe(0);
+      }
+    );
+
+    it(
+      "brings a kept-deleted file back with --restore and drops the flag",
+      { timeout: 30_000 },
+      async () => {
+        await withDeletedBlock(true);
+
+        const preview = await runBoth(["--restore", BLOCK, "--dry-run"]);
+        expect(preview.code).toBe(0);
+        expect(preview.err).toMatch(
+          new RegExp(`restore\\s+${BLOCK.replaceAll(".", "\\.")}`)
+        );
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+
+        const { code } = await runBoth(["--restore", BLOCK, "--yes"]);
+
+        expect(code).toBe(0);
+        await expect(
+          readFile(join(project, ...BLOCK.split("/")), "utf-8")
+        ).resolves.toBe(await readFile(join(templateDir, BLOCK), "utf-8"));
+        const entry = (await loadManifest(project)).managed[BLOCK];
+        expect(entry).toBeDefined();
+        expect(entry).not.toHaveProperty("deleted");
+      }
+    );
+
+    it(
+      "refuses --restore on a path with no tombstone, and writes nothing",
+      { timeout: 30_000 },
+      async () => {
+        await withDeletedBlock(false);
+        const before = await readFile(
+          join(project, ".saasaloy", "manifest.json"),
+          "utf-8"
+        );
+
+        const { code, err } = await runBoth(["--restore", BLOCK, "--yes"]);
+
+        expect(code).toBe(2);
+        expect(err).toContain("not a file kept deleted");
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+        await expect(
+          readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+        ).resolves.toBe(before);
+      }
+    );
+
+    it("reads a project whose only missing base file is kept deleted as current", async () => {
+      await withDeletedBlock(true);
+
+      const [outdatedCode] = await captureCode(() => runOutdated(["--check"]));
+      const { code, err } = await runBoth(["--yes"]);
+
+      expect(outdatedCode).toBe(0);
+      expect(code).toBe(0);
+      expect(err).toContain("Everything is up to date");
+    });
   });
 
   it("writes the merge plan to --out and shows a diff under --diff", async () => {
@@ -1409,6 +1747,8 @@ describe("runUpdate — the base template (#120)", () => {
       await expect(pendingIds()).resolves.toStrictEqual([NOTE_ID]);
       // The range moves to the running CLI, so the note is never selected again.
       expect((await lockOnDisk()).base?.cliVersion).toBe(cliVersion);
+      // The hash is still the 0.7.0 template's, so the snapshot keeps naming it (#312).
+      expect((await lockOnDisk()).base?.templateVersion).toBe("0.7.0");
 
       const done = await runBoth(["--done", NOTE_ID, "--yes"]);
       expect(done.code).toBe(0);
@@ -1458,9 +1798,12 @@ describe("runUpdate — the base template (#120)", () => {
       expect(first.code).toBe(EXIT_WORK_PENDING);
       expect(first.out).toContain("## base");
       expect(noteIds(first.out).notes).toStrictEqual([NOTE_ID]);
-      expect((await lockOnDisk()).base).toStrictEqual(
-        baseRecord(cliVersion, "f".repeat(64))
-      );
+      // The hash is still the 0.7.0 template's, so `templateVersion` keeps the release the
+      // next run fetches its three-way snapshot at (#312).
+      expect((await lockOnDisk()).base).toStrictEqual({
+        ...baseRecord(cliVersion, "f".repeat(64)),
+        templateVersion: "0.7.0",
+      });
 
       // Cleared while the merge still waits: the next run offers the merge, not the note.
       await runBoth(["--done", NOTE_ID, "--yes"]);

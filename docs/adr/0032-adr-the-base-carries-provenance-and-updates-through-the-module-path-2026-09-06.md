@@ -8,6 +8,8 @@
 
 accepted — amends the "one-time gift" consequence of [ADR 0022](0022-adr-design-layer-ships-in-the-base-2026-08-06.md); the rest of 0022 stands
 
+Amended by [ADR 0059](0059-adr-the-base-merges-against-its-release-tag-and-keeps-a-deleted-file-deleted-2026-11-04.md) (2026-11-04): a base update now merges three-way against the template fetched from the recorded release's git tag, which reverses "never a network fetch" below, and the two-way plan is the fallback when no snapshot can be had.
+
 ## Considered Options
 
 - **A version stamp only.** Write the CLI version into the lock and let `outdated` compare numbers. Rejected. It tells an owner that the template moved and leaves them to diff fifty files by hand, which is the work the tool exists to do. It is also blind: every CLI build is `0.0.0` until a release process exists, so a version compare would never turn the row red.
