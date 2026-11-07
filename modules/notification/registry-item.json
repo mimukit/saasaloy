@@ -1,0 +1,223 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "notification",
+  "type": "saasaloy:feature",
+  "description": "In-app notifications for apps/app: the notifications tables, a notify() helper for api routes, the /notifications routes, category opt-outs and a daily prune.",
+  "stage": "mvp",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.8"
+  },
+  "dependsOn": ["api", "database", "auth", "app", "validators", "shell"],
+  "dependencies": [],
+  "removeWarnings": [
+    "The deployed notifications and notification_opt_outs tables survive this removal. Run db:generate and review the resulting drop migration before you apply it.",
+    "Every notify() call you added to your own routes loses its import when this module goes. Search apps/api for \"lib/notify\" before you remove it."
+  ],
+  "patches": [
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/notifications",
+      "call": "notifications",
+      "import": {
+        "name": "notifications",
+        "from": "./routes/notifications"
+      }
+    },
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "notificationConfig",
+      "import": {
+        "name": "notificationConfig",
+        "from": "./sections/notification"
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "jobs",
+      "call": "pruneNotificationsJob",
+      "import": {
+        "name": "pruneNotificationsJob",
+        "from": "./jobs/notifications"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "file": "packages/queue/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "queue",
+      "arrayProp": "schedules",
+      "call": "pruneNotificationsSchedule",
+      "import": {
+        "name": "pruneNotificationsSchedule",
+        "from": "./jobs/notifications"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "file": "apps/api/src/worker.ts",
+      "kind": "plugin-array",
+      "exportName": "worker",
+      "arrayProp": "handlers",
+      "call": "notificationPruneHandlers",
+      "import": {
+        "name": "notificationPruneHandlers",
+        "from": "./lib/notification-prune"
+      },
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "file": "apps/app/src/components/shell-extensions.ts",
+      "kind": "plugin-array",
+      "exportName": "shellExtensions",
+      "arrayProp": "extensions",
+      "call": "notificationExtension",
+      "import": {
+        "name": "notificationExtension",
+        "from": "@app/components/notification-extension"
+      }
+    },
+    {
+      "file": "apps/app/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Workspace",
+      "entry": {
+        "to": "/notifications",
+        "label": "Notifications",
+        "shortcut": "G N"
+      },
+      "icon": {
+        "name": "BellIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "apps/app/src/components/nav-counts.ts",
+      "kind": "const-array",
+      "constName": "NAV_COUNTS",
+      "key": "to",
+      "entry": {
+        "to": "/notifications",
+        "path": "/notifications/unread-count"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/config/notification.ts",
+      "target": "@config/sections/notification.ts"
+    },
+    {
+      "path": "files/db/schema/notifications.sqlite.ts",
+      "target": "@db/schema/notifications.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/notifications.pg.ts",
+      "target": "@db/schema/notifications.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/notifications.ts",
+      "target": "@db/repositories/notifications.ts"
+    },
+    {
+      "path": "files/db/seed/notifications.ts",
+      "target": "@db/seed/slices/notifications.ts"
+    },
+    {
+      "path": "files/db/seed/notification-opt-outs.ts",
+      "target": "@db/seed/slices/notification-opt-outs.ts"
+    },
+    {
+      "path": "files/validators/notifications.ts",
+      "target": "@validators/notifications.ts"
+    },
+    {
+      "path": "files/api/lib/notification-href.ts",
+      "target": "@api/lib/notification-href.ts"
+    },
+    {
+      "path": "files/api/lib/notify.ts",
+      "target": "@api/lib/notify.ts"
+    },
+    {
+      "path": "files/api/lib/notify.vitest.ts",
+      "target": "@api/lib/notify.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/routes/notifications.ts",
+      "target": "@api/routes/notifications.ts"
+    },
+    {
+      "path": "files/api/routes/notifications.vitest.ts",
+      "target": "@api/routes/notifications.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/notification-prune.ts",
+      "target": "@api/lib/notification-prune.ts",
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "path": "files/queue/jobs/notifications.ts",
+      "target": "@queue/jobs/notifications.ts",
+      "when": {
+        "installed": ["queue"]
+      }
+    },
+    {
+      "path": "files/ui/lib/notification/format.ts",
+      "target": "@ui/lib/notification/format.ts"
+    },
+    {
+      "path": "files/ui/blocks/notification/notification-menu.tsx",
+      "target": "@ui/blocks/notification/notification-menu.tsx"
+    },
+    {
+      "path": "files/ui/blocks/notification/notification-list.tsx",
+      "target": "@ui/blocks/notification/notification-list.tsx"
+    },
+    {
+      "path": "files/ui/blocks/notification/notification-preferences.tsx",
+      "target": "@ui/blocks/notification/notification-preferences.tsx"
+    },
+    {
+      "path": "files/app/lib/notifications.ts",
+      "target": "@app/lib/notifications.ts"
+    },
+    {
+      "path": "files/app/components/notification-extension.tsx",
+      "target": "@app/components/notification-extension.tsx"
+    },
+    {
+      "path": "files/app/routes/notifications.tsx",
+      "target": "@app/routes/notifications.tsx"
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-notification"]
+  }
+}
