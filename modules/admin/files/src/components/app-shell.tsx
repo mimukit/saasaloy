@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import {
@@ -14,6 +15,8 @@ import { useCommands } from "@repo/ui/lib/shell/commands";
 import { adminCommands } from "@admin/components/commands";
 import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { NAV_COUNTS } from "@admin/components/nav-counts";
+import { PageTrailContext } from "@admin/components/page-trail";
+import type { PageTrailStep } from "@admin/components/page-trail";
 import { shellExtensions } from "@admin/components/shell-extensions";
 import { useSignOut } from "@admin/components/sign-out-button";
 import { API_CREDENTIALS, API_HEADERS } from "@admin/lib/api";
@@ -112,8 +115,10 @@ function AdminCommands({ signOut }: { signOut: () => Promise<void> }) {
   const navigate = useNavigate();
   useCommands(
     adminCommands({
+      // Cast for the reason ShellNavLink casts: a nav `to` may be a concrete path of a
+      // param route ("/cms/blog"), which nav.ts's `NavTargets` has already checked.
       navigate: (to) => {
-        void navigate({ to });
+        void navigate({ to: to as LinkProps["to"] });
       },
       signOut: () => {
         void signOut();
@@ -146,6 +151,9 @@ export function AppShell({
 
   const counts = useNavCounts();
 
+  // The page path a record screen sets through `usePageTrail`; unset, the shell derives it.
+  const [trail, setTrail] = useState<readonly PageTrailStep[] | undefined>();
+
   const name = session.user.name || session.user.email;
 
   return (
@@ -160,9 +168,10 @@ export function AppShell({
       signOut={signOut}
       extensions={shellExtensions}
       counts={counts}
+      trail={trail}
     >
       <AdminCommands signOut={signOut.signOut} />
-      {children}
+      <PageTrailContext value={setTrail}>{children}</PageTrailContext>
     </ShellLayout>
   );
 }

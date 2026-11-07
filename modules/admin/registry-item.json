@@ -171,6 +171,10 @@
           "target": "src/components/nav-counts.ts"
         },
         {
+          "path": "files/src/components/page-trail.tsx",
+          "target": "src/components/page-trail.tsx"
+        },
+        {
           "path": "files/src/components/access-denied.tsx",
           "target": "src/components/access-denied.tsx"
         },

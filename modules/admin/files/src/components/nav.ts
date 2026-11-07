@@ -9,10 +9,13 @@
 // plugin wires it up with no patch. Adding it to NAV_AREAS below is the separate, optional
 // step that puts it in the sidebar.
 
+import type { NavigateOptions } from "@tanstack/react-router";
 import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
 
-// The `to` values are checked against the generated route tree, so a nav entry pointing at
-// a route that does not exist fails `pnpm typecheck` instead of 404-ing at runtime. That is
+// The `to` values are checked against the generated route tree (`NavTargets` below), so a
+// nav entry pointing at a route that does not exist fails `pnpm typecheck` instead of
+// 404-ing at runtime. A row may name a concrete path of a route with a param: `/cms/blog`
+// passes because `/cms/$collection` exists. That is
 // the reason this list is written out rather than derived from the router at runtime, and
 // the reason it is `as const`: widening `to` to `string` would take the check away.
 //
@@ -50,6 +53,24 @@ export type NavAreas = typeof NAV_AREAS;
 export type NavArea = NavAreas[number];
 export type NavGroup = NavArea["groups"][number];
 export type NavItem = NavGroup["items"][number];
+
+/** Every route path the generated tree holds, such as "/users" or "/cms/$collection". */
+type RoutePath = Exclude<NonNullable<NavigateOptions["to"]>, "." | "..">;
+
+/** A route path with each `$param` segment widened to any segment. */
+type Concrete<P extends string> = P extends `${infer Head}$${infer Rest}`
+  ? Rest extends `${string}/${infer Tail}`
+    ? `${Head}${string}/${Concrete<Tail>}`
+    : `${Head}${string}`
+  : P;
+
+/** Every path a nav row may point at: a route of the tree, its params filled in. */
+export type NavPath = Concrete<RoutePath>;
+
+type Checked<T extends NavPath> = T;
+
+/** The check itself. A row whose `to` matches no route makes this line fail typecheck. */
+export type NavTargets = Checked<NavArea["to"] | NavItem["to"]>;
 
 /**
  * The optional count on an area or a nav row.

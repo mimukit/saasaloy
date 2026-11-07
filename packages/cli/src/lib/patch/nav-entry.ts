@@ -45,11 +45,14 @@ export interface NavEntry {
   icon: NamedImport;
 }
 
-/** Append a nav item to one group of one area, and import the icon it names. */
+/**
+ * Append a nav item to one group of one area, and import the icon it names. When the area
+ * has no group with that label yet, the group is added after the area's last group,
+ * holding the one row, so a module can open a group of its own ("Content").
+ */
 export function insertNavEntry(source: string, patch: NavEntry): string {
-  const items = findItems(source, patch);
   const wanted = patch.entry[IDENTITY];
-  if (!items || wanted === undefined || hasEntry(items, IDENTITY, wanted)) {
+  if (wanted === undefined) {
     return source;
   }
   // Rendering `icon: GaugeIcon` against a `GaugeIcon` that is bound to something else
@@ -59,7 +62,29 @@ export function insertNavEntry(source: string, patch: NavEntry): string {
     return source;
   }
 
-  const withEntry = appendEntry(source, items, renderItem(patch));
+  const items = findItems(source, patch);
+  if (!items) {
+    const groups = findGroups(source, patch);
+    if (!groups) {
+      return source;
+    }
+    const withGroup = appendEntry(
+      source,
+      groups,
+      renderGroup(source, groups, patch)
+    );
+    return ensureNamedImport(withGroup, patch.icon);
+  }
+  if (hasEntry(items, IDENTITY, wanted)) {
+    return source;
+  }
+
+  const expanded = expandSingleLine(source, items);
+  const target = expanded === source ? items : findItems(expanded, patch);
+  if (!target) {
+    return source;
+  }
+  const withEntry = appendEntry(expanded, target, renderItem(patch));
   return ensureNamedImport(withEntry, patch.icon);
 }
 
@@ -81,11 +106,9 @@ export function navEntryInsertRefusal(
   if (!groups) {
     return `nav-entry found the ${JSON.stringify(patch.area)} area but it has no groups array`;
   }
+  // A missing group is not a refusal: the insert adds it.
   const group = findElement(groups, "label", patch.group);
-  if (!group) {
-    return `nav-entry could not find a group labelled ${JSON.stringify(patch.group)} in the ${JSON.stringify(patch.area)} area`;
-  }
-  if (!arrayProperty(group, "items")) {
+  if (group && !arrayProperty(group, "items")) {
     return `nav-entry found the ${JSON.stringify(patch.group)} group but it has no items array`;
   }
   if (patch.entry[IDENTITY] === undefined) {
@@ -111,7 +134,19 @@ export function removeNavEntry(source: string, patch: NavEntry): string {
     return source;
   }
 
-  const withoutEntry = removeEntry(source, items, index);
+  // The group's last row takes the group with it, so a group an insert created leaves
+  // no empty shell behind.
+  const groups = findGroups(source, patch);
+  const groupIndex =
+    items.elements.length === 1 && groups
+      ? groups.elements.findIndex(
+          (element) => entryValue(element, "label") === patch.group
+        )
+      : -1;
+  const withoutEntry =
+    groups && groupIndex !== -1
+      ? removeEntry(source, groups, groupIndex)
+      : removeEntry(source, items, index);
   // After the row is gone, so the reference count this reads is the one that matters: a
   // second row still using the same icon keeps the import.
   return removeNamedImport(withoutEntry, patch.icon);
@@ -133,7 +168,7 @@ export function navEntryRemoveRefusal(
   return undefined;
 }
 
-function findItems(
+function findGroups(
   source: string,
   patch: NavEntry
 ): ArrayExpression | undefined {
@@ -143,12 +178,66 @@ function findItems(
     return undefined;
   }
   const area = findElement(areas, IDENTITY, patch.area);
-  const groups = area && arrayProperty(area, "groups");
+  return area ? arrayProperty(area, "groups") : undefined;
+}
+
+function findItems(
+  source: string,
+  patch: NavEntry
+): ArrayExpression | undefined {
+  const groups = findGroups(source, patch);
   if (!groups) {
     return undefined;
   }
   const group = findElement(groups, "label", patch.group);
   return group ? arrayProperty(group, "items") : undefined;
+}
+
+/** The indentation of the line `offset` sits on. */
+function lineIndent(source: string, offset: number): string {
+  const lineStart = source.lastIndexOf("\n", offset - 1) + 1;
+  return /^[ \t]*/.exec(source.slice(lineStart))?.[0] ?? "";
+}
+
+/**
+ * A one-line array with rows in it, rewritten with one row per line. Prettier breaks an
+ * array of two or more objects that way, and `appendEntry` then adds the next row on its
+ * own line. An empty or already multi-line array is returned unchanged.
+ */
+function expandSingleLine(source: string, array: ArrayExpression): string {
+  const body = source.slice(array.start, array.end);
+  if (array.elements.length === 0 || body.includes("\n")) {
+    return source;
+  }
+  const indent = lineIndent(source, array.start);
+  const rows = array.elements
+    .filter((element) => element !== null)
+    .map(
+      (element) => `${indent}  ${source.slice(element.start, element.end)},\n`
+    )
+    .join("");
+  return `${source.slice(0, array.start)}[\n${rows}${indent}]${source.slice(array.end)}`;
+}
+
+/** Prettier's print width, which the rendered group is laid out against. */
+const PRINT_WIDTH = 80;
+
+/** A new group holding the one row, laid out the way prettier prints it. */
+function renderGroup(
+  source: string,
+  groups: ArrayExpression,
+  patch: NavEntry
+): string {
+  const close = groups.end - 1;
+  const groupIndent = `${lineIndent(source, close)}  `;
+  const inner = `${groupIndent}  `;
+  const row = renderItem(patch);
+  const oneLine = `${inner}items: [${row}],`;
+  const items =
+    oneLine.length <= PRINT_WIDTH
+      ? oneLine
+      : `${inner}items: [\n${inner}  ${row},\n${inner}],`;
+  return `{\n${inner}label: ${JSON.stringify(patch.group)},\n${items}\n${groupIndent}}`;
 }
 
 function arrayProperty(

@@ -44,6 +44,9 @@ Target: an admin publishes a post in `apps/admin`, and `GET /blog/<slug>` on `ap
 | Approved outward action | Phase 6 files one `needs-planning` issue titled `feat(cms): add draft preview links and scheduled publishing`. (grill Q22) |
 | UI house rules | Admin screens follow `modules/admin/files/DESIGN.md` (dense, panelled backoffice, status tokens `status-open`, `status-ok`, `status-warn`). Blog pages follow `packages/cli/templates/base/apps/web/DESIGN.md`. |
 | Visual reference | None yet. Phase 1 produces the mockup, and the owner approves it before any build (AGENTS.md rule). Phase 1 stays attended. (grill Q23) |
+| Live revision pointer | `published_revision_id` carries no database foreign key. A key forms an entries and revisions loop that makes the seed engine throw `SeedCycleError`. The repository keeps the pointer valid, and a prune never deletes the live revision. Owner decision, 2026-11-07 (Phase 2). |
+| Last editor | `cms_entries` gains a nullable `updated_by` column that references `users` with `on delete set null`, set on every save and publish. A `409 conflict` body returns that user's name and `updated_at`, so the conflict alert names the other editor as the mockup shows. Owner decision, 2026-11-07 (Phase 2), built in Phase 3. |
+| Mockup approved | Approved by the owner on 2026-11-07, round 1. Screenshots: seven screens, light and dark, 1440 and 360, kept outside the repo on the dev box at `~/saasaloy-mockups/0105-cms-mockup-r1/` (images are not committed). The mockup app is `.dev/cms-mockup/`, built from the real `shell`, `storage` (`FileDrop`) and web components. The approval accepts these choices: draft is `status-open`, published is `status-ok`, archived is neutral. The list has filter chips Current (draft and published, the default), Draft, Published, Archived and All. A published entry whose draft differs from the live revision shows "Unpublished edits" in the list and the editor, so the api exposes that state. An entry with no author shows a muted "No author" in the admin. The Updated column shows relative time under 36 hours, then the date and time. The editor has a main column (Title, Slug with the base-path prefix, Body) and a 20rem side column (Publishing, Cover image, Excerpt, SEO) that moves below the body under `lg`. The header holds Revisions, Unpublish (published entries only), Save draft and Publish. The conflict alert names the other editor and the time, and offers only Reload. The revisions drawer is a right-hand sheet that marks the live revision, offers Restore on every row and notes the 50-revision limit. The cover picker needs a stored-image state with Replace and Remove around `FileDrop`. Empty SEO fields show their fallback as placeholder text. The web navbar gains a "Blog" link. The blog index is one list (date, title, excerpt, optional 16rem cover on the right, on top on mobile) with "Page N of M" and Older and Newer links. The post page uses the 48rem reading width, an "All posts" link, one line for author, date and "Updated", and hand-written prose styles. |
 
 ## Approach
 
@@ -61,7 +64,7 @@ Rejected alternatives:
 - **Two data columns for draft and published.** Title, slug and SEO fields would each need two copies too (grill Q1).
 - **Rendering in the web app.** It puts Tiptap in the web Worker bundle, and a future storefront would repeat it (grill Q2).
 
-### Phase 1: mockup (#327)
+### Phase 1: mockup (#327) (built 2026-11-07)
 
 Attended: the owner approves the mockup screenshots. An unattended run stops before Phase 2 until this plan records the approval.
 
@@ -72,7 +75,7 @@ Attended: the owner approves the mockup screenshots. An unattended run stops bef
 
 Done when: this plan carries a "Mockup approved" row with the date and the screenshot paths.
 
-### Phase 2: core package and schema (#327)
+### Phase 2: core package and schema (#327) (built 2026-11-07)
 
 - Scaffold `packages/cms` (`@repo/cms`) with `define.ts` (`defineCollection`, `defineCms`), field builders (`text`, `slug`, `richText`, `media`, `seo`), and the `blog` collection in `src/collections/blog.ts`.
 - Add `renderer.ts`, which turns Tiptap JSON into HTML with `renderToHTMLString`, a media `nodeMapping`, and the link-protocol filter.
@@ -84,7 +87,7 @@ Done when: this plan carries a "Mockup approved" row with the date and the scree
 
 Done when: `pnpm test` passes the define, validator, repository and renderer tests. The renderer test shows that a `javascript:` link is dropped. `scripts/table-names.test.ts` passes with the three new tables.
 
-### Phase 3: api routes (#327)
+### Phase 3: api routes (#327) (built 2026-11-07)
 
 - Add `apps/api/src/routes/cms.ts` through a `chained-route` patch at `/cms`.
 - Admin routes, guarded by the admin role: list entries per collection, read one, create, save draft, publish, unpublish, archive, delete, list revisions, restore a revision. Save and publish check `version`.
@@ -93,7 +96,7 @@ Done when: `pnpm test` passes the define, validator, repository and renderer tes
 
 Done when: route tests show that a signed-out caller gets 401 on admin routes, a non-admin gets 403, a stale `version` gets 409 on save and on publish, a public read of a draft gets 404, a renamed published slug gets a 301 to the new slug, and deleting a published entry is refused. One publish against the api under `wrangler dev` in `.dev` returns the rendered `html`. If the renderer fails in workerd, stop and report it.
 
-### Phase 4: admin screens (#327)
+### Phase 4: admin screens (#327) (built 2026-11-07)
 
 - Add a `nav-entry` patch: group "Content", entry "Blog" at `/cms/blog`.
 - Build the list and editor screens from the approved mockup. Generate the form from the collection definition, so a new collection needs no new screen code.
@@ -101,7 +104,7 @@ Done when: route tests show that a signed-out caller gets 401 on admin routes, a
 
 Done when: in `.dev`, an admin creates a post, uploads a cover image, saves a draft, publishes it, edits it again, sees two revisions, and restores the first one into the draft. A second tab that saves an old version sees the conflict message.
 
-### Phase 5: web pages, feeds and cache (#327)
+### Phase 5: web pages, feeds and cache (#327) (built 2026-11-07)
 
 - Check whether the adapter's generated `dist/client/wrangler.json` sets `main` once a page is on demand. If it does not, add the `wrangler-field` patch kind.
 - Add `blog/index.astro` and `blog/[slug].astro` with `prerender = false`, the SEO meta tags with their fallbacks, and the stored `html`.
