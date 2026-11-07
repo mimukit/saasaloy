@@ -132,6 +132,18 @@
     {
       "path": "files/db/seed/payment-refunds.ts",
       "target": "@db/seed/slices/payment-refunds.ts"
+    },
+    {
+      "path": "files/db/column-classes/payment-events.ts",
+      "target": "@db/column-classes/payment-events.ts"
+    },
+    {
+      "path": "files/db/column-classes/payment-refunds.ts",
+      "target": "@db/column-classes/payment-refunds.ts"
+    },
+    {
+      "path": "files/db/column-classes/payments.ts",
+      "target": "@db/column-classes/payments.ts"
     }
   ],
   "scaffolds": [

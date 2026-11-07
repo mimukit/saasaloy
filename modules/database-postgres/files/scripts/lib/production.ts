@@ -3,7 +3,8 @@ import { databaseOf, hostOf } from "./url.ts";
 
 // The checks and the order behind `pnpm db:prod:dump` and `pnpm db:prod:migrate` (see
 // `../prod.ts`). Both run under `env-deploy --run api`, so DATABASE_URL is the production
-// value from the value source and never the one in `apps/api/.env`.
+// value from the value source and never the one in `apps/api/.env`. A migration ends with
+// the read-only role's grants (`./readonly-grants.ts`).
 //
 // The production database is always named `<project>_production`, where `<project>` is
 // the slug `databasePrefix` builds from the root `package.json` name. Every side effect
@@ -165,6 +166,11 @@ export interface ProductionDeps {
   removeFile: (file: string) => void;
   /** Run `drizzle-kit migrate` against `url`, and report whether it passed. */
   migrate: (url: string) => boolean;
+  /**
+   * Bring the read-only role's grants to the column classes on `url`, after a migration
+   * (`./readonly-grants.ts`). A throw is reported and does not fail the migration.
+   */
+  applyGrants: (url: string) => Promise<void>;
   say: (message: string) => void;
 }
 
@@ -225,4 +231,15 @@ export async function runProduction(
     );
   }
   deps.say(`Migrated ${database}.`);
+
+  // The migration has landed, so its result stands whatever happens here. A failed grant
+  // leaves the old grants in place, and a column the migration added stays unreadable to
+  // the read-only role until the grants run again.
+  try {
+    await deps.applyGrants(url);
+  } catch (error) {
+    deps.say(
+      `The read-only grants failed (${error instanceof Error ? error.message : String(error)}). The migration stands, and the role keeps its old grants. Run pnpm db:prod:readonly-grants.`
+    );
+  }
 }

@@ -56,6 +56,10 @@
     {
       "path": "files/db/seed/api-keys.ts",
       "target": "@db/seed/slices/api-keys.ts"
+    },
+    {
+      "path": "files/db/column-classes/api-keys.ts",
+      "target": "@db/column-classes/api-keys.ts"
     }
   ]
 }

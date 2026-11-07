@@ -385,6 +385,16 @@ describe("instance wiring", () => {
     );
   });
 
+  it("promotes no account on sign-up, the first one included", () => {
+    // A first-user hook once wrote `superadmin` on an empty `users` table. Client
+    // sign-up is open, so it gave the admin app to whoever signed up first. Every
+    // sign-up now gets the `admin()` plugin's default role; the first superadmin comes
+    // from the seed, `pnpm db:prod:superadmin`, or the D1 SQL in the auth skill.
+    assert.doesNotMatch(auth, /databaseHooks/);
+    assert.doesNotMatch(auth, /noUsersYet/);
+    assert.doesNotMatch(auth, /role: SUPERADMIN_ROLE/);
+  });
+
   it("scopes each instance's session lookups to its own audience", () => {
     assert.match(auth, /database: scopeSessionsTo\(\s*drizzleAdapter\(/);
   });

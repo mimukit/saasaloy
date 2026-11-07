@@ -1,7 +1,8 @@
 import { config } from "@repo/config";
-import { sessions } from "@repo/db/schema/auth";
+import { sessions, users } from "@repo/db/schema/auth";
 import { seedId } from "@repo/db/seed/id";
 import { testDatabase } from "@repo/db/testing";
+import { eq } from "drizzle-orm";
 import { describe, expect, it } from "vitest";
 import app from "../index";
 
@@ -383,5 +384,19 @@ describe("password length", () => {
     const res = await signUp(database.env, "twelve-chars");
 
     expect(res.status).toBe(200);
+  });
+
+  // No sign-up is promoted, the first one included: the first superadmin comes from the
+  // seed, `pnpm db:prod:superadmin` or a SQL update. `audience-rank.test.ts` pins that
+  // `auth.ts` has no promotion hook left; this proves the stored role through the route.
+  it("stores a new sign-up with the role user", async () => {
+    const res = await signUp(database.env, "twelve-chars");
+    expect(res.status).toBe(200);
+
+    const [row] = await database.db
+      .select({ role: users.role })
+      .from(users)
+      .where(eq(users.email, "new@example.test"));
+    expect(row?.role).toBe("user");
   });
 });
