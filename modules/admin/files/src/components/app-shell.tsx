@@ -3,12 +3,15 @@ import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
 import type { ReactNode } from "react";
 
+import { AttentionMenu } from "@repo/ui/blocks/shell/attention-menu";
 import {
   applyThemeChoice,
   currentThemeChoice,
 } from "@repo/ui/blocks/shell/theme-toggle";
 import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
 import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
+import { attentionRows } from "@repo/ui/lib/shell/attention";
+import type { AttentionSource } from "@repo/ui/lib/shell/attention";
 import { useCommands } from "@repo/ui/lib/shell/commands";
 import { navCountFromBody } from "@repo/ui/lib/shell/nav-counts";
 
@@ -28,7 +31,9 @@ import { initialsOf } from "@admin/lib/initials";
 //
 // NAV_AREAS, its types, and the two rules that read it live in ./nav.ts, which is the
 // one file to edit to add a screen. The live counts some rows show come from
-// ./nav-counts.ts, which a module extends with a `const-array` patch.
+// ./nav-counts.ts, which a module extends with a `const-array` patch. The same counts feed
+// the "Needs attention" menu in the header, so a module that adds a count gets a row there
+// too, with no second patch.
 
 /**
  * The link the shell renders for every nav entry. TanStack Router sets aria-current on
@@ -43,6 +48,26 @@ function ShellNavLink({ to, exact, ...props }: ShellLinkProps) {
     <Link {...props} to={to as LinkProps["to"]} activeOptions={{ exact }} />
   );
 }
+
+/** The words of the "Needs attention" menu. */
+const ATTENTION_WORDS = {
+  title: "Needs attention",
+  empty: "Nothing waits for you.",
+} as const;
+
+/**
+ * The queues the "Needs attention" menu offers: every NAV_COUNTS entry, in its order, with
+ * the label of the nav row whose `to` matches. An entry with no nav row has no label to
+ * show, so the menu leaves it out.
+ */
+const ATTENTION_SOURCES: readonly AttentionSource[] = NAV_COUNTS.flatMap(
+  ({ to }) => {
+    const label = NAV_AREAS.flatMap((area) =>
+      area.groups.flatMap((group) => group.items)
+    ).find((item) => item.to === to)?.label;
+    return label === undefined ? [] : [{ to, label }];
+  }
+);
 
 /** How often the sidebar's live counts refetch while the tab is visible. */
 const NAV_COUNT_INTERVAL_MS = 60_000;
@@ -139,6 +164,7 @@ export function AppShell({
   const signOut = useSignOut();
 
   const counts = useNavCounts();
+  const attention = attentionRows(ATTENTION_SOURCES, counts);
 
   const name = session.user.name || session.user.email;
 
@@ -154,6 +180,15 @@ export function AppShell({
       signOut={signOut}
       extensions={shellExtensions}
       counts={counts}
+      attention={
+        <AttentionMenu
+          rows={attention.rows}
+          total={attention.total}
+          link={ShellNavLink}
+          title={ATTENTION_WORDS.title}
+          emptyText={ATTENTION_WORDS.empty}
+        />
+      }
     >
       <AdminCommands signOut={signOut.signOut} />
       {children}
