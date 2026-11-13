@@ -433,8 +433,8 @@ describe("expectedNoteIds", () => {
       when: { installed: ["admin"], testing: false },
     },
     {
-      id: "shell/0002-needs-billing",
-      when: { installed: ["billing"], testing: false },
+      id: "shell/0002-needs-subscription",
+      when: { installed: ["subscription"], testing: false },
     },
     { id: "shell/0003-tests", when: { installed: [], testing: true } },
   ];
