@@ -4,8 +4,12 @@
   // The Brainaloy Labs account. The login on this box reaches four accounts, so the
   // deploy names this one rather than ask. An account ID is not a secret.
   "account_id": "bde653ea530f2e51ffe50e98701dd1ac",
-  // Serves at https://saasaloy.brainaloy.workers.dev, the `site` in astro.config.mjs.
-  "workers_dev": true,
+  // Serves at https://saasaloy.com, the `site` in astro.config.mjs. Cloudflare creates the
+  // DNS record and the certificate for a custom domain on deploy. www.saasaloy.com is not
+  // here: a zone redirect rule sends it to the bare domain. The workers.dev host is off so
+  // two hosts do not split search signals.
+  "routes": [{ "pattern": "saasaloy.com", "custom_domain": true }],
+  "workers_dev": false,
   "compatibility_date": "2026-07-22",
   // `astro dev` renders inside workerd, and @astrojs/react's server renderer keeps a
   // dynamic `import("node:stream")` for the Node streaming path. That path never runs

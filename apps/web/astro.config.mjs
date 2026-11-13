@@ -1,5 +1,7 @@
 // @ts-check
+import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
+import { parseEnv } from "node:util";
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
@@ -47,11 +49,36 @@ const COMPONENT_ENTRIES = ["src/**/*.tsx"];
 //
 // The public origin. Layout.astro builds each canonical URL, `og:url` and `og:image`
 // from it as `Astro.site`, and src/pages/robots.txt.ts and sitemap.xml.ts do the same.
-// The owner chose saasaloy.com on 2026-10-27 (docs/seo/0001-seo-saasaloy-com-2026-10-27.md),
-// but until that domain is on Cloudflare the site deploys to the Brainaloy Labs
-// workers.dev subdomain (2026-10-28). Change this and wrangler.jsonc together.
+// The owner chose saasaloy.com on 2026-10-27 (docs/seo/0001-seo-saasaloy-com-2026-10-27.md)
+// and attached it to the Brainaloy Labs account on 2026-11-02. Change this and
+// wrangler.jsonc together.
+// The dev port: 3000 in the main checkout, or the `DEV_PORT` that `wtports` writes into a
+// linked worktree's apps/web/.env.local, hashed from the branch so two worktrees never
+// share a port. A `DEV_PORT` in the shell wins over the file. The file is read here with
+// node:util, because Astro loads .env files after this config is evaluated.
+function devPort() {
+  let fromFile;
+  try {
+    fromFile = parseEnv(
+      readFileSync(new URL(".env.local", import.meta.url), "utf-8")
+    ).DEV_PORT;
+  } catch (error) {
+    if (error?.code !== "ENOENT") {
+      throw error;
+    }
+  }
+  const value = process.env.DEV_PORT ?? fromFile;
+  const port = value === undefined || value === "" ? 3000 : Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new Error(
+      `DEV_PORT is "${value}". It must be an integer from 1 to 65535. wtports writes it in apps/web/.env.local.`
+    );
+  }
+  return port;
+}
+
 export default defineConfig({
-  site: "https://saasaloy.brainaloy.workers.dev",
+  site: "https://saasaloy.com",
   output: "static",
   // Sessions off. Left unset, the Cloudflare adapter reads this key, decides sessions are
   // wanted, and writes a `SESSION` KV namespace binding with no id into the config it
@@ -72,9 +99,10 @@ export default defineConfig({
   // they release as a pair.
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [react(), separateBuildCache()],
-  // Fixed dev port, the same as a generated project's web app. `strictPort` makes a busy
-  // port a loud failure instead of a silent +1.
-  server: { port: 3000 },
+  // 3000 is the same port as a generated project's web app; a linked worktree takes its
+  // hashed port (see devPort above). `strictPort` makes a busy port a loud failure
+  // instead of a silent +1.
+  server: { port: devPort() },
   vite: {
     // Tailwind 4 is a Vite plugin, not an Astro integration — `@astrojs/tailwind` is EOL
     // and never supported v4. The theme lives in src/styles: the @source globs in

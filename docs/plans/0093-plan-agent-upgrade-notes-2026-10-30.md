@@ -54,14 +54,14 @@ Reuses:
 
 Rejected in one line each: richer changelog only (no filtering by project, not in the package); root `MIGRATION.md` (same, and it drifts from the code); codemods for everything (break on code the owner edited).
 
-### Phase 1: Repair the v0.8.0 notes (built 2026-10-30)
+### Phase 1: Repair the v0.8.0 notes (#297, built 2026-10-30)
 Attended: the owner approves the new GitHub release body before it is published, because editing a published release is an outward action.
 - Move the `## Unreleased` content in `packages/cli/CHANGELOG.md` into the 0.8.0 section and delete the `Unreleased` heading.
 - Inline the shell item's two pointers: the perl command from `modules/shell/skills/saasaloy-shell/SKILL.md:213` and the oxlint rule from `packages/cli/templates/base/oxlint.config.mjs:182`.
 - Rewrite the v0.8.0 GitHub release body from the repaired section.
 Done when: `grep -n "Unreleased" packages/cli/CHANGELOG.md` prints nothing, and `gh release view v0.8.0` shows the brand.css steps, the port 3003 item and the `:3002` CORS item.
 
-### Phase 2: Note format, schema and loader (built 2026-10-30)
+### Phase 2: Note format, schema and loader (#298, built 2026-10-30)
 - Write `packages/cli/schemas/update-note.schema.json` for the frontmatter: `title`, `when`, `version`.
 - Write `packages/cli/src/lib/update-notes.ts`: parse one note, validate it, derive its id from its path, and list the notes in a folder in serial order. No selection logic yet.
 - Create `packages/cli/update-notes/` and add it to `files` in `packages/cli/package.json`.
@@ -73,7 +73,7 @@ Done when: `grep -n "Unreleased" packages/cli/CHANGELOG.md` prints nothing, and 
 - Add a test that parses every `update-notes/` file in the repo, so `pnpm test` fails on a bad note.
 Done when: `pnpm --filter saasaloy test` passes with the new parse test, and `npm pack --dry-run` in `packages/cli` lists `update-notes/0001-brand-css.md`.
 
-### Phase 3: Select notes and render them in the merge plan (built 2026-10-30)
+### Phase 3: Select notes and render them in the merge plan (#298, built 2026-10-30)
 - In `commands/update.ts`, select base notes by version range and module notes by folder comparison, then filter each by `whenHolds` against the project's install set and testing mode.
 - Put notes from a module with no merge base, and older base notes on an adopted project, in a "may apply" group.
 - Record `adoptedAt` in the lock `base` record during adoption (`schemas/saasaloy-lock.schema.json`, `lib/lock.ts`, `adoptBase`).
@@ -82,7 +82,7 @@ Done when: `pnpm --filter saasaloy test` passes with the new parse test, and `np
 - Show the note count in the `summarizePlan` box.
 Done when: a test project whose lock predates the v0.8.0 notes runs `saasaloy update --dry-run` and stdout holds an "Update notes" section with exactly the notes whose `when` holds for that project, and an adopted project without `--from` shows the base note under "may apply".
 
-### Phase 4: Track pending notes (built 2026-10-30)
+### Phase 4: Track pending notes (#298, built 2026-10-30)
 - Add `pendingNotes` to `schemas/manifest.schema.json` and `lib/manifest.ts`. Record the notes an applied run shows; record nothing on `--dry-run`, `--diff` or a declined prompt.
 - Add `update --done <id>`, repeatable. An id that is not pending refuses the run with exit `2` and lists the pending ids.
 - Print pending notes in every later merge plan until cleared.
@@ -91,24 +91,24 @@ Done when: a test project whose lock predates the v0.8.0 notes runs `saasaloy up
 - Make `saasaloy remove <module>` drop that module's pending notes.
 Done when: an applied run that shows one note exits `3`; `saasaloy update --done <id>` then clears it; and the next `saasaloy update` exits `0` with "Everything is up to date."
 
-### Phase 5: The `saasaloy-update` skill (built 2026-10-30)
+### Phase 5: The `saasaloy-update` skill (#298, built 2026-10-30)
 - Add `packages/cli/templates/base/_agents/skills/saasaloy-update/SKILL.md`: upgrade the CLI, preview, apply with `--out`, work the file merges and the update notes, record merges with `--resolved` and notes with `--done`, run the verify commands, and run `update` again until it exits `0`. Include `--from` for an adopted project.
 - Name the skill in the base template's `AGENTS.md` and in the root `llms.txt`.
 Done when: `saasaloy init` in `.dev` writes `.agents/skills/saasaloy-update/SKILL.md` and links it under `.claude/skills/`.
 
-### Phase 6: Release tooling requires a note (built 2026-10-30)
+### Phase 6: Release tooling requires a note (#298, built 2026-10-30)
 - In `scripts/release-preflight.ts`, read the commits since the last tag. Fail on a breaking commit that adds no file under `**/update-notes/` and carries no `Update-Note: none (<reason>)` footer. Print each opt-out reason.
 - Add a local commitlint rule in `commitlint.config.js` that rejects an `Update-Note:` footer with an empty reason.
 - Make the generated changelog entry for a breaking change carry a link to its note at the tag.
 - Document the rule in `CONTRIBUTING.md` next to the release steps.
 Done when: `scripts/release-preflight.test.ts` fails a breaking commit with no note and no footer, passes one that adds a note, and passes one with a footer that has a reason.
 
-### Phase 7: Upgrade smoke (built 2026-10-30)
+### Phase 7: Upgrade smoke (#298, built 2026-10-30)
 - Extend `scripts/release-smoke.ts`: scaffold a project with the previous published CLI, then run `update --dry-run` with the packed tarball against the repo's `modules/`.
 - Assert that the merge plan lists the update notes expected for that project.
 Done when: the smoke script exits `0` and its log names each expected note id.
 
-### Phase 8: Agent acceptance run
+### Phase 8: Agent acceptance run (#298)
 Attended: the owner runs or watches the agent session and judges the result. This phase comes last because it tests the finished build.
 - Scaffold a project at v0.7.0 with `admin`, `email-react`, `api` and `auth`. Upgrade the CLI. Run `saasaloy update --yes --out .saasaloy/merge-plan.md`.
 - Give an agent only the merge plan and the `saasaloy-update` skill.
