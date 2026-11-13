@@ -67,6 +67,10 @@
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",
             "description": "sha256 of the module's version a merge took in, set by `saasaloy update --resolved <path>`. The entry's `hash` is then of the merged bytes. While the module still ships that version `update` skips the file; once it moves, the file goes to the merge plan rather than being overwritten. Cleared the first time the tool writes the file itself."
+          },
+          "deleted": {
+            "type": "boolean",
+            "description": "A tombstone: the owner deleted this file and `saasaloy update --resolved <path>` kept it deleted (ADR 0059). `update` never writes it again and never offers it in the merge plan; `saasaloy update --restore <path>` writes the current file and drops the flag. The entry keeps `module`, `from` and the last `hash`."
           }
         }
       }

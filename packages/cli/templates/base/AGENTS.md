@@ -174,7 +174,7 @@ The linter is **[oxlint](https://oxc.rs)** configured from **[Ultracite](https:/
 **Commit hooks are installed by husky** on your first `pnpm install`, and they need a `.git` directory, which `saasaloy init` creates for you. The root `prepare` script is `husky && node packages/tooling/src/link-skills.ts`, so the same install also links every folder in `.agents/skills/` into `.claude/skills/`. pnpm skips `prepare` when an install changes nothing, so after you add a skill folder to a checkout that is already installed, run `pnpm skills:link`. The hooks:
 
 - `pre-commit` runs **lint-staged** over staged files only — oxlint `--fix`, Stylelint `--fix`, Prettier `--write`. It skips the type-aware pass on purpose: that one needs the whole project graph, which defeats staged-file scoping.
-- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`.
+- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`. A hotfix commit uses `fix`; `hotfix` is a branch name, not a commit type, and commitlint refuses it.
 
 Bypass in a genuine emergency with `git commit --no-verify`, or `HUSKY=0` to skip every hook (which is also how you keep hooks out of CI).
 

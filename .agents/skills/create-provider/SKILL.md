@@ -77,7 +77,7 @@ Six rules hold for every mode:
    `package-json-dependency` patch — never the descriptor's `dependencies[]` (which merges into the
    project root) and never another workspace. Only the capability's own workspace may import a
    provider SDK (ADR 0020).
-6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). Two cores are exceptions, and both for one reason: `cloudflare:workers` is a module only the ambient declarations name, so no `import type` can replace it. `packages/billing` keeps the package and the `types` entry because `billing-stripe` imports `cloudflare:workers`. `packages/queue` keeps them because its `jobs` array imports the `@repo/billing` barrel, and `queue-cloudflare` adds no patch. Both providers still import their own types explicitly.
+6. **A vendor type is an `import type`, never an ambient global.** The barrel imports every registered provider, so any workspace that imports the capability compiles your file, `packages/email-react` included, and it lists no vendor types of its own. Write `import type { KVNamespace } from "@cloudflare/workers-types"`, not a bare `KVNamespace` that resolves only where a tsconfig lists the package in `types`. Pin the types package as a `devDependencies` entry of the capability's `package.json` with a `package-json-dependency` patch, as rule 5 does for an SDK. The core lists neither the package nor a `types` entry, so a project with only the local provider installs nothing from the vendor (issue #253). Two cores are exceptions, and both for one reason: `cloudflare:workers` is a module only the ambient declarations name, so no `import type` can replace it. `packages/subscription` keeps the package and the `types` entry because `subscription-stripe` imports `cloudflare:workers`. `packages/queue` keeps them because its `jobs` array imports the `@repo/subscription` barrel, and `queue-cloudflare` adds no patch. Both providers still import their own types explicitly.
 
 A provider that carries a **checked-in constant** — a page size, a default the vendor does not
 supply — puts it in a config section rather than in its one runtime file or in an env var. That is
@@ -543,21 +543,21 @@ suite against the file in place, add a one-line re-export shim beside the module
 `modules/kv-memory/provider.ts` holding `export * from "../kv/files/src/provider";` — and leave it
 out of the descriptor's `files` list so it never ships. `queue-memory` and `kv-memory` both do this.
 
-## Mode: `billing`
+## Mode: `subscription`
 
-**Interface:** `BillingProvider` in `packages/billing/src/provider.ts`. `billing-stripe` is the
-vendor flavour, `billing-console` is the local one, and the capability's runbook is
-`modules/billing/skills/saasaloy-billing/SKILL.md`. Read
-[ADR 0034](../../../docs/adr/adr-0034-billing-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)
+**Interface:** `SubscriptionProvider` in `packages/subscription/src/provider.ts`. `subscription-stripe` is the
+vendor flavour, `subscription-console` is the local one, and the capability's runbook is
+`modules/subscription/skills/saasaloy-subscription/SKILL.md`. Read
+[ADR 0034](../../../docs/adr/adr-0034-subscription-tables-are-a-projection-of-the-vendors-record-2026-09-08.md)
 before you start: it is what makes a payment capability take providers even though the project owns
 the table.
 
 This is the widest interface in the repo — seven methods plus an optional auth plugin — and it is
 also the one where copying `email` goes wrong fastest. Five rules, in the order they bite:
 
-- **A provider never writes the database.** `billing_subscriptions` has exactly one writer, the
+- **A provider never writes the database.** `subscriptions` has exactly one writer, the
   event path, and the dedupe rule lives there. Nothing in your file imports a schema, a client or
-  `requireBillingStore`. A state change is reported, not written: return a `CheckoutResult.event`
+  `requireSubscriptionStore`. A state change is reported, not written: return a `CheckoutResult.event`
   when your vendor has no webhook, or let your webhook enqueue one when it does. Never both — a
   provider that does both writes the projection twice and races itself.
 - **Wrap the vendor's Better Auth plugin when it has one.** Better Auth ships plugins for Stripe,
@@ -567,56 +567,56 @@ also the one where copying `email` goes wrong fastest. Five rules, in the order 
   the same file and register it with a second `plugin-array` patch on `packages/auth/src/auth.ts`.
   Two exports, still one file. **Build the vendor client lazily.** That factory is called while
   `packages/auth/src/auth.ts` is being imported, so a client built eagerly makes your vendor's
-  secret a requirement for signing in, and takes `BILLING_PROVIDER=console` away from a
-  contributor who has no account. `billing-stripe` hands the plugin a `Proxy` that builds the
+  secret a requirement for signing in, and takes `SUBSCRIPTION_PROVIDER=console` away from a
+  contributor who has no account. `subscription-stripe` hands the plugin a `Proxy` that builds the
   client on the first property read; copy that shape.
 - **Map the plugin's model onto the core's columns, and check the map covers every field the
   plugin writes.** Better Auth plugins let a project rename the model and every field
   (`schema.subscription.modelName` + `fields`). `modelName` is the **Drizzle export key**
-  (`billingSubscription`), not the SQL table name, and each field maps to a Drizzle property, not a
+  without the plural `s`, not the SQL table name, and each field maps to a Drizzle property, not a
   column name. Read the plugin's own schema file at the pinned version and account for every entry;
   a field with no column fails at the first webhook, not at `pnpm typecheck`. Watch for fields the
   plugin writes *outside* its declared schema — `@better-auth/stripe` writes `limits` whenever a
-  plan carries it, which is why `billing-stripe` does not pass `limits` through.
+  plan carries it, which is why `subscription-stripe` does not pass `limits` through.
 - **`plans.ts` is the source of truth, and the plan id is what lands in the `plan` column.** Map
   `providerIds.<yourName>.monthly` and `.yearly` onto the vendor's price fields and `trialDays`
   onto its trial field. Leave the default plan out: it has no price and nobody buys it. Name the
   vendor's plan after the plan **id**, because that is the string the entitlement resolver looks up.
 - **Wire `authorizeSubject` into the vendor's own authorization hook.** The plugin's endpoints are
-  reachable directly, so the rule in `@billing/subject.ts` has to guard them as well as the
+  reachable directly, so the rule in `@subscription/subject.ts` has to guard them as well as the
   capability's routes. That single file is what `teams` replaces to bill organizations.
 
 Codes are `invalid_request`, `not_found`, `card_declined`, `rate_limited`, `webhook_invalid` and
 `provider_error`. Map only vendor codes you have seen, keep the raw one in `providerCode`, and set
 `retryable` honestly: a rate limit and a connection failure earn it, a declined card never does.
 
-**Descriptor** (`billing-stripe`): two `plugin-array` patches — one per door Stripe reaches the
+**Descriptor** (`subscription-stripe`): two `plugin-array` patches — one per door Stripe reaches the
 project through — and one `package-json-dependency` per vendor package, into the **capability's**
 `package.json` and never into `packages/auth`:
 
 ```jsonc
-{ "file": "packages/billing/src/index.ts", "kind": "plugin-array",
-  "exportName": "billing", "arrayProp": "providers", "call": "stripeBilling",
-  "import": { "name": "stripeBilling", "from": "./providers/stripe" } },
+{ "file": "packages/subscription/src/index.ts", "kind": "plugin-array",
+  "exportName": "subscription", "arrayProp": "providers", "call": "stripeSubscription",
+  "import": { "name": "stripeSubscription", "from": "./providers/stripe" } },
 { "file": "packages/auth/src/auth.ts", "kind": "plugin-array",
   "exportName": "auth", "arrayProp": "plugins", "call": "stripeAuthPlugin",
-  "import": { "name": "stripeAuthPlugin", "from": "@repo/billing/providers/stripe" } },
-{ "file": "packages/billing/package.json", "kind": "package-json-dependency",
+  "import": { "name": "stripeAuthPlugin", "from": "@repo/subscription/providers/stripe" } },
+{ "file": "packages/subscription/package.json", "kind": "package-json-dependency",
   "section": "dependencies", "name": "stripe", "range": "22.6.1" },
-{ "file": "packages/billing/package.json", "kind": "package-json-dependency",
+{ "file": "packages/subscription/package.json", "kind": "package-json-dependency",
   "section": "peerDependencies", "name": "better-auth", "range": "1.7.3" }
 ```
 
 The vendor's plugin peers on `better-auth`, so declare that as a **peer** dependency of
-`packages/billing` rather than a direct one. Two copies of Better Auth in one project is two
+`packages/subscription` rather than a direct one. Two copies of Better Auth in one project is two
 session implementations.
 
 **Does your vendor need a column on `user`?** Better Auth plugins put the customer link on the
-`user` model and cannot be pointed at another table. `modules/billing` already adds
-`user.billingCustomerId` with a `drizzle-column` patch, so map the plugin's own field onto it
-(`schema.user.fields.stripeCustomerId: "billingCustomerId"`) rather than adding a second column.
+`user` model and cannot be pointed at another table. `modules/subscription` already adds
+`user.subscriptionCustomerId` with a `drizzle-column` patch, so map the plugin's own field onto it
+(`schema.user.fields.stripeCustomerId: "subscriptionCustomerId"`) rather than adding a second column.
 
-**The local provider is not optional here, and it is not a mock.** `billing-console` runs the whole
+**The local provider is not optional here, and it is not a mock.** `subscription-console` runs the whole
 flow — checkout, portal, change-plan, cancel, restore — with no account and no network, by
 returning the event the route enqueues. It has no auth plugin, so it patches one array. Two things
 it needs that a vendor provider does not: ids derived from the subject, so a second call converges
@@ -693,7 +693,7 @@ The install path a provider must survive is a **clean project**, one command:
 
 ```sh
 pnpm play:reset
-cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, billing-, storage-<provider>
+cd .dev/playground && ./saasaloy add email-<provider>   # or logger-, sms-, queue-, subscription-, storage-<provider>
 ```
 
 That resolves `email` first, scaffolds `packages/email`, drops your file, and applies your patches

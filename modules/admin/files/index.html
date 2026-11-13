@@ -7,6 +7,21 @@
     <meta name="robots" content="noindex, nofollow" />
     <!-- vite.config.ts replaces this title with the product name and adds the favicon. -->
     <title>Admin</title>
+    <!--
+      Start the session check with the HTML, not after the JavaScript. The root route's
+      guard cannot pick the login screen or the shell until /get-session answers, and
+      without this the request waits for every script to load and run first (822 ms
+      against 76 ms, measured). The auth client in src/lib/auth.ts sends the same request,
+      a GET with credentials, so the browser hands it this response instead of asking
+      again. Keep the path in step with the client's `basePath`, "/admin/auth". Vite fills
+      in %PUBLIC_API_URL% at dev and build time.
+    -->
+    <link
+      rel="preload"
+      as="fetch"
+      crossorigin="use-credentials"
+      href="%PUBLIC_API_URL%/admin/auth/get-session"
+    />
   </head>
   <body class="bg-background text-foreground min-h-dvh font-sans antialiased">
     <div id="root"></div>

@@ -13,8 +13,8 @@ const USAGE_LINE = "saasaloy new module <name>";
 
 describe(parseArgs, () => {
   it("reads the noun and the name", () => {
-    expect(parseArgs(["module", "billing"])).toMatchObject({
-      name: "billing",
+    expect(parseArgs(["module", "subscription"])).toMatchObject({
+      name: "subscription",
       noun: "module",
       unknown: [],
     });
@@ -28,7 +28,7 @@ describe(parseArgs, () => {
     expect(
       parseArgs([
         "module",
-        "billing",
+        "subscription",
         "--type",
         "saasaloy:feature",
         "--depends-on=api,database",
@@ -80,7 +80,11 @@ describe(renderFindings, () => {
   it("prints each finding's path and message", () => {
     const line = stripAnsi(
       renderFindings([
-        { message: 'names "api"', module: "billing", where: "/dependsOn/0" },
+        {
+          message: 'names "api"',
+          module: "subscription",
+          where: "/dependsOn/0",
+        },
       ]).join("\n")
     );
 
@@ -125,7 +129,7 @@ describe(runNew, () => {
   it("scaffolds a descriptor, a files folder and a prefixed skill", async () => {
     const { code } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on=",
@@ -135,10 +139,10 @@ describe(runNew, () => {
     for (const path of [
       "registry-item.json",
       "files/.gitkeep",
-      "skills/saasaloy-billing/SKILL.md",
+      "skills/saasaloy-subscription/SKILL.md",
     ]) {
       await expect(
-        pathExists(join(repo, "modules", "billing", ...path.split("/")))
+        pathExists(join(repo, "modules", "subscription", ...path.split("/")))
       ).resolves.toBeTruthy();
     }
   });
@@ -146,14 +150,17 @@ describe(runNew, () => {
   it("writes a schema-valid descriptor", async () => {
     await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:capability",
       "--depends-on=",
     ]);
 
     const parsed = JSON.parse(
-      await readFile(join(repo, "modules/billing/registry-item.json"), "utf-8")
+      await readFile(
+        join(repo, "modules/subscription/registry-item.json"),
+        "utf-8"
+      )
     ) as unknown;
 
     const result = await validateRegistryItem(parsed);
@@ -166,14 +173,14 @@ describe(runNew, () => {
   it("leaves a module that passes doctor with no findings", async () => {
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on=",
     ]);
 
     const reports = await checkTarget(
-      await resolveDoctorTarget(join(repo, "modules", "billing"))
+      await resolveDoctorTarget(join(repo, "modules", "subscription"))
     );
 
     expect(reports.flatMap((report) => report.findings)).toStrictEqual([]);
@@ -188,7 +195,7 @@ describe(runNew, () => {
   it("records the dependencies the author named", async () => {
     await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on",
@@ -196,7 +203,10 @@ describe(runNew, () => {
     ]);
 
     const parsed = JSON.parse(
-      await readFile(join(repo, "modules/billing/registry-item.json"), "utf-8")
+      await readFile(
+        join(repo, "modules/subscription/registry-item.json"),
+        "utf-8"
+      )
     ) as { dependsOn: string[] };
 
     expect(parsed.dependsOn).toStrictEqual(["api", "database"]);
@@ -206,7 +216,7 @@ describe(runNew, () => {
     // `api` is in no registry here, so the dependency it names cannot resolve.
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on",
@@ -216,7 +226,7 @@ describe(runNew, () => {
     expect(code).toBe(0);
     expect(out).toContain("/dependsOn/0");
     await expect(
-      pathExists(join(repo, "modules/billing/registry-item.json"))
+      pathExists(join(repo, "modules/subscription/registry-item.json"))
     ).resolves.toBeTruthy();
   });
 
@@ -226,7 +236,7 @@ describe(runNew, () => {
 
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
     ]);
@@ -244,7 +254,7 @@ describe(runNew, () => {
 
     const { code } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on=",
@@ -255,11 +265,11 @@ describe(runNew, () => {
   });
 
   it("refuses to merge into a module folder that already exists", async () => {
-    await mkdir(join(repo, "modules", "billing"), { recursive: true });
+    await mkdir(join(repo, "modules", "subscription"), { recursive: true });
 
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
     ]);
@@ -267,25 +277,25 @@ describe(runNew, () => {
     expect(code).toBe(2);
     expect(out).toContain("already exists");
     await expect(
-      pathExists(join(repo, "modules/billing/registry-item.json"))
+      pathExists(join(repo, "modules/subscription/registry-item.json"))
     ).resolves.toBeFalsy();
   });
 
   it("refuses a name the schema's pattern would reject", async () => {
     const { code, out } = await runCommand([
       "module",
-      "Billing",
+      "Subscription",
       "--type",
       "saasaloy:feature",
     ]);
 
     expect(code).toBe(2);
-    expect(out).toContain("Billing");
+    expect(out).toContain("Subscription");
     await expect(pathExists(join(repo, "modules"))).resolves.toBeFalsy();
   });
 
   it("refuses a noun it does not know, naming the ones it does", async () => {
-    const { code, out } = await runCommand(["provider", "billing"]);
+    const { code, out } = await runCommand(["provider", "subscription"]);
 
     expect(code).toBe(2);
     expect(out).toContain("module");
@@ -294,7 +304,7 @@ describe(runNew, () => {
   it("refuses a tier that is not one of the two", async () => {
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "feature",
     ]);
@@ -305,7 +315,7 @@ describe(runNew, () => {
   });
 
   it("refuses rather than hanging when there is no terminal to ask for the tier", async () => {
-    const { code, out } = await runCommand(["module", "billing"]);
+    const { code, out } = await runCommand(["module", "subscription"]);
 
     expect(code).toBe(2);
     expect(out).toContain("--type");
@@ -315,7 +325,7 @@ describe(runNew, () => {
   it("refuses with no terminal and no --depends-on, naming the flag, and writes nothing", async () => {
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
     ]);
@@ -328,7 +338,7 @@ describe(runNew, () => {
   it("scaffolds with no dependencies under an empty --depends-on", async () => {
     const { code } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--depends-on",
@@ -337,7 +347,10 @@ describe(runNew, () => {
 
     expect(code).toBe(0);
     const descriptor = JSON.parse(
-      await readFile(join(repo, "modules/billing/registry-item.json"), "utf-8")
+      await readFile(
+        join(repo, "modules/subscription/registry-item.json"),
+        "utf-8"
+      )
     ) as { dependsOn?: unknown };
     expect(descriptor.dependsOn ?? []).toStrictEqual([]);
   });
@@ -356,7 +369,7 @@ describe(runNew, () => {
   it("reports an unknown flag rather than scaffolding anyway", async () => {
     const { code, out } = await runCommand([
       "module",
-      "billing",
+      "subscription",
       "--type",
       "saasaloy:feature",
       "--force",

@@ -21,6 +21,11 @@ import { defineConfig } from "vitest/config";
 //   and import the template source by relative path. The source imports its neighbours as
 //   `@repo/ui/<layer>/<name>`, which nothing links here either, so the alias below points
 //   each one at the template's `packages/ui/src/<layer>/<name>.ts`.
+// - `web`: the base template's `apps/web` tests: the sitemap page list, and the guard that
+//   every primitive the site renders has an `@source` line. They import only Vitest, Node
+//   and the files beside them, and the guard reads the template's files by path.
+// - `module-files`: a module's shipped Vitest tests outside the database drivers, stored as
+//   `*.vitest.ts` for the same reason as `db-scripts`, and importing only Vitest and Node.
 //
 // The root `test:base` script runs the template's `node:test` files and skips
 // `packages/tooling` and `packages/config`, so each file runs on the one runner it imports.
@@ -58,6 +63,32 @@ export default defineConfig({
           name: "config",
           environment: "node",
           include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        root: `${base}apps/web`,
+        oxc: { tsconfig: false },
+        test: {
+          name: "web",
+          environment: "node",
+          include: ["src/**/*.test.ts"],
+        },
+      },
+      {
+        root: modules,
+        oxc: { tsconfig: false },
+        resolve: {
+          alias: [
+            {
+              find: /^@repo\/env\/(.*)$/,
+              replacement: `${base}packages/env/src/$1.ts`,
+            },
+          ],
+        },
+        test: {
+          name: "module-files",
+          environment: "node",
+          include: ["storage-cloudflare/files/**/*.vitest.ts"],
         },
       },
       {

@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 
 import { SignUpCard } from "@repo/ui/blocks/auth/sign-up";
@@ -17,6 +18,7 @@ export const Route = createFileRoute("/sign-up")({
 
 function SignUpScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   async function handleSignUp({
     name,
@@ -34,7 +36,9 @@ function SignUpScreen() {
       return "Could not reach the api. Check that apps/api is running on the origin PUBLIC_API_URL names (http://localhost:4000 in dev).";
     }
 
+    // A new account must not read the cached queries of the one that used this tab before.
     forgetSession();
+    queryClient.clear();
     await router.invalidate();
     await router.navigate({ to: "/" });
     return undefined;
