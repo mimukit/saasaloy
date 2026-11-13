@@ -16,6 +16,10 @@ This repository is a monorepo.
 
 - We do not use changesets. The CLI is published to npm as [`saasaloy`](https://www.npmjs.com/package/saasaloy), and the maintainer cuts each release by hand with [release-it](https://github.com/release-it/release-it). See [Releasing](#releasing).
 
+## The public site's dev port
+
+`pnpm dev` starts the public site (`apps/web`) on port 3000 in the main checkout. A linked worktree takes its own port from 10000 to 19999 instead, so two worktrees can run the site at once. Run `wtports` in the worktree before the first `pnpm dev`: it reads `.devports.json`, hashes the repository, the service and the branch into a port, and writes `DEV_PORT` into a marked block in `apps/web/.env.local`. `apps/web/astro.config.mjs` reads `DEV_PORT` from that file, and a `DEV_PORT` in the shell wins over it. `wtports list` shows the port of every worktree, and `wtports clean` removes the block. Astro also allows one `astro dev` per folder, so a second `pnpm dev` in the same worktree stops with "Another astro dev server is already running". Stop the first one with `pnpm --filter @saasaloy/web exec astro dev stop`, or press Ctrl-C in its terminal. A service you add to the dev setup gets an entry in `.devports.json` in the same change.
+
 ## Manual QA: the `.dev/playground`
 
 When you build or change a CLI command or a module, hand-test it in a throwaway
@@ -186,7 +190,7 @@ Pointed at a project, `doctor` also prints a Base section: which CLI recorded th
 
 ### Changing the base template
 
-Every file under `packages/cli/templates/base/` is a managed file in a scaffolded project, recorded at `init` under the module name `base` with the hash of its rendered bytes. `saasaloy outdated` compares the lock's template hash against the running CLI's, so any edit to the template turns the base row `outdated` for every project scaffolded before it, and `saasaloy update` then overwrites the clean copies and routes edited ones to the merge plan. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles`, as an explicit path; a test asserts every listed path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename. A module marks the same kind of file with `"seed": true` on its `files[]` or `scaffolds[].files[]` entry: written once, never overwritten or merged by `update`, restored when missing, and kept by `remove` once changed (ADR 0059).
+Every file under `packages/cli/templates/base/` is a managed file in a scaffolded project, recorded at `init` under the module name `base` with the hash of its rendered bytes. `saasaloy outdated` compares the lock's template hash against the running CLI's, so any edit to the template turns the base row `outdated` for every project scaffolded before it, and `saasaloy update` then overwrites the clean copies and routes edited ones to the merge plan. Two rules follow. A file the owner is meant to rewrite goes in `_saasaloy-base.json`'s `seedFiles`, as an explicit path; a test asserts every listed path exists. And the declaration itself is never copied: `copyTemplate` skips it by name before the `_` to `.` rename. A module marks the same kind of file with `"seed": true` on its `files[]` or `scaffolds[].files[]` entry: written once, never overwritten or merged by `update`, restored when missing, and kept by `remove` once changed (ADR 0060).
 
 ### Resetting
 

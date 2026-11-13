@@ -167,7 +167,8 @@ The sidebar applies `withLiveCounts` from `@repo/ui/lib/shell/nav-counts`:
 
 - A live count replaces the row's static `count`.
 - A live 0 hides the badge. A static 0 still renders.
-- With no live count (loading, a failed fetch, a non-OK answer or a body without a numeric `count`) the static `count` stays. A failed count shows no error.
+- Before the first successful fetch the static `count` stays.
+- A failed fetch (a network error, a non-OK answer or a body without a numeric `count`) throws, so TanStack Query keeps the last count it read. The badge never drops to 0 or disappears because of a failure, and a failed count shows no error.
 
 A screen whose action changes a count invalidates the key after the mutation, so the badge follows with no reload:
 
@@ -350,7 +351,7 @@ Under `database-d1` there is no interactive transaction. Each statement of the b
 
 ## Extension seams
 
-Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it, and writes it again only when it is missing, because a managed file imports it. Put your change in the seed file and leave the managed file alone, and it keeps taking updates with no merge (ADR 0059).
+Some module files take a project's own code through a seed file under `src/extend/`. A seed file is written once and is then the project's: `saasaloy update` never changes it, and writes it again only when it is missing, because a managed file imports it. Put your change in the seed file and leave the managed file alone, and it keeps taking updates with no merge (ADR 0060).
 
 | Seed file | Shipped by | Read by | What goes in it |
 | --- | --- | --- | --- |
@@ -382,7 +383,7 @@ Four properties are load-bearing:
 - **`init.credentials: "include"`** is why this file exists instead of a one-line `hc()` per call
   site. `fetch` omits cookies cross-origin by default, so without it every request from `:3001`
   arrives anonymous and the api answers 401.
-- **`x-auth-audience: admin`** names which of the browser's two sessions each call means. The browser sends both cookies to the api host, the client one included when a client is signed in on another app in the same browser. The `requireAdmin*` gates read the admin session whatever the header says, but a generic gate (`requireSession`, `requireTenant`, `authFor(c)`) reads the session the header names. Without it, a teams or billing screen here would act as the client in the other tab. Any value other than `client` or `admin` gets 400.
+- **`x-auth-audience: admin`** names which of the browser's two sessions each call means. The browser sends both cookies to the api host, the client one included when a client is signed in on another app in the same browser. The `requireAdmin*` gates read the admin session whatever the header says, but a generic gate (`requireSession`, `requireTenant`, `authFor(c)`) reads the session the header names. Without it, a teams or subscription screen here would act as the client in the other tab. Any value other than `client` or `admin` gets 400.
 
 `@repo/api/client` is a **types-only** export (its `package.json` maps `./client` under a `types`
 condition alone), which is why `@repo/api` is a `devDependency`. No Worker code enters this bundle.
@@ -441,7 +442,7 @@ That `shell.css` import is load-bearing. It holds the `@source` line for `compon
 
 `src/main.tsx` imports `@repo/ui/styles/admin.css` and the Inter font package, and nothing else. That import needs the `"./styles/*": "./src/styles/*"` export in `packages/ui/package.json`, which the base template ships from the theme split onward. A project made before the split lacks it, and the admin build then fails to resolve `@repo/ui/styles/admin.css`. Run `saasaloy update` for the base and follow the steps in [Finish the theme split](https://github.com/mimukit/saasaloy/blob/main/docs/wiki/runbooks/finish-the-theme-split.md) first. **No route imports a stylesheet.** Two Tailwind entrypoints in one bundle means two copies of the base layer and a token set whose winner depends on import order.
 
-The palette is a three-step neutral ramp measured off the reference screenshots — canvas darkest, panel one step lighter, hover and selected one step lighter again — with alpha hairlines over it: white at 8 % on dark, black at 8 % on light, and inputs a step stronger. The measured values are written into the header comment of `admin.css` beside the roles they fill; change a value there and update the comment with it. Light is a mapped cream variant and is first-class, not a fallback.
+The palette is a three-step neutral ramp measured off the reference screenshots — canvas darkest, panel one step lighter, hover and selected one step lighter again — with alpha hairlines over it: white at 8 % on dark, black at 8 % on light, and inputs a step stronger. The measured values are written into the header comment of `admin.css` beside the roles they fill; change a value there and update the comment with it. Light is a mapped variant on a neutral grey canvas and is first-class, not a fallback.
 
 `apps/admin/DESIGN.md` records these tokens and the rules behind them, and fingerprints `admin.css`. After you change `admin.css`, run the `saasaloy-design` skill's `update` flow for the admin app. A theme preset never targets `admin.css`; it reaches the web app only.
 

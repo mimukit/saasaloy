@@ -164,7 +164,7 @@ export interface RegistryFile {
    */
   onlyWith?: string;
   /**
-   * A module seed file (#310, ADR 0059): `add` and backfill write it once and record it,
+   * A module seed file (#310, ADR 0060): `add` and backfill write it once and record it,
    * and from then on it is the project's. `update` never overwrites or merges it, and puts
    * it back only when it is missing. `remove` deletes it while its hash still matches the
    * record and keeps it, with a warning, once the project changed it. A managed file

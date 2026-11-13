@@ -8,7 +8,7 @@ import {
   removeFromPluginArray,
 } from "./ts-module.js";
 
-// The real file `billing` and `teams` patch, read off disk rather than restated here.
+// The real file `subscription` and `teams` patch, read off disk rather than restated here.
 // The synthetic fixture below cannot catch an edit to `modules/auth` that hoists
 // `plugins` to a named const or moves `auth` out of module scope, and #99 rewrote that
 // file around this exact call.

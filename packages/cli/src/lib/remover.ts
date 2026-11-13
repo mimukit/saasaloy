@@ -58,7 +58,7 @@ export interface PlannedRemoveFile {
    */
   gatedOn?: string;
   /**
-   * The manifest records this file as a module seed (#310, ADR 0059). A `drift` seed is
+   * The manifest records this file as a module seed (#310, ADR 0060). A `drift` seed is
    * the project's own change to a file it was handed, so it is kept without a prompt and
    * the command warns with its path. An unchanged one is deleted like any other file.
    */

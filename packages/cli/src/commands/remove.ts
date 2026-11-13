@@ -101,7 +101,7 @@ const FILE_ACTION_LABEL: Record<FileRemoveAction, string> = {
 // accordingly instead of implying a confirmation that won't happen.
 function fileActionLabel(file: PlannedRemoveFile, yes: boolean): string {
   const { action } = file;
-  // A seed file the project changed is kept without asking (#310, ADR 0059).
+  // A seed file the project changed is kept without asking (#310, ADR 0060).
   if (action === "drift" && file.seed) {
     return pc.yellow("seed, changed → kept (untracked)");
   }

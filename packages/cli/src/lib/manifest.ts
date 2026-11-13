@@ -36,7 +36,7 @@ export interface ManagedEntry {
    */
   when?: When;
   /**
-   * The descriptor marked this file `seed` (#310, ADR 0059): written once, then the
+   * The descriptor marked this file `seed` (#310, ADR 0060): written once, then the
    * project's. `update` never overwrites or merges it and restores it only when it is
    * missing; `remove` deletes it only while `hash` still matches. `remove` runs offline
    * with no descriptor, which is why the flag is recorded rather than re-read.
@@ -50,6 +50,13 @@ export interface ManagedEntry {
    * writes the file itself.
    */
   mergedWith?: string;
+  /**
+   * The owner deleted this file and `saasaloy update --resolved <path>` said to keep it
+   * deleted (#312, ADR 0059). `update` never writes it again and never offers it in the
+   * merge plan; `update --restore <path>` brings it back and drops the flag. The entry
+   * keeps `module`, `from` and the last `hash`. Absent on every entry that is not one.
+   */
+  deleted?: boolean;
 }
 
 // A structural config patch that actually landed on disk, recorded so `remove` can undo
@@ -128,6 +135,11 @@ export interface ManagedFileRecord {
    * structural: a real write cannot carry `adopted` forward by accident.
    */
   adopted?: boolean;
+  /**
+   * True only for a tombstone (`ManagedEntry.deleted`). Leaving it out drops the field,
+   * so every write the tool makes itself clears a tombstone.
+   */
+  deleted?: boolean;
   from?: string;
   hash: string;
   /** See `ManagedEntry.mergedWith`. Left out on every write the tool makes itself. */
@@ -160,6 +172,7 @@ export function recordManagedFile(
     ...(record.mergedWith === undefined
       ? {}
       : { mergedWith: record.mergedWith }),
+    ...(record.deleted ? { deleted: true } : {}),
   };
 }
 

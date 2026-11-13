@@ -10,6 +10,7 @@ import {
 import { ShellLayout } from "@repo/ui/containers/shell/shell-layout";
 import type { ShellLinkProps } from "@repo/ui/containers/shell/shell-nav";
 import { useCommands } from "@repo/ui/lib/shell/commands";
+import { navCountFromBody } from "@repo/ui/lib/shell/nav-counts";
 
 import { adminCommands } from "@admin/components/commands";
 import { NAV_AREAS, areaFor } from "@admin/components/nav";
@@ -61,33 +62,25 @@ function RootWrappers({ children }: { children: ReactNode }) {
 const NAV_COUNT_INTERVAL_MS = 60_000;
 
 /**
- * One live nav count, or `null` when there is none to show.
+ * One live nav count.
  *
  * Plain `fetch` rather than the typed `api` client: a NAV_COUNTS `path` is data a module's
  * patch wrote, so there is no route type to call it through. The origin, the cookie and
  * the audience header are the same three `src/lib/api.ts` sets, for the same reasons.
  *
- * Every failure (network, a non-OK status, a body that is not `{ count: number }`) answers
- * `null`, so a count that cannot be read shows no badge and never reaches an error UI.
+ * Every failure (network, a non-OK status, a body that is not `{ count: number }`) throws,
+ * so TanStack Query keeps the last count it read and the badge never drops because of a
+ * failure. The query has no error UI, so a failure never reaches the screen.
  */
-async function fetchNavCount(path: string): Promise<number | null> {
-  try {
-    const response = await fetch(`${apiBaseUrl}${path}`, {
-      credentials: API_CREDENTIALS,
-      headers: API_HEADERS,
-    });
-    if (!response.ok) {
-      return null;
-    }
-    const body: unknown = await response.json();
-    const count =
-      typeof body === "object" && body !== null && "count" in body
-        ? body.count
-        : undefined;
-    return typeof count === "number" && Number.isFinite(count) ? count : null;
-  } catch {
-    return null;
+async function fetchNavCount(path: string): Promise<number> {
+  const response = await fetch(`${apiBaseUrl}${path}`, {
+    credentials: API_CREDENTIALS,
+    headers: API_HEADERS,
+  });
+  if (!response.ok) {
+    throw new Error(`The nav count at ${path} answered ${response.status}.`);
   }
+  return navCountFromBody(await response.json());
 }
 
 /**
@@ -96,6 +89,8 @@ async function fetchNavCount(path: string): Promise<number | null> {
  * One query per entry under `["nav-count", to]`, so a page that changes a count
  * invalidates its own key after the mutation and the badge follows with no reload.
  * TanStack Query refetches on window focus and does not run the interval in a hidden tab.
+ * A query with no data yet maps to `undefined`, "not known", so the row keeps its static
+ * count; a query that failed after a success still holds its last `data`.
  */
 function useNavCounts(): Record<string, number | undefined> {
   return useQueries({
@@ -103,14 +98,13 @@ function useNavCounts(): Record<string, number | undefined> {
       queryKey: ["nav-count", to],
       queryFn: () => fetchNavCount(path),
       refetchInterval: NAV_COUNT_INTERVAL_MS,
-      refetchOnWindowFocus: true,
+      // "always", not `true`: `true` skips a count fetched inside the 30 s staleTime, so
+      // a row changed in another tab would not show here until the next interval.
+      refetchOnWindowFocus: "always",
     })),
     combine: (results) =>
       Object.fromEntries(
-        NAV_COUNTS.map(({ to }, index) => [
-          to,
-          results[index]?.data ?? undefined,
-        ])
+        NAV_COUNTS.map(({ to }, index) => [to, results[index]?.data])
       ),
   });
 }

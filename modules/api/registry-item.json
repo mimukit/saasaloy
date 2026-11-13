@@ -89,6 +89,11 @@
           "target": "test/setup/.gitkeep"
         },
         {
+          "path": "files/src/routes/cors.vitest.ts",
+          "target": "src/routes/cors.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/env.ts",
           "target": "src/env.ts"
         },

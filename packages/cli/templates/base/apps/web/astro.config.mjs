@@ -5,20 +5,21 @@ import react from "@astrojs/react";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
 
-// `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
-// node_modules/.vite, each stamped with a hash of the config that made them. The two
-// hashes always differ, and Vite deletes a cache whose hash does not match. So a build
-// run beside a live `astro dev` deletes the dev server's deps_ssr folder, and the next
-// module the dev server loads from it fails with "The file does not exist at
-// .../deps_ssr/<dep>.js which is in the optimize deps directory". A separate folder for
-// the build keeps the two apart; dev keeps the default.
-/** @returns {import("astro").AstroIntegration} the integration that moves the build cache */
+// Only `astro dev` uses node_modules/.vite; every other command gets its own Vite cache.
+// Each command keeps pre-bundled dependencies there, stamped with a hash of the config
+// that made them. The hashes differ between commands, and Vite deletes a cache whose hash
+// does not match. So `astro build`, or the `astro sync` that `pnpm typecheck` runs, beside
+// a live `astro dev` deletes the dev server's deps_ssr folder, and the next module the dev
+// server loads from it fails with "The file does not exist at .../deps_ssr/<dep>.js which
+// is in the optimize deps directory". Test `command !== "dev"`, not `=== "build"`: a list
+// of the other commands misses the next one Astro adds.
+/** @returns {import("astro").AstroIntegration} the integration that moves the non-dev cache */
 function separateBuildCache() {
   return {
     name: "separate-build-cache",
     hooks: {
       "astro:config:setup": ({ command, updateConfig }) => {
-        if (command === "build") {
+        if (command !== "dev") {
           updateConfig({ vite: { cacheDir: "node_modules/.vite-build" } });
         }
       },
@@ -94,6 +95,9 @@ export default defineConfig({
     // A glob, not an include list, so a component a module adds is covered with no edit
     // here.
     ssr: {
+      // Vite types `ssr.optimizeDeps` without `entries`, but merges the whole object into
+      // `environments.ssr.optimizeDeps`, which honours it. Type gap only.
+      // @ts-expect-error -- `entries` reaches the ssr environment at runtime.
       optimizeDeps: { entries: COMPONENT_ENTRIES },
     },
     // The browser needs the same entries. Its scan reads an .astro page's <script> tags but
