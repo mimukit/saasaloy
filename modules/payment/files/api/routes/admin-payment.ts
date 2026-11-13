@@ -1,7 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import { createPayment, PaymentError } from "@repo/payment";
 import type { PaymentEnv, PaymentStatus } from "@repo/payment";
-import { requireAdmin, withAuthScope } from "@repo/auth/server";
+import { adminGate, requireAdmin, withAuthScope } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import { Hono } from "hono";
 import type { Context } from "hono";
@@ -14,6 +14,9 @@ import {
   paymentDetail,
   withPaymentStore,
 } from "../payment-store";
+import type { PaymentView } from "../payment-store";
+import { adminWrite } from "../lib/admin-write";
+import type { AdminWriteScope } from "../lib/admin-write";
 import type { Db } from "@repo/db/client";
 import { paymentErrorStatus } from "./payment";
 import type { PaymentBindings } from "./payment";
@@ -24,10 +27,16 @@ import type { PaymentBindings } from "./payment";
 // is `/admin/payment` and not `/admin` because a `chained-route` patch matches on its path,
 // and `admin` already routes `/admin`: a second `/admin` link would be skipped as present.
 //
-// Four routes: the queue, one payment, a review decision, and a refund. Every one opens
-// with `requireAdmin`, on the server. The admin app's root route denies a non-admin in
-// the browser, and that is not the gate: it stops the SPA from asking, and this stops
-// everyone else. Same arrangement as `apps/api/src/routes/admin-users.ts`.
+// Five routes: the queue, the review count, one payment, a review decision, and a refund.
+// Every one lists `adminGate` first, before its validator, so a caller with no admin
+// session gets a 401 and never a 400 that describes the input. The handler then reads the
+// session again, through `requireAdmin` in `staff()` or `adminWrite` in `staffWrite()`,
+// because it needs the actor's id. The admin app's root route denies a non-admin in the
+// browser, and that is not the gate: it stops the SPA from asking, and this stops
+// everyone else.
+//
+// The two writes run through `adminWrite` (`../lib/admin-write.ts`), so each writes one
+// audit row with its change. Their actions are in `../audit/payment.ts`.
 //
 // Nothing here verifies a payment. Under a manual method the only witness is the staff
 // member reading their own statement; the review only records what they decided.
@@ -116,7 +125,7 @@ const validRefundBody = zValidator("json", refundBody, (result, c) => {
 
 export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
   // The queue. The admin page opens on `?status=submitted`; no status lists every payment.
-  .get("/payments", validListQuery, (c) =>
+  .get("/payments", adminGate, validListQuery, (c) =>
     staff(c, async ({ db }) => {
       const { status } = c.req.valid("query");
       const [payments, counts] = await Promise.all([
@@ -129,7 +138,7 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
 
   // The sidebar's live count on the Payments row: how many payments wait for a review.
   // The admin shell polls it through NAV_COUNTS, so it answers only `{ count }`.
-  .get("/review-count", (c) =>
+  .get("/review-count", adminGate, (c) =>
     staff(c, async ({ db }) => {
       const { submitted } = await countPayments(db);
       return c.json({ count: submitted }, 200);
@@ -137,7 +146,7 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
   )
 
   // One payment, with its event history and its refunds.
-  .get("/payments/:id", (c) =>
+  .get("/payments/:id", adminGate, (c) =>
     staff(c, async ({ db }) => {
       const detail = await paymentDetail(db, c.req.param("id"));
       if (!detail) {
@@ -151,11 +160,13 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
   )
 
   // One decision. Both are conditional updates on `status = 'submitted'`, so two staff
-  // racing get one 200 and one 409.
-  .post("/payments/:id/review", validReviewBody, (c) =>
-    staff(c, async ({ db, actorUserId }) => {
+  // racing get one 200 and one 409. The decision, its event row and its audit row commit
+  // together: `staffWrite` runs it inside `adminWrite`.
+  .post("/payments/:id/review", adminGate, validReviewBody, (c) =>
+    staffWrite(c, async ({ db, actorUserId, audit }) => {
       const id = c.req.param("id");
       const body = c.req.valid("json");
+      const before = await detailOrThrow(db, id);
       const client = createPayment(c.env as PaymentEnv);
       await (body.action === "confirm"
         ? client.confirm(id, { actorUserId, note: body.note ?? null })
@@ -164,21 +175,46 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
             note: body.note ?? null,
             reason: body.reason,
           }));
-      return c.json(await detailOrThrow(db, id), 200);
+      const after = await detailOrThrow(db, id);
+      audit({
+        action:
+          body.action === "confirm"
+            ? "payment.review.confirm"
+            : "payment.review.reject",
+        after: {
+          note: body.note ?? null,
+          status: after.payment.status,
+          ...(body.action === "reject" ? { reason: body.reason } : {}),
+        },
+        before: { status: before.payment.status },
+        target: paymentTarget(after.payment),
+      });
+      return c.json(after, 200);
     })
   )
 
   // Record a refund. Only from `successful`, and the refunds never add up past `amount`.
-  .post("/payments/:id/refunds", validRefundBody, (c) =>
-    staff(c, async ({ db, actorUserId }) => {
+  .post("/payments/:id/refunds", adminGate, validRefundBody, (c) =>
+    staffWrite(c, async ({ db, actorUserId, audit }) => {
       const id = c.req.param("id");
       const body = c.req.valid("json");
-      await createPayment(c.env as PaymentEnv).refund(id, {
+      const before = await detailOrThrow(db, id);
+      const { refund } = await createPayment(c.env as PaymentEnv).refund(id, {
         actorUserId,
         amount: body.amount,
         note: body.note ?? null,
       });
-      return c.json(await detailOrThrow(db, id), 200);
+      const after = await detailOrThrow(db, id);
+      audit({
+        action: "payment.refund.create",
+        after: {
+          refund: { amount: refund.amount, id: refund.id, note: refund.note },
+          refundedAmount: after.payment.refundedAmount,
+        },
+        before: { refundedAmount: before.payment.refundedAmount },
+        target: paymentTarget(after.payment),
+      });
+      return c.json(after, 200);
     })
   );
 
@@ -190,9 +226,28 @@ async function detailOrThrow(db: Db, id: string) {
   return detail;
 }
 
+/** A payment as the audit log names it: its id, labelled with the reference staff see. */
+function paymentTarget(payment: PaymentView) {
+  return {
+    id: payment.id,
+    label: `${payment.referenceType} · ${payment.referenceId}`,
+  };
+}
+
+/** A `PaymentError` as the api's `{ error: { code, message } }` envelope, or a rethrow. */
+function answerPaymentError(c: AdminPaymentContext, error: unknown) {
+  if (error instanceof PaymentError) {
+    return c.json(
+      { error: { code: error.code, message: error.message } },
+      paymentErrorStatus(error)
+    );
+  }
+  throw error;
+}
+
 /**
- * The gate and the scope every staff route opens with: the admin check, this request's
- * client, and the store in scope for the core. A `PaymentError` becomes the api's
+ * The scope every staff read opens with: the admin check, this request's client, and the
+ * store in scope for the core. A `PaymentError` becomes the api's
  * `{ error: { code, message } }` envelope here, because it is not an `HTTPException` and
  * `onError` would otherwise answer it with a bare 500.
  *
@@ -211,15 +266,36 @@ function staff<T>(
         try {
           return await body({ actorUserId: session.user.id, db });
         } catch (error) {
-          if (error instanceof PaymentError) {
-            return c.json(
-              { error: { code: error.code, message: error.message } },
-              paymentErrorStatus(error)
-            );
-          }
-          throw error;
+          return answerPaymentError(c, error);
         }
       })
     );
   });
+}
+
+/**
+ * `staff` for a write. `adminWrite` runs the admin check and opens one transaction, and
+ * the payment store is built over that transaction's `db`, so the core's payment update,
+ * its `payment_events` or `payment_refunds` row and the audit row all go through it.
+ * Under `database-postgres` they commit together, and the 4xx a `PaymentError` becomes
+ * rolls every one of them back. Under `database-d1` each statement commits as it runs,
+ * and a failed decision only goes without an audit row.
+ */
+function staffWrite<T>(
+  c: AdminPaymentContext,
+  body: (scope: {
+    db: Db;
+    actorUserId: string;
+    audit: AdminWriteScope["audit"];
+  }) => Promise<T>
+) {
+  return adminWrite(c, ({ db, actor, audit }) =>
+    withPaymentStore(createPaymentStore(db), async () => {
+      try {
+        return await body({ actorUserId: actor.id, audit, db });
+      } catch (error) {
+        return answerPaymentError(c, error);
+      }
+    })
+  );
 }

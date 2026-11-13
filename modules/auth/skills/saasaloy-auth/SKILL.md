@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (subscription/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -24,7 +24,9 @@ Everything the two share (the adapter, the secret, `trustedOrigins`, the first-u
 
 **`adminAuth` refuses a user outside the admin group.** The admin instance registers `audience("admin", { roles: ADMIN_APP_ROLES })`, whose `session.create.before` hook refuses to open a session for a user whose role is not in the list. The answer is Better Auth's own `INVALID_EMAIL_OR_PASSWORD` ("Invalid email or password"), so the admin login tells an attacker nothing about which addresses hold an account. The `accounts` table is shared, so an admin signs in on the admin app with the same email and password the account uses on the client side.
 
-**The client instance refuses every admin endpoint.** Both instances keep the `admin()` plugin, because it writes the default `"user"` role, types `user.role` and refuses a banned account at sign-in. On `auth`, `clientAdminGuard()` (`packages/auth/src/plugins/client-admin-guard.ts`) answers 403 `ADMIN_SESSION_REQUIRED` on every `/auth/admin/*` path. It matches the path prefix, so an endpoint a Better Auth bump adds is refused too. The same endpoints answer on `/admin/auth/admin/*`, behind the admin session and the rank guard below.
+**The client instance refuses every admin endpoint.** Both instances keep the `admin()` plugin, because it writes the default `"user"` role, types `user.role` and refuses a banned account at sign-in. On `auth`, `clientAdminGuard()` (`packages/auth/src/plugins/client-admin-guard.ts`) answers 403 `ADMIN_SESSION_REQUIRED` on every `/auth/admin/*` path. It matches the path prefix, so an endpoint a Better Auth bump adds is refused too.
+
+**The admin forward closes the same endpoints over HTTP.** `adminAuthRoute` in `apps/api/src/routes/auth.ts` answers 404 on every `/admin/auth/admin/*` path, reads and impersonation included, before it forwards to `adminAuth.handler`. It decodes the path and folds case and repeated slashes, so an encoded path gets the same 404. No browser code calls these endpoints, and an open `set-role` or `ban-user` would be a staff write with no audit row, under `/admin/auth/*` where the `admin` module's audit coverage test cannot see it (issue #310). Server code still reaches them: an api route under `/admin/` calls `adminAuth.api.*` with the caller's headers inside `withAuthScope`, and `adminAuthWrite` from the `admin` module when it changes something. That call runs the admin session check and the rank guard below.
 
 **`/admin/auth/*` is reserved.** The `auth` module mounts `adminAuthRoute` at `/admin/auth` with a second `chained-route` patch on `base`, beside `authRoute` at `/auth`. The path sits under `/admin` so one edge rule (WAF, Access, a log filter) covers the whole admin group on the api. A middleware a project adds on `/admin/*` must skip `/admin/auth/*`, or the sign-in endpoint itself demands a session. A project without the `admin` module still has the `/admin/auth` route; nothing calls it.
 
@@ -89,7 +91,7 @@ included. That is deliberate. D1 is the default driver, so most development happ
 permissive D1 path would let the mistake pass every local test and surface only after a project
 switched to Postgres. The cost on D1 is one property lookup per call. See ADR 0029.
 
-## The plugin-array patch points (read this before adding billing/teams)
+## The plugin-array patch points (read this before adding subscription/teams)
 
 `packages/auth/src/auth.ts` exports two **module-scope singletons**, each with its own literal plugin array:
 
@@ -111,7 +113,7 @@ export const adminAuth = betterAuth({
 
 This is deliberately a top-level `export const`, not a per-request `c.env`-scoped factory (every other capability's convention): the plugin arrays must exist at module scope for the codemod to patch. Keep `audience(...)` first in each array, so the session row carries its audience before any other plugin reads it.
 
-**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, billing), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `billing-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
+**A feature module that adds a Better Auth plugin patches both instances.** The admin app hosts every self-service screen (teams, roles, keys, subscription), so the admin session needs the same feature plugins as the client session. `teams`, `api-keys` and `subscription-stripe` each declare one `plugin-array` patch with `"exportName": "auth"` and a second with `"exportName": "adminAuth"`:
 
 ```json
 "patches": [
@@ -199,11 +201,11 @@ headers to prove it.
 | `requireAdminApp(c)` | always the admin session | the session | as `requireRole(c, ADMIN_APP_ROLES)` |
 | `requireSuperadmin(c)` | always the admin session | the session | as `requireRole(c, "superadmin")` |
 
-**The `x-auth-audience` header picks the session for the generic helpers.** Its values are `client` and `admin`. No header means `client`. Any other value, the empty string included, gets 400 `x-auth-audience must be "client" or "admin"` rather than a quiet fallback to the client session. The admin app's `api` client sends `x-auth-audience: admin` on every request, so a teams or billing screen there reads the admin who is signed in, not a client signed in on another tab. The header picks between the caller's own two cookies, so it grants nothing. Hono's `cors()` with no `allowHeaders` echoes the preflight's headers, so CORS needs no change for it.
+**The `x-auth-audience` header picks the session for the generic helpers.** Its values are `client` and `admin`. No header means `client`. Any other value, the empty string included, gets 400 `x-auth-audience must be "client" or "admin"` rather than a quiet fallback to the client session. The admin app's `api` client sends `x-auth-audience: admin` on every request, so a teams or subscription screen there reads the admin who is signed in, not a client signed in on another tab. The header picks between the caller's own two cookies, so it grants nothing. Hono's `cors()` with no `allowHeaders` echoes the preflight's headers, so CORS needs no change for it.
 
 **The role gates ignore the header.** `requireRole`, `requireAdmin`, `requireAdminApp` and `requireSuperadmin` read `adminAuth` through `getAdminSession`, whatever the request says. Every site role lives in the admin group, so a client session never passes a role gate, even one that belongs to a `superadmin`. A request with only a client cookie gets 401 from them, not 403.
 
-**A route that calls Better Auth itself uses `authFor(c)`.** `authFor(c).api.getActiveMember({ headers })` reads the session the request names, so the same route serves the client app and the admin app. Calling `auth.api.*` directly reads only the client session, which is the bug `billing`, `entitlements` and `multitenant` had before the split. Wrap the call in `withAuthScope` as above.
+**A route that calls Better Auth itself uses `authFor(c)`.** `authFor(c).api.getActiveMember({ headers })` reads the session the request names, so the same route serves the client app and the admin app. Calling `auth.api.*` directly reads only the client session, which is the bug `subscription`, `entitlements` and `multitenant` had before the split. Wrap the call in `withAuthScope` as above.
 
 All of them take the whole Hono context, not `c.req.raw`. They need `c.env` to open this request's database client and `c.executionCtx` to close it, and they enter `withAuthScope` for you. See "Either database driver" below.
 
@@ -227,7 +229,7 @@ Each gate returns the session, so the caller reads `session.user.id` without a s
 
 `AuthDbBindings` is whichever binding shape the installed driver declares, so this route is one file under both drivers.
 
-**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `auth.admin.setRole({ userId, role: "admin" })` on the admin client writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
+**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `adminAuth.api.setRole({ body: { userId, role: "admin" }, headers })` writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
 
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
@@ -240,7 +242,7 @@ If you do hand-write a deny, write the body out rather than importing a helper: 
 
 Every helper wraps `getSession({ headers })` on the instance it reads, so both httpOnly cookies ride along on `c.req.raw` automatically and the instance reads only its own. No route imports `better-auth` (ADR 0020); everything goes through `@repo/auth/server`.
 
-Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way.
+Note the route shape: one named `export const`, one chained expression, an explicit status on every `c.json`. That is what `hc<AppType>` reads. Register it with a `chained-route` patch on the exported chain (`"exportName": "default"`), never by dropping the file and hoping (ADR 0028). `modules/admin`'s `GET /admin/users` is the worked example of a gated route registered that way: it lists `adminGate` before its query validator, so a signed-out caller with a bad `?limit=` gets 401, not 400.
 
 **The gate is the api's, not the browser's.** `apps/admin` also refuses an account outside `ADMIN_APP_ROLES`, in `beforeLoad`. That guard stops the SPA from asking; it cannot stop `curl`. A route that skips `requireAdmin` because the admin app already checks is open to anyone holding any session cookie.
 
@@ -296,13 +298,13 @@ function siteRoles() {
 ```
 
 3. Open each api route support may call with `requireAdminApp(c)`. Every `requireAdmin` route keeps refusing support with 403.
-4. Grant the role as a superadmin: `auth.admin.setRole({ userId, role: "support" })` from the admin app. Only a superadmin may grant a role in `ADMIN_APP_ROLES`.
+4. Grant the role as a superadmin, through an api route under `/admin/` that calls `adminAuth.api.setRole({ body: { userId, role: "support" }, headers: c.req.raw.headers })` inside `adminAuthWrite`. Only a superadmin may grant a role in `ADMIN_APP_ROLES`. The browser cannot call `/admin/auth/admin/set-role`: the forward answers 404.
 
 Support is then in the admin group for the rank guard too: an `admin` may not change a support account, and only a superadmin may.
 
 ### Rank: superadmin owns the admin group
 
-`adminAc` gives `admin` and `superadmin` the same `set-role`, so the `admin()` plugin alone would let an `admin` promote anyone to `superadmin`. `rankGuard()` (`packages/auth/src/plugins/rank-guard.ts`) runs before every `/admin/*` endpoint on `adminAuth` and asks `rankDenial()` in `authorize.ts`. In order:
+`adminAc` gives `admin` and `superadmin` the same `set-role`, so the `admin()` plugin alone would let an `admin` promote anyone to `superadmin`. `rankGuard()` (`packages/auth/src/plugins/rank-guard.ts`) runs before every `/admin/*` endpoint on `adminAuth`, on an `adminAuth.api.*` call with the caller's headers as well as over HTTP, and asks `rankDenial()` in `authorize.ts`. Over HTTP the forward already answers 404 on those paths, so in practice the guard runs on the api's own calls. In order:
 
 - **Impersonation is refused for everyone**, `superadmin` included: `/admin/impersonate-user` gets 403 "impersonation is not available between the client and admin sessions". An impersonated session would be an admin-audience row for a client account, which the split forbids; without this refusal the admin sign-in hook would answer the call with a wrong-credentials message. Cross-audience impersonation is out of scope, and `auth` refuses every `/admin/*` path anyway.
 - **A caller who is not `superadmin` may read** (`list-users`, `get-user`, `list-user-sessions`, `has-permission`) and may change client accounts.
@@ -333,7 +335,7 @@ needs no quotes: Postgres reserves `user`, not `users`.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role is read off the user row, and `cookieCache` is off (see the last boundary below). An account that is already signed in on the admin session needs no re-login. An account promoted from `user` has no admin session yet: it signs in on the admin app, because `adminAuth` refused it before the promotion. Demoting an account works the other way: its admin session stays in the table, but every role gate and the admin app's guard refuse it from the next request, and the admin app shows the refusal page.
 
-Once one superadmin exists, promote the rest through the API instead of SQL: `auth.admin.setRole({ userId, role: "admin" })` on the admin client, which calls `/admin/auth/admin/set-role`. The server authorizes it against the caller's own role and the rank guard above, so only a superadmin may grant `admin` or `superadmin`. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that own the admin group and may cross an organization boundary. The plugin also carries `listUsers`, `banUser` and friends on the same namespace. `impersonateUser` is there too, and the rank guard refuses it.
+Once one superadmin exists, promote the rest through the API instead of SQL: an api route under `/admin/` that calls `adminAuth.api.setRole({ body: { userId, role: "admin" }, headers: c.req.raw.headers })` inside `adminAuthWrite`, so the change leaves an audit row. `/admin/auth/admin/set-role` itself answers 404 over HTTP. The call authorizes against the caller's own role and the rank guard above, so only a superadmin may grant `admin` or `superadmin`. Grant `admin` for a backoffice user and keep `superadmin` for the accounts that own the admin group and may cross an organization boundary. The plugin also carries `listUsers`, `banUser` and friends on `adminAuth.api`. `impersonateUser` is there too, and the rank guard refuses it.
 
 **A project that installed auth before this shipped needs a migration.** The four new `users` fields and `sessions.impersonatedBy` are schema changes like any other: run `pnpm --filter @repo/db db:generate`, read the emitted SQL, then apply it with the command from the installed driver's skill. Existing users come out of it with `role` null, which is neither site role, so the guard denies them until you promote one.
 
@@ -403,7 +405,7 @@ await client.signIn.email({ email, password });
 
 `fetchOptions: { credentials: "include" }` is baked into both. The calling origin must be in `CORS_ORIGINS` (api's spine) for the cookie to be set and sent cross-origin.
 
-`adminClient()` rides on the admin client only, mirroring the server's `admin()`, because its endpoints answer only on `/admin/auth`. That is what types `session.user.role` and puts `auth.admin.*` on the admin app's client. Handing those methods to a browser grants nothing; the server authorizes every call. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
+`adminClient()` rides on the admin client only, mirroring the server's `admin()`. That is what types `session.user.role`. It also puts `auth.admin.*` on the admin app's client, but the api's forward answers 404 to every `/admin/auth/admin/*` path, so no browser code calls those methods. A staff screen calls an api route under `/admin/` instead, which writes the audit row. A feature module that ships a client plugin patches both arrays. Keep each array literal and never delete one, even when it is empty.
 
 ## Wire-up: the sign-in and sign-up blocks
 
@@ -463,6 +465,20 @@ function SignInScreen() {
 **Lint.** The base `oxlint.config.mjs` twin-primitive rule covers `packages/ui/src/blocks/auth/**`, so a base primitive in a block is a lint error. A project made before this rule copies the glob from the base template.
 
 **Removal.** `saasaloy remove shell` refuses while `admin` or `app` is installed. When it runs, it deletes the three block files with it, so delete each route that imports them first.
+
+## Signed-in state on the static site
+
+The base `apps/web` is a prerendered Astro site, and no module puts a header with a session on it. When a project adds one (a "Log in" link that turns into an avatar), two faults are waiting. The session lives in an httpOnly cookie on the api origin, so the page learns who is signed in only when a session check answers:
+
+- The header shows "Log in" first and swaps to the avatar after the check, a visible jump on every load (2.5 s in one project).
+- A sign-in form that signs in without a page load leaves a header that checked on mount still showing "Log in".
+
+Use two pieces, both in `apps/web/src/lib/`:
+
+- **A `session:change` event.** One seam, `session.ts`, owns `getSession()` on the client factory. Export `announceSessionChange()`, which dispatches `new Event("session:change")` on `window`, and `onSessionChange(listener)`, which returns the unsubscribe. Call `announceSessionChange()` after each sign-in and sign-out. Every island that shows the session (the header, an account panel) listens and checks again.
+- **A first-paint hint.** `session-hint.ts` stores one flag in `localStorage` each time a check answers: `"1"` while signed in, removed when not. An inline script in `<head>` of `Layout.astro` (`<script is:inline set:html={SESSION_HINT_SCRIPT} />`, a string, because a module script runs after the paint) sets `data-session="in"` on `<html>` from that flag. The header renders both states, and CSS under `[data-session="in"]` shows one, so server and client markup match and hydration does not warn.
+
+The flag holds no name and no id, so a shared device shows nothing about the user. The cookie stays the truth: a stale flag costs one swap, and the next check clears it. Wrap every `localStorage` access in `try`, because storage can be off.
 
 ## Password rules
 
@@ -545,7 +561,7 @@ after the edit.
 
 A project that installed auth before the tables became plural has `user`, `session`, `account` and `verification` in its database. Move them to the new names like this:
 
-1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `billing`.
+1. Run `saasaloy update auth`. It takes the new schema file and the `auth.ts` that passes `usePlural: true`. The schema rename and `usePlural` must land together, because one without the other breaks sign-in. Update auth before `teams`, `api-keys` and `subscription`.
 2. Run `pnpm db:generate`.
 3. drizzle-kit asks, for each new table, whether it is created or renamed from an existing table. Pick the rename from the old name: `user` → `users`, `session` → `sessions`, `account` → `accounts`, `verification` → `verifications`.
 4. Read the generated SQL before you apply it. It must rename the tables and the indexes (`ALTER TABLE ... RENAME TO ...`, and `session_user_id_idx` → `sessions_user_id_idx`, `account_user_id_idx` → `accounts_user_id_idx`, `verification_identifier_idx` → `verifications_identifier_idx`). It must contain no `DROP TABLE` or `CREATE TABLE` for a table that holds data.
@@ -559,7 +575,7 @@ A project made before the split has one instance and one `better-auth.session_to
 1. Run `saasaloy update auth admin`.
 2. Resolve the merge plan for `packages/auth/src/auth.ts`, `packages/auth/src/client.ts`, `packages/auth/src/server.ts` and `@db/schema/auth.ts`. Take the new `adminAuth` export, `adminAuthClientPlugins`, `createAdminClient` and the `audience` column. Carry over any plugin or option you added by hand to both instances.
 3. Run `pnpm db:generate`. It writes one migration that adds `sessions.audience` with default `'client'`. Read it, then apply it with `pnpm db:migrate:local`, or the production migrate command from the installed driver's skill.
-4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `billing-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
+4. Run `saasaloy update` for each installed module that patches auth: `teams`, `api-keys` and `subscription-stripe`. Each one now adds its plugin to `adminAuth` and to `adminAuthClientPlugins` as well.
 
 Run step 4 after step 2. Before the merge, `auth.ts` has no `adminAuth` export, and the patch prints a warning that names the missing export. That warning means "merge `auth.ts` first", and the module's lock entry stays where it was, so running `saasaloy update <module>` again after the merge applies the patch.
 

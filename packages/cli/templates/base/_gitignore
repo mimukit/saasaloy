@@ -34,3 +34,6 @@ pnpm-debug.log*
 
 # Pre-update copies written by `saasaloy update`, restored by `saasaloy update --abort`.
 .saasaloy/backups/
+
+# Mockup and QA screenshots. The PR links the published copies; the files stay local.
+.artifacts/

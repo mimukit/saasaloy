@@ -1279,7 +1279,7 @@ describe("applier — chained-route end to end", () => {
   it("appends a second module's link without disturbing the first", async () => {
     const config = emptyConfig();
     const manifest = emptyManifest();
-    const billing = await writeModule("billing", {
+    const subscription = await writeModule("subscription", {
       type: "saasaloy:feature",
       dependsOn: ["api"],
       patches: [
@@ -1287,16 +1287,20 @@ describe("applier — chained-route end to end", () => {
           file: ENTRY_TARGET,
           kind: "chained-route",
           exportName: "default",
-          path: "/billing",
-          call: "billing",
-          import: { name: "billing", from: "./routes/billing.js" },
+          path: "/subscription",
+          call: "subscription",
+          import: { name: "subscription", from: "./routes/subscription.js" },
         },
       ],
     });
-    const mods = [await apiWorkspace(), await waitlistWithRoute(), billing];
+    const mods = [
+      await apiWorkspace(),
+      await waitlistWithRoute(),
+      subscription,
+    ];
     await executePlan(
       await plan({
-        install: ["api", "waitlist", "billing"],
+        install: ["api", "waitlist", "subscription"],
         modules: mods,
         config,
         manifest,
@@ -1311,7 +1315,7 @@ describe("applier — chained-route end to end", () => {
       "utf-8"
     );
     expect(entry).toContain('.route("/waitlist", waitlist)');
-    expect(entry).toContain('.route("/billing", billing)');
+    expect(entry).toContain('.route("/subscription", subscription)');
     expect(manifest.patches).toHaveLength(2);
   });
 });
@@ -3496,10 +3500,10 @@ function sectionModule(name: string, key: string): Promise<LoadedModule> {
 describe("buildPlan — config section keys", () => {
   it("plans two modules contributing different sections", async () => {
     const built = await plan({
-      install: ["auth", "billing"],
+      install: ["auth", "subscription"],
       modules: [
         await sectionModule("auth", "auth"),
-        await sectionModule("billing", "billing"),
+        await sectionModule("subscription", "subscription"),
       ],
     });
     expect(built.patches).toHaveLength(2);
@@ -3711,5 +3715,96 @@ describe("buildPlan — envOptional needs every declaring module", () => {
     });
 
     expect(p.envOptional).toStrictEqual(["KV_KEY_PREFIX"]);
+  });
+});
+
+// A module seed file (#310, ADR 0060): `add` writes it once and records it as a seed, in
+// `files[]` and in a scaffold alike, and a re-add leaves one already written as it stands.
+describe("module seed files", () => {
+  const SEED = "apps/api/src/extend/root.ts";
+
+  async function seedModule(): Promise<LoadedModule> {
+    return writeModule(
+      "api",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "apps/api",
+            aliases: { "@api": "apps/api/src" },
+            files: [
+              { path: "files/src/index.ts", target: "src/index.ts" },
+              {
+                path: "files/src/extend/root.ts",
+                target: "src/extend/root.ts",
+                seed: true,
+              },
+            ],
+          },
+        ],
+      },
+      {
+        "files/src/index.ts": "export default {};\n",
+        "files/src/extend/root.ts": "export const wrappers = [];\n",
+      }
+    );
+  }
+
+  it("writes a seed file and records it as a seed in a manifest that validates", async () => {
+    const mod = await seedModule();
+    const manifest = emptyManifest();
+    const config = emptyConfig();
+
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+
+    await expect(readFile(join(root, SEED), "utf-8")).resolves.toBe(
+      "export const wrappers = [];\n"
+    );
+    expect(manifest.managed[SEED]).toMatchObject({ module: "api", seed: true });
+    expect(manifest.managed["apps/api/src/index.ts"]?.seed).toBeUndefined();
+    await expect(validateManifest(manifest)).resolves.toMatchObject({
+      valid: true,
+    });
+  });
+
+  it("leaves a seed file the project changed out of a re-add", async () => {
+    const mod = await seedModule();
+    const manifest = emptyManifest();
+    const config = emptyConfig();
+    await executePlan(
+      await plan({ install: ["api"], modules: [mod], config, manifest }),
+      root,
+      config,
+      manifest
+    );
+    await writeFile(join(root, SEED), "export const wrappers = [mine];\n");
+
+    const again = await plan({
+      install: ["api"],
+      modules: [mod],
+      config,
+      manifest,
+    });
+    await executePlan(again, root, config, manifest);
+
+    expect(again.files.map((f) => f.target)).not.toContain(SEED);
+    await expect(readFile(join(root, SEED), "utf-8")).resolves.toBe(
+      "export const wrappers = [mine];\n"
+    );
+  });
+
+  it("accepts `seed` on a files[] entry and a scaffold entry in the schema", async () => {
+    const mod = await seedModule();
+    await expect(
+      validateRegistryItem({
+        ...mod.item,
+        files: [{ path: "files/x.ts", target: "@api/x.ts", seed: true }],
+      })
+    ).resolves.toMatchObject({ valid: true });
   });
 });

@@ -1,12 +1,76 @@
+import { createRequire } from "node:module";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
-import { defineConfig } from "vite";
+import { defineConfig, runnerImport } from "vite";
+import type { Plugin } from "vite";
 
 // Plain SPA build: Vite emits static assets into dist/ and wrangler.jsonc serves them
 // with a single-page-application fallback. There is no Worker entry and no SSR — the
 // customer app talks to apps/api over the credentialed CORS spine instead.
+
+// The tab title and the favicon come from the project, not from index.html: the title is
+// the product name from `@repo/config`, and the icon is the shell's light brand mark
+// (packages/ui/src/assets/shell/brand-mark-light.svg). The plugin runs before Vite reads
+// the page's assets, so in a build the icon goes through the asset pipeline and ships
+// hashed in dist/assets/. The dev server serves it from its `/@fs/` path instead, because
+// a path that climbs out of this app would land on the SPA fallback. Replace the brand
+// files, or set `config.app.name`, and the next build follows.
+//
+// The plugin loads `@repo/config` through Vite's `runnerImport`, not a static import in
+// this file. Vite's native config loader (planned as the default) leaves this file's
+// imports to Node, and Node cannot load the config package's extensionless TypeScript
+// imports. `runnerImport` transforms them the way the app's own build does.
+const FAVICON_FILE = createRequire(import.meta.url)
+  .resolve("@repo/ui/assets/shell/brand-mark-light.svg")
+  .replaceAll("\\", "/");
+const FAVICON_BUILD = relative(import.meta.dirname, FAVICON_FILE).replaceAll(
+  "\\",
+  "/"
+);
+const FAVICON_DEV = `/@fs/${FAVICON_FILE.replace(/^\//, "")}`;
+
+/** `&`, `<`, `>` and `"` as entities, so a product name cannot break the markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+/** The part of `@repo/config` the page reads. */
+interface ConfigModule {
+  config: { app: { name: string } };
+}
+
+function brandHtml(): Plugin {
+  let title = "";
+  return {
+    name: "brand-html",
+    async configResolved(resolved) {
+      const { module } = await runnerImport<ConfigModule>("@repo/config", {
+        root: resolved.root,
+        configFile: false,
+        logLevel: "silent",
+      });
+      title = module.config.app.name;
+    },
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html, context) => {
+        const href = context.server === undefined ? FAVICON_BUILD : FAVICON_DEV;
+        return html.replace(
+          /<title>[^<]*<\/title>/,
+          `<title>${escapeHtml(title)}</title>\n    <link rel="icon" type="image/svg+xml" href="${escapeHtml(href)}" />`
+        );
+      },
+    },
+  };
+}
+
 export default defineConfig({
   plugins: [
     // MUST run before the React plugin. It rewrites the route files (and generates
@@ -17,21 +81,21 @@ export default defineConfig({
     // The generated tree is committed rather than ignored, so `tsc --noEmit` and a
     // fresh `pnpm build` work on a clean checkout before Vite has ever run. Do not
     // hand-edit it — add or delete a file under src/routes/ and let the plugin rewrite it.
-    // `quoteStyle` and `semicolons` match Prettier's output. The generator defaults to single
-    // quotes and no semicolons, which made every build rewrite the committed file and dirty
-    // the tree. `.prettierignore` lists the file too, so a format pass leaves it alone.
-    tanstackRouter({
-      target: "react",
-      autoCodeSplitting: true,
-      quoteStyle: "double",
-      semicolons: true,
-    }),
+    //
+    // The generator options live in tsr.config.json, not here, because two writers share
+    // them: this plugin and `tsr generate`, which the `typecheck` script runs first so a
+    // route a module adds typechecks before Vite has run. `quoteStyle` and `semicolons`
+    // there match Prettier's output. The generator defaults to single quotes and no
+    // semicolons, which made every build rewrite the committed file and dirty the tree.
+    // `.prettierignore` lists the file too, so a format pass leaves it alone.
+    tanstackRouter({ target: "react", autoCodeSplitting: true }),
     react(),
     // Tailwind 4 is a Vite plugin. The theme lives in packages/ui: the @source globs in
     // src/styles/globals.css, this app's stylesheet in src/styles/app.css, which
     // src/main.tsx imports via `@repo/ui/styles/app.css`. Do not declare a second
     // entrypoint here.
     tailwindcss(),
+    brandHtml(),
   ],
   // `PUBLIC_` replaces Vite's default `VITE_` prefix, so the browser bundle only ever
   // inlines a variable a human deliberately named PUBLIC_*. It also unifies this app

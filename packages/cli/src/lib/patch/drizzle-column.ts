@@ -17,14 +17,14 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 // drizzle-kit reads the same glob, so a second file declaring `sqliteTable("users", …)`
 // collides with the one `auth` ships, in both. A one-to-one side table holds the same fact
 // but not the same shape: Better Auth's own plugins write their columns onto the `user`
-// model through a field map and cannot be pointed at another table, so `billing` needs the
+// model through a field map and cannot be pointed at another table, so `subscription` needs the
 // column itself.
 //
 // The value is carried as verbatim source, not as a structured column description. A
 // structured one would have to be re-rendered per dialect, and the two dialects disagree
 // on more than the builder's name — `integer(name, { mode: "boolean" })` against
 // `boolean(name)`. Verbatim source lets one patch serve both dialects when the builder is
-// the same in each (`text("billing_customer_id")` parses and means the same thing under
+// the same in each (`text("subscription_customer_id")` parses and means the same thing under
 // `sqlite-core` and `pg-core`) and lets a descriptor ship a variant per dialect when it is
 // not. Nothing here checks the expression's meaning; the project's own typecheck does.
 //
@@ -44,9 +44,9 @@ import type { ModuleImports, ProgramLike } from "./ts-ast.js";
 export interface DrizzleColumn {
   /** Exported binding holding the table, e.g. "users" in `export const users = sqliteTable(…)`. */
   exportName: string;
-  /** Property key to add to the columns object, e.g. "billingCustomerId". */
+  /** Property key to add to the columns object, e.g. "subscriptionCustomerId". */
   column: string;
-  /** The column expression, verbatim source, e.g. `text("billing_customer_id")`. */
+  /** The column expression, verbatim source, e.g. `text("subscription_customer_id")`. */
   value: string;
   /**
    * Named import the value needs, when the file does not already have it. Optional,

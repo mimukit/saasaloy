@@ -1,10 +1,12 @@
 import { zValidator } from "@hono/zod-validator";
-import { requireAdmin, withAuthScope } from "@repo/auth/server";
+import { adminGate, requireAdmin, withAuthScope } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
+import type { Db } from "@repo/db/client";
 import {
   deleteOverride,
   listFlags,
   listOverrides,
+  listOverridesForTenant,
   upsertFlag,
   upsertOverride,
 } from "@repo/db/repositories/feature-flags";
@@ -12,6 +14,7 @@ import { flags } from "@repo/feature-flags";
 import { errorBody } from "@repo/validators/common";
 import { flagValueInput } from "@repo/validators/feature-flags";
 import { Hono } from "hono";
+import { adminWrite } from "../lib/admin-write";
 import { flagsFor } from "../lib/flags";
 import type { AuthDbBindings } from "@repo/auth/server";
 import type { FlagsBindings, FlagsRequestContext } from "../lib/flags";
@@ -27,9 +30,16 @@ import type { FlagsBindings, FlagsRequestContext } from "../lib/flags";
 //   behind. A reader route elsewhere in your api uses `flagsFor(c).flag(...)` and gets the
 //   fast, slightly stale answer; this file gets the true one.
 //
-//   **Every write republishes.** The database row changes, then `publish()` rewrites the
-//   affected document. A KV write happens per toggle, not per read, which is what keeps the
-//   whole feature inside Workers KV's 1,000 free daily writes.
+//   **Every write republishes, after it commits.** The database row changes, then
+//   `publish()` rewrites the affected document. A KV write happens per toggle, not per
+//   read, which is what keeps the whole feature inside Workers KV's 1,000 free daily
+//   writes. The publish is queued with `afterCommit`, so a kv document never shows a value
+//   whose write rolled back. It runs on `waitUntil`, so a write answers `{ ok: true }`
+//   without waiting for kv.
+//
+// The three writes run through `adminWrite` (`../lib/admin-write.ts`): the admin check,
+// one transaction, and one audit row per change, inserted with it. Their actions are in
+// `../audit/feature-flags.ts`. Every query of a write goes through the scope's `db`.
 //
 // Route module contract: export a Hono sub-app under a NAMED export matching the file, built
 // as ONE chained expression. Split it into separate `featureFlags.get(...)` statements and
@@ -38,8 +48,16 @@ import type { FlagsBindings, FlagsRequestContext } from "../lib/flags";
 // `import { featureFlags } from "./routes/feature-flags"` and refuses to wire a binding that
 // resolves to a default import.
 //
-// This module's `chained-route` patch mounts it at `/flags`, so `get("/")` serves
-// `GET /flags`. Paths here are relative to that mount.
+// This module's `chained-route` patch mounts it at `/admin/flags`, so `get("/")` serves
+// `GET /admin/flags` and `hc<AppType>` types it for the admin app as `api.admin.flags`.
+// Paths here are relative to that mount. It sits under `/admin/` so the admin gate test
+// and the audit coverage test see its routes. The mount is `/admin/flags` and not `/admin`
+// because a `chained-route` patch matches on its path, and `admin` already routes `/admin`.
+//
+// Every route lists `adminGate` first, before `validateValue`, so a caller with no admin
+// session gets a 401 and never a 400 that describes the flag value. A read still calls
+// `requireAdmin` inside its own scope, and a write's `adminWrite` checks again; the gate
+// only decides who reaches the handler.
 //
 // No CORS and no `onError`: `modules/api`'s spine applies the credentialed `CORS_ORIGINS`
 // allowlist before this sub-app is mounted, and an unset `onError` inherits api's, which
@@ -82,7 +100,7 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
   // The screen's whole payload in one request: the code definitions (which say what a flag
   // is and what it defaults to), the global rows, and every override. Definitions and rows
   // are separate on purpose — a flag with no row is the normal state, not a gap to fill.
-  .get("/", (c) =>
+  .get("/", adminGate, (c) =>
     withAuthScope(c, async () => {
       await requireAdmin(c);
 
@@ -121,7 +139,7 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
   )
 
   // One flag, for a screen that deep-links to it. Same database-only rule as the list.
-  .get("/:key", (c) =>
+  .get("/:key", adminGate, (c) =>
     withAuthScope(c, async () => {
       await requireAdmin(c);
 
@@ -155,11 +173,10 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
   )
 
   // The global value. This is the toggle that takes effect with no deploy: the row lands,
-  // the global document is republished, and every isolate picks it up as its cache expires.
-  .put("/:key", validateValue, (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-
+  // the global document is republished after the commit, and every isolate picks it up as
+  // its cache expires.
+  .put("/:key", adminGate, validateValue, (c) =>
+    adminWrite(c, async ({ db, audit, afterCommit }) => {
       const key = c.req.param("key");
       const definition = definitionFor(key);
       if (!definition) {
@@ -170,27 +187,31 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
       }
 
       const value = c.req.valid("json");
+      const percentage = shareFor(definition.type, value.percentage);
+      const before = await storedFlag(db, key);
 
-      await withDb(c, (db) =>
-        upsertFlag(db, {
-          description: definition.description ?? null,
-          enabled: value.enabled,
-          key,
-          percentage: shareFor(definition.type, value.percentage),
-          type: definition.type,
-        })
-      );
+      await upsertFlag(db, {
+        description: definition.description ?? null,
+        enabled: value.enabled,
+        key,
+        percentage,
+        type: definition.type,
+      });
+      audit({
+        action: "flag.value.set",
+        after: { enabled: value.enabled, percentage },
+        before: before ? valueOf(before) : null,
+        target: { id: key, label: key },
+      });
 
-      const document = await publish(c);
-      return c.json({ ok: true, publishedAt: document.publishedAt }, 200);
+      afterCommit(() => publish(c));
+      return c.json({ ok: true }, 200);
     })
   )
 
   // A tenant override, the level that beats the global value.
-  .put("/:key/tenants/:tenantId", validateValue, (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-
+  .put("/:key/tenants/:tenantId", adminGate, validateValue, (c) =>
+    adminWrite(c, async ({ db, audit, afterCommit }) => {
       const key = c.req.param("key");
       const tenantId = c.req.param("tenantId");
       const definition = definitionFor(key);
@@ -202,27 +223,32 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
       }
 
       const value = c.req.valid("json");
+      const percentage = shareFor(definition.type, value.percentage);
+      const before = await storedOverride(db, key, tenantId);
 
-      await withDb(c, (db) =>
-        upsertOverride(db, {
-          enabled: value.enabled,
-          flagKey: key,
-          percentage: shareFor(definition.type, value.percentage),
-          tenantId,
-        })
-      );
+      await upsertOverride(db, {
+        enabled: value.enabled,
+        flagKey: key,
+        percentage,
+        tenantId,
+      });
+      audit({
+        action: "flag.tenant.set",
+        after: { enabled: value.enabled, percentage },
+        before: before ? valueOf(before) : null,
+        target: tenantTarget(key, tenantId),
+      });
 
-      const document = await publish(c, tenantId);
-      return c.json({ ok: true, publishedAt: document.publishedAt }, 200);
+      afterCommit(() => publish(c, tenantId));
+      return c.json({ ok: true }, 200);
     })
   )
 
   // Clearing an override deletes the row. The absence is the inheritance: with no row the
-  // tenant resolves whatever global says, now and after global next changes.
-  .delete("/:key/tenants/:tenantId", (c) =>
-    withAuthScope(c, async () => {
-      await requireAdmin(c);
-
+  // tenant resolves whatever global says, now and after global next changes. Clearing an
+  // override that does not exist changes nothing, so it writes no audit row.
+  .delete("/:key/tenants/:tenantId", adminGate, (c) =>
+    adminWrite(c, async ({ db, audit, afterCommit }) => {
       const key = c.req.param("key");
       const tenantId = c.req.param("tenantId");
       if (!definitionFor(key)) {
@@ -232,15 +258,49 @@ export const featureFlags = new Hono<{ Bindings: Bindings }>()
         );
       }
 
-      await withDb(c, (db) => deleteOverride(db, key, tenantId));
+      const before = await storedOverride(db, key, tenantId);
 
-      const document = await publish(c, tenantId);
-      return c.json({ ok: true, publishedAt: document.publishedAt }, 200);
+      await deleteOverride(db, key, tenantId);
+      if (before) {
+        audit({
+          action: "flag.tenant.clear",
+          before: valueOf(before),
+          target: tenantTarget(key, tenantId),
+        });
+      }
+
+      afterCommit(() => publish(c, tenantId));
+      return c.json({ ok: true }, 200);
     })
   );
 
+/** The stored global row of one flag, or `undefined` when none was ever written. */
+async function storedFlag(db: Db, key: string) {
+  const rows = await listFlags(db);
+  return rows.find((row) => row.key === key);
+}
+
+/** One tenant's stored override of one flag, or `undefined` when it has none. */
+async function storedOverride(db: Db, key: string, tenantId: string) {
+  const rows = await listOverridesForTenant(db, tenantId);
+  return rows.find((row) => row.flagKey === key);
+}
+
+/** A stored row's value, as an audit row records it. */
+function valueOf(row: { enabled: boolean; percentage: number | null }) {
+  return { enabled: row.enabled, percentage: row.percentage };
+}
+
 /**
- * Republish a scope after a write, and drop this isolate's own cached copy so the operator
+ * A tenant override as the audit log names it. The id is the flag key, so a filter by
+ * target finds every change to the flag, global and per tenant; the label names the tenant.
+ */
+function tenantTarget(key: string, tenantId: string) {
+  return { id: key, label: `${key} · tenant ${tenantId}` };
+}
+
+/**
+ * Republish a scope after a write commits, and drop this isolate's own cached copy so the operator
  * who just toggled sees the change on their next request rather than waiting out the TTL.
  *
  * Every other isolate still waits: nothing can reach into another colo to invalidate a

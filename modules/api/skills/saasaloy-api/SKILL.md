@@ -311,6 +311,8 @@ shared `{ error: { code, message } }` envelope from `@repo/validators/common`. S
 Keep the three layers apart: request shapes in `@repo/validators`, database column shapes in
 `packages/db`, HTTP wiring here in `apps/api`.
 
+On an admin route, `adminGate` from `@repo/auth/server` goes before the validator: `.put("/:key", adminGate, validateValue, handler)`. Hono runs the handlers in the order they are listed, so a validator listed first answers a caller with no session with a 400 that names the rejected field. With the gate first, that caller gets a 401 whatever the body says. The handler still calls `requireAdmin` for the session value. The `admin` module's `apps/api/src/routes/admin-gate.test.ts` checks every `/admin/*` route for this; see the `saasaloy-admin` skill.
+
 ## Errors: one envelope, including the ones you did not throw
 
 `base` ends in an `onError` handler, and it is there because a route cannot cover every error it

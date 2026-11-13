@@ -5,12 +5,13 @@ description: Runbook for the feature-flags module — typed flags with per-tenan
 
 # feature-flags — typed flags, rollouts, maintenance mode and kill switches
 
-`feature-flags` ships one package and seven files:
+`feature-flags` ships one package and eight files:
 
 | File | What it holds |
 |---|---|
 | `packages/feature-flags/` | the registry, the resolver, the isolate cache and the bucketing |
-| `apps/api/src/routes/feature-flags.ts` | the admin API at `/flags` |
+| `apps/api/src/routes/feature-flags.ts` | the admin API at `/admin/flags`; every route lists `adminGate` before `validateValue`, and every write runs through `adminWrite` |
+| `apps/api/src/audit/feature-flags.ts` | the three audit actions of those writes |
 | `apps/api/src/lib/flags.ts` | `flagsFor(c)`, the database source, and `sessionIsAdmin` |
 | `apps/api/src/middleware/maintenance.ts` | the 503 page middleware |
 | `packages/db/src/schema/feature-flags.ts` | `feature_flags` and `feature_flag_overrides` |
@@ -40,7 +41,7 @@ import { flagsFor } from "../lib/flags";
 export const checkout = new Hono().post("/", async (c) => {
   const flags = flagsFor(c);
 
-  if (await flags.flag("billing.new-checkout", { subjectId: user.id, tenantId: org.id })) {
+  if (await flags.flag("subscription.new-checkout", { subjectId: user.id, tenantId: org.id })) {
     return newCheckout(c);
   }
   return oldCheckout(c);
@@ -59,7 +60,7 @@ import { defineFlag } from "../define";
 
 export function newCheckout() {
   return defineFlag({
-    key: "billing.new-checkout",
+    key: "subscription.new-checkout",
     type: "percentage",
     default: false,
     description: "Route checkout through the new provider.",
@@ -95,9 +96,25 @@ Raise `FLAGS_ISOLATE_TTL_SECONDS` to spend fewer KV reads and wait longer; set i
 
 ## The admin screen reads the database, never the cache
 
-`GET /flags` queries the tables directly. That is deliberate: the published document is up to a minute behind, and showing an operator a stale copy of the switch they just moved is the failure the split exists to prevent. The cost is the other way round — the screen can be *ahead* of what a live request sees, for about a minute after a toggle.
+`GET /admin/flags` queries the tables directly. That is deliberate: the published document is up to a minute behind, and showing an operator a stale copy of the switch they just moved is the failure the split exists to prevent. The cost is the other way round — the screen can be *ahead* of what a live request sees, for about a minute after a toggle.
 
-Every write route writes the row, then republishes. A tenant write republishes the global document too, so the two documents a tenant request reads were built from the same database state.
+Every write route writes the row, then republishes. The republish is queued with `afterCommit`, so it runs only after the row commits, and a kv document never shows a value whose write rolled back. It runs on `waitUntil`, so the write answers `{ ok: true }` without waiting for kv, and a failed publish is logged at `error` rather than failing the write. A tenant write republishes the global document too, so the two documents a tenant request reads were built from the same database state.
+
+## Admin routes and their audit rows
+
+The `chained-route` patch mounts `apps/api/src/routes/feature-flags.ts` at `/admin/flags`, so the admin app calls it as `api.admin.flags`. It sits under `/admin/` so the `admin` module's gate test and audit coverage test see every route.
+
+A project made before the move to `/admin/flags` keeps the old `.route("/flags", featureFlags)` link after `saasaloy update`, because update never reverses a patch the new revision dropped. The update note `feature-flags/0001-admin-flags-mount` tells you to delete that line. Until you do, both paths serve the same handlers, and the gate and coverage tests cannot see the `/flags` copy.
+
+| Route | Audit action | Label |
+| --- | --- | --- |
+| `GET /admin/flags` | none, a read | |
+| `GET /admin/flags/:key` | none, a read | |
+| `PUT /admin/flags/:key` | `flag.value.set` | the flag key |
+| `PUT /admin/flags/:key/tenants/:tenantId` | `flag.tenant.set` | `<key> · tenant <tenantId>` |
+| `DELETE /admin/flags/:key/tenants/:tenantId` | `flag.tenant.clear` | `<key> · tenant <tenantId>` |
+
+Each write runs through `adminWrite` from `apps/api/src/lib/admin-write.ts`. The area is `flags`, the target type is `flag`, and the target id is the flag key, so a filter by target finds the global value and every tenant override of one flag. A row records `before` and `after` for `enabled` and `percentage`. A first write has no `before`. Clearing an override that does not exist changes nothing and writes no row. The actions live in `apps/api/src/audit/feature-flags.ts`, which this module's `plugin-array` patch registers in `apps/api/src/lib/audit-actions.ts`. A new write route here needs an entry there, or the audit coverage test fails.
 
 ## Percentage rollouts
 
@@ -122,14 +139,14 @@ app.use(
   maintenance({
     flags: flagsFor,
     isAdmin: sessionIsAdmin,
-    bypassPaths: ["/health", "/auth", "/admin/auth", "/flags"],
+    bypassPaths: ["/health", "/auth", "/admin/auth", "/admin/flags"],
   })
 );
 ```
 
 Three ways past the page, checked in this order: the path is on the bypass list, the flag is off, or the caller is an admin. The path check runs first because it costs no flag read. `sessionIsAdmin` reads the admin session through `getAdminSession`, whatever `x-auth-audience` says, and passes any role in `ADMIN_ROLES` (`admin` and `superadmin`). A client session never counts, even one that belongs to a superadmin.
 
-Put `/health` on the bypass list. A load balancer that gets a 503 may pull the Worker out of rotation. Put `/admin/auth` there too, or an admin cannot sign in on the admin app to turn maintenance back off, and `/flags`, or they cannot reach the switch once signed in. `/auth` is the client sign-in; leave it on the list only if clients may sign in while the site is closed. A prefix matches whole segments, so `/auth` does not cover `/admin/auth`.
+Put `/health` on the bypass list. A load balancer that gets a 503 may pull the Worker out of rotation. Put `/admin/auth` there too, or an admin cannot sign in on the admin app to turn maintenance back off, and `/admin/flags`, or they cannot reach the switch once signed in. `/auth` is the client sign-in; leave it on the list only if clients may sign in while the site is closed. A prefix matches whole segments, so `/auth` does not cover `/admin/auth`.
 
 If the flag cannot be resolved at all, the request goes through. A store outage should not take an api down on the assumption that somebody meant to close it.
 

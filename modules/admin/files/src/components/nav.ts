@@ -10,7 +10,13 @@
 // step that puts it in the sidebar.
 
 import type { NavigateOptions } from "@tanstack/react-router";
-import { GaugeIcon, LayoutDashboardIcon, UsersIcon } from "lucide-react";
+import {
+  GaugeIcon,
+  HistoryIcon,
+  LayoutDashboardIcon,
+  ShieldIcon,
+  UsersIcon,
+} from "lucide-react";
 
 // The `to` values are checked against the generated route tree (`NavTargets` below), so a
 // nav entry pointing at a route that does not exist fails `pnpm typecheck` instead of
@@ -43,6 +49,18 @@ export const NAV_AREAS = [
         items: [
           { to: "/", label: "Overview", icon: GaugeIcon, shortcut: "G O" },
           { to: "/users", label: "Users", icon: UsersIcon, shortcut: "G U" },
+          {
+            to: "/members",
+            label: "Members",
+            icon: ShieldIcon,
+            shortcut: "G M",
+          },
+          {
+            to: "/activity",
+            label: "Activity",
+            icon: HistoryIcon,
+            shortcut: "G A",
+          },
         ],
       },
     ],

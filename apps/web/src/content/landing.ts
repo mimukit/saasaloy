@@ -304,7 +304,7 @@ export const landing = {
         "Tenant isolation, where a query without the tenant filter does not compile, plus custom roles.",
       teams:
         "Organizations, members, roles and invitations, with an admin screen.",
-      billing:
+      subscription:
         "Subscriptions with plans and entitlements, and a 402 gate on paid features.",
       payment:
         "One-off payments with a status machine and a staff review screen.",
@@ -319,6 +319,8 @@ export const landing = {
         "Feature flags with per-tenant overrides, rollouts and kill switches.",
       "file-uploads":
         "File uploads with an upload block, an admin screen and a cleanup job.",
+      notification:
+        "In-app notifications with a bell, an inbox and per-category opt-outs.",
       ratelimit: "Rate limits per route, with a 429 and Retry-After.",
     } as Record<string, string>,
   },

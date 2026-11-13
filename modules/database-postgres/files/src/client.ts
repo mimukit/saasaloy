@@ -160,3 +160,37 @@ export async function withDb<T>(
     }
   }
 }
+
+/**
+ * Run `body` in one transaction on `db`, and commit when it resolves. A throw rolls back
+ * every write `body` made through the client it was handed.
+ *
+ * Both drivers export this with one signature, so code written against
+ * `@repo/db/client` asks for a transaction without naming the driver. The guarantee is
+ * not the same on both. Here it is a real Postgres transaction: the writes commit together
+ * or not at all. Under `database-d1` there is no interactive transaction, and the same call
+ * runs `body` on the plain client, so each statement commits as it runs. `adminWrite` in
+ * `apps/api/src/lib/admin-write.ts` is the caller this was added for (issue #310).
+ *
+ * Under a route test `db` is the test's own transaction (see `TEST_DB`), so this opens a
+ * savepoint inside it. A rollback here still undoes only `body`'s writes, and the test
+ * rolls back the rest when it ends.
+ *
+ * Use the client `body` receives for every query. A query on the outer `db` runs outside
+ * the transaction and survives its rollback.
+ */
+export function transaction<T>(
+  db: Db,
+  body: (db: Db) => Promise<T>
+): Promise<T> {
+  // A transaction carries the client's whole query API and lacks only `$client`, which
+  // nothing inside a transaction may call: closing the socket mid-transaction is a bug.
+  return db.transaction((tx) => body(tx as unknown as Db));
+}
+
+/**
+ * Whether `transaction` rolls back on a throw. `true` here. Code that has to act
+ * differently when it cannot (`adminWrite` logs a failed audit insert under D1 instead of
+ * failing a change that already stood) reads this and never names the driver.
+ */
+export const TRANSACTION_IS_ATOMIC = true;

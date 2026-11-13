@@ -110,6 +110,9 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
       "*",
       cors({
         credentials: true,
+        // The browser keeps a preflight answer this many seconds (two hours, Chromium's
+        // cap). Without it every credentialed call from the admin paid an OPTIONS round trip.
+        maxAge: 7200,
         origin: (
           origin,
           c: Context<{ Bindings: Bindings; Variables: Variables }>

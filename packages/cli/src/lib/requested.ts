@@ -29,7 +29,7 @@ export function listLabel(items: readonly string[]): string {
   return `${items.slice(0, -1).join(", ")} and ${items.at(-1)}`;
 }
 
-/** The names as prose: `admin`, `admin and teams`, `admin, billing and teams`. */
+/** The names as prose: `admin`, `admin and teams`, `admin, subscription and teams`. */
 export function requestedLabel(input: RequestedInput): string {
   return listLabel(toRequested(input).names);
 }

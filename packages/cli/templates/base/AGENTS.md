@@ -124,7 +124,9 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 - **Import by subpath.** `import { Button } from "@repo/ui/components/button"`. The package root exports project-wide constants only (`siteName`).
 - **The signed-in apps use the `shell` set.** `apps/admin` and `apps/app` import from `@repo/ui/{components,blocks,containers}/shell/*`, and a lint rule makes a base primitive there an error.
 - **Words live in `packages/ui/src/content/`**, never in a block, so a copy pass and a later translation find them.
-- **No UI kit as a dependency.** Copy a kit's component into `src/components/` or `src/blocks/` as source this project owns.
+- **Compare before you copy a kit component.** Before you copy a component from a kit (coss ui, Tailark, a licensed dashboard kit), compare it with the source this project already owns in `src/components/` and `src/blocks/`, and recommend one to the owner. When the kit's version wins, copy it as source this project owns. Do not install the kit's package.
+- **A field with more than 7 options uses a combobox, not a select.** A person types to find one of many; a select makes them scroll.
+- **Mockup and QA images stay out of the repo.** Save them in the gitignored `.artifacts/mockups/` and `.artifacts/qa/` at the project root, and link the published copies from the PR.
 
 ### The Base Skills
 
@@ -172,7 +174,7 @@ The linter is **[oxlint](https://oxc.rs)** configured from **[Ultracite](https:/
 **Commit hooks are installed by husky** on your first `pnpm install`, and they need a `.git` directory, which `saasaloy init` creates for you. The root `prepare` script is `husky && node packages/tooling/src/link-skills.ts`, so the same install also links every folder in `.agents/skills/` into `.claude/skills/`. pnpm skips `prepare` when an install changes nothing, so after you add a skill folder to a checkout that is already installed, run `pnpm skills:link`. The hooks:
 
 - `pre-commit` runs **lint-staged** over staged files only — oxlint `--fix`, Stylelint `--fix`, Prettier `--write`. It skips the type-aware pass on purpose: that one needs the whole project graph, which defeats staged-file scoping.
-- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`.
+- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`. A hotfix commit uses `fix`; `hotfix` is a branch name, not a commit type, and commitlint refuses it.
 
 Bypass in a genuine emergency with `git commit --no-verify`, or `HUSKY=0` to skip every hook (which is also how you keep hooks out of CI).
 
@@ -233,7 +235,7 @@ An agent may build this project with no person at the keyboard. These rules appl
 Under `autonomy: afk`, "Unattended work" above decides these instead.
 
 - Adding new dependencies (especially to root `package.json`)
-- Building new UI before the owner has approved a mockup. Show screenshots of the mockup first and get approval. A change after approval gets a new mockup, not a fix after the work lands
+- Building new UI before the owner has approved a mockup. Show screenshots of the mockup first and get approval. A change after approval gets a new mockup, not a fix after the work lands. Only these UI changes need no mockup: copy text, a token value, spacing or alignment inside one existing component, an icon swap, and a fix that makes a screen match its approved mockup. A change that adds a screen, a section or a component, or changes a layout, needs a mockup
 - Modifying Turborepo configuration (`turbo.json`)
 - Changing TypeScript strictness settings
 - Modifying the husky hooks (`.husky/`), `lint-staged.config.js`, or `commitlint.config.js`

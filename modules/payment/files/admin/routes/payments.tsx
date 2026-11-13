@@ -14,6 +14,7 @@ import {
   TriangleAlertIcon,
 } from "lucide-react";
 import { useMemo, useState } from "react";
+import { z } from "zod";
 
 import { DataTable } from "@repo/ui/blocks/shell/data-table";
 import type { DataTableColumn } from "@repo/ui/blocks/shell/data-table";
@@ -51,6 +52,7 @@ import { Textarea } from "@repo/ui/components/shell/textarea";
 import { toastManager } from "@repo/ui/components/shell/toast";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
 
+import { paymentsSearchExtension } from "@admin/extend/payments";
 import { api } from "@admin/lib/api";
 
 // The Payments screen at `/payments`, shipped by `modules/payment`. The router plugin wires
@@ -134,7 +136,15 @@ const paymentQuery = (id: string) =>
     },
   });
 
+// The screen's search params. It reads none of its own yet; the project's own keys come
+// from src/extend/payments.ts, a seed file the project owns, spread in here so a key
+// added there is typed on `Route.useSearch()` and on every link to `/payments` with no
+// edit to this file. A key of this file's own goes before the spread, so a project key
+// of the same name wins.
+const paymentsSearch = z.object({ ...paymentsSearchExtension });
+
 export const Route = createFileRoute("/payments")({
+  validateSearch: paymentsSearch,
   loader: ({ context }) =>
     context.queryClient.ensureQueryData(paymentsQuery("submitted")),
   component: Payments,

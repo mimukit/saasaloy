@@ -1,6 +1,6 @@
 ---
 name: create-module
-description: Scaffold a new Saasaloy module (registry-item.json + files + Claude skill) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/billing/teams module", "create a new api/database/auth capability", "author a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
+description: Scaffold a new Saasaloy module (registry-item.json + files + Claude skill) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/subscription/teams module", "create a new api/database/auth capability", "author a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
 ---
 
 # create-module
@@ -22,6 +22,7 @@ now honored at `add` time; author the full descriptor and it all applies.
 | `files[]` | ✅ copied to their `@alias` targets |
 | `files[].onlyWith` | ✅ the entry is copied only when the module it names is in the resolved install set; two entries may share one `target` under disjoint conditions (also honored on a scaffold's `files[]`) |
 | `files[].when`, `patches[].when` | ✅ the entry ships only while its condition holds: `testing: true` needs a testing mode other than `off`, `installed` needs every named module; a tracked entry stays managed in every mode (also honored on a scaffold's `files[]`) (ADR 0054) |
+| `files[].seed` | ✅ written once and recorded as a seed; `update` never overwrites or merges it and restores it when missing, `remove` keeps it once changed (also honored on a scaffold's `files[]`) (ADR 0060) |
 | `files[].untested` | ✅ read by the test guards, which print the reason instead of failing |
 | `enablesTesting` | ✅ `add` turns an `off` project to `tests-after` once the apply lands, then backfills (ADR 0054) |
 | `agent.skills[]` | ✅ files land in `.agents/skills/saasaloy-<name>/`, with a `.claude/skills/` symlink (both recorded in the manifest) (ADR 0015) |
@@ -69,7 +70,7 @@ authoring first; it drives everything else.
   on a vendor SDK (`database` → `drizzle-orm`, `auth` → `better-auth`) **encapsulates it**: the
   scaffolded workspace owns the npm dep and exports project-facing utilities; no other workspace
   imports the vendor package directly (ADR 0020).
-- **Feature module** — `waitlist`, `billing`, `teams`, … Extends existing capabilities *purely
+- **Feature module** — `waitlist`, `subscription`, `teams`, … Extends existing capabilities *purely
   by dropping files into their conventions*, and declares `dependsOn` for the capabilities it
   needs. A feature rarely needs `patches` at all.
 
@@ -88,13 +89,13 @@ Run the CLI's own scaffold from the repo root. It takes the tier you settled in 
 there is nothing to type twice:
 
 ```sh
-saasaloy new module billing --type saasaloy:feature --depends-on api,database
+saasaloy new module subscription --type saasaloy:feature --depends-on api,database
 ```
 
-It writes `modules/billing/registry-item.json` (schema-valid, `agent.skills[]` already
+It writes `modules/subscription/registry-item.json` (schema-valid, `agent.skills[]` already
 pointing at the skill folder, and a `TODO` `description` with `stage: "mvp"` and `needs: []`
-for you to correct), an empty `modules/billing/files/`, and a
-`modules/billing/skills/saasaloy-billing/SKILL.md` stub with the frontmatter filled in and
+for you to correct), an empty `modules/subscription/files/`, and a
+`modules/subscription/skills/saasaloy-subscription/SKILL.md` stub with the frontmatter filled in and
 `TODO`s for the prose. Then it runs the `doctor` checks over what it wrote, so a fresh
 module starts green. Drop `--type` / `--depends-on` to be prompted for them instead, and
 run it in this repo — it refuses inside a generated project, where a `modules/` folder
@@ -142,7 +143,7 @@ Field notes:
 - **`name`** — matches the directory (`modules/<name>/`).
 - **`type`** — `saasaloy:capability` or `saasaloy:feature`.
 - **`description`** — one line on what the module gives a project. `saasaloy list --json` prints it, and an agent picks modules from it, so name the thing the user gets, not the files. The schema keeps it optional, so a project still reads an older descriptor, but `saasaloy doctor` in registry mode fails a descriptor without it.
-- **`stage`** — the product stage that usually earns the module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage. The scaffold writes `mvp`; change it.
+- **`stage`** — the product stage that usually earns the module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (subscription and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage. The scaffold writes `mvp`; change it.
 - **`needs`** — what the module needs outside the repo before it works in production: `cloudflare-paid` (a paid Workers plan), `stripe` (a Stripe account), `domain` (a domain onboarded by hand) or `vendor-account` (an account with any other vendor). Write `[]` when the free tier and no account will do, which is what the scaffold writes.
 - **`requires`** — an optional `{ "saasaloy": "<semver range>" }` naming the CLI versions
   this descriptor works on. A consumer whose CLI falls outside the range gets one fatal,
@@ -191,7 +192,7 @@ Field notes:
   a **capability** owns the `package.json` it scaffolds, so it declares its deps *there* and leaves
   the descriptor buckets **empty**; a **feature** owns no `package.json`, so it lists npm deps here
   and the applier merges them into the target workspace's `package.json`. Never declare the same dep
-  in both places. A feature extending a capability's vendor SDK (e.g. `billing` adding
+  in both places. A feature extending a capability's vendor SDK (e.g. `subscription` adding
   `@better-auth/stripe`) targets the capability's workspace, so the plugin dep merges into *that*
   workspace's `package.json` — vendor packages stay inside the capability that owns them (ADR 0020).
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
@@ -209,6 +210,7 @@ Field notes:
   A target whose entries are **all** conditional and none matches makes `add` refuse and name the
   candidates, so a missing variant is a refusal rather than a file that quietly never arrived.
 - **`when`** — an optional condition on a `files[]` entry, a scaffold `files[]` entry, or a `patches` op (ADR 0054). `{ "testing": true }` ships it only when the project's testing mode is `tests-after` or `tdd`. `{ "installed": ["e2e"] }` ships it only when every named module is installed. Both keys together mean both. The applier asks `when` before `onlyWith`, and a target whose entries `when` drops is skipped, not refused. `when` decides the first write only: once the file is in the manifest it stays managed in every mode. A later `saasaloy testing tests-after`, `add` or `update` backfills an entry whose condition turned true, and `remove X` takes every entry whose `installed` names X. Use `testing` for every test file, and `installed` for a file that only makes sense beside another module, such as a journey spec beside `e2e`.
+- **`seed`** — `true` on a `files[]` or scaffold `files[]` entry the project is meant to change: an extension point a managed file imports, such as `apps/admin/src/extend/payments.ts`. `add` and backfill write it once and the manifest records it as a seed. `update` never overwrites or merges it, and writes it again only when it is missing. `remove` deletes it while unchanged and keeps it, with a warning, once the project changed it. Keep a seed small and stable: a project that already holds it never sees a later change to its content, so a change to what it exports needs an update note. Use it in place of asking the owner to edit a managed file in place, and set `requires.saasaloy` to `>=0.9.0`, the first CLI that reads the flag (ADR 0060).
 - **`untested`** — on a `files[]` entry, a one-line reason the file ships with no test beside it (`"untested": "generated types"`). The test guards print it instead of failing.
 - **`enablesTesting`** — `true` on a module whose whole point is tests (`e2e`). Adding it to a project with testing `off` sets `tests-after` after the apply succeeds and backfills. It leaves `tdd` alone, and `remove` never changes the mode.
 - **`envVars`** — keys the module needs (e.g. `RESEND_API_KEY`); surfaced to the user, never
@@ -402,7 +404,7 @@ exactly what was copied.
 `skills/saasaloy-api/` with `name: saasaloy-api`). The prefix namespaces every module skill so it
 lands in the consumer's `.claude/skills/` without colliding with a user's own installed skills — a
 generated project may have dozens of module skills alongside the user's, and a bare `api` or
-`billing` is exactly the kind of name a user might already have. Keep the folder name and the
+`subscription` is exactly the kind of name a user might already have. Keep the folder name and the
 frontmatter `name` identical and prefixed. (See ADR 0014.)
 
 **A UI-bearing module's skill carries a `## Wire-up` section, and it is required.** Any module with

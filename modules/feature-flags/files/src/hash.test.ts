@@ -24,9 +24,9 @@ describe("fnv1a32", () => {
 
 describe("bucket", () => {
   it("is stable for a subject across calls", () => {
-    const first = bucket("billing.new-checkout", "user-1");
+    const first = bucket("subscription.new-checkout", "user-1");
     for (let index = 0; index < 1000; index += 1) {
-      assert.equal(bucket("billing.new-checkout", "user-1"), first);
+      assert.equal(bucket("subscription.new-checkout", "user-1"), first);
     }
   });
 
@@ -40,7 +40,7 @@ describe("bucket", () => {
   it("spreads 10,000 subjects close to evenly", () => {
     const counts = Array.from({ length: 100 }, () => 0);
     for (let index = 0; index < 10_000; index += 1) {
-      counts[bucket("billing.new-checkout", `user-${String(index)}`)] += 1;
+      counts[bucket("subscription.new-checkout", `user-${String(index)}`)] += 1;
     }
 
     // 100 buckets over 10,000 subjects averages 100 each. The tolerance is deliberately

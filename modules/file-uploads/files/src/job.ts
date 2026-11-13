@@ -10,7 +10,7 @@ import { sweep } from "./sweep";
 // `import.meta.glob` into a workspace that does not compile with Vite's types.
 //
 // So the job ships here unconditionally and goes nowhere until the two `plugin-array`
-// patches register it, exactly as `packages/billing` registers its own. In a project
+// patches register it, exactly as `packages/subscription` registers its own. In a project
 // without `queue` those patches are skipped with a warning and this file is dead code.
 //
 // Factories, not bare constants, because the tables register a *call* — that is what the

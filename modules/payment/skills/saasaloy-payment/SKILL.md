@@ -148,7 +148,7 @@ The staff reason and note are on the latest `payment_events` row for the payment
 
 ## Staff routes
 
-`apps/api/src/routes/admin-payment.ts` is mounted at `/admin/payment` and every route opens with `requireAdmin`.
+`apps/api/src/routes/admin-payment.ts` is mounted at `/admin/payment`. Every route lists `adminGate` first, before its validator, so a caller with no admin session gets a 401 and never a 400. A read then calls `requireAdmin` inside `staff()` for the actor id, and a write runs through `adminWrite` inside `staffWrite()`. A new staff route keeps that order; the `admin` module's `admin-gate.test.ts` fails on a validator listed before the gate.
 
 | Route | Body | Answers |
 | --- | --- | --- |
@@ -161,6 +161,40 @@ The staff reason and note are on the latest `payment_events` row for the payment
 `reason` is one of `amount_mismatch`, `not_found`, `duplicate`, `other`. Errors use the api envelope `{ error: { code, message } }`. The status per code: `not_found` 404; `conflict` and `duplicate_transaction` 409; `invalid_request`, `method_unavailable` and `callback_invalid` 400; `rate_limited` 429; `declined` and `provider_error` 502.
 
 A refund is allowed only on a `successful` payment, and the sum of a payment's refunds stays at or below its `amount`. The core reserves the amount with a conditional update before it calls the provider and releases it if the provider refuses. There is no `refunded` status: read `refundedAmount`.
+
+### Audit rows of the staff writes
+
+The two write routes run through `adminWrite` from `apps/api/src/lib/admin-write.ts`, so each staff decision leaves one row in `audit_events`. The actions live in `apps/api/src/audit/payment.ts`, which this module's `plugin-array` patch registers in `apps/api/src/lib/audit-actions.ts`.
+
+| Route | Audit action | `before` | `after` |
+| --- | --- | --- | --- |
+| `POST /admin/payment/payments/:id/review` with `confirm` | `payment.review.confirm` | `status` | `status`, `note` |
+| `POST /admin/payment/payments/:id/review` with `reject` | `payment.review.reject` | `status` | `status`, `note`, `reason` |
+| `POST /admin/payment/payments/:id/refunds` | `payment.refund.create` | `refundedAmount` | `refundedAmount`, and the refund's `id`, `amount` and `note` |
+
+The area is `payments`, the target type is `payment`, the target id is the payment id, and the label is the reference staff see, `<referenceType> · <referenceId>`. The reads need no action.
+
+`staffWrite()` builds the payment store over the transaction `adminWrite` opens and puts it in scope with `withPaymentStore`, so the core's status update, its `payment_events` or `payment_refunds` row and the audit row go through one client. Under `database-postgres` they commit together, and a `PaymentError` (a 409 from a race, a 404) rolls every one of them back. Under `database-d1` each statement commits as it runs, and a failed decision only goes without an audit row. A status listener runs inside that transaction too: write through `currentAdminWrite()?.db` when it is set, and put a side effect such as an email in its `afterCommit`.
+
+A refund calls the provider inside the transaction. Under `database-postgres`, if the provider refunds and a later statement fails, the rollback removes the `payment_refunds` row while the gateway's refund stands. Check the gateway's dashboard after a refund that answered 500.
+
+### Add a search param to the Payments screen
+
+`apps/admin/src/routes/payments.tsx` is a managed file. Its search schema spreads `paymentsSearchExtension` from `apps/admin/src/extend/payments.ts`, a seed file this module writes once. `saasaloy update` never changes it and writes it again only when it is missing (ADR 0060). Add a key there, as a zod field:
+
+```ts
+import { z } from "zod";
+
+export const paymentsSearchExtension = {
+  payment: z
+    .string()
+    .regex(/^[\w-]{1,64}$/)
+    .optional()
+    .catch(undefined),
+} satisfies z.ZodRawShape;
+```
+
+The key is then typed on every `<Link to="/payments" search={{ payment }}>` and on `Route.useSearch()`, with no edit to `payments.tsx`. A key the screen itself must act on, such as opening that payment's panel, still needs a read in `payments.tsx`; that read is the only edit left in the managed file. The `.catch(undefined)` drops a malformed value instead of failing the screen. The module adds `zod` to `apps/admin/package.json` for this file. The `saasaloy-admin` skill, "Extension seams", lists every seed file in the admin app.
 
 ## Providers
 
@@ -299,4 +333,4 @@ A provider is one file, `packages/payment/src/providers/<name>.ts`, exporting a 
 
 ## Next
 
-Run `saasaloy-billing` to sell a plan on top of the payments this module records.
+Run `saasaloy-subscription` to sell a plan on top of the payments this module records.
