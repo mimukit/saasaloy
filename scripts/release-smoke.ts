@@ -21,6 +21,18 @@
 // that project's own `pnpm lint` (issue #152). Only there do imports between workspaces
 // resolve, the type-aware pass reach the installed blocks, and `add` format its patches.
 //
+// The upgrade step needs the network too (issue #298). It installs the previous published
+// CLI, which scaffolds a project with modules fetched from GitHub at that release's tag,
+// and then runs the packed CLI's `update --dry-run` against the repo's `modules/`. The
+// merge plan must list the update notes that project is owed. `--upgrade-only` runs this
+// step alone after the pack.
+//
+// The skipped-release step needs the network as well (issue #312). It scaffolds a project
+// with CLI 0.5.0 from npm, deletes one demo block, and runs the packed CLI's `update`. The
+// run must add the aliases the project lacks, list the block as "deleted locally", keep it
+// deleted after `--resolved`, and merge the base three-way against the template at the
+// `v0.5.0` tag. `--skipped-only` runs this step alone after the pack.
+//
 // npm does the install, not pnpm: pnpm would find pnpm-workspace.yaml above .dev/ and link
 // rather than install, which is the one thing this script exists to avoid.
 //
@@ -114,11 +126,15 @@ export interface FullScaffold {
 export interface SmokeOptions {
   /** Leave `.dev/release-smoke/` in place after a green run, for inspection. */
   keep: boolean;
+  /** Pack and install, then run the upgrade step alone (issue #298). */
+  upgradeOnly: boolean;
+  /** Pack and install, then run the skipped-release step alone (issue #312). */
+  skippedOnly: boolean;
   /** Flags and positionals this script does not accept. */
   unknown: string[];
 }
 
-const KNOWN_FLAGS = new Set(["--keep"]);
+const KNOWN_FLAGS = new Set(["--keep", "--upgrade-only", "--skipped-only"]);
 
 /**
  * Split this script's argv. Exported for its own test: a typo'd `--kep` that silently
@@ -127,7 +143,12 @@ const KNOWN_FLAGS = new Set(["--keep"]);
  */
 export function parseArgs(argv: string[]): SmokeOptions {
   const unknown = argv.filter((arg) => !KNOWN_FLAGS.has(arg));
-  return { keep: argv.includes("--keep"), unknown };
+  return {
+    keep: argv.includes("--keep"),
+    skippedOnly: argv.includes("--skipped-only"),
+    unknown,
+    upgradeOnly: argv.includes("--upgrade-only"),
+  };
 }
 
 /**
@@ -245,6 +266,388 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
         name: `full-${ordered.join("-")}`,
       };
     });
+}
+
+// --- Upgrade step (issue #298) ------------------------------------------------------
+
+/** The repository the previous CLI fetches its modules from, at the tag of its release. */
+const UPGRADE_SOURCE = "mimukit/saasaloy";
+
+/**
+ * What the upgrade project takes from the previous release, one `add` each, in order.
+ * `admin` brings `api` and `auth` with it, and its `when.installed` gate is what lets the
+ * shell note through. `email-react` ships a note of its own. Add a module here when a
+ * note needs one the set does not hold.
+ */
+const UPGRADE_ADDS: readonly (readonly string[])[] = [
+  ["email-react"],
+  ["admin", "--with", "database-d1"],
+];
+
+/**
+ * The testing mode the upgrade project takes. Off, so a note gated on `when.testing` is
+ * expected to stay out of the merge plan.
+ */
+const UPGRADE_TESTING = "off";
+
+/** What `update --dry-run` exits with: a preview stays 0 even while notes are pending. */
+const DRY_RUN_EXIT = 0;
+
+/** A note id: `base/NNNN-<slug>` or `<module>/NNNN-<slug>`, as `lib/update-notes.ts` derives it. */
+const NOTE_ID = "[a-z0-9][a-z0-9-]*/[0-9]{4}-[a-z0-9][a-z0-9-]*";
+
+/** A note heading in the merge plan: `### <id>: <title>`, or one level down under "may apply". */
+const NOTE_HEADING = new RegExp(`^#{3,4} (${NOTE_ID}): `);
+
+const MAY_APPLY_HEADING = "### Notes that may apply";
+
+/** A version as `[major, minor, patch, prerelease]`, or undefined when it is not semver. */
+function parseSemver(
+  version: string
+): [number, number, number, string] | undefined {
+  const match = /^(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/.exec(version);
+  if (match === null) {
+    return undefined;
+  }
+  return [Number(match[1]), Number(match[2]), Number(match[3]), match[4] ?? ""];
+}
+
+/**
+ * Compare two semver strings. A prerelease sorts below its release, and two prereleases
+ * compare as text, which is all the smoke needs. Exported for its own test.
+ */
+export function compareSemver(a: string, b: string): number {
+  const left = parseSemver(a);
+  const right = parseSemver(b);
+  if (left === undefined || right === undefined) {
+    throw new Error(`not a semver version: ${left === undefined ? a : b}`);
+  }
+  for (let index = 0; index < 3; index += 1) {
+    const diff = (left[index] as number) - (right[index] as number);
+    if (diff !== 0) {
+      return diff;
+    }
+  }
+  if (left[3] === right[3]) {
+    return 0;
+  }
+  if (left[3] === "") {
+    return 1;
+  }
+  if (right[3] === "") {
+    return -1;
+  }
+  return left[3] < right[3] ? -1 : 1;
+}
+
+/**
+ * The newest published release below `current`, from the list `npm view saasaloy
+ * versions --json` prints. A prerelease is never the previous CLI: a project scaffolded
+ * with one is not what a user upgrades from. Exported for its own test.
+ */
+export function previousVersion(
+  published: readonly string[],
+  current: string
+): string | undefined {
+  return published
+    .filter((version) => {
+      const parsed = parseSemver(version);
+      return (
+        parsed !== undefined &&
+        parsed[3] === "" &&
+        compareSemver(version, current) < 0
+      );
+    })
+    .toSorted(compareSemver)
+    .at(-1);
+}
+
+/** The frontmatter fields the expected-notes table reads. */
+export interface NoteFrontmatter {
+  version?: string;
+  when?: { installed: string[]; testing: boolean };
+}
+
+/**
+ * Read `version` and `when` out of a note's frontmatter. Only the forms the notes use:
+ * `when` as a block map or a flow map, `installed` as a block list or a flow list, and
+ * `testing: true`. A `when` key past those two throws, so a new condition fails the smoke
+ * loudly and is not skipped. Exported for its own test.
+ */
+export function readNoteFrontmatter(source: string): NoteFrontmatter {
+  const match = /^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/.exec(source);
+  if (match === null) {
+    throw new Error("the note has no frontmatter");
+  }
+  const lines = match[1]!.split(/\r?\n/);
+  const result: NoteFrontmatter = {};
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]!;
+    const top = /^(\w+):\s*(.*)$/.exec(line);
+    if (top === null) {
+      continue;
+    }
+    const [, key, rest] = top as unknown as [string, string, string];
+    if (key === "version") {
+      result.version = rest.replaceAll(/^["']|["']$/g, "").trim();
+    } else if (key === "when") {
+      let text = rest;
+      while (index + 1 < lines.length && /^\s/.test(lines[index + 1] ?? "")) {
+        index += 1;
+        text += `\n${lines[index]!}`;
+      }
+      result.when = readWhen(text);
+    }
+  }
+  return result;
+}
+
+function readWhen(text: string): { installed: string[]; testing: boolean } {
+  for (const [, key] of text.matchAll(/(\w+):/g)) {
+    if (key !== "installed" && key !== "testing") {
+      throw new Error(
+        `the smoke cannot judge \`when.${String(key)}\`; teach readNoteFrontmatter the key`
+      );
+    }
+  }
+  const flow = /installed:\s*\[([^\]]*)\]/.exec(text);
+  const block = /installed:\s*\n((?:[ \t]*-[^\n]*(?:\n|$))+)/.exec(text);
+  const unquote = (item: string): string =>
+    item.trim().replaceAll(/^["']|["']$/g, "");
+  let installed: string[] = [];
+  if (flow !== null) {
+    installed = flow[1]!.split(",").map(unquote).filter(Boolean);
+  } else if (block !== null) {
+    installed = block[1]!
+      .split("\n")
+      .map((item) => unquote(item.replace(/^\s*-/, "")))
+      .filter(Boolean);
+  }
+  return { installed, testing: /testing:\s*true\b/.test(text) };
+}
+
+/** One note on disk, as the expected-notes table reads it. */
+export interface NoteOnDisk extends NoteFrontmatter {
+  id: string;
+}
+
+/**
+ * The note ids the upgrade's merge plan must list, in no particular group. A base note
+ * counts when its `version` is newer than the previous CLI and no newer than the packed
+ * one. A module note counts when its module is installed after the update: with
+ * SAASALOY_REGISTRY_DIR no module has a merge base, so every note it ships prints. A note
+ * whose `when` fails against that install set and the testing mode does not count.
+ * Exported for its own test.
+ */
+export function expectedNoteIds(
+  notes: readonly NoteOnDisk[],
+  range: { previous: string; packed: string },
+  installed: ReadonlySet<string>,
+  testing: string
+): string[] {
+  return notes
+    .filter((note) => {
+      const owner = note.id.split("/")[0]!;
+      if (owner === "base") {
+        return (
+          note.version !== undefined &&
+          compareSemver(note.version, range.previous) > 0 &&
+          compareSemver(note.version, range.packed) <= 0
+        );
+      }
+      return installed.has(owner);
+    })
+    .filter((note) => {
+      if (note.when === undefined) {
+        return true;
+      }
+      if (note.when.testing && testing === "off") {
+        return false;
+      }
+      return note.when.installed.every((name) => installed.has(name));
+    })
+    .map((note) => note.id)
+    .toSorted();
+}
+
+/**
+ * The modules installed after the update: what the lock holds now, plus every module the
+ * new descriptors make a dependency of one, which `update` installs fresh (the shell
+ * module that `admin` gained in 0.8.0 is the case). Exported for its own test.
+ */
+export function installedAfterUpdate(
+  locked: readonly string[],
+  dependsOn: ReadonlyMap<string, readonly string[]>
+): Set<string> {
+  const installed = new Set<string>();
+  const visit = (name: string): void => {
+    if (installed.has(name)) {
+      return;
+    }
+    installed.add(name);
+    for (const dependency of dependsOn.get(name) ?? []) {
+      visit(dependency);
+    }
+  };
+  for (const name of locked) {
+    visit(name);
+  }
+  return installed;
+}
+
+/** The note ids a merge plan lists, split by the group each sits in. */
+export interface PlanNotes {
+  placed: string[];
+  mayApply: string[];
+}
+
+/**
+ * Every note id in the "Update notes" section of a merge plan on stdout. A note heading
+ * before "### Notes that may apply" is placed, one after it may apply. A heading inside a
+ * fenced block is a note's own text, and the section ends at the next level-2 heading.
+ * Exported for its own test.
+ */
+export function parsePlanNotes(stdout: string): PlanNotes {
+  const result: PlanNotes = { mayApply: [], placed: [] };
+  let inSection = false;
+  let mayApply = false;
+  let fence: string | undefined;
+  for (const line of stdout.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) {
+        fence = marker;
+      } else if (marker.startsWith(fence)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (fence !== undefined) {
+      continue;
+    }
+    if (line === "## Update notes") {
+      inSection = true;
+      continue;
+    }
+    if (!inSection) {
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      break;
+    }
+    if (line === MAY_APPLY_HEADING) {
+      mayApply = true;
+      continue;
+    }
+    const id = NOTE_HEADING.exec(line)?.[1];
+    if (id !== undefined) {
+      (mayApply ? result.mayApply : result.placed).push(id);
+    }
+  }
+  return result;
+}
+
+/**
+ * What is wrong with the notes a merge plan listed against the ids expected: each id it
+ * missed and each it listed that no rule expects. Empty when they match. Both groups
+ * count, so a note the local registry pushes under "may apply" still matches. Exported for
+ * its own test.
+ */
+export function checkPlanNotes(
+  expected: readonly string[],
+  found: PlanNotes
+): string[] {
+  const listed = new Set([...found.placed, ...found.mayApply]);
+  const wanted = new Set(expected);
+  return [
+    ...expected.filter((id) => !listed.has(id)).map((id) => `missing ${id}`),
+    ...[...listed]
+      .filter((id) => !wanted.has(id))
+      .map((id) => `unexpected ${id}`),
+  ];
+}
+
+// --- Skipped-release step (issue #312) -----------------------------------------------
+
+/**
+ * The release the skipped-release project starts from. PrimeShopr's base was recorded at
+ * 0.5.0 and skipped to 0.8.0 (issue #312), and 0.5.0 already writes the lock's `base`
+ * record, so the update reads its snapshot version from the lock with no `--from`.
+ */
+const SKIPPED_FROM = "0.5.0";
+
+/**
+ * What the skipped-release project takes from 0.5.0, one `add` each, in order. `auth`
+ * now writes `@config/sections/auth.ts`, under an alias 0.5.0's `saasaloy.json` lacks,
+ * so the update proves it adds the alias. 0.5.0 has no `--with`, so the driver goes first.
+ */
+const SKIPPED_ADDS: readonly string[] = ["database-d1", "auth"];
+
+/**
+ * The demo block the skipped-release step deletes. 0.5.0 ships it and the packed template
+ * still does, so the update tracks it and must ask about it rather than drop it.
+ */
+export const SKIPPED_BLOCK = "packages/ui/src/blocks/faq.tsx";
+
+/** What `update` exits with when a merge or a note waits on the owner. */
+const PENDING_EXIT = 3;
+
+/**
+ * The lines of a merge plan's base section that say its diffs are two-way: the header's
+ * "no merge base" line and a file's "no base available" diff. Empty when the base merged
+ * three-way, or when the plan has no base section. A line inside a fenced block is a
+ * diff of the file, not the plan's own text. Exported for its own test.
+ */
+export function baseTwoWayLines(plan: string): string[] {
+  const found: string[] = [];
+  let inBase = false;
+  let fence: string | undefined;
+  for (const line of plan.split(/\r?\n/)) {
+    const marker = /^\s*(`{3,}|~{3,})/.exec(line)?.[1];
+    if (marker !== undefined) {
+      if (fence === undefined) {
+        fence = marker;
+      } else if (marker.startsWith(fence)) {
+        fence = undefined;
+      }
+      continue;
+    }
+    if (fence !== undefined) {
+      continue;
+    }
+    if (line.startsWith("## ")) {
+      inBase = line === "## base";
+      continue;
+    }
+    if (
+      inBase &&
+      (line.startsWith("- **no merge base") ||
+        line.includes("no base available"))
+    ) {
+      found.push(line);
+    }
+  }
+  return found;
+}
+
+/**
+ * Whether a merge plan lists `target` as a file deleted locally: its `#### \`target\``
+ * heading, then the source line that ends "deleted locally." Exported for its own test.
+ */
+export function listsDeletedLocally(plan: string, target: string): boolean {
+  const lines = plan.split(/\r?\n/);
+  const heading = lines.indexOf(`#### \`${target}\``);
+  if (heading === -1) {
+    return false;
+  }
+  return lines
+    .slice(heading + 1, heading + 4)
+    .some((line) => line.endsWith("— deleted locally."));
+}
+
+/** Every output line that reports an alias the project does not declare. Exported for its own test. */
+export function findUnknownAliases(output: string): string[] {
+  return output.split("\n").filter((line) => line.includes("Unknown alias"));
 }
 
 function fail(message: string, ...detail: string[]): never {
@@ -417,6 +820,385 @@ async function lintFullScaffold(
   step(`${scaffold.name} passes \`pnpm lint\` (${seconds(started)})`);
 }
 
+/** A finished command's exit code and its two streams, kept apart. */
+interface Captured {
+  code: number | null;
+  stdout: string;
+  stderr: string;
+}
+
+/** Run a command and hold both streams apart, so stdout can be parsed on its own. */
+function capture(
+  command: string,
+  args: readonly string[],
+  label: string,
+  options: { cwd: string; env?: NodeJS.ProcessEnv }
+): Promise<Captured> {
+  return new Promise((done, reject) => {
+    const child = spawn(command, args, {
+      cwd: options.cwd,
+      env: options.env ?? process.env,
+      stdio: ["ignore", "pipe", "pipe"],
+    });
+    let stdout = "";
+    let stderr = "";
+    child.stdout.on("data", (chunk: Buffer) => {
+      stdout += chunk.toString();
+    });
+    child.stderr.on("data", (chunk: Buffer) => {
+      stderr += chunk.toString();
+    });
+    child.on("error", (error) => {
+      reject(new StepError(`${label} could not start`, [String(error)]));
+    });
+    child.on("close", (code) => {
+      done({ code, stderr, stdout });
+    });
+  });
+}
+
+/** Every update note in this checkout: the base's and each module's. */
+async function readNotesOnDisk(registryDir: string): Promise<NoteOnDisk[]> {
+  const folders: [string, string][] = [["base", join(cliDir, "update-notes")]];
+  for (const dirent of await readdir(registryDir, { withFileTypes: true })) {
+    if (dirent.isDirectory()) {
+      folders.push([
+        dirent.name,
+        join(registryDir, dirent.name, "update-notes"),
+      ]);
+    }
+  }
+  const notes: NoteOnDisk[] = [];
+  for (const [owner, folder] of folders) {
+    let names: string[];
+    try {
+      names = await readdir(folder);
+    } catch {
+      continue;
+    }
+    for (const name of names.filter((file) =>
+      /^\d{4}-[a-z0-9][a-z0-9-]*\.md$/.test(file)
+    )) {
+      const file = join(folder, name);
+      let frontmatter: NoteFrontmatter;
+      try {
+        frontmatter = readNoteFrontmatter(await readFile(file, "utf-8"));
+      } catch (error) {
+        throw new StepError(`could not read ${relative(root, file)}`, [
+          String(error),
+        ]);
+      }
+      notes.push({ ...frontmatter, id: `${owner}/${name.slice(0, -3)}` });
+    }
+  }
+  return notes;
+}
+
+/**
+ * Scaffold a project with the previous published CLI and its modules at the previous
+ * release's tag, then run `update --dry-run` with the packed CLI against this checkout's
+ * `modules/` (issue #298). The merge plan on stdout must list exactly the update notes
+ * this project is owed, and the preview must exit as a preview does.
+ *
+ * It needs the network twice: npm for the previous CLI, and GitHub for the modules that
+ * CLI fetches at its tag. The project is built the way a user's was, so the update meets
+ * the files and the lock the previous release really wrote.
+ */
+async function checkUpgrade(
+  bin: string,
+  version: string,
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  const started = Date.now();
+  const registryDir = env.SAASALOY_REGISTRY_DIR!;
+  const view = await capture(
+    "npm",
+    ["view", "saasaloy", "versions", "--json"],
+    "npm view saasaloy versions",
+    { cwd: workDir }
+  );
+  if (view.code !== 0) {
+    throw new StepError("npm view saasaloy versions failed", [
+      `exit code ${String(view.code)}`,
+      ...view.stderr.trim().split("\n").slice(-10),
+    ]);
+  }
+  const parsed = JSON.parse(view.stdout) as unknown;
+  const published = (Array.isArray(parsed) ? parsed : [parsed]).filter(
+    (entry): entry is string => typeof entry === "string"
+  );
+  const previous = previousVersion(published, version);
+  if (previous === undefined) {
+    throw new StepError(
+      `no published saasaloy release is older than ${version}`,
+      [`npm lists: ${published.join(", ")}`]
+    );
+  }
+
+  const previousBin = await installPublished(previous, "previous", "upgrade");
+  const remoteEnv = publishedEnv();
+  const projectName = "upgrade";
+  const dir = join(workDir, projectName);
+  step(`scaffolding ${projectName} with saasaloy@${previous}`);
+  await runQuiet(
+    previousBin,
+    [
+      "init",
+      projectName,
+      "--no-install",
+      "--no-git",
+      `--testing=${UPGRADE_TESTING}`,
+    ],
+    `saasaloy@${previous} init ${projectName}`,
+    { cwd: workDir, env: remoteEnv }
+  );
+  for (const [name, ...flags] of UPGRADE_ADDS) {
+    const target = `${UPGRADE_SOURCE}@v${previous}/${String(name)}`;
+    await runQuiet(
+      previousBin,
+      ["add", target, ...flags, "--yes"],
+      `saasaloy@${previous} add ${target}`,
+      { cwd: dir, env: remoteEnv }
+    );
+  }
+
+  const lock = await readManifest(join(dir, "saasaloy-lock.json"));
+  const locked = Object.keys(
+    typeof lock.modules === "object" && lock.modules !== null
+      ? lock.modules
+      : {}
+  );
+  const modules = await readModules(registryDir);
+  const installed = installedAfterUpdate(
+    locked,
+    new Map(modules.map((entry) => [entry.name, entry.dependsOn ?? []]))
+  );
+  const expected = expectedNoteIds(
+    await readNotesOnDisk(registryDir),
+    { packed: version, previous },
+    installed,
+    UPGRADE_TESTING
+  );
+  if (expected.length === 0) {
+    throw new StepError(
+      `the upgrade from ${previous} expects no update note, so the step proves nothing`,
+      ["Add a module to UPGRADE_ADDS whose notes reach this range."]
+    );
+  }
+
+  step(`running \`saasaloy update --dry-run\` (${version}) in ${projectName}`);
+  const update = await capture(
+    bin,
+    ["update", "--dry-run"],
+    `saasaloy update --dry-run in ${projectName}`,
+    { cwd: dir, env }
+  );
+  if (update.code !== DRY_RUN_EXIT) {
+    throw new StepError(
+      `saasaloy update --dry-run in ${projectName} exited ${String(update.code)}, not ${String(DRY_RUN_EXIT)}`,
+      update.stderr.trim().split("\n").slice(-30)
+    );
+  }
+  const found = parsePlanNotes(update.stdout);
+  const problems = checkPlanNotes(expected, found);
+  if (problems.length > 0) {
+    throw new StepError(
+      `the merge plan from ${previous} to ${version} lists the wrong update notes`,
+      [...problems, `expected: ${expected.join(", ")}`]
+    );
+  }
+  for (const id of found.placed) {
+    step(`update note ${id} listed`);
+  }
+  for (const id of found.mayApply) {
+    step(`update note ${id} listed (may apply)`);
+  }
+  step(
+    `${projectName} from ${previous} lists all ${String(expected.length)} expected update notes (${seconds(started)})`
+  );
+}
+
+/**
+ * Install a published CLI into `.dev/release-smoke/<folder>/`, outside the workspace, and
+ * return its bin. A package.json of its own stops npm walking up into the repo.
+ */
+async function installPublished(
+  version: string,
+  folder: string,
+  purpose: string
+): Promise<string> {
+  const dir = join(scratch, folder);
+  await mkdir(dir, { recursive: true });
+  await writeFile(
+    join(dir, "package.json"),
+    `${JSON.stringify({ name: `saasaloy-release-smoke-${folder}`, private: true, version: "0.0.0" }, null, 2)}\n`
+  );
+  step(`installing saasaloy@${version} for the ${purpose} step`);
+  await runQuiet(
+    "npm",
+    ["install", "--no-audit", "--no-fund", `saasaloy@${version}`],
+    `npm install saasaloy@${version}`,
+    { cwd: dir }
+  );
+  return join(dir, "node_modules/.bin/saasaloy");
+}
+
+/**
+ * The environment a published CLI runs in. It fetches its modules from GitHub at its own
+ * tag, the way a user's project got them. SAASALOY_REGISTRY_DIR would hand it this
+ * checkout's modules, which it was never released with.
+ */
+function publishedEnv(): NodeJS.ProcessEnv {
+  const env = { ...process.env };
+  delete env.SAASALOY_REGISTRY_DIR;
+  return env;
+}
+
+/** Both streams of a run, the last `count` lines, for a failure's detail. */
+function outputTail(result: Captured, count = 30): string[] {
+  return `${result.stdout}\n${result.stderr}`.trim().split("\n").slice(-count);
+}
+
+/**
+ * Scaffold a project with CLI 0.5.0 and its modules at the `v0.5.0` tag, delete one demo
+ * block, and drive the packed CLI's `update` against this checkout's `modules/` (issue
+ * #312). Three things must hold. No run reports an unknown alias. The merge plan lists the
+ * block as deleted locally, `--resolved` keeps it deleted, and a second update leaves it
+ * absent. The base section merges three-way, from the template at `v0.5.0` that the lock's
+ * `base.cliVersion` names, so it carries no "no merge base" line.
+ *
+ * It needs the network three times: npm for 0.5.0, GitHub for the modules 0.5.0 fetches,
+ * and GitHub for the base snapshot the packed CLI fetches. `GITHUB_TOKEN` lifts the rate
+ * limit on the last two.
+ */
+async function checkSkippedRelease(
+  bin: string,
+  env: NodeJS.ProcessEnv
+): Promise<void> {
+  const started = Date.now();
+  const oldBin = await installPublished(
+    SKIPPED_FROM,
+    "skipped-cli",
+    "skipped-release"
+  );
+  const remoteEnv = publishedEnv();
+  const projectName = "skipped";
+  const dir = join(workDir, projectName);
+  step(`scaffolding ${projectName} with saasaloy@${SKIPPED_FROM}`);
+  await runQuiet(
+    oldBin,
+    ["init", projectName, "--no-install", "--no-git"],
+    `saasaloy@${SKIPPED_FROM} init ${projectName}`,
+    { cwd: workDir, env: remoteEnv }
+  );
+  for (const name of SKIPPED_ADDS) {
+    const target = `${UPGRADE_SOURCE}@v${SKIPPED_FROM}/${name}`;
+    await runQuiet(
+      oldBin,
+      ["add", target, "--yes"],
+      `saasaloy@${SKIPPED_FROM} add ${target}`,
+      { cwd: dir, env: remoteEnv }
+    );
+  }
+  const block = join(dir, ...SKIPPED_BLOCK.split("/"));
+  await rm(block);
+  step(`deleted ${SKIPPED_BLOCK} in ${projectName}`);
+
+  // The project sits under this repo's gitignored `.dev/`, so the tree check would read
+  // clean anyway; `--force` keeps the step from depending on that.
+  const update = async (
+    extra: readonly string[],
+    label: string
+  ): Promise<{ result: Captured; plan: string }> => {
+    const out = join(scratch, `${projectName}-${label}.md`);
+    const result = await capture(
+      bin,
+      ["update", ...extra, "--yes", "--force", "--out", out],
+      `saasaloy update ${extra.join(" ")} in ${projectName}`,
+      { cwd: dir, env }
+    );
+    if (result.code !== 0 && result.code !== PENDING_EXIT) {
+      throw new StepError(
+        `saasaloy update ${extra.join(" ")} in ${projectName} exited ${String(result.code)}`,
+        outputTail(result)
+      );
+    }
+    const unknown = findUnknownAliases(`${result.stdout}\n${result.stderr}`);
+    if (unknown.length > 0) {
+      throw new StepError(
+        `saasaloy update ${extra.join(" ")} in ${projectName} met an alias the project lacks`,
+        unknown
+      );
+    }
+    let plan = "";
+    try {
+      plan = await readFile(out, "utf-8");
+    } catch {
+      // A run with nothing left to merge writes no plan.
+    }
+    return { plan, result };
+  };
+
+  step(`running \`saasaloy update\` in ${projectName} from ${SKIPPED_FROM}`);
+  const first = await update([], "first");
+  if (first.result.code !== PENDING_EXIT) {
+    throw new StepError(
+      `the first update in ${projectName} exited ${String(first.result.code)}, not ${String(PENDING_EXIT)}`,
+      outputTail(first.result)
+    );
+  }
+  step(`no \`Unknown alias\` in the update from ${SKIPPED_FROM}`);
+  if (!listsDeletedLocally(first.plan, SKIPPED_BLOCK)) {
+    throw new StepError(
+      `the merge plan does not list ${SKIPPED_BLOCK} as deleted locally`,
+      first.plan.split("\n").filter((line) => line.includes("deleted"))
+    );
+  }
+  step(`the merge plan lists ${SKIPPED_BLOCK} as deleted locally`);
+  const twoWay = baseTwoWayLines(first.plan);
+  if (twoWay.length > 0) {
+    throw new StepError(
+      `the base section of the merge plan from ${SKIPPED_FROM} is two-way`,
+      twoWay.slice(0, 10)
+    );
+  }
+  if (!first.plan.split("\n").includes("## base")) {
+    throw new StepError(
+      `the merge plan from ${SKIPPED_FROM} has no base section, so the three-way check proves nothing`,
+      []
+    );
+  }
+  step("the base section merges three-way: no `no merge base` line");
+
+  step(`running \`saasaloy update --resolved ${SKIPPED_BLOCK}\``);
+  await update(["--resolved", SKIPPED_BLOCK], "resolved");
+  const second = await update([], "second");
+  if (await pathPresent(block)) {
+    throw new StepError(
+      `${SKIPPED_BLOCK} came back after \`--resolved\` and a second update`,
+      outputTail(second.result)
+    );
+  }
+  if (listsDeletedLocally(second.plan, SKIPPED_BLOCK)) {
+    throw new StepError(
+      `the second update lists ${SKIPPED_BLOCK} as deleted locally again`,
+      []
+    );
+  }
+  step(
+    `${projectName} from ${SKIPPED_FROM} keeps ${SKIPPED_BLOCK} deleted, adds its aliases, and merges the base three-way (${seconds(started)})`
+  );
+}
+
+async function pathPresent(file: string): Promise<boolean> {
+  try {
+    await readFile(file);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /** The time since `started`, as `12s`. */
 function seconds(started: number): string {
   return `${String(Math.round((Date.now() - started) / 1000))}s`;
@@ -534,8 +1316,11 @@ async function main(): Promise<void> {
   if (options.unknown.length > 0) {
     fail(
       `unknown argument(s): ${options.unknown.join(", ")}`,
-      "usage: pnpm release:smoke [--keep]"
+      "usage: pnpm release:smoke [--keep] [--upgrade-only] [--skipped-only]"
     );
+  }
+  if (options.upgradeOnly && options.skippedOnly) {
+    fail("pass --upgrade-only or --skipped-only, not both");
   }
 
   // --- Pack ----------------------------------------------------------------------
@@ -627,6 +1412,42 @@ async function main(): Promise<void> {
     );
   }
 
+  // --- Upgrade from the previous release (needs the network) ------------------------
+
+  // Issue #298. A project the previous release scaffolded must get the update notes it is
+  // owed. `--upgrade-only` runs this step alone, after the pack and install above.
+  if (options.upgradeOnly || options.skippedOnly) {
+    try {
+      await (options.upgradeOnly
+        ? checkUpgrade(bin, version, offlineEnv)
+        : checkSkippedRelease(bin, offlineEnv));
+    } catch (error) {
+      if (error instanceof StepError) {
+        fail(error.message, ...error.detail);
+      }
+      throw error;
+    }
+    if (!options.keep) {
+      await rm(scratch, { force: true, recursive: true });
+    }
+    console.log(
+      options.upgradeOnly
+        ? `release-smoke: saasaloy@${version} packs, installs, and lists every update note a project from the previous release is owed.`
+        : `release-smoke: saasaloy@${version} packs, installs, and updates a ${SKIPPED_FROM} project with no alias error, a deleted block kept deleted, and a three-way base.`
+    );
+    return;
+  }
+  const upgrade = checkUpgrade(bin, version, offlineEnv);
+  // Issue #312. A 0.5.0 project takes one update. `--skipped-only` runs this step alone.
+  const skipped = checkSkippedRelease(bin, offlineEnv);
+  // The full run reads the outcomes later, through `Promise.allSettled`. A handler now
+  // keeps an early rejection from counting as unhandled, which would end the process.
+  for (const check of [upgrade, skipped]) {
+    check.catch(() => {
+      // Read below.
+    });
+  }
+
   step("running `saasaloy init smoke --no-install --no-git`");
   run(bin, ["init", "smoke", "--no-install", "--no-git"], "saasaloy init", {
     cwd: workDir,
@@ -670,6 +1491,8 @@ async function main(): Promise<void> {
     await readModules(offlineEnv.SAASALOY_REGISTRY_DIR)
   );
   const results = await Promise.allSettled([
+    upgrade,
+    skipped,
     webDev,
     ...scaffolds.map((scaffold) => lintFullScaffold(bin, scaffold, offlineEnv)),
   ]);
@@ -694,7 +1517,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, and passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s).${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a deleted block kept deleted and a three-way base.${kept}`
   );
 }
 

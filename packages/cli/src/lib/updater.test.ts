@@ -10,18 +10,22 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { buildPlan } from "./applier.js";
+import { templateAliases } from "./base.js";
 import { hashContent, pathExists } from "./fs-utils.js";
 import { emptyLock } from "./lock.js";
 import type { Lockfile, LockModule } from "./lock.js";
 import { emptyManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
 import type { LoadedModule } from "./registry.js";
+import { loadConfig, saveConfig } from "./saasaloy-config.js";
+import { baseTemplateDir } from "./scaffold.js";
 import type { RegistryItem, SaasaloyConfig } from "./schema.js";
 import {
   buildUpdatePlan,
   compareInstalled,
   executeUpdatePlan,
   markResolved,
+  markRestored,
   mergeTargets,
   recordRefRewrites,
 } from "./updater.js";
@@ -463,20 +467,29 @@ describe("buildUpdatePlan — three-way file classification", () => {
     expect(plan.modules[0]?.needsMerge).toBeTruthy();
   });
 
-  it("restores a tracked file that is missing from disk", async () => {
-    const { base, theirs } = await emailRevisions("v1\n", "v2\n");
-    const manifest = emptyManifest();
-    await trackFile(
-      manifest,
-      "apps/api/src/lib/email.ts",
-      "v1\n",
-      "files/lib/email.ts"
-    );
-    await rm(join(root, "apps/api/src/lib/email.ts"));
+  // #312, ADR 0059: replaces decision 6's "tracked but missing, put it back".
+  it.each([
+    ["changed", "v2\n"],
+    ["did not change", "v1\n"],
+  ])(
+    "sends a tracked file missing from disk to the merge plan as deleted when upstream %s it",
+    async (_label, next) => {
+      const { base, theirs } = await emailRevisions("v1\n", next);
+      const manifest = emptyManifest();
+      await trackFile(
+        manifest,
+        "apps/api/src/lib/email.ts",
+        "v1\n",
+        "files/lib/email.ts"
+      );
+      await rm(join(root, "apps/api/src/lib/email.ts"));
 
-    const plan = await build({ manifest, inputs: [input({ theirs, base })] });
-    expect(plan.modules[0]?.files[0]?.action).toBe("restore");
-  });
+      const plan = await build({ manifest, inputs: [input({ theirs, base })] });
+      expect(plan.modules[0]?.files[0]?.action).toBe("deleted");
+      expect(plan.needsMerge).toBeTruthy();
+      expect(mergeTargets(plan)).toStrictEqual(["apps/api/src/lib/email.ts"]);
+    }
+  );
 
   it("classifies an untracked file the new version introduces as a two-way conflict", async () => {
     const item = {
@@ -922,9 +935,9 @@ describe("buildUpdatePlan — a new dependsOn", () => {
     const { base, theirs, prereqs } = await withNewPrereq();
     const plan = await build({ inputs: [input({ theirs, base, prereqs })] });
     expect(plan.modules[0]?.prereqNames).toStrictEqual(["queue"]);
-    expect(
-      plan.modules[0]?.prereqPlan?.files.map((f) => f.target)
-    ).toStrictEqual(["apps/queue/src/index.ts"]);
+    expect(plan.prereqPlan?.files.map((f) => f.target)).toStrictEqual([
+      "apps/queue/src/index.ts",
+    ]);
   });
 
   it("installs it and gives it its own lock entry at the same SHA", async () => {
@@ -959,7 +972,133 @@ describe("buildUpdatePlan — a new dependsOn", () => {
       inputs: [input({ theirs, base, prereqs })],
     });
     expect(plan.modules[0]?.prereqNames).toStrictEqual([]);
-    expect(plan.modules[0]?.prereqPlan).toBeUndefined();
+    expect(plan.prereqPlan).toBeUndefined();
+  });
+});
+
+describe("buildUpdatePlan — aliases the project lacks (#312)", () => {
+  // `saasaloy.json` is a seed file, so a project made before the template declared
+  // `@config` never gets it, and a module file under `@config` stopped the run.
+  async function authRevisions() {
+    const item = {
+      type: "saasaloy:feature" as const,
+      files: [{ path: "files/auth.ts", target: "@config/sections/auth.ts" }],
+    };
+    return {
+      base: await writeModule("old", "auth", { ...item, files: [] }, {}),
+      theirs: await writeModule("new", "auth", item, {
+        "files/auth.ts": "export const auth = {};\n",
+      }),
+    };
+  }
+
+  function authLock(): Lockfile {
+    return lockWith({
+      auth: { source: "mimukit/saasaloy", ref: "main", resolved: OLD_SHA },
+    });
+  }
+
+  it("adds a template alias the project lacks and places the file under it", async () => {
+    const { base, theirs } = await authRevisions();
+    const state = {
+      config: config({ installed: ["auth"] }),
+      manifest: emptyManifest(),
+      lock: authLock(),
+    };
+    const plan = await build({
+      ...state,
+      inputs: [input({ theirs, base })],
+      baseAliases: await templateAliases(await baseTemplateDir()),
+    });
+
+    expect(plan.aliasAdds).toContainEqual({
+      alias: "@config",
+      value: "packages/config/src",
+    });
+    expect(plan.modules[0]?.files[0]).toMatchObject({
+      target: "packages/config/src/sections/auth.ts",
+      action: "create",
+    });
+
+    await writeFile(join(root, "saasaloy.json"), "{}\n", "utf-8");
+    await executeUpdatePlan(plan, { root, ...state });
+    await saveConfig(root, state.config);
+
+    await expect(onDisk("packages/config/src/sections/auth.ts")).resolves.toBe(
+      "export const auth = {};\n"
+    );
+    const saved = await loadConfig(root);
+    expect(saved.aliases["@config"]).toBe("packages/config/src");
+    expect(saved.aliases["@api"]).toBe("apps/api/src");
+  });
+
+  it("keeps an alias the project holds with another value, and reports it once", async () => {
+    const { base, theirs } = await authRevisions();
+    const ui = await writeModule(
+      "new",
+      "ui-kit",
+      {
+        type: "saasaloy:capability",
+        scaffolds: [
+          {
+            workspace: "packages/ui",
+            aliases: { "@ui": "packages/ui/src" },
+            files: [],
+          },
+        ],
+      },
+      {}
+    );
+    const state = {
+      config: config({
+        aliases: { "@api": "apps/api/src", "@ui": "packages/design/src" },
+        installed: ["auth", "ui-kit"],
+      }),
+      manifest: emptyManifest(),
+      lock: authLock(),
+    };
+    const plan = await build({
+      ...state,
+      inputs: [input({ theirs, base }), input({ theirs: ui })],
+      baseAliases: {
+        "@ui": "packages/ui/src",
+        "@config": "packages/config/src",
+      },
+    });
+
+    expect(plan.aliasKept).toStrictEqual([
+      {
+        alias: "@ui",
+        project: "packages/design/src",
+        template: "packages/ui/src",
+      },
+    ]);
+    expect(plan.aliasAdds.map((add) => add.alias)).not.toContain("@ui");
+
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.config.aliases["@ui"]).toBe("packages/design/src");
+  });
+});
+
+describe("buildUpdatePlan — a link the run already plans (#312)", () => {
+  it("plans a skill link two modules name once, and reads the second as exists", async () => {
+    const skill = { "skills/shared/SKILL.md": "# Shared\n" };
+    const item = {
+      type: "saasaloy:feature" as const,
+      files: [],
+      agent: { skills: ["skills/shared"] },
+    };
+    const alpha = await writeModule("new", "alpha", item, skill);
+    const beta = await writeModule("new", "beta", item, skill);
+    const plan = await build({
+      config: config({ installed: ["alpha", "beta"] }),
+      inputs: [input({ theirs: alpha }), input({ theirs: beta })],
+    });
+
+    expect(plan.modules.map((mod) => mod.links[0]?.action)).toStrictEqual([
+      "create",
+      "exists",
+    ]);
   });
 });
 
@@ -1305,7 +1444,7 @@ describe(executeUpdatePlan, () => {
     expect(result.deleted).toHaveLength(1);
   });
 
-  it("restores a tracked file that had been deleted", async () => {
+  it("writes nothing for a tracked file that had been deleted, and keeps the lock", async () => {
     const { base, theirs } = await emailRevisions("v1\n", "v2\n");
     const manifest = emptyManifest();
     await trackFile(
@@ -1319,8 +1458,11 @@ describe(executeUpdatePlan, () => {
     const plan = await build({ ...state, inputs: [input({ theirs, base })] });
 
     const result = await run(plan, state);
-    await expect(onDisk("apps/api/src/lib/email.ts")).resolves.toBe("v2\n");
-    expect(result.written[0]?.action).toBe("restore");
+    await expect(
+      pathExists(join(root, "apps/api/src/lib/email.ts"))
+    ).resolves.toBeFalsy();
+    expect(result.written).toStrictEqual([]);
+    expect(state.lock.modules.email?.resolved).toBe(OLD_SHA);
   });
 
   it("applies config patches and records them in the manifest", async () => {
@@ -1569,6 +1711,202 @@ describe("markResolved — update --resolved (#223)", () => {
     markResolved(plan, new Set(["apps/api/src/other.ts"]));
     expect(mergeTargets(plan)).toStrictEqual([TARGET]);
     expect(plan.needsMerge).toBeTruthy();
+  });
+});
+
+describe("tombstones — a file kept deleted (#312, ADR 0059)", () => {
+  const TARGET = "apps/api/src/lib/email.ts";
+
+  /** A tracked email.ts the owner deleted, at `v1`. */
+  async function deletedFile(tombstoned: boolean) {
+    const manifest = emptyManifest();
+    await trackFile(manifest, TARGET, "v1\n", "files/lib/email.ts");
+    await rm(join(root, ...TARGET.split("/")));
+    if (tombstoned) {
+      manifest.managed[TARGET]!.deleted = true;
+    }
+    return { config: config(), lock: emailLock(), manifest };
+  }
+
+  it("records a tombstone for a deleted file --resolved names, writes nothing, and moves the lock", async () => {
+    const state = await deletedFile(false);
+    const { base, theirs } = await emailRevisions("v1\n", "v2\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.files[0]?.action).toBe("deleted");
+
+    markResolved(plan, new Set([TARGET]));
+    expect(plan.needsMerge).toBeFalsy();
+    const result = await executeUpdatePlan(plan, { root, ...state });
+
+    expect(result.tombstoned.map((f) => f.target)).toStrictEqual([TARGET]);
+    expect(result.resolved).toStrictEqual([]);
+    expect(state.manifest.managed[TARGET]).toStrictEqual({
+      deleted: true,
+      from: "files/lib/email.ts",
+      hash: hashContent("v1\n"),
+      module: "email",
+    });
+    await expect(pathExists(join(root, TARGET))).resolves.toBeFalsy();
+    expect(state.lock.modules.email?.resolved).toBe(NEW_SHA);
+  });
+
+  it("skips a tombstoned file upstream left alone", async () => {
+    const state = await deletedFile(true);
+    const { base, theirs } = await emailRevisions("v1\n", "v1\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    expect(plan.modules[0]?.files[0]?.action).toBe("skip");
+    expect(plan.needsMerge).toBeFalsy();
+  });
+
+  it("keeps a tombstoned file deleted when upstream changed it, out of the merge plan", async () => {
+    const state = await deletedFile(true);
+    const { base, theirs } = await emailRevisions("v1\n", "v2\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    expect(plan.modules[0]?.files[0]?.action).toBe("kept-deleted");
+    expect(plan.needsMerge).toBeFalsy();
+    expect(mergeTargets(plan)).toStrictEqual([]);
+    const result = await executeUpdatePlan(plan, { root, ...state });
+    expect(result.written).toStrictEqual([]);
+    await expect(pathExists(join(root, TARGET))).resolves.toBeFalsy();
+    expect(state.manifest.managed[TARGET]?.deleted).toBeTruthy();
+    expect(state.lock.modules.email?.resolved).toBe(NEW_SHA);
+  });
+
+  it("reads a tombstone with no merge base against its recorded hash", async () => {
+    const state = await deletedFile(true);
+    const { theirs } = await emailRevisions("v1\n", "v1\n");
+    const changed = await writeModule(
+      "changed",
+      "email",
+      {
+        files: [{ path: "files/lib/email.ts", target: "@api/lib/email.ts" }],
+        type: "saasaloy:feature",
+      },
+      { "files/lib/email.ts": "v2\n" }
+    );
+
+    const same = await build({ ...state, inputs: [input({ theirs })] });
+    const moved = await build({
+      ...state,
+      inputs: [input({ theirs: changed })],
+    });
+    expect(same.modules[0]?.files[0]?.action).toBe("skip");
+    expect(moved.modules[0]?.files[0]?.action).toBe("kept-deleted");
+  });
+
+  it("untracks a tombstoned file upstream dropped", async () => {
+    const state = await deletedFile(true);
+    const base = await writeModule(
+      "old",
+      "email",
+      {
+        files: [{ path: "files/lib/email.ts", target: "@api/lib/email.ts" }],
+        type: "saasaloy:feature",
+      },
+      { "files/lib/email.ts": "v1\n" }
+    );
+    const theirs = await writeModule(
+      "new",
+      "email",
+      { files: [], type: "saasaloy:feature" },
+      {}
+    );
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+    expect(plan.modules[0]?.removals[0]?.action).toBe("delete-missing");
+
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]).toBeUndefined();
+  });
+
+  it("restores a tombstoned file --restore names and drops the flag", async () => {
+    const state = await deletedFile(true);
+    const { base, theirs } = await emailRevisions("v1\n", "v2\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    expect(markRestored(plan, new Set([TARGET]))).toStrictEqual([]);
+    expect(plan.modules[0]?.files[0]?.action).toBe("restore");
+    const result = await executeUpdatePlan(plan, { root, ...state });
+
+    expect(result.written.map((f) => f.target)).toStrictEqual([TARGET]);
+    await expect(onDisk(TARGET)).resolves.toBe("v2\n");
+    expect(state.manifest.managed[TARGET]).toStrictEqual({
+      from: "files/lib/email.ts",
+      hash: hashContent("v2\n"),
+      module: "email",
+    });
+  });
+
+  it("returns a --restore target the plan holds no tombstone for", async () => {
+    const state = await deletedFile(false);
+    const { base, theirs } = await emailRevisions("v1\n", "v2\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    expect(markRestored(plan, new Set([TARGET]))).toStrictEqual([TARGET]);
+    expect(plan.modules[0]?.files[0]?.action).toBe("deleted");
+  });
+
+  // The choice for a tombstone found back on disk: the owner restored it by hand, so it
+  // classifies as any tracked file does and the flag goes.
+  it("classifies a tombstoned file that is back on disk normally and drops the flag", async () => {
+    const state = await deletedFile(true);
+    await writeFile(join(root, ...TARGET.split("/")), "v1\n", "utf-8");
+    const { base, theirs } = await emailRevisions("v1\n", "v1\n");
+    const plan = await build({ ...state, inputs: [input({ theirs, base })] });
+
+    expect(plan.modules[0]?.files[0]).toMatchObject({
+      action: "skip",
+      reappeared: true,
+    });
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]?.deleted).toBeUndefined();
+  });
+
+  // After a recorded merge the manifest hash is of the owner's own bytes, and `mergedWith`
+  // is what says so. A tombstone that dropped it would let the file, put back by hand with
+  // those bytes, read as untouched, and the next upstream change would overwrite it.
+  it("keeps mergedWith on the tombstone, so a merged file put back by hand is not overwritten", async () => {
+    const state = await deletedFile(false);
+    const entry = state.manifest.managed[TARGET]!;
+    entry.hash = hashContent("mine\n");
+    entry.mergedWith = hashContent("v1\n");
+    const plan = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v2\n"))],
+    });
+    markResolved(plan, new Set([TARGET]));
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]).toMatchObject({
+      deleted: true,
+      hash: hashContent("mine\n"),
+      mergedWith: hashContent("v1\n"),
+    });
+
+    await writeFile(join(root, ...TARGET.split("/")), "mine\n", "utf-8");
+    const again = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v3\n"))],
+    });
+    expect(again.modules[0]?.files[0]).toMatchObject({
+      action: "drift",
+      reappeared: true,
+    });
+  });
+
+  it("keeps adopted on the tombstone", async () => {
+    const state = await deletedFile(false);
+    state.manifest.managed[TARGET]!.adopted = true;
+    const plan = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v2\n"))],
+    });
+    markResolved(plan, new Set([TARGET]));
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]).toMatchObject({
+      adopted: true,
+      deleted: true,
+    });
   });
 });
 

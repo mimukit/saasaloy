@@ -13,7 +13,7 @@
 //     heading that starts `## Wire-up`;
 //   - the eight capability skills the gap audit named have a removal section and a
 //     failure-mode section;
-//   - the base template ships `saasaloy-build` and `saasaloy-feature`.
+//   - the base template ships `saasaloy-build`, `saasaloy-feature` and `saasaloy-update`.
 //
 // Run it with `pnpm test:scripts`.
 
@@ -232,7 +232,11 @@ describe("the module skills", () => {
 });
 
 describe("the base skills", () => {
-  for (const name of ["saasaloy-build", "saasaloy-feature"]) {
+  for (const name of [
+    "saasaloy-build",
+    "saasaloy-feature",
+    "saasaloy-update",
+  ]) {
     it(`ship ${name} with its name in the frontmatter`, () => {
       const path = join(BASE_SKILLS, name, "SKILL.md");
       assert.ok(existsSync(path), `${path} is missing`);

@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
+  checkKeptDeleted,
   checkDeploy,
   checkEnv,
   checkConfigValues,
@@ -26,7 +27,8 @@ import { pathExists, readIfPresent } from "../lib/fs-utils.js";
 import { createOutput, printJson } from "../lib/json-output.js";
 import type { Output } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
+import { loadManifest, pendingNotesOf } from "../lib/manifest.js";
+import { pendingNoteJson, pendingNoteLines } from "../lib/pending-notes.js";
 import { ROOT_MANIFEST, rootVersion } from "../lib/root-version.js";
 import { CONFIG_FILE, loadConfig } from "../lib/saasaloy-config.js";
 import { baseTemplateDir } from "../lib/scaffold.js";
@@ -118,7 +120,7 @@ function renderBase(report: BaseReport): string {
     ),
     ...report.missing.map(
       (target) =>
-        `${pc.red("✗")} ${target} ${pc.dim("missing — `saasaloy update` restores it")}`
+        `${pc.red("✗")} ${target} ${pc.dim("missing — `saasaloy update` asks whether to keep it deleted")}`
     ),
   ];
   if (report.seed.length > 0) {
@@ -150,6 +152,32 @@ async function reportProject(path: string, out: Output): Promise<number> {
     ),
   });
   note(wrapForNote(renderBase(base)), "Base", out.tui);
+  // Files kept deleted on purpose (#312). An info line each; the exit code does not move.
+  const keptDeleted = await checkKeptDeleted(path, manifest);
+  if (keptDeleted.length > 0) {
+    note(
+      wrapForNote(
+        keptDeleted
+          .map(
+            (file) =>
+              `${pc.dim("ℹ")} ${file.target} ${pc.dim(`deleted, kept deleted (${file.module}) — \`saasaloy update --restore <path>\` brings it back`)}`
+          )
+          .join("\n")
+      ),
+      `Kept deleted ${pc.dim(`(${keptDeleted.length})`)}`,
+      out.tui
+    );
+  }
+  // Update notes an applied `update` showed and nobody cleared (#298). Like base drift,
+  // they are work the project owes, never a finding: the exit code does not move.
+  const pending = pendingNotesOf(manifest);
+  if (pending.length > 0) {
+    note(
+      wrapForNote(pendingNoteLines(pending).join("\n")),
+      `${pc.yellow("Pending update notes")} ${pc.dim(`(${pending.length})`)}`,
+      out.tui
+    );
+  }
   // The deploy rules (ADR 0048) are warnings, like base drift: each prints its fix and
   // none of them turns exit 0 into 2. `pnpm deploy:production` refuses the same state on
   // its own, so this only says it sooner.
@@ -189,8 +217,10 @@ async function reportProject(path: string, out: Output): Promise<number> {
       base,
       findings: findings.map(findingJson),
       installed: config.installed,
+      keptDeleted,
       mode: "project",
       path,
+      pendingNotes: pending.map(pendingNoteJson),
       problems: findings.length,
       warnings: warnings.map(findingJson),
     });

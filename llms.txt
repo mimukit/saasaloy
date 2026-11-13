@@ -35,4 +35,5 @@ This file is for an AI agent that wants to build a product with Saasaloy. An age
 - [saasaloy-build](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-build/SKILL.md): the staged MVP build.
 - [saasaloy-feature](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-feature/SKILL.md): one product entity across the stack.
 - [saasaloy-setup](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-setup/SKILL.md): the brief interview and its completeness rule.
+- [saasaloy-update](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-update/SKILL.md): the upgrade to a newer CLI, the merge plan and its update notes, and the exit codes.
 - [The generated project's agent guide](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/AGENTS.md): the rules for unattended work.

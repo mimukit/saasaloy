@@ -18,13 +18,14 @@ const Ajv2020 = AjvDefault as unknown as typeof AjvDefault.default;
 // error rather than surfacing as a mysterious applier crash later (build spec §3.2/§3.3).
 
 export type SchemaName =
-  "saasaloy" | "manifest" | "registry-item" | "saasaloy-lock";
+  "saasaloy" | "manifest" | "registry-item" | "saasaloy-lock" | "update-note";
 
 const SCHEMA_FILES: Record<SchemaName, string> = {
   manifest: "manifest.schema.json",
   "registry-item": "registry-item.schema.json",
   saasaloy: "saasaloy.schema.json",
   "saasaloy-lock": "saasaloy-lock.schema.json",
+  "update-note": "update-note.schema.json",
 };
 
 // Schemas ship beside dist/ (see package.json "files"). At runtime import.meta.url is
@@ -266,4 +267,9 @@ export function validateRegistryItem(data: unknown): Promise<ValidationResult> {
 
 export function validateLock(data: unknown): Promise<ValidationResult> {
   return validate("saasaloy-lock", data);
+}
+
+/** Validate an update note's parsed frontmatter (#298). `lib/update-notes.ts` calls it. */
+export function validateUpdateNote(data: unknown): Promise<ValidationResult> {
+  return validate("update-note", data);
 }

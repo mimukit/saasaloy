@@ -284,7 +284,103 @@ describe("runDoctor — what it reports and what it exits with", () => {
     });
   });
 
+  // #312: a file kept deleted is an info line, never a problem.
+  it("lists a tombstoned base file as kept deleted, and exits 0", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-kept-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await writeFile(join(project, "AGENTS.md"), "a\n");
+    await mkdir(join(project, ".saasaloy"));
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: {
+          "AGENTS.md": { module: "base", hash: hashContent("a\n") },
+          "packages/ui/src/blocks/showcase.tsx": {
+            module: "base",
+            hash: hashContent("s\n"),
+            deleted: true,
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: {},
+        base: {
+          name: "web",
+          cliVersion: "0.3.0",
+          templateHash: "f".repeat(64),
+        },
+      })
+    );
+
+    const { code, out } = await run([project]);
+
+    expect(code).toBe(0);
+    expect(out).toMatch(
+      /packages\/ui\/src\/blocks\/showcase\.tsx deleted, kept deleted/
+    );
+    expect(out).not.toContain("missing —");
+    expect(out).toContain("No problems found");
+  });
+
   // ADR 0048: the deploy rules warn and print the fix, and never fail the run.
+  // #298 Phase 4. A pending update note is work the project still owes, listed like base
+  // drift: information that never fails the run.
+  describe("the pending update notes of a project", () => {
+    async function withPendingNote(): Promise<string> {
+      const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-notes-"));
+      temps.push(project);
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+      await mkdir(join(project, ".saasaloy"), { recursive: true });
+      await writeFile(
+        join(project, ".saasaloy", "manifest.json"),
+        JSON.stringify({
+          managed: {},
+          pendingNotes: [
+            {
+              id: "base/0001-brand-css",
+              title: "Move the web tokens",
+              body: "## What you do\n",
+            },
+          ],
+        })
+      );
+      return project;
+    }
+
+    it("lists each pending note with the command that clears it, and exits 0", async () => {
+      const project = await withPendingNote();
+
+      const { code, out } = await run([project]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("base/0001-brand-css");
+      expect(out).toContain("Move the web tokens");
+      expect(out).toContain("saasaloy update --done <id>");
+    });
+
+    it("carries the pending notes in --json", async () => {
+      const project = await withPendingNote();
+
+      const { code, doc } = await runJson(runDoctor, [project, "--json"]);
+
+      expect(code).toBe(0);
+      expect(doc.pendingNotes).toStrictEqual([
+        { id: "base/0001-brand-css", title: "Move the web tokens" },
+      ]);
+    });
+  });
+
   describe("the deploy warnings of a project", () => {
     it("warns about the retired task and a workspace with no row, and exits 0", async () => {
       const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-deploy-"));

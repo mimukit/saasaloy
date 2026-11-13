@@ -1,7 +1,7 @@
 {
   "name": "saasaloy",
   "version": "0.9.0",
-  "description": "Composable SaaS accelerator kit.",
+  "description": "An open source SaaS starter kit for Cloudflare: a CLI plus a module registry that copies source files you own.",
   "keywords": [
     "saas",
     "scaffold",
@@ -12,7 +12,7 @@
     "drizzle",
     "generator"
   ],
-  "homepage": "https://github.com/mimukit/saasaloy#readme",
+  "homepage": "https://saasaloy.com",
   "bugs": {
     "url": "https://github.com/mimukit/saasaloy/issues"
   },
@@ -29,13 +29,14 @@
   "files": [
     "dist",
     "templates",
-    "schemas/*.schema.json"
+    "schemas/*.schema.json",
+    "update-notes"
   ],
   "publishConfig": {
     "access": "public"
   },
   "engines": {
-    "node": ">=24.13.0"
+    "node": ">=24.15.0"
   },
   "scripts": {
     "build": "tsup",

@@ -613,6 +613,46 @@ describe("executeRemovePlan — file deletion", () => {
     ]);
     expect(manifest.managed["apps/api/src/routes/auth.ts"]).toBeUndefined();
   });
+
+  // #312: a tombstone is not on disk by design, so `remove` drops it with no delete and
+  // no warning, and leaves another module's tombstone alone.
+  it("drops the module's tombstones silently and keeps another module's", async () => {
+    const manifest = emptyManifest();
+    manifest.managed["apps/api/src/routes/auth.ts"] = {
+      module: "auth",
+      hash: hashContent("auth\n"),
+      deleted: true,
+    };
+    manifest.managed["apps/api/src/routes/email.ts"] = {
+      module: "email",
+      hash: hashContent("email\n"),
+      deleted: true,
+    };
+
+    const config: SaasaloyConfig = {
+      aliases: {},
+      installed: ["auth", "email"],
+    };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("auth", config, manifest, lock);
+    expect(plan.files.map((f) => [f.target, f.action])).toStrictEqual([
+      ["apps/api/src/routes/auth.ts", "missing"],
+    ]);
+    expect(plan.warnings).toStrictEqual([]);
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+    });
+
+    expect(result.deleted).toStrictEqual([]);
+    expect(result.driftSurvivors).toStrictEqual([]);
+    expect(manifest.managed["apps/api/src/routes/auth.ts"]).toBeUndefined();
+    expect(
+      manifest.managed["apps/api/src/routes/email.ts"]?.deleted
+    ).toBeTruthy();
+  });
 });
 
 describe("executeRemovePlan — links", () => {

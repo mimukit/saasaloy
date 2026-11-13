@@ -265,6 +265,8 @@ pnpm --filter @repo/db db:generate       # diff schema → emit SQL under migrat
 connection, so it runs the same way on either driver. Review the emitted SQL and commit it beside
 the schema change.
 
+**Two branches, one migration number.** drizzle-kit numbers each migration from the journal it finds, so two branches that each run `db:generate` both write the same `NNNN_` prefix, and the merge holds two migrations with one number and a `meta/_journal.json` that names only one of them. Do not rename the files to fix it, because the journal and the snapshot chain still point at the old names. drizzle-kit names a snapshot by its number alone, so both branches also wrote the same `meta/NNNN_snapshot.json` path, and that file must stay the other branch's: with it deleted, the next `db:generate` diffs against an older snapshot and writes the other branch's tables a second time. After the merge, delete only your branch's `.sql` file, and resolve `meta/NNNN_snapshot.json` and `meta/_journal.json` to the other branch's version. Then run `db:generate` again, which writes your change as the next number on top of the merged schema. Read the new SQL before you commit it. A migration already applied to a shared or production database is never deleted; generate a new one after it.
+
 It still needs a driver installed, because the config it reads, `drizzle.config.ts`, ships with the
 driver. Run it on a core-only project and drizzle-kit falls back to its own default and reports
 `drizzle.config.json file does not exist`, naming a file this project never had. Add a driver
@@ -323,6 +325,8 @@ The engine in `packages/db/src/seed/` is driver-neutral. `index.ts` globs `slice
 **A row removed from a slice stays in the database.** The seed keeps no state between runs, so it cannot tell an old seed row from one you made. Start clean with `pnpm db:setup --reset` on Postgres, or `pnpm db:drop` then `pnpm db:setup` on D1, then `pnpm db:seed`. `db:setup` never seeds on either driver.
 
 **One row for each state the UI shows differently.** That is the size rule, and the review test for a slice: one subscription per normalized status, one invitation per status, one flag per type. No number cap and no generated data.
+
+**Seed dates are fixed.** Write a date in a slice as a literal, `new Date("2026-01-15T09:00:00Z")`, never `Date.now()` or a bare `new Date()`. A date relative to today moves every run: a row seeded "three days ago" leaves a fixed-range test or a "this month" screen on the first day of the next month. A relative date also makes two seed runs write different rows, which breaks the upsert rule above.
 
 **A table change updates its slice in the same change.** Add a table, add its slice; rename a column, rename it in the slice. A table that should stay empty gets a slice with `rows: {}`, which records the choice. Two checks hold the rule:
 

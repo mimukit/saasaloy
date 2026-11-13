@@ -13,15 +13,99 @@
 
     - run saasaloy update for every installed module in one run
     - move any edit in an old admin file into its new shell path
-    - rewrite own imports with the perl line in the saasaloy-shell skill
-    - copy the oxlint twin-primitive rule from the base template
+    - rewrite your own imports. The pattern skips
+      `blocks/admin/feature-flags`, which the update already points
+      at the right place:
+
+      ```sh
+      grep -rlE '@repo/ui/(components|blocks|containers|lib)/admin/' apps packages/ui/src \
+        | xargs perl -pi -e 's#\@repo/ui/(components|blocks|containers|lib)/admin/(?!feature-flags)#\@repo/ui/$1/shell/#g'
+      ```
+
+    - add the twin-primitive rule to the `overrides` array of your
+      oxlint.config.mjs, or change the globs and the
+      `!@repo/ui/components/admin/*` line of your old rule to `shell`:
+
+      ```js
+      {
+        files: [
+          "apps/admin/**",
+          "apps/app/**",
+          "packages/ui/src/blocks/admin/**",
+          "packages/ui/src/blocks/auth/**",
+          "packages/ui/src/blocks/shell/**",
+          "packages/ui/src/components/shell/**",
+          "packages/ui/src/containers/shell/**",
+        ],
+        rules: {
+          "no-restricted-imports": [
+            "error",
+            {
+              patterns: [
+                {
+                  group: [
+                    "@repo/ui/components/*",
+                    "!@repo/ui/components/shell/*",
+                    "@repo/ui/blocks/error-state",
+                    "@repo/ui/blocks/theme-toggle",
+                  ],
+                  message:
+                    "Signed-in app code uses the shell set: import from @repo/ui/components/shell/* and @repo/ui/blocks/shell/*.",
+                },
+              ],
+            },
+          ],
+        },
+      },
+      ```
+
     - pnpm install, then pnpm check
-* **app:** the email-react preview now starts on port 3003.
-* **ui:** the web tokens live in brand.css. A project made
-  before this change merges web.css by hand per the changelog.
+* **email-react:** the template preview moves from port 3002 to
+  3003, because the coming `app` module takes 3002. saasaloy update
+  changes the `dev` script in packages/email-react/package.json.
+  Change a bookmark or a script that opens localhost:3002.
+* **ui:** the web tokens move from packages/ui/src/styles/web.css to
+  a new brand.css beside it: the `:root` and `.dark` blocks,
+  `@custom-variant dark` and `@theme inline`. brand.css imports
+  globals.css, web.css imports brand.css and keeps the landing
+  layout, type and motion utilities, and components.json points
+  shadcn at brand.css. saasaloy update creates brand.css from the
+  template and sends web.css to the merge plan because the project
+  owns it. globals.css and Layout.astro join the merge plan for
+  comment changes only. update leaves apps/web/DESIGN.md alone
+  because it is a seed file, and overwrites components.json only if
+  you never edited it.
+  Until you finish the steps below, Layout.astro still loads your
+  old web.css, so the site looks the same and brand.css is unused.
+
+  1. Copy the `@custom-variant dark` line and the `:root`, `.dark`
+     and `@theme inline` blocks from your web.css into brand.css,
+     replacing the template's copies below its
+     `@import "./globals.css";`. Keep your own values: a preset you
+     applied lives in web.css, not in the new file.
+  2. In web.css, delete those four and change
+     `@import "./globals.css";` to `@import "./brand.css";`. Keep
+     the landing block, from the comment that opens "The landing
+     page's layout" to the end of the file.
+  3. Set `tailwind.css` in packages/ui/components.json to
+     `src/styles/brand.css`, if the update did not.
+  4. Run the saasaloy-design skill's `update` flow, or edit the last
+     line of apps/web/DESIGN.md by hand so it names
+     packages/ui/src/styles/brand.css with the first 12 hex
+     characters of that file's sha256.
+  5. Run `pnpm build` and check that globals.css, brand.css and
+     web.css hold one `:root`, one `.dark`, one `@theme inline` and
+     one `@custom-variant dark` between them.
 
 ### Features
 
+* **api, auth:** `http://localhost:3002` joins the dev origin list
+  in apps/api/src/index.ts and packages/auth/src/auth.ts, ready for
+  the `app` module. A project made before this release gets it from
+  `saasaloy update api auth`. Until then, a request from :3002 fails
+  CORS. The `CORS_ORIGINS` description now says that a set value
+  replaces the localhost list, so a deployed project lists every
+  frontend origin in it.
 * **app:** add the customer app module ([aab7a62](https://github.com/mimukit/saasaloy/commit/aab7a62bd4bf81794b58a085d8541158d6b4aacb)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
 * **app:** reserve port 3002 for the app module ([86b9c7c](https://github.com/mimukit/saasaloy/commit/86b9c7ca9b807f0b9f3effebef670f2f4f099f01)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
 * **auth:** send the password reset mail when email is installed ([9e45724](https://github.com/mimukit/saasaloy/commit/9e45724ff28b1aa890023d70c2c86a62937b8ed7)), references [#225](https://github.com/mimukit/saasaloy/issues/225)
@@ -61,58 +145,6 @@
 ### Code Refactoring
 
 * **ui:** move the web tokens into brand.css ([b208e20](https://github.com/mimukit/saasaloy/commit/b208e207000b57146a8112369f409b84929d7da3)), references [#227](https://github.com/mimukit/saasaloy/issues/227)
-
-## Unreleased
-
-### ⚠ BREAKING CHANGES
-
-* **ui:** the web tokens move from packages/ui/src/styles/web.css to
-  a new brand.css beside it: the `:root` and `.dark` blocks,
-  `@custom-variant dark` and `@theme inline`. brand.css imports
-  globals.css, web.css imports brand.css and keeps the landing
-  layout, type and motion utilities, and components.json points
-  shadcn at brand.css. saasaloy update creates brand.css from the
-  template and sends web.css to the merge plan because the project
-  owns it. globals.css and Layout.astro join the merge plan for
-  comment changes only. update leaves apps/web/DESIGN.md alone
-  because it is a seed file, and overwrites components.json only if
-  you never edited it.
-  Until you finish the steps below, Layout.astro still loads your
-  old web.css, so the site looks the same and brand.css is unused.
-
-  1. Copy the `@custom-variant dark` line and the `:root`, `.dark`
-     and `@theme inline` blocks from your web.css into brand.css,
-     replacing the template's copies below its
-     `@import "./globals.css";`. Keep your own values: a preset you
-     applied lives in web.css, not in the new file.
-  2. In web.css, delete those four and change
-     `@import "./globals.css";` to `@import "./brand.css";`. Keep
-     the landing block, from the comment that opens "The landing
-     page's layout" to the end of the file.
-  3. Set `tailwind.css` in packages/ui/components.json to
-     `src/styles/brand.css`, if the update did not.
-  4. Run the saasaloy-design skill's `update` flow, or edit the last
-     line of apps/web/DESIGN.md by hand so it names
-     packages/ui/src/styles/brand.css with the first 12 hex
-     characters of that file's sha256.
-  5. Run `pnpm build` and check that globals.css, brand.css and
-     web.css hold one `:root`, one `.dark`, one `@theme inline` and
-     one `@custom-variant dark` between them.
-
-* **email-react:** the template preview moves from port 3002 to
-  3003, because the coming `app` module takes 3002. saasaloy update
-  changes the `dev` script in packages/email-react/package.json.
-  Change a bookmark or a script that opens localhost:3002.
-
-### Features
-
-* **api, auth:** `http://localhost:3002` joins the dev origin list
-  in apps/api/src/index.ts and packages/auth/src/auth.ts, ready for
-  the `app` module. A project made before this release gets it from
-  `saasaloy update api auth`. Until then, a request from :3002 fails
-  CORS. The `CORS_ORIGINS` description now says that a set value
-  replaces the localhost list, so a deployed project lists every
-  frontend origin in it.
 
 ## [0.7.0](https://github.com/mimukit/saasaloy/compare/v0.6.1...v0.7.0) (2026-10-24)
 

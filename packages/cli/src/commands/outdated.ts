@@ -4,7 +4,12 @@ import { EXIT_OK, EXIT_REFUSED } from "../lib/exit.js";
 import { BASE_MODULE, missingBaseTargets, templateHash } from "../lib/base.js";
 import { createOutput, printJson } from "../lib/json-output.js";
 import { loadLock } from "../lib/lock.js";
-import { loadManifest } from "../lib/manifest.js";
+import { loadManifest, pendingNotesOf } from "../lib/manifest.js";
+import {
+  pendingLabel,
+  pendingNoteJson,
+  pendingNoteLines,
+} from "../lib/pending-notes.js";
 import { findProjectRoot } from "../lib/project.js";
 import { REGISTRY_ENV, RemoteRegistrySource } from "../lib/registry.js";
 import type { RegistrySource } from "../lib/registry.js";
@@ -39,9 +44,12 @@ import { DESCRIPTIONS } from "./descriptions.js";
 //
 // `--json` prints the same rows as one document on stdout (#223): `base`, `modules`, and
 // `drift`, the count `--check` gates on. The exit code does not change.
+//
+// Pending update notes (#298) are work waiting too: the report lists them, `--json`
+// carries them as `pendingNotes`, and `--check` exits 2 while any is pending.
 
 export interface Options {
-  /** `--check`: exit non-zero when any module has moved, for CI. */
+  /** `--check`: exit non-zero when any module has moved or a note is pending, for CI. */
   check: boolean;
   /** `--json`: one JSON document on stdout, the TUI on stderr. */
   json: boolean;
@@ -57,7 +65,7 @@ const HELP: CommandHelp = {
   usage: USAGE,
   flags: {
     "--check":
-      "exit non-zero when the base template or any module has moved (for CI)",
+      "exit non-zero when the base template or any module has moved, or an update note is pending (for CI)",
     "--json": "print the rows as one JSON document on stdout",
   },
 };
@@ -300,12 +308,28 @@ export async function runOutdated(argv: string[]): Promise<number> {
       out.tui
     );
 
+    // Update notes an applied `update` showed and nobody cleared (#298): work waiting, read
+    // offline from the manifest.
+    const pending = pendingNotesOf(manifest);
+    if (pending.length > 0) {
+      note(
+        wrapForNote(pendingNoteLines(pending).join("\n")),
+        "Pending update notes",
+        out.tui
+      );
+    }
+
     const comparisons = [baseRow, ...moduleRows];
     const drift = countDrift(comparisons);
     if (opts.json) {
-      printJson({ base: baseRow, drift, modules: moduleRows });
+      printJson({
+        base: baseRow,
+        drift,
+        modules: moduleRows,
+        pendingNotes: pending.map(pendingNoteJson),
+      });
     }
-    if (drift === 0) {
+    if (drift === 0 && pending.length === 0) {
       if (registryOverride && moduleRows.length > 0) {
         // Nothing was compared, so there is nothing to gate on — `--check` exits 0 too.
         outro(
@@ -325,7 +349,14 @@ export async function runOutdated(argv: string[]): Promise<number> {
       return EXIT_OK;
     }
 
-    const summary = describeDrift(comparisons);
+    const summary = [
+      ...(drift > 0 ? [describeDrift(comparisons)] : []),
+      ...(pending.length > 0
+        ? [
+            `${pendingLabel(pending.length)} — do the work, then \`saasaloy update --done <id>\`.`,
+          ]
+        : []),
+    ].join(" ");
     // `--check` is the only thing that turns news into a non-zero exit. A bare run is a
     // report, and a report that failed the shell would be unusable interactively.
     if (opts.check) {

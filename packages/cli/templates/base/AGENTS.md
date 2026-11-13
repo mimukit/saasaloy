@@ -128,7 +128,7 @@ The merge goes **one level below the section**: `app: { name: "..." }` replaces 
 
 ### The Base Skills
 
-Nine skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
+Ten skills ship with the base, as real files in `.agents/skills/` linked into `.claude/skills/`. Two run in order when you make the project yours:
 
 1. **`saasaloy-setup`** interviews the owner once and writes `docs/product-brief.md`, then sets `config.app.name` and `config.app.locale`. Other skills read the brief rather than ask again.
 2. **`saasaloy-landing-copy`** writes `packages/ui/src/content/landing.ts` from the brief.
@@ -138,13 +138,14 @@ Two build the product once modules are installed:
 - **`saasaloy-build`** runs the whole MVP build in stages from a complete brief, with one commit per stage on `build/mvp` and a resumable `docs/build-log.md`. Start here when you are asked to build the product.
 - **`saasaloy-feature`** builds one product entity across the stack: table, migration, seed slice, validator, route, `hc` client, an `app` screen, an `admin` list and a route test.
 
-The other five run when the thing they own moves:
+The other six run when the thing they own moves:
 
 - **`saasaloy-design`** keeps each app's `DESIGN.md` true, and swaps the web theme for a shadcn preset.
 - **`saasaloy-config`** covers `@repo/config`: a section, the merge rule, config versus `.env`.
 - **`saasaloy-env`** covers `packages/env`: adding a key, the server and client split, `pnpm env:setup`.
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
 - **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates and the rollback.
+- **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the merge plan, the update notes, `--resolved` and `--done`.
 
 ### Naming Conventions
 
@@ -171,7 +172,7 @@ The linter is **[oxlint](https://oxc.rs)** configured from **[Ultracite](https:/
 **Commit hooks are installed by husky** on your first `pnpm install`, and they need a `.git` directory, which `saasaloy init` creates for you. The root `prepare` script is `husky && node packages/tooling/src/link-skills.ts`, so the same install also links every folder in `.agents/skills/` into `.claude/skills/`. pnpm skips `prepare` when an install changes nothing, so after you add a skill folder to a checkout that is already installed, run `pnpm skills:link`. The hooks:
 
 - `pre-commit` runs **lint-staged** over staged files only — oxlint `--fix`, Stylelint `--fix`, Prettier `--write`. It skips the type-aware pass on purpose: that one needs the whole project graph, which defeats staged-file scoping.
-- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`.
+- `commit-msg` runs **commitlint** with `@commitlint/config-conventional`, so messages must read `type(scope): subject` — `feat:`, `fix(api):`, `chore(deps):`. A hotfix commit uses `fix`; `hotfix` is a branch name, not a commit type, and commitlint refuses it.
 
 Bypass in a genuine emergency with `git commit --no-verify`, or `HUSKY=0` to skip every hook (which is also how you keep hooks out of CI).
 

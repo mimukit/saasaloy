@@ -305,6 +305,26 @@ describe("khudebarta: transport failures", () => {
     assert.equal(error.code, "provider_error");
     assert.equal(error.retryable, false);
     assert.match(error.message, /unreadable response \(HTTP 502\)/);
+    assert.match(error.message, /<html>Bad Gateway<\/html>/);
+  });
+
+  it("keeps only the first 200 characters of a long body, whitespace collapsed", async () => {
+    const page = `<html>\n  <body>${"x".repeat(500)}</body>\n</html>`;
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response(page, { status: 502 }))) as typeof fetch;
+
+    const error = await sendError(ENV, message());
+    const extract = error.message.split("(HTTP 502): ")[1] ?? "";
+    assert.equal(extract.length, 200);
+    assert.ok(extract.startsWith("<html> <body>xxx"));
+  });
+
+  it("says the body was empty", async () => {
+    globalThis.fetch = (() =>
+      Promise.resolve(new Response("", { status: 502 }))) as typeof fetch;
+
+    const error = await sendError(ENV, message());
+    assert.match(error.message, /\(HTTP 502\): \(empty body\)/);
   });
 
   it("refuses a redirect instead of following it", async () => {

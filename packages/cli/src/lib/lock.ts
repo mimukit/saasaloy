@@ -41,6 +41,19 @@ export interface LockBase {
   cliVersion: string;
   /** sha256 over the shipped template as `templateHash()` computes it. */
   templateHash: string;
+  /**
+   * The CLI that adopted the base (#298), absent on a base `init` rendered. Kept through
+   * later updates: while `cliVersion` still equals it, no update has run since the
+   * adoption, so the base update notes up to it cannot be placed.
+   */
+  adoptedAt?: string;
+  /**
+   * The CLI release whose template `templateHash` describes (#312), written only when an
+   * applied run moves `cliVersion` past it while the base still waits on a merge. `update`
+   * fetches the three-way snapshot at this version, so a re-run keeps its merge base.
+   * Absent means `cliVersion` is that release. A clean base update drops it.
+   */
+  templateVersion?: string;
 }
 
 export interface Lockfile {

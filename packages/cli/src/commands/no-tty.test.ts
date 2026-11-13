@@ -6,7 +6,7 @@ import { fileURLToPath } from "node:url";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import {
   EXIT_FAILURE,
-  EXIT_MERGE_PENDING,
+  EXIT_WORK_PENDING,
   EXIT_OK,
   EXIT_REFUSED,
 } from "../lib/exit.js";
@@ -40,7 +40,7 @@ const DEFINED_CODES = new Set([
   EXIT_OK,
   EXIT_FAILURE,
   EXIT_REFUSED,
-  EXIT_MERGE_PENDING,
+  EXIT_WORK_PENDING,
 ]);
 
 /**

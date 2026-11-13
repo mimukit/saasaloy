@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { baseRecord } from "./base.js";
 import {
   checkBase,
+  checkKeptDeleted,
   checkConfigValues,
   checkDeploy,
   checkModule,
@@ -537,6 +538,55 @@ describe("checkBase — the base's record and drift (#120)", () => {
 
     expect(report.drifted).toStrictEqual([]);
     expect(report.matching).toBe(1);
+  });
+});
+
+describe("checkKeptDeleted — files kept deleted (#312)", () => {
+  let root: string;
+
+  beforeEach(async () => {
+    root = await mkdtemp(join(tmpdir(), "saasaloy-doctor-kept-"));
+  });
+
+  afterEach(async () => {
+    await rm(root, { recursive: true, force: true });
+  });
+
+  it("lists each tombstone still absent, and never as a missing base file", async () => {
+    // gone.md is deleted with no tombstone: missing, and not kept deleted.
+    await writeFile(join(root, "AGENTS.md"), "a\n", "utf-8");
+    await writeFile(join(root, "back.md"), "b\n", "utf-8");
+    const manifest = emptyManifest();
+    manifest.managed["AGENTS.md"] = {
+      module: "base",
+      hash: hashContent("a\n"),
+    };
+    manifest.managed["gone.md"] = { module: "base", hash: hashContent("g\n") };
+    manifest.managed["showcase.tsx"] = {
+      module: "base",
+      hash: hashContent("s\n"),
+      deleted: true,
+    };
+    manifest.managed["email.ts"] = {
+      module: "email",
+      hash: hashContent("e\n"),
+      deleted: true,
+    };
+    // Back on disk: the owner restored it by hand, so it is no longer kept deleted.
+    manifest.managed["back.md"] = {
+      module: "base",
+      hash: hashContent("b\n"),
+      deleted: true,
+    };
+    const lock = { ...emptyLock(), base: baseRecord("0.0.0", "f".repeat(64)) };
+
+    await expect(checkKeptDeleted(root, manifest)).resolves.toStrictEqual([
+      { module: "email", target: "email.ts" },
+      { module: "base", target: "showcase.tsx" },
+    ]);
+    const report = await checkBase({ root, lock, manifest, seedFiles: [] });
+    expect(report.missing).toStrictEqual(["gone.md"]);
+    expect(report.matching).toBe(2);
   });
 });
 

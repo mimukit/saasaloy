@@ -18,12 +18,18 @@ import { readFile } from "node:fs/promises";
 import { join } from "node:path";
 import { describe, it } from "node:test";
 import {
+  checkUpdateNotes,
   GATE_SCRIPTS,
   hasGitHubToken,
+  isBreakingCommit,
   missingTokenMessage,
+  missingUpdateNotesMessage,
+  optOutMessage,
   shouldSkipGate,
   staleMainMessage,
+  updateNoteOptOut,
 } from "./release-preflight.ts";
+import type { Git } from "./release-preflight.ts";
 
 describe("shouldSkipGate", () => {
   it("is off when the variable is unset", () => {
@@ -107,5 +113,211 @@ describe("staleMainMessage", () => {
 
   it("tells the maintainer how to recover", () => {
     assert.match(message, /git pull/);
+  });
+});
+
+/**
+ * A fake git for `breakingCommitsSince`: a log of commits and the files each one added.
+ * Answers only the calls the function makes, and throws on any other, so a test fails
+ * loudly when the function starts asking git something new.
+ */
+function fakeGit(
+  commits: readonly {
+    hash: string;
+    message: string;
+    added?: readonly string[];
+  }[]
+): Git {
+  return (args) => {
+    if (args[0] === "log") {
+      return commits
+        .map((commit) => `${commit.hash}\u001F${commit.message}\u001E`)
+        .join("\n");
+    }
+    if (args[0] === "diff-tree") {
+      const hash = args.at(-1);
+      const commit = commits.find((entry) => entry.hash === hash);
+      return (commit?.added ?? []).join("\n");
+    }
+    throw new Error(`unexpected git call: git ${args.join(" ")}`);
+  };
+}
+
+const HASH_A = "a".repeat(40);
+const HASH_B = "b".repeat(40);
+
+describe("isBreakingCommit", () => {
+  it("is true for `type!:` and `type(scope)!:`", () => {
+    assert.equal(isBreakingCommit("feat!: drop node 20"), true);
+    assert.equal(isBreakingCommit("feat(cli)!: drop node 20"), true);
+  });
+
+  it("is true for a BREAKING CHANGE or BREAKING-CHANGE footer", () => {
+    assert.equal(
+      isBreakingCommit("feat: x\n\nBREAKING CHANGE: the flag is gone"),
+      true
+    );
+    assert.equal(
+      isBreakingCommit("feat: x\n\nBREAKING-CHANGE: the flag is gone"),
+      true
+    );
+  });
+
+  it("is false for a plain commit, or one that only mentions the words", () => {
+    assert.equal(isBreakingCommit("feat: add a flag"), false);
+    assert.equal(
+      isBreakingCommit("fix: x\n\nThis is not a BREAKING CHANGE: honest."),
+      false
+    );
+  });
+});
+
+describe("updateNoteOptOut", () => {
+  it("reads the reason from `Update-Note: none (<reason>)`", () => {
+    assert.equal(
+      updateNoteOptOut("feat!: x\n\nUpdate-Note: none (no project impact)"),
+      "no project impact"
+    );
+  });
+
+  it("is null for an empty or blank reason", () => {
+    assert.equal(updateNoteOptOut("feat!: x\n\nUpdate-Note: none ()"), null);
+    assert.equal(updateNoteOptOut("feat!: x\n\nUpdate-Note: none (  )"), null);
+  });
+
+  it("is null when the footer is missing or is not `none`", () => {
+    assert.equal(updateNoteOptOut("feat!: x"), null);
+    assert.equal(updateNoteOptOut("feat!: x\n\nUpdate-Note: later"), null);
+  });
+});
+
+describe("checkUpdateNotes", () => {
+  it("fails a breaking commit with no note and no footer", () => {
+    const result = checkUpdateNotes(
+      fakeGit([{ hash: HASH_A, message: "feat(cli)!: drop the old flag\n" }]),
+      "v0.8.0"
+    );
+    assert.equal(result.missing.length, 1);
+    assert.equal(result.missing[0]!.shortHash, "aaaaaaa");
+    assert.equal(result.missing[0]!.subject, "feat(cli)!: drop the old flag");
+  });
+
+  it("passes a breaking commit that adds an update note", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: HASH_A,
+          message: "feat(cli)!: drop the old flag\n",
+          added: [
+            "packages/cli/src/index.ts",
+            "packages/cli/update-notes/0.9.0-drop-flag.md",
+          ],
+        },
+        {
+          hash: HASH_B,
+          message: "feat(auth)!: rename a table\n",
+          added: ["modules/auth/update-notes/0.9.0-rename.md"],
+        },
+      ]),
+      "v0.8.0"
+    );
+    assert.deepEqual(result.missing, []);
+    assert.deepEqual(result.optOuts, []);
+  });
+
+  it("does not count a file that only sits beside a folder named like it", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: HASH_A,
+          message: "feat!: x\n",
+          added: ["docs/my-update-notes/x.md", "update-notes.md"],
+        },
+      ]),
+      "v0.8.0"
+    );
+    assert.equal(result.missing.length, 1);
+  });
+
+  it("passes a breaking commit with an opt-out footer that has a reason", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: HASH_A,
+          message:
+            "feat!: drop the old flag\n\nUpdate-Note: none (the flag was never documented)\n",
+        },
+      ]),
+      "v0.8.0"
+    );
+    assert.deepEqual(result.missing, []);
+    assert.equal(result.optOuts.length, 1);
+    assert.equal(result.optOuts[0]!.reason, "the flag was never documented");
+  });
+
+  it("fails a breaking commit whose opt-out footer has an empty reason", () => {
+    const result = checkUpdateNotes(
+      fakeGit([
+        {
+          hash: HASH_A,
+          message: "feat!: drop the old flag\n\nUpdate-Note: none ()\n",
+        },
+      ]),
+      "v0.8.0"
+    );
+    assert.equal(result.missing.length, 1);
+    assert.deepEqual(result.optOuts, []);
+  });
+
+  it("ignores a commit that is not breaking", () => {
+    const result = checkUpdateNotes(
+      fakeGit([{ hash: HASH_A, message: "feat: add a flag\n" }]),
+      "v0.8.0"
+    );
+    assert.deepEqual(result, { missing: [], optOuts: [] });
+  });
+
+  it("reads the commits after the tag, skipping merges", () => {
+    const calls: string[][] = [];
+    const git: Git = (args) => {
+      calls.push([...args]);
+      return "";
+    };
+    checkUpdateNotes(git, "v0.8.0");
+    assert.ok(calls[0]!.includes("v0.8.0..HEAD"));
+    assert.ok(calls[0]!.includes("--no-merges"));
+  });
+});
+
+describe("missingUpdateNotesMessage", () => {
+  const message = missingUpdateNotesMessage([
+    {
+      hash: HASH_A,
+      shortHash: "aaaaaaa",
+      subject: "feat(cli)!: drop the old flag",
+    },
+  ]);
+
+  it("names the commit", () => {
+    assert.match(message, /aaaaaaa feat\(cli\)!: drop the old flag/);
+  });
+
+  it("says what to add", () => {
+    assert.match(message, /update-notes\//);
+    assert.match(message, /Update-Note: none \(<reason>\)/);
+  });
+});
+
+describe("optOutMessage", () => {
+  it("prints the short SHA, the subject and the reason", () => {
+    assert.equal(
+      optOutMessage({
+        hash: HASH_A,
+        shortHash: "aaaaaaa",
+        subject: "feat!: x",
+        reason: "no project impact",
+      }),
+      "aaaaaaa feat!: x: no update note (no project impact)"
+    );
   });
 });

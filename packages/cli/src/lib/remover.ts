@@ -8,7 +8,12 @@ import {
   resolveWithinRoot,
 } from "./fs-utils.js";
 import type { Lockfile } from "./lock.js";
-import { untrackLink, untrackManagedFile, untrackPatch } from "./manifest.js";
+import {
+  dropModulePendingNotes,
+  untrackLink,
+  untrackManagedFile,
+  untrackPatch,
+} from "./manifest.js";
 import type { Manifest, ManifestPatch } from "./manifest.js";
 import { isReversibleKind, reversePatch } from "./patch/index.js";
 import type { PatchResult } from "./patch/index.js";
@@ -377,6 +382,8 @@ export interface RemoveResult {
   prunedDirs: string[];
   /** saasaloy.json alias names dropped because their prefix directory vanished. */
   droppedAliases: string[];
+  /** Pending update note ids the module owned, dropped with it (#298). */
+  droppedNotes: string[];
 }
 
 /** A patch entry left on disk on purpose, and the inverse codemod's account of why. */
@@ -568,6 +575,8 @@ export async function executeRemovePlan(
   config.installed = config.installed.filter((m) => m !== plan.module);
   delete lock.modules[plan.module];
   delete manifest.removeWarnings[plan.module];
+  // A removed module's update notes describe code that is gone (#298).
+  const droppedNotes = dropModulePendingNotes(manifest, plan.module);
 
   return {
     deleted,
@@ -580,5 +589,6 @@ export async function executeRemovePlan(
     patchRefusals,
     prunedDirs,
     droppedAliases,
+    droppedNotes,
   };
 }

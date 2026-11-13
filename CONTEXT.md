@@ -373,6 +373,13 @@ A base-template file the owner is meant to rewrite — `apps/web/DESIGN.md`, `RE
 ### AI-assisted merge
 The structured, agent-consumable merge plan `saasaloy update` writes to stdout, or to `--out <path>`, for a drifted file — natural-language intent + target files + old/new context — handed straight to an agent CLI.
 
+### Update note
+A Markdown file of steps for a change that `saasaloy update` cannot make itself: an import in the owner's code, a moved stylesheet block, a port. It lives next to the code it describes, in `packages/cli/update-notes/` for the base and `modules/<name>/update-notes/` for a module, named `NNNN-<slug>.md`. Its id is its path (`shell/0001-admin-kit-move`). `update` selects the notes for the project's version gap and renders them in the [AI-assisted merge](#ai-assisted-merge) plan ([ADR 0058](docs/adr/0058-adr-update-notes-ship-beside-their-code-and-ride-the-merge-plan-2026-10-30.md)).
+_Avoid: migration (that word means a database migration), upgrade note, release note._
+
+### Pending note
+An [update note](#update-note) an applied `update` showed and nobody has marked done. It is recorded in `.saasaloy/manifest.json` under `pendingNotes`, repeats in every later merge plan, and keeps `update` at exit `3` until `saasaloy update --done <id>` clears it.
+
 ## AI-agent-native
 
 ### Agent-native project

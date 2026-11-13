@@ -328,7 +328,7 @@ export function SourceTree({ className = "" }: { className?: string }) {
       <Drawing
         width={300}
         height={460}
-        className={`${className} mx-auto max-w-sm md:hidden lg:block xl:hidden`}
+        className={`${className} mx-auto max-w-sm md:hidden lg:block lg:max-w-75 xl:hidden`}
       >
         <Assemble at={0} y={16}>
           <Explorer x={1} y={1} w={298} h={338} gap={22} />

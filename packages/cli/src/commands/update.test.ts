@@ -1,5 +1,6 @@
 import { execFileSync } from "node:child_process";
 import {
+  cp,
   mkdir,
   mkdtemp,
   readFile,
@@ -22,12 +23,13 @@ import {
 import {
   BASE_INTENT,
   BASE_MODULE,
+  BASE_SNAPSHOT_ENV,
   baseEntries,
   baseRecord,
   recordBaseFiles,
   templateHash,
 } from "../lib/base.js";
-import { EXIT_MERGE_PENDING } from "../lib/exit.js";
+import { EXIT_WORK_PENDING } from "../lib/exit.js";
 import { hashContent, pathExists } from "../lib/fs-utils.js";
 import { emptyLock, loadLock, saveLock } from "../lib/lock.js";
 import type { Lockfile } from "../lib/lock.js";
@@ -42,6 +44,7 @@ import {
 import { TESTING_BLOCKS } from "../lib/testing.js";
 import { stripAnsi } from "../lib/tui.js";
 import { readVersion } from "../version.js";
+import { runOutdated } from "./outdated.js";
 import { finishUpToDate, runUpdate } from "./update.js";
 import type { UpToDateSteps } from "./update.js";
 
@@ -55,8 +58,13 @@ const ORIGINAL_STDIN_TTY = process.stdin.isTTY;
 const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
 
 let dir: string;
+// The base snapshot (#312) reads this folder of `<version>/` templates, never the
+// network. Empty unless a test fills it, so every base update here is two-way by default.
+let snapshots: string;
 
 beforeAll(async () => {
+  snapshots = await mkdtemp(join(tmpdir(), "saasaloy-update-snapshots-"));
+  process.env[BASE_SNAPSHOT_ENV] = snapshots;
   dir = await mkdtemp(join(tmpdir(), "saasaloy-update-guards-"));
   await writeFile(
     join(dir, "saasaloy.json"),
@@ -68,6 +76,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   process.chdir(ORIGINAL_CWD);
+  delete process.env[BASE_SNAPSHOT_ENV];
+  await rm(snapshots, { recursive: true, force: true });
   await rm(dir, { recursive: true, force: true });
 });
 
@@ -96,6 +106,71 @@ async function runCaptured(argv: string[]): Promise<[number, string]> {
     captured.restore();
   }
   return [code, captured.lines.join("")];
+}
+
+/** Any command with its TUI captured, so its output stays out of the test log. */
+async function captureCode(
+  run: () => Promise<number>
+): Promise<[number, string]> {
+  const captured = capture();
+  const originalOut = process.stdout.write.bind(process.stdout);
+  process.stdout.write = () => true;
+  try {
+    return [await run(), captured.lines.join("")];
+  } finally {
+    process.stdout.write = originalOut;
+    captured.restore();
+  }
+}
+
+/** stderr (the TUI) and stdout (the merge plan), both captured. */
+async function runBothCaptured(
+  argv: string[]
+): Promise<{ code: number; err: string; out: string }> {
+  const out: string[] = [];
+  const originalOut = process.stdout.write.bind(process.stdout);
+  process.stdout.write = (chunk: string | Uint8Array) => {
+    out.push(stripAnsi(String(chunk)));
+    return true;
+  };
+  try {
+    const [code, err] = await runCaptured(argv);
+    return { code, err, out: out.join("") };
+  } finally {
+    process.stdout.write = originalOut;
+  }
+}
+
+/** The four sections every update note holds (#298). */
+const NOTE_SECTIONS = [
+  "## What update does",
+  "",
+  "It writes a file.",
+  "",
+  "## What the merge plan gets",
+  "",
+  "Nothing.",
+  "",
+  "## What you do",
+  "",
+  "Nothing more.",
+  "",
+  "## Verify",
+  "",
+  "Run `pnpm check`.",
+  "",
+].join("\n");
+
+/** The note ids a merge plan lists, split at its "may apply" subsection (#298). */
+function noteIds(plan: string): { notes: string[]; mayApply: string[] } {
+  const at = plan.indexOf("### Notes that may apply");
+  const ids = (text: string): string[] =>
+    [...text.matchAll(/^#{3,4} ([a-z0-9-]+\/\d{4}-[a-z0-9-]+): /gm)].map(
+      (match) => match[1]!
+    );
+  return at === -1
+    ? { notes: ids(plan), mayApply: [] }
+    : { notes: ids(plan.slice(0, at)), mayApply: ids(plan.slice(at)) };
 }
 
 describe("runUpdate value flags", () => {
@@ -249,7 +324,8 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
 
   async function state(
     installed: string[],
-    modules: Record<string, unknown>
+    modules: Record<string, unknown>,
+    recorded?: string
   ): Promise<void> {
     await writeFile(
       join(project, "saasaloy.json"),
@@ -265,7 +341,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
         modules,
         base: {
           name: "web",
-          cliVersion: await readVersion(),
+          cliVersion: recorded ?? (await readVersion()),
           templateHash: await templateHash(await baseTemplateDir()),
         },
       }),
@@ -275,13 +351,32 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     await writeFile(
       join(project, ".saasaloy", "manifest.json"),
       JSON.stringify({
-        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+        // A tombstone (#312): tracked, so the base counts as recorded, and kept
+        // deleted, so it reads current and no run plans it.
+        managed: {
+          "AGENTS.md": { module: "base", hash: "a".repeat(64), deleted: true },
+        },
       }),
       "utf-8"
     );
   }
 
   const localEntry = { source: "local", ref: "local", resolved: "local" };
+
+  /** An update note in the fixture registry's copy of `name`. */
+  async function updateNote(
+    name: string,
+    file: string,
+    frontmatter: string
+  ): Promise<void> {
+    const notes = join(registry, name, "update-notes");
+    await mkdir(notes, { recursive: true });
+    await writeFile(
+      join(notes, file),
+      `---\n${frontmatter}\n---\n\n${NOTE_SECTIONS}`,
+      "utf-8"
+    );
+  }
 
   it("refuses an update whose new prerequisite conflicts with an installed module", async () => {
     await state(["widget", "driver-a"], {
@@ -304,6 +399,29 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       "driver-a",
       "widget",
     ]);
+  });
+
+  // #312: the backfill plans every installed module's targets before the apply writes the
+  // alias, so it must see the aliases the update adds. A 0.5.0 project with `auth` refused
+  // here with `Unknown alias "@config"` (the release smoke's skipped-release step).
+  it("plans the backfill with the aliases the update adds", async () => {
+    await state(["widget"], { widget: localEntry });
+    await descriptor("widget", {
+      files: [
+        { path: "files/widget.ts", target: "@config/sections/widget.ts" },
+      ],
+    });
+    await mkdir(join(registry, "widget", "files"), { recursive: true });
+    await writeFile(
+      join(registry, "widget", "files", "widget.ts"),
+      "export const widget = {};\n",
+      "utf-8"
+    );
+
+    const [code, output] = await runCaptured(["--dry-run"]);
+    expect(output).not.toContain("Unknown alias");
+    expect(output).toMatch(/alias\s+@config/);
+    expect(code).toBe(0);
   });
 
   it("refuses a pair that arrives across two separate prerequisite graphs", async () => {
@@ -340,6 +458,78 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     const [code, output] = await runCaptured(["widget", "--yes"]);
     expect(code).toBe(0);
     expect(output).not.toContain("module conflict");
+  });
+
+  // #312. Two modules that both start to depend on `shell` used to plan its skill link
+  // twice, and the second link refused the run. The run now plans `shell` once.
+  it("installs a prerequisite two modules share once, with one link and one lock entry", async () => {
+    await state(["alpha", "beta"], { alpha: localEntry, beta: localEntry });
+    await descriptor("alpha", { dependsOn: ["shell"] });
+    await descriptor("beta", { dependsOn: ["shell"] });
+    await descriptor("shell", {
+      type: "saasaloy:capability",
+      agent: { skills: ["skills/saasaloy-shell"] },
+    });
+    await mkdir(join(registry, "shell", "skills", "saasaloy-shell"), {
+      recursive: true,
+    });
+    await writeFile(
+      join(registry, "shell", "skills", "saasaloy-shell", "SKILL.md"),
+      "---\nname: saasaloy-shell\ndescription: The shell.\n---\n\n# Shell\n",
+      "utf-8"
+    );
+
+    const [code, output] = await runCaptured(["--yes"]);
+
+    expect(code).toBe(0);
+    expect(output.match(/install {2}shell \(new prerequisite\)/g)).toHaveLength(
+      2
+    );
+    const manifest = await loadManifest(project);
+    expect(
+      Object.keys(manifest.links).filter(
+        (target) => target === ".agents/skills/saasaloy-shell"
+      )
+    ).toHaveLength(1);
+    await expect(
+      readlink(join(project, ".claude", "skills", "saasaloy-shell"))
+    ).resolves.toBe(join("..", "..", ".agents", "skills", "saasaloy-shell"));
+    const lock = await loadLock(project);
+    expect(lock.modules.shell).toMatchObject({ source: "local" });
+    const config = JSON.parse(
+      await readFile(join(project, "saasaloy.json"), "utf-8")
+    ) as { installed: string[] };
+    expect(config.installed.filter((name) => name === "shell")).toHaveLength(1);
+  });
+
+  // #312: `--restore` names a file one module keeps deleted, so a run that does not read
+  // that module refuses rather than ignoring the flag.
+  it("refuses --restore of a module's file on a run that reads only the base", async () => {
+    await state(["alpha"], { alpha: localEntry });
+    const manifestPath = join(project, ".saasaloy", "manifest.json");
+    const manifest = JSON.parse(await readFile(manifestPath, "utf-8")) as {
+      managed: Record<string, unknown>;
+    };
+    manifest.managed["src/alpha.ts"] = {
+      module: "alpha",
+      hash: "b".repeat(64),
+      deleted: true,
+    };
+    await writeFile(manifestPath, JSON.stringify(manifest), "utf-8");
+    await descriptor("alpha", {});
+
+    const [code, output] = await runCaptured([
+      "base",
+      "--restore",
+      "src/alpha.ts",
+      "--yes",
+    ]);
+
+    expect(code).toBe(2);
+    expect(output).toContain("saasaloy update alpha --restore");
+    await expect(
+      pathExists(join(project, "src", "alpha.ts"))
+    ).resolves.toBeFalsy();
   });
 
   // #229. A module split moves files out of a core into an owner the project must pick.
@@ -430,6 +620,93 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
     expect(output).toContain("Skill link .claude/skills/taken left untouched");
   });
 
+  // #298 Phase 3: a project whose lock predates the v0.8.0 notes gets, on stdout, exactly
+  // the notes whose `when` holds for it. The base note comes from the real folder the CLI
+  // ships; the module notes come from the fixture registry. `shell` arrives as a new
+  // prerequisite, so its old folder is empty and its note applies outright; `widget` is a
+  // working copy with no merge base, so its note may apply.
+  describe("update notes (#298)", () => {
+    async function fixture(installed: string[]): Promise<void> {
+      await state(
+        installed,
+        Object.fromEntries(installed.map((name) => [name, localEntry])),
+        "0.7.0"
+      );
+      await descriptor("widget", { dependsOn: ["shell"] });
+      await descriptor("shell", {});
+      await descriptor("admin", {});
+      await updateNote("widget", "0001-widget-port.md", "title: Widget port");
+      await updateNote(
+        "shell",
+        "0001-admin-kit-move.md",
+        "title: Admin kit move\nwhen:\n  installed:\n    - admin"
+      );
+      await updateNote("shell", "0002-shell-css.md", "title: Shell css");
+    }
+
+    it("hands a project without admin every note but the admin one", async () => {
+      await fixture(["widget"]);
+
+      const { code, out } = await runBothCaptured(["--dry-run"]);
+
+      expect(code).toBe(0);
+      expect(out).toContain("## Update notes");
+      expect(noteIds(out)).toStrictEqual({
+        notes: ["base/0001-brand-css", "shell/0002-shell-css"],
+        mayApply: ["widget/0001-widget-port"],
+      });
+    });
+
+    it("hands a project with admin the admin note too", async () => {
+      await fixture(["widget", "admin"]);
+
+      const { code, out } = await runBothCaptured(["--dry-run"]);
+
+      expect(code).toBe(0);
+      expect(noteIds(out)).toStrictEqual({
+        notes: [
+          "base/0001-brand-css",
+          "shell/0001-admin-kit-move",
+          "shell/0002-shell-css",
+        ],
+        mayApply: ["widget/0001-widget-port"],
+      });
+    });
+
+    // `SAASALOY_REGISTRY_DIR` leaves every module with no merge base, so each run selects
+    // its notes again. A cleared one stays cleared.
+    it("keeps a cleared module note cleared under the registry override", async () => {
+      await fixture(["widget"]);
+      const first = await runBothCaptured(["--yes"]);
+      expect(first.code).toBe(EXIT_WORK_PENDING);
+      expect(noteIds(first.out).mayApply).toStrictEqual([
+        "widget/0001-widget-port",
+      ]);
+
+      await runBothCaptured(["--done", "widget/0001-widget-port", "--yes"]);
+      const next = await runBothCaptured(["--dry-run"]);
+
+      expect(noteIds(next.out).mayApply).toStrictEqual([]);
+      expect(next.out).not.toContain("widget/0001-widget-port");
+      const manifest = await loadManifest(project);
+      expect(manifest.doneNotes).toContain("widget/0001-widget-port");
+      expect((manifest.pendingNotes ?? []).map((n) => n.id)).not.toContain(
+        "widget/0001-widget-port"
+      );
+    });
+
+    it("emits the plan on an applied run with no file to merge, and counts the notes in the summary", async () => {
+      await fixture(["widget"]);
+
+      const { code, err, out } = await runBothCaptured(["--yes"]);
+
+      expect(code).toBe(EXIT_WORK_PENDING);
+      expect(out).toContain("No file needs a merge");
+      expect(out).toContain("### shell/0002-shell-css: Shell css");
+      expect(err).toMatch(/3 update notes/);
+    });
+  });
+
   // #223: after a merge, `--resolved` records it, and the next run has nothing left to
   // offer. A working copy has no merge base, which is the hard case: the recorded hash
   // alone would read the merged file as clean and overwrite it.
@@ -478,7 +755,7 @@ describe("runUpdate — conflicts and env vars (#98)", () => {
       const planPath = join(project, "merge-plan.md");
 
       const [first] = await runCaptured(["widget", "--yes", "--out", planPath]);
-      expect(first).toBe(EXIT_MERGE_PENDING);
+      expect(first).toBe(EXIT_WORK_PENDING);
       const plan = await readFile(planPath, "utf-8");
       expect(plan).toContain(`--resolved ${TARGET}`);
 
@@ -583,7 +860,11 @@ describe("runUpdate — backfill (#242)", () => {
     await writeFile(
       join(project, ".saasaloy", "manifest.json"),
       JSON.stringify({
-        managed: { "AGENTS.md": { module: "base", hash: "a".repeat(64) } },
+        // A tombstone (#312): tracked, so the base counts as recorded, and kept
+        // deleted, so it reads current and no run plans it.
+        managed: {
+          "AGENTS.md": { module: "base", hash: "a".repeat(64), deleted: true },
+        },
       }),
       "utf-8"
     );
@@ -685,7 +966,7 @@ describe("runUpdate — backfill (#242)", () => {
     ]);
 
     expect(output).toContain("Backfill stopped");
-    expect(code).toBe(EXIT_MERGE_PENDING);
+    expect(code).toBe(EXIT_WORK_PENDING);
     await expect(pathExists(join(project, "plan.md"))).resolves.toBeTruthy();
     expect(output).toContain("saasaloy update");
   });
@@ -808,7 +1089,9 @@ describe("finishUpToDate (#242)", () => {
 // #120. The base rides the module engine. These run offline: the template ships with the
 // CLI, so a "newer template" is simply a project whose lock records another hash and
 // whose files differ from today's render.
-describe("runUpdate — the base template (#120)", () => {
+// Every test here renders the whole bundled template at least once, which runs near the
+// 5 s default on a loaded box, so the group takes the 30 s the snapshot tests use.
+describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
   let project: string;
   let templateDir: string;
   let runningHash: string;
@@ -875,7 +1158,9 @@ describe("runUpdate — the base template (#120)", () => {
     await writeFile(join(project, "AGENTS.md"), "old agent rules\n", "utf-8");
     state.manifest.managed["AGENTS.md"]!.hash =
       hashContent("old agent rules\n");
-    state.lock.base = baseRecord("0.0.0", "f".repeat(64));
+    // At the running CLI, so the run selects no base update note (#298) and these tests
+    // see the file outcome alone.
+    state.lock.base = baseRecord(cliVersion, "f".repeat(64));
     await saveManifest(project, state.manifest);
     await saveLock(project, state.lock);
   }
@@ -900,7 +1185,10 @@ describe("runUpdate — the base template (#120)", () => {
       "my own rules\n"
     );
     const lock = await lockOnDisk();
-    expect(lock.base).toStrictEqual(baseRecord(cliVersion, runningHash));
+    expect(lock.base).toStrictEqual({
+      ...baseRecord(cliVersion, runningHash),
+      adoptedAt: cliVersion,
+    });
     const manifest = await loadManifest(project);
     expect(manifest.managed["AGENTS.md"]).toMatchObject({
       module: BASE_MODULE,
@@ -922,9 +1210,15 @@ describe("runUpdate — the base template (#120)", () => {
 
     expect(code).toBe(0);
     expect(err).toContain("Adopted");
+    // Only the files on disk are recorded (#312); the template files the project never
+    // held are named and left for a later base update to create.
     expect(
       Object.keys(baseEntries(await loadManifest(project))).length
-    ).toBeGreaterThan(10);
+    ).toBeGreaterThan(0);
+    expect(err).toMatch(/not on disk and were not recorded/);
+    expect((await loadLock(project)).base?.templateHash).not.toBe(
+      "f".repeat(64)
+    );
   });
 
   it("previews the adoption under --dry-run and writes nothing", async () => {
@@ -974,6 +1268,8 @@ describe("runUpdate — the base template (#120)", () => {
 
     expect(code).toBe(0);
     expect(err).toContain("AGENTS.md");
+    // No file waits on a merge, and the record sits at the running CLI, so there is no
+    // update note either: no merge plan at all (#298).
     expect(out).toBe("");
     const now = await readFile(join(project, "AGENTS.md"), "utf-8");
     expect(now).not.toBe("old agent rules\n");
@@ -997,7 +1293,7 @@ describe("runUpdate — the base template (#120)", () => {
     const { code, err, out } = await runBoth(["--yes"]);
 
     // 3, not 0: the run applied what it could and left a file waiting on a merge.
-    expect(code).toBe(EXIT_MERGE_PENDING);
+    expect(code).toBe(EXIT_WORK_PENDING);
     expect(out).toContain("# Saasaloy merge plan");
     expect(out).toContain("## base");
     expect(out).toContain(BASE_INTENT);
@@ -1007,8 +1303,257 @@ describe("runUpdate — the base template (#120)", () => {
       "old agent rules, plus mine\n"
     );
     expect((await lockOnDisk()).base).toStrictEqual(
-      baseRecord("0.0.0", "f".repeat(64))
+      baseRecord(cliVersion, "f".repeat(64))
     );
+  });
+
+  // #312 Phase 3: `--from` names the merge base's version too. The snapshot folder holds
+  // the template at 0.5.0, which differs from today's in `AGENTS.md` alone.
+  describe("the merge base from the recorded release (#312)", () => {
+    async function adoptedWithEdit(): Promise<void> {
+      const state = await scaffolded();
+      for (const entry of Object.values(state.manifest.managed)) {
+        entry.adopted = true;
+      }
+      await writeFile(
+        join(project, "AGENTS.md"),
+        "old agent rules, plus mine\n",
+        "utf-8"
+      );
+      state.lock.base = {
+        ...baseRecord(cliVersion, "f".repeat(64)),
+        adoptedAt: cliVersion,
+      };
+      await saveManifest(project, state.manifest);
+      await saveLock(project, state.lock);
+      const old = join(snapshots, "0.5.0");
+      await cp(templateDir, old, { recursive: true });
+      await writeFile(join(old, "AGENTS.md"), "old agent rules\n", "utf-8");
+    }
+
+    afterEach(async () => {
+      await rm(join(snapshots, "0.5.0"), { recursive: true, force: true });
+    });
+
+    it(
+      "renders a drifted base file three-way against the `--from` release",
+      { timeout: 30_000 },
+      async () => {
+        await adoptedWithEdit();
+
+        const { code, out } = await runBoth(["--dry-run", "--from", "0.5.0"]);
+
+        expect(code).toBe(0);
+        expect(out).toContain("#### `AGENTS.md`");
+        expect(out).toContain("**base → theirs**");
+        expect(out).not.toContain("no merge base");
+      }
+    );
+
+    it(
+      "falls back to two-way with the reason when no snapshot holds the version",
+      { timeout: 30_000 },
+      async () => {
+        await adoptedWithEdit();
+
+        const { code, out } = await runBoth(["--dry-run"]);
+
+        expect(code).toBe(0);
+        expect(out).toContain(
+          `no merge base — ${BASE_SNAPSHOT_ENV} holds no template for ${cliVersion}`
+        );
+        expect(out).toContain("**theirs → mine**");
+      }
+    );
+
+    // `--from` is refused on every later run. A lock that named the adopting release as
+    // the merge base would give the next run a base equal to theirs for `AGENTS.md`, which
+    // the template changed only before that release, and the waiting merge would leave
+    // the plan: `--resolved` then refuses the path and a plain run reports up to date.
+    it(
+      "keeps a file merged against `--from` in the next run's merge plan",
+      { timeout: 60_000 },
+      async () => {
+        await adoptedWithEdit();
+        // The adopting release: today's template with one other file older, so its hash
+        // is not the running one and `AGENTS.md` did not change after it.
+        const adopting = join(snapshots, "0.7.0");
+        await cp(templateDir, adopting, { recursive: true });
+        await writeFile(
+          join(adopting, "prettier.config.js"),
+          "// an older config\n",
+          "utf-8"
+        );
+        const lock = await lockOnDisk();
+        lock.base = {
+          ...baseRecord("0.7.0", await templateHash(adopting)),
+          adoptedAt: "0.7.0",
+        };
+        await saveLock(project, lock);
+
+        try {
+          const first = await runBoth(["--from", "0.5.0", "--yes"]);
+          expect(first.code).toBe(EXIT_WORK_PENDING);
+          expect(first.out).toContain("#### `AGENTS.md`");
+          expect((await lockOnDisk()).base?.templateVersion).toBe("0.5.0");
+
+          const dry = await runBoth(["--dry-run"]);
+          expect(dry.out).toContain("#### `AGENTS.md`");
+
+          const resolved = await runBoth(["--resolved", "AGENTS.md", "--yes"]);
+          // Exit 3 here is the pending base update note, not a merge.
+          expect(resolved.err).toContain("record  AGENTS.md");
+          expect(resolved.err).toContain("0 needing merge");
+          await expect(
+            readFile(join(project, "AGENTS.md"), "utf-8")
+          ).resolves.toBe("old agent rules, plus mine\n");
+        } finally {
+          await rm(adopting, { recursive: true, force: true });
+        }
+      }
+    );
+  });
+
+  // #312 Phase 4, ADR 0059: a deleted base file is offered once, kept deleted once the
+  // owner says so, and stays deleted when the template later changes it.
+  describe("a deleted base file (#312)", () => {
+    const BLOCK = "packages/ui/src/blocks/audience.tsx";
+
+    afterEach(async () => {
+      await rm(join(snapshots, cliVersion), { recursive: true, force: true });
+    });
+
+    /** A scaffolded project whose owner deleted `BLOCK`, kept deleted when `tombstoned`. */
+    async function withDeletedBlock(tombstoned: boolean) {
+      const state = await scaffolded();
+      await rm(join(project, ...BLOCK.split("/")));
+      if (tombstoned) {
+        state.manifest.managed[BLOCK]!.deleted = true;
+        await saveManifest(project, state.manifest);
+      }
+      return state;
+    }
+
+    it(
+      "offers it as deleted, keeps it deleted with --resolved, and keeps it absent when the template changes it",
+      { timeout: 60_000 },
+      async () => {
+        await withDeletedBlock(false);
+
+        const first = await runBoth(["--yes"]);
+        expect(first.code).toBe(EXIT_WORK_PENDING);
+        expect(first.err).toContain("deleted locally");
+        expect(first.out).toContain(`#### \`${BLOCK}\``);
+        expect(first.out).toContain("deleted locally");
+        expect(first.out).toContain(`saasaloy update --restore ${BLOCK}`);
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+
+        const resolved = await runBoth(["--resolved", BLOCK, "--yes"]);
+        expect(resolved.code).toBe(0);
+        expect((await loadManifest(project)).managed[BLOCK]).toMatchObject({
+          module: BASE_MODULE,
+          deleted: true,
+        });
+
+        // The record now names an older template whose copy of the block differs, so
+        // the running template changed it: the snapshot at the recorded version is that
+        // older template, and the merge runs three-way.
+        const old = join(snapshots, cliVersion);
+        await cp(templateDir, old, { recursive: true });
+        await writeFile(
+          join(old, ...BLOCK.split("/")),
+          "export const Audience = () => null;\n",
+          "utf-8"
+        );
+        const lock = await lockOnDisk();
+        lock.base = baseRecord(cliVersion, await templateHash(old));
+        await saveLock(project, lock);
+
+        const changed = await runBoth(["--yes"]);
+        expect(changed.code).toBe(0);
+        expect(changed.err).toMatch(
+          new RegExp(
+            `kept deleted\\s+${BLOCK.replaceAll(".", "\\.")}\\s+\\(upstream changed it\\)`
+          )
+        );
+        expect(changed.out).not.toContain(BLOCK);
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+        expect((await lockOnDisk()).base?.templateHash).toBe(runningHash);
+        expect(
+          (await loadManifest(project)).managed[BLOCK]?.deleted
+        ).toBeTruthy();
+
+        const [outdatedCode] = await captureCode(() =>
+          runOutdated(["--check"])
+        );
+        expect(outdatedCode).toBe(0);
+      }
+    );
+
+    it(
+      "brings a kept-deleted file back with --restore and drops the flag",
+      { timeout: 30_000 },
+      async () => {
+        await withDeletedBlock(true);
+
+        const preview = await runBoth(["--restore", BLOCK, "--dry-run"]);
+        expect(preview.code).toBe(0);
+        expect(preview.err).toMatch(
+          new RegExp(`restore\\s+${BLOCK.replaceAll(".", "\\.")}`)
+        );
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+
+        const { code } = await runBoth(["--restore", BLOCK, "--yes"]);
+
+        expect(code).toBe(0);
+        await expect(
+          readFile(join(project, ...BLOCK.split("/")), "utf-8")
+        ).resolves.toBe(await readFile(join(templateDir, BLOCK), "utf-8"));
+        const entry = (await loadManifest(project)).managed[BLOCK];
+        expect(entry).toBeDefined();
+        expect(entry).not.toHaveProperty("deleted");
+      }
+    );
+
+    it(
+      "refuses --restore on a path with no tombstone, and writes nothing",
+      { timeout: 30_000 },
+      async () => {
+        await withDeletedBlock(false);
+        const before = await readFile(
+          join(project, ".saasaloy", "manifest.json"),
+          "utf-8"
+        );
+
+        const { code, err } = await runBoth(["--restore", BLOCK, "--yes"]);
+
+        expect(code).toBe(2);
+        expect(err).toContain("not a file kept deleted");
+        await expect(
+          pathExists(join(project, ...BLOCK.split("/")))
+        ).resolves.toBeFalsy();
+        await expect(
+          readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+        ).resolves.toBe(before);
+      }
+    );
+
+    it("reads a project whose only missing base file is kept deleted as current", async () => {
+      await withDeletedBlock(true);
+
+      const [outdatedCode] = await captureCode(() => runOutdated(["--check"]));
+      const { code, err } = await runBoth(["--yes"]);
+
+      expect(outdatedCode).toBe(0);
+      expect(code).toBe(0);
+      expect(err).toContain("Everything is up to date");
+    });
   });
 
   it("writes the merge plan to --out and shows a diff under --diff", async () => {
@@ -1026,7 +1571,7 @@ describe("runUpdate — the base template (#120)", () => {
     expect(diff.err).toContain("- old agent rules, plus mine");
 
     const applied = await runBoth(["--yes", "--out", "plan.md"]);
-    expect(applied.code).toBe(EXIT_MERGE_PENDING);
+    expect(applied.code).toBe(EXIT_WORK_PENDING);
     expect(applied.out).toBe("");
     await expect(
       readFile(join(project, "plan.md"), "utf-8")
@@ -1081,6 +1626,285 @@ describe("runUpdate — the base template (#120)", () => {
     expect(err).toContain("--ref");
   });
 
+  // #298 Phase 3: an adopted base carries no record of the CLI that really made it, so the
+  // base notes up to the adopting CLI cannot be placed.
+  describe("update notes on an adopted base (#298)", () => {
+    async function adopted(): Promise<void> {
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+      await writeFile(join(project, "AGENTS.md"), "my own rules\n", "utf-8");
+      const adoption = await runBoth(["--yes"]);
+      expect(adoption.code).toBe(0);
+    }
+
+    it("records adoptedAt at the running CLI", async () => {
+      await adopted();
+      expect((await lockOnDisk()).base).toStrictEqual({
+        ...baseRecord(cliVersion, runningHash),
+        adoptedAt: cliVersion,
+      });
+    });
+
+    it("shows the base notes under may apply without `--from`", async () => {
+      await adopted();
+
+      const { code, out } = await runBoth(["--dry-run"]);
+
+      expect(code).toBe(0);
+      expect(noteIds(out)).toStrictEqual({
+        notes: [],
+        mayApply: ["base/0001-brand-css"],
+      });
+    });
+
+    it("places the base notes newer than `--from`", async () => {
+      await adopted();
+
+      const { code, out } = await runBoth(["--dry-run", "--from", "0.7.0"]);
+
+      expect(code).toBe(0);
+      expect(noteIds(out)).toStrictEqual({
+        notes: ["base/0001-brand-css"],
+        mayApply: [],
+      });
+    });
+
+    // The adoption window stays open while the base sits at the running CLI, so every
+    // run selects the note again. `--done` records the id, and selection skips it.
+    it("keeps a cleared note cleared while the adopted base sits at the running CLI", async () => {
+      await adopted();
+
+      const shown = await runBoth(["--yes"]);
+      expect(shown.code).toBe(EXIT_WORK_PENDING);
+      expect(noteIds(shown.out).mayApply).toStrictEqual([
+        "base/0001-brand-css",
+      ]);
+
+      const done = await runBoth(["--done", "base/0001-brand-css", "--yes"]);
+      expect(done.code).toBe(0);
+
+      const next = await runBoth(["--yes"]);
+      expect(next.code).toBe(0);
+      expect(next.err).toContain("Everything is up to date.");
+      expect(next.out).toBe("");
+      const manifest = await loadManifest(project);
+      expect(manifest.pendingNotes).toBeUndefined();
+      expect(manifest.doneNotes).toStrictEqual(["base/0001-brand-css"]);
+    });
+
+    it("refuses `--from` on a run that is not the first after adoption, and writes nothing", async () => {
+      await scaffolded();
+      const before = await readFile(
+        join(project, "saasaloy-lock.json"),
+        "utf-8"
+      );
+
+      const { code, err, out } = await runBoth(["--from", "0.7.0", "--yes"]);
+
+      expect(code).toBe(2);
+      expect(err).toContain("already exact");
+      expect(out).toBe("");
+      await expect(
+        readFile(join(project, "saasaloy-lock.json"), "utf-8")
+      ).resolves.toBe(before);
+    });
+
+    it("refuses a `--from` that is not a version", async () => {
+      await adopted();
+
+      const { code, err } = await runBoth(["--dry-run", "--from", "seven"]);
+
+      expect(code).toBe(2);
+      expect(err).toContain("seven");
+    });
+
+    it("refuses `--from` on the run that adopts the base", async () => {
+      await writeFile(
+        join(project, "saasaloy.json"),
+        JSON.stringify({ aliases: {}, installed: [] })
+      );
+
+      const { code, err } = await runBoth(["--from", "0.7.0", "--yes"]);
+
+      expect(code).toBe(2);
+      expect(err).toContain("--from");
+      await expect(
+        pathExists(join(project, "saasaloy-lock.json"))
+      ).resolves.toBeFalsy();
+    });
+
+    it("refuses `--from` with a named module, which reads no base", async () => {
+      await scaffolded();
+
+      const { code, err } = await runBoth([
+        "email",
+        "--from",
+        "0.7.0",
+        "--dry-run",
+      ]);
+
+      expect(code).toBe(2);
+      expect(err).toContain("--from");
+    });
+  });
+
+  it("emits the base notes when the base itself is up to date", async () => {
+    const state = await scaffolded();
+    state.lock.base = baseRecord("0.7.0", runningHash);
+    await saveLock(project, state.lock);
+
+    const { code, err, out } = await runBoth(["--yes"]);
+
+    expect(code).toBe(EXIT_WORK_PENDING);
+    expect(noteIds(out)).toStrictEqual({
+      notes: ["base/0001-brand-css"],
+      mayApply: [],
+    });
+    expect(err).not.toContain("Everything is up to date");
+  });
+
+  // #298 Phase 4. A note an applied run shows stays pending in the manifest until
+  // `update --done <id>`, keeps the run at exit 3, and prints in every later merge plan.
+  describe("pending update notes (#298)", () => {
+    const NOTE_ID = "base/0001-brand-css";
+
+    /** A current base recorded at 0.7.0, so the run selects the brand.css note. */
+    async function belowTheNote(): Promise<void> {
+      const state = await scaffolded();
+      state.lock.base = baseRecord("0.7.0", runningHash);
+      await saveLock(project, state.lock);
+    }
+
+    async function pendingIds(): Promise<string[]> {
+      return ((await loadManifest(project)).pendingNotes ?? []).map(
+        (n) => n.id
+      );
+    }
+
+    it("exits 3 on the run that shows a note, clears it with --done, then exits 0", async () => {
+      await belowTheNote();
+
+      const first = await runBoth(["--yes"]);
+      expect(first.code).toBe(EXIT_WORK_PENDING);
+      expect(noteIds(first.out).notes).toStrictEqual([NOTE_ID]);
+      expect(first.out).toContain(`--done ${NOTE_ID}`);
+      expect(first.err).toContain("1 update note pending");
+      await expect(pendingIds()).resolves.toStrictEqual([NOTE_ID]);
+      // The range moves to the running CLI, so the note is never selected again.
+      expect((await lockOnDisk()).base?.cliVersion).toBe(cliVersion);
+      // The hash is still the 0.7.0 template's, so the snapshot keeps naming it (#312).
+      expect((await lockOnDisk()).base?.templateVersion).toBe("0.7.0");
+
+      const done = await runBoth(["--done", NOTE_ID, "--yes"]);
+      expect(done.code).toBe(0);
+      expect(done.err).toContain(`done  ${NOTE_ID}`);
+      expect(done.out).toBe("");
+      await expect(pendingIds()).resolves.toStrictEqual([]);
+      expect((await loadManifest(project)).pendingNotes).toBeUndefined();
+
+      const last = await runBoth(["--yes"]);
+      expect(last.code).toBe(0);
+      expect(last.err).toContain("Everything is up to date.");
+      expect(last.out).toBe("");
+    });
+
+    it("repeats a pending note in the next merge plan, once", async () => {
+      await belowTheNote();
+      await runBoth(["--yes"]);
+
+      const preview = await runBoth(["--dry-run"]);
+      expect(preview.code).toBe(0);
+      expect(noteIds(preview.out).notes).toStrictEqual([NOTE_ID]);
+
+      const again = await runBoth(["--yes"]);
+      expect(again.code).toBe(EXIT_WORK_PENDING);
+      expect(noteIds(again.out).notes).toStrictEqual([NOTE_ID]);
+      await expect(pendingIds()).resolves.toStrictEqual([NOTE_ID]);
+    });
+
+    it("repeats a pending note in `update base` and keeps exit 3", async () => {
+      await belowTheNote();
+      await runBoth(["--yes"]);
+
+      const named = await runBoth(["base", "--yes"]);
+      expect(named.code).toBe(EXIT_WORK_PENDING);
+      expect(noteIds(named.out).notes).toStrictEqual([NOTE_ID]);
+    });
+
+    it("moves the recorded CLI of a base still waiting on a merge, and keeps its hash", async () => {
+      const state = await scaffolded();
+      await writeFile(join(project, "AGENTS.md"), "mine\n", "utf-8");
+      state.manifest.managed["AGENTS.md"]!.hash = hashContent("old\n");
+      state.lock.base = baseRecord("0.7.0", "f".repeat(64));
+      await saveManifest(project, state.manifest);
+      await saveLock(project, state.lock);
+
+      const first = await runBoth(["--yes"]);
+      expect(first.code).toBe(EXIT_WORK_PENDING);
+      expect(first.out).toContain("## base");
+      expect(noteIds(first.out).notes).toStrictEqual([NOTE_ID]);
+      // The hash is still the 0.7.0 template's, so `templateVersion` keeps the release the
+      // next run fetches its three-way snapshot at (#312).
+      expect((await lockOnDisk()).base).toStrictEqual({
+        ...baseRecord(cliVersion, "f".repeat(64)),
+        templateVersion: "0.7.0",
+      });
+
+      // Cleared while the merge still waits: the next run offers the merge, not the note.
+      await runBoth(["--done", NOTE_ID, "--yes"]);
+      const next = await runBoth(["--yes"]);
+      expect(next.code).toBe(EXIT_WORK_PENDING);
+      expect(next.out).toContain("## base");
+      expect(noteIds(next.out).notes).toStrictEqual([]);
+      await expect(pendingIds()).resolves.toStrictEqual([]);
+    });
+
+    it("records nothing under --dry-run", async () => {
+      await belowTheNote();
+
+      const preview = await runBoth(["--dry-run"]);
+      expect(preview.code).toBe(0);
+      expect(noteIds(preview.out).notes).toStrictEqual([NOTE_ID]);
+      expect((await loadManifest(project)).pendingNotes).toBeUndefined();
+      expect((await lockOnDisk()).base?.cliVersion).toBe("0.7.0");
+    });
+
+    it("refuses a --done id that is not pending, lists the pending ids, and writes nothing", async () => {
+      await belowTheNote();
+      await runBoth(["--yes"]);
+      const before = await readFile(
+        join(project, ".saasaloy", "manifest.json"),
+        "utf-8"
+      );
+
+      const refused = await runBoth(["--done", "api/0001-nope", "--yes"]);
+      expect(refused.code).toBe(2);
+      expect(refused.err).toContain("api/0001-nope");
+      expect(refused.err).toContain(`Pending: ${NOTE_ID}`);
+      await expect(
+        readFile(join(project, ".saasaloy", "manifest.json"), "utf-8")
+      ).resolves.toBe(before);
+    });
+
+    it("refuses --done when no note is pending", async () => {
+      await belowTheNote();
+
+      const refused = await runBoth(["--done", NOTE_ID, "--yes"]);
+      expect(refused.code).toBe(2);
+      expect(refused.err).toContain("No update note is pending");
+      expect((await lockOnDisk()).base?.cliVersion).toBe("0.7.0");
+    });
+
+    it("refuses --done with a missing value", async () => {
+      await belowTheNote();
+      const refused = await runBoth(["--done"]);
+      expect(refused.code).toBe(2);
+      expect(refused.err).toContain("--done (missing value)");
+    });
+  });
+
   // The incident this whole group of tests exists for (#144). A project adopted on one
   // run had every hand-edited file recorded at its own hash, and the next run read that
   // hash as proof the file was untouched template output and overwrote it.
@@ -1092,7 +1916,7 @@ describe("runUpdate — the base template (#120)", () => {
 
     const { code, out } = await runBoth(["--yes"]);
 
-    expect(code).toBe(EXIT_MERGE_PENDING);
+    expect(code).toBe(EXIT_WORK_PENDING);
     expect(out).toContain("AGENTS.md");
     expect(out).toContain("adopted this file");
     await expect(readFile(join(project, "AGENTS.md"), "utf-8")).resolves.toBe(
@@ -1113,7 +1937,7 @@ describe("runUpdate — the base template (#120)", () => {
 
     const { code } = await runBoth(["--yes"]);
 
-    expect(code).toBe(EXIT_MERGE_PENDING);
+    expect(code).toBe(EXIT_WORK_PENDING);
     await expect(readFile(join(project, owned), "utf-8")).resolves.toBe(
       ":root { --mine: 1; }\n"
     );
@@ -1208,7 +2032,7 @@ describe("runUpdate — the base template (#120)", () => {
       "old agent rules\n"
     );
     expect((await lockOnDisk()).base).toStrictEqual(
-      baseRecord("0.0.0", "f".repeat(64))
+      baseRecord(cliVersion, "f".repeat(64))
     );
   });
 
@@ -1245,6 +2069,6 @@ describe("runUpdate — the base template (#120)", () => {
     );
 
     const forced = await runBoth(["--yes", "--force"]);
-    expect(forced.code).toBe(EXIT_MERGE_PENDING);
+    expect(forced.code).toBe(EXIT_WORK_PENDING);
   });
 });
