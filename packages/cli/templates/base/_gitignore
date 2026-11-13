@@ -29,6 +29,9 @@ pnpm-debug.log*
 # The real skill files are committed under .agents/skills/.
 .claude/skills/
 
+# This checkout's dev ports, written by `pnpm dev:ports`.
+.devports.json
+
 # Turborepo task cache
 .turbo
 

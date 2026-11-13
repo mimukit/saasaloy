@@ -16,7 +16,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { deriveCookieDomain, requireAuthSecret } from "./env.ts";
+import {
+  AUTH_COOKIE_PREFIX_PATTERN,
+  cookiePrefixes,
+  deriveCookieDomain,
+  requireAuthSecret,
+} from "./env.ts";
 
 describe("requireAuthSecret", () => {
   it("returns the configured secret", () => {
@@ -196,6 +201,84 @@ describe("deriveCookieDomain", () => {
         deriveCookieDomain({ BETTER_AUTH_URL }),
         undefined,
         `${BETTER_AUTH_URL} is not an api. host`
+      );
+    }
+  });
+});
+
+describe("cookiePrefixes", () => {
+  const PLAIN = { admin: "admin", client: "client" };
+
+  it("returns the plain names when AUTH_COOKIE_PREFIX is unset or blank", () => {
+    for (const AUTH_COOKIE_PREFIX of [undefined, "", "   "]) {
+      assert.deepEqual(
+        cookiePrefixes({
+          AUTH_COOKIE_PREFIX,
+          BETTER_AUTH_URL: "http://localhost:4000",
+        }),
+        PLAIN
+      );
+    }
+  });
+
+  it("prefixes both names on an http loopback baseURL", () => {
+    assert.deepEqual(
+      cookiePrefixes({
+        AUTH_COOKIE_PREFIX: "wt5ddad8",
+        BETTER_AUTH_URL: "http://localhost:4100",
+      }),
+      { admin: "wt5ddad8-admin", client: "wt5ddad8-client" }
+    );
+  });
+
+  it("prefixes both names on an http non-loopback baseURL", () => {
+    // A tailnet host is still dev: the browser reaches the box by name over http.
+    assert.deepEqual(
+      cookiePrefixes({
+        AUTH_COOKIE_PREFIX: "wt5ddad8",
+        BETTER_AUTH_URL: "http://devaloy:4100",
+      }),
+      { admin: "wt5ddad8-admin", client: "wt5ddad8-client" }
+    );
+  });
+
+  it("ignores the prefix on an https baseURL", () => {
+    assert.deepEqual(
+      cookiePrefixes({
+        AUTH_COOKIE_PREFIX: "wt5ddad8",
+        BETTER_AUTH_URL: "https://api.example.com",
+      }),
+      PLAIN
+    );
+  });
+
+  it("ignores the prefix when the baseURL is unset or unparseable", () => {
+    for (const BETTER_AUTH_URL of [undefined, "not a url"]) {
+      assert.deepEqual(
+        cookiePrefixes({ AUTH_COOKIE_PREFIX: "wt5ddad8", BETTER_AUTH_URL }),
+        PLAIN
+      );
+    }
+  });
+
+  it("throws on a prefix that does not match the pattern", () => {
+    for (const AUTH_COOKIE_PREFIX of ["WT1", "wt_1", "wt.1", "wt 1", "wt;1"]) {
+      assert.throws(
+        () =>
+          cookiePrefixes({
+            AUTH_COOKIE_PREFIX,
+            BETTER_AUTH_URL: "http://localhost:4000",
+          }),
+        (error: unknown) => {
+          assert.ok(error instanceof Error);
+          assert.match(error.message, /AUTH_COOKIE_PREFIX/);
+          assert.ok(
+            error.message.includes(AUTH_COOKIE_PREFIX_PATTERN.source),
+            "the message names the pattern"
+          );
+          return true;
+        },
+        `${AUTH_COOKIE_PREFIX} must throw`
       );
     }
   });

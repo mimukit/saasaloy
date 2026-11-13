@@ -2,8 +2,20 @@
 import { fileURLToPath } from "node:url";
 import cloudflare from "@astrojs/cloudflare";
 import react from "@astrojs/react";
+import { devPort } from "@repo/env/dev-port";
+import { devGzip } from "@repo/tooling/vite";
 import tailwindcss from "@tailwindcss/vite";
 import { defineConfig } from "astro/config";
+import { loadEnv } from "vite";
+
+// The dev port: `DEV_PORT` from apps/web/.env.local, which `pnpm dev:ports` writes, or
+// 3000 when it is unset. Astro has no `mode` argument here, so NODE_ENV stands in for it.
+const PORT = devPort(
+  loadEnv(process.env.NODE_ENV ?? "development", process.cwd(), "DEV_PORT")
+    .DEV_PORT,
+  3000,
+  "apps/web/.env.local"
+);
 
 // `astro build` gets its own Vite cache. Both commands keep pre-bundled dependencies under
 // node_modules/.vite, each stamped with a hash of the config that made them. The two
@@ -70,19 +82,23 @@ export default defineConfig({
   // they release as a pair, and apps/api (once added) pins the same two versions.
   adapter: cloudflare({ imageService: "compile" }),
   integrations: [react(), separateBuildCache()],
-  // Fixed dev port. Every cross-origin consumer in this repo — the api Worker's CORS
-  // allowlist, auth's `trustedOrigins`, the waitlist form's `PUBLIC_API_URL` fallback —
-  // hardcodes the localhost dev origins, so the port cannot be allowed to drift.
-  // `strictPort` makes a busy port a loud failure instead of a silent +1 that turns
-  // into a mystery CORS rejection. web is 3000, api is 4000 (see apps/api).
-  server: { port: 3000 },
+  // `PORT` above: a per-worktree port in a linked worktree, 3000 in the main checkout. A
+  // bad `DEV_PORT` fails at startup, naming the file. The api's `CORS_ORIGINS` and the
+  // page's `PUBLIC_API_URL` come from the same `pnpm dev:ports` run, so the port and the
+  // origins move together. `strictPort` makes a busy port a loud failure instead of a
+  // silent +1 that turns into a mystery CORS rejection.
+  server: { port: PORT },
   vite: {
     // Tailwind 4 is a Vite plugin, not an Astro integration — `@astrojs/tailwind` is EOL
     // and never supported v4. The theme lives in packages/ui: the @source globs in
     // src/styles/globals.css, the tokens in src/styles/brand.css, and the landing
     // utilities in src/styles/web.css, which imports brand.css and which Layout.astro
     // imports via `@repo/ui/styles/web.css`.
-    plugins: [tailwindcss()],
+    //
+    // `devGzip()` compresses what the dev server sends (dev only). `restartOnLockfile()`
+    // is left out: Astro keeps its own handlers on the Vite watcher, and a bare Vite
+    // restart replaces the watcher under them. Restart `pnpm dev` after an install.
+    plugins: [tailwindcss(), devGzip()],
     server: { strictPort: true },
     // Dev only: pre-bundle every dependency the React components import before the
     // first request. In dev the adapter renders inside workerd, and Vite's scan starts

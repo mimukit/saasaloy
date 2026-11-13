@@ -16,7 +16,7 @@ A project has two user groups. The **client** group is the shopper, the customer
 | `auth` | client | `/auth` | `client.session_token` | open |
 | `adminAuth` | admin | `/admin/auth` | `admin.session_token` | none (`disableSignUp: true`) |
 
-In production both cookies carry the `__Secure-` prefix. `advanced.cookiePrefix` sets the name, so a client and an admin stay signed in together in two tabs of one browser, and a sign-out in one tab leaves the other signed in. The decision record is [ADR 0050](../../../../docs/adr/0050-adr-client-and-admin-sessions-are-two-auth-instances-2026-10-23.md).
+In production both cookies carry the `__Secure-` prefix. `advanced.cookiePrefix` sets the name, so a client and an admin stay signed in together in two tabs of one browser, and a sign-out in one tab leaves the other signed in. In a linked worktree, `pnpm dev:ports` writes `AUTH_COOKIE_PREFIX` (such as `wt5ddad8`) into `apps/api/.env.local`, and on an `http:` `BETTER_AUTH_URL` the names become `wt5ddad8-client.session_token` and `wt5ddad8-admin.session_token`, so two worktrees on one host keep separate sessions. `cookiePrefixes` in `src/env.ts` holds the rule; an `https:` URL ignores the key. The decision record is [ADR 0050](../../../../docs/adr/0050-adr-client-and-admin-sessions-are-two-auth-instances-2026-10-23.md).
 
 Everything the two share (the adapter, the secret, `trustedOrigins`, the first-user hook, `advanced`) lives in `sharedOptions(group)`. Each `betterAuth({...})` spreads it and keeps its own literal `plugins: [...]`.
 
@@ -131,7 +131,7 @@ The plugin's own vendor dep (`@better-auth/stripe`) merges into `packages/auth/p
 | Var | What | Prod | Local |
 |---|---|---|---|
 | `BETTER_AUTH_SECRET` | Signs sessions | **Required** — generate a real secret | Optional, but only when `BETTER_AUTH_URL` is a loopback origin |
-| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port) — **set it**, it is what opens the keyless path |
+| `BETTER_AUTH_URL` | The API's own origin | `https://api.x.com` | `http://localhost:4000` (the api Worker's pinned dev port; `pnpm dev:ports` writes the worktree's own api origin into `apps/api/.env.local`) — **set it**, it is what opens the keyless path |
 | `COOKIE_DOMAIN` | Explicit cookie domain | `.x.com` (cross-subdomain) | Leave unset (host-only) |
 
 ### The secret fails closed
@@ -150,6 +150,8 @@ So local dev is keyless but not configless: `BETTER_AUTH_URL=http://localhost:40
 local default in `packages/env/.env.example`, `pnpm env:setup` writes it into `apps/api/.env`,
 and `wrangler dev` then runs with no secret. Everywhere else,
 set the secret with `wrangler secret put BETTER_AUTH_SECRET`.
+
+A remote dev box is "everywhere else". With `DEV_HOST=devaloy` in `packages/env/.env`, `pnpm dev:ports` writes `BETTER_AUTH_URL=http://devaloy:<port>`, which is not a loopback host, so the api throws at module load until `BETTER_AUTH_SECRET` has a value. Set a dev secret in `packages/env/.env` and run `pnpm env:setup`.
 
 Misconfigured prod fails **visibly** rather than silently: an origin missing from
 `CORS_ORIGINS` gets no `Access-Control-Allow-Origin` header, so the browser refuses to hand the
@@ -491,7 +493,7 @@ await authClient.requestPasswordReset({
 });
 ```
 
-`POST /auth/request-password-reset` answers `200` with the same message for a known and an unknown address, so it does not tell a caller which addresses have accounts. The mail carries Better Auth's link, `<BETTER_AUTH_URL>/auth/reset-password/<token>?callbackURL=<redirectTo>`. That endpoint checks the token and redirects to `redirectTo` with `?token=`. The `redirectTo` origin has to be in `trustedOrigins` (`CORS_ORIGINS`, or the localhost dev list), or the request answers `403`. The token lives for 60 minutes. The page that reads the token and calls `authClient.resetPassword({ newPassword, token })` is the app's: no module ships it yet (#230 plans it).
+`POST /auth/request-password-reset` answers `200` with the same message for a known and an unknown address, so it does not tell a caller which addresses have accounts. The mail carries Better Auth's link, `<BETTER_AUTH_URL>/auth/reset-password/<token>?callbackURL=<redirectTo>`. That endpoint checks the token and redirects to `redirectTo` with `?token=`. The `redirectTo` origin has to be in `trustedOrigins` (`CORS_ORIGINS`), or the request answers `403`. The token lives for 60 minutes. The page that reads the token and calls `authClient.resetPassword({ newPassword, token })` is the app's: no module ships it yet (#230 plans it).
 
 **Check it locally.** With `email-console` and `EMAIL_PROVIDER=console`, the mail prints to the api's stdout:
 

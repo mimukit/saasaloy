@@ -16,25 +16,32 @@ This is a **pnpm workspace monorepo** managed by **Turborepo**.
 
 ### Dev Port Map
 
-Every dev port in this repo is pinned, not assigned on the fly. The api Worker's CORS allow-list and the auth module's trusted origins hardcode the localhost origins, so a drifting port turns into an unexplained CORS rejection.
+The table gives each service's pinned port, the one it takes in the main checkout. Every port has `strictPort` (or the framework's equivalent), so a busy port fails at startup and a dev server never moves to an origin nothing allows.
 
 | Workspace | Port | Dev URL | Pinned in |
 | --- | --- | --- | --- |
-| `apps/web` (Astro) | 3000 | `http://localhost:3000` | `apps/web/astro.config.mjs` (`server.port`) |
-| `apps/admin` (TanStack Router) | 3001 | `http://localhost:3001` | `apps/admin/vite.config.ts` (`server.port`, `strictPort`) |
-| `apps/app` (TanStack Router) | 3002 | `http://localhost:3002` | `apps/app/vite.config.ts` (`server.port`, `strictPort`) |
-| `packages/email-react` preview | 3003 | `http://localhost:3003` | `packages/email-react/package.json` (`dev`, `--port`) |
-| `apps/api` (Hono on Workers) | 4000 | `http://localhost:4000` | `apps/api/wrangler.jsonc` (`dev.port`) |
+| `apps/web` (Astro) | 3000 | `http://localhost:3000` | `apps/web/astro.config.mjs` (`DEV_PORT`, fallback 3000) and the `web` row's `devPort` |
+| `apps/admin` (TanStack Router) | 3001 | `http://localhost:3001` | `apps/admin/vite.config.ts` (`DEV_PORT`, fallback 3001) and the `admin` row's `devPort` |
+| `apps/app` (TanStack Router) | 3002 | `http://localhost:3002` | `apps/app/vite.config.ts` (`DEV_PORT`, fallback 3002) and the `app` row's `devPort` |
+| `packages/email-react` preview | 3003 | `http://localhost:3003` | `packages/email-react/scripts/dev.ts` (`DEV_PORT`, fallback 3003) and the `email-react` row's `devPort` |
+| `apps/api` (Hono on Workers) | 4000 | `http://localhost:4000` | `apps/api/vite.config.ts` (`DEV_PORT`, fallback 4000), `apps/api/wrangler.jsonc` (`dev.port`) and the `api` row's `devPort` |
 | Postgres (local, `database-postgres`) | 5432 | `postgres://postgres:postgres@127.0.0.1:5432/app` | `DATABASE_URL` in `packages/env/.env.example` |
 
-The `apps/admin`, `apps/app`, preview and `apps/api` rows apply once you run `saasaloy add` for `admin`, `app`, `email-react` or `api`.
+The `apps/admin`, `apps/app`, preview and `apps/api` rows apply once you run `saasaloy add` for `admin`, `app`, `email-react` or `api`. The `devPort` field is on each row of `SERVICES` in `packages/env/src/services.ts`.
+
+**A linked worktree gets its own ports.** `pnpm dev:ports` hashes the checkout root to a block of ten ports from 10000 up, and moves to the next block when a port in it listens or another worktree records it. It writes `DEV_PORT` and the origins that follow from it (`PUBLIC_API_URL`, `PUBLIC_SITE_URL`, `BETTER_AUTH_URL`, `CORS_ORIGINS`) into a `# >>> dev:ports` block in each service's `.env.local`. In a linked worktree it also writes `AUTH_COOKIE_PREFIX`, so two worktrees on one host keep separate session cookies. `pnpm env:setup` runs it at the end, and it also runs alone. `pnpm dev:ports --clean` removes every block.
+
+- **`.devports.json`** at the checkout root records the block, the host, the cookie prefix and each service's port. It is gitignored. Read a worktree's ports there, or in the table `pnpm dev:ports` prints.
+- **`DEV_HOST`** in `packages/env/.env` names the host the browser uses. Set it to a remote dev box's name (`DEV_HOST=devaloy`), or pass `pnpm dev:ports --host <name>` for one run. The URLs then use that host, and `CORS_ORIGINS` lists both the `localhost` and the `DEV_HOST` origin of each browser service. With `auth` installed, a `DEV_HOST` other than `localhost` makes `BETTER_AUTH_URL` a non-loopback origin, so `BETTER_AUTH_SECRET` must have a value.
+- **Restart `pnpm dev` after `pnpm dev:ports` changes a value.** A dev server does not watch `.env.local`, so it keeps the old port and origins until a restart. The command prints "restart pnpm dev to load the new ports" when that happens.
+- **`wrangler dev` does not read `DEV_PORT`.** `pnpm dev` runs `vite dev` in `apps/api`, which does. If you run `wrangler dev` in a linked worktree, pass `--port <DEV_PORT>` with the port from `apps/api/.env.local` or `.devports.json`.
 
 Rules for a new app or service:
 
-- **Take the next free port in the block** — `apps/*` count up from 3000, backend services from 4000. Add a row to this table in the same change.
-- **Set `strictPort` (or the framework's equivalent).** A busy port must fail loudly. A silent `+1` moves the app to an origin nothing allows.
-- **Name the origin, don't infer it.** A browser-side caller reads `PUBLIC_API_URL` through `webEnv()` or `adminEnv()`, with no fallback — an unset key fails the build naming the key. A server-side caller reads its own key through `apiEnv(c.env)`.
-- **Update both allow-lists when you add a browser origin**: `DEV_ORIGINS` in `apps/api/src/index.ts` and `DEV_ORIGINS` in `packages/auth/src/auth.ts`.
+- **Add `devPort` to its `SERVICES` row.** A frontend takes the next free port from 3000 to 3004, and a backend service the next free port from 4000 to 4004. `pnpm dev:ports` fails on any other value. Add a row to this table in the same change.
+- **Read `DEV_PORT` in its dev config and keep `strictPort`.** Use Vite's `loadEnv(mode, process.cwd(), "DEV_PORT")` and `devPort()` from `@repo/env/dev-port`, with the row's `devPort` as the fallback. A bad value then fails at startup and names the file.
+- **Name the origin, don't infer it.** A browser-side caller reads `PUBLIC_API_URL` through `webEnv()` or `adminEnv()`, with no fallback. An unset key fails the build naming the key. A server-side caller reads its own key through `apiEnv(c.env)`.
+- **Do not hard-code an origin list.** The api CORS list and the auth trusted origins come from `CORS_ORIGINS`, which `pnpm dev:ports` writes for each browser service. Run `pnpm env:setup` after you add a service, and the new origin is in the list.
 
 ### Code at the Root
 
@@ -163,7 +170,7 @@ The linter is **[oxlint](https://oxc.rs)** configured from **[Ultracite](https:/
   4. `format:check` — `prettier --check .`
 - `pnpm lint:fix` — passes 1-3 with `--fix`: the type-aware oxlint invocation over the same four folders, the plain one over everything, then Stylelint. **Never** add `--fix-suggestions`: it rewrites `a[i++]` to `a[i += 1]`, which is a different program.
 - `pnpm format` — `prettier --write .`
-- `pnpm typecheck` — `turbo run typecheck`, which runs `tsc` in each workspace, and it must pass before you commit.
+- `pnpm typecheck` — `turbo run typecheck --concurrency=4`, which runs `tsc` in each workspace, four at a time, and it must pass before you commit.
 
 **Why the type-aware pass is scoped and the plain one is not.** `--type-aware` is a global CLI switch, so the split is by invocation rather than by config. It stays off `.astro` because `apps/web/tsconfig.json` includes the build-generated `.astro/types.d.ts`, which would make `astro sync` a prerequisite of every `pnpm lint`, including on a fresh clone. Do not merge the two passes.
 
@@ -189,10 +196,47 @@ Testing mode: `off`. This project ships no module tests, and `saasaloy add` writ
 - Run every gate at once: `pnpm check`. It runs `typecheck`, `lint`, `test` and `build` in that order, stops at the first failure, and edits no file. Run `pnpm lint:fix` and `pnpm format` first.
 - Run type checking: `pnpm typecheck` (must pass before commits)
 - Run linting: `pnpm lint` (see above — it reports, `pnpm lint:fix` fixes, and `pnpm format` rewrites the formatting)
-- Run the tests: `pnpm test`. It runs `turbo run test` (each workspace's own `test` script), then `vitest run` from the root, whose `vitest.config.ts` treats every workspace under `apps/*` and `packages/*` as a project. Write new tests for Vitest: put a `*.test.ts` file beside the code, and give the workspace a `vitest.config.ts` only when it needs setup of its own. Do not add a per-workspace `test` script that calls Vitest, or the file runs twice. `packages/env` is the exception: its tests run on `node --test` through its own `test` script, and the root config leaves it out.
+- Run the tests: `pnpm test`. It runs `turbo run test --concurrency=4` (each workspace's own `test` script, four at a time), then `vitest run` from the root, whose `vitest.config.ts` treats every workspace under `apps/*` and `packages/*` as a project. Write new tests for Vitest: put a `*.test.ts` file beside the code, and give the workspace a `vitest.config.ts` only when it needs setup of its own. Do not add a per-workspace `test` script that calls Vitest, or the file runs twice. `packages/env` is the exception: its tests run on `node --test` through its own `test` script, and the root config leaves it out.
 - Run the browser suite: `pnpm e2e`, once `saasaloy add e2e` is installed. It is Playwright against the running apps, in `packages/e2e`. Run `pnpm e2e:install` once per machine first to download Chromium. The root `vitest.config.ts` leaves `packages/e2e` out, so `pnpm test` never collects a Playwright spec. The `saasaloy-e2e` skill covers adding a flow and reading a red run.
 - `packages/tooling` tests run on Vitest through the root `vitest.config.ts`, like every other workspace. The workspace has a `typecheck` script and no `test` script, so `pnpm test` runs each file once.
 - Before you hand over UI work, run `pnpm dev`, load the pages you changed, and read the dev server's terminal output. Fix every error and warning it prints. A clean build does not prove a clean dev server.
+- **Test on the real origin, not `localhost`.** When the browser reaches this machine by `DEV_HOST` (a remote dev box), load the pages at `http://<DEV_HOST>:<port>` and check them there. Plain `http` on a host that is not `localhost` is not a secure context, so `crypto.randomUUID` and `navigator.clipboard` are missing. Browser code uses `randomId()` from `@repo/ui/lib/random-id` and `copyText()` from `@repo/ui/lib/clipboard` instead.
+- **Restart the dev server after an install while `pnpm dev` runs.** Vite 8 keeps a failed import in its resolver cache until a restart, so a package you install while the server runs stays unresolved. `apps/admin`, `apps/app` and `apps/api` restart themselves when `pnpm-lock.yaml` changes. `apps/web` does not, so stop `pnpm dev` and start it again.
+- **Stop your dev servers with `pnpm dev:stop`** before you end a session. It stops the dev processes of this checkout only, from the ports in `.devports.json` and the processes that run under the checkout root. It leaves another worktree's servers running.
+
+## Worktree setup
+
+Each worktree is its own checkout with its own ports, env files and session cookies. Run one agent session per worktree, and never two sessions in one worktree: they share its ports and its `.devports.json`, and one session's `pnpm dev:stop` stops the other's servers.
+
+setup:
+```sh
+if [ ! -f packages/env/.env ] && [ -f "$GITKIT_REPO/packages/env/.env" ]; then
+  cp "$GITKIT_REPO/packages/env/.env" packages/env/.env
+fi
+pnpm install --frozen-lockfile
+pnpm env:setup
+```
+
+update:
+```sh
+pnpm install --frozen-lockfile
+pnpm env:setup
+```
+
+teardown:
+```sh
+pnpm dev:stop
+```
+
+watch:
+```text
+packages/env/.env.example
+packages/env/src/services.ts
+```
+
+`pnpm env:setup` writes each service's `.env` and then runs `pnpm dev:ports`, which gives a linked worktree its own ports and cookie prefix. Every step is safe to re-run. The `.env` copy runs only when the worktree has no `packages/env/.env`.
+
+The branch database is not in the blocks above, because the base template has no database. With `database-postgres` installed, add `pnpm db:setup && pnpm db:seed` to the end of `setup:`, `pnpm db:setup` to the end of `update:`, and `pnpm db:drop` to `teardown:`. On a branch other than `main`, `db:setup` creates a database named for the branch, so two worktrees never share one. With `database-d1` installed, add `pnpm db:setup && pnpm db:seed` to `setup:` and `pnpm db:setup` to `update:`. The local D1 database is under `apps/api/.wrangler` inside the worktree, so it needs no teardown. With either driver, add `packages/db/migrations/**` and `packages/db/src/seed/**` to `watch:`.
 
 ## Branches and Deploys
 
@@ -214,6 +258,7 @@ An agent may build this project with no person at the keyboard. These rules appl
 - **Commit once per stage on `build/mvp`.** Create the branch if it does not exist, and continue on it when it does. Commit through the Husky and commitlint hooks, never with `--no-verify`. Never push.
 - **`docs/build-log.md` is the output.** Give each stage a `## <stage>` section with what it did and its commit hash. Put what stopped the run under `## Blocked`, and each step you leave for a person under `## Left for a human`. A new session reads the log first and continues from the last stage with a commit.
 - **Allowed without asking:** database schema changes and migrations, new dependencies (exact-pinned), and new workspace packages (with a `clean` script).
+- **One session per worktree.** An unattended run works in its own worktree. Run `pnpm dev:stop` when a stage that started `pnpm dev` ends, so no dev server holds a port after the run.
 - **Still forbidden:** a deploy (`pnpm deploy:production`, `wrangler deploy`), anything that spends money or creates a vendor account, editing a secret (`packages/env/.env`, `.env.prod`, a dashboard), deleting data outside the local dev database, and `git push`. Every other "Ask First" item stays forbidden too. Log the step under `## Left for a human` and carry on.
 
 ## Boundaries
@@ -227,6 +272,7 @@ An agent may build this project with no person at the keyboard. These rules appl
 - Use TypeScript strict mode (no `any` without explicit reason)
 - Use workspace package names (`@repo/ui`, `@repo/config`, `@repo/tsconfig`) for imports
 - Put a value you would otherwise write twice in `@repo/config`, and a per-deployment value in `packages/env/.env` — see above
+- Stop the dev servers you started with `pnpm dev:stop` before you end a session
 
 ### ⚠️ Ask First
 

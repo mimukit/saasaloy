@@ -384,24 +384,29 @@ Do not add a `test` script to `apps/api/package.json`: the root `vitest.config.t
 
 | Service | Port | Pinned in |
 |---|---|---|
-| `apps/web` (Astro) | **3000** | `astro.config.mjs` (`server.port` + `vite.server.strictPort`) |
-| `apps/admin` (Vite SPA) | **3001** | `vite.config.ts` (`server.port` + `strictPort`), allowlisted in `DEV_ORIGINS` |
-| `apps/app` (Vite SPA) | **3002** | `vite.config.ts` (`server.port` + `strictPort`), allowlisted in `DEV_ORIGINS` |
-| `apps/api` (Worker) | **4000** | `vite.config.ts` (`server.port` + `strictPort`) and `wrangler.jsonc` (`dev.port`) |
+| `apps/web` (Astro) | **3000** | `astro.config.mjs` (`DEV_PORT` with fallback 3000, `vite.server.strictPort`) |
+| `apps/admin` (Vite SPA) | **3001** | `vite.config.ts` (`DEV_PORT` with fallback 3001, `strictPort`) |
+| `apps/app` (Vite SPA) | **3002** | `vite.config.ts` (`DEV_PORT` with fallback 3002, `strictPort`) |
+| `apps/api` (Worker) | **4000** | `vite.config.ts` (`DEV_PORT` with fallback 4000, `strictPort`) and `wrangler.jsonc` (`dev.port`) |
 
-Frontends take 3xxx, backends 4xxx. These aren't cosmetic: `DEV_ORIGINS` in `src/index.ts` (and
-`auth`'s `trustedOrigins`, and `waitlist`'s `PUBLIC_API_URL` fallback) hardcode them as the
-keyless dev fallback, so a drifting port turns into a CORS rejection that looks like a code bug.
+Frontends take 3xxx, backends 4xxx. These aren't cosmetic: `pnpm dev:ports` writes the same
+ports into `CORS_ORIGINS` in `apps/api/.env.local`, which both the CORS spine and `auth`'s
+`trustedOrigins` read (and `waitlist`'s `PUBLIC_API_URL` fallback names :4000), so a drifting
+port turns into a CORS rejection that looks like a code bug.
 `strictPort` makes a busy port fail loudly instead of quietly shifting to the next one.
 
-Because `wrangler.jsonc` pins the same `4000`, `wrangler dev` is a drop-in swap for the Vite loop.
+These are the main checkout's ports, each the `devPort` on its row in `packages/env/src/services.ts`. A linked worktree takes its own block from `pnpm dev:ports`, which writes `DEV_PORT` into each service's `.env.local` and records the ports in `.devports.json`. Restart `pnpm dev` after it changes a value.
+
+In the main checkout `wrangler.jsonc` pins the same `4000`, so `wrangler dev` is a drop-in swap for the Vite loop. `wrangler dev` does not read `DEV_PORT`, so in a linked worktree run `wrangler dev --port <DEV_PORT>` with the port from `apps/api/.env.local`.
 
 ## CORS lives here, in the spine
 
 `src/index.ts` mounts credentialed `hono/cors` on `base` for the whole app: the `origin` callback
-reflects the caller's origin only if it's in `CORS_ORIGINS` (comma-separated) or, when that's
-unset, in `DEV_ORIGINS`. It never answers `*`, because `credentials: true` and `*` are
-incompatible.
+reflects the caller's origin only if it's in `CORS_ORIGINS` (comma-separated). There is no
+localhost fallback list: the env gate requires the key, `pnpm env:setup` runs `pnpm dev:ports`,
+which writes this checkout's localhost and `DEV_HOST` origins into `apps/api/.env.local`, and
+production lists every deployed frontend. It never answers `*`, because `credentials: true` and
+`*` are incompatible.
 
 `cors()` sets no `allowHeaders`, so a preflight's `Access-Control-Request-Headers` is echoed back. That is what lets the admin app send `x-auth-audience: admin` with no CORS change. Keep it that way, or add `x-auth-audience` to the list if you ever pin `allowHeaders`.
 

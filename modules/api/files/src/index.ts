@@ -28,21 +28,6 @@ export interface Variables {
   log: Logger;
 }
 
-// Local dev origins for `apps/web` (Astro, :3000), `apps/admin` (TanStack Router/Vite,
-// :3001) and `apps/app` (TanStack Router/Vite, :3002) — the keyless dev fallback so
-// `wrangler dev`/`vite dev` works with zero config. Frontends get 3xxx, backends 4xxx
-// (api is :4000); every dev server pins its port with `strictPort`, so these stay true
-// instead of drifting to the next free port. An origin stays listed when its app is not
-// installed, because nothing listens there. Prod sets `CORS_ORIGINS` (comma-separated)
-// explicitly, and a set value replaces this list rather than adding to it; a
-// misconfigured prod value fails visibly (CORS rejects the real origin) rather than
-// silently falling back.
-const DEV_ORIGINS = [
-  "http://localhost:3000",
-  "http://localhost:3001",
-  "http://localhost:3002",
-];
-
 // The one error body this api answers with: `{ error: { code, message } }`. It is the
 // same envelope `@repo/validators`' `errorSchema` describes, written out here because
 // api cannot import it — `validators` declares `dependsOn: ["api"]`, so the dependency
@@ -87,7 +72,10 @@ function errorFor(status: number, message: string): ErrorBody {
 // the waitlist form on the marketing site, auth's cookie-based session) shares the
 // same origin allowlist, so it's a property of api's topology, not any one consumer's.
 // `auth`'s `trustedOrigins` reuses this same `CORS_ORIGINS` var (one list, two readers,
-// no drift).
+// no drift). There is no fallback list: the api env gate requires the key, `pnpm dev:ports`
+// writes the dev origins (localhost and `DEV_HOST`) into `apps/api/.env.local`, and prod
+// lists every deployed frontend. An origin outside the list gets no CORS headers, so a
+// misconfigured value fails visibly rather than trusting a guessed origin.
 //
 // The second link is request correlation. Every route below reads the same logger with
 // `c.get("log")`, and every line it writes carries this request's `requestId` — that is
@@ -114,11 +102,10 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
           origin,
           c: Context<{ Bindings: Bindings; Variables: Variables }>
         ) => {
-          const configured = c.env.CORS_ORIGINS?.split(",")
-            .map((o: string) => o.trim())
-            .filter(Boolean);
           const allowed =
-            configured && configured.length > 0 ? configured : DEV_ORIGINS;
+            c.env.CORS_ORIGINS?.split(",")
+              .map((o: string) => o.trim())
+              .filter(Boolean) ?? [];
           return origin && allowed.includes(origin) ? origin : null;
         },
       })
