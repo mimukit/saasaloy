@@ -25,6 +25,8 @@ import { cn } from "@web/lib/utils";
 // behind the bar. The hero's top padding clears the bar; a page that puts another
 // section first gives that section the same top padding.
 //
+// The bar sits in the hero's wider container (`section-container-hero`), so the wordmark
+// lines up with the hero title, as the two-column hero mockup approved on 2026-11-06 shows.
 // The bar is the round 10 mockup's: the lowercase wordmark in `highlight` on the left,
 // then Docs, GitHub and Guide and the theme toggle on the right. Every link leaves the
 // site, so each one spreads `externalLinkProps` and opens in a new tab. Below `lg` the
@@ -138,7 +140,7 @@ export function Navbar({
           open && "border-border bg-background"
         )}
       >
-        <div className="section-container-wide flex h-14 items-center gap-6">
+        <div className="section-container-hero flex h-14 items-center gap-6">
           <a
             href="/"
             aria-label={interpolate(ui.navbar.homeLabel, { siteName })}
@@ -192,7 +194,7 @@ export function Navbar({
           >
             <nav
               aria-label={ui.navbar.mobileNavLabel}
-              className="section-container-wide flex flex-col py-2"
+              className="section-container-hero flex flex-col py-2"
             >
               {links.map((link) => (
                 <a

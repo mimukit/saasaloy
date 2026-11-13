@@ -16,6 +16,10 @@ This repository is a monorepo.
 
 - We do not use changesets. The CLI is published to npm as [`saasaloy`](https://www.npmjs.com/package/saasaloy), and the maintainer cuts each release by hand with [release-it](https://github.com/release-it/release-it). See [Releasing](#releasing).
 
+## The public site's dev port
+
+`pnpm dev` starts the public site (`apps/web`) on port 3000 in the main checkout. A linked worktree takes its own port from 10000 to 19999 instead, so two worktrees can run the site at once. Run `wtports` in the worktree before the first `pnpm dev`: it reads `.devports.json`, hashes the repository, the service and the branch into a port, and writes `DEV_PORT` into a marked block in `apps/web/.env.local`. `apps/web/astro.config.mjs` reads `DEV_PORT` from that file, and a `DEV_PORT` in the shell wins over it. `wtports list` shows the port of every worktree, and `wtports clean` removes the block. Astro also allows one `astro dev` per folder, so a second `pnpm dev` in the same worktree stops with "Another astro dev server is already running". Stop the first one with `pnpm --filter @saasaloy/web exec astro dev stop`, or press Ctrl-C in its terminal. A service you add to the dev setup gets an entry in `.devports.json` in the same change.
+
 ## Manual QA: the `.dev/playground`
 
 When you build or change a CLI command or a module, hand-test it in a throwaway

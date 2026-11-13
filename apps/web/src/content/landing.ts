@@ -84,14 +84,23 @@ export const landing = {
   // The hero. The title is two sentences: the first renders in `foreground`, the second
   // in `highlight`. `command` is the command field's text (5b). Every link leaves the page
   // (5a). `note` is the proof-of-concept line, which stays visible (README, WARNING).
+  // `eyebrow` is the mono line above the title. `annotations` label the dimension lines
+  // around the drawing (5b): `apps/` comes from `saasaloy init`, `packages/` from
+  // `saasaloy add`, and the side dimension measures the whole `my-app/` tree.
+  // `explore` labels the link at the foot of the hero, down to the module catalog.
+  // `modules` is the module strip above it, from mockup variant A approved on 2026-11-06:
+  // module names (5b), shown in this order when the registry has them. `modulesMore`
+  // takes `{count}`, the catalog tiles the strip leaves out, and links to the catalog.
   // `{version}` is the CLI version, read from packages/cli/package.json at build time.
-  // `description` names the category, because the title does not, and its last
-  // sentence repeats the README's opening paragraph.
+  // `description` names the category, because the title does not. Its first sentence is
+  // the product sentence GitHub and npm use (packages/cli/package.json, SEO AEO-ENTITY),
+  // and its last repeats the README's opening paragraph.
   hero: {
+    eyebrow: "Open source · MIT · Cloudflare Workers",
     titleLead: "A landing page today.",
     titleAccent: "Your next module tomorrow.",
     description:
-      "An open source SaaS starter kit for Cloudflare. Start small, and add each module as source files you own. Think shadcn/ui for a full-stack SaaS.",
+      "An open source SaaS starter kit for Cloudflare: a CLI plus a module registry that copies source files you own. Start with a landing page, and add auth, teams and payments when the product needs them. Think shadcn/ui for a full-stack SaaS.",
     command: "npx saasaloy init my-app",
     links: [
       {
@@ -102,6 +111,30 @@ export const landing = {
       { id: "github", label: "GitHub", href: REPO },
     ],
     note: "Version {version}. Proof of concept. Not for production use yet.",
+    explore: "Explore the modules",
+    modulesLabel: "Add when you need it",
+    modules: [
+      "waitlist",
+      "database",
+      "auth",
+      "email",
+      "teams",
+      "payment",
+      "storage",
+      "queue",
+      "feature-flags",
+      "file-uploads",
+      "sms",
+      "kv",
+      "ratelimit",
+      "api-keys",
+    ],
+    modulesMore: "+{count} more",
+    annotations: {
+      top: "apps/ ← init",
+      bottom: "packages/ ← add",
+      side: "my-app/",
+    },
   },
 
   // The problem section (plan 0092). `title` and `description` repeat README line 23,

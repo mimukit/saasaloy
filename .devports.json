@@ -1,0 +1,8 @@
+{
+  "services": { "web": 3000 },
+  "env": {
+    "apps/web/.env.local": {
+      "DEV_PORT": "{web}"
+    }
+  }
+}
