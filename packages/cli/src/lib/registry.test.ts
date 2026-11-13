@@ -11,8 +11,8 @@ describe(parseCoordinate, () => {
   });
 
   it("reads owner/repo/module", () => {
-    expect(parseCoordinate("acme/mods/billing")).toStrictEqual({
-      module: "billing",
+    expect(parseCoordinate("acme/mods/subscription")).toStrictEqual({
+      module: "subscription",
       owner: "acme",
       ref: undefined,
       repo: "mods",
@@ -20,8 +20,8 @@ describe(parseCoordinate, () => {
   });
 
   it("reads a pinned ref on owner/repo@ref/module", () => {
-    expect(parseCoordinate("acme/mods@v2/billing")).toStrictEqual({
-      module: "billing",
+    expect(parseCoordinate("acme/mods@v2/subscription")).toStrictEqual({
+      module: "subscription",
       owner: "acme",
       ref: "v2",
       repo: "mods",
@@ -49,7 +49,9 @@ describe(parseCoordinate, () => {
   });
 
   it("rejects an empty ref", () => {
-    expect(() => parseCoordinate("acme/mods@/billing")).toThrow(/empty ref/);
+    expect(() => parseCoordinate("acme/mods@/subscription")).toThrow(
+      /empty ref/
+    );
   });
 
   it("rejects too many path segments", () => {

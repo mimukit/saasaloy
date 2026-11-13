@@ -9,7 +9,7 @@ import type { Job, Schedule } from "../provider";
 // pull the schema barrel's `import.meta.glob` into a workspace that does not compile with
 // Vite's types. So `apps/api/src/lib/notification-prune.ts` hands in the function that
 // opens a database and prunes, through `setNotificationPruneRunner`, when the Worker
-// loads. `packages/billing` and `packages/file-uploads` split their jobs the same way.
+// loads. `packages/subscription` and `packages/file-uploads` split their jobs the same way.
 //
 // Factories, not bare constants, because the tables register a *call*: that is what the
 // `plugin-array` patch appends and what `saasaloy remove` takes back out.
