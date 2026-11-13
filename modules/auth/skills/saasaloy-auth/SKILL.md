@@ -478,8 +478,6 @@ Use two pieces, both in `apps/web/src/lib/`:
 
 The flag holds no name and no id, so a shared device shows nothing about the user. The cookie stays the truth: a stale flag costs one swap, and the next check clears it. Wrap every `localStorage` access in `try`, because storage can be off.
 
-The reference implementation is PrimeShopr: `apps/web/src/lib/session.ts`, `apps/web/src/lib/session-hint.ts` and `apps/web/src/layouts/Layout.astro`.
-
 ## Password rules
 
 Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update auth`.

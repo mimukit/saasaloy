@@ -51,6 +51,12 @@
    costs nothing. Both blocks/file-uploads.tsx and an app page render it. */
 @source "../components/file-drop.tsx";
 
+/* Rendered by blocks/file-uploads.tsx, which the `file-uploads` module writes. A module
+   has no patch kind for CSS, so the line ships here. Before that module is added the
+   line costs the table's few utility rules in the stylesheet. Without the line, the
+   block renders an unstyled table and ui-sources.test.ts fails. */
+@source "../components/table.tsx";
+
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to
    packages/apps/** — a directory that does not exist. shadcn's own astro-monorepo
