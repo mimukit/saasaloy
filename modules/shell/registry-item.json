@@ -6,7 +6,7 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.9.0"
   },
   "dependsOn": [],
   "dependencies": [],
@@ -25,8 +25,16 @@
       "target": "@ui/assets/shell/assets.d.ts"
     },
     {
-      "path": "files/ui/assets/shell/brand-mark.svg",
-      "target": "@ui/assets/shell/brand-mark.svg"
+      "path": "files/ui/assets/shell/brand-mark-dark.svg",
+      "target": "@ui/assets/shell/brand-mark-dark.svg"
+    },
+    {
+      "path": "files/ui/assets/shell/brand-mark-light.svg",
+      "target": "@ui/assets/shell/brand-mark-light.svg"
+    },
+    {
+      "path": "files/ui/blocks/shell/attention-menu.tsx",
+      "target": "@ui/blocks/shell/attention-menu.tsx"
     },
     {
       "path": "files/ui/blocks/shell/attribute-list.tsx",
@@ -109,6 +117,10 @@
       "target": "@ui/components/shell/button.tsx"
     },
     {
+      "path": "files/ui/components/shell/calendar.tsx",
+      "target": "@ui/components/shell/calendar.tsx"
+    },
+    {
       "path": "files/ui/components/shell/card.tsx",
       "target": "@ui/components/shell/card.tsx"
     },
@@ -127,6 +139,10 @@
     {
       "path": "files/ui/components/shell/command.tsx",
       "target": "@ui/components/shell/command.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/date-picker.tsx",
+      "target": "@ui/components/shell/date-picker.tsx"
     },
     {
       "path": "files/ui/components/shell/dialog.tsx",
@@ -175,6 +191,14 @@
     {
       "path": "files/ui/components/shell/meter.tsx",
       "target": "@ui/components/shell/meter.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/overflow-tooltip.tsx",
+      "target": "@ui/components/shell/overflow-tooltip.tsx"
+    },
+    {
+      "path": "files/ui/components/shell/password-input.tsx",
+      "target": "@ui/components/shell/password-input.tsx"
     },
     {
       "path": "files/ui/components/shell/popover.tsx",
@@ -273,6 +297,10 @@
       "target": "@ui/containers/shell/shell-sidebar.tsx"
     },
     {
+      "path": "files/ui/lib/shell/attention.ts",
+      "target": "@ui/lib/shell/attention.ts"
+    },
+    {
       "path": "files/ui/lib/shell/command-registration.ts",
       "target": "@ui/lib/shell/command-registration.ts"
     },
@@ -283,6 +311,10 @@
     {
       "path": "files/ui/lib/shell/extensions.ts",
       "target": "@ui/lib/shell/extensions.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/group-rows.ts",
+      "target": "@ui/lib/shell/group-rows.ts"
     },
     {
       "path": "files/ui/lib/shell/nav-counts.ts",
@@ -299,6 +331,10 @@
     {
       "path": "files/ui/lib/shell/segmented-control.ts",
       "target": "@ui/lib/shell/segmented-control.ts"
+    },
+    {
+      "path": "files/ui/lib/shell/updated-at.ts",
+      "target": "@ui/lib/shell/updated-at.ts"
     },
     {
       "path": "files/ui/lib/shell/use-media-query.ts",

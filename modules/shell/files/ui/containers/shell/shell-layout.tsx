@@ -29,6 +29,10 @@ import type { LiveCounts } from "@repo/ui/lib/shell/nav-counts";
 // Each entry's `Provider` wraps the whole layout, the first entry outermost, and each
 // `header` renders at the right of the header, after the page path. With no extensions
 // the output is the same as before the prop existed.
+//
+// `attention` is one slot for the app's "Needs attention" menu (blocks/shell/
+// attention-menu.tsx). It renders last in the header's right group, after the extension
+// headers. The app builds it, because the counts and the words are the app's.
 
 // One shared empty list, so an app with no extensions passes a stable default.
 const NO_EXTENSIONS: readonly ShellExtension[] = [];
@@ -62,6 +66,7 @@ export function ShellLayout({
   subtitle,
   trail,
   extensions = NO_EXTENSIONS,
+  attention,
   children,
 }: {
   areas: readonly ShellNavArea[];
@@ -85,6 +90,8 @@ export function ShellLayout({
   trail?: readonly { label: string; to?: string }[];
   /** The app's `shellExtensions` list, from `defineShellExtensions`. */
   extensions?: readonly ShellExtension[];
+  /** The "Needs attention" menu, rendered last in the header. */
+  attention?: ReactNode;
   children: ReactNode;
 }): ReactElement {
   const pageLabel = pageLabelFor(areas, currentPath);
@@ -150,11 +157,12 @@ export function ShellLayout({
               })}
             </ol>
           </nav>
-          {headers.length === 0 ? null : (
+          {headers.length === 0 && attention === undefined ? null : (
             <div className="flex shrink-0 items-center gap-2">
               {headers.map(({ id, Header }) => (
                 <Header key={id} />
               ))}
+              {attention}
             </div>
           )}
         </header>
