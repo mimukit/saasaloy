@@ -1,0 +1,31 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "infra-ci-deploy",
+  "type": "saasaloy:feature",
+  "description": "A GitHub Actions workflow that runs pnpm deploy:production on every push to main, with the Cloudflare and value-source credentials from repository secrets.",
+  "stage": "validate",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.8"
+  },
+  "dependsOn": [],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [],
+  "files": [
+    {
+      "path": "files/workflows/deploy.yml",
+      "target": "@root/.github/workflows/deploy.yml"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": ".",
+      "aliases": { "@root": "." },
+      "files": []
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-infra-ci-deploy"]
+  }
+}
