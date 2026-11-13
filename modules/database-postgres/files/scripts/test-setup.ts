@@ -117,3 +117,41 @@ export async function setup(project: TestProject): Promise<void> {
 
   project.provide("testDatabaseUrl", url);
 }
+
+/**
+ * `setup` for a test file that prepares the test database itself, in its own `beforeAll`,
+ * rather than through a project's global setup. Vitest runs test files in parallel workers,
+ * so two such files would create, migrate and seed `<database>_test` at the same moment, and
+ * the second `CREATE DATABASE` fails on `pg_database_datname_index`. A session advisory lock
+ * on the server makes each file wait for the one before it; by then the database exists, the
+ * migrations are applied and the seed is an upsert, so the second run changes nothing.
+ */
+export async function setupLocked(): Promise<void> {
+  const context = loadContext(ROOT);
+  const url = testDatabaseUrl(context);
+  const project = {
+    provide: () => {
+      // A file-level call has no project to hand the URL to; each file reads it itself.
+    },
+  } as unknown as TestProject;
+  if (!url) {
+    await setup(project);
+    return;
+  }
+  if (resolveState(context)?.backend === "docker") {
+    await docker.ensureRunning(context.root);
+  }
+  const key = `saasaloy-test-setup:${databaseOf(url)}`;
+  await withSql(
+    server.adminUrl(url),
+    "Cannot reach the test database server",
+    async (sql) => {
+      await sql`select pg_advisory_lock(hashtext(${key}))`;
+      try {
+        await setup(project);
+      } finally {
+        await sql`select pg_advisory_unlock(hashtext(${key}))`;
+      }
+    }
+  );
+}

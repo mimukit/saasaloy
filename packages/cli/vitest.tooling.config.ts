@@ -15,7 +15,10 @@ import { defineConfig } from "vitest/config";
 // - `db-scripts`: the database drivers' production script tests. They are stored as
 //   `*.vitest.ts`, so `pnpm test:modules` (`node --test` over `*.test.ts`) skips them, and
 //   the descriptor ships them as `*.test.ts`. They import only Vitest and the files beside
-//   them.
+//   them. `readonly.vitest.ts` and `superadmin.vitest.ts` are the exception: they run on a
+//   generated project's test database through the `postgres` driver, which this repo does
+//   not install, so the project excludes them. They run in a generated project's own
+//   `pnpm test`.
 //
 // The root `test:base` script runs the template's `node:test` files and skips
 // `packages/tooling` and `packages/config`, so each file runs on the one runner it imports.
@@ -61,6 +64,10 @@ export default defineConfig({
           name: "db-scripts",
           environment: "node",
           include: ["database-*/files/scripts/**/*.vitest.ts"],
+          exclude: [
+            "database-postgres/files/scripts/lib/readonly.vitest.ts",
+            "database-postgres/files/scripts/lib/superadmin.vitest.ts",
+          ],
         },
       },
     ],

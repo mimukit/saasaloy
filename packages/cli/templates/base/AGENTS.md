@@ -40,7 +40,7 @@ Rules for a new app or service:
 
 No code lives at the repository root. The root holds configuration only: `package.json`, `turbo.json`, the lint and format configs, `vitest.config.ts`. A tool, a script or a codemod goes into a workspace, where it gets a `tsconfig.json`, a `typecheck` script, the type-aware lint pass and the root Vitest run. A root `scripts/` folder gets none of them.
 
-`packages/tooling` (`@repo/tooling`) is the workspace for the repository's own tooling. It holds the deploy command (`src/deploy-production.ts`) and the skill linker (`src/link-skills.ts`). A root script that runs one of them names the file: `node packages/tooling/src/<name>.ts`. Two of its files are yours: `src/deploy.config.ts` and `src/targets.ts`. `saasaloy update` never writes them again after `saasaloy init`. The other files are managed.
+`packages/tooling` (`@repo/tooling`) is the workspace for the repository's own tooling. It holds the deploy command (`src/deploy-production.ts`), the production log reader (`src/logs-prod.ts`, `pnpm logs:prod`) and the skill linker (`src/link-skills.ts`). A root script that runs one of them names the file: `node packages/tooling/src/<name>.ts`. Two of its files are yours: `src/deploy.config.ts` and `src/targets.ts`. `saasaloy update` never writes them again after `saasaloy init`. The other files are managed.
 
 ### Workspace Commands
 
@@ -144,7 +144,7 @@ The other six run when the thing they own moves:
 - **`saasaloy-config`** covers `@repo/config`: a section, the merge rule, config versus `.env`.
 - **`saasaloy-env`** covers `packages/env`: adding a key, the server and client split, `pnpm env:setup`.
 - **`saasaloy-testing`** says which test a change needs under this project's testing mode.
-- **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates and the rollback.
+- **`saasaloy-deploy`** covers `pnpm deploy:production`, its gates, the rollback, the first superadmin, and answering a production question against the last deploy tag.
 - **`saasaloy-update`** takes the project to a newer CLI and newer modules: `saasaloy update`, the merge plan, the update notes, `--resolved` and `--done`.
 
 ### Naming Conventions
@@ -202,6 +202,7 @@ Testing mode: `off`. This project ships no module tests, and `saasaloy add` writ
 - **Never move or delete a deploy tag.** Each successful deploy pushes an annotated `deploy-<UTC yyyymmdd-hhmm>` tag. `git log <tag>..main` lists what the next deploy ships, and a hotfix branches from the tag.
 - **Release before you deploy.** `pnpm release` bumps the root `package.json` version, writes `CHANGELOG.md`, and pushes an annotated `v<version>` tag and a GitHub Release. The `v*` tag names the release, and the `deploy-*` tag records when it went live. A deploy from a commit that is not a release warns and still runs. Never move or delete a release tag, and never edit `version` by hand.
 - **Merge a hotfix branch into `main`, never rebase it.** A rebase rewrites the commit its release tag names.
+- **Answer a production question from the last deploy tag, not `main`.** Production runs the commit `git describe --tags --match 'deploy-*' --abbrev=0` names. Read a live file with `git show <tag>:<path>`, and what is not live yet with `git log <tag>..main`.
 - **An agent deploys only after the owner says so in the same session.** It runs `pnpm deploy:production --dry-run` and reports first. The `saasaloy-deploy` skill is the procedure, and `docs/runbook-deploy.md` holds this project's own deploy steps.
 
 ## Unattended work

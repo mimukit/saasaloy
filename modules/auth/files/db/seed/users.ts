@@ -5,8 +5,10 @@ import { defineSlice } from "../slice";
 // Seed users, one for each way the admin app shows a user: the superadmin, an admin, a
 // plain user and a banned one. Each signs in with the dev password in `./accounts.ts`.
 //
-// Seeding a superadmin means the first sign-up on a seeded database is not the first user,
-// so it gets the plain `user` role. Sign in as `superadmin@example.test` instead.
+// The seed is how development gets its superadmin. No sign-up promotes an account, the
+// first one included: every sign-up gets the plain `user` role. Sign in as
+// `superadmin@example.test`. Production gets its first superadmin from
+// `pnpm db:prod:superadmin` on Postgres, or from the auth skill's SQL on D1.
 //
 // The two site-admin roles come from `config.auth`, so a project that renames them in
 // `packages/config/src/project.ts` seeds the names its guards admit.

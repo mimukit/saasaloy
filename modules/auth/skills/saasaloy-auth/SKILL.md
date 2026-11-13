@@ -1,6 +1,6 @@
 ---
 name: saasaloy-auth
-description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, promoting the first superadmin or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
+description: Runbook for the auth capability — Better Auth with httpOnly session cookies in packages/auth, as two instances on one set of tables (the client session at /auth and the admin session at /admin/auth). Use when wiring sign-up/sign-in or rendering the SignInCard and SignUpCard blocks on an app route, gating an api route with requireSession/requireRole/requireAdmin/requireAdminApp or reading one with getSession/authFor, choosing which session a route reads with x-auth-audience, adding a role such as support to the admin group, making the first superadmin (the seed, pnpm db:prod:superadmin on Postgres, or SQL on D1; no sign-up is promoted) or checking a user's role, signing in as a seed user with the dev password, re-verifying the schema snapshot after a better-auth bump, enabling social OAuth or email verification, the password reset mail and the 12-character password rule, patching the plugin arrays (billing/teams), upgrading a project made before the client/admin split, rotating the auth secret, debugging cookie/CORS/session issues, or working out why a call throws about a database client read outside `withAuthScope`.
 ---
 
 # auth — Better Auth, httpOnly cookies + subdomains
@@ -18,7 +18,7 @@ A project has two user groups. The **client** group is the shopper, the customer
 
 In production both cookies carry the `__Secure-` prefix. `advanced.cookiePrefix` sets the name, so a client and an admin stay signed in together in two tabs of one browser, and a sign-out in one tab leaves the other signed in. The decision record is [ADR 0050](../../../../docs/adr/0050-adr-client-and-admin-sessions-are-two-auth-instances-2026-10-23.md).
 
-Everything the two share (the adapter, the secret, `trustedOrigins`, the first-user hook, `advanced`) lives in `sharedOptions(group)`. Each `betterAuth({...})` spreads it and keeps its own literal `plugins: [...]`.
+Everything the two share (the adapter, the secret, `trustedOrigins`, `advanced`) lives in `sharedOptions(group)`. Each `betterAuth({...})` spreads it and keeps its own literal `plugins: [...]`.
 
 **The audience column keeps the two apart.** `sessions.audience` is `client` or `admin`, not null, default `'client'`, in both driver schemas. The `audience(name)` plugin in `packages/auth/src/plugins/audience.ts` declares the field with `input: false` (no endpoint can set it) and writes the instance's name into every new row. Each instance wraps its `drizzleAdapter` in `scopeSessionsTo(adapter, group)` from `packages/auth/src/scoped-adapter.ts`, so a session lookup by token finds only rows of its own audience. A token copied into the other cookie is no session at all: every endpoint, middleware and `api.*` call on that instance sees `null`. `decide()` in `authorize.ts` checks the audience a second time behind the adapter.
 
@@ -227,7 +227,7 @@ Each gate returns the session, so the caller reads `session.user.id` without a s
 
 `AuthDbBindings` is whichever binding shape the installed driver declares, so this route is one file under both drivers.
 
-**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the first-user hook writes `"superadmin"`, and `auth.admin.setRole({ userId, role: "admin" })` on the admin client writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
+**One role per user is the contract here, and it is narrower than better-auth's.** The plugin reads `user.role` as a comma-separated list (`has-permission.mjs` splits it on `,`), so a row holding `"admin,support"` is an admin to `adminAuth.api.listUsers` and gets a 403 from `requireAdmin`. `apps/admin`'s browser guard compares with `===` too, so both halves of the gate agree with each other and both refuse the joined string. Nothing a scaffolded project writes produces one: the seed and `pnpm db:prod:superadmin` write `"superadmin"`, and `auth.admin.setRole({ userId, role: "admin" })` on the admin client writes one value. If you want stacked roles, change `hasRole` in `packages/auth/src/authorize.ts` and `isAdmin` in `apps/admin/src/lib/auth.ts` together, never one alone.
 
 Keep `getSession` for the case it was written for: a route whose answer *changes* for a signed-in caller but is still served to an anonymous one. A public page that shows a "you already voted" badge reads the session; it does not gate on it.
 
@@ -244,9 +244,9 @@ Note the route shape: one named `export const`, one chained expression, an expli
 
 **The gate is the api's, not the browser's.** `apps/admin` also refuses an account outside `ADMIN_APP_ROLES`, in `beforeLoad`. That guard stops the SPA from asking; it cannot stop `curl`. A route that skips `requireAdmin` because the admin app already checks is open to anyone holding any session cookie.
 
-## Roles and the first user
+## Roles and the first superadmin
 
-Better Auth's `admin` plugin is on from the start, on both instances (`siteRoles()` in `auth.ts`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up (except the first one, see below), refuses a banned account at sign-in, and treats the roles in `adminRoles` as privileged. Its `/admin/*` endpoints answer only on `adminAuth`.
+Better Auth's `admin` plugin is on from the start, on both instances (`siteRoles()` in `auth.ts`). It gives `user` a `role` column, writes `"user"` into it for every new sign-up, the first one included (see "The first superadmin" below), refuses a banned account at sign-in, and treats the roles in `adminRoles` as privileged. Its `/admin/*` endpoints answer only on `adminAuth`.
 
 **The role strings live in `packages/config/src/sections/auth.ts`, which this module installs, and they have exactly one home.** `packages/auth/src/authorize.ts` reads `config.auth.adminRole`, `config.auth.superadminRole` and `config.auth.adminAppExtraRoles`, and `apps/admin/src/lib/auth.ts` reads the same three — a browser bundle cannot import `@repo/auth/server`, but `@repo/config` has no dependencies at all, so both sides read one copy. `siteRoleMap` in `authorize.ts` keys the `admin()` plugin's statements by the same strings, so a renamed role keeps its `/admin/*` permissions. Rename either role in `packages/config/src/project.ts`; rows already written keep the old string, so an existing project needs the `update users set role = ...` to match.
 
@@ -312,24 +312,29 @@ Support is then in the admin group for the rank guard too: an `admin` may not ch
 
 The guard reads target roles through `@repo/db/repositories/site-roles`, not the adapter, because the scoped adapter cannot see a session of the other audience.
 
-### First user wins
+### The first superadmin
 
-The first account to sign up on an empty `users` table gets `role: "superadmin"`. A `databaseHooks.user.create.before` hook in `sharedOptions()` in `packages/auth/src/auth.ts` reads the table before the row is written, so it can only match on the very first sign-up; every account after that keeps the plugin's default `"user"`. This is the only automatic promotion in the system, and it is what makes `saasaloy add admin` usable without SQL. It writes `superadmin` rather than `admin` because the first account has to be able to grant every other one, and only `superadmin` may change an admin-group role.
+No sign-up promotes an account. Every sign-up gets the plugin's default `"user"`, the first one on an empty `users` table included. The first superadmin comes from outside the api, and it has to be `superadmin` rather than `admin`, because only `superadmin` may grant an admin-group role to anyone else:
 
-Both instances carry the hook, and in practice it fires on `auth`: `adminAuth` has no sign-up. So the first account signs up as a client, through `POST /auth/sign-up/email` or a client app's sign-up screen, and then signs in on the admin app with the same email and password. Both instances read one `accounts` table, so no second account is needed.
+- **Development:** the seed writes `superadmin@example.test` (see "Seed users and the dev password" below).
+- **Postgres in production:** `pnpm db:prod:superadmin --email <address> [--name <display name>] [--keep-password]` creates the account with a password typed at the prompt, or promotes an existing one. `database-postgres` ships it when `auth` is installed. Run it once before the first `pnpm deploy:production`. The `saasaloy-database-postgres` skill covers its rules.
+- **D1 in production:** there is no script. Sign up as a client with your email on a client app, or through `POST /auth/sign-up/email`, then promote that account from `apps/api`. `<db>` is the `database_name` in `apps/api/wrangler.jsonc`:
 
-**Client sign-up is open, so that first slot is a race you can lose.** Any account that reaches `/auth/sign-up` before you do becomes the superadmin, and on a deployed API with a public origin the window is real. Sign up yourself the moment the API answers its first request, then confirm with `select email, role from users`. Two sign-ups that land at the same instant both read an empty table and both become superadmin; that is accepted rather than locked, because a unique index on `role = 'superadmin'` would also block a deliberate second one later.
+  ```sh
+  wrangler d1 execute <db> --remote --command "update users set role = 'superadmin' where email = 'you@example.com'"
+  ```
 
-If somebody else got there first, or you are promoting an account on a project that already has users, flip the row by hand. Run this from the project root; `--filter @repo/db` puts the working directory in `packages/db`, which is what the relative paths are written against. The statement is the same under both drivers:
+`adminAuth` has no sign-up. Whichever path made the account, it signs in on the admin app with its email and password. Both instances read one `accounts` table, so no second account is needed.
+
+To promote an account by hand on a project that already has users, the statement is the same under both drivers:
 
 ```sql
 update users set role = 'superadmin' where email = 'you@example.com';
 ```
 
-**How you run it is the driver's business**, so read the skill for the driver this project
-installed — `saasaloy-database-d1` or `saasaloy-database-postgres` — for the console it hands you.
-Swap `update` for `select email, role from users` to check it landed. The plural table name
-needs no quotes: Postgres reserves `user`, not `users`.
+**How you run it is the driver's business**, so read the skill for the driver this project installed (`saasaloy-database-d1` or `saasaloy-database-postgres`) for the console it hands you. On Postgres in production, prefer `pnpm db:prod:superadmin --keep-password`, which promotes without SQL. Swap `update` for `select email, role from users where role = 'superadmin'` to check it landed. The plural table name needs no quotes: Postgres reserves `user`, not `users`.
+
+An older project's `auth.ts` may still promote the first sign-up to superadmin. `saasaloy update auth` shows the update note "The first sign-up no longer becomes the superadmin", with the steps to delete that `databaseHooks` block.
 
 The change takes effect on the next `getSession` call, because sessions are DB-backed and the role is read off the user row, and `cookieCache` is off (see the last boundary below). An account that is already signed in on the admin session needs no re-login. An account promoted from `user` has no admin session yet: it signs in on the admin app, because `adminAuth` refused it before the promotion. Demoting an account works the other way: its admin session stays in the table, but every role gate and the admin app's guard refuse it from the next request, and the admin app shows the refusal page.
 
@@ -363,7 +368,7 @@ Leaving the column in place is the option that breaks. The snapshot no longer de
 
 Every one has an email-and-password account with the password **`saasaloy-dev-password`**, and `db:seed` prints it after the counts. The hash in `packages/db/src/seed/slices/accounts.ts` is precomputed in Better Auth's own format, so the seed never loads Better Auth. `sessions` and `verifications` ship empty slices: a seeded session would carry a token nobody holds.
 
-A seeded database already holds a superadmin, so the first-user promotion above does not fire there: the first person to sign up gets `user`. Sign in on the admin app as `superadmin@example.test` instead. Never seed a database other people can reach; the password is in this file.
+Every sign-up gets `user`, on a seeded database as everywhere else. Sign in on the admin app as `superadmin@example.test`. Never seed a database other people can reach; the password is in this file.
 
 `auth` also ships the example route test, `apps/api/src/routes/auth.test.ts`. It signs the seeded superadmin in through `POST /auth/sign-in/email` and checks the session row, then a second test proves that row is gone. The rest pins the split: both cookies in one browser, a token copied into the other cookie, the admin sign-in refusal, `/auth/admin/*` refused, the rank rules and the impersonation refusal. A Better Auth bump that changes how a session is found fails these tests. Copy its shape for a route of your own; the database driver's skill, "Route tests", explains `testDatabase()`.
 

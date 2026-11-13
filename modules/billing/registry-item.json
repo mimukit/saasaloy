@@ -123,6 +123,13 @@
       "value": "text(\"billing_customer_id\")"
     },
     {
+      "file": "packages/db/src/column-classes/users.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "billingCustomerId",
+      "value": "\"plain\""
+    },
+    {
       "file": "apps/api/src/env.ts",
       "kind": "plugin-array",
       "exportName": "apiEnv",
@@ -184,6 +191,14 @@
     {
       "path": "files/db/seed/billing-events.ts",
       "target": "@db/seed/slices/billing-events.ts"
+    },
+    {
+      "path": "files/db/column-classes/billing-events.ts",
+      "target": "@db/column-classes/billing-events.ts"
+    },
+    {
+      "path": "files/db/column-classes/billing-subscriptions.ts",
+      "target": "@db/column-classes/billing-subscriptions.ts"
     }
   ],
   "scaffolds": [

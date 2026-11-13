@@ -65,6 +65,25 @@
       "value": "env-deploy --run api -- node scripts/prod.ts migrate"
     },
     {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:readonly-grants",
+      "value": "env-deploy --run api -- node scripts/readonly-grants.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:query",
+      "value": "node scripts/query.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:superadmin",
+      "value": "env-deploy --run api -- node scripts/superadmin.ts",
+      "when": { "installed": ["auth"] }
+    },
+    {
       "file": "package.json",
       "kind": "package-json-script",
       "name": "db:setup",
@@ -99,6 +118,25 @@
       "kind": "package-json-script",
       "name": "db:prod:migrate",
       "value": "pnpm --filter @repo/db db:prod:migrate"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:readonly-grants",
+      "value": "pnpm --filter @repo/db db:prod:readonly-grants"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:query",
+      "value": "pnpm --filter @repo/db db:prod:query"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prod:superadmin",
+      "value": "pnpm --filter @repo/db db:prod:superadmin",
+      "when": { "installed": ["auth"] }
     },
     {
       "file": "packages/db/package.json",
@@ -222,6 +260,65 @@
           "target": "scripts/prod.ts"
         },
         {
+          "path": "files/scripts/lib/readonly.ts",
+          "target": "scripts/lib/readonly.ts"
+        },
+        {
+          "path": "files/scripts/lib/readonly-grants.ts",
+          "target": "scripts/lib/readonly-grants.ts"
+        },
+        {
+          "path": "files/scripts/lib/query.ts",
+          "target": "scripts/lib/query.ts"
+        },
+        {
+          "path": "files/scripts/lib/mask.ts",
+          "target": "scripts/lib/mask.ts"
+        },
+        {
+          "path": "files/scripts/readonly-grants.ts",
+          "target": "scripts/readonly-grants.ts"
+        },
+        {
+          "path": "files/scripts/query.ts",
+          "target": "scripts/query.ts"
+        },
+        {
+          "path": "files/scripts/superadmin.ts",
+          "target": "scripts/superadmin.ts",
+          "when": { "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/superadmin.ts",
+          "target": "scripts/lib/superadmin.ts",
+          "when": { "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/superadmin-args.ts",
+          "target": "scripts/lib/superadmin-args.ts",
+          "when": { "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/password.ts",
+          "target": "scripts/lib/password.ts",
+          "when": { "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/prompt.ts",
+          "target": "scripts/lib/prompt.ts",
+          "when": { "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/superadmin.vitest.ts",
+          "target": "scripts/lib/superadmin.test.ts",
+          "when": { "testing": true, "installed": ["auth"] }
+        },
+        {
+          "path": "files/scripts/lib/readonly.vitest.ts",
+          "target": "scripts/lib/readonly.test.ts",
+          "when": { "testing": true, "installed": ["auth"] }
+        },
+        {
           "path": "files/scripts/backends/docker.ts",
           "target": "scripts/backends/docker.ts"
         },
@@ -246,6 +343,9 @@
     }
   ],
   "agent": {
-    "skills": ["skills/saasaloy-database-postgres"]
+    "skills": [
+      "skills/saasaloy-database-postgres",
+      "skills/saasaloy-prod-debug"
+    ]
   }
 }

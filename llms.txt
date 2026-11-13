@@ -21,6 +21,7 @@ This file is for an AI agent that wants to build a product with Saasaloy. An age
 - One commit per stage on the `build/mvp` branch. Nothing is pushed.
 - `docs/build-log.md`, with one section per stage and its commit, a `## Blocked` list, and a `## Left for a human` list. A new session reads it first and continues.
 - A deploy, a vendor account, a secret edit and a push stay a person's steps.
+- No sign-up becomes the superadmin. Locally the seed's `superadmin@example.test` opens the admin app. Production's first superadmin is a person's step before the first deploy: `pnpm db:prod:superadmin` on Postgres, or a sign-up and one SQL statement on D1.
 
 ## Docs
 
@@ -36,4 +37,6 @@ This file is for an AI agent that wants to build a product with Saasaloy. An age
 - [saasaloy-feature](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-feature/SKILL.md): one product entity across the stack.
 - [saasaloy-setup](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-setup/SKILL.md): the brief interview and its completeness rule.
 - [saasaloy-update](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-update/SKILL.md): the upgrade to a newer CLI, the merge plan and its update notes, and the exit codes.
+- [saasaloy-deploy](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/_agents/skills/saasaloy-deploy/SKILL.md): the release, the gated deploy, the first superadmin, and answering a production question against the last deploy tag.
+- [saasaloy-prod-debug](https://github.com/mimukit/saasaloy/blob/main/modules/database-postgres/skills/saasaloy-prod-debug/SKILL.md): with `database-postgres`, read production rows and the api logs, read-only, through `pnpm db:prod:query` and `pnpm logs:prod`.
 - [The generated project's agent guide](https://github.com/mimukit/saasaloy/blob/main/packages/cli/templates/base/AGENTS.md): the rules for unattended work.
