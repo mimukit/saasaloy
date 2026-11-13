@@ -203,7 +203,7 @@ const HELP: CommandHelp = {
     "--resolved <path>":
       "record a file you merged as it stands now, or keep a file you deleted deleted, so the next update stops offering it (repeatable)",
     "--restore <path>":
-      "bring back a file kept deleted: write the current upstream file and drop its tombstone (repeatable)",
+      "bring back a file kept deleted: write the current upstream file and stop keeping it deleted (repeatable)",
     "--done <id>":
       "record an update note whose work is finished, so the merge plan stops listing it (repeatable)",
     "--from <version>":
@@ -1140,10 +1140,18 @@ export async function runUpdate(argv: string[]): Promise<number> {
       }
       // The hash still describes the old template, so the release it came from is kept
       // for the next run's three-way snapshot (#312).
+      //
+      // A run that merged against `--from` records that version, not the adopting one.
+      // `--from` is refused on every later run, so the adopting release would become the
+      // merge base there, and each file the template changed only before it would read
+      // `base === theirs` and leave the merge plan with its merge still waiting. The
+      // `--from` snapshot does not hash to `templateHash`, so the next run goes two-way,
+      // which keeps every waiting file in the plan.
       lock.base = {
         ...lock.base,
         cliVersion,
-        templateVersion: lock.base.templateVersion ?? lock.base.cliVersion,
+        templateVersion:
+          opts.from ?? lock.base.templateVersion ?? lock.base.cliVersion,
         ...(adoptedBefore === undefined ? {} : { adoptedAt: adoptedBefore }),
       };
     };

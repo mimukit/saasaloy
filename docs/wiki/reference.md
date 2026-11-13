@@ -260,7 +260,7 @@ Two cases stop before anything is applied. A project with no usable base record 
 | `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--resolved <path>` | record a file you merged, or keep a file you deleted deleted, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge) and [Keeping a deleted file deleted](#keeping-a-deleted-file-deleted). |
-| `--restore <path>` | bring back a file kept deleted: write the current upstream file and drop its tombstone. A path that is not kept deleted exits 2. Repeatable. |
+| `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted. A path that is not kept deleted exits 2. Repeatable. |
 | `--done <id>` | record an update note whose work is done, so the merge plan stops listing it. Repeatable. See [Recording an update note](#recording-an-update-note). |
 | `--from <version>` | on the first update after adoption, name the CLI version the project was made with, so the base update notes newer than it apply. Without it those notes print under "Notes that may apply". Any other run refuses it with exit 2, because the lock range is already exact. |
 | `--dry-run` | print the plan and stop. Nothing is written. |

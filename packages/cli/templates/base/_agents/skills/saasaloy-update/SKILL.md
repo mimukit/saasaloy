@@ -79,9 +79,9 @@ A file under `Files to merge` that reads "deleted locally" is a file Saasaloy tr
 
 ### The base section header
 
-The base section's header says whether its diffs are three-way. With no reason line, the CLI fetched the template at the release this project recorded, and each file shows `base → theirs` and `base → mine`. A file the template did not change since that release is not in the merge plan.
+The base section's header says whether its diffs are three-way. With no reason line, the CLI fetched the template at the release this project recorded, and each file shows `base → theirs` and `base → mine`. A file the template did not change since that release is not in the merge plan, unless you deleted it locally: a deleted file is listed once, as `deleted locally`.
 
-A line that starts with `no merge base` gives the reason the diffs are two-way: the version is not a release, the fetch failed, or the template differs from the one the lock records. Judge which side each difference came from. On a fetch failure, check the network or set `GITHUB_TOKEN`, then run the update again. For an adopted project, name its version with `--from <version>` on the first applied update, as [An adopted project](#an-adopted-project) says, so the base merges three-way.
+A line that starts with `no merge base` gives the reason the diffs are two-way: the version is not a release, the fetch failed, or the template differs from the one the lock records. Judge which side each difference came from. On a fetch failure, check the network or set `GITHUB_TOKEN`, then run the update again. For an adopted project, name its version with `--from <version>` on the first applied update, as [An adopted project](#an-adopted-project) says, so that run merges the base three-way. `--from` works on that one run only. Each later run, until every waiting base merge is recorded with `--resolved`, shows the `no merge base` line and two-way diffs. That is expected, and every file still waiting stays in the merge plan.
 
 A section titled "Config patches that moved" is not a file. Reconcile the change by hand. The module's lock stays at the old version, and `--resolved` does not apply to it.
 

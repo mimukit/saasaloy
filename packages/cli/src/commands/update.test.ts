@@ -1365,6 +1365,53 @@ describe("runUpdate — the base template (#120)", { timeout: 30_000 }, () => {
         expect(out).toContain("**theirs → mine**");
       }
     );
+
+    // `--from` is refused on every later run. A lock that named the adopting release as
+    // the merge base would give the next run a base equal to theirs for `AGENTS.md`, which
+    // the template changed only before that release, and the waiting merge would leave
+    // the plan: `--resolved` then refuses the path and a plain run reports up to date.
+    it(
+      "keeps a file merged against `--from` in the next run's merge plan",
+      { timeout: 60_000 },
+      async () => {
+        await adoptedWithEdit();
+        // The adopting release: today's template with one other file older, so its hash
+        // is not the running one and `AGENTS.md` did not change after it.
+        const adopting = join(snapshots, "0.7.0");
+        await cp(templateDir, adopting, { recursive: true });
+        await writeFile(
+          join(adopting, "prettier.config.js"),
+          "// an older config\n",
+          "utf-8"
+        );
+        const lock = await lockOnDisk();
+        lock.base = {
+          ...baseRecord("0.7.0", await templateHash(adopting)),
+          adoptedAt: "0.7.0",
+        };
+        await saveLock(project, lock);
+
+        try {
+          const first = await runBoth(["--from", "0.5.0", "--yes"]);
+          expect(first.code).toBe(EXIT_WORK_PENDING);
+          expect(first.out).toContain("#### `AGENTS.md`");
+          expect((await lockOnDisk()).base?.templateVersion).toBe("0.5.0");
+
+          const dry = await runBoth(["--dry-run"]);
+          expect(dry.out).toContain("#### `AGENTS.md`");
+
+          const resolved = await runBoth(["--resolved", "AGENTS.md", "--yes"]);
+          // Exit 3 here is the pending base update note, not a merge.
+          expect(resolved.err).toContain("record  AGENTS.md");
+          expect(resolved.err).toContain("0 needing merge");
+          await expect(
+            readFile(join(project, "AGENTS.md"), "utf-8")
+          ).resolves.toBe("old agent rules, plus mine\n");
+        } finally {
+          await rm(adopting, { recursive: true, force: true });
+        }
+      }
+    );
   });
 
   // #312 Phase 4, ADR 0059: a deleted base file is offered once, kept deleted once the

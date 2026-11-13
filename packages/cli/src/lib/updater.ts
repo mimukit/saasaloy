@@ -1597,6 +1597,11 @@ async function stillMatches(file: PlannedUpdateFile): Promise<boolean> {
  * module, `from` and last hash, gains `deleted: true`, and no file is written. That is
  * the `deleted` verdict settled, and a merge that ended by deleting the file alike:
  * untracking it would make the next run create it again. Returns whether it tombstoned.
+ *
+ * The tombstone keeps `adopted` and `mergedWith`. Either one says the recorded hash is of
+ * the project's own bytes, not of a file the CLI wrote. Without them, a file put back by
+ * hand with those bytes would read as untouched, and the next upstream change would
+ * overwrite the project's edits.
  */
 async function recordResolved(
   manifest: Manifest,
@@ -1615,6 +1620,10 @@ async function recordResolved(
       module: entry.module,
       target: file.target,
       ...(entry.when === undefined ? {} : { when: entry.when }),
+      ...(entry.adopted ? { adopted: true } : {}),
+      ...(entry.mergedWith === undefined
+        ? {}
+        : { mergedWith: entry.mergedWith }),
     });
     return true;
   }

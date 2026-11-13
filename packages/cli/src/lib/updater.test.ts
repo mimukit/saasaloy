@@ -1862,6 +1862,52 @@ describe("tombstones — a file kept deleted (#312, ADR 0059)", () => {
     await executeUpdatePlan(plan, { root, ...state });
     expect(state.manifest.managed[TARGET]?.deleted).toBeUndefined();
   });
+
+  // After a recorded merge the manifest hash is of the owner's own bytes, and `mergedWith`
+  // is what says so. A tombstone that dropped it would let the file, put back by hand with
+  // those bytes, read as untouched, and the next upstream change would overwrite it.
+  it("keeps mergedWith on the tombstone, so a merged file put back by hand is not overwritten", async () => {
+    const state = await deletedFile(false);
+    const entry = state.manifest.managed[TARGET]!;
+    entry.hash = hashContent("mine\n");
+    entry.mergedWith = hashContent("v1\n");
+    const plan = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v2\n"))],
+    });
+    markResolved(plan, new Set([TARGET]));
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]).toMatchObject({
+      deleted: true,
+      hash: hashContent("mine\n"),
+      mergedWith: hashContent("v1\n"),
+    });
+
+    await writeFile(join(root, ...TARGET.split("/")), "mine\n", "utf-8");
+    const again = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v3\n"))],
+    });
+    expect(again.modules[0]?.files[0]).toMatchObject({
+      action: "drift",
+      reappeared: true,
+    });
+  });
+
+  it("keeps adopted on the tombstone", async () => {
+    const state = await deletedFile(false);
+    state.manifest.managed[TARGET]!.adopted = true;
+    const plan = await build({
+      ...state,
+      inputs: [input(await emailRevisions("v1\n", "v2\n"))],
+    });
+    markResolved(plan, new Set([TARGET]));
+    await executeUpdatePlan(plan, { root, ...state });
+    expect(state.manifest.managed[TARGET]).toMatchObject({
+      adopted: true,
+      deleted: true,
+    });
+  });
 });
 
 describe("add and update agree (#98)", () => {

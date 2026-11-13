@@ -282,10 +282,11 @@ const ACTION_HEADING: Record<string, string> = {
 };
 
 function renderFile(file: PlannedUpdateFile): string[] {
+  const origin = file.module === BASE_MODULE ? "template" : "module";
   const out: string[] = [
     `#### \`${file.target}\``,
     "",
-    `Source in the ${file.module === BASE_MODULE ? "template" : "module"}: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`,
+    `Source in the ${origin}: \`${file.from}\` — ${ACTION_HEADING[file.action] ?? file.action}.`,
     "",
   ];
 
@@ -314,7 +315,7 @@ function renderFile(file: PlannedUpdateFile): string[] {
   } else if (file.merged) {
     out.push(
       "This file was merged before (`saasaloy update --resolved`), so it holds edits Saasaloy " +
-        "did not write. The module moved again since that merge, and the file was left alone.",
+        `did not write. The ${origin} moved again since that merge, and the file was left alone.`,
       ""
     );
   } else if (file.adopted) {
@@ -347,7 +348,7 @@ function renderFile(file: PlannedUpdateFile): string[] {
     );
   } else {
     out.push(
-      "**base → theirs** (what the module changed):",
+      `**base → theirs** (what the ${origin} changed):`,
       "",
       ...fenced(toDiff(base, theirs, file.target), "diff"),
       "**base → mine** (what you changed):",
