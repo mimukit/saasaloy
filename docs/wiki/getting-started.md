@@ -5,8 +5,8 @@ on disk, and its landing page running at `http://localhost:3000`.
 
 ## Before you begin
 
-- **Node 24.13.0 or newer.** The root `package.json`, `packages/cli`, the base template and
-  `.nvmrc` all say 24.13.0, and `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node
+- **Node 24.15.0 or newer.** The root `package.json`, `packages/cli`, the base template and
+  `.nvmrc` all say 24.15.0, and `pnpm-workspace.yaml` sets `engineStrict: true`, so an older Node
   fails the install rather than breaking later. `nvm use` picks the floor up from `.nvmrc`, which
   is also the version CI runs.
 - **pnpm 11 or newer.** The repo and the scaffolded project both pin `pnpm@12.3.4`.
