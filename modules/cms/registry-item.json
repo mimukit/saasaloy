@@ -1,0 +1,363 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "cms",
+  "type": "saasaloy:feature",
+  "description": "An in-house CMS: code-defined collections, a Tiptap editor in apps/admin, drafts, revisions and redirects, and a blog collection.",
+  "stage": "scale",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.7.0"
+  },
+  "dependsOn": [
+    "api",
+    "database",
+    "validators",
+    "auth",
+    "admin",
+    "file-uploads"
+  ],
+  "dependencies": [],
+  "removeWarnings": [
+    "The deployed cms_entries, cms_revisions and cms_redirects tables survive this removal, and so does every post, draft, revision and redirect in them. Run db:generate and review the resulting drop migration before you apply it.",
+    "The images uploaded through the CMS stay as file-uploads rows in storage_objects, with their objects in the bucket. Delete them from the Files screen, or keep them if file-uploads stays installed."
+  ],
+  "patches": [
+    {
+      "file": "packages/cms/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "cms",
+      "arrayProp": "collections",
+      "call": "blogCollection",
+      "import": {
+        "name": "blogCollection",
+        "from": "./collections/blog"
+      }
+    },
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "cmsConfig",
+      "import": {
+        "name": "cmsConfig",
+        "from": "./sections/cms"
+      }
+    },
+    {
+      "file": "apps/api/src/index.ts",
+      "kind": "chained-route",
+      "exportName": "default",
+      "path": "/cms",
+      "call": "cms",
+      "import": {
+        "name": "cms",
+        "from": "./routes/cms"
+      }
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/cms",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/admin/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/cms",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/cms",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "assets.run_worker_first",
+      "entry": "/blog"
+    },
+    {
+      "file": "apps/web/wrangler.jsonc",
+      "kind": "wrangler-binding",
+      "bindingType": "assets.run_worker_first",
+      "entry": "/blog/*"
+    },
+    {
+      "file": "packages/ui/src/blocks/navbar.tsx",
+      "kind": "const-array",
+      "constName": "pageLinks",
+      "key": "href",
+      "entry": {
+        "label": "Blog",
+        "href": "/blog"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Content",
+      "entry": {
+        "to": "/cms/blog",
+        "label": "Blog"
+      },
+      "icon": {
+        "name": "FileTextIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "packages/cms/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "wrangler",
+      "range": "4.145.0",
+      "when": {
+        "installed": ["database-d1"]
+      }
+    },
+    {
+      "file": "packages/cms/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@cloudflare/workers-types",
+      "range": "5.20261001.1",
+      "when": {
+        "installed": ["database-d1"]
+      }
+    },
+    {
+      "file": "packages/cms/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "postgres",
+      "range": "3.4.9",
+      "when": {
+        "installed": ["database-postgres"]
+      }
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "cms:rerender",
+      "value": "pnpm --filter @repo/cms cms:rerender"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/api/routes/cms.ts",
+      "target": "@api/routes/cms.ts"
+    },
+    {
+      "path": "files/api/routes/cms.vitest.ts",
+      "target": "@api/routes/cms.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/config/cms.ts",
+      "target": "@config/sections/cms.ts"
+    },
+    {
+      "path": "files/db/schema/cms.sqlite.ts",
+      "target": "@db/schema/cms.ts",
+      "onlyWith": "database-d1"
+    },
+    {
+      "path": "files/db/schema/cms.pg.ts",
+      "target": "@db/schema/cms.ts",
+      "onlyWith": "database-postgres"
+    },
+    {
+      "path": "files/db/repositories/cms.ts",
+      "target": "@db/repositories/cms.ts"
+    },
+    {
+      "path": "files/db/repositories/cms-rules.ts",
+      "target": "@db/repositories/cms-rules.ts"
+    },
+    {
+      "path": "files/db/seed/cms-entries.ts",
+      "target": "@db/seed/slices/cms-entries.ts"
+    },
+    {
+      "path": "files/db/seed/cms-revisions.ts",
+      "target": "@db/seed/slices/cms-revisions.ts"
+    },
+    {
+      "path": "files/db/seed/cms-redirects.ts",
+      "target": "@db/seed/slices/cms-redirects.ts"
+    },
+    {
+      "path": "files/validators/cms.ts",
+      "target": "@validators/cms.ts"
+    },
+    {
+      "path": "files/admin/lib/cms-api.ts",
+      "target": "@admin/lib/cms-api.ts"
+    },
+    {
+      "path": "files/admin/lib/cms-format.ts",
+      "target": "@admin/lib/cms-format.ts"
+    },
+    {
+      "path": "files/admin/lib/cms-now.ts",
+      "target": "@admin/lib/cms-now.ts"
+    },
+    {
+      "path": "files/admin/lib/cms-pick-file.ts",
+      "target": "@admin/lib/cms-pick-file.ts"
+    },
+    {
+      "path": "files/admin/components/cms/editor-toolbar.tsx",
+      "target": "@admin/components/cms/editor-toolbar.tsx"
+    },
+    {
+      "path": "files/admin/components/cms/entry-editor.tsx",
+      "target": "@admin/components/cms/entry-editor.tsx"
+    },
+    {
+      "path": "files/admin/components/cms/media-picker.tsx",
+      "target": "@admin/components/cms/media-picker.tsx"
+    },
+    {
+      "path": "files/admin/components/cms/revisions-sheet.tsx",
+      "target": "@admin/components/cms/revisions-sheet.tsx"
+    },
+    {
+      "path": "files/admin/components/cms/status-pill.tsx",
+      "target": "@admin/components/cms/status-pill.tsx"
+    },
+    {
+      "path": "files/admin/routes/cms/$collection/index.tsx",
+      "target": "@admin/routes/cms/$collection/index.tsx"
+    },
+    {
+      "path": "files/admin/routes/cms/$collection/new.tsx",
+      "target": "@admin/routes/cms/$collection/new.tsx"
+    },
+    {
+      "path": "files/admin/routes/cms/$collection/$entryId.tsx",
+      "target": "@admin/routes/cms/$collection/$entryId.tsx"
+    },
+    {
+      "path": "files/web/lib/cms.ts",
+      "target": "@web/lib/cms.ts"
+    },
+    {
+      "path": "files/web/pages/blog/index.astro",
+      "target": "@web/pages/blog/index.astro"
+    },
+    {
+      "path": "files/web/pages/blog/[slug].astro",
+      "target": "@web/pages/blog/[slug].astro"
+    },
+    {
+      "path": "files/web/pages/blog/rss.xml.ts",
+      "target": "@web/pages/blog/rss.xml.ts"
+    },
+    {
+      "path": "files/web/pages/blog/sitemap.xml.ts",
+      "target": "@web/pages/blog/sitemap.xml.ts"
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/cms",
+      "aliases": {
+        "@cms": "packages/cms/src"
+      },
+      "files": [
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/define.ts",
+          "target": "src/define.ts"
+        },
+        {
+          "path": "files/src/fields.ts",
+          "target": "src/fields.ts"
+        },
+        {
+          "path": "files/src/form.ts",
+          "target": "src/form.ts"
+        },
+        {
+          "path": "files/src/links.ts",
+          "target": "src/links.ts"
+        },
+        {
+          "path": "files/src/extensions.ts",
+          "target": "src/extensions.ts"
+        },
+        {
+          "path": "files/src/renderer.ts",
+          "target": "src/renderer.ts"
+        },
+        {
+          "path": "files/src/text.ts",
+          "target": "src/text.ts"
+        },
+        {
+          "path": "files/src/editor.tsx",
+          "target": "src/editor.tsx"
+        },
+        {
+          "path": "files/src/cache.ts",
+          "target": "src/cache.ts"
+        },
+        {
+          "path": "files/src/feeds.ts",
+          "target": "src/feeds.ts"
+        },
+        {
+          "path": "files/src/public-page.ts",
+          "target": "src/public-page.ts"
+        },
+        {
+          "path": "files/src/client.ts",
+          "target": "src/client.ts"
+        },
+        {
+          "path": "files/src/collections/blog.ts",
+          "target": "src/collections/blog.ts"
+        },
+        {
+          "path": "files/scripts/rerender.ts",
+          "target": "scripts/rerender.ts"
+        },
+        {
+          "path": "files/scripts/open-db.d1.ts",
+          "target": "scripts/open-db.ts",
+          "onlyWith": "database-d1"
+        },
+        {
+          "path": "files/scripts/open-db.pg.ts",
+          "target": "scripts/open-db.ts",
+          "onlyWith": "database-postgres"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-cms"]
+  }
+}

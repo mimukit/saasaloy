@@ -1,0 +1,159 @@
+---
+// The blog index, installed by `saasaloy add cms`. On demand, not prerendered: a publish
+// in apps/admin shows here within the client's 60-second cache, with no deploy. The rest of
+// the site stays prerendered.
+//
+// `?page=N` pages the list, newest first, `config.cms.pageSize` to a page. A page number
+// that is not a positive whole number, or past the last page, answers the site's 404.
+import {
+  formatPostDate,
+  pagination,
+  parsePageParam,
+  postPath,
+} from "@repo/cms/client";
+import { config } from "@repo/config";
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { Navbar } from "@repo/ui/blocks/navbar";
+import { buttonVariants } from "@repo/ui/components/button";
+import { interpolate } from "@repo/ui/lib/interpolate";
+import { cn } from "@repo/ui/lib/utils";
+import { BLOG_COLLECTION, blogCopy, cmsClient } from "@web/lib/cms";
+import Layout from "../../layouts/Layout.astro";
+
+export const prerender = false;
+
+const { basePath } = config.cms;
+const page = parsePageParam(Astro.url.searchParams.get("page"));
+if (page === undefined) {
+  // An empty 404 makes Astro render src/pages/404.astro with that status.
+  return new Response(null, { status: 404 });
+}
+const list = await cmsClient().list(BLOG_COLLECTION, page);
+if (page > list.pageCount) {
+  return new Response(null, { status: 404 });
+}
+const pager = pagination({ basePath, page, pageCount: list.pageCount });
+const lead = interpolate(blogCopy.lead, { siteName });
+const title =
+  page > 1
+    ? `${blogCopy.title}, page ${page} — ${siteName}`
+    : `${blogCopy.title} — ${siteName}`;
+---
+
+<Layout
+  title={title}
+  description={lead}
+  canonicalPath={page > 1 ? `${basePath}?page=${page}` : basePath}
+>
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/rss+xml"
+    title={config.cms.rssTitle}
+    href={`${basePath}/rss.xml`}
+  />
+  <Navbar client:idle siteName={siteName} />
+  <main id="main" tabindex="-1">
+    <div class="section-container pt-32 pb-20 md:pt-40 md:pb-28">
+      <header class="max-w-2xl">
+        <h1 class="text-section-title">{blogCopy.title}</h1>
+        <p class="text-lead text-muted-foreground mt-4">{lead}</p>
+      </header>
+      {list.entries.length === 0 ? (
+        <p class="text-muted-foreground mt-12 border-t pt-8 md:mt-16">
+          {blogCopy.empty}
+        </p>
+      ) : (
+        <ol class="mt-12 border-t md:mt-16">
+          {list.entries.map((post) => (
+            <li class="border-b">
+              <a
+                href={postPath(basePath, post.slug)}
+                class="group focus-visible:ring-ring/50 grid gap-5 rounded-sm py-8 outline-none focus-visible:ring-3 md:grid-cols-[minmax(0,1fr)_16rem] md:gap-10"
+              >
+                <div class="flex min-w-0 flex-col gap-2 md:py-1">
+                  <time
+                    class="text-muted-foreground text-sm"
+                    datetime={post.publishedAt}
+                  >
+                    {formatPostDate(post.publishedAt)}
+                  </time>
+                  <h2 class="text-xl font-semibold tracking-tight wrap-anywhere group-hover:underline group-hover:underline-offset-4 md:text-2xl">
+                    {post.title}
+                  </h2>
+                  {post.excerpt && (
+                    <p class="text-muted-foreground leading-7 wrap-anywhere">
+                      {post.excerpt}
+                    </p>
+                  )}
+                </div>
+                {post.cover?.url && (
+                  <img
+                    src={post.cover.url}
+                    alt=""
+                    loading="lazy"
+                    class="bg-muted order-first aspect-[1200/630] w-full rounded-xl border object-cover md:order-none"
+                  />
+                )}
+              </a>
+            </li>
+          ))}
+        </ol>
+      )}
+      {pager && (
+        <nav
+          aria-label={blogCopy.pagerLabel}
+          class="mt-10 flex flex-wrap items-center justify-between gap-4"
+        >
+          <span class="text-muted-foreground text-sm">{pager.label}</span>
+          <div class="flex items-center gap-2">
+            {pager.newer && (
+              <a
+                href={pager.newer}
+                class={cn(buttonVariants({ variant: "outline" }))}
+              >
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="m12 19-7-7 7-7" />
+                  <path d="M19 12H5" />
+                </svg>
+                {blogCopy.newer}
+              </a>
+            )}
+            {pager.older && (
+              <a
+                href={pager.older}
+                class={cn(buttonVariants({ variant: "outline" }))}
+              >
+                {blogCopy.older}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12h14" />
+                  <path d="m12 5 7 7-7 7" />
+                </svg>
+              </a>
+            )}
+          </div>
+        </nav>
+      )}
+    </div>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>

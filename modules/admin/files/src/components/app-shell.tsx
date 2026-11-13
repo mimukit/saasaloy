@@ -1,6 +1,7 @@
 import { useQueries } from "@tanstack/react-query";
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import type { LinkProps } from "@tanstack/react-router";
+import { useState } from "react";
 import type { ReactNode } from "react";
 
 import { AttentionMenu } from "@repo/ui/blocks/shell/attention-menu";
@@ -18,6 +19,8 @@ import { navCountFromBody } from "@repo/ui/lib/shell/nav-counts";
 import { adminCommands } from "@admin/components/commands";
 import { NAV_AREAS, areaFor } from "@admin/components/nav";
 import { NAV_COUNTS } from "@admin/components/nav-counts";
+import { PageTrailContext } from "@admin/components/page-trail";
+import type { PageTrailStep } from "@admin/components/page-trail";
 import { shellExtensions } from "@admin/components/shell-extensions";
 import { useSignOut } from "@admin/components/sign-out-button";
 import { rootWrappers } from "@admin/extend/root";
@@ -70,6 +73,16 @@ const ATTENTION_WORDS = {
 } as const;
 
 /**
+ * A nav row as the attention menu reads it. NAV_AREAS is `as const`, so each group's
+ * `items` is a tuple type of its own, and a module that adds a group adds one more. This
+ * is the shape they share.
+ */
+interface NavRow {
+  readonly to: string;
+  readonly label: string;
+}
+
+/**
  * The queues the "Needs attention" menu offers: every NAV_COUNTS entry, in its order, with
  * the label of the nav row whose `to` matches. An entry with no nav row has no label to
  * show, so the menu leaves it out.
@@ -77,7 +90,7 @@ const ATTENTION_WORDS = {
 const ATTENTION_SOURCES: readonly AttentionSource[] = NAV_COUNTS.flatMap(
   ({ to }) => {
     const label = NAV_AREAS.flatMap((area) =>
-      area.groups.flatMap((group) => group.items)
+      area.groups.flatMap((group): readonly NavRow[] => group.items)
     ).find((item) => item.to === to)?.label;
     return label === undefined ? [] : [{ to, label }];
   }
@@ -145,8 +158,10 @@ function AdminCommands({ signOut }: { signOut: () => Promise<void> }) {
   const navigate = useNavigate();
   useCommands(
     adminCommands({
+      // Cast for the reason ShellNavLink casts: a nav `to` may be a concrete path of a
+      // param route ("/cms/blog"), which nav.ts's `NavTargets` has already checked.
       navigate: (to) => {
-        void navigate({ to });
+        void navigate({ to: to as LinkProps["to"] });
       },
       signOut: () => {
         void signOut();
@@ -180,6 +195,9 @@ export function AppShell({
   const counts = useNavCounts();
   const attention = attentionRows(ATTENTION_SOURCES, counts);
 
+  // The page path a record screen sets through `usePageTrail`; unset, the shell derives it.
+  const [trail, setTrail] = useState<readonly PageTrailStep[] | undefined>();
+
   const name = session.user.name || session.user.email;
 
   // The project's root wrappers go around the whole layout, so the sidebar, the header and
@@ -210,9 +228,10 @@ export function AppShell({
             emptyText={ATTENTION_WORDS.empty}
           />
         }
+        trail={trail}
       >
         <AdminCommands signOut={signOut.signOut} />
-        {children}
+        <PageTrailContext value={setTrail}>{children}</PageTrailContext>
       </ShellLayout>
     </RootWrappers>
   );
