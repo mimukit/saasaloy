@@ -1,0 +1,52 @@
+# Written by the saasaloy `ci` module. The steps never change: a module that needs CI
+# work adds a `ci:prepare:<module>` script to the root package.json, and `pnpm ci:prepare`
+# runs every one of them in order. `pnpm deploy:production` waits for this workflow to
+# pass on HEAD, because the module set `ciWorkflow: "ci.yml"` in
+# packages/tooling/src/deploy.config.ts. See .agents/skills/saasaloy-ci/SKILL.md.
+name: ci
+
+on:
+  push:
+  pull_request:
+
+# A second push to a branch makes the first run's answer worthless. Cancel it.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  gate:
+    name: gate
+    runs-on: ubuntu-latest
+    env:
+      # The database `ci:prepare:database` starts from compose.yaml, with its literal
+      # development credentials. Only the database-postgres driver reads it.
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
+    steps:
+      - uses: actions/checkout@v7
+
+      # No `version` key: the action reads `packageManager` from package.json.
+      - uses: pnpm/action-setup@v6
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      # Does nothing until a module adds a `ci:prepare:<module>` script.
+      - run: pnpm ci:prepare
+
+      - run: pnpm lint
+
+      - run: pnpm typecheck
+
+      # Passes with no test files, so a project with testing off stays green.
+      - run: pnpm test
+
+      # Runs only when the e2e module added a `ci:e2e` script.
+      - run: pnpm run --if-present ci:e2e
