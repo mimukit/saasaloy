@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "@tanstack/react-router";
 import { useState } from "react";
 
@@ -15,6 +16,7 @@ import { auth, forgetSession } from "@app/lib/auth";
  */
 export function useSignOut() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -26,6 +28,9 @@ export function useSignOut() {
       forgetSession();
       await router.invalidate();
       await router.navigate({ to: "/sign-in" });
+      // Last, when the shell and its observers are gone: drop every cached query, so the
+      // next account to sign in on this tab never sees this one's rows or counts.
+      queryClient.clear();
     } catch {
       setError(
         "Could not reach the api, so you are still signed in. Try again."

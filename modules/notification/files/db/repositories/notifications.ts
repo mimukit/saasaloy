@@ -282,8 +282,11 @@ function decodeCursor(
   }
   const at = Number(cursor.slice(0, separator));
   const id = cursor.slice(separator + 1);
-  if (!Number.isFinite(at) || id.length === 0) {
+  const createdAt = new Date(at);
+  // A finite number can still be outside the range a `Date` holds, such as `9e20`. Postgres
+  // cannot bind an invalid date, so it would answer 500 instead of the first page.
+  if (Number.isNaN(createdAt.getTime()) || id.length === 0) {
     return;
   }
-  return { createdAt: new Date(at), id };
+  return { createdAt, id };
 }

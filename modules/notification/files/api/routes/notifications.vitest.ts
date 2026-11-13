@@ -204,6 +204,41 @@ describe("cursor paging", () => {
     expect(second.nextCursor).toBeNull();
     expect(new Set(ids).size).toBe(25);
   });
+
+  it("walks rows that take the database's own `created_at`", async () => {
+    const member = await signIn("member@example.test");
+    const userId = seedId("users", "member");
+    // No `createdAt`, the way `notify` writes a row, so the column default stamps all 21.
+    // Postgres stamps one statement's rows with one time, and the cursor carries that
+    // time as a JS `Date`, in whole milliseconds. A column that stored microseconds would
+    // sit just after its own cursor, and the page boundary would lose the rest of the tie.
+    const rows = Array.from({ length: 21 }, (_, index) => ({
+      category: "product",
+      id: crypto.randomUUID(),
+      title: `Row ${index}`,
+      userId,
+    }));
+    await database.db.insert(notifications).values(rows);
+
+    const first = await page(member);
+    expect(first.notifications).toHaveLength(20);
+    const second = await page(member, first.nextCursor ?? "");
+    const ids = [...first.notifications, ...second.notifications].map(
+      (row) => row.id
+    );
+
+    expect(second.notifications).toHaveLength(5);
+    expect(new Set(ids).size).toBe(25);
+  });
+
+  it("answers the first page for a cursor it cannot read", async () => {
+    const member = await signIn("member@example.test");
+    // `9e20` is a finite number and no date: past the range a JS `Date` holds.
+    for (const cursor of ["not-a-cursor", "abc.def", "9e20.x", "1e400.x"]) {
+      const first = await page(member, cursor);
+      expect(first.notifications).toHaveLength(4);
+    }
+  });
 });
 
 describe("preferences", () => {
