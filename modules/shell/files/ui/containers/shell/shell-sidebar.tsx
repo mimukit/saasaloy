@@ -37,8 +37,8 @@ import type {
   ShellNavArea,
   ShellSignOut,
 } from "@repo/ui/containers/shell/shell-nav";
+import { navCountLabel, withLiveCounts } from "@repo/ui/lib/shell/nav-counts";
 import { useShortcutHints } from "@repo/ui/lib/shell/commands";
-import { withLiveCounts } from "@repo/ui/lib/shell/nav-counts";
 import type { LiveCounts } from "@repo/ui/lib/shell/nav-counts";
 import { sidebarHints } from "@repo/ui/lib/shell/shortcut-hints";
 
@@ -213,7 +213,9 @@ export function ShellSidebar({
                         </SidebarMenuButton>
                         {next === undefined ? (
                           item.count === undefined ? null : (
-                            <SidebarMenuBadge>{item.count}</SidebarMenuBadge>
+                            <SidebarMenuBadge>
+                              {navCountLabel(item.count)}
+                            </SidebarMenuBadge>
                           )
                         ) : (
                           <StepKeys

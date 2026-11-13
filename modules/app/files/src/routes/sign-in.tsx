@@ -1,3 +1,4 @@
+import { useQueryClient } from "@tanstack/react-query";
 import { createFileRoute, useRouter } from "@tanstack/react-router";
 
 import { SignInCard } from "@repo/ui/blocks/auth/sign-in";
@@ -21,6 +22,7 @@ export const Route = createFileRoute("/sign-in")({
 
 function SignInScreen() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const search = Route.useSearch();
 
   async function handleSignIn({
@@ -42,7 +44,10 @@ function SignInScreen() {
     }
 
     // The cookie is set, so the cached session is now wrong. Drop it and run the guard.
+    // Every cached query goes too: it may hold the rows of the account that used this tab
+    // before, and a query inside its staleTime would show them to this one with no refetch.
     forgetSession();
+    queryClient.clear();
     await router.invalidate();
 
     // Back to the page the guard interrupted, or / when there was none or it names no
