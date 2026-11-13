@@ -102,19 +102,20 @@ function usePendingHints(
   const ids = usePendingSequences();
 
   // The timer always runs and records which set of sequences it waited on. The hints show
-  // once that record matches the set still in progress, so a new set waits again and an
-  // ended one hides at once, with no state set inside the effect itself.
-  const key = ids.join("\n");
-  const [waited, setWaited] = useState("");
+  // once that record is the set still in progress, so a new set waits again and an ended
+  // one hides at once, with no state set inside the effect itself. The record is the array
+  // itself, not its joined ids: `usePendingSequences` returns a new array on every change,
+  // so a sequence restarted inside the delay cannot match the record of the one before it.
+  const [waited, setWaited] = useState<readonly string[] | null>(null);
   useEffect(() => {
     const timer = setTimeout(() => {
-      setWaited(key);
+      setWaited(ids);
     }, HINT_DELAY_MS);
     return () => {
       clearTimeout(timer);
     };
-  }, [key]);
-  const shown = key !== "" && waited === key;
+  }, [ids]);
+  const shown = ids.length > 0 && waited === ids;
 
   return useMemo(
     () => (shown ? pendingShortcuts(bound, ids, platform) : NO_PENDING),
