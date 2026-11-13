@@ -63,6 +63,10 @@
             "description": "Module-relative POSIX source path this file was copied from (e.g. `files/lib/email.ts`). `update` uses it to fetch the same file at the old and new commit SHAs. Optional — entries written before this field shipped fall back to re-deriving the target from the module descriptor."
           },
           "when": { "$ref": "#/$defs/when" },
+          "seed": {
+            "const": true,
+            "description": "The descriptor marked this file `seed` (#310, ADR 0060): it was written once and is the project's. `update` never overwrites or merges it and restores it only when it is missing. `remove` deletes it while `hash` still matches and keeps it, with a warning, once the project changed it. Absent on every other entry."
+          },
           "mergedWith": {
             "type": "string",
             "pattern": "^[a-f0-9]{64}$",

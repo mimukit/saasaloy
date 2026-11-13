@@ -7,7 +7,7 @@ import { z } from "zod";
 // route validates against it with `zValidator`, and the admin bundle gets the request body's
 // type through `hc<AppType>` from the same source.
 
-/** Body of the three `/flags` write routes: the global value, or one tenant's override. */
+/** Body of the three `/admin/flags` write routes: the global value, or one tenant's override. */
 export const flagValueInput = z.object({
   enabled: z.boolean(),
   // Read only on a percentage flag; the route stores `null` on a boolean one whatever

@@ -2134,3 +2134,57 @@ export default app;
     expect(manifest.patches).toStrictEqual([]);
   });
 });
+
+// A module seed file (#310, ADR 0060) is the project's once written. `remove` takes back
+// one still as it was handed over and keeps one the project changed, confirmed or not.
+describe("executeRemovePlan — module seed files", () => {
+  const SEED = "apps/admin/src/extend/payments.ts";
+
+  async function writeSeed(manifest: Manifest, content: string) {
+    await writeManaged(manifest, SEED, content, "admin");
+    manifest.managed[SEED] = { ...manifest.managed[SEED]!, seed: true };
+  }
+
+  async function removeAdmin(manifest: Manifest) {
+    const config: SaasaloyConfig = { aliases: {}, installed: ["admin"] };
+    const lock: Lockfile = emptyLock();
+    const plan = await build("admin", config, manifest, lock);
+    const result = await executeRemovePlan(plan, {
+      root,
+      config,
+      manifest,
+      lock,
+      // Even a caller that confirms the delete cannot take a changed seed file.
+      deleteDrifted: new Set([SEED]),
+    });
+    return { plan, result };
+  }
+
+  it("deletes a seed file whose hash still matches", async () => {
+    const manifest = emptyManifest();
+    await writeSeed(manifest, "export const extend = {};\n");
+
+    const { result } = await removeAdmin(manifest);
+
+    await expect(pathExists(join(root, SEED))).resolves.toBeFalsy();
+    expect(result.deleted.map((f) => f.target)).toStrictEqual([SEED]);
+    expect(manifest.managed[SEED]).toBeUndefined();
+  });
+
+  it("keeps a seed file the project changed and reports it as a seed survivor", async () => {
+    const manifest = emptyManifest();
+    await writeSeed(manifest, "export const extend = {};\n");
+    await writeFile(join(root, SEED), "export const extend = { mine: 1 };\n");
+
+    const { plan, result } = await removeAdmin(manifest);
+
+    expect(plan.files[0]).toMatchObject({ action: "drift", seed: true });
+    await expect(readFile(join(root, SEED), "utf-8")).resolves.toBe(
+      "export const extend = { mine: 1 };\n"
+    );
+    expect(result.seedSurvivors.map((f) => f.target)).toStrictEqual([SEED]);
+    expect(result.driftSurvivors).toHaveLength(0);
+    expect(result.deleted).toHaveLength(0);
+    expect(manifest.managed[SEED]).toBeUndefined();
+  });
+});

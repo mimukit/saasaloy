@@ -100,8 +100,8 @@ export interface FlagsClient<K extends string> {
   /** Throw `KillSwitchError` unless `kill.<name>` resolves true. */
   assertEnabled(name: KillSwitchName<K>, context?: FlagContext): Promise<void>;
   /**
-   * Re-read a scope from the database and write its document. Called by the `/flags` write
-   * routes, never by a read.
+   * Re-read a scope from the database and write its document. Called by the `/admin/flags`
+   * write routes after their change commits, never by a read.
    */
   publish(tenantId?: string): Promise<FlagDocument>;
 }

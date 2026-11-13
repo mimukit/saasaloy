@@ -436,6 +436,8 @@ export interface PlannedUpdateFile {
   patchedBy?: string[];
   /** The new revision's `when` for this entry, recorded in the manifest on write (#242). */
   when?: When;
+  /** The new revision marks this entry a module seed file (#310): see {@link classifySeed}. */
+  seed?: true;
   /**
    * The manifest entry is a tombstone (#312). Set on a `kept-deleted` or `skip` file that
    * is still absent, and on a `restore` one. A tombstoned file found back on disk is not
@@ -1050,16 +1052,21 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     // as any tracked file does, and the apply drops the flag.
     const tombstoned = owned?.deleted === true && mine === undefined;
     const reappeared = owned?.deleted === true && mine !== undefined;
-    const action = classifyUpdate({
-      adopted: owned?.adopted ?? false,
-      base: baseContent,
-      managedHash: owned?.hash,
-      mergedWith: owned?.mergedWith,
-      mine: compared,
-      projectOwned,
-      theirs: theirsContent,
-      tombstoned,
-    });
+    // A seed file follows its own rule (#310), except a tombstoned one: the owner said to
+    // keep it deleted (#312), and that decision wins over putting a missing seed back.
+    const action =
+      ref.seed && !tombstoned
+        ? classifySeed(mine, owned?.hash, theirsContent)
+        : classifyUpdate({
+            adopted: owned?.adopted ?? false,
+            base: baseContent,
+            managedHash: owned?.hash,
+            mergedWith: owned?.mergedWith,
+            mine: compared,
+            projectOwned,
+            theirs: theirsContent,
+            tombstoned,
+          });
     const patchedBy = patchersOf(manifest, ref.target);
     files.push({
       module: name,
@@ -1078,6 +1085,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       newHash: hashContent(theirsContent),
       ...(patchedBy.length > 0 ? { patchedBy } : {}),
       ...(ref.when === undefined ? {} : { when: ref.when }),
+      ...(ref.seed ? { seed: true } : {}),
     });
   }
 
@@ -1378,6 +1386,27 @@ function classifyUpdate(args: ClassifyArgs): UpdateFileAction {
     return "drift";
   }
   return hashContent(mine) === managedHash ? "overwrite" : "drift";
+}
+
+/**
+ * How `update` treats a module seed file (#310, ADR 0060). The module hands the file over
+ * on its first write, so a tracked seed on disk is skipped whatever its bytes or the new
+ * revision hold: no overwrite, no merge. A tracked seed that is missing is put back,
+ * even when the module did not change it, because a managed file imports from it. An
+ * untracked file in the way is still a `conflict`, the same as for any new file.
+ */
+function classifySeed(
+  mine: string | undefined,
+  managedHash: string | undefined,
+  theirs: string
+): UpdateFileAction {
+  if (mine === undefined) {
+    return managedHash === undefined ? "create" : "restore";
+  }
+  if (managedHash === undefined) {
+    return mine === theirs ? "unchanged" : "conflict";
+  }
+  return "skip";
 }
 
 /**
@@ -1728,6 +1757,14 @@ export async function executeUpdatePlan(
         }
         continue;
       }
+      if (file.seed && file.action === "skip") {
+        // A file the new revision first marks `seed` keeps its bytes and its hash, and
+        // gains the flag, so `remove` reads it as a seed from here on.
+        if (entry?.module === file.module) {
+          entry.seed = true;
+        }
+        continue;
+      }
       if (!WRITABLE.has(file.action) || file.theirs === undefined) {
         continue;
       }
@@ -1752,6 +1789,7 @@ export async function executeUpdatePlan(
         module: file.module,
         target: file.target,
         ...(file.when === undefined ? {} : { when: file.when }),
+        ...(file.seed ? { seed: true } : {}),
       });
     }
 

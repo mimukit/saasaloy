@@ -36,6 +36,13 @@ export interface ManagedEntry {
    */
   when?: When;
   /**
+   * The descriptor marked this file `seed` (#310, ADR 0060): written once, then the
+   * project's. `update` never overwrites or merges it and restores it only when it is
+   * missing; `remove` deletes it only while `hash` still matches. `remove` runs offline
+   * with no descriptor, which is why the flag is recorded rather than re-read.
+   */
+  seed?: true;
+  /**
    * sha256 of the module's version a merge took in. Set by `saasaloy update --resolved`
    * (#223), whose `hash` is then of the merged bytes, a person's edits included. While the
    * module still ships that version there is nothing to merge; once it moves, the file
@@ -138,6 +145,8 @@ export interface ManagedFileRecord {
   /** See `ManagedEntry.mergedWith`. Left out on every write the tool makes itself. */
   mergedWith?: string;
   module: string;
+  /** See `ManagedEntry.seed`. Leaving it out drops the field. */
+  seed?: boolean;
   /** Project-relative POSIX path of the file on disk. */
   target: string;
   /** The descriptor `when` the file was written under; omitted for an unconditional one. */
@@ -159,6 +168,7 @@ export function recordManagedFile(
     ...(record.adopted ? { adopted: true } : {}),
     ...(record.from === undefined ? {} : { from: record.from }),
     ...(record.when === undefined ? {} : { when: record.when }),
+    ...(record.seed ? { seed: true } : {}),
     ...(record.mergedWith === undefined
       ? {}
       : { mergedWith: record.mergedWith }),

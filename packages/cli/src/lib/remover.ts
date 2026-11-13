@@ -57,6 +57,12 @@ export interface PlannedRemoveFile {
    * installed: its recorded `when.installed` names it (#242). The summary names these.
    */
   gatedOn?: string;
+  /**
+   * The manifest records this file as a module seed (#310, ADR 0060). A `drift` seed is
+   * the project's own change to a file it was handed, so it is kept without a prompt and
+   * the command warns with its path. An unchanged one is deleted like any other file.
+   */
+  seed?: true;
   /** Project-relative POSIX path (manifest key). */
   target: string;
   /** Absolute path on disk. */
@@ -184,6 +190,7 @@ export async function buildRemovePlan(
       action: classifyTrackedFile(oldContent, entry.hash),
       oldContent,
       ...(gated ? { gatedOn: name } : {}),
+      ...(entry.seed ? { seed: true } : {}),
     });
   }
 
@@ -351,7 +358,8 @@ export interface ExecuteRemoveArgs {
    * Manifest targets classified `drift` that the caller confirmed to actually
    * delete (an interactive per-file `confirm`). Anything drift-classified but not
    * in this set survives on disk, untracked — the non-interactive `--yes` default
-   * (drift never gets silently clobbered).
+   * (drift never gets silently clobbered). A changed seed file survives even when
+   * named here: the project changed a file it was handed (#310).
    */
   deleteDrifted?: ReadonlySet<string>;
 }
@@ -361,6 +369,11 @@ export interface RemoveResult {
   deleted: PlannedRemoveFile[];
   /** Drift files left on disk, untracked — the designed survivor outcome. */
   driftSurvivors: PlannedRemoveFile[];
+  /**
+   * Seed files the project changed, left on disk and untracked (#310). Kept apart from
+   * `driftSurvivors` so the command can say these were never offered for deletion.
+   */
+  seedSurvivors: PlannedRemoveFile[];
   /** Files already gone from disk — just untracked, nothing to delete. */
   missingUntracked: PlannedRemoveFile[];
   /** `.claude/skills` symlinks actually removed. */
@@ -476,14 +489,20 @@ export async function executeRemovePlan(
 
   const deleted: PlannedRemoveFile[] = [];
   const driftSurvivors: PlannedRemoveFile[] = [];
+  const seedSurvivors: PlannedRemoveFile[] = [];
   const missingUntracked: PlannedRemoveFile[] = [];
+  // A seed file the project changed is never deleted, confirmed or not (#310).
+  const survivors = (file: PlannedRemoveFile): PlannedRemoveFile[] =>
+    file.seed ? seedSurvivors : driftSurvivors;
 
   for (const file of plan.files) {
     // Hash-clean, or drift the caller explicitly confirmed deleting — both are
     // "delete this exact content", so both have to prove the content is still that.
     const wantsDelete =
       file.action === "delete" ||
-      (file.action === "drift" && !!deleteDrifted?.has(file.target));
+      (file.action === "drift" &&
+        !file.seed &&
+        !!deleteDrifted?.has(file.target));
     if (wantsDelete) {
       const state = await recheckFile(file);
       if (state === "unchanged") {
@@ -494,10 +513,10 @@ export async function executeRemovePlan(
       } else {
         // Edited between planning and now — the confirm the user gave was for
         // different bytes, so it doesn't authorize deleting these.
-        driftSurvivors.push(file);
+        survivors(file).push(file);
       }
     } else if (file.action === "drift") {
-      driftSurvivors.push(file);
+      survivors(file).push(file);
     } else {
       missingUntracked.push(file);
     }
@@ -581,6 +600,7 @@ export async function executeRemovePlan(
   return {
     deleted,
     driftSurvivors,
+    seedSurvivors,
     missingUntracked,
     linksRemoved,
     linkConflicts,
