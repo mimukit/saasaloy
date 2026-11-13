@@ -1,6 +1,6 @@
 ---
 name: create-module
-description: Scaffold a new Saasaloy module (registry-item.json + files + Claude skill) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/billing/teams module", "create a new api/database/auth capability", "author a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
+description: Scaffold a new Saasaloy module (registry-item.json + files + Claude skill) under modules/, following the repo's two-tier, convention-based design. Use whenever adding a capability or feature to the Saasaloy registry — e.g. "add a waitlist/subscription/teams module", "create a new api/database/auth capability", "author a module descriptor", or any work under modules/ — even if the user doesn't say the word "module".
 ---
 
 # create-module
@@ -69,7 +69,7 @@ authoring first; it drives everything else.
   on a vendor SDK (`database` → `drizzle-orm`, `auth` → `better-auth`) **encapsulates it**: the
   scaffolded workspace owns the npm dep and exports project-facing utilities; no other workspace
   imports the vendor package directly (ADR 0020).
-- **Feature module** — `waitlist`, `billing`, `teams`, … Extends existing capabilities *purely
+- **Feature module** — `waitlist`, `subscription`, `teams`, … Extends existing capabilities *purely
   by dropping files into their conventions*, and declares `dependsOn` for the capabilities it
   needs. A feature rarely needs `patches` at all.
 
@@ -88,13 +88,13 @@ Run the CLI's own scaffold from the repo root. It takes the tier you settled in 
 there is nothing to type twice:
 
 ```sh
-saasaloy new module billing --type saasaloy:feature --depends-on api,database
+saasaloy new module subscription --type saasaloy:feature --depends-on api,database
 ```
 
-It writes `modules/billing/registry-item.json` (schema-valid, `agent.skills[]` already
+It writes `modules/subscription/registry-item.json` (schema-valid, `agent.skills[]` already
 pointing at the skill folder, and a `TODO` `description` with `stage: "mvp"` and `needs: []`
-for you to correct), an empty `modules/billing/files/`, and a
-`modules/billing/skills/saasaloy-billing/SKILL.md` stub with the frontmatter filled in and
+for you to correct), an empty `modules/subscription/files/`, and a
+`modules/subscription/skills/saasaloy-subscription/SKILL.md` stub with the frontmatter filled in and
 `TODO`s for the prose. Then it runs the `doctor` checks over what it wrote, so a fresh
 module starts green. Drop `--type` / `--depends-on` to be prompted for them instead, and
 run it in this repo — it refuses inside a generated project, where a `modules/` folder
@@ -142,7 +142,7 @@ Field notes:
 - **`name`** — matches the directory (`modules/<name>/`).
 - **`type`** — `saasaloy:capability` or `saasaloy:feature`.
 - **`description`** — one line on what the module gives a project. `saasaloy list --json` prints it, and an agent picks modules from it, so name the thing the user gets, not the files. The schema keeps it optional, so a project still reads an older descriptor, but `saasaloy doctor` in registry mode fails a descriptor without it.
-- **`stage`** — the product stage that usually earns the module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (billing and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage. The scaffold writes `mvp`; change it.
+- **`stage`** — the product stage that usually earns the module: `validate` (landing page and waitlist), `mvp` (sign-in, admin, email), `teams` (organizations, tenancy, roles), `money` (subscription and payments) or `scale` (jobs, caching, files, rate limits, API access). A supporting module the README's stage table does not name takes the earliest stage of the modules that need it, and a provider or a driver takes its capability's stage. The scaffold writes `mvp`; change it.
 - **`needs`** — what the module needs outside the repo before it works in production: `cloudflare-paid` (a paid Workers plan), `stripe` (a Stripe account), `domain` (a domain onboarded by hand) or `vendor-account` (an account with any other vendor). Write `[]` when the free tier and no account will do, which is what the scaffold writes.
 - **`requires`** — an optional `{ "saasaloy": "<semver range>" }` naming the CLI versions
   this descriptor works on. A consumer whose CLI falls outside the range gets one fatal,
@@ -191,7 +191,7 @@ Field notes:
   a **capability** owns the `package.json` it scaffolds, so it declares its deps *there* and leaves
   the descriptor buckets **empty**; a **feature** owns no `package.json`, so it lists npm deps here
   and the applier merges them into the target workspace's `package.json`. Never declare the same dep
-  in both places. A feature extending a capability's vendor SDK (e.g. `billing` adding
+  in both places. A feature extending a capability's vendor SDK (e.g. `subscription` adding
   `@better-auth/stripe`) targets the capability's workspace, so the plugin dep merges into *that*
   workspace's `package.json` — vendor packages stay inside the capability that owns them (ADR 0020).
 - **`files[]`** — each entry maps a source `path` (under this module's `files/`) to a `target`
@@ -402,7 +402,7 @@ exactly what was copied.
 `skills/saasaloy-api/` with `name: saasaloy-api`). The prefix namespaces every module skill so it
 lands in the consumer's `.claude/skills/` without colliding with a user's own installed skills — a
 generated project may have dozens of module skills alongside the user's, and a bare `api` or
-`billing` is exactly the kind of name a user might already have. Keep the folder name and the
+`subscription` is exactly the kind of name a user might already have. Keep the folder name and the
 frontmatter `name` identical and prefixed. (See ADR 0014.)
 
 **A UI-bearing module's skill carries a `## Wire-up` section, and it is required.** Any module with

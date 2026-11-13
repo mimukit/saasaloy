@@ -83,7 +83,7 @@ A deploy in an interactive terminal offers to write the new ids back into `wrang
 Two kinds of setup stay manual:
 
 - **`email-cloudflare`** needs a Workers paid plan and a domain onboarded in the dashboard. An unverified sender fails with `sender_not_verified`.
-- **`billing-stripe`** needs a webhook endpoint registered at Stripe, pointing at `https://<your-api>/auth/stripe/webhook`, and its signing secret in `STRIPE_WEBHOOK_SECRET`.
+- **`subscription-stripe`** needs a webhook endpoint registered at Stripe, pointing at `https://<your-api>/auth/stripe/webhook`, and its signing secret in `STRIPE_WEBHOOK_SECRET`.
 
 ## Environment variables and secrets
 
@@ -103,8 +103,8 @@ Two kinds of setup stay manual:
 | `storage` | `STORAGE_PROVIDER`, `STORAGE_URL_SECRET`, `STORAGE_MAX_UPLOAD_BYTES`, `STORAGE_PROXY_URL` |
 | `storage-cloudflare` | `R2_ACCOUNT_ID`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_BUCKET_NAME` |
 | `email-plunk` | `PLUNK_API_KEY`, `PLUNK_API_URL` |
-| `billing` | `BILLING_PROVIDER`, `BILLING_LOCKOUT_DAYS`, `BILLING_APP_URL` |
-| `billing-stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
+| `subscription` | `SUBSCRIPTION_PROVIDER`, `SUBSCRIPTION_LOCKOUT_DAYS`, `SUBSCRIPTION_APP_URL` |
+| `subscription-stripe` | `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET` |
 | `database-postgres` | `DATABASE_URL` |
 | `feature-flags` | `FLAGS_ISOLATE_TTL_SECONDS` |
 | `waitlist` | `PUBLIC_API_URL` |

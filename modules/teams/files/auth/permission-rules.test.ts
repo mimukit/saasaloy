@@ -65,7 +65,7 @@ describe("can, for a member", () => {
     // An unknown resource holds no actions, so it refuses exactly like an empty one.
     // `requirePermission` cannot reach this arm — `Permissions` from `access.ts` types the
     // demand — but a stored role parsed at runtime can, and so can `apps/admin`.
-    assert.equal(allows(viewer, { billing: ["read"] }), false);
+    assert.equal(allows(viewer, { subscription: ["read"] }), false);
   });
 
   it("refuses every action of a resource resolved from an empty stored role", () => {
@@ -103,7 +103,7 @@ describe("can, for a superadmin", () => {
     // No `statements` field exists on this kind, so an implementation that reached for
     // one would throw here rather than quietly answering false.
     assert.equal(allows(superadmin, { project: ["delete"] }), true);
-    assert.equal(allows(superadmin, { billing: ["refund"] }), true);
+    assert.equal(allows(superadmin, { subscription: ["refund"] }), true);
   });
 
   it("allows an empty demand, unlike every other kind", () => {
