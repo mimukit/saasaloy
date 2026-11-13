@@ -293,6 +293,10 @@
       "target": "@ui/lib/shell/shell-keys.ts"
     },
     {
+      "path": "files/ui/lib/shell/shortcut-hints.ts",
+      "target": "@ui/lib/shell/shortcut-hints.ts"
+    },
+    {
       "path": "files/ui/lib/shell/segmented-control.ts",
       "target": "@ui/lib/shell/segmented-control.ts"
     },

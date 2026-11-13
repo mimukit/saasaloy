@@ -152,3 +152,40 @@ export function useCommands(
 export function useCommandProvider(): boolean {
   return useContext(CommandRegistryContext) !== null;
 }
+
+/** One command that continues the key sequence in progress, as a hint shows it. */
+export interface PendingShortcut {
+  /** The command's whole shortcut, as declared: `"G R"`. */
+  shortcut: string;
+  title: string;
+  /** The keycaps of the steps still to press, one array per step: `[["R"]]`. */
+  rest: readonly (readonly string[])[];
+}
+
+/**
+ * What the `command` module tells the shell chrome about its keys. The sidebar reads it to
+ * put a row's shortcut in its tooltip, to show the next key while a sequence such as
+ * `G` then a letter is in progress, and to offer the shortcut sheet in the account menu.
+ * With no module mounted, `useShortcutHints` returns `null` and the chrome shows no keys.
+ */
+export interface ShortcutHints {
+  /** The keycaps of `shortcut` on this platform, one array per step. */
+  keycaps: (shortcut: string) => readonly (readonly string[])[];
+  /**
+   * The commands that continue the sequence in progress. It fills only after a short
+   * pause, so a person who types `G R` without stopping sees no hint, and it empties when
+   * the sequence completes, fails, or times out.
+   */
+  pending: readonly PendingShortcut[];
+  /** The keycaps of the key that opens the shortcut sheet. */
+  sheetKeycaps: readonly (readonly string[])[];
+  openShortcuts: () => void;
+}
+
+export const ShortcutHintsContext: Context<ShortcutHints | null> =
+  createContext<ShortcutHints | null>(null);
+
+/** The `command` module's key hints, or `null` when it is not mounted. */
+export function useShortcutHints(): ShortcutHints | null {
+  return useContext(ShortcutHintsContext);
+}

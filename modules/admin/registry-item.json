@@ -123,6 +123,10 @@
           "target": "index.html"
         },
         {
+          "path": "files/public/_headers",
+          "target": "public/_headers"
+        },
+        {
           "path": "files/DESIGN.md",
           "target": "DESIGN.md"
         },

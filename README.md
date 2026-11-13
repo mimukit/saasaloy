@@ -42,7 +42,7 @@ The full picture of how the CLI, the registry and a generated project fit togeth
 
 ## Quick start
 
-Requires Node 24.13.0+ and pnpm 11+. No Cloudflare account is needed until you deploy.
+Requires Node 24.15.0+ and pnpm 11+. No Cloudflare account is needed until you deploy.
 
 ```bash
 npm install -g saasaloy

@@ -1,0 +1,9 @@
+# Every crawler may read every page: search engines, AI search and answer engines,
+# user-triggered assistants, and training crawlers alike. To opt out of AI training
+# only, add a group such as "User-agent: GPTBot" / "Disallow: /" for GPTBot, ClaudeBot
+# and CCBot. That does not remove the site from AI search answers.
+User-agent: *
+Allow: /
+
+# Change this host when you change `site` in astro.config.mjs. Both name the live origin.
+Sitemap: https://example.com/sitemap.xml

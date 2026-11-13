@@ -4,12 +4,16 @@
 // linting needs the whole project graph, which defeats the point of scoping to
 // staged files. `pnpm lint` — in CI, or by hand — is what catches those.
 //
+// `--no-error-on-unmatched-pattern` lets a commit of only ignored files through, such
+// as a regenerated `routeTree.gen.ts`: oxlint drops it, finds nothing left to lint,
+// and would otherwise exit 1.
+//
 // Keep these globs in step with the `lint` scripts in package.json. Markdown is
 // absent on purpose: `.prettierignore` excludes it because Ultracite's Prettier
 // sets `proseWrap: "never"`.
 export default {
   "*.{js,jsx,mjs,cjs,ts,tsx,astro}": [
-    "oxlint -c oxlint.config.mjs --fix --deny-warnings",
+    "oxlint -c oxlint.config.mjs --fix --deny-warnings --no-error-on-unmatched-pattern",
     "prettier --write",
   ],
   "*.css": ["stylelint --fix --max-warnings 0", "prettier --write"],

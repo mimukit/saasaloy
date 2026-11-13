@@ -1,20 +1,26 @@
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { basename, dirname, join } from "node:path";
+import { createServer } from "node:http";
+import type { AddressInfo } from "node:net";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { tarGz } from "../../test/support/tar.js";
 import {
   adoptBase,
   BASE_DECLARATION,
   BASE_MODULE,
-  BASE_NO_MERGE_BASE,
   baseEntries,
   baseAdoptedAt,
   baseRecord,
+  BASE_SNAPSHOT_ENV,
+  baseSnapshotVersion,
   baseUpdateInput,
+  fetchBaseSnapshot,
   isBaseTracked,
   isFirstUpdateAfterAdoption,
   listTemplateFiles,
   missingBaseTargets,
+  noSnapshotReason,
   compileGlob,
   ownedMatcher,
   readBaseDeclaration,
@@ -26,6 +32,7 @@ import { emptyLock, loadLock } from "./lock.js";
 import type { Lockfile } from "./lock.js";
 import { emptyManifest, loadManifest } from "./manifest.js";
 import type { Manifest } from "./manifest.js";
+import { renderMergePlan } from "./merge-plan.js";
 import { applyPatch } from "./patch/index.js";
 import { baseTemplateDir, copyTemplate, templateVars } from "./scaffold.js";
 import {
@@ -320,8 +327,12 @@ describe(adoptBase, () => {
     });
   });
 
-  it("records a template file missing from disk at its rendered hash, so the next update restores it", async () => {
+  // #312: a recorded absent file would read as deleted on purpose. Unrecorded, a later
+  // base update reads it as new and creates it.
+  it("names a template file missing from disk and does not record it", async () => {
     await write(template, "a.txt", "hello {{PROJECT_NAME}}\n");
+    await write(template, "b.txt", "b\n");
+    await write(root, "b.txt", "b\n");
     const manifest = emptyManifest();
 
     const result = await adoptBase({
@@ -335,9 +346,8 @@ describe(adoptBase, () => {
     });
 
     expect(result.absent).toStrictEqual(["a.txt"]);
-    expect(manifest.managed["a.txt"]?.hash).toBe(
-      hashContent(`hello ${basename(root)}\n`)
-    );
+    expect(manifest.managed["a.txt"]).toBeUndefined();
+    expect(Object.keys(manifest.managed)).toStrictEqual(["b.txt"]);
   });
 
   it("does not record a file on disk the template no longer ships", async () => {
@@ -522,6 +532,21 @@ describe(missingBaseTargets, () => {
     ).resolves.toStrictEqual(["gone.txt"]);
   });
 
+  // #312: a tombstone was kept deleted on purpose, so it leaves the base current.
+  it("skips a tombstoned target", async () => {
+    await declare([]);
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, [
+      { target: "gone.txt", from: "gone.txt", hash: hashContent("gone\n") },
+      { target: "kept.txt", from: "kept.txt", hash: hashContent("kept\n") },
+    ]);
+    manifest.managed["kept.txt"]!.deleted = true;
+
+    await expect(
+      missingBaseTargets(root, manifest, template)
+    ).resolves.toStrictEqual(["gone.txt"]);
+  });
+
   it("ignores a missing seed file, which no plan would restore anyway", async () => {
     await declare(["seed.txt"]);
     const manifest = emptyManifest();
@@ -565,9 +590,8 @@ describe(compareBase, () => {
     expect(row.latest).toContain("aaaaaaa");
   });
 
-  // The bug this guards: `adoptBase` records an absent template file so "the next update
-  // restores it", but a same-CLI re-run has an unmoved template hash. Comparing the hash
-  // alone reported `current`, so the restore never ran on the version that recorded it.
+  // A same-CLI re-run has an unmoved template hash. Comparing the hash alone reported
+  // `current`, so a deleted base file was never offered (#120, #312).
   it("is outdated at an unmoved hash when a tracked file is missing from disk", () => {
     const row = compareBase({
       ...tracked("a".repeat(64)),
@@ -678,7 +702,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
     const { base, cleanup } = await planAgainst(next, state);
 
     expect(actionOf(base, "AGENTS.md")).toBe("overwrite");
-    expect(base.noMergeBase).toBe(BASE_NO_MERGE_BASE);
+    expect(base.noMergeBase).toBe(noSnapshotReason.notARelease(CLI));
     expect(base.baseRecord).toStrictEqual(
       baseRecord(CLI, await templateHash(next))
     );
@@ -853,24 +877,34 @@ describe("baseUpdateInput — classifying base files through the module engine",
     await cleanup();
   });
 
-  it("restores a tracked base file that is missing from disk", async () => {
+  // #312, ADR 0059: a tracked file the owner deleted goes to the merge plan once, even
+  // when the template did not change it, rather than coming back on its own.
+  it("offers a tracked base file missing from disk as deleted, and writes nothing", async () => {
     await write(template, "AGENTS.md", "v1\n");
     const state = await scaffold();
     await rm(join(root, "AGENTS.md"));
     const next = await bumped({ "AGENTS.md": "v1\n" });
 
-    const { base, cleanup } = await planAgainst(next, state);
+    const { plan, base, cleanup } = await planAgainst(next, state);
 
-    expect(actionOf(base, "AGENTS.md")).toBe("restore");
+    expect(actionOf(base, "AGENTS.md")).toBe("deleted");
+    expect(base.needsMerge).toBeTruthy();
+    await executeUpdatePlan(plan, {
+      root,
+      config: { aliases: {}, installed: [] },
+      ...state,
+    });
+    await expect(pathExists(join(root, "AGENTS.md"))).resolves.toBeFalsy();
     await cleanup();
   });
 
-  // The whole loop `adoptBase`'s message promises, on one CLI: adopt a project whose file
-  // is absent, then update against the *same* template and get the file back. Before
-  // `missingTargets`, this second run reported "already at" and wrote nothing.
-  it("restores an adopted-absent file on a re-run at the same template hash", async () => {
+  // #312: adoption leaves an absent template file unrecorded, so the base reads current at
+  // the same template, and a later template change creates the file as new.
+  it("creates an adopted-absent file as new once the template changes", async () => {
     await declare([]);
     await write(template, "AGENTS.md", "v1 {{PROJECT_NAME}}\n");
+    await write(template, "kept.txt", "kept\n");
+    await write(root, "kept.txt", "kept\n");
     const manifest = emptyManifest();
     const lock = emptyLock();
     const adoption = await adoptBase({
@@ -885,42 +919,32 @@ describe("baseUpdateInput — classifying base files through the module engine",
     expect(adoption.absent).toStrictEqual(["AGENTS.md"]);
 
     const state = { manifest, lock };
-    const comparison = compareBase({
-      ...state,
-      runningHash: await templateHash(template),
-      runningVersion: CLI,
-      missingTargets: await missingBaseTargets(root, manifest, template),
-    });
-    expect(comparison.status).toBe("outdated");
+    expect(
+      compareBase({
+        ...state,
+        runningHash: await templateHash(template),
+        runningVersion: CLI,
+        missingTargets: await missingBaseTargets(root, manifest, template),
+      }).status
+    ).toBe("current");
 
-    const handle = await baseUpdateInput({
-      root,
-      ...state,
-      templateDir: template,
-      cliVersion: CLI,
-      projectName: basename(root),
-      testingMode: "off",
-      comparison,
+    const next = await bumped({
+      "AGENTS.md": "v1 {{PROJECT_NAME}}\n",
+      "kept.txt": "kept, v2\n",
     });
-    const config = { aliases: {}, installed: [] };
-    const plan = await buildUpdatePlan({
+    const { plan, base, cleanup } = await planAgainst(next, state);
+    expect(actionOf(base, "AGENTS.md")).toBe("create");
+    await executeUpdatePlan(plan, {
       root,
-      config,
+      config: { aliases: {}, installed: [] },
       ...state,
-      inputs: [handle.input],
-      considered: [],
     });
-    expect(actionOf(plan.modules[0]!, "AGENTS.md")).toBe("restore");
-    await executeUpdatePlan(plan, { root, config, ...state });
 
     await expect(readFile(join(root, "AGENTS.md"), "utf-8")).resolves.toBe(
       `v1 ${basename(root)}\n`
     );
-    // And the third run is genuinely quiet.
-    await expect(
-      missingBaseTargets(root, manifest, template)
-    ).resolves.toStrictEqual([]);
-    await handle.cleanup();
+    expect(state.manifest.managed["AGENTS.md"]?.deleted).toBeUndefined();
+    await cleanup();
   });
 
   // #242: the base render fills the AGENTS.md testing block for the project's mode. Were
@@ -963,12 +987,14 @@ describe("baseUpdateInput — classifying base files through the module engine",
     await cleanup();
   });
 
-  it("restores an adopted-absent AGENTS.md with the project's testing mode (#242)", async () => {
+  it("records an adopted AGENTS.md at its on-disk hash in a tests-after project (#242)", async () => {
+    const block = `${TESTING_BLOCK_START}\n${TESTING_BLOCKS["tests-after"]}\n${TESTING_BLOCK_END}\n`;
     await write(
       template,
       "AGENTS.md",
       `${TESTING_BLOCK_START}\noff\n${TESTING_BLOCK_END}\n`
     );
+    await write(root, "AGENTS.md", block);
     const manifest = emptyManifest();
 
     await adoptBase({
@@ -981,11 +1007,7 @@ describe("baseUpdateInput — classifying base files through the module engine",
       templateDir: template,
     });
 
-    expect(manifest.managed["AGENTS.md"]?.hash).toBe(
-      hashContent(
-        `${TESTING_BLOCK_START}\n${TESTING_BLOCKS["tests-after"]}\n${TESTING_BLOCK_END}\n`
-      )
-    );
+    expect(manifest.managed["AGENTS.md"]?.hash).toBe(hashContent(block));
   });
 
   it("re-applies a module's recorded patch after overwriting the file it patched", async () => {
@@ -1144,5 +1166,434 @@ describe("baseUpdateInput — classifying base files through the module engine",
     );
     expect(written).toMatchObject({ v: 2, dependencies: { zod: "4.0.0" } });
     await handle.cleanup();
+  });
+});
+
+// #312 Phase 3: the merge base of a base update is the template at the recorded release,
+// read here from `SAASALOY_BASE_SNAPSHOT_DIR` rather than the tag, so nothing goes online.
+describe("baseUpdateInput — three-way from the recorded release (#312)", () => {
+  const OLD = "0.5.0";
+  const NEW = "0.8.0";
+  let snapshots: string;
+
+  beforeEach(async () => {
+    snapshots = await mkdtemp(join(tmpdir(), "saasaloy-base-snapshots-"));
+    process.env[BASE_SNAPSHOT_ENV] = snapshots;
+  });
+
+  afterEach(async () => {
+    delete process.env[BASE_SNAPSHOT_ENV];
+    await rm(snapshots, { recursive: true, force: true });
+  });
+
+  /** Lay a template out as the snapshot for `version`, and return its folder. */
+  async function release(
+    version: string,
+    files: Record<string, string>
+  ): Promise<string> {
+    const dir = join(snapshots, version);
+    for (const [rel, content] of Object.entries(files)) {
+      await write(dir, rel, content);
+    }
+    return dir;
+  }
+
+  /** Scaffold `root` from `templateDir` and record it at `version`, as `init` does. */
+  async function scaffoldAt(templateDir: string, version: string) {
+    // As that release's `init` wrote it, `{{CLI_VERSION}}` and all.
+    const written = await copyTemplate(templateDir, root, {
+      ...templateVars(basename(root)),
+      CLI_VERSION: version,
+    });
+    const manifest = emptyManifest();
+    recordBaseFiles(manifest, written);
+    const lock: Lockfile = {
+      ...emptyLock(),
+      base: baseRecord(version, await templateHash(templateDir)),
+    };
+    return { manifest, lock };
+  }
+
+  async function planAgainst(
+    next: string,
+    state: { manifest: Manifest; lock: Lockfile },
+    from?: string
+  ) {
+    const handle = await baseUpdateInput({
+      root,
+      manifest: state.manifest,
+      lock: state.lock,
+      templateDir: next,
+      cliVersion: NEW,
+      projectName: basename(root),
+      testingMode: "off",
+      comparison: compareBase({
+        ...state,
+        runningHash: await templateHash(next),
+        runningVersion: NEW,
+      }),
+      ...(from === undefined ? {} : { from }),
+    });
+    const plan = await buildUpdatePlan({
+      root,
+      config: { aliases: {}, installed: [] },
+      manifest: state.manifest,
+      lock: state.lock,
+      inputs: [handle.input],
+      considered: [],
+    });
+    return { plan, handle, base: plan.modules[0]! };
+  }
+
+  const OLD_FILES = {
+    [BASE_DECLARATION]: JSON.stringify({
+      seedFiles: [],
+      ownedFiles: ["blocks/**"],
+    }),
+    "AGENTS.md": "rules v1\n",
+    "README.md": "readme {{PROJECT_NAME}} v1\n",
+    "blocks/hero.tsx": "hero v1\n",
+    "gone.txt": "gone v1\n",
+    "stamp.md": "made by CLI {{CLI_VERSION}}\n",
+  };
+
+  it("skips a drifted file the template did not change, and merges one it did, with base set", async () => {
+    const old = await release(OLD, OLD_FILES);
+    const state = await scaffoldAt(old, OLD);
+    await write(root, "AGENTS.md", "rules v1\nmine\n");
+    await write(root, "README.md", `readme ${basename(root)} v1\nmine\n`);
+    await write(root, "blocks/hero.tsx", "hero v1\nmine\n");
+    const next = await bumped({
+      [BASE_DECLARATION]: OLD_FILES[BASE_DECLARATION],
+      "AGENTS.md": "rules v1\n",
+      "README.md": "readme {{PROJECT_NAME}} v2\n",
+      "blocks/hero.tsx": "hero v1\n",
+      "stamp.md": OLD_FILES["stamp.md"],
+    });
+
+    const { base, handle } = await planAgainst(next, state);
+
+    expect(base.noMergeBase).toBeUndefined();
+    expect(actionOf(base, "AGENTS.md")).toBe("skip");
+    // An owned file the template left alone is no merge either.
+    expect(actionOf(base, "blocks/hero.tsx")).toBe("skip");
+    const readme = base.files.find((f) => f.target === "README.md");
+    expect(readme?.action).toBe("drift");
+    // Rendered with the project's vars, like theirs.
+    expect(readme?.base).toBe(`readme ${basename(root)} v1\n`);
+    // The snapshot renders `{{CLI_VERSION}}` as its own release, so the stamp the old
+    // `init` wrote reads as the template's change, not an edit to keep.
+    expect(actionOf(base, "stamp.md")).toBe("overwrite");
+    // A file the template dropped carries the old template's bytes as its base.
+    const gone = base.removals.find((f) => f.target === "gone.txt");
+    expect(gone?.base).toBe("gone v1\n");
+    await handle.cleanup();
+    await rm(next, { recursive: true, force: true });
+  });
+
+  it("renders the changed file three-way, with no no-merge-base header", async () => {
+    const old = await release(OLD, OLD_FILES);
+    const state = await scaffoldAt(old, OLD);
+    await write(root, "README.md", `readme ${basename(root)} v1\nmine\n`);
+    const next = await bumped({
+      [BASE_DECLARATION]: OLD_FILES[BASE_DECLARATION],
+      "AGENTS.md": "rules v1\n",
+      "README.md": "readme {{PROJECT_NAME}} v2\n",
+      "blocks/hero.tsx": "hero v1\n",
+    });
+
+    const { plan, handle } = await planAgainst(next, state);
+    const doc = renderMergePlan(plan);
+
+    expect(doc).toContain("#### `README.md`");
+    expect(doc).toContain("**base → theirs**");
+    expect(doc).toContain("**base → mine**");
+    expect(doc).not.toContain("**theirs → mine**");
+    expect(doc).not.toContain("no merge base");
+    await handle.cleanup();
+    await rm(next, { recursive: true, force: true });
+  });
+
+  it("removes the rendered snapshot on cleanup and leaves the fixture folder", async () => {
+    const old = await release(OLD, OLD_FILES);
+    const state = await scaffoldAt(old, OLD);
+    const next = await bumped({ "README.md": "v2\n" });
+
+    const { handle } = await planAgainst(next, state);
+    const rendered = handle.input.base!.dir;
+    await expect(pathExists(rendered)).resolves.toBeTruthy();
+    await handle.cleanup();
+
+    await expect(pathExists(rendered)).resolves.toBeFalsy();
+    await expect(pathExists(old)).resolves.toBeTruthy();
+    await rm(next, { recursive: true, force: true });
+  });
+
+  describe("falls back to two-way with the reason, and never throws", () => {
+    it("on a 0.0.0 record", async () => {
+      await release("0.0.0", OLD_FILES);
+      const state = await scaffoldAt(join(snapshots, "0.0.0"), "0.0.0");
+      const next = await bumped({ "README.md": "v2\n" });
+
+      const { base, handle } = await planAgainst(next, state);
+
+      expect(base.noMergeBase).toBe(noSnapshotReason.notARelease("0.0.0"));
+      expect(handle.input.base).toBeUndefined();
+      await handle.cleanup();
+      await rm(next, { recursive: true, force: true });
+    });
+
+    it("on a version with no snapshot folder", async () => {
+      const old = await release(OLD, OLD_FILES);
+      const state = await scaffoldAt(old, "0.6.0");
+      const next = await bumped({ "README.md": "v2\n" });
+
+      const { base, handle } = await planAgainst(next, state);
+
+      expect(base.noMergeBase).toBe(noSnapshotReason.notInSnapshotDir("0.6.0"));
+      await write(root, "README.md", "mine\n");
+      const again = await planAgainst(next, state);
+      expect(renderMergePlan(again.plan)).toContain(
+        `no merge base — ${noSnapshotReason.notInSnapshotDir("0.6.0")}`
+      );
+      await handle.cleanup();
+      await again.handle.cleanup();
+      await rm(next, { recursive: true, force: true });
+    });
+
+    // A run that left a merge waiting moves the record's label to the running CLI and
+    // keeps its hash, so the label names a newer template than the files came from.
+    it("on a snapshot that does not hash to the recorded template", async () => {
+      const old = await release(OLD, OLD_FILES);
+      const state = await scaffoldAt(old, OLD);
+      await release(NEW, { "README.md": "readme {{PROJECT_NAME}} v2\n" });
+      state.lock.base = { ...state.lock.base!, cliVersion: NEW };
+      const next = await bumped({
+        "README.md": "readme {{PROJECT_NAME}} v2\n",
+      });
+
+      const { base, handle } = await planAgainst(next, state);
+
+      expect(base.noMergeBase).toBe(noSnapshotReason.hashMismatch(NEW));
+      await handle.cleanup();
+      await rm(next, { recursive: true, force: true });
+    });
+  });
+
+  // `--from` names an older template than the adoption recorded, so no hash can match.
+  it("takes `--from` as the snapshot version, with no hash check", async () => {
+    await release("0.4.0", { "README.md": "readme v0\n" });
+    const adopted = await release(OLD, OLD_FILES);
+    const state = await scaffoldAt(adopted, OLD);
+    await write(root, "README.md", "readme v0\nmine\n");
+    const next = await bumped({ "README.md": "readme v2\n" });
+
+    const { base, handle } = await planAgainst(next, state, "0.4.0");
+
+    expect(base.noMergeBase).toBeUndefined();
+    expect(base.files.find((f) => f.target === "README.md")?.base).toBe(
+      "readme v0\n"
+    );
+    await handle.cleanup();
+    await rm(next, { recursive: true, force: true });
+  });
+
+  /** A second template dir standing in for the one a newer CLI ships. */
+  async function bumped(files: Record<string, string>): Promise<string> {
+    const next = await mkdtemp(join(tmpdir(), "saasaloy-base-next-"));
+    for (const [rel, content] of Object.entries(files)) {
+      await write(next, rel, content);
+    }
+    return next;
+  }
+});
+
+describe(baseSnapshotVersion, () => {
+  const hash = "a".repeat(64);
+
+  it("takes `--from` first", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.8.0", hash), adoptedAt: "0.8.0" },
+    };
+
+    expect(baseSnapshotVersion(lock, emptyManifest(), "0.5.0")).toBe("0.5.0");
+  });
+
+  it("takes `adoptedAt` on the first update after adoption", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.8.0", hash), adoptedAt: "0.8.0" },
+    };
+
+    expect(baseSnapshotVersion(lock, emptyManifest())).toBe("0.8.0");
+  });
+
+  // A legacy adopted record has no `adoptedAt`; its adopted files say it was adopted at
+  // the recorded `cliVersion`.
+  it("reads a legacy adopted record as adopted at its CLI", () => {
+    const lock = { ...emptyLock(), base: baseRecord("0.7.0", hash) };
+    const manifest = emptyManifest();
+    manifest.managed["a.txt"] = { module: BASE_MODULE, hash, adopted: true };
+
+    expect(baseSnapshotVersion(lock, manifest)).toBe("0.7.0");
+  });
+
+  it("takes the recorded `cliVersion` otherwise", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.9.0", hash), adoptedAt: "0.8.0" },
+    };
+
+    expect(baseSnapshotVersion(lock, emptyManifest())).toBe("0.9.0");
+  });
+
+  // An applied run with a base merge still waiting moves `cliVersion` (#298) and keeps
+  // the hash, so the release that hash came from has to name the snapshot (#312).
+  it("takes `templateVersion` over the recorded `cliVersion`", () => {
+    const lock = {
+      ...emptyLock(),
+      base: { ...baseRecord("0.8.0", hash), templateVersion: "0.5.0" },
+    };
+
+    expect(baseSnapshotVersion(lock, emptyManifest())).toBe("0.5.0");
+  });
+
+  it("is undefined with no base record", () => {
+    expect(baseSnapshotVersion(emptyLock(), emptyManifest())).toBeUndefined();
+  });
+});
+
+describe(fetchBaseSnapshot, () => {
+  afterEach(() => {
+    delete process.env[BASE_SNAPSHOT_ENV];
+  });
+
+  it.each(["0.0.0", "", "dev", "1.2"])(
+    "names no release for %j, before any lookup",
+    async (version) => {
+      process.env[BASE_SNAPSHOT_ENV] = template;
+      await write(template, `${version}/AGENTS.md`, "x\n");
+
+      await expect(fetchBaseSnapshot(version)).resolves.toStrictEqual({
+        version,
+        reason: noSnapshotReason.notARelease(version),
+      });
+    }
+  );
+
+  it("reads `<dir>/<version>/` when the env var is set", async () => {
+    process.env[BASE_SNAPSHOT_ENV] = template;
+    await write(template, "0.5.0/AGENTS.md", "x\n");
+
+    const snapshot = await fetchBaseSnapshot("0.5.0");
+
+    expect(snapshot).toMatchObject({
+      version: "0.5.0",
+      dir: join(template, "0.5.0"),
+    });
+  });
+
+  it("has no snapshot for a version with no folder", async () => {
+    process.env[BASE_SNAPSHOT_ENV] = template;
+
+    await expect(fetchBaseSnapshot("0.5.0")).resolves.toStrictEqual({
+      version: "0.5.0",
+      reason: noSnapshotReason.notInSnapshotDir("0.5.0"),
+    });
+  });
+});
+
+// The tag fetch itself, through giget, against a local tarball server: `GIGET_GITHUB_URL`
+// is the hook giget reads, the same one the module fetch tests use.
+describe("fetchBaseSnapshot — the tag download", () => {
+  let url: string;
+  let requests: string[];
+  let close: () => Promise<void>;
+  let cache: string;
+  let cacheBefore: string | undefined;
+
+  beforeEach(async () => {
+    requests = [];
+    // giget caches each tarball under XDG_CACHE_HOME, keyed by repo and ref. Left at the
+    // real cache, this fixture lands as `mimukit-saasaloy/v0.5.0.tar.gz`, and a later real
+    // fetch whose download fails reads it back as the v0.5.0 template (#312).
+    cacheBefore = process.env.XDG_CACHE_HOME;
+    cache = await mkdtemp(join(tmpdir(), "saasaloy-giget-cache-"));
+    process.env.XDG_CACHE_HOME = cache;
+    const server = createServer((req, res) => {
+      const path = req.url ?? "/";
+      requests.push(`${req.method} ${path}`);
+      if (path === "/repos/mimukit/saasaloy/tarball/v0.5.0") {
+        res.writeHead(200, { "content-type": "application/gzip" });
+        res.end(
+          tarGz({
+            "mimukit-saasaloy-abc1234/packages/cli/templates/base/AGENTS.md":
+              "rules v1\n",
+            "mimukit-saasaloy-abc1234/modules/email/registry-item.json": "{}",
+          })
+        );
+        return;
+      }
+      res.writeHead(404, { "content-type": "application/json" });
+      res.end(JSON.stringify({ message: "Not Found" }));
+    });
+    await new Promise<void>((done) => {
+      server.listen(0, "127.0.0.1", done);
+    });
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+    process.env.GIGET_GITHUB_URL = url;
+    close = () =>
+      new Promise<void>((done) => {
+        server.close(() => {
+          done();
+        });
+      });
+  });
+
+  afterEach(async () => {
+    delete process.env.GIGET_GITHUB_URL;
+    if (cacheBefore === undefined) {
+      delete process.env.XDG_CACHE_HOME;
+    } else {
+      process.env.XDG_CACHE_HOME = cacheBefore;
+    }
+    await close();
+    await rm(cache, { recursive: true, force: true });
+  });
+
+  it("downloads the template folder at the tag, in one request, and cleans it up", async () => {
+    const snapshot = await fetchBaseSnapshot("0.5.0");
+
+    expect("dir" in snapshot).toBeTruthy();
+    const { dir, cleanup } = snapshot as {
+      dir: string;
+      cleanup: () => Promise<void>;
+    };
+    await expect(readFile(join(dir, "AGENTS.md"), "utf-8")).resolves.toBe(
+      "rules v1\n"
+    );
+    await expect(pathExists(join(dir, "modules"))).resolves.toBeFalsy();
+    // giget sends a HEAD before the GET; one tarball either way.
+    expect(requests.filter((r) => r.startsWith("GET "))).toStrictEqual([
+      "GET /repos/mimukit/saasaloy/tarball/v0.5.0",
+    ]);
+    // The fixture went to this test's cache, never the owner's.
+    await expect(
+      pathExists(
+        join(cache, "giget", "github", "mimukit-saasaloy", "v0.5.0.tar.gz")
+      )
+    ).resolves.toBeTruthy();
+    await cleanup();
+    await expect(pathExists(dir)).resolves.toBeFalsy();
+  });
+
+  it("returns the fetch failure as a reason, never a throw", async () => {
+    const snapshot = await fetchBaseSnapshot("0.6.0");
+
+    expect(snapshot).toMatchObject({ version: "0.6.0" });
+    const reason = (snapshot as { reason: string }).reason;
+    expect(reason).toContain("the template at v0.6.0 could not be fetched");
+    expect(reason).toContain(BASE_SNAPSHOT_ENV);
   });
 });

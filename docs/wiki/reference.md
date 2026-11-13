@@ -245,27 +245,28 @@ A pending update note is work waiting too. `outdated` lists each one by id and t
 ## `saasaloy update`
 
 ```text
-saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes]
+saasaloy update [<module>|base] [--ref <ref>] [--out <path>] [--resolved <path>]... [--restore <path>]... [--done <id>]... [--from <version>] [--dry-run] [--diff] [--force] [--yes]
 saasaloy update --abort
 ```
 
 Re-apply the base template and installed modules at a newer version than `saasaloy-lock.json` records. With nothing named it considers the base and every installed module; `saasaloy update base` considers the base alone. A file you never touched is overwritten; a file you edited is left alone and routed into a **merge plan** — a document written to stdout describing what changed upstream, what you changed, and what the reconciliation has to preserve. `saasaloy update email | claude` is the designed pipeline.
 
-The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. There is no old template on disk to use as a merge base, so a drifted base file renders two-way, current file against the new render, with the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`apps/web/DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated, and neither is a root `DESIGN.md` from a project made before the design document moved. Files it declares as owned — `packages/ui/src/styles/globals.css`, `brand.css` and `web.css`, everything under `blocks/`, `components/`, `containers/` and `content/`, `packages/ui/src/index.ts`, `apps/web/src/layouts/Layout.astro` and `apps/web/public/favicon.*` — are created when absent and never written again. The template hands them over once, and the upstream change reaches you through the merge plan instead. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
+The base ships inside the CLI package, so its update compares the project against the template the running CLI renders for it. The merge base is the template at the release the project recorded, fetched from the `v<version>` tag of `mimukit/saasaloy` (`SAASALOY_BASE_SNAPSHOT_DIR` points at a local folder of `<version>/` copies instead), so a drifted base file renders three-way. When no snapshot is available (a version that is not a release, a failed fetch, or a template that does not match the lock), it renders two-way, current file against the new render, and the base section's header gives the reason. Either way it carries the intent line "the base template changed; keep local edits, take the upstream change". Files the template declares as seed (`apps/web/DESIGN.md`, `README.md`, the landing copy, and `saasaloy.json`) are never updated, and neither is a root `DESIGN.md` from a project made before the design document moved. Files it declares as owned — `packages/ui/src/styles/globals.css`, `brand.css` and `web.css`, everything under `blocks/`, `components/`, `containers/` and `content/`, `packages/ui/src/index.ts`, `apps/web/src/layouts/Layout.astro` and `apps/web/public/favicon.*` — are created when absent and never written again. The template hands them over once, and the upstream change reaches you through the merge plan instead. A base file another module patched, such as `apps/web/package.json` after `waitlist`, has its recorded patches re-applied after the overwrite.
 
-Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, while each missing file is recorded at the rendered template hash. The run records the running CLI, reports the adoption, and exits 0. Each adopted entry is flagged `adopted`, because the hash came off your disk and says nothing about who wrote those bytes: the next update treats every one of those files as edited and offers a merge rather than a write. Missing files are still restored. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
+Two cases stop before anything is applied. A project with no usable base record is **adopted**: each existing base file is recorded at its on-disk hash, and each missing template file is listed and left unrecorded. The run records the running CLI, reports the adoption, and exits 0. Each adopted entry is flagged `adopted`, because the hash came off your disk and says nothing about who wrote those bytes: the next update treats every one of those files as edited and offers a merge rather than a write. A later base update reads each unrecorded missing file as new and creates it. `--dry-run` reports the adoption and writes nothing. A project whose record names a newer CLI than the one running is refused with exit 2 and both versions printed; upgrade the CLI instead.
 
 | Flag | Effect |
 |---|---|
 | `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
-| `--resolved <path>` | record a file you merged, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge). |
+| `--resolved <path>` | record a file you merged, or keep a file you deleted deleted, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge) and [Keeping a deleted file deleted](#keeping-a-deleted-file-deleted). |
+| `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted. A path that is not kept deleted exits 2. Repeatable. |
 | `--done <id>` | record an update note whose work is done, so the merge plan stops listing it. Repeatable. See [Recording an update note](#recording-an-update-note). |
 | `--from <version>` | on the first update after adoption, name the CLI version the project was made with, so the base update notes newer than it apply. Without it those notes print under "Notes that may apply". Any other run refuses it with exit 2, because the lock range is already exact. |
 | `--dry-run` | print the plan and stop. Nothing is written. |
 | `--diff` | print the plan plus a per-file diff and stop. Nothing is written. |
 | `--force` | apply even though the git working tree has uncommitted changes. Without it, a dirty tree is refused with exit 2, so `git diff` still shows what the update did. A project that is not a git repository is never blocked. |
-| `--abort` | restore the newest pre-update backup and stop. Reads no registry and builds no plan. |
+| `--abort` | put back the files the last update replaced, from the newest pre-update backup, and stop. Reads no registry and builds no plan. |
 | `--yes`, `-y` | skip the `Proceed?` confirmation. |
 
 The confirmation gates on **stdin**, not stdout: the merge plan goes to stdout, so a
@@ -299,6 +300,22 @@ Each named file leaves the merge plan. `update` records the file's current hash 
 The manifest entry also records the hash of the module version the merge took in (`mergedWith`). While the module still ships that version, `update` skips the file even with no merge base, as under `SAASALOY_REGISTRY_DIR`. Once the module moves again, the file goes to the merge plan rather than being overwritten, because it holds your edits.
 
 A path may be relative to the working directory or to the project root, as the merge plan prints it. A path that this run does not send to a merge exits 2 before anything is written and names the path and the files that are waiting.
+
+### Keeping a deleted file deleted
+
+A file `update` tracks and that is missing from disk goes to the merge plan once, as "deleted locally", with the upstream file or its upstream diff, and the run exits 3. `update` never writes it back on its own. Choose one:
+
+```sh
+saasaloy update --resolved packages/ui/src/blocks/showcase.tsx --yes
+```
+
+keeps it deleted. The `managed` entry in `.saasaloy/manifest.json` gains `"deleted": true` and keeps its module, `from` and last hash. No later run writes the file or lists it in the merge plan. When the upstream file changes, the plan summary prints one line, `kept deleted  <path>  (upstream changed it)`. When upstream drops the file, the entry goes. `saasaloy remove <module>` drops that module's kept-deleted entries, `saasaloy outdated` reads the base as current when only kept-deleted files are missing, and `saasaloy doctor` lists each one as "deleted, kept deleted".
+
+```sh
+saasaloy update --restore packages/ui/src/blocks/showcase.tsx --yes
+```
+
+brings a kept-deleted file back: it writes the current upstream file and drops the flag. It takes only a file kept deleted, so a file still waiting in the merge plan needs `--resolved` first. A module whose lock is current is planned at its recorded SHA for the restore, and its lock stays. A kept-deleted file you put back by hand counts as restored: the next `update` treats it as any tracked file and drops the flag.
 
 ### Recording an update note
 

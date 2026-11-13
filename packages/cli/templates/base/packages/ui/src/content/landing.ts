@@ -668,7 +668,7 @@ export const landing = {
       {
         id: "requirements",
         question: "What do I need installed?",
-        answer: "Node 24.13.0 or later and pnpm 11 or later.",
+        answer: "Node 24.15.0 or later and pnpm 11 or later.",
       },
     ],
     /** The line under the list. An empty `moreLinkHref` hides it. */
