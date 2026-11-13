@@ -50,6 +50,8 @@ describe("isSafeHref", () => {
   it("refuses protocol-relative URLs and empty values", () => {
     for (const href of [
       "//evil.example",
+      "/\\evil.example",
+      "\\/evil.example",
       "\\\\evil.example",
       "",
       "   ",

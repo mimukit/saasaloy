@@ -550,6 +550,17 @@ export function EntryEditor({
             onChange={(next) => {
               setData(key, next);
             }}
+            onNormalize={(next) => {
+              // The editor's own form of a body it loaded. While the admin has not edited
+              // the body, the saved baseline moves with it, so the form stays clean.
+              if (saved.data[key] === values.data[key]) {
+                setSaved((current) => ({
+                  ...current,
+                  data: { ...current.data, [key]: next },
+                }));
+              }
+              setData(key, next);
+            }}
             onRequestImage={requestImage}
             onLinkRefused={(href) => {
               toastManager.add({

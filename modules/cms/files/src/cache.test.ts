@@ -2,7 +2,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { CMS_CACHE_TTL_SECONDS, createTtlCache } from "./cache.ts";
+import {
+  CMS_CACHE_MAX_ENTRIES,
+  CMS_CACHE_TTL_SECONDS,
+  createTtlCache,
+} from "./cache.ts";
 
 function clock(start = 1_000_000) {
   let now = start;
@@ -56,5 +60,26 @@ describe("createTtlCache", () => {
     time.advance(61_000);
     cache.write("a", "two", 60);
     assert.equal(cache.read("a"), "two");
+  });
+});
+
+describe("createTtlCache at its size limit", () => {
+  it("drops expired entries first, then the oldest write", () => {
+    const time = clock(0);
+    const cache = createTtlCache<number>(time.now);
+    cache.write("short", 0, 1);
+    for (let index = 1; index < CMS_CACHE_MAX_ENTRIES; index += 1) {
+      cache.write(`key-${String(index)}`, index, 60);
+    }
+    time.advance(2000);
+    // The cache is full. The expired entry goes, and every live one stays.
+    cache.write("next", 1, 60);
+    assert.equal(cache.read("key-1"), 1);
+    assert.equal(cache.read("next"), 1);
+    // Full again, with nothing expired: the oldest write goes.
+    cache.write("one-more", 2, 60);
+    assert.equal(cache.read("key-1"), undefined);
+    assert.equal(cache.read("key-2"), 2);
+    assert.equal(cache.read("one-more"), 2);
   });
 });

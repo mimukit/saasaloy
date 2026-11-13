@@ -38,7 +38,9 @@ export const blogCopy = {
  * code blocks, links and images.
  */
 export const PROSE = [
-  "text-base leading-7 md:text-lg md:leading-8",
+  // `wrap-anywhere`: a long unbroken word or a bare URL wraps, so a phone never scrolls
+  // sideways. A code block keeps its own horizontal scroll.
+  "text-base leading-7 wrap-anywhere md:text-lg md:leading-8",
   "[&>*+*]:mt-6",
   "[&_h2]:mt-12 [&_h2]:text-2xl [&_h2]:font-semibold [&_h2]:tracking-tight md:[&_h2]:text-3xl",
   "[&_h3]:mt-10 [&_h3]:text-xl [&_h3]:font-semibold [&_h3]:tracking-tight",

@@ -16,7 +16,7 @@
 
 import { EditorContent, useEditor, useEditorState } from "@tiptap/react";
 import type { Editor } from "@tiptap/react";
-import { useEffect } from "react";
+import { useEffect, useRef } from "react";
 import type { ReactNode } from "react";
 import { cmsExtensions } from "./extensions";
 import type { MediaValue, RichTextDocument } from "./fields";
@@ -75,8 +75,16 @@ export interface EditorToolbarState {
 export interface RichTextEditorProps {
   /** The stored document, or `undefined` for an empty body. */
   value: RichTextDocument | undefined;
-  /** Called with the new document on every change. */
+  /** Called with the new document on every change the admin makes. */
   onChange: (value: RichTextDocument) => void;
+  /**
+   * Called when the editor rewrites a document nobody edited. Tiptap adds default
+   * attributes to links and lists as it loads a body, and the trailing-node plugin adds an
+   * empty last paragraph, so a body written through the api never equals what the editor
+   * hands back. The host takes this value as its saved baseline too, or the form reads as
+   * changed the moment it opens. Left out, these rewrites go to `onChange`.
+   */
+  onNormalize?: (value: RichTextDocument) => void;
   /** Read-only when false. Default true. */
   editable?: boolean;
   /**
@@ -195,6 +203,7 @@ export function RichTextEditor({
   labelledBy,
   onChange,
   onLinkRefused,
+  onNormalize,
   onRequestImage,
   onRequestLink = promptLink,
   toolbar,
@@ -218,8 +227,16 @@ export function RichTextEditor({
     editorProps: { attributes },
     extensions: cmsExtensions(),
     immediatelyRender: false,
-    onUpdate({ editor: current }) {
-      onChange(current.getJSON() as RichTextDocument);
+    onUpdate({ editor: current, transaction }) {
+      const next = current.getJSON() as RichTextDocument;
+      // An update with no step of its own did not come from the admin. `setEditable`
+      // emits one on mount, and the trailing-node plugin adds its paragraph on the first
+      // click into a loaded body.
+      if (transaction.steps.length === 0 && onNormalize) {
+        onNormalize(next);
+        return;
+      }
+      onChange(next);
     },
   });
 
@@ -228,24 +245,39 @@ export function RichTextEditor({
     selector: ({ editor: current }) => selectState(current),
   });
 
+  // The newest `onNormalize`, read by the effect below. The host passes a new function on
+  // every render, and the effect must run on a new value only.
+  const normalize = useRef(onNormalize);
+  useEffect(() => {
+    normalize.current = onNormalize;
+  }, [onNormalize]);
+
   // A value set from outside, such as a restored revision, replaces the content. A value
   // that only echoes the editor's own last change is left alone, or the cursor would jump.
   useEffect(() => {
     if (!editor) {
       return;
     }
-    const next = value ?? EMPTY;
-    if (JSON.stringify(editor.getJSON()) !== JSON.stringify(next)) {
-      // Out of the undo history: undo must not step back past a restore or a load.
-      editor
-        .chain()
-        .setMeta("addToHistory", false)
-        .setContent(next, { emitUpdate: false })
-        .run();
+    const next = JSON.stringify(value ?? EMPTY);
+    if (JSON.stringify(editor.getJSON()) === next) {
+      return;
+    }
+    // Out of the undo history: undo must not step back past a restore or a load.
+    editor
+      .chain()
+      .setMeta("addToHistory", false)
+      .setContent(value ?? EMPTY, { emitUpdate: false })
+      .run();
+    // The editor's own form of the loaded document, when it differs from the stored one.
+    const settled = editor.getJSON() as RichTextDocument;
+    if (JSON.stringify(settled) !== next) {
+      normalize.current?.(settled);
     }
   }, [editor, value]);
 
   useEffect(() => {
+    // `setEditable` emits an update with no step. `onUpdate` reports it as a normalised
+    // document, not as an edit, and that first report is also what draws the toolbar.
     editor?.setEditable(editable);
   }, [editor, editable]);
 

@@ -12,6 +12,13 @@
 /** Seconds a cached answer is served before the client reads the api again. */
 export const CMS_CACHE_TTL_SECONDS = 60;
 
+/**
+ * The most entries one cache holds. Every distinct address is a key, and a miss is cached
+ * too, so without a limit a crawler that walks random slugs grows the map until the
+ * isolate runs out of memory.
+ */
+export const CMS_CACHE_MAX_ENTRIES = 500;
+
 /** A key-value cache whose entries expire. `now` is injectable for tests. */
 export interface TtlCache<V> {
   read(key: string): V | undefined;
@@ -46,7 +53,22 @@ export function createTtlCache<V>(now: () => number = Date.now): TtlCache<V> {
       if (ttlSeconds <= 0) {
         return;
       }
-      entries.set(key, { expiresAt: now() + ttlSeconds * 1000, value });
+      const at = now();
+      if (!entries.has(key) && entries.size >= CMS_CACHE_MAX_ENTRIES) {
+        for (const [stored, entry] of entries) {
+          if (entry.expiresAt <= at) {
+            entries.delete(stored);
+          }
+        }
+        // Still full of live entries: drop the oldest write. A `Map` keeps insertion order.
+        if (entries.size >= CMS_CACHE_MAX_ENTRIES) {
+          const [oldest] = entries.keys();
+          if (oldest !== undefined) {
+            entries.delete(oldest);
+          }
+        }
+      }
+      entries.set(key, { expiresAt: at + ttlSeconds * 1000, value });
     },
   };
 }

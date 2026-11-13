@@ -33,7 +33,8 @@ export function isSafeHref(href: string | null | undefined): boolean {
   if (value.length === 0) {
     return false;
   }
-  if (value.startsWith("//") || value.startsWith("\\")) {
+  // Two leading slashes of either kind: a browser reads `/\host` and `\/host` as `//host`.
+  if (/^[/\\]{2}/.test(value) || value.startsWith("\\")) {
     return false;
   }
   const scheme = SCHEME.exec(value);
