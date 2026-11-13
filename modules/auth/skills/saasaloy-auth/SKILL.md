@@ -464,6 +464,20 @@ function SignInScreen() {
 
 **Removal.** `saasaloy remove shell` refuses while `admin` or `app` is installed. When it runs, it deletes the three block files with it, so delete each route that imports them first.
 
+## Signed-in state on the static site
+
+The base `apps/web` is a prerendered Astro site, and no module puts a header with a session on it. When a project adds one (a "Log in" link that turns into an avatar), two faults are waiting. The session lives in an httpOnly cookie on the api origin, so the page learns who is signed in only when a session check answers:
+
+- The header shows "Log in" first and swaps to the avatar after the check, a visible jump on every load (2.5 s in one project).
+- A sign-in form that signs in without a page load leaves a header that checked on mount still showing "Log in".
+
+Use two pieces, both in `apps/web/src/lib/`:
+
+- **A `session:change` event.** One seam, `session.ts`, owns `getSession()` on the client factory. Export `announceSessionChange()`, which dispatches `new Event("session:change")` on `window`, and `onSessionChange(listener)`, which returns the unsubscribe. Call `announceSessionChange()` after each sign-in and sign-out. Every island that shows the session (the header, an account panel) listens and checks again.
+- **A first-paint hint.** `session-hint.ts` stores one flag in `localStorage` each time a check answers: `"1"` while signed in, removed when not. An inline script in `<head>` of `Layout.astro` (`<script is:inline set:html={SESSION_HINT_SCRIPT} />`, a string, because a module script runs after the paint) sets `data-session="in"` on `<html>` from that flag. The header renders both states, and CSS under `[data-session="in"]` shows one, so server and client markup match and hydration does not warn.
+
+The flag holds no name and no id, so a shared device shows nothing about the user. The cookie stays the truth: a stale flag costs one swap, and the next check clears it. Wrap every `localStorage` access in `try`, because storage can be off.
+
 ## Password rules
 
 Both instances set `minPasswordLength: 12` (`MIN_PASSWORD_LENGTH` in `packages/auth/src/auth.ts`). Better Auth applies it on sign-up, on a password reset and on a password change, and answers `400` with `code: "PASSWORD_TOO_SHORT"`. It never applies it on sign-in, so an account made before the rule, with a shorter password, still signs in. Keep the number and the sign-up form's hint in step. A project made before this rule gets it through `saasaloy update auth`.
