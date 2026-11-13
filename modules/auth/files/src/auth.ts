@@ -74,6 +74,10 @@ async function noUsersYet(): Promise<boolean> {
   return rows.length === 0;
 }
 
+// The path a phone sign-up creates its user on, as a hook's context names it. A literal,
+// because `auth` cannot import from `auth-phone`, which may not be installed.
+const PHONE_SIGN_UP_PATH = "/phone-number/verify";
+
 // Two instances, one per user group, on the same four tables. A project has clients (the
 // shopper, the customer, the app user) and an admin group (`superadmin`, `admin`, and any
 // role a project adds to `ADMIN_APP_ROLES`). Each group signs in on its own instance and
@@ -157,8 +161,15 @@ function sharedOptions(group: Audience) {
           // it alone, so the `admin()` plugin's own hook — which runs first and writes the
           // default `"user"` — stands. Plugin hooks run before these, which is why this
           // one wins when it does answer.
-          before: async (newUser: Record<string, unknown>) => {
-            if (!(await noUsersYet())) {
+          //
+          // A phone sign-up (`auth-phone`'s `/phone-number/verify`) is skipped: it is a
+          // client, always, even on an empty table. A plugin hook cannot say so itself,
+          // because this hook runs last and its `{ data }` would write over the role.
+          before: async (
+            newUser: Record<string, unknown>,
+            ctx?: { path?: string } | null
+          ) => {
+            if (ctx?.path === PHONE_SIGN_UP_PATH || !(await noUsersYet())) {
               return;
             }
             return { data: { ...newUser, role: SUPERADMIN_ROLE } };

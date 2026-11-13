@@ -7,7 +7,7 @@
     "e2e": "node prepare.ts && playwright test",
     "e2e:ui": "node prepare.ts && playwright test --ui",
     "e2e:install": "playwright install chromium",
-    "clean": "rimraf -g playwright-report test-results \"*.tsbuildinfo\"",
+    "clean": "rimraf -g playwright-report test-results logs \"*.tsbuildinfo\"",
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {

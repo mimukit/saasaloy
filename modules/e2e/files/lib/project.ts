@@ -33,18 +33,65 @@ interface SaasaloyConfig {
  * could never gate anything, and keeping the vocabulary to module names is what lets the
  * guard test be exact.
  */
-export const SPEC_TAGS = ["api", "admin", "auth", "waitlist"] as const;
+export const SPEC_TAGS = [
+  "api",
+  "admin",
+  "app",
+  "auth",
+  "auth-phone",
+  "sms-console",
+  "waitlist",
+] as const;
 
 export type SpecTag = (typeof SPEC_TAGS)[number];
 
-/** Each app's pinned dev port. These match the port map in the project's `AGENTS.md`. */
-export const PORTS = { web: 3000, admin: 3001, api: 4000 } as const;
+/** The pinned dev ports. These match the port map in the project's `AGENTS.md`. */
+const PINNED_PORTS = { web: 3000, admin: 3001, app: 3002, api: 4000 } as const;
 
-export const URLS = {
-  web: `http://localhost:${PORTS.web}`,
-  admin: `http://localhost:${PORTS.admin}`,
-  api: `http://localhost:${PORTS.api}`,
-} as const;
+export type App = keyof typeof PINNED_PORTS;
+
+/**
+ * The port for `app`: the pinned one, or `E2E_<APP>_PORT` when it is set, such as
+ * `E2E_API_PORT=4100`. The override is for a second checkout whose own dev servers hold
+ * the pinned ports. It moves only what this suite starts and polls: the apps' `.env`
+ * files must name the same origins (`PUBLIC_API_URL`, `CORS_ORIGINS`, `BETTER_AUTH_URL`),
+ * or the browser calls the wrong api. A value that is not a port throws.
+ */
+function portOf(app: App): number {
+  const name = `E2E_${app.toUpperCase()}_PORT`;
+  const raw = process.env[name];
+  if (raw === undefined || raw === "") {
+    return PINNED_PORTS[app];
+  }
+  const port = Number(raw);
+  if (!Number.isInteger(port) || port < 1 || port > 65_535) {
+    throw new RangeError(`${name}=${raw} is not a port number.`);
+  }
+  return port;
+}
+
+/** Each app's dev port for this run. */
+export const PORTS: Record<App, number> = {
+  web: portOf("web"),
+  admin: portOf("admin"),
+  app: portOf("app"),
+  api: portOf("api"),
+};
+
+export const URLS: Record<App, string> = {
+  web: `http://localhost:${String(PORTS.web)}`,
+  admin: `http://localhost:${String(PORTS.admin)}`,
+  app: `http://localhost:${String(PORTS.app)}`,
+  api: `http://localhost:${String(PORTS.api)}`,
+};
+
+/**
+ * The api dev server's output for this run. `playwright.config.ts` writes it, through
+ * `lib/tee-log.ts`, whenever it starts the api itself. A spec runs in a worker process and
+ * cannot read the `webServer` pipe, so a spec that needs what the api printed (such as a
+ * code the console SMS provider wrote) reads this file. `logs/` is gitignored.
+ */
+export const API_LOG = path.resolve(import.meta.dirname, "../logs/api.log");
 
 /**
  * `saasaloy.json`, read from the repo root.
@@ -90,8 +137,6 @@ export function hasModule(config: SaasaloyConfig, name: string): boolean {
   return config.installed.includes(name);
 }
 
-export type App = keyof typeof PORTS;
-
 /** The apps this project actually holds, in the order Playwright should start them. */
 export function installedApps(config: SaasaloyConfig): App[] {
   const apps: App[] = [];
@@ -102,6 +147,9 @@ export function installedApps(config: SaasaloyConfig): App[] {
   apps.push("web");
   if (hasModule(config, "admin")) {
     apps.push("admin");
+  }
+  if (hasModule(config, "app")) {
+    apps.push("app");
   }
   return apps;
 }
@@ -117,6 +165,7 @@ export function installedApps(config: SaasaloyConfig): App[] {
 export const READY: Record<App, string> = {
   web: URLS.web,
   admin: URLS.admin,
+  app: URLS.app,
   api: `${URLS.api}/health`,
 };
 

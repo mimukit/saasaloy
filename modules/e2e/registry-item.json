@@ -39,6 +39,8 @@
         { "path": "files/global-teardown.ts", "target": "global-teardown.ts" },
         { "path": "files/lib/project.ts", "target": "lib/project.ts" },
         { "path": "files/lib/fixtures.ts", "target": "lib/fixtures.ts" },
+        { "path": "files/lib/tee-log.ts", "target": "lib/tee-log.ts" },
+        { "path": "files/.gitignore", "target": ".gitignore" },
         {
           "path": "files/specs/health.spec.ts",
           "target": "specs/health.spec.ts"

@@ -110,6 +110,10 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
       "*",
       cors({
         credentials: true,
+        // A browser hides every response header outside the CORS safelist from a
+        // cross-origin caller. A 429 names its wait in `Retry-After`, and a screen on
+        // another origin needs it to say how long.
+        exposeHeaders: ["Retry-After"],
         origin: (
           origin,
           c: Context<{ Bindings: Bindings; Variables: Variables }>
