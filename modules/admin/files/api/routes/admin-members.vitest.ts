@@ -162,6 +162,22 @@ describe("POST /admin/members", () => {
     await expect(rowsOf("member.add")).resolves.toHaveLength(before);
   });
 
+  it("refuses a password shorter than the auth rule with 400, and adds no account", async () => {
+    const cookie = await cookieOf("superadmin@example.test");
+
+    const res = await call("POST", "/admin/members", cookie, {
+      ...NEWCOMER,
+      password: "11-chars-pw",
+      role: config.auth.adminRole,
+    });
+
+    expect(res.status).toBe(400);
+    const body = await listMembers(cookie);
+    expect(body.members.map((member) => member.email)).not.toContain(
+      NEWCOMER.email
+    );
+  });
+
   it("answers 409 member_removed for the email of a removed member", async () => {
     const cookie = await cookieOf("superadmin@example.test");
     const removal = await call("DELETE", `/admin/members/${ADMIN}`, cookie);
@@ -323,6 +339,21 @@ describe("POST /admin/members/:id/password", () => {
     ]);
     await expect(
       signIn("admin@example.test", "a-new-password")
+    ).resolves.toHaveProperty("status", 200);
+  });
+
+  it("refuses a superadmin a reset shorter than the auth rule with 400, not 500", async () => {
+    const res = await call(
+      "POST",
+      `/admin/members/${ADMIN}/password`,
+      await cookieOf("superadmin@example.test"),
+      { newPassword: "11-chars-pw" }
+    );
+
+    expect(res.status).toBe(400);
+    await expect(rowsOf("member.password.set")).resolves.toHaveLength(0);
+    await expect(
+      signIn("admin@example.test", PASSWORD)
     ).resolves.toHaveProperty("status", 200);
   });
 

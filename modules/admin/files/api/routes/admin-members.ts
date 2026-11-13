@@ -57,7 +57,12 @@ const REMOVED_REASON = "Removed as an admin";
 const PAGE = 100;
 
 const name = z.string().trim().min(1).max(100);
-const password = z.string().min(8).max(128);
+// The length rule of `packages/auth/src/auth.ts` (`MIN_PASSWORD_LENGTH`), copied because
+// that file keeps it private. Better Auth checks it on a password change and a reset, and
+// its `createUser` does not, so a shorter minimum here would let a new member in under it.
+const MIN_PASSWORD_LENGTH = 12;
+
+const password = z.string().min(MIN_PASSWORD_LENGTH).max(128);
 
 const createBody = z.object({
   email: z.email().max(254),
@@ -357,10 +362,25 @@ export const adminMembers = new Hono<{ Bindings: AuthDbBindings }>()
           403
         );
       }
-      await adminAuth.api.setUserPassword({
-        body: { newPassword: input.newPassword, userId: id },
-        headers,
-      });
+      try {
+        await adminAuth.api.setUserPassword({
+          body: { newPassword: input.newPassword, userId: id },
+          headers,
+        });
+      } catch (error) {
+        // A project that raises the auth rule above the minimum here gets a 400, not a 500.
+        const refusal = authRefusal(error);
+        if (refusal === null) {
+          throw error;
+        }
+        return c.json(
+          refused(
+            refusal.status === 403 ? "forbidden" : "invalid_request",
+            refusal.message
+          ),
+          refusal.status === 403 ? 403 : 400
+        );
+      }
       // The reset ends the member's open sessions, as the dialog says.
       await adminAuth.api.revokeUserSessions({ body: { userId: id }, headers });
       audit({ action: "member.password.set", target: label });

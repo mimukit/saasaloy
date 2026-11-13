@@ -108,6 +108,11 @@ type Tab = "active" | "removed";
 
 type DialogKind = "add" | "name" | "password" | "reset" | "remove";
 
+// The browser's check for the password fields. The server's rule is `MIN_PASSWORD_LENGTH`
+// in `packages/auth/src/auth.ts`, and `apps/api/src/routes/admin-members.ts` holds the same
+// number. Keep the three in step.
+const MIN_PASSWORD_LENGTH = 12;
+
 const ROLE_ITEMS = [
   { label: "Admin", value: ADMIN_ROLE },
   { label: "Superadmin", value: SUPERADMIN_ROLE },
@@ -637,7 +642,7 @@ function AddMemberForm({
           <Input
             type="password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             maxLength={128}
             autoComplete="new-password"
             value={password}
@@ -646,7 +651,8 @@ function AddMemberForm({
             }}
           />
           <FieldDescription>
-            At least 8 characters. Share it with them yourself.
+            At least {MIN_PASSWORD_LENGTH} characters. Share it with them
+            yourself.
           </FieldDescription>
         </Field>
         <Field>
@@ -801,7 +807,7 @@ function ChangePasswordForm({
           <Input
             type="password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             maxLength={128}
             autoComplete="new-password"
             value={newPassword}
@@ -876,7 +882,7 @@ function ResetPasswordForm({
           <Input
             type="password"
             required
-            minLength={8}
+            minLength={MIN_PASSWORD_LENGTH}
             maxLength={128}
             autoComplete="new-password"
             value={newPassword}
