@@ -2,6 +2,7 @@ import { RefreshCwIcon } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 
+import { config } from "@repo/config";
 import { UPDATED_TICK_MS, updatedLabel } from "@repo/ui/lib/shell/updated-at";
 import type { UpdatedWords } from "@repo/ui/lib/shell/updated-at";
 import { cn } from "@repo/ui/lib/utils";
@@ -23,6 +24,9 @@ import { cn } from "@repo/ui/lib/utils";
 // The second line says the state of the page. `status` is a line the page builds, usually
 // links to the queues that follow from it, and `updated` ends it with "Updated 12s ago" as
 // a button that refetches. A page with neither keeps the older fixed `description`.
+
+/** The count beside the title, grouped as the project's locale writes it: 1,284. */
+const COUNT_FORMAT = new Intl.NumberFormat(config.app.locale);
 
 /** When the page's data last arrived, and how to fetch it again. */
 export interface PageHeaderUpdated {
@@ -128,8 +132,8 @@ export function PageHeader({
             <span className="text-muted-foreground shrink-0 text-sm tabular-nums">
               {total !== undefined && count < total
                 ? (countLabel?.(count, total) ??
-                  `${String(count)} of ${String(total)}`)
-                : count}
+                  `${COUNT_FORMAT.format(count)} of ${COUNT_FORMAT.format(total)}`)
+                : COUNT_FORMAT.format(count)}
             </span>
           )}
           {badges === undefined ? null : (

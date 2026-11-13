@@ -467,7 +467,9 @@ export function DataTable<TRow extends object>({
               {section.header === null ? null : (
                 <TableRow className="bg-muted/40 hover:bg-muted/40 border-border">
                   <TableHead
-                    scope="colgroup"
+                    // `rowgroup`, not `colgroup`: the cell heads the rows of this
+                    // body, and the table declares no column groups.
+                    scope="rowgroup"
                     colSpan={columns.length}
                     className="text-foreground h-9 px-(--page-gutter) text-sm font-medium"
                   >

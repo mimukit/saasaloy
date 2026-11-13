@@ -6,7 +6,7 @@
   "stage": "mvp",
   "needs": [],
   "requires": {
-    "saasaloy": ">=0.7.0"
+    "saasaloy": ">=0.9.0"
   },
   "dependsOn": [],
   "dependencies": [],
