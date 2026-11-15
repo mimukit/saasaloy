@@ -122,4 +122,13 @@ describe("testDatabaseName", () => {
     assert.notEqual(name, testDatabaseName(`${database.slice(0, -1)}y`));
     assertManagedDatabase("app_dev", name);
   });
+
+  // `db:drop` drops the test database through the same guard as the development one.
+  it("passes the drop guard for the default and a branch database", () => {
+    assertManagedDatabase("app_dev", testDatabaseName("app_dev"));
+    assertManagedDatabase(
+      "app_dev",
+      testDatabaseName(branchDatabaseName("app_dev", "issue-339-prune"))
+    );
+  });
 });

@@ -158,10 +158,11 @@ export function isManagedDatabase(context: Context, database: string): boolean {
 /**
  * This checkout's state block, or `undefined` when there is none.
  *
- * A checkout whose `DATABASE_URL` has no state file gets one inferred, when the URL names
- * a neon.new host or a database this project manages. Any other URL infers nothing and is
- * left alone: it is a server connection a developer put there, and `--server` is built to
- * create a database on exactly that server.
+ * A checkout whose `DATABASE_URL` has no state file gets one inferred, but only when the
+ * URL names this checkout's own database (`context.database`). Any other URL infers nothing
+ * and is left alone: it is a server connection a developer put there, or the main
+ * checkout's URL that `pnpm env:setup` copied into a new worktree, and `--server` is built
+ * to create a database on exactly that server.
  *
  * Inferring nothing is also the safety rule. `db:drop` drops what the block names and
  * nothing else, so a URL no block vouches for is never a drop target.
@@ -176,9 +177,7 @@ export function resolveState(context: Context): State | undefined {
     return undefined;
   }
 
-  const inferred = inferState(url, (database) =>
-    isManagedDatabase(context, database)
-  );
+  const inferred = inferState(url, context.database);
   if (!inferred) {
     return undefined;
   }

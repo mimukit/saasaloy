@@ -222,7 +222,7 @@ Three commands create, report on and drop the development database. They live in
 ```sh
 pnpm db:setup    # create the database if needed, then apply every pending migration
 pnpm db:status   # backend, database, host, applied and pending migrations
-pnpm db:drop     # drop the database, clear DATABASE_URL, delete the state block
+pnpm db:drop     # drop the database and its _test, clear DATABASE_URL, delete the state block
 ```
 
 `db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
@@ -285,10 +285,18 @@ The block has a file of its own because `pnpm env:setup` rebuilds `apps/api/.env
 and drops every comment it did not write. `DATABASE_URL` survives that rebuild as a checkout-owned
 key; the block would not. `.env.*` is gitignored, and no tool loads `.env.db`.
 
-A checkout whose `DATABASE_URL` has no state file gets one inferred, when the URL names a database
-this project manages or a neon.new host. Any other URL infers nothing and is left alone, which is
-both how `--server` reads the server you already use and how a production string never becomes a
-drop target: `db:drop` drops what the block names and nothing else.
+A checkout whose `DATABASE_URL` has no state file gets one inferred, but only when the URL names
+this checkout's own database: `<project>_dev` on `main`, `<project>_dev_<branch>` on a branch. Any
+other URL infers nothing and is left alone, which is both how `--server` reads the server you
+already use and how a production string never becomes a drop target: `db:drop` drops what the
+block names and nothing else.
+
+The rule matters in a new worktree. `pnpm env:setup` copies the main checkout's `DATABASE_URL` into
+`apps/api/.env` there, and that URL names `<project>_dev`, a database this project manages but not
+the one the branch uses. No block is inferred from it, so a `db:drop` in that worktree prints "This
+checkout has no development database. Nothing to drop." and leaves the main database alone.
+`db:setup` prints one line saying it ignores the copied URL, keeps the backend the URL points at,
+and creates the branch's own database.
 
 The two files can drift apart under a hand edit. When `DATABASE_URL` names another database than
 the block records, `db:setup` and `db:drop` refuse and `db:status` prints a `Mismatch` line.
@@ -299,6 +307,10 @@ the block records, `db:setup` and `db:drop` refuse and `db:status` prints a `Mis
 There is no confirmation prompt and no `--yes`. `db:drop` refuses a `DATABASE_URL` the state block
 does not vouch for, and every `CREATE DATABASE` and `DROP DATABASE` passes a guard that accepts only
 `<project>_dev` and `<project>_dev_<branch>` names.
+
+`db:drop` drops two databases: the one the block names, and its `<database>_test` on the same
+server, which `pnpm test` creates. Both pass the same guard, and the test database may not exist.
+The output names both, so a removed worktree leaves nothing behind.
 
 It drops a **database, never a server**. No container is stopped and no neon.new project is deleted.
 Throwing the container away is a separate, manual step:
