@@ -212,33 +212,42 @@ Each worktree is its own checkout with its own ports, env files and session cook
 
 setup:
 ```sh
-if [ ! -f packages/env/.env ] && [ -f "$GITKIT_REPO/packages/env/.env" ]; then
-  cp "$GITKIT_REPO/packages/env/.env" packages/env/.env
+if [ ! -e packages/env/.env ]; then
+  if [ ! -f "$GITKIT_REPO/packages/env/.env" ]; then
+    echo "The main checkout has no packages/env/.env. Run saasaloy env in $GITKIT_REPO, then prepare this worktree again." >&2
+    exit 1
+  fi
+  ln -sf "$GITKIT_REPO/packages/env/.env" packages/env/.env
 fi
 pnpm install --frozen-lockfile
 pnpm env:setup
+pnpm run --if-present db:setup
+pnpm run --if-present db:seed
 ```
 
 update:
 ```sh
 pnpm install --frozen-lockfile
 pnpm env:setup
+pnpm run --if-present db:setup
 ```
 
 teardown:
 ```sh
 pnpm dev:stop
+pnpm run --if-present db:drop
 ```
 
 watch:
 ```text
 packages/env/.env.example
 packages/env/src/services.ts
+packages/db/migrations/**
 ```
 
-`pnpm env:setup` writes each service's `.env` and then runs `pnpm dev:ports`, which gives a linked worktree its own ports and cookie prefix. Every step is safe to re-run. The `.env` copy runs only when the worktree has no `packages/env/.env`.
+`pnpm env:setup` writes each service's `.env` and then runs `pnpm dev:ports`, which gives a linked worktree its own ports and cookie prefix. Every step is safe to re-run. `packages/env/.env` in a worktree is a symlink to the main checkout's file, made only when the worktree has none, so `saasaloy env` in either checkout edits the one file. It holds no per-worktree value: the branch's `DATABASE_URL` lives in `apps/api/.env`.
 
-The branch database is not in the blocks above, because the base template has no database. With `database-postgres` installed, add `pnpm db:setup && pnpm db:seed` to the end of `setup:`, `pnpm db:setup` to the end of `update:`, and `pnpm db:drop` to `teardown:`. On a branch other than `main`, `db:setup` creates a database named for the branch, so two worktrees never share one. With `database-d1` installed, add `pnpm db:setup && pnpm db:seed` to `setup:` and `pnpm db:setup` to `update:`. The local D1 database is under `apps/api/.wrangler` inside the worktree, so it needs no teardown. With either driver, add `packages/db/migrations/**` and `packages/db/src/seed/**` to `watch:`.
+The database lines run through `pnpm run --if-present`, so the same blocks work with no database, with `database-d1` and with `database-postgres`. With Postgres, `db:setup` on a branch other than `main` creates a database named for the branch, `db:seed` fills it, and `db:drop` drops it and its test database. gitkit runs these blocks: `setup:` when it prepares a new worktree, `update:` when a watched path changes, and `teardown:` before it removes a worktree it prepared. Without gitkit, run the same commands by hand in the worktree. A worktree removed without its teardown leaves its Postgres databases on the server: `pnpm db:prune` in any checkout lists the databases of closed branches, and `pnpm db:prune --apply` drops them.
 
 ## Branches and Deploys
 

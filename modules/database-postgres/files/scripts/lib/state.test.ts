@@ -145,15 +145,12 @@ describe("liveness / timeLeft", () => {
   });
 });
 
-/** Stands in for `isManagedDatabase`: this project's databases all start with the prefix. */
-const managed = (database: string) => database.startsWith("app_dev");
-
 describe("inferState", () => {
   it("reads a neon host as the neon backend", () => {
     assert.deepEqual(
       inferState(
         "postgres://u:p@ep-x.eu-central-1.aws.neon.tech/app_dev",
-        () => false
+        "app_dev"
       ),
       { backend: "neon", database: "app_dev" }
     );
@@ -163,32 +160,54 @@ describe("inferState", () => {
     assert.deepEqual(
       inferState(
         "postgres://postgres:postgres@127.0.0.1:5432/app_dev",
-        managed
+        "app_dev"
       ),
       { backend: "docker", database: "app_dev" }
     );
   });
 
-  it("reads a remote URL holding a managed database as the server backend", () => {
+  it("reads a remote URL holding this checkout's database as the server backend", () => {
     assert.deepEqual(
-      inferState("postgres://u:p@db.example.com:5432/app_dev_main", managed),
+      inferState(
+        "postgres://u:p@db.example.com:5432/app_dev_main",
+        "app_dev_main"
+      ),
       { backend: "server", database: "app_dev_main" }
+    );
+  });
+
+  // The worktree case: `pnpm env:setup` copied the main checkout's URL, which names a
+  // database this project manages but not the one this branch uses.
+  it("reads nothing out of a URL naming another database of this project", () => {
+    assert.equal(
+      inferState(
+        "postgres://postgres:postgres@127.0.0.1:5432/app_dev",
+        "app_dev_issue_7_abcdef"
+      ),
+      undefined
+    );
+    assert.equal(
+      inferState(
+        "postgres://u:p@ep-x.eu-central-1.aws.neon.tech/app_dev",
+        "app_dev_feat_a"
+      ),
+      undefined
     );
   });
 
   // The refusal that keeps `db:drop` off a database these scripts did not make.
   it("reads nothing out of a URL naming another project's database", () => {
     assert.equal(
-      inferState("postgres://u:p@db.example.com:5432/production", managed),
+      inferState("postgres://u:p@db.example.com:5432/production", "app_dev"),
       undefined
     );
   });
 
   it("reads nothing out of a URL with no database or no shape", () => {
     assert.equal(
-      inferState("postgres://u:p@db.example.com:5432/", managed),
+      inferState("postgres://u:p@db.example.com:5432/", "app_dev"),
       undefined
     );
-    assert.equal(inferState("not a url", managed), undefined);
+    assert.equal(inferState("not a url", "app_dev"), undefined);
   });
 });

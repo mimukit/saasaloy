@@ -12,11 +12,13 @@ import {
   say,
   stateMismatch,
 } from "./lib/context.ts";
+import { testDatabaseName } from "./lib/branch-name.ts";
 import { removeKey, writeEnvFile } from "./lib/env-file.ts";
 import { BACKEND_LABEL } from "./lib/state.ts";
 
-// `pnpm db:drop`: drop the development database this checkout uses, then delete
-// `apps/api/.env.db` and remove `DATABASE_URL` from `apps/api/.env`.
+// `pnpm db:drop`: drop the development database this checkout uses and its `<database>_test`
+// on the same server, then delete `apps/api/.env.db` and remove `DATABASE_URL` from
+// `apps/api/.env`.
 //
 // It drops a database and never a server: no container is stopped, no neon.new project and
 // no Postgres instance is removed. `docker compose down -v` is the separate, manual step
@@ -43,6 +45,9 @@ await run(async () => {
       `${mismatch} Refusing to drop. Point DATABASE_URL back at ${state.database}, or delete ${STATE_FILE} by hand.`
     );
   }
+  // The database `pnpm test` made beside this one. `DROP DATABASE IF EXISTS` makes a run
+  // that never tested a no-op.
+  const test = testDatabaseName(state.database);
   if (state.backend === "neon") {
     if (!url) {
       throw new Error(
@@ -51,16 +56,18 @@ await run(async () => {
     }
     neon.forceIpv4();
     await neon.dropDatabase(context.prefix, url, state.database);
+    await neon.dropDatabase(context.prefix, url, test);
   } else {
     const admin =
       state.backend === "docker" ? docker.adminUrl() : server.adminUrl(url);
     await server.dropDatabase(context.prefix, admin, state.database);
+    await server.dropDatabase(context.prefix, admin, test);
   }
 
   writeEnvFile(context.env.path, removeKey(context.env.lines, "DATABASE_URL"));
   removeState(context);
   say(
-    `Dropped ${state.database} on ${BACKEND_LABEL[state.backend]}, removed DATABASE_URL from ${API_ENV}, and deleted ${STATE_FILE}.`
+    `Dropped ${state.database} and ${test} on ${BACKEND_LABEL[state.backend]}, removed DATABASE_URL from ${API_ENV}, and deleted ${STATE_FILE}.`
   );
   if (state.backend === "docker") {
     say(

@@ -49,6 +49,12 @@
     {
       "file": "packages/db/package.json",
       "kind": "package-json-script",
+      "name": "db:prune",
+      "value": "node scripts/prune.ts"
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-script",
       "name": "db:seed",
       "value": "node scripts/seed.ts"
     },
@@ -81,6 +87,12 @@
       "kind": "package-json-script",
       "name": "db:drop",
       "value": "pnpm --filter @repo/db db:drop"
+    },
+    {
+      "file": "package.json",
+      "kind": "package-json-script",
+      "name": "db:prune",
+      "value": "pnpm --filter @repo/db db:prune"
     },
     {
       "file": "package.json",
@@ -177,6 +189,10 @@
           "target": "scripts/drop.ts"
         },
         {
+          "path": "files/scripts/prune.ts",
+          "target": "scripts/prune.ts"
+        },
+        {
           "path": "files/scripts/seed.ts",
           "target": "scripts/seed.ts"
         },
@@ -203,6 +219,14 @@
         {
           "path": "files/scripts/lib/state.ts",
           "target": "scripts/lib/state.ts"
+        },
+        {
+          "path": "files/scripts/lib/mapping.ts",
+          "target": "scripts/lib/mapping.ts"
+        },
+        {
+          "path": "files/scripts/lib/prune.ts",
+          "target": "scripts/lib/prune.ts"
         },
         {
           "path": "files/scripts/lib/url.ts",

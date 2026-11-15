@@ -141,18 +141,18 @@ export function timeLeft(state: State, now: Date): string {
 }
 
 /**
- * Build a block for a `DATABASE_URL` set before `db:setup` ever wrote one. A `neon.tech`
- * host is neon.new with an unknown expiry. Any other host holding a database this project
- * manages is the `server` backend, or `docker` when the host is the local one the scaffolded
- * `compose.yaml` publishes.
+ * Build a block for a `DATABASE_URL` set before `db:setup` ever wrote one. The URL must
+ * name `own`, the database this checkout should use. A `neon.tech` host is then neon.new
+ * with an unknown expiry; any other host is the `server` backend, or `docker` when the host
+ * is the local one the scaffolded `compose.yaml` publishes.
  *
  * Anything else returns `undefined`, and every script refuses rather than touching a
- * database it cannot prove it made.
+ * database it cannot prove it made. That includes a URL for another database of this same
+ * project: `pnpm env:setup` copies the main checkout's `DATABASE_URL` into a new worktree,
+ * and a block inferred from that copy would make the main database this worktree's drop
+ * target.
  */
-export function inferState(
-  url: string,
-  isManaged: (database: string) => boolean
-): State | undefined {
+export function inferState(url: string, own: string): State | undefined {
   let parsed: URL;
   try {
     parsed = new URL(url);
@@ -160,15 +160,12 @@ export function inferState(
     return undefined;
   }
   const database = decodeURIComponent(parsed.pathname.replace(/^\//, ""));
-  if (!database) {
+  if (!database || database !== own) {
     return undefined;
   }
 
   if (parsed.hostname.endsWith(".neon.tech")) {
     return { backend: "neon", database };
-  }
-  if (!isManaged(database)) {
-    return undefined;
   }
   const local =
     parsed.hostname === "localhost" ||

@@ -4,6 +4,7 @@ import * as server from "./backends/server.ts";
 import {
   API_ENV,
   STATE_FILE,
+  isManagedDatabase,
   journalEntries,
   loadContext,
   readFlags,
@@ -17,9 +18,10 @@ import {
 } from "./lib/context.ts";
 import type { Context } from "./lib/context.ts";
 import { setKey, writeEnvFile } from "./lib/env-file.ts";
-import { BACKEND_LABEL, chooseBackend } from "./lib/state.ts";
+import { cloneId, mappingStatement } from "./lib/mapping.ts";
+import { BACKEND_LABEL, chooseBackend, inferState } from "./lib/state.ts";
 import type { Backend, State } from "./lib/state.ts";
-import { hostOf, swapDatabase } from "./lib/url.ts";
+import { databaseOf, hostOf, swapDatabase } from "./lib/url.ts";
 
 // `pnpm db:setup [--docker | --server | --neon] [--reset]`: give this checkout a migrated
 // development database, record it in the state block in `apps/api/.env.db`, and point
@@ -32,6 +34,29 @@ import { hostOf, swapDatabase } from "./lib/url.ts";
 /** The server URL `--server` creates on: whatever `DATABASE_URL` already names. */
 function serverAdmin(context: Context): string {
   return server.adminUrl(context.env.values.get("DATABASE_URL"));
+}
+
+/**
+ * The database a `DATABASE_URL` with no state block names, when it is another database of
+ * this project. That is the main checkout's URL, which `pnpm env:setup` copied into a new
+ * worktree. `resolveState` infers nothing from it, and `db:setup` says once that it is
+ * ignored. A URL for a database this project does not manage is a server connection a
+ * developer put there for `--server`, and gets no line.
+ */
+function copiedUrl(context: Context, existing?: State): string | undefined {
+  const url = context.env.values.get("DATABASE_URL");
+  if (existing || !url) {
+    return undefined;
+  }
+  let named: string;
+  try {
+    named = databaseOf(url);
+  } catch {
+    return undefined;
+  }
+  return named !== context.database && isManagedDatabase(context, named)
+    ? named
+    : undefined;
 }
 
 /** `--reset`: drop the database, or, on neon.new, forget its URL. */
@@ -145,7 +170,19 @@ await run(async () => {
   };
   const context = loadContext();
   const existing = resolveState(context);
-  const backend = chooseBackend(flags, existing);
+  const copied = copiedUrl(context, existing);
+  if (copied) {
+    say(
+      `Ignoring DATABASE_URL in ${API_ENV}: it names ${copied}, not ${context.database}, so it was copied from another checkout. Creating ${context.database}.`
+    );
+  }
+  // The copy still says which backend the other checkout uses, so a project on a shared
+  // server keeps using that server rather than falling back to the container.
+  const hinted =
+    copied && !(flags.docker || flags.server || flags.neon)
+      ? inferState(context.env.values.get("DATABASE_URL") ?? "", copied)
+      : undefined;
+  const backend = chooseBackend(flags, existing ?? hinted);
   if (backend === "neon") {
     neon.forceIpv4();
   }
@@ -210,8 +247,18 @@ await run(async () => {
 
   // Prove the URL the file now holds actually answers, so `db:setup` never ends green on a
   // database the next command cannot open.
+  // The same connection writes the database mapping, which `db:prune` reads to tell whether
+  // this branch is closed. A re-run rewrites it, so a database made before the mapping
+  // existed is mapped on its next `db:setup`.
+  const mapping = mappingStatement(context.prefix, state.database, {
+    prefix: context.prefix,
+    branch: context.branch ?? "",
+    worktree: context.root,
+    clone: cloneId(context.root),
+  });
   await withSql(url, "The new database did not answer", async (sql) => {
     await sql`select 1`;
+    await sql.unsafe(mapping);
   });
   printSummary(context, state, url);
 });

@@ -222,11 +222,16 @@ Three commands create, report on and drop the development database. They live in
 ```sh
 pnpm db:setup    # create the database if needed, then apply every pending migration
 pnpm db:status   # backend, database, host, applied and pending migrations
-pnpm db:drop     # drop the database, clear DATABASE_URL, delete the state block
+pnpm db:drop     # drop the database and its _test, clear DATABASE_URL, delete the state block
+pnpm db:prune    # list (or with --apply, drop) the databases of closed branches
 ```
 
 `db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
 the state block in place so the next run continues rather than making a second database.
+
+A new worktree runs these commands for you. The `## Worktree setup` section of the root `AGENTS.md`
+calls `db:setup` and `db:seed` when gitkit prepares a worktree, `db:setup` when a migration changes,
+and `db:drop` before gitkit removes it. Without gitkit, run the same commands by hand.
 
 ### One database per branch
 
@@ -237,7 +242,8 @@ because the title says nothing the number does not.
 The reason is the shared server. A branch that adds a migration must not apply it to a database
 other developers read: they then run schema that is not on `main` and nobody can see why. A database
 per branch keeps the unmerged migration where only its author meets it. Run `pnpm db:drop` when you
-are done with a branch, or the databases pile up.
+are done with a branch, or `pnpm db:prune` from any checkout to drop the databases of every closed
+branch at once.
 
 ### Backends: `--docker`, `--server`, `--neon`
 
@@ -285,10 +291,18 @@ The block has a file of its own because `pnpm env:setup` rebuilds `apps/api/.env
 and drops every comment it did not write. `DATABASE_URL` survives that rebuild as a checkout-owned
 key; the block would not. `.env.*` is gitignored, and no tool loads `.env.db`.
 
-A checkout whose `DATABASE_URL` has no state file gets one inferred, when the URL names a database
-this project manages or a neon.new host. Any other URL infers nothing and is left alone, which is
-both how `--server` reads the server you already use and how a production string never becomes a
-drop target: `db:drop` drops what the block names and nothing else.
+A checkout whose `DATABASE_URL` has no state file gets one inferred, but only when the URL names
+this checkout's own database: `<project>_dev` on `main`, `<project>_dev_<branch>` on a branch. Any
+other URL infers nothing and is left alone, which is both how `--server` reads the server you
+already use and how a production string never becomes a drop target: `db:drop` drops what the
+block names and nothing else.
+
+The rule matters in a new worktree. `pnpm env:setup` copies the main checkout's `DATABASE_URL` into
+`apps/api/.env` there, and that URL names `<project>_dev`, a database this project manages but not
+the one the branch uses. No block is inferred from it, so a `db:drop` in that worktree prints "This
+checkout has no development database. Nothing to drop." and leaves the main database alone.
+`db:setup` prints one line saying it ignores the copied URL, keeps the backend the URL points at,
+and creates the branch's own database.
 
 The two files can drift apart under a hand edit. When `DATABASE_URL` names another database than
 the block records, `db:setup` and `db:drop` refuse and `db:status` prints a `Mismatch` line.
@@ -300,12 +314,58 @@ There is no confirmation prompt and no `--yes`. `db:drop` refuses a `DATABASE_UR
 does not vouch for, and every `CREATE DATABASE` and `DROP DATABASE` passes a guard that accepts only
 `<project>_dev` and `<project>_dev_<branch>` names.
 
+`db:drop` drops two databases: the one the block names, and its `<database>_test` on the same
+server, which `pnpm test` creates. Both pass the same guard, and the test database may not exist.
+The output names both, so a removed worktree leaves nothing behind.
+
 It drops a **database, never a server**. No container is stopped and no neon.new project is deleted.
 Throwing the container away is a separate, manual step:
 
 ```sh
 docker compose down -v   # stops the container and deletes its volume
 ```
+
+### `db:prune`: drop the databases of closed branches
+
+A worktree removed without `pnpm db:drop` leaves its databases on the server. `pnpm db:prune`
+finds them. It is a dry run by default:
+
+```sh
+pnpm db:prune                      # list candidates with sizes, and each kept database with why
+pnpm db:prune --apply              # drop the candidates
+pnpm db:prune --include-unmapped   # also judge databases made before the mapping existed
+pnpm db:prune --server             # read the server DATABASE_URL names, not the container
+```
+
+It reads the **database mapping**: `db:setup` (and `--reset`) writes a comment on the development
+database, and the test setup writes one on `<database>_test`, as JSON
+`{"saasaloy":1,"prefix":"…","branch":"…","worktree":"…","clone":"…"}`. The clone id is a short SHA-1 of the
+hostname and the absolute git common dir, so every worktree of one clone shares it. A comment, not a
+table, so the drizzle schema never sees it. A re-run of `db:setup` maps a database made before.
+
+A database is a candidate only when its branch is closed:
+
+| The database                       | Dropped when                                                          |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| mapped by this clone               | the branch is in no `refs/heads/*` and no `refs/remotes/*/*`          |
+| mapped by another clone            | `gh pr list --state merged --head <branch>` finds a merged PR         |
+| unmapped, with `--include-unmapped` | no local or remote branch computes to its name                        |
+
+Everything else is kept and listed with its reason: `default` (the plain `<project>_dev` and its
+test database), `branch open`, `foreign, no merged PR`, `foreign, gh missing`, `unmapped`,
+`other project`, or `in use` (a session is open on it, and `DROP … WITH (FORCE)` would end it).
+
+`other project` guards a shared server. The name guard `^<prefix>(_…)?$` lets project `shop`
+(`shop_dev`) see the databases of project `shop-dev-tools` (`shop_dev_tools_dev`), so prune never
+trusts a name alone. A mapping records its project's `prefix`, and a database mapped by another
+project is kept. With `--include-unmapped`, an unmapped name with a `dev` segment after this prefix
+(`shop_dev_tools_dev`, `shop_dev_tools_dev_feat_a`) is kept for the same reason. A branch with a
+`dev` segment of its own is kept too, which errs on the side of keeping.
+
+It reads one server: the state block's backend, or with no block the local container when it
+answers; otherwise it refuses and names `--server`. On a server it reminds you to run
+`git fetch --prune` first, because it never fetches and a stale remote ref only keeps a database. On
+neon.new there is nothing to prune: each database is deleted when it expires.
 
 ## Seed data: `db:seed`
 
