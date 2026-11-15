@@ -36,7 +36,8 @@ Target: after `gitkit prepare`, a new worktree has a migrated, seeded `<project>
 | A branch switched in place | The old branch's database stays until prune closes the branch. `db:setup` already prints that it leaves the old database alone. (Defaulted, Q3.) |
 | A teardown that `db:drop` refuses | The failure stands: gitkit keeps the worktree and reports the exit code, because the worktree is the only handle on the database. (Defaulted, Q7.) |
 | `database-d1` | It ships `db:prune` as a script that drops nothing and says why: each D1 database lives in `apps/api/.wrangler/state` and goes with the worktree. Both drivers then expose the same `db:*` commands. |
-| Delivery order | Phase 1 is its own issue and PR, filed and built first, because it fixes a live data-loss path. (Defaulted, Q5.) |
+| Delivery order | One issue and one branch carry Phases 1 to 4, built in order, so Phase 1 lands first inside it. The grill defaulted Phase 1 to its own issue (Q5). The owner chose one issue when filing on 2026-11-15. |
+| Dependency on #307 | Phase 3 amends the `## Worktree setup` section that PR #322 (issue #307) adds to `packages/cli/templates/base/AGENTS.md`, so the issue is blocked by #307. That section already exists in #322 with `cp` for `packages/env/.env`, `pnpm dev:stop` in `teardown:`, `packages/env/src/services.ts` in `watch:`, and a paragraph that tells the owner to add the `db:*` lines by hand. Found when filing on 2026-11-15. No settled decision changed. |
 | Tests | Unit tests with `node:test` beside the source in `modules/database-postgres/files/scripts/lib/`, run by `pnpm test:modules`, as `branch-name.test.ts` does. They stay out of `scaffolds[].files`. The end-to-end check runs in the `.dev/playground` with the local Docker daemon. |
 | Attended phases | None. Every phase, Phase 4 included, can run unattended. (Defaulted, Q12.) |
 
@@ -53,7 +54,7 @@ Reuse:
 
 Rejected: a git `post-checkout` hook that runs `db:setup`. It conflicts with husky, runs on every branch switch in place, and duplicates what gitkit `prepare` already does with a marker and a teardown. Rejected for the prune rule: proof of merge from git alone (a recorded tip SHA, or parsing merge and squash commit text), because a squash merge never makes the branch an ancestor of the default branch.
 
-### Phase 1: make the guards safe for worktrees
+### Phase 1: make the guards safe for worktrees (#339)
 
 - Change `resolveState` so it infers a block only when the URL's database equals `context.database`, for the neon.new rule too.
 - Make `db:setup` print one line when it ignores a copied `DATABASE_URL` for another database, then create this branch's database as now.
@@ -63,7 +64,7 @@ Rejected: a git `post-checkout` hook that runs `db:setup`. It conflicts with hus
 
 Done when: in a playground worktree on a branch, with `apps/api/.env` copied from the main checkout and `db:setup` stopped before `create` (container down), `pnpm db:drop` prints "This checkout has no development database. Nothing to drop." and the main database still exists. After a normal `db:setup` and `pnpm test`, `pnpm db:drop` removes both `<db>` and `<db>_test` (`psql -l` shows neither). `pnpm test:modules` passes.
 
-### Phase 2: write the mapping and add `pnpm db:prune`
+### Phase 2: write the mapping and add `pnpm db:prune` (#339)
 
 - Add `lib/mapping.ts`: `cloneId(root)`, `formatMapping(...)` and `parseMapping(comment)`, which returns `undefined` for a comment that is not a saasaloy mapping. Add `lib/mapping.test.ts`.
 - Make `db:setup` write the mapping after it creates or reuses the database, and make `test-setup.ts` write it on the test database. A re-run rewrites it, so a database made before this change gets mapped on its next `db:setup`.
@@ -76,19 +77,19 @@ Done when: in a playground worktree on a branch, with `apps/api/.env` copied fro
 
 Done when: in the playground on the docker backend, with mapped databases for `main`, an open branch `feat-a`, a deleted branch `feat-b` (development and test), a database whose mapping names another clone and a deleted branch, and one unmapped database, `pnpm db:prune` lists only the two `feat-b` databases as candidates and lists the foreign and unmapped databases as skipped with their reasons. `pnpm db:prune --apply` drops the two `feat-b` databases, and `psql -l` still shows every other one. With a `psql` session open on a candidate, `--apply` skips it and names it. `pnpm test:modules` passes.
 
-### Phase 3: declare the worktree setup
+### Phase 3: extend the worktree setup (#339)
 
-- Add a `## Worktree setup` section to `packages/cli/templates/base/AGENTS.md`:
-  - `setup:` stops with a message naming `saasaloy env` when `"$GITKIT_REPO/packages/env/.env"` is missing; symlinks `packages/env/.env` to it when the worktree has none; then runs `pnpm install --frozen-lockfile`, `pnpm env:setup`, `pnpm run --if-present db:setup` and `pnpm run --if-present db:seed`.
-  - `update:` runs `pnpm install --frozen-lockfile`, `pnpm env:setup` and `pnpm run --if-present db:setup`.
-  - `teardown:` runs `pnpm run --if-present db:drop`.
-  - `watch:` lists `packages/db/migrations/**` and `packages/env/.env.example`.
-- Add one paragraph under the section: gitkit runs these blocks; a person without gitkit runs the same commands by hand; `pnpm db:prune` cleans up after worktrees that gitkit did not prepare.
+- Amend the `## Worktree setup` section that PR #322 adds to `packages/cli/templates/base/AGENTS.md`. Keep every line #322 owns (`pnpm dev:stop`, the `dev:ports` paragraph, the one-session rule):
+  - `setup:` stops with a message naming `saasaloy env` when `"$GITKIT_REPO/packages/env/.env"` is missing, and replaces #322's `cp` with a symlink when the worktree has no `packages/env/.env`. It keeps `pnpm install --frozen-lockfile` and `pnpm env:setup`, then appends `pnpm run --if-present db:setup` and `pnpm run --if-present db:seed`.
+  - `update:` appends `pnpm run --if-present db:setup`.
+  - `teardown:` keeps `pnpm dev:stop` first, then appends `pnpm run --if-present db:drop`.
+  - `watch:` keeps its two paths and adds `packages/db/migrations/**`.
+- Replace #322's paragraph that tells the owner to add the `db:*` lines by hand with one that says: the blocks call the database scripts when a driver is installed; gitkit runs these blocks; a person without gitkit runs the same commands by hand; `pnpm db:prune` cleans up after worktrees that gitkit did not prepare.
 - Point to the section from the lifecycle section of both driver skills.
 
-Done when: `saasaloy init` in `.dev` writes an `AGENTS.md` whose `## Worktree setup` section gitkit `prepare` reads with no "broken declaration" error. `saasaloy update` on an existing playground adds the section. `pnpm lint` passes.
+Done when: `saasaloy init` in `.dev` writes an `AGENTS.md` whose one `## Worktree setup` section gitkit `prepare` reads with no "broken declaration" error, and whose blocks hold both the #322 lines and the database lines. `saasaloy update` on an existing playground adds the section. `pnpm lint` passes.
 
-### Phase 4: prove the lifecycle end to end
+### Phase 4: prove the lifecycle end to end (#339)
 
 - In a playground with `database-postgres` on the docker backend: create a worktree with gitkit, let `prepare` run, then run `pnpm dev` and `pnpm test` in it. Check that `packages/env/.env` in the worktree is a symlink to the main checkout's file.
 - Remove the worktree with gitkit and check that teardown drops both databases.
