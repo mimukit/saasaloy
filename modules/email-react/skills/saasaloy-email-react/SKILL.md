@@ -126,15 +126,15 @@ the first.
 pnpm --filter @repo/email-react dev
 ```
 
-That runs `email dev --dir src/templates --port 3003` — the `react-email` package installs its CLI
-under the bin name `email`, not `react-email`. It starts on http://localhost:3003, lists every
+That runs `scripts/dev.ts`, which starts `email dev --dir src/templates --port <port>`. The port is `DEV_PORT` from `packages/email-react/.env.local` when `pnpm dev:ports` wrote one, and 3003 otherwise. The `react-email` package installs its CLI
+under the bin name `email`, not `react-email`. In the main checkout it starts on http://localhost:3003, lists every
 template in the folder, and hot-reloads as you edit. It is a development tool: it never runs in the
 Worker, and both `react-email` and `@react-email/ui` are devDependencies, so neither reaches a
 deploy.
 
 The port is pinned on purpose. The CLI defaults to 3000, which `apps/web` already holds with
 `strictPort`, and the root `pnpm dev` starts every workspace's `dev` script at once. 3001 is
-`apps/admin` and 3002 is `apps/app`, so the preview takes the next free frontend port, 3003.
+`apps/admin` and 3002 is `apps/app`, so the preview takes the next free frontend port, 3003. That is the `devPort` on the `email-react` row in `packages/env/src/services.ts`, and a linked worktree gets its own port from `pnpm dev:ports`.
 
 `@react-email/ui` is declared up front on purpose. Without it the CLI stops on an interactive
 "would you like to install it?" prompt, which hangs any non-interactive run.

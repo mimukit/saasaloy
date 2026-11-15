@@ -62,6 +62,8 @@ const ORIGINAL_STDOUT_TTY = process.stdout.isTTY;
 const BASE_NOTE_IDS = [
   "base/0001-brand-css",
   "base/0002-ui-primitives-and-date-logic",
+  "base/0003-dev-stop-and-dev-plugins",
+  "base/0004-dev-ports",
 ];
 
 let dir: string;

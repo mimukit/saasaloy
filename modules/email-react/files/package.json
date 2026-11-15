@@ -4,7 +4,7 @@
   "type": "module",
   "scripts": {
     "clean": "rimraf -g dist .react-email \"*.tsbuildinfo\"",
-    "dev": "email dev --dir src/templates --port 3003",
+    "dev": "node scripts/dev.ts",
     "typecheck": "tsc --noEmit"
   },
   "exports": {
@@ -20,7 +20,9 @@
   },
   "devDependencies": {
     "@react-email/ui": "6.11.0",
+    "@repo/env": "workspace:*",
     "@repo/tsconfig": "workspace:*",
+    "@types/node": "26.6.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
     "react-email": "6.11.0",

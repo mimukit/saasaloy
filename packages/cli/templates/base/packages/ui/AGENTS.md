@@ -58,6 +58,12 @@ The `saasaloy-shell` skill lists the whole set and how a page composes it.
 
 **One rule covers the whole package: no IO in `@repo/ui`.** No fetch, no persistence, no auth, no router, in any layer. Client-state stores (nanostores) live in `src/lib/`; the app that owns the data hydrates the store and passes what a block needs as props. When a store-shaped need shows up in a block, move the binding up into the app instead of importing the store in place.
 
+## A new dependency and the running dev server
+
+**Restart the dev server after an install while `pnpm dev` runs.** Vite 8 caches a failed import until the server restarts, and its watcher ignores `node_modules`. So a block that imports a package before `pnpm --filter @repo/ui add <package>` keeps failing with `Failed to resolve import` on every reload. `apps/admin`, `apps/app` and `apps/api` restart themselves when `pnpm-lock.yaml` changes (`restartOnLockfile()` from `@repo/tooling/vite`). `apps/web` does not, so stop `pnpm dev` and start it again.
+
+**Plain `http` on a remote host is not a secure context.** A dev server reached at `http://<DEV_HOST>:<port>` has no `crypto.randomUUID` and no `navigator.clipboard`. Browser code makes an id with `randomId()` from `@repo/ui/lib/random-id`, and copies text with `copyText()` from `@repo/ui/lib/clipboard`, which falls back to `execCommand` and rejects when both paths fail.
+
 ## Primitives and presets
 
 **The primitives the base ships.** `src/components/` holds accordion, avatar, badge, button, calendar, card, checkbox, collapsible, combobox, date-picker (a From/To `DateRangePicker`), dialog, dropdown-menu, input, input-group, input-otp, label, number-field, password-field, popover, radio-group, scroll-area, select, separator, sheet, skeleton, sonner, switch, table, tabs, textarea and tooltip. Check this list before you run `shadcn add`: a primitive that ships is already source you own. The calendar and the date picker keep their logic in `src/lib/calendar.ts`, `src/lib/date-picker.ts` and `src/lib/date-field.ts`, and their words in `src/content/date-picker.ts`. They show days in `config.app.locale` and start the week on that locale's first weekday; a `weekStartsOn` prop (0 is Sunday) overrides it.

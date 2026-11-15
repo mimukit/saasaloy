@@ -27,8 +27,21 @@ export const ENV_EXAMPLE = "packages/env/.env.example";
 /** The literal, case-sensitive prefix that marks a build-time public value. */
 export const PUBLIC_PREFIX = "PUBLIC_";
 
-/** The services a project can have. The order here is the order the sections print in. */
-export const SERVICE_NAMES = ["api", "web", "admin", "app", "deploy"] as const;
+/**
+ * The services a project can have. The order here is the order the sections print in.
+ *
+ * `dev-ports` is the base's file-less row for `DEV_HOST`, which `pnpm dev:ports` reads. No
+ * module declares a key for it, but a name missing here makes the parse drop the section
+ * and the next `saasaloy add` moves the key under `api`.
+ */
+export const SERVICE_NAMES = [
+  "api",
+  "web",
+  "admin",
+  "app",
+  "deploy",
+  "dev-ports",
+] as const;
 
 export type ServiceName = (typeof SERVICE_NAMES)[number];
 

@@ -17,8 +17,10 @@
     "release": "node packages/tooling/src/release.ts",
     "release:dry": "node packages/tooling/src/release.ts --dry-run",
     "dev": "turbo run dev",
+    "dev:ports": "node packages/env/scripts/dev-ports.ts",
+    "dev:stop": "node packages/tooling/src/dev-stop.ts",
     "env:setup": "node packages/env/scripts/env-setup.ts",
-    "test": "turbo run test && vitest run",
+    "test": "turbo run test --concurrency=4 && vitest run",
     "lint": "pnpm run lint:types && pnpm run lint:code && pnpm run lint:css && pnpm run format:check",
     "lint:types": "oxlint -c oxlint.config.mjs --type-aware --deny-warnings packages/config/src packages/env/src packages/tooling/src packages/ui/src",
     "lint:code": "oxlint -c oxlint.config.mjs --deny-warnings .",
@@ -27,7 +29,7 @@
     "format": "prettier --write .",
     "format:check": "prettier --check .",
     "skills:link": "node packages/tooling/src/link-skills.ts",
-    "typecheck": "turbo run typecheck"
+    "typecheck": "turbo run typecheck --concurrency=4"
   },
   "devDependencies": {
     "@commitlint/cli": "21.2.3",

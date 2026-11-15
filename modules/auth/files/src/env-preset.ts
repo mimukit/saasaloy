@@ -17,6 +17,13 @@ export const authPreset = definePreset({
   module: "@repo/auth",
   extends: [],
   server: {
+    AUTH_COOKIE_PREFIX: z
+      .string()
+      .regex(/^[a-z0-9-]+$/u)
+      .optional()
+      .describe(
+        "Dev-only prefix for both session cookie names. pnpm dev:ports writes it in a linked worktree; read only on an http BETTER_AUTH_URL."
+      ),
     BETTER_AUTH_SECRET: z
       .string()
       .optional()

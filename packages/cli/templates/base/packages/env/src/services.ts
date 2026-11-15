@@ -4,9 +4,9 @@
 // A *service* is a workspace that reads a `.env` at runtime or at build time, or a set of
 // values a tool reads with no file at all. The name is the workspace directory, not the
 // module that installed it. The base seeds the `web` row because the base template ships
-// `apps/web`, and the `deploy` row because `pnpm deploy:production` needs Cloudflare
-// credentials; `saasaloy add api` and `admin` each append their own row with a
-// `const-array` patch.
+// `apps/web`, the `deploy` row because `pnpm deploy:production` needs Cloudflare
+// credentials, and the `dev-ports` row for the values `pnpm dev:ports` reads. `saasaloy
+// add api` and `admin` each append their own row with a `const-array` patch.
 
 export type Environment = "dev" | "prod";
 
@@ -22,6 +22,13 @@ export interface Service {
   environment: Environment;
   /** Keys a value source holds that must never reach this file. */
   omit: string[];
+  /**
+   * The port this service's dev server listens on in the main checkout. `pnpm dev:ports`
+   * moves it into a per-worktree block in a linked worktree and writes the result as
+   * `DEV_PORT` in the `.env.local` beside `file`. A frontend takes 3000 to 3004 and a
+   * backend 4000 to 4004; any other value fails `pnpm dev:ports`.
+   */
+  devPort?: number;
 }
 
 /**
@@ -48,8 +55,15 @@ export const LOCAL_PROD_VALUES = "packages/env/.env.prod";
  * otherwise, and `saasaloy add api` fails silently.
  */
 export const SERVICES: Service[] = [
-  { name: "web", file: "apps/web/.env", environment: "dev", omit: [] },
+  {
+    name: "web",
+    file: "apps/web/.env",
+    environment: "dev",
+    omit: [],
+    devPort: 3000,
+  },
   { name: "deploy", environment: "prod", omit: [] },
+  { name: "dev-ports", environment: "dev", omit: [] },
 ];
 
 export function serviceNames(): string[] {

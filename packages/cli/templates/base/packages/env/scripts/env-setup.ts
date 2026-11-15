@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { execFileSync } from "node:child_process";
+import { execFileSync, spawnSync } from "node:child_process";
+import path from "node:path";
 import { selectServices } from "../src/services.ts";
 import type { Environment } from "../src/services.ts";
 import { setupServices } from "../src/setup.ts";
@@ -9,6 +10,9 @@ import { sources } from "../src/sources.ts";
 // the selected value source. `dev` writes every dev service; `--env prod --only <service>`
 // writes one production file and nothing under `apps/`. A deploy writes no file at all:
 // `pnpm deploy:production` loads the production values in memory.
+//
+// A dev run ends with `pnpm dev:ports`, which writes this checkout's dev ports and origins
+// into each service's `.env.local`. The `.env` files above never hold them.
 
 function readOptions(args: string[]): {
   environment: Environment;
@@ -77,6 +81,18 @@ try {
           `Warning: ${service.extraKeys.join(", ")} came from the value source but packages/env/.env.example does not list them for ${service.service}. Add them there, under a "# @services" section that names ${service.service}.`
         );
       }
+    }
+  }
+
+  if (options.environment === "dev") {
+    const devPorts = spawnSync(
+      process.execPath,
+      [path.join(import.meta.dirname, "dev-ports.ts")],
+      { cwd: root, stdio: "inherit" }
+    );
+    if (devPorts.status !== 0) {
+      say("pnpm dev:ports failed. Fix the error above and run it again.");
+      process.exitCode = 1;
     }
   }
 } catch (error) {

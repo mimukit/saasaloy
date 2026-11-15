@@ -38,9 +38,9 @@ Steps 1 and 2 are a script rather than a `globalSetup` hook because of step 3. T
 | `apps/web` | 3000 | always, it is the base app |
 | `apps/admin` | 3001 | `admin` is installed |
 
-These are the project's pinned dev ports, the same ones in `AGENTS.md`. Off CI, `reuseExistingServer` is on, so a `pnpm dev` you already have running is used instead of a second one on a busy port. On CI it is off, because reusing would hide a start-up failure.
+These are the project's pinned dev ports, the same ones in `AGENTS.md`. `lib/project.ts` reads `.devports.json` at the repository root when `pnpm dev:ports` wrote one, and takes the host and each app's port from it, so a linked worktree tests its own servers. With no record it uses these pinned ports on `localhost`, and a record that does not parse fails the run. Off CI, `reuseExistingServer` is on, so a `pnpm dev` you already have running is used instead of a second one on a busy port. On CI it is off, because reusing would hide a start-up failure.
 
-Playwright waits on `http://localhost:4000/health` for the api, not on its origin. The Worker answers `GET /` with a 404 envelope, and Playwright reads any status at or above 400 as "not ready".
+Playwright waits on the api's `/health` (`http://localhost:4000/health` in the main checkout), not on its origin. The Worker answers `GET /` with a 404 envelope, and Playwright reads any status at or above 400 as "not ready".
 
 ## Adding a flow
 

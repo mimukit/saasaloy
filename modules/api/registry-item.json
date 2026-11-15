@@ -9,12 +9,14 @@
   "dependsOn": ["logger", "logger-console"],
   "dependencies": [],
   "envVars": {
-    "CORS_ORIGINS": "Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com). Falls back to the localhost dev origins when unset. A set value replaces them, so list every deployed frontend (web, admin, app)."
+    "CORS_ORIGINS": "Required. Comma-separated allowed origins for credentialed cross-origin requests (e.g. https://app.x.com,https://admin.x.com). There is no localhost fallback: an origin outside this list gets no CORS headers. In dev, keep the localhost default here: pnpm env:setup runs pnpm dev:ports, which writes this checkout's real web, admin and app origins (localhost and DEV_HOST) into apps/api/.env.local, and that file wins. In production, list every deployed frontend (web, admin, app)."
   },
   "envServices": {
     "default": ["api"]
   },
-  "envOptional": ["CORS_ORIGINS"],
+  "devVars": {
+    "CORS_ORIGINS": "http://localhost:3000,http://localhost:3001,http://localhost:3002"
+  },
   "patches": [
     {
       "file": "packages/env/src/services.ts",
@@ -25,7 +27,8 @@
         "name": "api",
         "file": "apps/api/.env",
         "environment": "dev",
-        "omit": []
+        "omit": [],
+        "devPort": 4000
       }
     },
     {

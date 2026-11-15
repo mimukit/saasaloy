@@ -128,4 +128,4 @@ Four rules:
   by definition.
 - **Schema validation.** `typecheck` is the gate.
 - **A `<CAP>_PROVIDER` key.** Provider selection stays in `env`.
-- **The dev ports.** 3000/3001/4000 are read by Node config files at build time.
+- **The dev ports.** Each checkout has its own, so they are `env`: `pnpm dev:ports` writes `DEV_PORT` into each service's `.env.local`, and the dev configs read it at startup.

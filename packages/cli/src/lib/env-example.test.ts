@@ -180,6 +180,24 @@ describe(renderEnvExample, () => {
     );
   });
 
+  it("keeps the base's DEV_HOST under its file-less dev-ports section", () => {
+    const text = [
+      "# @services dev-ports",
+      "",
+      "# The machine name the browser uses.",
+      "DEV_HOST=localhost",
+      "",
+    ].join("\n");
+    const out = renderEnvExample({
+      ...base,
+      existing: parseEnvExample(text),
+    });
+
+    expect(out).toContain(
+      "# @services dev-ports\n\n# The machine name the browser uses.\nDEV_HOST=localhost"
+    );
+  });
+
   it("says so when a key has no description and no kept comment", () => {
     const out = renderEnvExample({
       ...base,

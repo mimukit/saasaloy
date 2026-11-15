@@ -57,6 +57,7 @@ import { Spinner } from "@repo/ui/components/shell/spinner";
 import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import { toastManager } from "@repo/ui/components/shell/toast";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
+import { copyText } from "@repo/ui/lib/clipboard";
 
 import { auth } from "@admin/lib/auth";
 
@@ -599,7 +600,7 @@ export function ApiKeyWorkspace({
                   // The rejection is deliberately swallowed. A browser that refuses
                   // clipboard access still leaves the key selectable in the box,
                   // and an error toast here would say nothing the operator can act on.
-                  navigator.clipboard.writeText(issued).catch(() => {
+                  copyText(issued).catch(() => {
                     // nothing to tell the operator; the key is on screen.
                   });
                 }}

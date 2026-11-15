@@ -22,6 +22,7 @@ import { Field, FieldLabel } from "@repo/ui/components/shell/field";
 import { Input } from "@repo/ui/components/shell/input";
 import { Skeleton } from "@repo/ui/components/shell/skeleton";
 import { toastManager } from "@repo/ui/components/shell/toast";
+import { copyText } from "@repo/ui/lib/clipboard";
 
 import { auth } from "@admin/lib/auth";
 
@@ -196,7 +197,7 @@ export function OrganizationWorkspace({
 
   const copyInvitationId = async (id: string) => {
     try {
-      await navigator.clipboard.writeText(id);
+      await copyText(id);
       setCopyStatus("Invitation ID copied.");
     } catch {
       setCopyStatus("Copy failed. Select the Invitation ID and copy it.");

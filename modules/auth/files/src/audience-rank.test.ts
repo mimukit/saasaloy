@@ -374,7 +374,8 @@ describe("instance wiring", () => {
   const auth = read("auth.ts");
 
   it("names each instance's base path and cookie prefix from its audience", () => {
-    assert.match(auth, /cookiePrefix: group,/);
+    assert.match(auth, /cookiePrefix: cookiePrefix\[group\],/);
+    assert.match(auth, /const cookiePrefix = cookiePrefixes\(authEnv\);/);
     assert.match(
       auth,
       /export const auth = betterAuth\(\{\s*\.\.\.sharedOptions\(CLIENT_AUDIENCE\),\s*basePath: "\/auth",/

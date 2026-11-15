@@ -17,7 +17,9 @@
     "./zod": "./src/zod.ts",
     "./sources": "./src/sources.ts",
     "./setup": "./src/setup.ts",
-    "./deploy": "./src/deploy.ts"
+    "./deploy": "./src/deploy.ts",
+    "./dev-port": "./src/dev-port.ts",
+    "./dev-ports": "./src/dev-ports.ts"
   },
   "scripts": {
     "clean": "rimraf -g dist \"*.tsbuildinfo\"",
