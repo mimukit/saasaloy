@@ -251,6 +251,7 @@ await run(async () => {
   // this branch is closed. A re-run rewrites it, so a database made before the mapping
   // existed is mapped on its next `db:setup`.
   const mapping = mappingStatement(context.prefix, state.database, {
+    prefix: context.prefix,
     branch: context.branch ?? "",
     worktree: context.root,
     clone: cloneId(context.root),

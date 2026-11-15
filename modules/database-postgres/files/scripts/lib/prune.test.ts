@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import { branchDatabaseName, testDatabaseName } from "./branch-name.ts";
-import { planPrune, readRefs } from "./prune.ts";
+import { looksForeign, planPrune, readRefs } from "./prune.ts";
 import type { DatabaseInfo, PruneInput, SkipReason } from "./prune.ts";
 
 const PREFIX = "app_dev";
@@ -13,7 +13,12 @@ const OTHER = "bbbbbbbbbbbb";
 
 function db(
   branch: string | undefined,
-  options: { clone?: string; sessions?: number; test?: boolean } = {}
+  options: {
+    clone?: string;
+    sessions?: number;
+    test?: boolean;
+    prefix?: string;
+  } = {}
 ): DatabaseInfo {
   const dev = branch ? branchDatabaseName(PREFIX, branch) : PREFIX;
   const name = options.test ? testDatabaseName(dev) : dev;
@@ -23,6 +28,7 @@ function db(
     ...(branch
       ? {
           mapping: {
+            prefix: options.prefix ?? PREFIX,
             branch,
             worktree: `/w/${branch}`,
             clone: options.clone ?? CLONE,
@@ -168,12 +174,65 @@ describe("planPrune", () => {
     });
   });
 
+  // `app_dev` also matches the names of a project whose prefix is `app_dev_tools_dev`.
+  it("keeps a database another project mapped: other project", () => {
+    const other = {
+      name: "app_dev_tools_dev_feat_b",
+      sessions: 0,
+      mapping: {
+        prefix: "app_dev_tools_dev",
+        branch: "feat-b",
+        worktree: "/w/tools",
+        clone: CLONE,
+      },
+    };
+    const plan = planPrune(
+      input({ databases: [other], mergedPr: () => "merged" })
+    );
+    assert.deepEqual(plan.candidates, []);
+    assert.deepEqual(Object.values(reasons(plan)), ["other project"]);
+  });
+
+  it("keeps an unmapped name of another project with --include-unmapped: other project", () => {
+    const names = [
+      "app_dev_tools_dev",
+      "app_dev_tools_dev_test",
+      "app_dev_tools_dev_feat_b",
+    ];
+    const plan = planPrune(
+      input({
+        databases: names.map((name) => ({ name, sessions: 0 })),
+        includeUnmapped: true,
+      })
+    );
+    assert.deepEqual(plan.candidates, []);
+    assert.deepEqual(Object.values(reasons(plan)), [
+      "other project",
+      "other project",
+      "other project",
+    ]);
+  });
+
   it("keeps a candidate with an open session: in use", () => {
     const plan = planPrune(
       input({ databases: [db("feat-b", { sessions: 1 })] })
     );
     assert.deepEqual(plan.candidates, []);
     assert.deepEqual(Object.values(reasons(plan)), ["in use"]);
+  });
+});
+
+describe("looksForeign", () => {
+  it("flags a dev segment after the prefix and nothing else", () => {
+    assert.equal(looksForeign("app_dev", "app_dev_tools_dev"), true);
+    assert.equal(
+      looksForeign("app_dev", "app_dev_tools_dev_feat_a_test"),
+      true
+    );
+    assert.equal(looksForeign("app_dev", "app_dev_feat_a"), false);
+    assert.equal(looksForeign("app_dev", "app_dev_devices"), false);
+    assert.equal(looksForeign("app_dev", "app_dev_issue_7_abcdef_test"), false);
+    assert.equal(looksForeign("app_dev", "app_dev"), false);
   });
 });
 

@@ -4,16 +4,22 @@ import { hostname } from "node:os";
 import { resolve } from "node:path";
 import { assertManagedDatabase } from "./branch-name.ts";
 
-// The database mapping: which branch, worktree and clone a development or test database
-// belongs to. `db:setup` and the test setup write it as the database's comment, and
+// The database mapping: which project, branch, worktree and clone a development or test
+// database belongs to. `db:setup` and the test setup write it as the database's comment, and
 // `db:prune` reads it back to decide whether the branch is closed. A comment, not a table,
 // so the project's drizzle schema never sees it.
 //
-// The comment is JSON: `{"saasaloy":1,"branch":…,"worktree":…,"clone":…}`. A comment that
-// does not parse to that shape is not a mapping, and `db:prune` treats the database as
-// unmapped.
+// The comment is JSON: `{"saasaloy":1,"prefix":…,"branch":…,"worktree":…,"clone":…}`. A
+// comment that does not parse to that shape is not a mapping, and `db:prune` treats the
+// database as unmapped.
+//
+// `prefix` is the project's database prefix. The name guard `^<prefix>(_…)?$` also matches
+// a project whose prefix starts with this one (`shop_dev` matches `shop_dev_tools_dev`), so
+// the name alone cannot say which project a database belongs to; the mapping can.
 
 export interface Mapping {
+  /** The database prefix of the project that wrote it, from `databasePrefix`. */
+  prefix: string;
   /** The branch the checkout was on when it wrote the mapping. */
   branch: string;
   /** Absolute path of the checkout. */
@@ -52,6 +58,7 @@ export function cloneId(root: string): string {
 export function formatMapping(mapping: Mapping): string {
   return JSON.stringify({
     saasaloy: 1,
+    prefix: mapping.prefix,
     branch: mapping.branch,
     worktree: mapping.worktree,
     clone: mapping.clone,
@@ -75,9 +82,11 @@ export function parseMapping(
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  const { branch, worktree, clone } = record;
+  const { prefix, branch, worktree, clone } = record;
   if (
     record.saasaloy !== 1 ||
+    typeof prefix !== "string" ||
+    !prefix ||
     typeof branch !== "string" ||
     typeof worktree !== "string" ||
     typeof clone !== "string" ||
@@ -85,7 +94,7 @@ export function parseMapping(
   ) {
     return undefined;
   }
-  return { branch, worktree, clone };
+  return { prefix, branch, worktree, clone };
 }
 
 /**

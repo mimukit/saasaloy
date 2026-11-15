@@ -11,6 +11,7 @@ import {
 } from "./mapping.ts";
 
 const MAPPING = {
+  prefix: "acme_dev",
   branch: "feat-a",
   worktree: "/home/dev/worktrees/acme/feat-a",
   clone: "0123456789ab",
@@ -52,6 +53,11 @@ describe("formatMapping / parseMapping", () => {
       undefined
     );
     assert.equal(parseMapping('{"saasaloy":1,"branch":"x"}'), undefined);
+    // A mapping with no project prefix cannot say which project it belongs to.
+    assert.equal(
+      parseMapping('{"saasaloy":1,"branch":"x","worktree":"/w","clone":"c"}'),
+      undefined
+    );
     assert.equal(parseMapping("[1]"), undefined);
   });
 });

@@ -13,6 +13,13 @@ import type { Mapping } from "./mapping.ts";
 //
 // The default `<prefix>` database and its test database are never candidates, and nor is a
 // database with an open session, because the drop would end that session.
+//
+// Nor is a database of another project. The name guard lets `shop_dev` see the databases of
+// a project whose prefix is `shop_dev_tools_dev`. A mapping names its project's prefix, so a
+// mapped database of another project is kept. An unmapped name is judged by its shape: every
+// prefix ends in `_dev`, so a `dev` segment after this prefix marks another project's name,
+// and `--include-unmapped` keeps it too. A branch with a `dev` segment of its own is kept
+// the same way, which errs on the side of keeping.
 
 export type SkipReason =
   | "default"
@@ -20,6 +27,7 @@ export type SkipReason =
   | "foreign, no merged PR"
   | "foreign, gh missing"
   | "unmapped"
+  | "other project"
   | "in use";
 
 /** What `gh` says about a branch: a merged PR, none, or nothing because `gh` is missing. */
@@ -79,6 +87,18 @@ function openNames(prefix: string, branches: readonly string[]): Set<string> {
   return names;
 }
 
+/**
+ * True when an unmapped `name` may belong to another project: the part after `<prefix>_`
+ * holds a `dev` segment, as `shop_dev_tools_dev` and `shop_dev_tools_dev_feat_a` do for
+ * the prefix `shop_dev`.
+ */
+export function looksForeign(prefix: string, name: string): boolean {
+  if (!name.startsWith(`${prefix}_`)) {
+    return false;
+  }
+  return /(?:^|_)dev(?:_|$)/.test(name.slice(prefix.length + 1));
+}
+
 /** Why `database` stays, or `undefined` when its branch is closed. */
 function keepReason(
   input: PruneInput,
@@ -91,7 +111,13 @@ function keepReason(
     if (!input.includeUnmapped) {
       return "unmapped";
     }
+    if (looksForeign(input.prefix, database.name)) {
+      return "other project";
+    }
     return computed().has(database.name) ? "branch open" : undefined;
+  }
+  if (mapping.prefix !== input.prefix) {
+    return "other project";
   }
   if (mapping.clone === input.clone) {
     return open.has(mapping.branch) ? "branch open" : undefined;

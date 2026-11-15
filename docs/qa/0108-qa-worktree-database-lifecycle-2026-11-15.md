@@ -138,10 +138,10 @@ git worktree add -b feat-a ../wt-a && cp apps/api/.env ../wt-a/apps/api/.env && 
 git worktree add -b feat-b ../wt-b && cp apps/api/.env ../wt-b/apps/api/.env && (cd ../wt-b && pnpm install --frozen-lockfile && pnpm db:setup && pnpm test) && git worktree remove --force ../wt-b && git branch -D feat-b
 ```
 
-2. Make a database mapped by another clone, and one with no mapping.
+2. Make a database mapped by another clone, one with no mapping, and one mapped by another project whose name the prefix also matches.
 
 ```sh
-docker compose exec postgres psql -U postgres -c "CREATE DATABASE playground_dev_feat_x" -c "COMMENT ON DATABASE playground_dev_feat_x IS '{\"saasaloy\":1,\"branch\":\"feat-x\",\"worktree\":\"/elsewhere\",\"clone\":\"000000000000\"}'" -c "CREATE DATABASE playground_dev_old"
+docker compose exec postgres psql -U postgres -c "CREATE DATABASE playground_dev_feat_x" -c "COMMENT ON DATABASE playground_dev_feat_x IS '{\"saasaloy\":1,\"prefix\":\"playground_dev\",\"branch\":\"feat-x\",\"worktree\":\"/elsewhere\",\"clone\":\"000000000000\"}'" -c "CREATE DATABASE playground_dev_old" -c "CREATE DATABASE playground_dev_tools_dev_feat_y" -c "COMMENT ON DATABASE playground_dev_tools_dev_feat_y IS '{\"saasaloy\":1,\"prefix\":\"playground_dev_tools_dev\",\"branch\":\"feat-y\",\"worktree\":\"/other\",\"clone\":\"000000000000\"}'"
 ```
 
 - [ ] Setup complete
@@ -159,7 +159,7 @@ docker compose exec postgres psql -U postgres -c "CREATE DATABASE playground_dev
    ```
 
    - [ ] The `prune` lines are `playground_dev_feat_b` and `playground_dev_feat_b_test`, each with a size
-   - [ ] The `keep` lines give `playground_dev` as `default`, `playground_dev_feat_a` as `branch open`, `playground_dev_feat_x` as `foreign, no merged PR` (or `foreign, gh missing`) and `playground_dev_old` as `unmapped`
+   - [ ] The `keep` lines give `playground_dev` as `default`, `playground_dev_feat_a` as `branch open`, `playground_dev_feat_x` as `foreign, no merged PR` (or `foreign, gh missing`) `playground_dev_old` as `unmapped`, and `playground_dev_tools_dev_feat_y` as `other project`
    - [ ] The last line says nothing was dropped and names `pnpm db:prune --apply`
 
 **Result**
@@ -211,7 +211,7 @@ docker compose exec postgres psql -U postgres -c "CREATE DATABASE playground_dev
    pnpm db:prune --apply && docker compose exec postgres psql -U postgres -l
    ```
 
-   - [ ] Both `feat-b` databases are gone, and `playground_dev`, `playground_dev_feat_a`, `playground_dev_feat_x` and `playground_dev_old` are still in the list
+   - [ ] Both `feat-b` databases are gone, and `playground_dev`, `playground_dev_feat_a`, `playground_dev_feat_x` `playground_dev_old` and `playground_dev_tools_dev_feat_y` are still in the list
 
 **Result**
 
@@ -224,7 +224,7 @@ docker compose exec postgres psql -U postgres -c "CREATE DATABASE playground_dev
 **Reset.** Run after every case above, before moving to Scenario 3.
 
 ```sh
-(cd ../wt-a && pnpm db:drop) && git worktree remove --force ../wt-a && git branch -D feat-a && docker compose exec postgres psql -U postgres -c "DROP DATABASE playground_dev_feat_x" -c "DROP DATABASE playground_dev_old"
+(cd ../wt-a && pnpm db:drop) && git worktree remove --force ../wt-a && git branch -D feat-a && docker compose exec postgres psql -U postgres -c "DROP DATABASE playground_dev_feat_x" -c "DROP DATABASE playground_dev_old" -c "DROP DATABASE playground_dev_tools_dev_feat_y"
 ```
 
 ## Scenario 3: A worktree from gitkit
@@ -401,6 +401,7 @@ cd .dev/playground && pnpm lint
 ```
 
 - ✅ `pnpm run test:modules` → 1050 of 1050 pass at `c213c2e6`, with the new `mapping.test.ts`, `prune.test.ts` and the `inferState` and `testDatabaseName` cases. Each prune skip reason has a test that fails when its rule is broken.
+- ✅ After the prefix fix, `pnpm run test:modules` → 1053 of 1053, `pnpm lint` → exit 0, and the playground `pnpm --filter @repo/db typecheck` → exit 0. The `other project` rule, for a mapped and an unmapped name, has tests that fail when the rule is broken.
 - ❌ `turbo run test` → 1959 of 1960 pass. The one failure is `update-notes.test.ts > dates every base note at or before the CLI in this package` (`base/0002` and `base/0003` at 0.9.0). The acceptance check ran it at the base `73ab3aab` and confirmed that PR #322 causes it, not this branch.
 - ✅ `test:base` 144/144, `test:tooling` 195/195, `test:scripts` 533/533.
 - ✅ `pnpm lint` → exit 0 at `c213c2e6`.

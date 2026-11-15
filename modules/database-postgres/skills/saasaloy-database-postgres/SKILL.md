@@ -339,7 +339,7 @@ pnpm db:prune --server             # read the server DATABASE_URL names, not the
 
 It reads the **database mapping**: `db:setup` (and `--reset`) writes a comment on the development
 database, and the test setup writes one on `<database>_test`, as JSON
-`{"saasaloy":1,"branch":"…","worktree":"…","clone":"…"}`. The clone id is a short SHA-1 of the
+`{"saasaloy":1,"prefix":"…","branch":"…","worktree":"…","clone":"…"}`. The clone id is a short SHA-1 of the
 hostname and the absolute git common dir, so every worktree of one clone shares it. A comment, not a
 table, so the drizzle schema never sees it. A re-run of `db:setup` maps a database made before.
 
@@ -352,8 +352,15 @@ A database is a candidate only when its branch is closed:
 | unmapped, with `--include-unmapped` | no local or remote branch computes to its name                        |
 
 Everything else is kept and listed with its reason: `default` (the plain `<project>_dev` and its
-test database), `branch open`, `foreign, no merged PR`, `foreign, gh missing`, `unmapped`, or
-`in use` (a session is open on it, and `DROP … WITH (FORCE)` would end it).
+test database), `branch open`, `foreign, no merged PR`, `foreign, gh missing`, `unmapped`,
+`other project`, or `in use` (a session is open on it, and `DROP … WITH (FORCE)` would end it).
+
+`other project` guards a shared server. The name guard `^<prefix>(_…)?$` lets project `shop`
+(`shop_dev`) see the databases of project `shop-dev-tools` (`shop_dev_tools_dev`), so prune never
+trusts a name alone. A mapping records its project's `prefix`, and a database mapped by another
+project is kept. With `--include-unmapped`, an unmapped name with a `dev` segment after this prefix
+(`shop_dev_tools_dev`, `shop_dev_tools_dev_feat_a`) is kept for the same reason. A branch with a
+`dev` segment of its own is kept too, which errs on the side of keeping.
 
 It reads one server: the state block's backend, or with no block the local container when it
 answers; otherwise it refuses and names `--server`. On a server it reminds you to run

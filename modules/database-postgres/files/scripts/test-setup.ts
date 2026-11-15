@@ -120,6 +120,7 @@ export async function setup(project: TestProject): Promise<void> {
   await withSql(url, "Cannot reach the test database", async (sql) => {
     await sql.unsafe(
       mappingStatement(context.prefix, database, {
+        prefix: context.prefix,
         branch: context.branch ?? "",
         worktree: context.root,
         clone: cloneId(context.root),
