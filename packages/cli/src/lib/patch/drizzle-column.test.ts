@@ -45,52 +45,59 @@ function authSchema(dialect: "pg" | "sqlite"): string {
   );
 }
 
-const BILLING_CUSTOMER = {
+const SUBSCRIPTION_CUSTOMER = {
   exportName: "users",
-  column: "billingCustomerId",
-  value: 'text("billing_customer_id")',
+  column: "subscriptionCustomerId",
+  value: 'text("subscription_customer_id")',
 } as const;
 
 describe(insertDrizzleColumn, () => {
   it("adds the column to the table's columns object", () => {
-    const out = insertDrizzleColumn(SQLITE, BILLING_CUSTOMER);
-    expect(out).toContain('billingCustomerId: text("billing_customer_id")');
+    const out = insertDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER);
+    expect(out).toContain(
+      'subscriptionCustomerId: text("subscription_customer_id")'
+    );
     expect(out).toContain('id: text("id").primaryKey()');
   });
 
   it("serves both dialects from one patch when the builder is the same", () => {
-    expect(insertDrizzleColumn(PG, BILLING_CUSTOMER)).toContain(
-      'billingCustomerId: text("billing_customer_id")'
+    expect(insertDrizzleColumn(PG, SUBSCRIPTION_CUSTOMER)).toContain(
+      'subscriptionCustomerId: text("subscription_customer_id")'
     );
   });
 
   it("is a byte-for-byte no-op on a second apply", () => {
-    const once = insertDrizzleColumn(SQLITE, BILLING_CUSTOMER);
-    expect(insertDrizzleColumn(once, BILLING_CUSTOMER)).toBe(once);
+    const once = insertDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER);
+    expect(insertDrizzleColumn(once, SUBSCRIPTION_CUSTOMER)).toBe(once);
   });
 
   it("never clobbers a column the user already wrote under that key", () => {
     const edited = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
-      value: 'text("billing_customer_id").notNull()',
+      ...SUBSCRIPTION_CUSTOMER,
+      value: 'text("subscription_customer_id").notNull()',
     });
-    expect(insertDrizzleColumn(edited, BILLING_CUSTOMER)).toBe(edited);
+    expect(insertDrizzleColumn(edited, SUBSCRIPTION_CUSTOMER)).toBe(edited);
   });
 
   it("leaves the source untouched when the export is absent", () => {
     expect(
-      insertDrizzleColumn(SQLITE, { ...BILLING_CUSTOMER, exportName: "team" })
+      insertDrizzleColumn(SQLITE, {
+        ...SUBSCRIPTION_CUSTOMER,
+        exportName: "team",
+      })
     ).toBe(SQLITE);
   });
 
   it("leaves the source untouched when the export is not a table call", () => {
     const notATable = 'export const users = "nope";\n';
-    expect(insertDrizzleColumn(notATable, BILLING_CUSTOMER)).toBe(notATable);
+    expect(insertDrizzleColumn(notATable, SUBSCRIPTION_CUSTOMER)).toBe(
+      notATable
+    );
   });
 
   it("adds a declared import that the file is missing", () => {
     const out = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
+      ...SUBSCRIPTION_CUSTOMER,
       column: "lockedAt",
       value: 'timestamp("locked_at")',
       import: { name: "timestamp", from: "drizzle-orm/pg-core" },
@@ -101,7 +108,7 @@ describe(insertDrizzleColumn, () => {
 
   it("does not duplicate an import the file already has", () => {
     const out = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
+      ...SUBSCRIPTION_CUSTOMER,
       import: { name: "text", from: "drizzle-orm/sqlite-core" },
     });
     expect(out.match(/from "drizzle-orm\/sqlite-core"/gu)).toHaveLength(1);
@@ -109,7 +116,7 @@ describe(insertDrizzleColumn, () => {
 
   it("keeps the file's trailing newline", () => {
     expect(
-      insertDrizzleColumn(SQLITE, BILLING_CUSTOMER).endsWith("\n")
+      insertDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER).endsWith("\n")
     ).toBeTruthy();
   });
 
@@ -122,7 +129,7 @@ describe(insertDrizzleColumn, () => {
     );
     expect(
       insertDrizzleColumn(repointed, {
-        ...BILLING_CUSTOMER,
+        ...SUBSCRIPTION_CUSTOMER,
         import: { name: "text", from: "drizzle-orm/sqlite-core" },
       })
     ).toBe(repointed);
@@ -131,8 +138,8 @@ describe(insertDrizzleColumn, () => {
   it("throws on a value that is more than one expression", () => {
     expect(() =>
       insertDrizzleColumn(SQLITE, {
-        ...BILLING_CUSTOMER,
-        value: 'text("billing_customer_id"); dropEverything()',
+        ...SUBSCRIPTION_CUSTOMER,
+        value: 'text("subscription_customer_id"); dropEverything()',
       })
     ).toThrow(/not a single expression/u);
   });
@@ -140,35 +147,35 @@ describe(insertDrizzleColumn, () => {
 
 describe(removeDrizzleColumn, () => {
   it("round-trips to the byte-identical original", () => {
-    const added = insertDrizzleColumn(SQLITE, BILLING_CUSTOMER);
+    const added = insertDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER);
     expect(added).not.toBe(SQLITE);
-    expect(removeDrizzleColumn(added, BILLING_CUSTOMER)).toBe(SQLITE);
+    expect(removeDrizzleColumn(added, SUBSCRIPTION_CUSTOMER)).toBe(SQLITE);
   });
 
   it("round-trips the pg twin too", () => {
-    const added = insertDrizzleColumn(PG, BILLING_CUSTOMER);
-    expect(removeDrizzleColumn(added, BILLING_CUSTOMER)).toBe(PG);
+    const added = insertDrizzleColumn(PG, SUBSCRIPTION_CUSTOMER);
+    expect(removeDrizzleColumn(added, SUBSCRIPTION_CUSTOMER)).toBe(PG);
   });
 
   it.each(["sqlite", "pg"] as const)(
     "round-trips the real auth.%s.ts byte for byte",
     (dialect) => {
       const before = authSchema(dialect);
-      const added = insertDrizzleColumn(before, BILLING_CUSTOMER);
+      const added = insertDrizzleColumn(before, SUBSCRIPTION_CUSTOMER);
 
       // Everything outside the one added line is untouched: no property is reprinted and
       // no blank line appears beside a multi-line column or a comment.
       expect(added).toContain(
-        '  billingCustomerId: text("billing_customer_id"),\n'
+        '  subscriptionCustomerId: text("subscription_customer_id"),\n'
       );
       expect(added.split("\n")).toHaveLength(before.split("\n").length + 1);
-      expect(removeDrizzleColumn(added, BILLING_CUSTOMER)).toBe(before);
+      expect(removeDrizzleColumn(added, SUBSCRIPTION_CUSTOMER)).toBe(before);
     }
   );
 
   it("takes a declared import back out with the column", () => {
     const patch = {
-      ...BILLING_CUSTOMER,
+      ...SUBSCRIPTION_CUSTOMER,
       column: "lockedAt",
       value: 'timestamp("locked_at")',
       import: { name: "timestamp", from: "drizzle-orm/pg-core" },
@@ -180,7 +187,7 @@ describe(removeDrizzleColumn, () => {
 
   it("keeps an import the file still references elsewhere", () => {
     const patch = {
-      ...BILLING_CUSTOMER,
+      ...SUBSCRIPTION_CUSTOMER,
       import: { name: "text", from: "drizzle-orm/sqlite-core" },
     };
     const out = removeDrizzleColumn(insertDrizzleColumn(SQLITE, patch), patch);
@@ -188,20 +195,20 @@ describe(removeDrizzleColumn, () => {
   });
 
   it("is a no-op when the column is already gone", () => {
-    expect(removeDrizzleColumn(SQLITE, BILLING_CUSTOMER)).toBe(SQLITE);
+    expect(removeDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER)).toBe(SQLITE);
   });
 
   it("refuses to delete a column the user has since edited", () => {
     const edited = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
-      value: 'text("billing_customer_id").notNull()',
+      ...SUBSCRIPTION_CUSTOMER,
+      value: 'text("subscription_customer_id").notNull()',
     });
-    expect(removeDrizzleColumn(edited, BILLING_CUSTOMER)).toBe(edited);
+    expect(removeDrizzleColumn(edited, SUBSCRIPTION_CUSTOMER)).toBe(edited);
   });
 
   it("refuses when the local name now binds a different import", () => {
     const patch = {
-      ...BILLING_CUSTOMER,
+      ...SUBSCRIPTION_CUSTOMER,
       column: "lockedAt",
       value: 'timestamp("locked_at")',
       import: { name: "timestamp", from: "drizzle-orm/pg-core" },
@@ -218,7 +225,7 @@ describe(drizzleColumnInsertRefusal, () => {
   it("names a missing export", () => {
     expect(
       drizzleColumnInsertRefusal(SQLITE, {
-        ...BILLING_CUSTOMER,
+        ...SUBSCRIPTION_CUSTOMER,
         exportName: "team",
       })
     ).toMatch(/could not find an export named "team"/u);
@@ -228,18 +235,18 @@ describe(drizzleColumnInsertRefusal, () => {
     expect(
       drizzleColumnInsertRefusal(
         'export const users = "nope";\n',
-        BILLING_CUSTOMER
+        SUBSCRIPTION_CUSTOMER
       )
     ).toMatch(/not a Drizzle table call/u);
   });
 
   it("reports a column already holding something else", () => {
     const edited = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
-      value: 'text("billing_customer_id").notNull()',
+      ...SUBSCRIPTION_CUSTOMER,
+      value: 'text("subscription_customer_id").notNull()',
     });
-    expect(drizzleColumnInsertRefusal(edited, BILLING_CUSTOMER)).toMatch(
-      /holds text\("billing_customer_id"\)\.notNull\(\)/u
+    expect(drizzleColumnInsertRefusal(edited, SUBSCRIPTION_CUSTOMER)).toMatch(
+      /holds text\("subscription_customer_id"\)\.notNull\(\)/u
     );
   });
 
@@ -250,7 +257,7 @@ describe(drizzleColumnInsertRefusal, () => {
     );
     expect(
       drizzleColumnInsertRefusal(repointed, {
-        ...BILLING_CUSTOMER,
+        ...SUBSCRIPTION_CUSTOMER,
         import: { name: "text", from: "drizzle-orm/sqlite-core" },
       })
     ).toMatch(/would read the wrong builder/u);
@@ -258,7 +265,7 @@ describe(drizzleColumnInsertRefusal, () => {
 
   it("has no objection to a clean apply", () => {
     expect(
-      drizzleColumnInsertRefusal(SQLITE, BILLING_CUSTOMER)
+      drizzleColumnInsertRefusal(SQLITE, SUBSCRIPTION_CUSTOMER)
     ).toBeUndefined();
   });
 });
@@ -266,22 +273,24 @@ describe(drizzleColumnInsertRefusal, () => {
 describe(drizzleColumnRemoveRefusal, () => {
   it("stays quiet when the column is already gone", () => {
     expect(
-      drizzleColumnRemoveRefusal(SQLITE, BILLING_CUSTOMER)
+      drizzleColumnRemoveRefusal(SQLITE, SUBSCRIPTION_CUSTOMER)
     ).toBeUndefined();
   });
 
   it("stays quiet on a clean removal", () => {
-    const added = insertDrizzleColumn(SQLITE, BILLING_CUSTOMER);
-    expect(drizzleColumnRemoveRefusal(added, BILLING_CUSTOMER)).toBeUndefined();
+    const added = insertDrizzleColumn(SQLITE, SUBSCRIPTION_CUSTOMER);
+    expect(
+      drizzleColumnRemoveRefusal(added, SUBSCRIPTION_CUSTOMER)
+    ).toBeUndefined();
   });
 
   it("explains an edited column", () => {
     const edited = insertDrizzleColumn(SQLITE, {
-      ...BILLING_CUSTOMER,
-      value: 'text("billing_customer_id").notNull()',
+      ...SUBSCRIPTION_CUSTOMER,
+      value: 'text("subscription_customer_id").notNull()',
     });
-    expect(drizzleColumnRemoveRefusal(edited, BILLING_CUSTOMER)).toMatch(
-      /reads text\("billing_customer_id"\)\.notNull\(\) now/u
+    expect(drizzleColumnRemoveRefusal(edited, SUBSCRIPTION_CUSTOMER)).toMatch(
+      /reads text\("subscription_customer_id"\)\.notNull\(\) now/u
     );
   });
 });

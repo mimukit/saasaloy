@@ -10,7 +10,7 @@ import type {
 // `packages/payment` declares the port and never implements it: the core has zero npm
 // runtime dependencies, so it cannot import `drizzle-orm` to write a query. `apps/api` is
 // the one workspace that holds both the schema and the request's database client, so the
-// SQL lives in `apps/api/src/payment-store.ts`, the same split `billing` uses (ADR 0029).
+// SQL lives in `apps/api/src/payment-store.ts`, the same split `subscription` uses (ADR 0029).
 //
 // The port is reached through a resolver registered once at module load, not passed into
 // `createPayment(env)`. That keeps the factory's signature `createPayment(env)` for every

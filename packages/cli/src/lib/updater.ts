@@ -264,9 +264,9 @@ function baseLabel(version: string, hash: string): string {
  * `untracked` when the project carries no usable record. Never `local`: the template has
  * no working-copy override, and a registry override says nothing about it.
  *
- * A tracked file missing from disk also makes the base `outdated`, at an unchanged hash.
- * `adoptBase` records an absent template file so the next update restores it, and the hash
- * alone would report `current` on the same CLI and never restore anything.
+ * A tracked file missing from disk also makes the base `outdated`, at an unchanged hash,
+ * so the next `update` offers it once as `deleted` (#312). A tombstoned file is not in
+ * `missingTargets`: the owner already chose to keep it deleted, so it moves nothing.
  */
 export function compareBase(args: CompareBaseArgs): ModuleComparison {
   const { lock, manifest, runningHash, runningVersion } = args;
@@ -342,7 +342,14 @@ export function recordRefRewrites(
  *                    drift or not (the single most important rule here)
  *   create         — the new version adds it and nothing occupies the path
  *   overwrite      — tracked and untouched since it was applied → safe deterministic write
- *   restore        — tracked but missing from disk → put it back (decision 6)
+ *   restore        — a tombstoned file `update --restore <path>` named → write theirs and
+ *                    drop the tombstone (#312). Never classified, only set by
+ *                    `markRestored`.
+ *   deleted        — tracked, not tombstoned, and missing from disk → merge plan as
+ *                    "deleted locally" (#312, ADR 0059; replaces decision 6's restore).
+ *                    `--resolved` keeps it deleted, `--restore` brings it back.
+ *   kept-deleted   — tombstoned, still absent, and upstream changed it → one summary
+ *                    line, never written, never in the merge plan (#312)
  *   unchanged      — disk already holds exactly what the new version ships
  *   drift          — tracked and hand-edited → merge plan, never written
  *   conflict       — the new version adds a file that already exists untracked → merge
@@ -360,6 +367,8 @@ export type UpdateFileAction =
   | "create"
   | "overwrite"
   | "restore"
+  | "deleted"
+  | "kept-deleted"
   | "unchanged"
   | "drift"
   | "conflict"
@@ -388,6 +397,7 @@ const NEEDS_MERGE: ReadonlySet<UpdateFileAction> = new Set<UpdateFileAction>([
   "drift",
   "conflict",
   "delete-drift",
+  "deleted",
 ]);
 
 export interface PlannedUpdateFile {
@@ -426,6 +436,17 @@ export interface PlannedUpdateFile {
   patchedBy?: string[];
   /** The new revision's `when` for this entry, recorded in the manifest on write (#242). */
   when?: When;
+  /** The new revision marks this entry a module seed file (#310): see {@link classifySeed}. */
+  seed?: true;
+  /**
+   * The manifest entry is a tombstone (#312). Set on a `kept-deleted` or `skip` file that
+   * is still absent, and on a `restore` one. A tombstoned file found back on disk is not
+   * one: the owner restored it by hand, so it classifies normally and the run drops the
+   * flag (`reappeared`).
+   */
+  tombstoned?: boolean;
+  /** Tombstoned, yet on disk again: the apply drops the flag whatever the verdict (#312). */
+  reappeared?: boolean;
 }
 
 /**
@@ -463,10 +484,11 @@ export interface ModuleUpdatePlan {
   depBumps: DepBump[];
   /** Human-readable version disagreements, in `planDeps`'s existing phrasing. */
   depConflicts: string[];
-  /** New `dependsOn` prerequisites this version introduces (decision 11). */
+  /**
+   * New `dependsOn` prerequisites this version introduces (decision 11). Two modules may
+   * name the same one; the run installs it once, through `UpdatePlan.prereqPlan` (#312).
+   */
   prereqNames: string[];
-  /** An ordinary `add` plan for those prerequisites, executed under the same confirmation. */
-  prereqPlan?: Plan;
   /** Each prerequisite's own `dependsOn`, so its lock entry stays self-describing. */
   prereqDependsOn: Record<string, string[]>;
   /** Each prerequisite's own `conflictsWith`, for the same reason. */
@@ -505,8 +527,37 @@ export interface ModuleUpdatePlan {
   baseRecord?: LockBase;
 }
 
+/** An alias the run adds to `saasaloy.json`, because the project lacks the key (#312). */
+export interface AliasAdd {
+  alias: string;
+  value: string;
+}
+
+/** An alias the project holds with a value other than the one the run declares (#312). */
+export interface AliasKept {
+  alias: string;
+  /** The value in the project's `saasaloy.json`, which stays. */
+  project: string;
+  /** The value the template or a module scaffold declares. */
+  template: string;
+}
+
 export interface UpdatePlan {
   modules: ModuleUpdatePlan[];
+  /**
+   * One ordinary `add` plan for every new prerequisite in the run, de-duplicated (#312),
+   * executed once before the first module under the same confirmation. Two modules that
+   * start to depend on one capability plan its files, link and lock entry once.
+   */
+  prereqPlan?: Plan;
+  /**
+   * Aliases the run adds to `saasaloy.json` (#312): keys the template's own `saasaloy.json`,
+   * a module revision or a prerequisite declares and the project lacks. Written before the
+   * first file, so every target resolves.
+   */
+  aliasAdds: AliasAdd[];
+  /** Declared aliases the project holds with another value. The project value stays. */
+  aliasKept: AliasKept[];
   /** Comparisons that won't be applied (current/pinned/local/unresolvable) — for the summary. */
   skipped: ModuleComparison[];
   /** Installed modules with no lock entry — reported, never fatal (mirrors remover.ts). */
@@ -551,8 +602,9 @@ export interface ModuleUpdateInput {
   /**
    * Whether a target is source the project owns once it has been written — the base's
    * blocks, components, `globals.css` and favicon (`ownedFiles` in `_saasaloy-base.json`).
-   * An owned file that is absent is still created or restored, because a project that
-   * never had it is not a project that edited it. An owned file that exists is never
+   * An owned file that is absent is still created, because a project that never had it
+   * is not a project that edited it; a tracked one that is gone is `deleted` (#312), like
+   * any other tracked file. An owned file that exists is never
    * written: it goes to the merge plan whatever its hash says.
    */
   isOwned?: (target: string) => boolean;
@@ -583,6 +635,13 @@ export interface BuildUpdatePlanArgs {
    * `add` wrote. Both revisions render alike, or every templated file reads as changed.
    */
   vars?: TemplateVars;
+  /**
+   * The aliases the bundled template's `saasaloy.json` declares (`templateAliases`, #312).
+   * Every module's targets resolve against them, so `update <module>` places a file under
+   * an alias the base added after this project was made, even when the base is not in the
+   * run. Each one the project lacks is added.
+   */
+  baseAliases?: Record<string, string>;
 }
 
 /**
@@ -650,6 +709,84 @@ function scaffoldAliases(
   return out;
 }
 
+/**
+ * The aliases this run declares, split by what the project holds (#312): the template's
+ * own first, then each input's prerequisites and new revision in plan order. The first
+ * declaration of a key wins. A key the project lacks is added; a key it holds with
+ * another value is kept, once, and reported.
+ */
+function planAliases(
+  config: SaasaloyConfig,
+  baseAliases: Record<string, string>,
+  inputs: readonly ModuleUpdateInput[]
+): { aliasAdds: AliasAdd[]; aliasKept: AliasKept[] } {
+  const declared = new Map<string, string>();
+  const declare = (aliases: Record<string, string>): void => {
+    for (const [alias, value] of Object.entries(aliases)) {
+      if (!declared.has(alias)) {
+        declared.set(alias, value);
+      }
+    }
+  };
+  declare(baseAliases);
+  for (const input of inputs) {
+    for (const name of input.prereqs?.order ?? []) {
+      declare(scaffoldAliases(input.prereqs?.modules.get(name)));
+    }
+    declare(scaffoldAliases(input.theirs));
+  }
+  const aliasAdds: AliasAdd[] = [];
+  const aliasKept: AliasKept[] = [];
+  for (const [alias, value] of declared) {
+    const project = config.aliases[alias];
+    if (project === undefined) {
+      aliasAdds.push({ alias, value });
+    } else if (project !== value) {
+      aliasKept.push({ alias, project, template: value });
+    }
+  }
+  return { aliasAdds, aliasKept };
+}
+
+/**
+ * One install plan for every new prerequisite in the run (#312). Each input's
+ * topological order is merged first-seen, which keeps every dependency ahead of its
+ * dependant, and anything the project already holds drops out. Two modules that both
+ * start to depend on `shell` then plan its files, its skill link and its lock entry once.
+ */
+async function planPrereqs(
+  root: string,
+  config: SaasaloyConfig,
+  manifest: Manifest,
+  inputs: readonly ModuleUpdateInput[]
+): Promise<{ plan?: Plan }> {
+  const order: string[] = [];
+  const modules = new Map<string, LoadedModule>();
+  for (const input of inputs) {
+    for (const name of input.prereqs?.order ?? []) {
+      const mod = input.prereqs?.modules.get(name);
+      if (config.installed.includes(name) || modules.has(name) || !mod) {
+        continue;
+      }
+      order.push(name);
+      modules.set(name, mod);
+    }
+  }
+  if (order.length === 0) {
+    return {};
+  }
+  return {
+    plan: await buildPlan({
+      root,
+      install: order,
+      alreadyInstalled: [],
+      modules,
+      config,
+      manifest,
+    }),
+  };
+}
+
 export async function buildUpdatePlan(
   args: BuildUpdatePlanArgs
 ): Promise<UpdatePlan> {
@@ -670,19 +807,49 @@ export async function buildUpdatePlan(
     ...Object.keys(lock.modules),
   ]);
 
-  for (const item of inputs) {
+  const rendered = inputs.map((item) =>
+    args.vars === undefined ? item : renderInput(item, args.vars, manifest)
+  );
+  const { aliasAdds, aliasKept } = planAliases(
+    config,
+    args.baseAliases ?? {},
+    rendered
+  );
+  const addedAliases = Object.fromEntries(
+    aliasAdds.map((add) => [add.alias, add.value])
+  );
+  const prereq = await planPrereqs(root, config, manifest, rendered);
+  // Links the run already plans, so a second module naming the same skill reads it as
+  // `exists` rather than a conflict with the first (#312).
+  const plannedLinks = new Set(
+    (prereq.plan?.links ?? [])
+      .filter((link) => link.action !== "conflict")
+      .map((link) => link.path)
+  );
+
+  for (const item of rendered) {
     const plan = await planOneModule({
       root,
       config,
       manifest,
-      input:
-        args.vars === undefined ? item : renderInput(item, args.vars, manifest),
+      input: item,
       pkg: pkg ?? null,
       installed,
+      addedAliases,
+      plannedLinks,
     });
+    for (const link of plan.links) {
+      if (link.action !== "conflict") {
+        plannedLinks.add(link.path);
+      }
+    }
     modules.push(plan);
     for (const file of plan.files) {
-      if (file.action !== "skip" && file.action !== "unchanged") {
+      if (
+        file.action !== "skip" &&
+        file.action !== "unchanged" &&
+        file.action !== "kept-deleted"
+      ) {
         touched.push(file.target);
       }
     }
@@ -707,6 +874,9 @@ export async function buildUpdatePlan(
 
   return {
     modules,
+    ...(prereq.plan ? { prereqPlan: prereq.plan } : {}),
+    aliasAdds,
+    aliasKept,
     skipped: args.skipped ?? [],
     missingLockEntries,
     ...(migrationCommand ? { migrationCommand } : {}),
@@ -757,6 +927,31 @@ export function markResolved(
   plan.needsMerge = plan.modules.some((mod) => mod.needsMerge);
 }
 
+/**
+ * Turn each tombstoned file `update --restore <path>` names into a `restore` (#312), so
+ * `executeUpdatePlan` writes the current upstream file and records it without the flag.
+ * Returns the targets the plan holds no tombstoned file for: the command refuses those
+ * before anything is written. A module whose only waiting item was a `deleted` file is
+ * worked out again, as `markResolved` does.
+ */
+export function markRestored(
+  plan: UpdatePlan,
+  targets: ReadonlySet<string>
+): string[] {
+  const found = new Set<string>();
+  for (const mod of plan.modules) {
+    for (const file of mod.files) {
+      if (file.tombstoned && targets.has(file.target)) {
+        file.action = "restore";
+        found.add(file.target);
+      }
+    }
+    mod.needsMerge = moduleNeedsMerge(mod);
+  }
+  plan.needsMerge = plan.modules.some((mod) => mod.needsMerge);
+  return [...targets].filter((target) => !found.has(target)).toSorted();
+}
+
 /** Whether anything about one module still routes to the merge plan. */
 function moduleNeedsMerge(
   mod: Pick<ModuleUpdatePlan, "files" | "removals" | "patches">
@@ -776,6 +971,10 @@ interface PlanOneArgs {
   pkg: PackageJson | null;
   /** Modules this project holds — what an `onlyWith` condition is tested against (#99). */
   installed: ReadonlySet<string>;
+  /** Aliases the run adds to `saasaloy.json` (#312), so a target under one resolves. */
+  addedAliases: Record<string, string>;
+  /** `.claude/skills/<name>` links the run already plans (#312). */
+  plannedLinks: ReadonlySet<string>;
 }
 
 async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
@@ -794,6 +993,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     );
   }
   const aliasView = {
+    ...args.addedAliases,
     ...config.aliases,
     ...scaffoldAliases(base),
     ...prereqAliases,
@@ -848,15 +1048,25 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     );
 
     const projectOwned = input.isOwned?.(ref.target) ?? false;
-    const action = classifyUpdate({
-      adopted: owned?.adopted ?? false,
-      base: baseContent,
-      managedHash: owned?.hash,
-      mergedWith: owned?.mergedWith,
-      mine: compared,
-      projectOwned,
-      theirs: theirsContent,
-    });
+    // A tombstone whose file is back on disk was restored by hand (#312): it classifies
+    // as any tracked file does, and the apply drops the flag.
+    const tombstoned = owned?.deleted === true && mine === undefined;
+    const reappeared = owned?.deleted === true && mine !== undefined;
+    // A seed file follows its own rule (#310), except a tombstoned one: the owner said to
+    // keep it deleted (#312), and that decision wins over putting a missing seed back.
+    const action =
+      ref.seed && !tombstoned
+        ? classifySeed(mine, owned?.hash, theirsContent)
+        : classifyUpdate({
+            adopted: owned?.adopted ?? false,
+            base: baseContent,
+            managedHash: owned?.hash,
+            mergedWith: owned?.mergedWith,
+            mine: compared,
+            projectOwned,
+            theirs: theirsContent,
+            tombstoned,
+          });
     const patchedBy = patchersOf(manifest, ref.target);
     files.push({
       module: name,
@@ -867,12 +1077,15 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
       ...(projectOwned ? { projectOwned: true } : {}),
       ...(owned?.adopted ? { adopted: true } : {}),
       ...(owned?.mergedWith === undefined ? {} : { merged: true }),
+      ...(tombstoned ? { tombstoned: true } : {}),
+      ...(reappeared ? { reappeared: true } : {}),
       base: baseContent,
       theirs: written,
       mine,
       newHash: hashContent(theirsContent),
       ...(patchedBy.length > 0 ? { patchedBy } : {}),
       ...(ref.when === undefined ? {} : { when: ref.when }),
+      ...(ref.seed ? { seed: true } : {}),
     });
   }
 
@@ -912,7 +1125,7 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     });
   }
 
-  const links = await planLinks(root, theirs);
+  const links = await planLinks(root, theirs, args.plannedLinks);
   const patches = await planPatches(
     root,
     name,
@@ -935,9 +1148,9 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
   );
   const deps = planDepChanges(base, theirs, pkg);
 
-  // A `dependsOn` the new version introduces is folded into this same plan rather than
-  // left for the user to install by hand (decision 11).
-  let prereqPlan: Plan | undefined;
+  // A `dependsOn` the new version introduces is folded into this same run rather than
+  // left for the user to install by hand (decision 11). The run's one `prereqPlan`
+  // installs it; this module keeps the names for its summary and the lock fields.
   const prereqDependsOn: Record<string, string[]> = {};
   const prereqConflictsWith: Record<string, string[]> = {};
   const prereqRequiresOneOf: Record<string, string[]> = {};
@@ -945,14 +1158,6 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     (n) => !config.installed.includes(n)
   );
   if (prereqNames.length > 0 && input.prereqs) {
-    prereqPlan = await buildPlan({
-      root,
-      install: prereqNames,
-      alreadyInstalled: [],
-      modules: input.prereqs.modules,
-      config,
-      manifest,
-    });
     for (const prereq of prereqNames) {
       const prereqItem = input.prereqs.modules.get(prereq)?.item;
       const dependsOn = prereqItem?.dependsOn;
@@ -984,7 +1189,6 @@ async function planOneModule(args: PlanOneArgs): Promise<ModuleUpdatePlan> {
     patches,
     ...deps,
     prereqNames,
-    ...(prereqPlan ? { prereqPlan } : {}),
     prereqDependsOn,
     prereqConflictsWith,
     prereqRequiresOneOf,
@@ -1123,13 +1327,19 @@ function newEnvVars(
  * Two rules stand between a recorded hash and a write. `adopted` says the hash came off
  * disk rather than out of a render, so it proves nothing about who wrote those bytes.
  * `projectOwned` says the template hands this file over once and never comes back for it.
- * Either one sends an existing file to the merge plan; neither blocks creating or
- * restoring a file that is not there, since an absent file carries no work to lose.
+ * Either one sends an existing file to the merge plan; neither blocks creating a file
+ * that is not there, since an absent file carries no work to lose.
  *
  * `mergedWith` is the third (#223): `update --resolved` recorded a merge, so the hash is
  * of a person's edits and is no licence to overwrite them either. It also stands in for
  * the merge base where there is none (a working copy, the bundled template): while the
  * module still ships the version the merge took in, there is nothing new to merge.
+ *
+ * A tracked file missing from disk comes first of all (#312, ADR 0059). A tombstone is
+ * never written: `skip` while upstream left it alone, `kept-deleted` once upstream
+ * changed it, with the recorded hash standing in for a missing merge base. Any other
+ * tracked file that is gone is `deleted`, even when `base === theirs`, so the owner
+ * settles it once with `--resolved` or `--restore`.
  */
 interface ClassifyArgs {
   base: string | undefined;
@@ -1140,11 +1350,23 @@ interface ClassifyArgs {
   projectOwned: boolean;
   /** `ManagedEntry.mergedWith`: the hash of the version a recorded merge took in. */
   mergedWith: string | undefined;
+  /** `ManagedEntry.deleted`, and the file is still absent (#312). */
+  tombstoned: boolean;
 }
 
 function classifyUpdate(args: ClassifyArgs): UpdateFileAction {
   const { base, theirs, mine, managedHash, adopted, projectOwned, mergedWith } =
     args;
+  if (mine === undefined && managedHash !== undefined) {
+    if (!args.tombstoned) {
+      return "deleted";
+    }
+    const unchanged =
+      base === undefined
+        ? hashContent(theirs) === managedHash
+        : base === theirs;
+    return unchanged ? "skip" : "kept-deleted";
+  }
   if (base !== undefined && base === theirs) {
     return "skip";
   }
@@ -1152,7 +1374,7 @@ function classifyUpdate(args: ClassifyArgs): UpdateFileAction {
     return "skip";
   }
   if (mine === undefined) {
-    return managedHash === undefined ? "create" : "restore";
+    return "create";
   }
   if (mine === theirs) {
     return "unchanged";
@@ -1166,9 +1388,37 @@ function classifyUpdate(args: ClassifyArgs): UpdateFileAction {
   return hashContent(mine) === managedHash ? "overwrite" : "drift";
 }
 
+/**
+ * How `update` treats a module seed file (#310, ADR 0060). The module hands the file over
+ * on its first write, so a tracked seed on disk is skipped whatever its bytes or the new
+ * revision hold: no overwrite, no merge. A tracked seed that is missing is put back,
+ * even when the module did not change it, because a managed file imports from it. An
+ * untracked file in the way is still a `conflict`, the same as for any new file.
+ */
+function classifySeed(
+  mine: string | undefined,
+  managedHash: string | undefined,
+  theirs: string
+): UpdateFileAction {
+  if (mine === undefined) {
+    return managedHash === undefined ? "create" : "restore";
+  }
+  if (managedHash === undefined) {
+    return mine === theirs ? "unchanged" : "conflict";
+  }
+  return "skip";
+}
+
+/**
+ * Each skill link the new revision names. A link the run already plans, through the
+ * prerequisite plan or an earlier module, is `exists` (#312): the first plan creates it,
+ * and a second `create` of the same path is no conflict. A correct link on disk is
+ * `exists` too.
+ */
 async function planLinks(
   root: string,
-  theirs: LoadedModule
+  theirs: LoadedModule,
+  planned: ReadonlySet<string> = new Set()
 ): Promise<PlannedLink[]> {
   const links: PlannedLink[] = [];
   for (const skillRel of theirs.item.agent?.skills ?? []) {
@@ -1177,7 +1427,9 @@ async function planLinks(
     const target = posix.join(".agents/skills", folderName);
     const pathAbs = resolveWithinRoot(root, path);
     const targetAbs = resolveWithinRoot(root, target);
-    const state = await classifyLink(pathAbs, targetAbs);
+    const state = planned.has(path)
+      ? "correct"
+      : await classifyLink(pathAbs, targetAbs);
     const action: LinkAction =
       state === "missing"
         ? "create"
@@ -1330,6 +1582,8 @@ export interface UpdateResult {
    * removal untracked. Disk is untouched for every one.
    */
   resolved: PlannedUpdateFile[];
+  /** Files `--resolved` kept deleted: tombstoned, nothing written (#312). */
+  tombstoned: PlannedUpdateFile[];
   patched: PlannedUpdatePatch[];
   /** Patches whose target file was absent — reported, not applied. */
   patchConflicts: PlannedUpdatePatch[];
@@ -1339,6 +1593,8 @@ export interface UpdateResult {
   linkConflicts: PlannedLink[];
   /** Prerequisites installed as part of the same confirmed plan. */
   prereqsInstalled: string[];
+  /** Aliases written into `saasaloy.json` (#312). */
+  aliasesAdded: AliasAdd[];
   /** Modules whose lock entry moved to the new SHA (those that fully applied). */
   lockMoved: string[];
   /** Modules whose lock `ref` was rewritten by `--ref` while `resolved` stayed put. */
@@ -1363,17 +1619,42 @@ async function stillMatches(file: PlannedUpdateFile): Promise<boolean> {
  * current hash becomes the manifest baseline, with no check of what the merge holds.
  * `mergedWith` keeps the hash of the version the merge took in, which is what tells the
  * next run there is nothing new to merge even with no merge base, and what keeps a later
- * upstream change from overwriting the merge. A file the merge deleted is untracked.
- * Read fresh, not from the plan: the merge may have finished after the plan was built.
+ * upstream change from overwriting the merge. Read fresh, not from the plan: the merge
+ * may have finished after the plan was built.
+ *
+ * A tracked file that is gone becomes a tombstone (#312, ADR 0059): the entry keeps its
+ * module, `from` and last hash, gains `deleted: true`, and no file is written. That is
+ * the `deleted` verdict settled, and a merge that ended by deleting the file alike:
+ * untracking it would make the next run create it again. Returns whether it tombstoned.
+ *
+ * The tombstone keeps `adopted` and `mergedWith`. Either one says the recorded hash is of
+ * the project's own bytes, not of a file the CLI wrote. Without them, a file put back by
+ * hand with those bytes would read as untouched, and the next upstream change would
+ * overwrite the project's edits.
  */
 async function recordResolved(
   manifest: Manifest,
   file: PlannedUpdateFile
-): Promise<void> {
+): Promise<boolean> {
   const now = await readIfPresent(file.targetAbs);
   if (now === undefined) {
-    untrackManagedFile(manifest, file.target);
-    return;
+    const entry = manifest.managed[file.target];
+    if (entry === undefined) {
+      return false;
+    }
+    recordManagedFile(manifest, {
+      deleted: true,
+      from: entry.from ?? file.from,
+      hash: entry.hash,
+      module: entry.module,
+      target: file.target,
+      ...(entry.when === undefined ? {} : { when: entry.when }),
+      ...(entry.adopted ? { adopted: true } : {}),
+      ...(entry.mergedWith === undefined
+        ? {}
+        : { mergedWith: entry.mergedWith }),
+    });
+    return true;
   }
   recordManagedFile(manifest, {
     from: file.from,
@@ -1382,6 +1663,31 @@ async function recordResolved(
     target: file.target,
     ...(file.newHash === undefined ? {} : { mergedWith: file.newHash }),
   });
+  return false;
+}
+
+/**
+ * One lock entry per prerequisite the run installed, pinned to the same SHA as the first
+ * module that needs it. Two modules that both name it still write it once (#312).
+ */
+function recordPrereqLocks(plan: UpdatePlan, lock: Lockfile): void {
+  for (const prereq of plan.prereqPlan?.install ?? []) {
+    const mod = plan.modules.find((m) => m.prereqNames.includes(prereq));
+    if (!mod) {
+      continue;
+    }
+    const dependsOn = mod.prereqDependsOn[prereq];
+    const conflictsWith = mod.prereqConflictsWith[prereq];
+    const requiresOneOf = mod.prereqRequiresOneOf[prereq];
+    lock.modules[prereq] = {
+      source: mod.comparison.source,
+      ref: mod.comparison.ref,
+      resolved: mod.comparison.latest,
+      ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
+      ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
+      ...(requiresOneOf && requiresOneOf.length > 0 ? { requiresOneOf } : {}),
+    };
+  }
 }
 
 export async function executeUpdatePlan(
@@ -1397,12 +1703,14 @@ export async function executeUpdatePlan(
     driftSurvivors: [],
     untracked: [],
     resolved: [],
+    tombstoned: [],
     patched: [],
     patchConflicts: [],
     patchRefusals: [],
     links: [],
     linkConflicts: [],
     prereqsInstalled: [],
+    aliasesAdded: [],
     lockMoved: [],
     refsRecorded: [],
     depsWritten: [],
@@ -1411,20 +1719,50 @@ export async function executeUpdatePlan(
   const bumpsAsDeps: DepChange[] = [];
   const devBumpsAsDeps: DepChange[] = [];
 
-  for (const mod of plan.modules) {
-    // Prerequisites first: a new capability may scaffold the very alias this module's
-    // files resolve against, and `executePlan` registers those aliases as it goes.
-    if (mod.prereqPlan) {
-      await executePlan(mod.prereqPlan, root, config, manifest);
-      result.prereqsInstalled.push(...mod.prereqPlan.install);
+  // Aliases before the first file (#312): a target resolves against them, and a key the
+  // project already holds is never changed.
+  for (const add of plan.aliasAdds) {
+    if (config.aliases[add.alias] === undefined) {
+      config.aliases[add.alias] = add.value;
+      result.aliasesAdded.push(add);
     }
+  }
 
+  // Prerequisites next, once for the whole run (#312): a new capability may scaffold the
+  // very files a module's patches aim at. `executePlan` registers its scaffold aliases
+  // last-write-wins, so a value the project held before is put back.
+  if (plan.prereqPlan) {
+    const held = { ...config.aliases };
+    await executePlan(plan.prereqPlan, root, config, manifest);
+    Object.assign(config.aliases, held);
+    result.prereqsInstalled.push(...plan.prereqPlan.install);
+    recordPrereqLocks(plan, lock);
+  }
+
+  for (const mod of plan.modules) {
     let clean = !mod.needsMerge;
 
     for (const file of mod.files) {
+      // A tombstone found back on disk was restored by hand (#312): the flag goes
+      // whatever this run does with the file, and a write below records it afresh.
+      const entry = manifest.managed[file.target];
+      if (file.reappeared && entry?.deleted) {
+        delete entry.deleted;
+      }
       if (file.action === "resolved") {
-        await recordResolved(manifest, file);
-        result.resolved.push(file);
+        if (await recordResolved(manifest, file)) {
+          result.tombstoned.push(file);
+        } else {
+          result.resolved.push(file);
+        }
+        continue;
+      }
+      if (file.seed && file.action === "skip") {
+        // A file the new revision first marks `seed` keeps its bytes and its hash, and
+        // gains the flag, so `remove` reads it as a seed from here on.
+        if (entry?.module === file.module) {
+          entry.seed = true;
+        }
         continue;
       }
       if (!WRITABLE.has(file.action) || file.theirs === undefined) {
@@ -1451,6 +1789,7 @@ export async function executeUpdatePlan(
         module: file.module,
         target: file.target,
         ...(file.when === undefined ? {} : { when: file.when }),
+        ...(file.seed ? { seed: true } : {}),
       });
     }
 
@@ -1571,20 +1910,6 @@ export async function executeUpdatePlan(
         entry.ref = mod.comparison.ref;
         result.refsRecorded.push(mod.name);
       }
-    }
-    // A prerequisite installed here is pinned to the same SHA as the module that needs it.
-    for (const prereq of mod.prereqPlan?.install ?? []) {
-      const dependsOn = mod.prereqDependsOn[prereq];
-      const conflictsWith = mod.prereqConflictsWith[prereq];
-      const requiresOneOf = mod.prereqRequiresOneOf[prereq];
-      lock.modules[prereq] = {
-        source: mod.comparison.source,
-        ref: mod.comparison.ref,
-        resolved: mod.comparison.latest,
-        ...(dependsOn && dependsOn.length > 0 ? { dependsOn } : {}),
-        ...(conflictsWith && conflictsWith.length > 0 ? { conflictsWith } : {}),
-        ...(requiresOneOf && requiresOneOf.length > 0 ? { requiresOneOf } : {}),
-      };
     }
   }
 

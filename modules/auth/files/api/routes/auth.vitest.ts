@@ -1,3 +1,4 @@
+import { adminAuth, withAuthScope } from "@repo/auth/server";
 import { config } from "@repo/config";
 import { sessions } from "@repo/db/schema/auth";
 import { seedId } from "@repo/db/seed/id";
@@ -17,6 +18,11 @@ import app from "../index";
 // The rest pin the client/admin split (ADR 0050): two instances, two cookies, a session
 // that counts only on its own side, and the rank guard on the admin instance. They talk
 // to Better Auth's own endpoints, so they need no route from another module.
+//
+// The `admin()` plugin's endpoints answer 404 over HTTP on both forwards' admin paths
+// (`/admin/auth/admin/*`, issue #310), so the rank guard cases call them the way an api
+// route does: `adminAuth.api.*` with the caller's headers, inside `withAuthScope`. The
+// rank guard runs on that call too.
 //
 // In the saasaloy repo this file is named `.vitest.ts`, so `pnpm test:modules`, which runs
 // `node --test` over `*.test.ts`, does not collect it. The descriptor renames it.
@@ -86,6 +92,38 @@ function call(
       : { headers: { cookie, ...ORIGIN } },
     env
   );
+}
+
+/**
+ * Run one `adminAuth.api.*` call as the holder of `cookie`, the way an api route calls it,
+ * and answer its status: 200 when it returns, the `APIError`'s status when it throws.
+ */
+async function adminApiStatus(
+  env: object,
+  cookie: string,
+  body: (headers: Headers) => Promise<unknown>
+): Promise<number> {
+  const headers = new Headers({ cookie, ...ORIGIN });
+  try {
+    await withAuthScope(
+      {
+        env: env as Parameters<typeof withAuthScope>[0]["env"],
+        executionCtx: {
+          waitUntil: () => {
+            // The test's client stays open; nothing to hold.
+          },
+        },
+      },
+      () => body(headers)
+    );
+    return 200;
+  } catch (error) {
+    const status = (error as { statusCode?: unknown }).statusCode;
+    if (typeof status === "number") {
+      return status;
+    }
+    throw error;
+  }
 }
 
 /** The user id `get-session` answers with, or `null` for no session. */
@@ -199,12 +237,11 @@ describe("two instances, two cookies", () => {
     await expect(
       sessionUser(database.env, "/admin/auth", copied)
     ).resolves.toBeNull();
-    const list = await call(
-      database.env,
-      "/admin/auth/admin/list-users",
-      copied
-    );
-    expect(list.status).toBe(401);
+    await expect(
+      adminApiStatus(database.env, copied, (headers) =>
+        adminAuth.api.listUsers({ headers, query: {} })
+      )
+    ).resolves.toBe(401);
   });
 
   it("finds no session for an admin token copied into the client cookie", async () => {
@@ -267,6 +304,42 @@ describe("the admin instance", () => {
     expect(res.status).toBe(403);
   });
 
+  it("answers 404 on the admin plugin endpoints, even to a superadmin", async () => {
+    const superadmin = await sessionCookie(
+      database.env,
+      "superadmin@example.test",
+      "/admin/auth"
+    );
+
+    const setRole = await call(
+      database.env,
+      "/admin/auth/admin/set-role",
+      superadmin,
+      { role: "user", userId: MEMBER }
+    );
+    expect(setRole.status).toBe(404);
+    const list = await call(
+      database.env,
+      "/admin/auth/admin/list-users",
+      superadmin
+    );
+    expect(list.status).toBe(404);
+    const encoded = await call(
+      database.env,
+      "/admin/auth/%61dmin/set-role",
+      superadmin,
+      { role: "user", userId: MEMBER }
+    );
+    expect(encoded.status).toBe(404);
+    const impersonate = await call(
+      database.env,
+      "/admin/auth/admin/impersonate-user",
+      superadmin,
+      { userId: MEMBER }
+    );
+    expect(impersonate.status).toBe(404);
+  });
+
   it("lets an admin list users and change a client's role", async () => {
     const admin = await sessionCookie(
       database.env,
@@ -274,17 +347,19 @@ describe("the admin instance", () => {
       "/admin/auth"
     );
 
-    const list = await call(
-      database.env,
-      "/admin/auth/admin/list-users",
-      admin
-    );
-    expect(list.status).toBe(200);
-    const res = await call(database.env, "/admin/auth/admin/set-role", admin, {
-      role: "user",
-      userId: MEMBER,
-    });
-    expect(res.status).toBe(200);
+    await expect(
+      adminApiStatus(database.env, admin, (headers) =>
+        adminAuth.api.listUsers({ headers, query: {} })
+      )
+    ).resolves.toBe(200);
+    await expect(
+      adminApiStatus(database.env, admin, (headers) =>
+        adminAuth.api.setRole({
+          body: { role: "user", userId: MEMBER },
+          headers,
+        })
+      )
+    ).resolves.toBe(200);
   });
 
   it("refuses an admin who changes a superadmin or grants an admin role", async () => {
@@ -294,26 +369,22 @@ describe("the admin instance", () => {
       "/admin/auth"
     );
 
-    const demote = await call(
-      database.env,
-      "/admin/auth/admin/set-role",
-      admin,
-      {
-        role: "user",
-        userId: SUPERADMIN,
-      }
-    );
-    expect(demote.status).toBe(403);
-    const promote = await call(
-      database.env,
-      "/admin/auth/admin/set-role",
-      admin,
-      {
-        role: config.auth.adminRole,
-        userId: MEMBER,
-      }
-    );
-    expect(promote.status).toBe(403);
+    await expect(
+      adminApiStatus(database.env, admin, (headers) =>
+        adminAuth.api.setRole({
+          body: { role: "user", userId: SUPERADMIN },
+          headers,
+        })
+      )
+    ).resolves.toBe(403);
+    await expect(
+      adminApiStatus(database.env, admin, (headers) =>
+        adminAuth.api.setRole({
+          body: { role: config.auth.adminRole, userId: MEMBER },
+          headers,
+        })
+      )
+    ).resolves.toBe(403);
   });
 
   it("refuses to demote the last superadmin, even for the superadmin", async () => {
@@ -323,16 +394,14 @@ describe("the admin instance", () => {
       "/admin/auth"
     );
 
-    const res = await call(
-      database.env,
-      "/admin/auth/admin/set-role",
-      superadmin,
-      {
-        role: config.auth.adminRole,
-        userId: SUPERADMIN,
-      }
-    );
-    expect(res.status).toBe(403);
+    await expect(
+      adminApiStatus(database.env, superadmin, (headers) =>
+        adminAuth.api.setRole({
+          body: { role: config.auth.adminRole, userId: SUPERADMIN },
+          headers,
+        })
+      )
+    ).resolves.toBe(403);
   });
 
   it("refuses impersonation", async () => {
@@ -342,15 +411,11 @@ describe("the admin instance", () => {
       "/admin/auth"
     );
 
-    const res = await call(
-      database.env,
-      "/admin/auth/admin/impersonate-user",
-      superadmin,
-      {
-        userId: MEMBER,
-      }
-    );
-    expect(res.status).toBe(403);
+    await expect(
+      adminApiStatus(database.env, superadmin, (headers) =>
+        adminAuth.api.impersonateUser({ body: { userId: MEMBER }, headers })
+      )
+    ).resolves.toBe(403);
   });
 });
 

@@ -35,8 +35,9 @@
      - only one app renders it → add an `@source` line in THAT app's own stylesheet
        instead, the way admin.css does for the shell primitives.
 
-   Get this wrong and the failure is the silent one the comment above describes: the class
-   never reaches the CSS and the component renders unstyled. */
+   Get this wrong and the class never reaches the CSS and the component renders unstyled.
+   `pnpm test` catches the first case: apps/web/src/lib/ui-sources.test.ts follows the
+   imports of the site and of src/blocks/ and fails on a primitive with no line here. */
 @source "../components/accordion.tsx";
 @source "../components/badge.tsx";
 @source "../components/button.tsx";
@@ -49,6 +50,12 @@
    is added the file does not exist, and a non-matching @source is silent, so the line
    costs nothing. Both blocks/file-uploads.tsx and an app page render it. */
 @source "../components/file-drop.tsx";
+
+/* Rendered by blocks/file-uploads.tsx, which the `file-uploads` module writes. A module
+   has no patch kind for CSS, so the line ships here. Before that module is added the
+   line costs the table's few utility rules in the stylesheet. Without the line, the
+   block renders an unstyled table and ui-sources.test.ts fails. */
+@source "../components/table.tsx";
 
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to

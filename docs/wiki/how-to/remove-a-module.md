@@ -38,13 +38,13 @@ cannot reverse.
 
 ## Warnings the module declares
 
-A module descriptor may carry a `removeWarnings` array, and `add` copies it into `.saasaloy/manifest.json` at install time. `remove` prints each entry after the plan, so the warning is there even when the registry is not. `billing` declares two, one of which reads:
+A module descriptor may carry a `removeWarnings` array, and `add` copies it into `.saasaloy/manifest.json` at install time. `remove` prints each entry after the plan, so the warning is there even when the registry is not. `subscription` declares two, one of which reads:
 
 ```text
-The deployed billing_subscriptions and billing_events tables survive this removal, and so does the users.billing_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
+The deployed subscriptions and subscription_events tables survive this removal, and so does the users.subscription_customer_id column the schema file loses. Run db:generate and review the resulting drop migration before you apply it.
 ```
 
-`billing` declares one about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
+`subscription` declares one about routes still wrapped in `requireFeature()` or `requireWithinLimit()`. A warning never blocks the removal. Read it and act on it yourself.
 
 ## Hand-edited files
 

@@ -31,6 +31,13 @@ describe("initialsOf", () => {
     assert.equal(initialsOf("  a   b  c "), "AB");
   });
 
+  it("keeps an emoji or a combined letter whole, never half a surrogate pair", () => {
+    assert.equal(initialsOf("🦊 Fox"), "🦊F");
+    assert.equal(initialsOf("👩‍💻 Dev"), "👩‍💻D");
+    // "e" followed by a combining acute accent is one grapheme.
+    assert.equal(initialsOf("e\u0301mile zola"), "E\u0301Z");
+  });
+
   it("falls back to a question mark for an empty name", () => {
     assert.equal(initialsOf(""), "?");
     assert.equal(initialsOf("   "), "?");

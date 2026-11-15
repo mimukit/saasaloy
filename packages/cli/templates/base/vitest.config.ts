@@ -15,8 +15,8 @@ import { defineConfig } from "vitest/config";
 // specs, named `*.spec.ts`, which Vitest's default glob also matches. Playwright runs them
 // through `pnpm e2e`, against the running apps.
 //
-// `passWithNoTests` keeps a fresh project green: the base ships no Vitest test, and a
-// run that finds none would otherwise exit 1.
+// `passWithNoTests` keeps the run green when it finds no test at all, which a run filtered
+// to one workspace often does. Without it, that run exits 1.
 export default defineConfig({
   test: {
     passWithNoTests: true,

@@ -50,7 +50,7 @@ const ALL_STATUSES: ModuleComparison[] = [
     detail: "pinned at aaaaaaa — nothing to update",
   }),
   comparison({
-    name: "billing",
+    name: "subscription",
     source: "local",
     ref: "local",
     current: "local",

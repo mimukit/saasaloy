@@ -54,10 +54,10 @@ const waitlist: TableShape = {
   references: [],
 };
 
-/** `billing_events`: a composite primary key. */
+/** `subscription_events`: a composite primary key. */
 const events: TableShape = {
   columns: [column("provider"), column("providerEventId"), column("type")],
-  name: "billing_events",
+  name: "subscription_events",
   primaryKey: ["provider", "providerEventId"],
   references: [],
 };
@@ -140,7 +140,7 @@ describe("conflictTarget", () => {
 
   it("uses a composite primary key with nothing extra", () => {
     assert.deepEqual(
-      conflictTarget(events, { rows: {}, table: "billing_events" }),
+      conflictTarget(events, { rows: {}, table: "subscription_events" }),
       ["provider", "providerEventId"]
     );
   });
@@ -234,7 +234,7 @@ describe("planSeed", () => {
         rows: {
           paid: { provider: "console", providerEventId: "evt_1", type: "paid" },
         },
-        table: "billing_events",
+        table: "subscription_events",
       },
     ]);
     assert.deepEqual(plan[0]?.rows[0]?.update, ["type"]);
@@ -296,7 +296,10 @@ describe("planSeed", () => {
     assert.throws(
       () =>
         planSeed(tables, [
-          { rows: { paid: { provider: "console" } }, table: "billing_events" },
+          {
+            rows: { paid: { provider: "console" } },
+            table: "subscription_events",
+          },
         ]),
       /conflict key/
     );

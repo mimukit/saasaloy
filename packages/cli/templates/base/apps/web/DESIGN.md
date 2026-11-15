@@ -17,6 +17,8 @@ colors:
   muted: "oklch(0.97 0 0)"
   muted-foreground: "oklch(0.556 0 0)"
   destructive: "oklch(0.577 0.245 27.325)"
+  warning: "oklch(0.666 0.179 58.318)"
+  warning-foreground: "oklch(0.555 0.163 48.998)"
   border: "oklch(0.922 0 0)"
   ring: "oklch(0.708 0 0)"
   dark-background: "oklch(0.145 0 0)"
@@ -29,6 +31,8 @@ colors:
   dark-secondary-foreground: "oklch(0.985 0 0)"
   dark-muted-foreground: "oklch(0.708 0 0)"
   dark-destructive: "oklch(0.704 0.191 22.216)"
+  dark-warning: "oklch(0.828 0.189 84.429)"
+  dark-warning-foreground: "oklch(0.828 0.189 84.429)"
 typography:
   headline-display:
     fontFamily: "ui-sans-serif, system-ui, sans-serif"
@@ -180,7 +184,7 @@ This file covers the web app. Each app has its own stylesheet in `packages/ui/sr
 
 ## Colors
 
-The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive color is the only chromatic semantic token in the seed.
+The light theme uses white surfaces, near-black text, and a dark neutral primary action. The dark theme reverses that relationship with near-black surfaces and near-white text. Muted neutrals separate supporting content. The destructive and warning colors are the only chromatic semantic tokens in the seed. Warning marks a state that needs attention but is not a failure, and its `-foreground` tone is text on a warning tint.
 
 Use the semantic custom properties in `packages/ui/src/styles/brand.css`. Do not copy their current `oklch()` values into components.
 
@@ -208,7 +212,7 @@ Primary buttons use the primary pair. Secondary buttons use the secondary pair. 
 
 Cards in one row share one height. The grid stretches its cards, so it carries no `items-start`, and sibling cards hold the same number of one-line items. The pricing tiers are the worked example: five one-line bullets each. A card's primary action sits inside that card, on the primary button, never below or beside it.
 
-A value that waits on a request shows the `Skeleton` primitive in its place, at the size the value will take, until the response arrives. It never shows a blank gap or a spinner. Add the primitive with `pnpm --filter @repo/ui exec shadcn add skeleton` the first time a page needs it.
+A value that waits on a request shows the `Skeleton` primitive in its place, at the size the value will take, until the response arrives. It never shows a blank gap or a spinner. The primitive ships in `packages/ui/src/components/skeleton.tsx`.
 
 The `error-state` block is the one screen for a failure: a wrong path, a failed render, a server error. It is a single centered card holding a muted icon, a status label in the mono face at the smallest size, a title at `body-lg`, a description in `muted-foreground`, and one or two actions on the button scale. It carries no destructive token and no alert tint, because a mistyped address is not a danger state. Every app renders this block rather than its own error markup, so a theme change reaches all three at once.
 
@@ -234,4 +238,4 @@ The `.dark` class selects the dark token set. The pre-paint theme script applies
 
 The theme toggle has two states, light and dark. `system` is only the starting state: a visitor who never pressed the toggle follows the OS. A press flips the resolved mode and stores the choice, and no press steps back to `system`. Do not add a third state or a light/dark/system menu to the toggle.
 
-_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:d7c3ad027b63 of packages/ui/src/styles/brand.css_
+_Seeded from the saasaloy base template · CLI {{CLI_VERSION}} · tokens sha256:df9bfcb154fa of packages/ui/src/styles/brand.css_

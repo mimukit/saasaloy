@@ -76,7 +76,11 @@ export function DetailPanel({
   onClose,
   className,
 }: {
-  /** The record's name. It is the panel's heading and its accessible name. */
+  /**
+   * The record's name. It is the panel's heading and its accessible name. The heading
+   * truncates, so it carries the full name as its `title`, and `dir="auto"` lets a
+   * right-to-left name read in its own direction.
+   */
   title: string;
   /** A second line under the title, such as an email address. */
   description?: ReactNode;
@@ -154,11 +158,21 @@ export function DetailPanel({
         {media}
         <div className="min-w-0 flex-1">
           {status === undefined ? (
-            <h2 className="truncate text-sm font-semibold">{title}</h2>
+            <h2
+              dir="auto"
+              title={title}
+              className="truncate text-sm font-semibold"
+            >
+              {title}
+            </h2>
           ) : (
             // The title gives way to the status: it truncates, the pills never do.
             <div className="flex min-w-0 items-center gap-2">
-              <h2 className="min-w-0 truncate text-sm font-semibold">
+              <h2
+                dir="auto"
+                title={title}
+                className="min-w-0 truncate text-sm font-semibold"
+              >
                 {title}
               </h2>
               <span className="flex shrink-0 items-center gap-1">{status}</span>

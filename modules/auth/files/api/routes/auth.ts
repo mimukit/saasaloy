@@ -34,12 +34,42 @@ export const authRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   (c) => withAuthScope(c, () => auth.handler(c.req.raw))
 );
 
+const ADMIN_PLUGIN_PATH = /^\/+admin\/+auth\/+admin(?:\/|$)/i;
+
+/**
+ * Whether a request path names an `admin()` plugin endpoint on the admin instance. It
+ * decodes the path, folds case and repeated slashes, and matches the prefix rather than a
+ * list, so an encoded or oddly written path is refused too, and so is an endpoint a
+ * better-auth bump adds.
+ */
+function isAdminPluginPath(pathname: string): boolean {
+  let path = pathname;
+  try {
+    path = decodeURIComponent(pathname);
+  } catch {
+    // A malformed escape: match the raw path, which Better Auth would refuse anyway.
+  }
+  return ADMIN_PLUGIN_PATH.test(path);
+}
+
 // The admin group's forward, mounted at `/admin/auth`. Everything said above holds for
 // it. The path sits under `/admin` on purpose, so one edge rule covers the whole admin
 // group on the api, which reserves the prefix: a middleware a project adds on `/admin/*`
 // must skip `/admin/auth/*`, or the sign-in endpoint itself needs a session.
+//
+// It forwards everything except the `admin()` plugin's own endpoints,
+// `/admin/auth/admin/*`, which answer 404 here, reads and impersonation included. No
+// browser code calls them, and `set-role` or `ban-user` over HTTP would be a staff write
+// with no audit row, under `/admin/auth/*` where the audit coverage test cannot see it
+// (issue #310). A staff write that needs one goes through an api route under `/admin/`
+// that calls `adminAuth.api.*` with the caller's headers inside `adminAuthWrite`, so the
+// rank guard still runs and the change leaves its row. The client instance refuses the
+// same endpoints under `/auth/admin/*` through `clientAdminGuard()`.
 export const adminAuthRoute = new Hono<{ Bindings: AuthDbBindings }>().on(
   ["GET", "POST"],
   "/*",
-  (c) => withAuthScope(c, () => adminAuth.handler(c.req.raw))
+  (c) =>
+    isAdminPluginPath(new URL(c.req.url).pathname)
+      ? c.notFound()
+      : withAuthScope(c, () => adminAuth.handler(c.req.raw))
 );

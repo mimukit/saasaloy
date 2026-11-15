@@ -109,7 +109,7 @@ Four rules:
 - **Import the helper by subpath**, `@repo/config/define`, never by relative path.
 - **A section never reads another section.** They are composed side by side. Apply a
   fallback between two sections where the value is used, the way
-  `apps/api/src/billing-store.ts` does for `config.billing.appName || config.app.name`.
+  `apps/api/src/subscription-store.ts` does for `config.subscription.appName || config.app.name`.
 
 ## When an override does not take effect
 

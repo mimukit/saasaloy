@@ -1,0 +1,121 @@
+---
+// One blog post, installed by `saasaloy add cms`. On demand, not prerendered. The body is
+// the html the api rendered at publish and stored with the live revision, so this page
+// carries no Tiptap. It is written with `set:html`: the api's renderer escapes text and
+// drops unsafe links, and nothing else writes that column.
+//
+//   a published slug   200, the post
+//   an old slug        301 to the current one (the api keeps the rename history)
+//   anything else      the site's 404, with status 404 (drafts, archived, unknown)
+import {
+  formatPostDate,
+  pageMeta,
+  postPath,
+  showUpdated,
+} from "@repo/cms/client";
+import { config } from "@repo/config";
+import { siteName } from "@repo/ui";
+import { Footer } from "@repo/ui/blocks/footer";
+import { Navbar } from "@repo/ui/blocks/navbar";
+import { webEnv } from "@web/env";
+import { BLOG_COLLECTION, blogCopy, cmsClient, PROSE } from "@web/lib/cms";
+import Layout from "../../layouts/Layout.astro";
+
+export const prerender = false;
+
+const { basePath } = config.cms;
+const slug = Astro.params.slug ?? "";
+const found = await cmsClient().entry(BLOG_COLLECTION, slug);
+if (found.kind === "redirect") {
+  return Astro.redirect(postPath(basePath, found.slug), 301);
+}
+if (found.kind === "missing") {
+  // An empty 404 makes Astro render src/pages/404.astro with that status.
+  return new Response(null, { status: 404 });
+}
+const post = found.entry;
+const meta = pageMeta(post, webEnv().PUBLIC_SITE_URL);
+const updated = showUpdated(post.publishedAt, post.updatedAt);
+---
+
+<Layout
+  title={`${meta.title} — ${siteName}`}
+  description={meta.description}
+  type="article"
+  {...(meta.image ? { image: meta.image } : {})}
+>
+  <link
+    slot="head"
+    rel="alternate"
+    type="application/rss+xml"
+    title={config.cms.rssTitle}
+    href={`${basePath}/rss.xml`}
+  />
+  <meta
+    slot="head"
+    property="article:published_time"
+    content={post.publishedAt}
+  />
+  <meta slot="head" property="article:modified_time" content={post.updatedAt} />
+  <Navbar client:idle siteName={siteName} />
+  <main id="main" tabindex="-1">
+    <article class="section-container-narrow pt-32 pb-20 md:pt-40 md:pb-28">
+      <a
+        href={basePath}
+        class="text-muted-foreground hover:text-foreground focus-visible:ring-ring/50 inline-flex items-center gap-1.5 rounded-sm text-sm font-medium outline-none focus-visible:ring-3"
+      >
+        <svg
+          xmlns="http://www.w3.org/2000/svg"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          stroke-width="2"
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          aria-hidden="true"
+          class="size-4"
+        >
+          <path d="m12 19-7-7 7-7" />
+          <path d="M19 12H5" />
+        </svg>
+        {blogCopy.allPosts}
+      </a>
+      <header class="mt-8">
+        <h1 class="text-section-title wrap-anywhere">{post.title}</h1>
+        <div class="text-muted-foreground mt-5 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm">
+          {post.authorName && (
+            <>
+              <span class="text-foreground font-medium">{post.authorName}</span>
+              <span aria-hidden="true">·</span>
+            </>
+          )}
+          <time datetime={post.publishedAt}>
+            {formatPostDate(post.publishedAt)}
+          </time>
+          {updated && (
+            <>
+              <span aria-hidden="true">·</span>
+              <span>
+                {blogCopy.updated}{" "}
+                <time datetime={post.updatedAt}>
+                  {formatPostDate(post.updatedAt)}
+                </time>
+              </span>
+            </>
+          )}
+        </div>
+      </header>
+      {post.cover?.url && (
+        <img
+          src={post.cover.url}
+          alt={post.cover.alt ?? ""}
+          class="bg-muted mt-10 aspect-[1200/630] w-full rounded-2xl border object-cover"
+        />
+      )}
+      <div class="mt-10">
+        <div class={PROSE} set:html={post.html} />
+      </div>
+    </article>
+  </main>
+  <Footer siteName={siteName} />
+</Layout>

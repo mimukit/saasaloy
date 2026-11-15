@@ -1,0 +1,100 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "subscription-stripe",
+  "type": "saasaloy:feature",
+  "description": "A subscription provider on Stripe through stripe and @better-auth/stripe; needs a Stripe account.",
+  "stage": "money",
+  "needs": ["stripe"],
+  "requires": { "saasaloy": ">=0.7.0" },
+  "dependsOn": ["subscription"],
+  "dependencies": [],
+  "envVars": {
+    "STRIPE_SECRET_KEY": "Your Stripe secret key (sk_test_… while you develop, sk_live_… in production). Required once SUBSCRIPTION_PROVIDER=stripe. The client is built on first use, so a project that keeps SUBSCRIPTION_PROVIDER=console runs the whole capability — sign-in included — with this unset; the throw then names the key on the first call that reaches Stripe.",
+    "STRIPE_WEBHOOK_SECRET": "The signing secret of the endpoint you registered at https://dashboard.stripe.com/webhooks, pointing at https://<your-api>/auth/stripe/webhook. The plugin verifies every delivery against it, so an unsigned POST is refused before any handler runs."
+  },
+  "envServices": {
+    "default": ["api"]
+  },
+  "removeWarnings": [
+    "Removing this module does not cancel anything at Stripe. Cancel live subscriptions in the Stripe dashboard first, and delete the webhook endpoint you registered.",
+    "`stripe` and `@better-auth/stripe` stay in packages/subscription/package.json. Uninstalling an npm dependency is yours to do; run `pnpm remove` in that workspace when nothing else needs them."
+  ],
+  "patches": [
+    {
+      "file": "packages/subscription/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "subscription",
+      "arrayProp": "providers",
+      "call": "stripeSubscription",
+      "import": {
+        "name": "stripeSubscription",
+        "from": "./providers/stripe"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "auth",
+      "arrayProp": "plugins",
+      "call": "stripeAuthPlugin",
+      "import": {
+        "name": "stripeAuthPlugin",
+        "from": "@repo/subscription/providers/stripe"
+      }
+    },
+    {
+      "file": "packages/auth/src/auth.ts",
+      "kind": "plugin-array",
+      "exportName": "adminAuth",
+      "arrayProp": "plugins",
+      "call": "stripeAuthPlugin",
+      "import": {
+        "name": "stripeAuthPlugin",
+        "from": "@repo/subscription/providers/stripe"
+      }
+    },
+    {
+      "file": "packages/subscription/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "stripe",
+      "range": "23.0.0"
+    },
+    {
+      "file": "packages/subscription/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@better-auth/stripe",
+      "range": "1.7.7"
+    },
+    {
+      "file": "packages/subscription/package.json",
+      "kind": "package-json-dependency",
+      "section": "peerDependencies",
+      "name": "better-auth",
+      "range": "1.7.7"
+    },
+    {
+      "file": "packages/subscription/src/env-preset.ts",
+      "kind": "plugin-array",
+      "exportName": "subscriptionPreset",
+      "arrayProp": "extends",
+      "call": "stripeEnv",
+      "import": {
+        "name": "stripeEnv",
+        "from": "./env/stripe"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/stripe.ts",
+      "target": "@subscription/providers/stripe.ts"
+    },
+    {
+      "path": "files/env.ts",
+      "target": "@subscription/env/stripe.ts"
+    }
+  ],
+  "scaffolds": []
+}

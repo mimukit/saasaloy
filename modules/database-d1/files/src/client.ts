@@ -89,3 +89,34 @@ export function withDb<T>(
 ): Promise<T> {
   return body(getDb(c.env));
 }
+
+/**
+ * Run `body` against `db`. D1 has no interactive transaction, so this is NOT one: each
+ * statement `body` runs commits as it runs, and a throw part-way leaves the earlier writes
+ * in place.
+ *
+ * Both drivers export this with one signature, so code written against
+ * `@repo/db/client` asks for a transaction without naming the driver. Under
+ * `database-postgres` the same call is a real transaction that rolls back on a throw. Code
+ * that needs D1 writes to be all-or-nothing sends them as one `db.batch`, which D1 runs
+ * atomically, instead.
+ *
+ * `adminWrite` in `apps/api/src/lib/admin-write.ts` is the caller this was added for
+ * (issue #310). On D1 its body's change stands first, the audit rows
+ * go in after it, and a failed insert is logged at `error` while the change stays. The
+ * `saasaloy-admin` skill states that weaker guarantee.
+ */
+export function transaction<T>(
+  db: Db,
+  body: (db: Db) => Promise<T>
+): Promise<T> {
+  return body(db);
+}
+
+/**
+ * Whether `transaction` rolls back on a throw. `false` here, because D1 has no interactive
+ * transaction. Code that has to act differently when it cannot (`adminWrite` logs a failed
+ * audit insert instead of failing a change that already stood) reads this and never names
+ * the driver.
+ */
+export const TRANSACTION_IS_ATOMIC = false;

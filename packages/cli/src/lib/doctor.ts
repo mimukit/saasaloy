@@ -1287,7 +1287,10 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
       continue;
     }
     const mine = await readIfPresent(resolveWithinRoot(root, target));
-    if (mine === undefined) {
+    if (mine === undefined && entry.deleted) {
+      // Kept deleted on purpose (#312): `checkKeptDeleted` lists it, never as missing.
+      continue;
+    } else if (mine === undefined) {
       missing.push(target);
     } else if (
       hashContent(mine) === entry.hash ||
@@ -1310,6 +1313,34 @@ export async function checkBase(args: BaseCheckArgs): Promise<BaseReport> {
   };
 }
 
+/** A tombstoned file (#312): tracked, kept deleted on purpose, and still absent. */
+export interface KeptDeletedFile {
+  target: string;
+  module: string;
+}
+
+/**
+ * Every file the manifest keeps deleted and that is still absent (#312, ADR 0059). Like
+ * base drift it is information, never a finding: the owner chose it with `update
+ * --resolved`, and `update --restore <path>` undoes it. A tombstone found back on disk is
+ * not listed; the next `update` reads it as restored by hand.
+ */
+export async function checkKeptDeleted(
+  root: string,
+  manifest: Manifest
+): Promise<KeptDeletedFile[]> {
+  const out: KeptDeletedFile[] = [];
+  for (const [target, entry] of Object.entries(manifest.managed)) {
+    if (
+      entry.deleted &&
+      (await readIfPresent(resolveWithinRoot(root, target))) === undefined
+    ) {
+      out.push({ target, module: entry.module });
+    }
+  }
+  return out.toSorted((a, b) => (a.target < b.target ? -1 : 1));
+}
+
 // ---------------------------------------------------------------------------
 // The `config` rules (#154).
 // ---------------------------------------------------------------------------
@@ -1319,7 +1350,7 @@ export const CONFIG_PROJECT_FILE = "packages/config/src/project.ts";
 /** The values file `saasaloy env` writes and `pnpm env:setup` copies from. */
 const ENV_VALUES_FILE = "packages/env/.env";
 /**
- * The env var `config.app.name` superseded. Billing no longer declares it, so a fresh
+ * The env var `config.app.name` superseded. `subscription` (then `billing`) no longer declares it, so a fresh
  * project never lists it; an older project's key list keeps the line, because `add` never
  * removes one, and this is how its owner learns the value does nothing.
  */
@@ -1359,9 +1390,9 @@ export function checkConfigValues(args: ConfigCheckArgs): Finding[] {
   for (const file of reported) {
     findings.push(
       finding(
-        "billing",
+        "subscription",
         `/env/${DEPRECATED_APP_NAME}`,
-        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the billing emails take their name from config.app.name (or config.billing.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
+        `${file} sets ${DEPRECATED_APP_NAME}, which nothing reads any more — the subscription emails take their name from config.app.name (or config.subscription.appName). Delete the line, and set the name in ${CONFIG_PROJECT_FILE}.`
       )
     );
   }

@@ -30,7 +30,7 @@ import type { SweepPort, SweepResult, SweepRow } from "@repo/file-uploads";
 //
 // `env` comes from `cloudflare:workers` rather than from a request: a scheduled run has no
 // request to read one off, and `JobContext` carries `attempt`, `step` and `sleep` and
-// nothing else. `apps/api/src/billing-store.ts` reaches for the same import for the same
+// nothing else. `apps/api/src/subscription-store.ts` reaches for the same import for the same
 // reason.
 
 setSweepRunner((now) => runSweepNow(now));

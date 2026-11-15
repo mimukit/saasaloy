@@ -1,13 +1,14 @@
 import {
   detectPlatform,
   getHotkeyManager,
+  useHotkeyRegistrations,
   useHotkeys,
 } from "@tanstack/react-hotkeys";
 import type {
   RawHotkeyChord,
   UseHotkeyDefinition,
 } from "@tanstack/react-hotkeys";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 
 import {
   chordKeycaps,
@@ -51,8 +52,12 @@ export const OVERLAY_ATTRIBUTE = "data-command-overlay";
 
 const FOREIGN_DIALOG = `[role="dialog"]:not([${OVERLAY_ATTRIBUTE}]), [role="alertdialog"]`;
 
-/** Gap allowed between the steps of a sequence such as G then U, in milliseconds. */
-const SEQUENCE_TIMEOUT_MS = 1000;
+/**
+ * Gap allowed between the steps of a sequence such as G then U, in milliseconds. It is
+ * long enough to read the hints that show after a pause on the first step (see
+ * `usePendingSequences`). A click or leaving the window ends the sequence sooner.
+ */
+const SEQUENCE_TIMEOUT_MS = 2500;
 
 function rawChord(chord: Chord): RawHotkeyChord {
   return {
@@ -156,6 +161,50 @@ export function useShortcutEngine({
       definition(binding, OVERLAY_SCOPE, overlay.open)
     ),
   ]);
+}
+
+/**
+ * The ids of the bindings whose sequence is in progress: the person pressed the first
+ * step (`G`) and the next one is still open. Empty when no sequence is in progress.
+ *
+ * While one is, a pointer press anywhere or leaving the window ends it, so a hint never
+ * outlives the person's attention, and the next letter typed does not jump to a screen.
+ */
+export function usePendingSequences(): readonly string[] {
+  const registrations = useHotkeyRegistrations();
+  const key = registrations
+    .flatMap((registration) =>
+      registration.kind === "sequence" &&
+      registration.matchedStepCount > 0 &&
+      registration.options.meta?.name !== undefined
+        ? [registration.options.meta.name]
+        : []
+    )
+    .toSorted()
+    .join("\n");
+  const pending = useMemo(() => (key === "" ? [] : key.split("\n")), [key]);
+
+  // The listeners stay attached and check `active` on each press, so the effect has one
+  // return shape (`consistent-return`), and a press with no sequence costs nothing.
+  const active = useRef(false);
+  useEffect(() => {
+    active.current = pending.length > 0;
+  });
+  useEffect(() => {
+    function handleInterrupt(): void {
+      if (active.current) {
+        getHotkeyManager().resetSequenceProgress();
+      }
+    }
+    window.addEventListener("pointerdown", handleInterrupt, true);
+    window.addEventListener("blur", handleInterrupt);
+    return () => {
+      window.removeEventListener("pointerdown", handleInterrupt, true);
+      window.removeEventListener("blur", handleInterrupt);
+    };
+  }, []);
+
+  return pending;
 }
 
 /** The platform keycaps are drawn for. It is fixed for the page's life. */

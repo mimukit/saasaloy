@@ -8,7 +8,7 @@ title: apps/app reads its dev port from DEV_PORT
 
 The `app` row in `packages/env/src/services.ts` gets `devPort: 3002`. That is the port `pnpm dev:ports` keeps in the main checkout and the base of the worktree port.
 
-This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0003-dev-ports` adds. Apply that note first, or the row fails `pnpm typecheck`.
+This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0004-dev-ports` adds. Apply that note first, or the row fails `pnpm typecheck`.
 
 ## What the merge plan gets
 

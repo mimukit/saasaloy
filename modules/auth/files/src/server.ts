@@ -1,3 +1,4 @@
+import { createMiddleware } from "hono/factory";
 import { HTTPException } from "hono/http-exception";
 import { adminAuth, auth } from "./auth";
 import {
@@ -205,3 +206,30 @@ export async function requireAdminApp(c: AuthRequestContext) {
 export async function requireSuperadmin(c: AuthRequestContext) {
   return requireRole(c, SUPERADMIN_ROLE);
 }
+
+/**
+ * The admin gate as Hono middleware: a 401 or 403 before anything else on the route runs.
+ *
+ * Put it first on every admin route, before any validator:
+ *
+ *   .post("/payments/:id/review", adminGate, validReviewBody, (c) => ...)
+ *
+ * Hono runs a route's handlers in the order they are listed, so a validator listed first
+ * answers a signed-out caller with a 400 that names the field it rejected. That tells a
+ * stranger the route exists and what it expects. With the gate first, every unauthenticated
+ * request gets the same 401, whatever its body or query. The shipped
+ * `apps/api/src/routes/admin-gate.test.ts` sends every `/admin/*` route a malformed body
+ * and query with no session and fails on any answer but 401.
+ *
+ * The handler still calls `requireAdmin(c)` itself, because that is how it gets the
+ * session value; the second read costs one session lookup. The comment above `denialError`
+ * still holds for a module that cannot wire middleware: a throw from the handler needs no
+ * wiring. This is the one piece of middleware the admin routes share, and it carries no
+ * rule of its own, so it adds no branch a test cannot reach.
+ */
+export const adminGate = createMiddleware<{ Bindings: AuthDbBindings }>(
+  async (c, next) => {
+    await withAuthScope(c, () => requireAdmin(c));
+    return next();
+  }
+);

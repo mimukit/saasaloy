@@ -20,6 +20,7 @@ import {
   pageExample,
   paletteGroups,
   parseShortcut,
+  pendingShortcuts,
   placeRegistration,
   resolveBindings,
   shortcutSections,
@@ -426,5 +427,56 @@ describe("chordKeycaps", () => {
     assert.ok(chord);
     assert.deepEqual(chordKeycaps(chord, "mac"), ["⌘", "K"]);
     assert.deepEqual(chordKeycaps(chord, "windows"), ["Ctrl", "K"]);
+  });
+});
+
+// The hints the shell shows while a sequence such as G then a letter waits for its next
+// key: which commands it reaches, and which keys are still to press.
+describe("pendingShortcuts", () => {
+  const bound = () =>
+    mergeRegistrations(
+      [
+        registration("admin", "global", [
+          command("admin.go-to-users", "navigation", {
+            title: "Go to Users",
+            shortcut: "G U",
+          }),
+          command("admin.go-to-new-user", "navigation", {
+            title: "Go to New user",
+            shortcut: "G N",
+          }),
+          command("admin.sign-out", "actions", { title: "Sign out" }),
+          command("admin.toggle", "actions", {
+            title: "Toggle",
+            shortcut: "Mod+B",
+          }),
+        ]),
+      ],
+      devOptions()
+    );
+
+  it("lists the commands in progress with the keys still to press", () => {
+    assert.deepEqual(
+      pendingShortcuts(
+        bound(),
+        ["admin.go-to-users", "admin.go-to-new-user"],
+        "linux"
+      ),
+      [
+        { shortcut: "G U", title: "Go to Users", rest: [["U"]] },
+        { shortcut: "G N", title: "Go to New user", rest: [["N"]] },
+      ]
+    );
+  });
+
+  it("lists nothing when no sequence is in progress", () => {
+    assert.deepEqual(pendingShortcuts(bound(), [], "linux"), []);
+  });
+
+  it("skips an id that has no shortcut or is not bound", () => {
+    assert.deepEqual(
+      pendingShortcuts(bound(), ["admin.sign-out", "admin.gone"], "linux"),
+      []
+    );
   });
 });

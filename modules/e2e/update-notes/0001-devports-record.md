@@ -6,7 +6,7 @@ title: The e2e suite reads this checkout's ports from .devports.json
 
 `packages/e2e/lib/project.ts` reads `.devports.json` at the repository root, which `pnpm dev:ports` writes. `PORTS` and `URLS` take the host and each app's port from it, so a run in a linked worktree drives that worktree's own servers. With no record, the suite uses the pinned ports on `localhost`, as before. A record that does not parse fails the run, because the pinned ports may belong to another checkout. The pinned ports are now exported as `PINNED_PORTS`, and `portsFrom(text)` holds the parse.
 
-This reads the record that the base note `base/0003-dev-ports` adds.
+This reads the record that the base note `base/0004-dev-ports` adds.
 
 ## What the merge plan gets
 

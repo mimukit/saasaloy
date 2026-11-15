@@ -13,8 +13,14 @@
   // @astrojs/cloudflare in astro.config.mjs (for src/pages/500.astro) makes Astro build
   // to dist/client + dist/server instead of a flat dist/. While every page is
   // prerendered the adapter runs assets-only and leaves dist/server empty, so there is
-  // no `main` to point at here. Add one the day a page sets `prerender = false`, when
-  // the adapter writes the server entry.
+  // no `main` to point at here. Never add one by hand: the day a page sets
+  // `prerender = false`, the adapter writes dist/server/entry.mjs and sets `main` in its
+  // generated config itself.
+  //
+  // An on-demand page also needs its paths in `assets.run_worker_first`. Without them a
+  // browser navigation to the page gets the 404 page below, because
+  // `not_found_handling` answers a navigation that matches no asset before the Worker
+  // runs. `saasaloy add cms` adds "/blog" and "/blog/*" there.
   //
   // THIS FILE IS NOT THE CONFIG THAT DEPLOYS. The build writes
   // .wrangler/deploy/config.json, which redirects wrangler to the adapter's own generated

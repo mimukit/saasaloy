@@ -199,7 +199,7 @@ Each `namespace_id` must be a unique positive integer **per Cloudflare account**
 
 **4. Know that the numbers can drift, and nothing checks them.** `wrangler.jsonc` holds the limits Cloudflare enforces. The `limit` and `periodSeconds` in `definePolicy` document the intent and drive the counting providers, and **editing them alone changes nothing on Cloudflare**. `saasaloy doctor` checks that every registered policy name has an `RL_<NAME>` binding; it never compares the numbers, because that would mean reading literal values out of a project's TypeScript.
 
-**5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter billing with it.
+**5. The limiter counts per location.** Cloudflare's Rate Limiting binding counts per colo, not globally, so a `limit` of 10 is 10 per colo and a distributed burst gets a multiple of it. Cloudflare calls the API "permissive, eventually consistent, and intentionally designed to not be used as an accurate accounting system". Use it to blunt abuse. Never meter subscription with it.
 
 ## Setting up `kv-upstash`
 

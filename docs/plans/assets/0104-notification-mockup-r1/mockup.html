@@ -1,0 +1,716 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Notification mockup r1</title>
+    <style>
+      :root {
+        --canvas: oklch(0.97 0 0);
+        --panel: oklch(1 0 0);
+        --fg: oklch(0.145 0 0);
+        --muted-fg: oklch(0.556 0 0);
+        --border: oklch(0.922 0 0);
+        --accent: oklch(0.922 0 0);
+        --hover: oklch(0.97 0 0);
+        --primary: oklch(0.205 0 0);
+        --primary-fg: oklch(0.985 0 0);
+        --destructive: oklch(0.577 0.245 27.325);
+        --info: oklch(0.546 0.245 262.881);
+        --pill: oklch(0.97 0 0);
+        --unread-bg: oklch(0.985 0.004 262);
+        --shadow: 0 8px 24px oklch(0 0 0 / 0.1), 0 1px 3px oklch(0 0 0 / 0.08);
+      }
+      .dark {
+        --canvas: oklch(0.145 0 0);
+        --panel: oklch(0.205 0 0);
+        --fg: oklch(0.985 0 0);
+        --muted-fg: oklch(0.708 0 0);
+        --border: oklch(1 0 0 / 10%);
+        --accent: oklch(0.269 0 0);
+        --hover: oklch(0.25 0 0);
+        --primary: oklch(0.922 0 0);
+        --primary-fg: oklch(0.205 0 0);
+        --destructive: oklch(0.704 0.191 22.216);
+        --info: oklch(0.707 0.165 254.624);
+        --pill: oklch(0.269 0 0);
+        --unread-bg: oklch(0.225 0.008 262);
+        --shadow: 0 8px 24px oklch(0 0 0 / 0.5), 0 0 0 1px oklch(1 0 0 / 10%);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+      }
+      body {
+        font:
+          14px/1.4 ui-sans-serif,
+          system-ui,
+          -apple-system,
+          "Segoe UI",
+          Roboto,
+          sans-serif;
+        background: var(--canvas);
+        color: var(--fg);
+      }
+      svg {
+        width: 16px;
+        height: 16px;
+        stroke: currentColor;
+        fill: none;
+        stroke-width: 2;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        flex: none;
+      }
+      .frame {
+        display: flex;
+        height: 100vh;
+        padding: 8px 8px 8px 0;
+      }
+      .sidebar {
+        width: 256px;
+        flex: none;
+        display: flex;
+        flex-direction: column;
+        padding: 14px 16px 12px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-weight: 700;
+        font-size: 15px;
+        padding: 6px 6px 18px;
+      }
+      .brand-mark {
+        width: 28px;
+        height: 28px;
+        border-radius: 7px;
+        background: var(--primary);
+        color: var(--primary-fg);
+        display: grid;
+        place-items: center;
+        font-weight: 700;
+      }
+      .group-label {
+        font-size: 12px;
+        color: var(--fg);
+        opacity: 0.8;
+        padding: 4px 8px 6px;
+      }
+      .nav a {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 8px;
+        border-radius: 8px;
+        color: var(--fg);
+        text-decoration: none;
+        margin-bottom: 4px;
+      }
+      .nav a.active {
+        background: var(--accent);
+      }
+      .nav .count {
+        margin-left: auto;
+        font-size: 12px;
+        font-weight: 500;
+        min-width: 20px;
+        height: 20px;
+        padding: 0 6px;
+        border-radius: 6px;
+        display: grid;
+        place-items: center;
+        font-variant-numeric: tabular-nums;
+      }
+      .account {
+        margin-top: auto;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 6px 4px;
+      }
+      .avatar {
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        display: grid;
+        place-items: center;
+        font-size: 12px;
+      }
+      .account small {
+        display: block;
+        color: var(--muted-fg);
+        font-size: 12px;
+      }
+      .panel {
+        flex: 1;
+        min-width: 0;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+        position: relative;
+      }
+      .header {
+        height: 52px;
+        flex: none;
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 0 12px 0 20px;
+        border-bottom: 1px solid var(--border);
+      }
+      .crumbs {
+        color: var(--muted-fg);
+      }
+      .crumbs b {
+        color: var(--fg);
+        font-weight: 400;
+      }
+      .header .right {
+        margin-left: auto;
+        display: flex;
+        gap: 4px;
+      }
+      .icon-btn {
+        position: relative;
+        width: 32px;
+        height: 32px;
+        border-radius: 8px;
+        border: 0;
+        background: transparent;
+        color: var(--fg);
+        display: grid;
+        place-items: center;
+      }
+      .icon-btn.open {
+        background: var(--accent);
+      }
+      .bell-badge {
+        position: absolute;
+        top: 2px;
+        right: 1px;
+        min-width: 16px;
+        height: 16px;
+        padding: 0 4px;
+        border-radius: 8px;
+        background: var(--destructive);
+        color: #fff;
+        font-size: 10px;
+        font-weight: 600;
+        line-height: 16px;
+        text-align: center;
+        font-variant-numeric: tabular-nums;
+        box-shadow: 0 0 0 2px var(--panel);
+      }
+      .page-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        padding: 18px 24px 0;
+      }
+      .page-head h1 {
+        font-size: 16px;
+        margin: 0;
+      }
+      .page-head p {
+        margin: 4px 0 0;
+        color: var(--muted-fg);
+      }
+      .btn {
+        height: 32px;
+        padding: 0 12px;
+        border-radius: 8px;
+        border: 1px solid var(--border);
+        background: var(--panel);
+        color: var(--fg);
+        font: inherit;
+        font-weight: 500;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+      }
+      .btn.ghost {
+        border-color: transparent;
+        background: transparent;
+      }
+      .btn.sm {
+        height: 28px;
+        padding: 0 8px;
+        font-size: 13px;
+      }
+      .tabs {
+        display: flex;
+        gap: 20px;
+        padding: 0 24px;
+        margin-top: 14px;
+        border-bottom: 1px solid var(--border);
+      }
+      .tabs span {
+        padding: 8px 0 10px;
+        color: var(--muted-fg);
+        border-bottom: 2px solid transparent;
+        margin-bottom: -1px;
+        display: flex;
+        gap: 6px;
+        align-items: center;
+      }
+      .tabs span.on {
+        color: var(--fg);
+        border-color: var(--fg);
+        font-weight: 500;
+      }
+      .tabs .n {
+        font-size: 12px;
+        color: var(--muted-fg);
+        font-weight: 400;
+      }
+      .list {
+        overflow: auto;
+      }
+      .row {
+        display: grid;
+        grid-template-columns: 10px 1fr auto;
+        gap: 12px;
+        padding: 12px 24px;
+        border-bottom: 1px solid var(--border);
+        align-items: start;
+      }
+      .row.unread {
+        background: var(--unread-bg);
+      }
+      .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        margin-top: 6px;
+      }
+      .unread .dot {
+        background: var(--info);
+      }
+      .row .title {
+        font-weight: 400;
+      }
+      .row.unread .title {
+        font-weight: 600;
+      }
+      .row .body {
+        color: var(--muted-fg);
+        margin-top: 2px;
+      }
+      .meta {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 6px;
+        color: var(--muted-fg);
+        font-size: 13px;
+        white-space: nowrap;
+      }
+      .pill {
+        font-size: 12px;
+        padding: 1px 6px;
+        border-radius: 6px;
+        background: var(--pill);
+        color: var(--muted-fg);
+      }
+      .more {
+        padding: 16px 24px;
+        display: flex;
+        justify-content: center;
+      }
+      .prefs {
+        padding: 8px 24px 24px;
+        max-width: 640px;
+      }
+      .pref {
+        display: flex;
+        justify-content: space-between;
+        gap: 24px;
+        padding: 16px 0;
+        border-bottom: 1px solid var(--border);
+      }
+      .pref p {
+        margin: 2px 0 0;
+        color: var(--muted-fg);
+      }
+      .pref .req {
+        font-size: 12px;
+        color: var(--muted-fg);
+        margin-top: 6px;
+        display: flex;
+        gap: 4px;
+        align-items: center;
+      }
+      .pref .req svg {
+        width: 12px;
+        height: 12px;
+      }
+      .switch {
+        width: 36px;
+        height: 20px;
+        border-radius: 10px;
+        background: var(--accent);
+        position: relative;
+        flex: none;
+        margin-top: 2px;
+      }
+      .switch::after {
+        content: "";
+        position: absolute;
+        top: 2px;
+        left: 2px;
+        width: 16px;
+        height: 16px;
+        border-radius: 50%;
+        background: var(--panel);
+        box-shadow: 0 1px 2px oklch(0 0 0 / 0.2);
+      }
+      .switch.on {
+        background: var(--primary);
+      }
+      .switch.on::after {
+        left: 18px;
+        background: var(--primary-fg);
+      }
+      .switch.disabled {
+        opacity: 0.5;
+      }
+      .prefs-note {
+        color: var(--muted-fg);
+        font-size: 13px;
+        padding: 14px 0 0;
+      }
+      .menu {
+        position: absolute;
+        top: 46px;
+        right: 12px;
+        width: 380px;
+        background: var(--panel);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: var(--shadow);
+        z-index: 5;
+        overflow: hidden;
+      }
+      .menu-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 8px 10px 14px;
+        border-bottom: 1px solid var(--border);
+        font-weight: 600;
+      }
+      .menu .row {
+        padding: 10px 14px;
+        grid-template-columns: 8px 1fr;
+        gap: 10px;
+      }
+      .menu .row:last-of-type {
+        border-bottom: 0;
+      }
+      .menu .row .body {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .menu .row .time {
+        color: var(--muted-fg);
+        font-size: 12px;
+        margin-top: 4px;
+      }
+      .menu-foot {
+        border-top: 1px solid var(--border);
+        padding: 6px;
+      }
+      .menu-foot a {
+        display: flex;
+        justify-content: center;
+        padding: 7px;
+        border-radius: 6px;
+        color: var(--fg);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      .state {
+        padding: 32px 20px;
+        text-align: center;
+        color: var(--muted-fg);
+      }
+      .state svg {
+        width: 24px;
+        height: 24px;
+        margin-bottom: 8px;
+      }
+      .state strong {
+        display: block;
+        color: var(--fg);
+        font-weight: 500;
+        margin-bottom: 4px;
+      }
+      .state .btn {
+        margin-top: 12px;
+      }
+      .skel {
+        height: 12px;
+        border-radius: 4px;
+        background: var(--accent);
+        margin: 4px 0;
+      }
+      /* states board */
+      .board {
+        padding: 24px;
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 24px;
+        align-items: start;
+      }
+      .board h2 {
+        font-size: 13px;
+        color: var(--muted-fg);
+        font-weight: 500;
+        margin: 0 0 10px;
+      }
+      .board .menu {
+        position: static;
+        width: 100%;
+      }
+      .bells {
+        display: flex;
+        gap: 28px;
+        align-items: center;
+        padding: 10px 0;
+      }
+      .bells figure {
+        margin: 0;
+        text-align: center;
+        color: var(--muted-fg);
+        font-size: 12px;
+      }
+      .bells .icon-btn {
+        margin: 0 auto 6px;
+      }
+      /* mobile */
+      @media (max-width: 600px) {
+        .frame {
+          padding: 0;
+        }
+        .sidebar {
+          display: none;
+        }
+        .panel {
+          border-radius: 0;
+          border: 0;
+        }
+        .header {
+          padding: 0 8px 0 12px;
+        }
+        .page-head {
+          padding: 16px 16px 0;
+          align-items: flex-start;
+        }
+        .page-head .btn span {
+          display: none;
+        }
+        .tabs {
+          padding: 0 16px;
+        }
+        .row {
+          padding: 12px 16px;
+          grid-template-columns: 10px 1fr;
+        }
+        .row .meta {
+          grid-column: 2;
+          flex-direction: row;
+          align-items: center;
+          justify-content: flex-start;
+        }
+        .menu {
+          left: 8px;
+          right: 8px;
+          width: auto;
+        }
+        .menu .row {
+          grid-template-columns: 8px 1fr;
+        }
+        .prefs {
+          padding: 8px 16px 24px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <script>
+      const params = new URLSearchParams(location.search);
+      if (params.get("theme") === "dark")
+        document.documentElement.classList.add("dark");
+      const screen = params.get("screen") || "inbox";
+
+      const I = {
+        bell: '<svg viewBox="0 0 24 24"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/></svg>',
+        house:
+          '<svg viewBox="0 0 24 24"><path d="M15 21v-8a1 1 0 0 0-1-1h-4a1 1 0 0 0-1 1v8"/><path d="M3 10a2 2 0 0 1 .709-1.528l7-5.999a2 2 0 0 1 2.582 0l7 5.999A2 2 0 0 1 21 10v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/></svg>',
+        folder:
+          '<svg viewBox="0 0 24 24"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>',
+        panel:
+          '<svg viewBox="0 0 24 24"><rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/></svg>',
+        checks:
+          '<svg viewBox="0 0 24 24"><path d="M18 6 7 17l-5-5"/><path d="m22 10-7.5 7.5L13 16"/></svg>',
+        chev: '<svg viewBox="0 0 24 24"><path d="m7 15 5 5 5-5"/><path d="m7 9 5-5 5 5"/></svg>',
+        lock: '<svg viewBox="0 0 24 24"><rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+        inbox:
+          '<svg viewBox="0 0 24 24"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+        alert:
+          '<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" x2="12" y1="8" y2="12"/><line x1="12" x2="12.01" y1="16" y2="16"/></svg>',
+      };
+
+      const ROWS = [
+        {
+          u: 1,
+          t: "Maya invited you to Spring catalogue",
+          b: "You can now edit the project and its files.",
+          c: "Account",
+          w: "4 minutes ago",
+        },
+        {
+          u: 1,
+          t: "Your export is ready",
+          b: "Checkout redesign, 1,204 rows, as CSV. The link stays valid for 7 days.",
+          c: "Product",
+          w: "1 hour ago",
+        },
+        {
+          u: 1,
+          t: "Payment failed for the Pro plan",
+          b: "Update the card on file before 12 November to keep your seats.",
+          c: "Account",
+          w: "yesterday",
+        },
+        {
+          u: 0,
+          t: "New: share a project with a link",
+          b: "Anyone with the link can view the project. Turn it on in project settings.",
+          c: "Product",
+          w: "3 days ago",
+        },
+        {
+          u: 0,
+          t: "Your password was changed",
+          b: "If this was not you, reset it now and sign out other sessions.",
+          c: "Account",
+          w: "last week",
+        },
+        {
+          u: 0,
+          t: "Partner onboarding was archived",
+          b: "Jonas archived the project. It stays readable for 90 days.",
+          c: "Product",
+          w: "2 weeks ago",
+        },
+        {
+          u: 0,
+          t: "Weekly summary",
+          b: "3 projects changed, 12 tasks closed, 2 members joined.",
+          c: "Product",
+          w: "3 weeks ago",
+        },
+      ];
+
+      function bellBtn(count, open) {
+        const badge = count ? `<span class="bell-badge">${count}</span>` : "";
+        return `<button class="icon-btn${open ? " open" : ""}" aria-label="Notifications">${I.bell}${badge}</button>`;
+      }
+      function pageRow(r) {
+        return `<div class="row${r.u ? " unread" : ""}"><span class="dot"></span><div><div class="title">${r.t}</div><div class="body">${r.b}</div></div><div class="meta"><span>${r.w}</span><span class="pill">${r.c}</span></div></div>`;
+      }
+      function menuRow(r) {
+        return `<div class="row${r.u ? " unread" : ""}"><span class="dot"></span><div style="min-width:0"><div class="title">${r.t}</div><div class="body">${r.b}</div><div class="time">${r.w} · ${r.c}</div></div></div>`;
+      }
+      function menu(kind) {
+        let body;
+        if (kind === "empty")
+          body = `<div class="state">${I.inbox}<strong>No notifications yet</strong>When something needs your attention, it shows here.</div>`;
+        else if (kind === "error")
+          body = `<div class="state">${I.alert}<strong>Could not load notifications</strong>Check your connection and try again.<br><button class="btn sm">Try again</button></div>`;
+        else if (kind === "loading")
+          body = `<div style="padding:14px">${[1, 2, 3].map(() => '<div class="skel" style="width:70%"></div><div class="skel" style="width:95%;margin-bottom:16px"></div>').join("")}</div>`;
+        else body = ROWS.slice(0, 5).map(menuRow).join("");
+        const markAll =
+          kind === "list"
+            ? `<button class="btn ghost sm">${I.checks}Mark all read</button>`
+            : `<span style="height:28px"></span>`;
+        return `<div class="menu"><div class="menu-head">Notifications ${markAll}</div>${body}<div class="menu-foot"><a href="#">View all notifications</a></div></div>`;
+      }
+      function shell(
+        content,
+        { count = 3, open = false, menuKind = "list" } = {}
+      ) {
+        return `<div class="frame">
+  <aside class="sidebar">
+    <div class="brand"><span class="brand-mark">S</span>Saasaloy</div>
+    <div class="group-label">Workspace</div>
+    <nav class="nav">
+      <a href="#">${I.house}Home</a>
+      <a href="#">${I.folder}Projects</a>
+      <a href="#" class="active">${I.bell}Notifications${count ? `<span class="count">${count}</span>` : ""}</a>
+    </nav>
+    <div class="account"><span class="avatar">MC</span><div>Maya Chen<small>maya@example.com</small></div><span style="margin-left:auto;color:var(--muted-fg)">${I.chev}</span></div>
+  </aside>
+  <main class="panel">
+    <div class="header"><span>${I.panel}</span><span class="crumbs">Saasaloy&nbsp; / &nbsp;<b>Notifications</b></span><div class="right">${bellBtn(count, open)}</div></div>
+    ${open ? menu(menuKind) : ""}
+    ${content}
+  </main>
+</div>`;
+      }
+      function head(tab) {
+        return `<div class="page-head"><div><h1>Notifications</h1><p>Newest first. Read rows are kept for 30 days.</p></div>${tab === "inbox" ? `<button class="btn">${I.checks}<span>Mark all read</span></button>` : ""}</div>
+  <div class="tabs"><span class="${tab === "inbox" ? "on" : ""}">Inbox <span class="n">3 unread</span></span><span class="${tab === "prefs" ? "on" : ""}">Preferences</span></div>`;
+      }
+      function inbox() {
+        return (
+          head("inbox") +
+          `<div class="list">${ROWS.map(pageRow).join("")}<div class="more"><button class="btn">Load more</button></div></div>`
+        );
+      }
+      function prefs() {
+        return (
+          head("prefs") +
+          `<div class="prefs">
+    <div class="pref"><div><strong>Account</strong><p>Sign-in, security, billing and membership changes.</p><div class="req">${I.lock}Required. These cannot be turned off.</div></div><span class="switch on disabled"></span></div>
+    <div class="pref"><div><strong>Product</strong><p>New features, exports that finish, project activity.</p></div><span class="switch on"></span></div>
+    <div class="pref"><div><strong>Tips</strong><p>Short guides to features you have not used yet.</p></div><span class="switch"></span></div>
+    <div class="prefs-note">Turning a category off stops new notifications in it. Ones you already have stay in your inbox.</div>
+  </div>`
+        );
+      }
+      function states() {
+        return `<div class="frame" style="padding:8px"><main class="panel"><div class="header"><span class="crumbs"><b>Bell and menu states</b></span></div><div class="board">
+    <div><h2>Bell badge</h2><div class="bells">
+      <figure>${bellBtn(0)}No unread</figure>
+      <figure>${bellBtn(3)}3 unread</figure>
+      <figure>${bellBtn("99+")}100 or more</figure>
+    </div>
+    <h2 style="margin-top:24px">Loading</h2>${menu("loading")}</div>
+    <div><h2>Empty</h2>${menu("empty")}</div>
+    <div><h2>Failed load (badge keeps its last count)</h2>${menu("error")}</div>
+  </div></main></div>`;
+      }
+
+      let html;
+      if (screen === "inbox") html = shell(inbox());
+      else if (screen === "menu") html = shell(inbox(), { open: true });
+      else if (screen === "prefs") html = shell(prefs());
+      else html = states();
+      document.body.innerHTML = html;
+    </script>
+  </body>
+</html>

@@ -3,6 +3,7 @@ import type {
   CommandGroup,
   CommandRegistration,
   CommandScope,
+  PendingShortcut,
 } from "@repo/ui/lib/shell/commands";
 
 // The pure half of the `command` module: what the provider does with the registrations
@@ -547,4 +548,32 @@ export function chordKeycaps(chord: Chord, platform: Platform): string[] {
       : (KEY_LABELS.get(chord.key) ?? chord.key);
   caps.push(key);
   return caps;
+}
+
+/**
+ * The hints for the sequences in progress: one entry per bound command whose id is in
+ * `pendingIds`, with the keycaps of the steps after the first. Every sequence in
+ * progress has matched its first step, so the rest is what the person still presses.
+ */
+export function pendingShortcuts(
+  bound: readonly ResolvedCommand[],
+  pendingIds: readonly string[],
+  platform: Platform
+): PendingShortcut[] {
+  const pending = new Set(pendingIds);
+  return bound.flatMap((entry): PendingShortcut[] => {
+    const { id, shortcut, title } = entry.command;
+    if (entry.steps === null || shortcut === undefined || !pending.has(id)) {
+      return [];
+    }
+    return [
+      {
+        shortcut,
+        title,
+        rest: entry.steps
+          .slice(1)
+          .map((chord) => chordKeycaps(chord, platform)),
+      },
+    ];
+  });
 }

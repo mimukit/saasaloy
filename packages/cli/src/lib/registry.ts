@@ -308,13 +308,13 @@ const FETCH_TIMEOUT_MS = 15_000;
 // neither a timeout nor an AbortSignal — the race below can only stop *waiting* on the
 // download, not stop the download itself. That is enough: the files land in a temp dir
 // this process deletes, and the point is that `saasaloy add` never hangs with no output.
-const DOWNLOAD_TIMEOUT_MS = 60_000;
+export const DOWNLOAD_TIMEOUT_MS = 60_000;
 
 /**
  * Reject when `work` outruns `ms`. The work keeps running; only the wait ends. Used where
  * the underlying call exposes no cancellation of its own.
  */
-async function withDeadline<T>(
+export async function withDeadline<T>(
   work: Promise<T>,
   ms: number,
   what: string
@@ -342,8 +342,9 @@ async function withDeadline<T>(
 export const OFFLINE_HINT = `Set ${REGISTRY_ENV} to a local \`modules/\` checkout to work offline.`;
 
 // GITHUB_TOKEN (or GIGET_AUTH) lifts the 60→5000 req/hr limit and unlocks private repos.
-// Read at call time so tests and long-lived processes can set it after import.
-function authToken(): string | undefined {
+// Read at call time so tests and long-lived processes can set it after import. Shared
+// with the base snapshot fetch (`fetchBaseSnapshot`, #312), which downloads the same way.
+export function authToken(): string | undefined {
   return process.env.GITHUB_TOKEN ?? process.env.GIGET_AUTH;
 }
 

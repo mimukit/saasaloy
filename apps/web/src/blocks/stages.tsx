@@ -95,7 +95,7 @@ export function Stages({
                   <span
                     aria-hidden="true"
                     data-stage-marker=""
-                    className="border-highlight bg-background text-highlight flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium transition-colors"
+                    className="border-highlight bg-background text-highlight flex size-8 shrink-0 items-center justify-center rounded-full border text-sm font-medium"
                   >
                     {index + 1}
                   </span>

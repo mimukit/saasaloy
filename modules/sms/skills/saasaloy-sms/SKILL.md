@@ -172,7 +172,7 @@ The rules, which are not the ones most people carry in their head:
 **Known inaccuracy: toll-free senders.** A US/CA toll-free number uses a 16-bit concatenation
 reference and gets **152/66** per part instead of 153/67, so a long message from one can need one
 part more than reported. The core is handed a `from` it deliberately doesn't parse, so it cannot
-know the sender's type. Documented rather than modelled; if it matters to your billing, check
+know the sender's type. Documented rather than modelled; if it matters to your subscription, check
 against your provider's own figure.
 
 Providers are not asked to report their own count, and `SmsResult` has no field for one. Twilio

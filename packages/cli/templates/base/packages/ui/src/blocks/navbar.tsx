@@ -36,19 +36,31 @@ export interface NavbarLink {
   href: string;
 }
 
-// Same-page anchors, matching the ids the other blocks render. The anchor is structure and
-// stays here; the label comes from content, and blanking it there drops the link — which
-// is how a removed section loses its nav entry without editing this file.
+// The home page's sections, matching the ids the other blocks render. Each href carries the
+// leading `/`, so the link also works from another page (a blog post); on the home page the
+// browser treats it as a same-page jump. The anchor is structure and stays here; the label
+// comes from content, and blanking it there drops the link — which is how a removed section
+// loses its nav entry without editing this file.
 //
 // The two buttons are the exception, and their hrefs come from content too: they point off
 // the page, at a signup, the docs or the source (content shape rule 5c).
-const defaultLinks: NavbarLink[] = [
-  { label: landing.navbar.linkFeatures, href: "#features" },
-  { label: landing.navbar.linkHowItWorks, href: "#how-it-works" },
-  { label: landing.navbar.linkShowcase, href: "#showcase" },
-  { label: landing.navbar.linkPricing, href: "#pricing" },
-  { label: landing.navbar.linkFaq, href: "#faq" },
-].filter((link) => link.label !== "");
+const sectionLinks: NavbarLink[] = [
+  { label: landing.navbar.linkFeatures, href: "/#features" },
+  { label: landing.navbar.linkHowItWorks, href: "/#how-it-works" },
+  { label: landing.navbar.linkShowcase, href: "/#showcase" },
+  { label: landing.navbar.linkPricing, href: "/#pricing" },
+  { label: landing.navbar.linkFaq, href: "/#faq" },
+];
+
+// Pages a module adds to the site, after the sections. `saasaloy add cms` appends
+// `{ label: "Blog", href: "/blog" }` with a `const-array` patch keyed on `href`, and
+// `remove` takes it back out. Keep this a module-scope array literal, or the patch has
+// nothing to append to.
+const pageLinks: NavbarLink[] = [];
+
+const defaultLinks: NavbarLink[] = [...sectionLinks, ...pageLinks].filter(
+  (link) => link.label !== ""
+);
 
 // Everything inside the open header a keyboard can reach. Tab cycles through these and
 // nothing else while the mobile panel is open.

@@ -5,7 +5,7 @@
   "description": "One-off payments in a packages/payment workspace: the provider contract, the status machine and staff review routes.",
   "stage": "money",
   "needs": [],
-  "requires": { "saasaloy": ">=0.7.0" },
+  "requires": { "saasaloy": ">=0.9.0" },
   "dependsOn": ["api", "database", "auth", "admin"],
   "dependencies": [],
   "envVars": {
@@ -69,6 +69,13 @@
       }
     },
     {
+      "file": "apps/admin/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "zod",
+      "range": "4.6.5"
+    },
+    {
       "file": "apps/admin/src/components/nav.ts",
       "kind": "nav-entry",
       "constName": "NAV_AREAS",
@@ -92,12 +99,27 @@
         "to": "/payments",
         "path": "/admin/payment/review-count"
       }
+    },
+    {
+      "file": "apps/api/src/lib/audit-actions.ts",
+      "kind": "plugin-array",
+      "exportName": "AUDIT_ACTIONS",
+      "arrayProp": "actions",
+      "call": "paymentAuditActions",
+      "import": {
+        "name": "paymentAuditActions",
+        "from": "../audit/payment"
+      }
     }
   ],
   "files": [
     {
       "path": "files/api/routes/payment.ts",
       "target": "@api/routes/payment.ts"
+    },
+    {
+      "path": "files/api/audit/payment.ts",
+      "target": "@api/audit/payment.ts"
     },
     {
       "path": "files/api/routes/admin-payment.ts",
@@ -120,6 +142,11 @@
     {
       "path": "files/admin/routes/payments.tsx",
       "target": "@admin/routes/payments.tsx"
+    },
+    {
+      "path": "files/admin/extend/payments.ts",
+      "target": "@admin/extend/payments.ts",
+      "seed": true
     },
     {
       "path": "files/db/seed/payments.ts",

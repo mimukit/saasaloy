@@ -6,7 +6,7 @@ title: apps/app takes the devGzip and restartOnLockfile dev plugins
 
 `apps/app/vite.config.ts` imports `devGzip` and `restartOnLockfile` from `@repo/tooling/vite` and adds both to the end of `plugins`. `devGzip()` gzips what the dev server sends, which cuts a cold load over a remote connection to about a quarter of the bytes. `restartOnLockfile()` restarts the dev server when `pnpm-lock.yaml` changes, because Vite 8 keeps a failed import cached after the package is installed. Both run under `vite dev` only. `apps/app/package.json` gets `@repo/tooling` as a devDependency.
 
-This needs the base template's `@repo/tooling/vite` export, which the base note `0002-dev-stop-and-dev-plugins` adds.
+This needs the base template's `@repo/tooling/vite` export, which the base note `0003-dev-stop-and-dev-plugins` adds.
 
 ## What the merge plan gets
 

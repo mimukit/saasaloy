@@ -91,7 +91,7 @@ With `STORAGE_IMAGE_TRANSFORMS` off — the default — `publicImageUrl` returns
 
 ### Why there is no `images` module
 
-Cloudflare Images is a second product with a second binding, its own ids and its own billing, and using it would store the same bytes twice. An object already in R2 transforms on the way out through a URL prefix on the zone. Revisit only for signed variants, background thumbnails or moderation — none of which this module claims.
+Cloudflare Images is a second product with a second binding, its own ids and its own subscription, and using it would store the same bytes twice. An object already in R2 transforms on the way out through a URL prefix on the zone. Revisit only for signed variants, background thumbnails or moderation — none of which this module claims.
 
 ## The sweep
 
@@ -101,7 +101,7 @@ The sweep runs at 04:00 UTC daily and makes three bounded passes: finish `deleti
 
 The three files always land; only the two `plugin-array` registrations need `queue`. In a project without it, `saasaloy add file-uploads` warns that three patch targets are missing — `packages/queue/package.json` once and `packages/queue/src/index.ts` twice, each printed both in the plan and again at apply time — and `packages/file-uploads/src/job.ts` is dead code. That is the expected output, not a failure — a patch carries no `onlyWith` condition the way a file does. Add `queue` later and run `saasaloy add file-uploads --force`; a plain re-run answers "already installed" and changes nothing, while `--force` re-applies the patches, which are idempotent.
 
-The sweep is split across three files for two reasons worth knowing before you move any of it. A file targeting `@queue/...` cannot ship conditionally, because the applier resolves the alias before it applies `onlyWith`, so the job would break `add` in every project with no queue. And a job file inside `packages/queue` that imported `@repo/db` would pull the schema barrel's `import.meta.glob` into a workspace that does not compile with Vite's types. So `packages/file-uploads` holds the sweep and the registration with zero runtime dependencies, and `apps/api/src/lib/storage-sweep.ts` implements the port. It is `packages/billing`'s arrangement, for the same reasons.
+The sweep is split across three files for two reasons worth knowing before you move any of it. A file targeting `@queue/...` cannot ship conditionally, because the applier resolves the alias before it applies `onlyWith`, so the job would break `add` in every project with no queue. And a job file inside `packages/queue` that imported `@repo/db` would pull the schema barrel's `import.meta.glob` into a workspace that does not compile with Vite's types. So `packages/file-uploads` holds the sweep and the registration with zero runtime dependencies, and `apps/api/src/lib/storage-sweep.ts` implements the port. It is `packages/subscription`'s arrangement, for the same reasons.
 
 ## Wire-up
 
