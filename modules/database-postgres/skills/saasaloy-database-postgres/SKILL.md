@@ -223,6 +223,7 @@ Three commands create, report on and drop the development database. They live in
 pnpm db:setup    # create the database if needed, then apply every pending migration
 pnpm db:status   # backend, database, host, applied and pending migrations
 pnpm db:drop     # drop the database and its _test, clear DATABASE_URL, delete the state block
+pnpm db:prune    # list (or with --apply, drop) the databases of closed branches
 ```
 
 `db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
@@ -237,7 +238,8 @@ because the title says nothing the number does not.
 The reason is the shared server. A branch that adds a migration must not apply it to a database
 other developers read: they then run schema that is not on `main` and nobody can see why. A database
 per branch keeps the unmerged migration where only its author meets it. Run `pnpm db:drop` when you
-are done with a branch, or the databases pile up.
+are done with a branch, or `pnpm db:prune` from any checkout to drop the databases of every closed
+branch at once.
 
 ### Backends: `--docker`, `--server`, `--neon`
 
@@ -318,6 +320,41 @@ Throwing the container away is a separate, manual step:
 ```sh
 docker compose down -v   # stops the container and deletes its volume
 ```
+
+### `db:prune`: drop the databases of closed branches
+
+A worktree removed without `pnpm db:drop` leaves its databases on the server. `pnpm db:prune`
+finds them. It is a dry run by default:
+
+```sh
+pnpm db:prune                      # list candidates with sizes, and each kept database with why
+pnpm db:prune --apply              # drop the candidates
+pnpm db:prune --include-unmapped   # also judge databases made before the mapping existed
+pnpm db:prune --server             # read the server DATABASE_URL names, not the container
+```
+
+It reads the **database mapping**: `db:setup` (and `--reset`) writes a comment on the development
+database, and the test setup writes one on `<database>_test`, as JSON
+`{"saasaloy":1,"branch":"…","worktree":"…","clone":"…"}`. The clone id is a short SHA-1 of the
+hostname and the absolute git common dir, so every worktree of one clone shares it. A comment, not a
+table, so the drizzle schema never sees it. A re-run of `db:setup` maps a database made before.
+
+A database is a candidate only when its branch is closed:
+
+| The database                       | Dropped when                                                          |
+| ---------------------------------- | --------------------------------------------------------------------- |
+| mapped by this clone               | the branch is in no `refs/heads/*` and no `refs/remotes/*/*`          |
+| mapped by another clone            | `gh pr list --state merged --head <branch>` finds a merged PR         |
+| unmapped, with `--include-unmapped` | no local or remote branch computes to its name                        |
+
+Everything else is kept and listed with its reason: `default` (the plain `<project>_dev` and its
+test database), `branch open`, `foreign, no merged PR`, `foreign, gh missing`, `unmapped`, or
+`in use` (a session is open on it, and `DROP … WITH (FORCE)` would end it).
+
+It reads one server: the state block's backend, or with no block the local container when it
+answers; otherwise it refuses and names `--server`. On a server it reminds you to run
+`git fetch --prune` first, because it never fetches and a stale remote ref only keeps a database. On
+neon.new there is nothing to prune: each database is deleted when it expires.
 
 ## Seed data: `db:seed`
 

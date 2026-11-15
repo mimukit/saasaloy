@@ -164,6 +164,14 @@ project root before `rimraf` sees it. A wrangler upgrade that moves the path tur
 no-op that says so, rather than a delete somewhere else. If that happens, look under
 `apps/api/.wrangler/state` and update the path in `scripts/drop.ts`.
 
+### `db:prune`
+
+`pnpm db:prune` drops nothing on this driver and says why: each local D1 database lives in
+`apps/api/.wrangler/state` inside its own worktree, so removing the worktree removes its database.
+The command exists so both drivers expose the same `db:*` commands, and the `## Worktree setup`
+section of the root `AGENTS.md` runs the same blocks on either one. On Postgres it drops the branch
+databases a server keeps after their worktree is gone.
+
 ## Seed data: `db:seed`
 
 `pnpm db:seed` fills the local D1 database with the rows in `packages/db/src/seed/slices/`, one file per table. The slice contract (slugs, `seedId`, the conflict key) is in the `saasaloy-database` skill, "Seed data". This section is what the D1 runner does with it.

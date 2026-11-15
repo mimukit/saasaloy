@@ -29,7 +29,8 @@ export function adminUrl(): string {
   return swapDatabase(CONTAINER_URL, MAINTENANCE_DATABASE);
 }
 
-async function answers(): Promise<boolean> {
+/** True when the container accepts a connection right now. Starts nothing. */
+export async function answers(): Promise<boolean> {
   try {
     await withSql(adminUrl(), DOCKER_UNREACHABLE, async (sql) => {
       await sql`select 1`;

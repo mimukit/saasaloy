@@ -11,6 +11,7 @@ import {
   withSql,
 } from "./lib/context.ts";
 import type { Context } from "./lib/context.ts";
+import { cloneId, mappingStatement } from "./lib/mapping.ts";
 import {
   assertTestTarget,
   refuseProduction,
@@ -114,6 +115,17 @@ export async function setup(project: TestProject): Promise<void> {
     await migrate(url);
   }
   await writeSeed(url, await import("../src/seed/index.ts"));
+  // The mapping `db:setup` writes on the development database, so `db:prune` drops the test
+  // database together with it once the branch closes.
+  await withSql(url, "Cannot reach the test database", async (sql) => {
+    await sql.unsafe(
+      mappingStatement(context.prefix, database, {
+        branch: context.branch ?? "",
+        worktree: context.root,
+        clone: cloneId(context.root),
+      })
+    );
+  });
 
   project.provide("testDatabaseUrl", url);
 }

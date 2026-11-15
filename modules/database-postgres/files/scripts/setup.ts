@@ -18,6 +18,7 @@ import {
 } from "./lib/context.ts";
 import type { Context } from "./lib/context.ts";
 import { setKey, writeEnvFile } from "./lib/env-file.ts";
+import { cloneId, mappingStatement } from "./lib/mapping.ts";
 import { BACKEND_LABEL, chooseBackend, inferState } from "./lib/state.ts";
 import type { Backend, State } from "./lib/state.ts";
 import { databaseOf, hostOf, swapDatabase } from "./lib/url.ts";
@@ -246,8 +247,17 @@ await run(async () => {
 
   // Prove the URL the file now holds actually answers, so `db:setup` never ends green on a
   // database the next command cannot open.
+  // The same connection writes the database mapping, which `db:prune` reads to tell whether
+  // this branch is closed. A re-run rewrites it, so a database made before the mapping
+  // existed is mapped on its next `db:setup`.
+  const mapping = mappingStatement(context.prefix, state.database, {
+    branch: context.branch ?? "",
+    worktree: context.root,
+    clone: cloneId(context.root),
+  });
   await withSql(url, "The new database did not answer", async (sql) => {
     await sql`select 1`;
+    await sql.unsafe(mapping);
   });
   printSummary(context, state, url);
 });
