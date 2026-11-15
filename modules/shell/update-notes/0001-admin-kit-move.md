@@ -7,7 +7,7 @@ when:
 
 ## What update does
 
-Before `shell`, the `admin` module wrote its ui kit under `@repo/ui/{components,blocks,containers,lib}/admin`. That kit now belongs to the `shell` module, under `@repo/ui/{components,blocks,containers,lib}/shell` and `packages/ui/src/assets/shell`. The new `admin` depends on `shell`, so `saasaloy update` installs `shell` and removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`. It writes the new imports into `admin` and into every module with an admin screen: `teams`, `billing`, `payment`, `feature-flags`, `multitenant`, `file-uploads` and `api-keys-organization`.
+Before `shell`, the `admin` module wrote its ui kit under `@repo/ui/{components,blocks,containers,lib}/admin`. That kit now belongs to the `shell` module, under `@repo/ui/{components,blocks,containers,lib}/shell` and `packages/ui/src/assets/shell`. The new `admin` depends on `shell`, so `saasaloy update` installs `shell` and removes each unchanged file under `components/admin/`, `blocks/admin/`, `containers/admin/` and `lib/admin/`. It writes the new imports into `admin` and into every module with an admin screen: `teams`, `subscription`, `payment`, `feature-flags`, `multitenant`, `file-uploads` and `api-keys-organization`.
 
 `blocks/admin/feature-flags` stays where it is. It is the one admin-only block, and the update already points its imports at the right place.
 

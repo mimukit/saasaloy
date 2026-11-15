@@ -40,9 +40,10 @@
    panels read flat against the canvas, so it is kept.
 
    LIGHT is a mapped variant, not a second measurement — the screenshots are dark only.
-   It follows the Intercom marketing surface instead: a cream canvas, white panels, and a
-   warm hairline, so the same three-step ramp reads in reverse. Light is first-class; the
-   app just starts on dark (see apps/admin/src/main.tsx). */
+   It takes a neutral grey canvas, `oklch(0.97 0 0)`, white panels, and a warm hairline,
+   so the same three-step ramp reads in reverse. The canvas has no hue so it does not
+   compete with the warm text tokens; it replaced a cream canvas on 2026-11-04 (#306).
+   Light is first-class; the app just starts on dark (see apps/admin/src/main.tsx). */
 
 @import "./globals.css";
 
@@ -64,14 +65,14 @@
   /* 12px. The screenshots' panels read at about a 12px corner, one step above the
      base template's 0.625rem. Everything derived from --radius follows. */
   --radius: 0.75rem;
-  --background: oklch(0.96 0.008 73.74);
+  --background: oklch(0.97 0 0);
   --foreground: oklch(0.197 0.005 67.53);
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.197 0.005 67.53);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.197 0.005 67.53);
   --primary: oklch(0.258 0.007 67.5);
-  --primary-foreground: oklch(0.96 0.008 73.74);
+  --primary-foreground: oklch(0.97 0 0);
   --secondary: oklch(0.933 0.011 76.6);
   --secondary-foreground: oklch(0.258 0.007 67.5);
   --muted: oklch(0.933 0.011 76.6);
@@ -90,10 +91,10 @@
 
   /* The rail and the nav panel are `sidebar` surfaces. They sit on the canvas as
      panels, so they take the panel fill rather than a fourth tone. */
-  --sidebar: oklch(0.96 0.008 73.74);
+  --sidebar: oklch(0.97 0 0);
   --sidebar-foreground: oklch(0.197 0.005 67.53);
   --sidebar-primary: oklch(0.258 0.007 67.5);
-  --sidebar-primary-foreground: oklch(0.96 0.008 73.74);
+  --sidebar-primary-foreground: oklch(0.97 0 0);
   --sidebar-accent: oklch(0.933 0.011 76.6);
   --sidebar-accent-foreground: oklch(0.258 0.007 67.5);
   --sidebar-border: oklch(0 0 0 / 6%);

@@ -1,15 +1,78 @@
+import { createRequire } from "node:module";
+import { relative } from "node:path";
 import { fileURLToPath } from "node:url";
 import tailwindcss from "@tailwindcss/vite";
 import { tanstackRouter } from "@tanstack/router-plugin/vite";
 import react from "@vitejs/plugin-react";
 import { devPort } from "@repo/env/dev-port";
 import { devGzip, restartOnLockfile } from "@repo/tooling/vite";
-import { defineConfig, loadEnv } from "vite";
+import { defineConfig, loadEnv, runnerImport } from "vite";
+import type { Plugin } from "vite";
 
 // Plain SPA build: Vite emits static assets into dist/ and wrangler.jsonc serves them
 // with a single-page-application fallback. There is no Worker entry and no SSR — the
 // admin app talks to apps/api over the credentialed CORS spine instead.
 const ENV_LOCAL = "apps/admin/.env.local";
+
+// The tab title and the favicon come from the project, not from index.html: the title is
+// `<name> Admin` from `@repo/config`, and the icon is the shell's light brand mark
+// (packages/ui/src/assets/shell/brand-mark-light.svg). The plugin runs before Vite reads
+// the page's assets, so in a build the icon goes through the asset pipeline and ships
+// hashed in dist/assets/. The dev server serves it from its `/@fs/` path instead, because
+// a path that climbs out of this app would land on the SPA fallback. Replace the brand
+// files, or set `config.app.name`, and the next build follows.
+//
+// The plugin loads `@repo/config` through Vite's `runnerImport`, not a static import in
+// this file. Vite's native config loader (planned as the default) leaves this file's
+// imports to Node, and Node cannot load the config package's extensionless TypeScript
+// imports. `runnerImport` transforms them the way the app's own build does.
+const FAVICON_FILE = createRequire(import.meta.url)
+  .resolve("@repo/ui/assets/shell/brand-mark-light.svg")
+  .replaceAll("\\", "/");
+const FAVICON_BUILD = relative(import.meta.dirname, FAVICON_FILE).replaceAll(
+  "\\",
+  "/"
+);
+const FAVICON_DEV = `/@fs/${FAVICON_FILE.replace(/^\//, "")}`;
+
+/** `&`, `<`, `>` and `"` as entities, so a product name cannot break the markup. */
+function escapeHtml(text: string): string {
+  return text
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;");
+}
+
+/** The part of `@repo/config` the page reads. */
+interface ConfigModule {
+  config: { app: { name: string } };
+}
+
+function brandHtml(): Plugin {
+  let title = "";
+  return {
+    name: "brand-html",
+    async configResolved(resolved) {
+      const { module } = await runnerImport<ConfigModule>("@repo/config", {
+        root: resolved.root,
+        configFile: false,
+        logLevel: "silent",
+      });
+      title = `${module.config.app.name} Admin`;
+    },
+    transformIndexHtml: {
+      order: "pre",
+      handler: (html, context) => {
+        const href = context.server === undefined ? FAVICON_BUILD : FAVICON_DEV;
+        return html.replace(
+          /<title>[^<]*<\/title>/,
+          `<title>${escapeHtml(title)}</title>\n    <link rel="icon" type="image/svg+xml" href="${escapeHtml(href)}" />`
+        );
+      },
+    },
+  };
+}
 
 export default defineConfig(({ mode }) => ({
   plugins: [
@@ -35,6 +98,7 @@ export default defineConfig(({ mode }) => ({
     // src/main.tsx imports via `@repo/ui/styles/admin.css`. Do not declare a second
     // entrypoint here.
     tailwindcss(),
+    brandHtml(),
     // Dev only. `devGzip()` compresses what the dev server sends, which matters when the
     // app is opened from another machine. `restartOnLockfile()` restarts the server after
     // an install, so a package added while it runs resolves on the next reload.

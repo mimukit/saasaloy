@@ -32,7 +32,7 @@ import type {
 // - **The limiter counts per Cloudflare location, not globally.** A `limit` of 10 is 10
 //   *per colo*, so a distributed burst gets a multiple of it. Cloudflare calls the API
 //   "permissive, eventually consistent, and intentionally designed to not be used as an
-//   accurate accounting system". Use it to blunt abuse, never to meter billing.
+//   accurate accounting system". Use it to blunt abuse, never to meter subscription.
 
 /** Workers KV rejects `expirationTtl` below this. */
 const MIN_TTL_SECONDS = 60;

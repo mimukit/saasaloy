@@ -40,6 +40,11 @@
           "type": "string",
           "minLength": 1,
           "description": "The CLI version that adopted the base, written by `saasaloy update` on a project that had no record and kept through later updates. Absent on a base `init` rendered. While `cliVersion` still equals it, `update` cannot tell which base update notes the project already took, so it shows the older ones as \"may apply\" and accepts `--from <version>`. A lock without it whose base files are adopted reads as adopted at `cliVersion`."
+        },
+        "templateVersion": {
+          "type": "string",
+          "minLength": 1,
+          "description": "The CLI release whose template `templateHash` describes, written when an applied run moves `cliVersion` past it while a base merge still waits. `update` fetches the three-way merge base at this version. Absent means `cliVersion` is that release."
         }
       }
     },

@@ -377,7 +377,7 @@ export const landing = {
       {
         id: "charge",
         title: "Charge money",
-        modules: ["billing", "billing-stripe"],
+        modules: ["subscription", "subscription-stripe"],
       },
       {
         id: "scale",
@@ -401,7 +401,7 @@ export const landing = {
           "queue",
           "kv",
           "storage",
-          "billing",
+          "subscription",
         ],
       },
       {
@@ -430,8 +430,8 @@ export const landing = {
           "kv-memory",
           "storage-cloudflare",
           "storage-memory",
-          "billing-stripe",
-          "billing-console",
+          "subscription-stripe",
+          "subscription-console",
           "sms-khudebarta",
           "sms-console",
           "logger-console",
@@ -668,7 +668,7 @@ export const landing = {
       {
         id: "requirements",
         question: "What do I need installed?",
-        answer: "Node 24.13.0 or later and pnpm 11 or later.",
+        answer: "Node 24.15.0 or later and pnpm 11 or later.",
       },
     ],
     /** The line under the list. An empty `moreLinkHref` hides it. */

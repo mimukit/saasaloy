@@ -198,7 +198,7 @@ A provider whose service pushes work back into the Worker ships a second exporte
 
 ## Removal
 
-Remove the dependents first. `queue-cloudflare` and `queue-memory` depend on `queue`, and so does `billing`. `remove queue` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
+Remove the dependents first. `queue-cloudflare` and `queue-memory` depend on `queue`, and so does `subscription`. `remove queue` refuses while any of them is installed. `--force` overrides the refusal, and it leaves the dependents broken.
 
 `saasaloy remove queue-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. `queue-cloudflare` also reverses its `wrangler-binding` patches and its `handlers` entry in `apps/api/src/worker.ts`. Messages still in the Cloudflare queue survive. Drain them before you remove, or they are never consumed.
 

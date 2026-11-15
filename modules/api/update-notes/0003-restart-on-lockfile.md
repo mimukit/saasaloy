@@ -6,7 +6,7 @@ title: apps/api restarts its dev server after an install
 
 `apps/api/vite.config.ts` imports `restartOnLockfile` from `@repo/tooling/vite` and adds it after `cloudflare()` in `plugins`. It restarts the dev server when `pnpm-lock.yaml` changes, because Vite 8 keeps a failed import cached after the package is installed. It runs under `vite dev` only. `apps/api/package.json` gets `@repo/tooling` as a devDependency.
 
-This needs the base template's `@repo/tooling/vite` export, which the base note `0002-dev-stop-and-dev-plugins` adds.
+This needs the base template's `@repo/tooling/vite` export, which the base note `0003-dev-stop-and-dev-plugins` adds.
 
 ## What the merge plan gets
 

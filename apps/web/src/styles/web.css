@@ -10,19 +10,21 @@
    and a preset or a redesign changes it in one place. None of this is a colour: a theme
    preset replaces the colour tokens in brand.css and leaves these alone.
 
-   Width. `wide` is every section's container, the navbar's and the footer's too.
+   Width. `wide` is every section's container and the footer's. `hero` is the wider
+   container of the hero and the navbar above it, from the two-column hero mockup the
+   owner approved on 2026-11-06.
 
    Type ramp, in Geist (brand.css maps `--font-sans` and `--font-mono`). `display` is the
-   hero's one h1, `section-title` every h2, `lead` the paragraph under either.
-   `wordmark-display` is the footer's large wordmark: it scales with the viewport so the
-   word fills the `wide` container, less its 1.5rem gutters, and stops at 80rem. Body text
-   stays on Tailwind's scale. The sizes and weights are the typography tokens in
-   apps/web/DESIGN.md. */
+   hero's one h1, `section-title` every h2, `lead` the paragraph under either. `display`
+   scales with its column (`cqi`, so its parent needs `@container`): 10.3% of the column
+   sets "A landing page today." (9.6em at this tracking) on one line, from 2.25rem on a
+   phone to 4rem at the widest, one step above the 3rem section titles. */
 @theme {
   --container-wide: 80rem;
-  --text-display: clamp(2.5rem, 1.6rem + 3.6vw, 4.5rem);
-  --text-display--line-height: 1.05;
-  --text-display--letter-spacing: -0.035em;
+  --container-hero: 90rem;
+  --text-display: clamp(2.25rem, 10.3cqi, 4rem);
+  --text-display--line-height: 1.02;
+  --text-display--letter-spacing: -0.045em;
   --text-display--font-weight: 700;
   --text-section-title: clamp(2rem, 1.6rem + 1.6vw, 3rem);
   --text-section-title--line-height: 1.1;
@@ -223,6 +225,19 @@
   padding-inline: 1.5rem;
 }
 
+/* The hero's container, and the navbar's, so the wordmark lines up with the title: the
+   wider `hero` width with the 1.5rem gutter, and a 3rem gutter from `lg`. */
+@utility section-container-hero {
+  width: 100%;
+  max-width: var(--container-hero);
+  margin-inline: auto;
+  padding-inline: 1.5rem;
+
+  @media (width >= 64rem) {
+    padding-inline: 3rem;
+  }
+}
+
 /* The blueprint decoration. Both utilities draw in hairlines of the `border` token and
    nothing else: no shadow, no glow, no colour ramp. The hard-stop `linear-gradient`s below
    are how CSS draws a 1px line across a box; each one is a solid line, never a fade.
@@ -230,10 +245,21 @@
    `blueprint-grid` is the graph paper behind the whole page. Layout.astro puts it on
    <body>, so it runs as one continuous background and no section draws a band of its own.
    A faint line every `--blueprint-cell` (24px) and a firmer one every
-   `--blueprint-major` (five cells). */
+   `--blueprint-major` (five cells). `--blueprint-mix` and `--blueprint-mix-major` set
+   how much `border` each line takes, 15% and 30%. The hero draws the same grid again
+   over its own `background` at 25% and 45%, so the first screen reads a little firmer;
+   the cells line up with the body's, because both start at the top of the page. */
 @utility blueprint-grid {
-  --blueprint-line: color-mix(in oklch, var(--border) 15%, transparent);
-  --blueprint-line-major: color-mix(in oklch, var(--border) 30%, transparent);
+  --blueprint-line: color-mix(
+    in oklch,
+    var(--border) var(--blueprint-mix, 15%),
+    transparent
+  );
+  --blueprint-line-major: color-mix(
+    in oklch,
+    var(--border) var(--blueprint-mix-major, 30%),
+    transparent
+  );
 
   background-image:
     linear-gradient(to right, var(--blueprint-line-major) 1px, transparent 1px),

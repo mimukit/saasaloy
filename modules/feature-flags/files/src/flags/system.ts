@@ -37,7 +37,7 @@ export function killPayments(): FlagDefinition<`${typeof KILL_PREFIX}payments`> 
   return defineFlag({
     default: true,
     description:
-      "Turn off to stop checkout and billing calls while a payment provider is down.",
+      "Turn off to stop checkout and subscription calls while a payment provider is down.",
     key: `${KILL_PREFIX}payments`,
     type: "boolean",
   });

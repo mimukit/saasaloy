@@ -1,0 +1,32 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "subscription-console",
+  "type": "saasaloy:feature",
+  "description": "A subscription provider that runs the whole checkout flow with no network and no secret.",
+  "stage": "money",
+  "needs": [],
+  "requires": { "saasaloy": ">=0.7.0" },
+  "dependsOn": ["subscription"],
+  "dependencies": [],
+  "envVars": {},
+  "patches": [
+    {
+      "file": "packages/subscription/src/index.ts",
+      "kind": "plugin-array",
+      "exportName": "subscription",
+      "arrayProp": "providers",
+      "call": "consoleSubscription",
+      "import": {
+        "name": "consoleSubscription",
+        "from": "./providers/console"
+      }
+    }
+  ],
+  "files": [
+    {
+      "path": "files/console.ts",
+      "target": "@subscription/providers/console.ts"
+    }
+  ],
+  "scaffolds": []
+}

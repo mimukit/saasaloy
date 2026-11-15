@@ -8,7 +8,7 @@ title: apps/api reads its dev port from DEV_PORT
 
 The `api` row in `packages/env/src/services.ts` gets `devPort: 4000`. That is the port `pnpm dev:ports` keeps in the main checkout and the base of the worktree port. `apps/api/wrangler.jsonc` keeps `dev.port: 4000`, and its comment now says to run `wrangler dev --port <DEV_PORT>` in a linked worktree, because wrangler does not read `DEV_PORT`.
 
-This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0003-dev-ports` adds. Apply that note first, or the row fails `pnpm typecheck`.
+This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0004-dev-ports` adds. Apply that note first, or the row fails `pnpm typecheck`.
 
 ## What the merge plan gets
 

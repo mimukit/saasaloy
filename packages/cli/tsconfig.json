@@ -3,7 +3,7 @@
   "compilerOptions": {
     "outDir": "dist"
   },
-  "// include": "`test/` holds the GitHub fixture server, the e2e harness and the module matrix. It is typechecked but never built: tsup's only entry is src/index.ts. `test/fixtures` is excluded on purpose \u2014 several fixtures are invalid by design and one is not parseable JSON, which is what they are for. No `rootDir`: the build is tsup's, and `tsc` here only checks.",
+  "// include": "`test/` holds the GitHub fixture server, the e2e harness and the module matrix. It is typechecked but never built: tsup's only entry is src/index.ts. `test/fixtures` is excluded on purpose \u2014 several fixtures are invalid by design and one is not parseable JSON, which is what they are for. No `rootDir`: the build is tsup's, and `tsc` here only checks. `test/base-ui` is excluded too: its tests import the base template's `packages/ui` source, which resolves `@repo/ui/*` only inside a generated project. Vitest aliases it (vitest.tooling.config.ts), and the template's own typecheck runs in a scaffold.",
   "include": ["src", "test"],
-  "exclude": ["dist", "node_modules", "test/fixtures"]
+  "exclude": ["dist", "node_modules", "test/fixtures", "test/base-ui"]
 }

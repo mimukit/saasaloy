@@ -58,7 +58,7 @@ export function FilterChips({
           {chip.label}
           {chip.count === undefined ? null : (
             <span className="text-muted-foreground tabular-nums">
-              {chip.count}
+              {chip.count.toLocaleString()}
             </span>
           )}
         </button>

@@ -107,6 +107,8 @@ export interface PlannedFile {
   onlyWith?: string;
   /** The descriptor `when` this entry carries, recorded in the manifest on write (#242). */
   when?: When;
+  /** The entry is a module seed file, recorded so `update` and `remove` know it (#310). */
+  seed?: true;
 }
 
 // How a skill's `.claude/skills/<name>` symlink relates to what's already on disk:
@@ -216,6 +218,8 @@ export interface ModuleFileRef {
   onlyWith?: string;
   /** The entry's `when`, carried so the manifest records it on write (#242). */
   when?: When;
+  /** The entry is a module seed file: written once, then the project's (#310). */
+  seed?: true;
 }
 
 /**
@@ -341,7 +345,8 @@ export async function selectModuleFiles(
     from: string,
     target: string,
     onlyWith?: string,
-    when?: When
+    when?: When,
+    seed?: boolean
   ): void => {
     let slot = byTarget.get(target);
     if (!slot) {
@@ -360,13 +365,14 @@ export async function selectModuleFiles(
       abs: joinModulePath(mod.dir, from),
       ...(onlyWith === undefined ? {} : { onlyWith }),
       ...(when === undefined ? {} : { when }),
+      ...(seed ? { seed: true } : {}),
     };
   };
 
   for (const file of mod.item.files ?? []) {
     const target = gated(file.when, () => resolveTarget(aliases, file.target));
     if (target !== undefined) {
-      record(file.path, target, file.onlyWith, file.when);
+      record(file.path, target, file.onlyWith, file.when, file.seed);
     }
   }
   for (const scaffold of mod.item.scaffolds ?? []) {
@@ -375,7 +381,7 @@ export async function selectModuleFiles(
         posix.join(scaffold.workspace, file.target)
       );
       if (target !== undefined) {
-        record(file.path, target, file.onlyWith, file.when);
+        record(file.path, target, file.onlyWith, file.when, file.seed);
       }
     }
   }
@@ -597,6 +603,7 @@ async function planModuleFile(
       isSkill: isSkillTarget(ref.target),
       ...(ref.onlyWith === undefined ? {} : { onlyWith: ref.onlyWith }),
       ...(ref.when === undefined ? {} : { when: ref.when }),
+      ...(ref.seed ? { seed: true } : {}),
     },
     ...(ownedBy === undefined ? {} : { ownedBy }),
     ...(staleOwner === undefined ? {} : { staleOwner }),
@@ -825,6 +832,15 @@ export async function buildPlan(args: BuildPlanArgs): Promise<Plan> {
     // classified and recorded alike, so create/drift/conflict and `remove` all come
     // for free.
     for (const ref of refsByModule.get(name) ?? []) {
+      // A seed file this module already wrote is the project's now (#310): a re-add
+      // leaves it as it stands, edited or not. One that went missing is written again.
+      if (
+        ref.seed &&
+        manifest.managed[ref.target]?.module === name &&
+        (await pathExists(resolveWithinRoot(root, ref.target)))
+      ) {
+        continue;
+      }
       const {
         file: planned,
         ownedBy,
@@ -1148,6 +1164,7 @@ export async function executePlan(
       module: file.module,
       target: file.target,
       ...(file.when === undefined ? {} : { when: file.when }),
+      ...(file.seed ? { seed: true } : {}),
     });
   }
 

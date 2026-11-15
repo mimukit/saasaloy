@@ -240,6 +240,44 @@ describe(recordManagedFile, () => {
   });
 });
 
+describe("tombstones (#312)", () => {
+  it("records deleted only when asked, and a later write drops it", () => {
+    const manifest = emptyManifest();
+    const target = "packages/ui/src/blocks/showcase.tsx";
+    recordManagedFile(manifest, { hash: HASH, module: "base", target });
+    expect(manifest.managed[target]).not.toHaveProperty("deleted");
+
+    recordManagedFile(manifest, {
+      deleted: true,
+      from: target,
+      hash: HASH,
+      module: "base",
+      target,
+    });
+    expect(manifest.managed[target]?.deleted).toBeTruthy();
+
+    recordManagedFile(manifest, { hash: HASH, module: "base", target });
+    expect(manifest.managed[target]).not.toHaveProperty("deleted");
+  });
+
+  it("round-trips a tombstone through the schema, and refuses a non-boolean one", async () => {
+    const manifest = emptyManifest();
+    manifest.managed["packages/ui/src/blocks/showcase.tsx"] = {
+      deleted: true,
+      from: "packages/ui/src/blocks/showcase.tsx",
+      hash: HASH,
+      module: "base",
+    };
+    await saveManifest(root, manifest);
+    await expect(loadManifest(root)).resolves.toStrictEqual(manifest);
+
+    await writeManifest({
+      managed: { "a.ts": { module: "base", hash: HASH, deleted: "yes" } },
+    });
+    await expect(loadManifest(root)).rejects.toThrow(/deleted/);
+  });
+});
+
 describe(untrackManagedFile, () => {
   it("drops the entry and leaves the others alone", () => {
     const manifest = emptyManifest();

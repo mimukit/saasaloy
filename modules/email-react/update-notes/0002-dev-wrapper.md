@@ -8,7 +8,7 @@ The `dev` script in `packages/email-react/package.json` becomes `node scripts/de
 
 The module now adds an `email-react` row to `SERVICES` in `packages/env/src/services.ts`, with `file: "packages/email-react/.env"` and `devPort: 3003`. `packages/email-react/package.json` gets `@repo/env` and `@types/node` 26.6.3 as devDependencies, and `tsconfig.json` adds `scripts` to `include` and `node` to `types`.
 
-This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0003-dev-ports` adds. Apply that note first, or the new row fails `pnpm typecheck`. The note `email-react/0001-preview-port` names the old `email dev --port 3003` script; this note replaces that script.
+This needs the base template's `devPort` field and `@repo/env/dev-port` export, which the base note `base/0004-dev-ports` adds. Apply that note first, or the new row fails `pnpm typecheck`. The note `email-react/0001-preview-port` names the old `email dev --port 3003` script; this note replaces that script.
 
 ## What the merge plan gets
 

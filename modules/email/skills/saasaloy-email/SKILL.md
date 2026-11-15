@@ -437,7 +437,7 @@ Then set `requireEmailVerification: true` in `auth`'s `emailAndPassword`. `packa
 
 ## Removal
 
-Remove the providers first. `email-console`, `email-cloudflare`, `email-plunk` and `email-react` each depend on `email`, so `remove email` refuses while any of them is installed. `billing` depends on `email` too, so remove `billing` first or keep `email`. `--force` overrides the refusal, and it leaves the dependents broken.
+Remove the providers first. `email-console`, `email-cloudflare`, `email-plunk` and `email-react` each depend on `email`, so `remove email` refuses while any of them is installed. `subscription` depends on `email` too, so remove `subscription` first or keep `email`. `--force` overrides the refusal, and it leaves the dependents broken.
 
 `saasaloy remove email-<provider>` deletes the provider file and reverses its `plugin-array` registration in the core's `providers` array. A provider that wrote a secret reader (`email-plunk` ships `env.ts`) loses that file too.
 

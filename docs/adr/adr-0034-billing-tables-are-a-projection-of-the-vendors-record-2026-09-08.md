@@ -5,6 +5,8 @@
 ## Status
 accepted. Applies [ADR 0033](adr-0033-transient-state-capabilities-take-providers-2026-09-08.md) and adds the `billing` row to its capability table.
 
+> **Renamed.** [ADR 0045](0045-adr-billing-becomes-subscription-and-one-time-payments-get-a-payment-capability-2026-10-20.md) renamed `billing` to `subscription`, and issue [#211](https://github.com/mimukit/saasaloy/issues/211) carried it out. `billing_subscriptions` is now `subscriptions` and `billing_events` is now `subscription_events`. The decision below holds unchanged under the new names.
+
 ## The table is a projection, not the record
 
 Stripe holds the customer, the payment method, the price and the subscription. `billing_subscription` holds a copy of the part the project needs to answer a question in a request: which plan is this subject on, is it live, is it locked. Every column that identifies a row upstream is a provider id (`providerSubscriptionId`, `providerCustomerId`, `providerScheduleId`), and every write into the table comes from a webhook the vendor sent. Nothing in the project mints a subscription.

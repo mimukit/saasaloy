@@ -6,13 +6,13 @@ omitted:
   - section: spacing
     reason: "Tailwind's default scale is used unchanged; the page gutter is the one named step, in Layout"
 colors:
-  background: "oklch(0.96 0.008 73.74)"
+  background: "oklch(0.97 0 0)"
   foreground: "oklch(0.197 0.005 67.53)"
   card: "oklch(1 0 0)"
   card-foreground: "oklch(0.197 0.005 67.53)"
   popover: "oklch(1 0 0)"
   primary: "oklch(0.258 0.007 67.5)"
-  primary-foreground: "oklch(0.96 0.008 73.74)"
+  primary-foreground: "oklch(0.97 0 0)"
   secondary: "oklch(0.933 0.011 76.6)"
   muted-foreground: "oklch(0.517 0.016 74.29)"
   accent: "oklch(0.933 0.011 76.6)"
@@ -21,7 +21,7 @@ colors:
   border: "oklch(0 0 0 / 8%)"
   input: "oklch(0 0 0 / 11%)"
   ring: "oklch(0.708 0 0)"
-  sidebar: "oklch(0.96 0.008 73.74)"
+  sidebar: "oklch(0.97 0 0)"
   status-open: "oklch(0.915 0.024 256.11)"
   status-open-foreground: "oklch(0.347 0.067 253.68)"
   status-ok: "oklch(0.696 0.17 162.48)"
@@ -253,7 +253,7 @@ This file covers the admin app, which `saasaloy add admin` installs. Its tokens 
 
 ## Colors
 
-Three neutral tones carry every surface: the canvas (`background`), the raised content panel (`card`), and the hover and selected tone (`accent`). On dark the ramp has a faint blue cast, measured from the reference screenshots; on light it is a warm cream canvas with white panels. Menus, dialogs and toasts take the `popover` tone, which is the hover tone on dark, so a popup stands off the panel beneath it.
+Three neutral tones carry every surface: the canvas (`background`), the raised content panel (`card`), and the hover and selected tone (`accent`). On dark the ramp has a faint blue cast, measured from the reference screenshots; on light it is a neutral grey canvas with white panels. Menus, dialogs and toasts take the `popover` tone, which is the hover tone on dark, so a popup stands off the panel beneath it.
 
 Hairlines and input borders are alpha, not a fixed grey: `border` is black at 8 % on light and white at 8 % on dark, and `input` is a step stronger. One alpha rule reads the same on the canvas, on a panel and on a popup.
 
@@ -302,4 +302,4 @@ Controls use short colour and shadow transitions. Popups fade and scale in from 
 
 The `.dark` class selects the dark token set. The admin app applies dark before React mounts unless the visitor has chosen a theme, and the "Theme" submenu in the account menu picks Light, Dark or System, with a circle reveal from the picked item. Every component uses the semantic tokens, so both themes stay in step.
 
-_Seeded by the saasaloy admin module · tokens sha256:de8fecf6b226 of packages/ui/src/styles/admin.css_
+_Seeded by the saasaloy admin module · tokens sha256:fe47ffdf752f of packages/ui/src/styles/admin.css_

@@ -7,7 +7,9 @@ import { cn } from "@web/lib/utils";
 
 // The page's primary call to action: a bordered mono field holding one command, with a
 // solid Copy button flush against its right edge (the `command-field` component in
-// apps/web/DESIGN.md). Both share the 2.5rem height and square corners.
+// apps/web/DESIGN.md). Both share the 2.5rem height and square corners. `size="lg"` is
+// the hero's field: 3rem tall, wider, with a larger command (`command-field-lg` in
+// DESIGN.md).
 //
 // THE ONE ISLAND THIS FILE ADDS. index.astro renders it with `client:visible`, so the
 // copy handler hydrates only once the field scrolls into view and never competes with
@@ -28,14 +30,18 @@ export interface CommandFieldProps {
   command: string;
   /** The glyph before the command. Decorative. */
   prompt?: string;
+  /** `lg` is the hero's taller field. */
+  size?: "md" | "lg";
   className?: string;
 }
 
 export function CommandField({
   command,
   prompt = ">",
+  size = "md",
   className,
 }: CommandFieldProps) {
+  const large = size === "lg";
   const [copied, setCopied] = useState(false);
   const commandRef = useRef<HTMLElement>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -73,11 +79,19 @@ export function CommandField({
   return (
     <div
       className={cn(
-        "border-border bg-card flex h-10 w-full max-w-md items-stretch border",
+        "border-border bg-card flex w-full items-stretch border",
+        large ? "h-12 max-w-lg" : "h-10 max-w-md",
         className
       )}
     >
-      <p className="flex min-w-0 flex-1 items-center gap-2 overflow-x-auto px-3 font-mono text-[0.8125rem] whitespace-nowrap sm:text-sm">
+      <p
+        className={cn(
+          "flex min-w-0 flex-1 items-center gap-2 overflow-x-auto font-mono whitespace-nowrap",
+          large
+            ? "px-3 text-[0.8125rem] sm:gap-3 sm:px-4 sm:text-base"
+            : "px-3 text-[0.8125rem] sm:text-sm"
+        )}
+      >
         <span aria-hidden="true" className="text-highlight select-none">
           {prompt}
         </span>
@@ -89,7 +103,12 @@ export function CommandField({
         type="button"
         onClick={copy}
         aria-label={interpolate(ui.commandField.copyLabel, { command })}
-        className="bg-primary text-primary-foreground focus-visible:outline-ring press -my-px -mr-px inline-flex min-w-24 shrink-0 cursor-pointer items-center justify-center gap-2 px-3 text-sm font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2"
+        className={cn(
+          "bg-primary text-primary-foreground focus-visible:outline-ring press -my-px -mr-px inline-flex shrink-0 cursor-pointer items-center justify-center gap-2 font-medium underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2",
+          large
+            ? "min-w-24 px-3 text-sm sm:min-w-28 sm:px-4"
+            : "min-w-24 px-3 text-sm"
+        )}
       >
         {copied ? (
           <CheckIcon aria-hidden="true" className={ICON_SWAP} />

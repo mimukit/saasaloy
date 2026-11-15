@@ -62,7 +62,7 @@ export type FlagKey = (typeof flags.flags)[number]["key"];
  *
  * ```ts
  * const client = createFlags(c.env, source);
- * if (await client.flag("billing.new-checkout", { subjectId: user.id, tenantId })) {
+ * if (await client.flag("subscription.new-checkout", { subjectId: user.id, tenantId })) {
  *   // ...
  * }
  * ```

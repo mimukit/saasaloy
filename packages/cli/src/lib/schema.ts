@@ -163,6 +163,15 @@ export interface RegistryFile {
    * is this same type, so the keyword covers a scaffold's workspace files too.
    */
   onlyWith?: string;
+  /**
+   * A module seed file (#310, ADR 0060): `add` and backfill write it once and record it,
+   * and from then on it is the project's. `update` never overwrites or merges it, and puts
+   * it back only when it is missing. `remove` deletes it while its hash still matches the
+   * record and keeps it, with a warning, once the project changed it. A managed file
+   * imports its extension point from one, so the project edits the seed and the managed
+   * file stays clean. `RegistryScaffold.files` is this same type.
+   */
+  seed?: boolean;
 }
 
 // A new workspace a capability births. Its `files[].target`s are workspace-root-relative

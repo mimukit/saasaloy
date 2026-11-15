@@ -52,8 +52,10 @@ export function adminCommands({
   setTheme,
   currentTheme,
 }: AdminCommandActions): Command[] {
+  // Annotated, because two groups hold two different tuple types and `flatMap` would
+  // otherwise infer its element type from the first one alone.
   const items: readonly NavItem[] = NAV_AREAS.flatMap((area) =>
-    area.groups.flatMap((group) => group.items)
+    area.groups.flatMap((group): readonly NavItem[] => group.items)
   );
 
   const goTo = items.map((item): Command => ({

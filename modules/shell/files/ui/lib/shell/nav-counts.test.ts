@@ -11,7 +11,12 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { liveCount, withLiveCounts } from "./nav-counts.ts";
+import {
+  liveCount,
+  navCountFromBody,
+  navCountLabel,
+  withLiveCounts,
+} from "./nav-counts.ts";
 
 const areas = [
   {
@@ -98,5 +103,41 @@ describe("withLiveCounts", () => {
       ["/users", 0],
       ["/payments", 5],
     ]);
+  });
+});
+
+describe("navCountFromBody", () => {
+  it("reads a finite count", () => {
+    assert.equal(navCountFromBody({ count: 3 }), 3);
+    assert.equal(navCountFromBody({ count: 0 }), 0);
+  });
+
+  it("throws on a body that is not { count: number }", () => {
+    for (const body of [
+      null,
+      undefined,
+      "3",
+      3,
+      {},
+      { count: "3" },
+      { count: null },
+      { count: Number.NaN },
+      { count: Number.POSITIVE_INFINITY },
+    ]) {
+      assert.throws(() => navCountFromBody(body), TypeError, String(body));
+    }
+  });
+});
+
+describe("navCountLabel", () => {
+  it("shows a count up to 99 as itself", () => {
+    assert.equal(navCountLabel(0), "0");
+    assert.equal(navCountLabel(7), "7");
+    assert.equal(navCountLabel(99), "99");
+  });
+
+  it("caps a count above 99 at 99+", () => {
+    assert.equal(navCountLabel(100), "99+");
+    assert.equal(navCountLabel(1284), "99+");
   });
 });

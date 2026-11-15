@@ -4,6 +4,7 @@ import pc from "picocolors";
 import { readBaseDeclaration } from "../lib/base.js";
 import {
   checkBase,
+  checkKeptDeleted,
   checkDeploy,
   checkEnv,
   checkConfigValues,
@@ -119,7 +120,7 @@ function renderBase(report: BaseReport): string {
     ),
     ...report.missing.map(
       (target) =>
-        `${pc.red("✗")} ${target} ${pc.dim("missing — `saasaloy update` restores it")}`
+        `${pc.red("✗")} ${target} ${pc.dim("missing — `saasaloy update` asks whether to keep it deleted")}`
     ),
   ];
   if (report.seed.length > 0) {
@@ -151,6 +152,22 @@ async function reportProject(path: string, out: Output): Promise<number> {
     ),
   });
   note(wrapForNote(renderBase(base)), "Base", out.tui);
+  // Files kept deleted on purpose (#312). An info line each; the exit code does not move.
+  const keptDeleted = await checkKeptDeleted(path, manifest);
+  if (keptDeleted.length > 0) {
+    note(
+      wrapForNote(
+        keptDeleted
+          .map(
+            (file) =>
+              `${pc.dim("ℹ")} ${file.target} ${pc.dim(`deleted, kept deleted (${file.module}) — \`saasaloy update --restore <path>\` brings it back`)}`
+          )
+          .join("\n")
+      ),
+      `Kept deleted ${pc.dim(`(${keptDeleted.length})`)}`,
+      out.tui
+    );
+  }
   // Update notes an applied `update` showed and nobody cleared (#298). Like base drift,
   // they are work the project owes, never a finding: the exit code does not move.
   const pending = pendingNotesOf(manifest);
@@ -200,6 +217,7 @@ async function reportProject(path: string, out: Output): Promise<number> {
       base,
       findings: findings.map(findingJson),
       installed: config.installed,
+      keptDeleted,
       mode: "project",
       path,
       pendingNotes: pending.map(pendingNoteJson),

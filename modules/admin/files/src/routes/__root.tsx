@@ -96,6 +96,7 @@ export const Route = createRootRouteWithContext<AdminRouterContext>()({
     return { session };
   },
   component: RootLayout,
+  pendingComponent: RootPending,
   errorComponent: RootError,
   notFoundComponent: RootNotFound,
 });
@@ -137,6 +138,20 @@ function RootLayout() {
 // out instead of reaching for the back button. It must not wrap itself in the shell
 // again, or the page shows a second sidebar and header inside the first.
 //
+// What the root route shows while its guard asks the api for the session. Without it the
+// router falls back to its default, PageSkeleton (src/main.tsx), which draws a list page: on
+// a hard reload with a slow `get-session`, an anonymous visitor saw that list before the
+// login screen replaced it. Until the session answers, the app does not know whether the
+// shell or the login screen comes next, so this draws neither. The body already paints the
+// theme background, and the status text is for a screen reader only.
+function RootPending() {
+  return (
+    <div role="status" className="min-h-dvh">
+      <span className="sr-only">Checking your session</span>
+    </div>
+  );
+}
+
 // Only an admin ever sees this screen, and that is the guard working rather than a hole in
 // it. The router resolves `beforeLoad` top-down before it installs the not-found boundary,
 // and a redirect thrown there ends the match, so an anonymous visitor asking for an unknown

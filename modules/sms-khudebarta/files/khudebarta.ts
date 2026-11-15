@@ -176,15 +176,20 @@ async function sendOne(
     );
   }
 
+  // Read the text first, so a body that is not JSON can still name itself in the error.
+  const text = await response.text();
   let body: KhudebartaResponse;
   try {
-    body = (await response.json()) as KhudebartaResponse;
+    body = JSON.parse(text) as KhudebartaResponse;
   } catch (error) {
     // An HTML error page or an empty body from something in front of the gateway. Whether the
-    // message went out is unknown, so this is not retryable either.
+    // message went out is unknown, so this is not retryable either. The first 200 characters
+    // of the body go into the message: without them, a 502 from a proxy and a changed
+    // gateway format read the same in the logs.
+    const extract = text.replaceAll(/\s+/g, " ").trim().slice(0, 200);
     throw new SmsError(
       "provider_error",
-      `khudebarta: unreadable response (HTTP ${response.status})`,
+      `khudebarta: unreadable response (HTTP ${response.status}): ${extract === "" ? "(empty body)" : extract}`,
       { cause: error, retryable: false }
     );
   }

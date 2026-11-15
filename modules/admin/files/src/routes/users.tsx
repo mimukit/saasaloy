@@ -35,8 +35,8 @@ import type { AdminUser } from "@admin/lib/users-query";
 //
 // This file is also what makes the "Users" row in NAV_AREAS type-check. Nav entries are
 // checked against the generated route tree, so the row and the route arrive together or
-// neither does. The request itself lives in src/lib/users-query.ts, because the overview
-// reads it too.
+// neither does. The request itself lives in src/lib/users-query.ts, beside the overview's
+// own newest-users request, so the two keys share one prefix.
 export const Route = createFileRoute("/users")({
   loader: ({ context }) => context.queryClient.ensureQueryData(usersQuery),
   component: Users,

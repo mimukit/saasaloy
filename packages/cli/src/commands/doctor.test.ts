@@ -284,6 +284,52 @@ describe("runDoctor — what it reports and what it exits with", () => {
     });
   });
 
+  // #312: a file kept deleted is an info line, never a problem.
+  it("lists a tombstoned base file as kept deleted, and exits 0", async () => {
+    const project = await mkdtemp(join(tmpdir(), "saasaloy-doctor-kept-"));
+    temps.push(project);
+    await writeFile(
+      join(project, "saasaloy.json"),
+      JSON.stringify({ aliases: {}, installed: [] })
+    );
+    await writeFile(join(project, "AGENTS.md"), "a\n");
+    await mkdir(join(project, ".saasaloy"));
+    await writeFile(
+      join(project, ".saasaloy", "manifest.json"),
+      JSON.stringify({
+        managed: {
+          "AGENTS.md": { module: "base", hash: hashContent("a\n") },
+          "packages/ui/src/blocks/showcase.tsx": {
+            module: "base",
+            hash: hashContent("s\n"),
+            deleted: true,
+          },
+        },
+      })
+    );
+    await writeFile(
+      join(project, "saasaloy-lock.json"),
+      JSON.stringify({
+        lockfileVersion: 1,
+        modules: {},
+        base: {
+          name: "web",
+          cliVersion: "0.3.0",
+          templateHash: "f".repeat(64),
+        },
+      })
+    );
+
+    const { code, out } = await run([project]);
+
+    expect(code).toBe(0);
+    expect(out).toMatch(
+      /packages\/ui\/src\/blocks\/showcase\.tsx deleted, kept deleted/
+    );
+    expect(out).not.toContain("missing —");
+    expect(out).toContain("No problems found");
+  });
+
   // ADR 0048: the deploy rules warn and print the fix, and never fail the run.
   // #298 Phase 4. A pending update note is work the project still owes, listed like base
   // drift: information that never fails the run.

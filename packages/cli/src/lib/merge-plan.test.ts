@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { BASE_INTENT, BASE_MODULE, BASE_NO_MERGE_BASE } from "./base.js";
+import { BASE_INTENT, BASE_MODULE, noSnapshotReason } from "./base.js";
 import { renderMergePlan } from "./merge-plan.js";
 import type { UpdateNote } from "./update-notes.js";
 import type {
@@ -79,6 +79,8 @@ function plan(
     modules,
     skipped: [],
     missingLockEntries: [],
+    aliasAdds: [],
+    aliasKept: [],
     verifyCommand: VERIFY_COMMAND,
     needsMerge: modules.some((m) => m.needsMerge),
     notes: [],
@@ -294,6 +296,55 @@ describe(renderMergePlan, () => {
     expect(doc).not.toMatch(/Nothing, and that is deliberate/);
   });
 
+  // #312, ADR 0059: a tracked file the owner deleted.
+  it("renders a deleted file as deleted locally with the upstream diff and both commands", () => {
+    const out = renderMergePlan(
+      plan([
+        modulePlan({
+          files: [
+            file({
+              action: "deleted",
+              base: "const retries = 1;\n",
+              theirs: "const retries = 3;\n",
+              mine: undefined,
+            }),
+          ],
+        }),
+      ])
+    );
+
+    expect(out).toContain("deleted locally");
+    expect(out).toContain("**base → theirs**");
+    expect(out).toContain("+const retries = 3;");
+    expect(out).not.toContain("**base → mine**");
+    expect(out).toContain(
+      "saasaloy update --resolved apps/api/src/lib/email.ts"
+    );
+    expect(out).toContain(
+      "saasaloy update --restore apps/api/src/lib/email.ts"
+    );
+  });
+
+  it("renders a deleted file with no merge base as the upstream file alone", () => {
+    const out = renderMergePlan(
+      plan([
+        modulePlan({
+          files: [
+            file({
+              action: "deleted",
+              base: undefined,
+              theirs: "const retries = 3;\n",
+              mine: undefined,
+            }),
+          ],
+        }),
+      ])
+    );
+
+    expect(out).toContain("**theirs**");
+    expect(out).toContain("+const retries = 3;");
+  });
+
   it("names each module's own base when several drifted at once", () => {
     const doc = renderMergePlan(
       plan([
@@ -334,7 +385,7 @@ describe(renderMergePlan, () => {
           current: "0.1.0 (aaaaaaa)",
           latest: "0.2.0 (bbbbbbb)",
         }),
-        noMergeBase: BASE_NO_MERGE_BASE,
+        noMergeBase: noSnapshotReason.notInSnapshotDir("0.1.0"),
         baseRecord: {
           name: "web",
           cliVersion: "0.2.0",
@@ -358,7 +409,9 @@ describe(renderMergePlan, () => {
 
     expect(out).toContain("## base");
     expect(out).toContain(BASE_INTENT);
-    expect(out).toContain(BASE_NO_MERGE_BASE);
+    expect(out).toContain(
+      "no merge base — SAASALOY_BASE_SNAPSHOT_DIR holds no template for 0.1.0"
+    );
     expect(out).toContain("Source in the template: `AGENTS.md`");
     expect(out).toContain("**theirs → mine**");
     expect(out).toContain("0.1.0 (aaaaaaa)");

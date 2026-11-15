@@ -50,11 +50,18 @@ export const local: EnvSource = {
         { code: "not_configured" }
       );
     }
+    // A key the file does not hold at all takes the example's default, so a checkout made
+    // before a module added that key still passes `env:setup`. A key the file holds blank
+    // stays blank: that is a choice, and the check still reports it. Production takes no
+    // default, because a dev default such as a `localhost` URL is never a production value.
+    const takeDefaults = request.environment !== "prod";
     const mine = new Map<string, string>();
-    for (const key of parseValues(
+    for (const [key, fallback] of parseValues(
       readExample(request.root, request.service.name)
-    ).keys()) {
-      const value = held.values.get(key);
+    )) {
+      const value =
+        held.values.get(key) ??
+        (takeDefaults && fallback !== "" ? fallback : undefined);
       if (value !== undefined) {
         mine.set(key, value);
       }

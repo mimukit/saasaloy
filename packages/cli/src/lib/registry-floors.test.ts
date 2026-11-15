@@ -48,6 +48,15 @@ const BEHAVIOURS: {
     since: "0.6.0",
     usedBy: (raw) => raw.includes('"@root'),
   },
+  {
+    // The shell date pickers import the base `packages/ui` date logic (`lib/calendar.ts`,
+    // `lib/date-picker.ts`, `lib/date-field.ts`, `content/date-picker.ts`), which the base
+    // template ships from 0.9.0 (#311). An older CLI copies the pickers into a base that
+    // has none of those files, and the project's typecheck fails.
+    name: "the base date logic the shell pickers import",
+    since: "0.9.0",
+    usedBy: (raw) => raw.includes('"@ui/components/shell/date-picker.tsx"'),
+  },
 ];
 
 interface Release {
