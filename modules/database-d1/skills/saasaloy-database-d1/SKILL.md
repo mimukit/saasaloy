@@ -157,6 +157,10 @@ commands whichever driver is under it.
 `db:status` exits `0` normally and `1` only when wrangler cannot read the database. Pending
 migrations are a report, not a failure.
 
+A new worktree runs these commands for you. The `## Worktree setup` section of the root `AGENTS.md`
+calls `db:setup` and `db:seed` when gitkit prepares a worktree, `db:setup` when a migration changes,
+and `db:drop` before gitkit removes it. Without gitkit, run the same commands by hand.
+
 `db:drop` deletes `apps/api/.wrangler/state/v3/d1` and nothing else. It never touches the remote
 database: `wrangler d1 delete` is a separate command this script does not run. The path is
 wrangler's own layout, so `scripts/drop.ts` checks that the directory exists and resolves under the

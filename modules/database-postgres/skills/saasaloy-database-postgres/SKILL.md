@@ -229,6 +229,10 @@ pnpm db:prune    # list (or with --apply, drop) the databases of closed branches
 `db:setup` is safe to re-run. It creates nothing that is already there, and a failed migrate leaves
 the state block in place so the next run continues rather than making a second database.
 
+A new worktree runs these commands for you. The `## Worktree setup` section of the root `AGENTS.md`
+calls `db:setup` and `db:seed` when gitkit prepares a worktree, `db:setup` when a migration changes,
+and `db:drop` before gitkit removes it. Without gitkit, run the same commands by hand.
+
 ### One database per branch
 
 On `main` the database is the plain `<project>_dev`. On any other branch it is
