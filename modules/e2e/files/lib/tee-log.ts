@@ -43,7 +43,9 @@ for (const signal of ["SIGINT", "SIGTERM"] as const) {
   });
 }
 
-child.on("exit", (code) => {
+// `close`, not `exit`: `exit` can fire before the child's pipes drain, and the last
+// lines, often the start-up error, would miss the log.
+child.on("close", (code) => {
   log.end(() => {
     process.exit(code ?? 1);
   });

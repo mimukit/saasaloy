@@ -411,7 +411,7 @@ With `database` installed, `sms` also ships an SMS log: the `sms_messages` table
 The columns are `id`, `user_id`, `purpose`, `to_phone`, `template`, `provider`, `provider_ref`, `status` (`sent` or `failed`), `error` and `created_at`. **The body is never stored**, because it can hold a one-time code. `template` names the template the body came from. `purpose` is free text that the caller names, such as `sign_up` or `password_reset`. `user_id` is plain nullable text with no foreign key: `sms` does not depend on `auth`, and a code can go to a number with no account yet.
 
 ```ts
-import { createSms, SmsError } from "@repo/sms";
+import { createSms } from "@repo/sms";
 import { verificationCode } from "@repo/sms/templates/verification-code";
 import { logSms } from "@repo/db/repositories/sms-messages";
 

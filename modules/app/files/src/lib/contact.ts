@@ -3,8 +3,8 @@
 // placeholder as an address, so a screen names the account by its phone instead.
 //
 // Pure, and it imports nothing: `app` can be installed without `auth-phone`, so the
-// `.invalid` rule lives here and not in an import from it. `admin` holds the same rule in
-// its own `src/lib/contact.ts`.
+// `.invalid` rule lives here and not in an import from it. `auth-phone` adds the same rule
+// to `admin` in its own `src/lib/contact.ts`.
 
 const PHONE_PLACEHOLDER = /^(\d+)@phone\.invalid$/;
 

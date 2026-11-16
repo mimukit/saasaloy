@@ -1,5 +1,6 @@
-import { authDb, requireAdmin, withAuthScope } from "@repo/auth/server";
+import { requireAdmin, withAuthScope } from "@repo/auth/server";
 import type { AuthDbBindings } from "@repo/auth/server";
+import { withDb } from "@repo/db/client";
 import {
   SMS_LOG_PAGE_SIZE,
   listSmsMessages,
@@ -23,11 +24,12 @@ function invalid(message: string) {
   return { error: { code: "invalid_input", message } } as const;
 }
 
-export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get("/", (c) =>
-  withAuthScope(c, async () => {
+export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get(
+  "/",
+  async (c) => {
     // First, before anything reads the log: 401 with no admin session, 403 for a
     // session without an admin role.
-    await requireAdmin(c);
+    await withAuthScope(c, () => requireAdmin(c));
 
     const rawPage = c.req.query("page") ?? "1";
     const page = Number(rawPage);
@@ -40,9 +42,11 @@ export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get("/", (c) =>
       return c.json(invalid('status: expected "sent" or "failed"'), 400);
     }
 
-    // `authDb` is the client the scope above opened, so the read takes no second
-    // connection under `database-postgres`.
-    const { rows, total } = await listSmsMessages(authDb, { page, status });
+    // `withDb`, not `authDb`: the route then needs no `auth` newer than the one a project
+    // already has, so `saasaloy update sms` alone still typechecks.
+    const { rows, total } = await withDb(c, (db) =>
+      listSmsMessages(db, { page, status })
+    );
 
     return c.json(
       {
@@ -64,5 +68,5 @@ export const adminSms = new Hono<{ Bindings: AuthDbBindings }>().get("/", (c) =>
       },
       200
     );
-  })
+  }
 );

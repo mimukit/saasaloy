@@ -178,6 +178,6 @@
     "skills": ["skills/saasaloy-sms"]
   },
   "removeWarnings": [
-    "The deployed sms_messages table survives this removal. Run db:generate and review the resulting drop migration before you apply it."
+    "If database is installed, the deployed sms_messages table survives this removal. Run db:generate and review the resulting drop migration before you apply it."
   ]
 }
