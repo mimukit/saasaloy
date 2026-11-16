@@ -1,12 +1,15 @@
 import { config } from "@repo/config";
-import { accounts, sessions, users, verifications } from "@repo/db/schema/auth";
+import { users, verifications } from "@repo/db/schema/auth";
 import { smsMessages } from "@repo/db/schema/sms-messages";
 import {
   PHONE_WITHOUT_PASSWORD,
   PHONE_WITH_PASSWORD,
 } from "@repo/db/seed/phone-accounts";
+import { tables } from "@repo/db/seed/index";
+import { orderTables } from "@repo/db/seed/order";
+import { describeTable } from "@repo/db/seed/table";
 import { testDatabase } from "@repo/db/testing";
-import { eq } from "drizzle-orm";
+import { eq, getTableName } from "drizzle-orm";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockInstance } from "vitest";
 import app from "../index";
@@ -44,6 +47,31 @@ const NEW_PASSWORD = "a-new-phone-password";
 const RESET_IDENTIFIER = `${PHONE_WITH_PASSWORD}-request-password-reset`;
 
 let log: MockInstance<typeof console.log>;
+
+/**
+ * Empty every table, children first, so `users` is empty for the first-user rule. Other
+ * modules hold rows that point at a user, such as `admin`'s `audit_events`, whose
+ * `actor_user_id` has no cascade. The order comes from the schema, so this file names
+ * no table another module owns. `testDatabase()` writes the seed again before the next
+ * test.
+ */
+async function emptyDatabase(): Promise<void> {
+  const byName = new Map(tables.map((table) => [getTableName(table), table]));
+  const childrenFirst = orderTables(
+    tables.map((table) => {
+      const shape = describeTable(table);
+      return { after: shape.references, name: shape.name };
+    })
+  ).toReversed();
+  for (const name of childrenFirst) {
+    const table = byName.get(name);
+    if (table !== undefined) {
+      await database.db.delete(
+        table as Parameters<typeof database.db.delete>[0]
+      );
+    }
+  }
+}
 
 /**
  * The bindings a request sees: this file's database, the console SMS provider, so the
@@ -160,9 +188,7 @@ describe("phone sign-in", () => {
     it("creates a client with a verified phone and the placeholder email, even as the first user", async () => {
       // An empty users table, where the first-user rule would make an email sign-up a
       // superadmin.
-      await database.db.delete(sessions);
-      await database.db.delete(accounts);
-      await database.db.delete(users);
+      await emptyDatabase();
 
       const sent = await post("/phone-number/send-otp", {
         phoneNumber: NEW_PHONE,
@@ -184,9 +210,7 @@ describe("phone sign-in", () => {
     it("still makes the first email sign-up a superadmin", async () => {
       // The phone skip in `auth.ts`'s first-user hook keys on the path, so an email
       // sign-up on the same empty table keeps the superadmin rule.
-      await database.db.delete(sessions);
-      await database.db.delete(accounts);
-      await database.db.delete(users);
+      await emptyDatabase();
 
       const res = await post("/sign-up/email", {
         email: "first@example.test",
