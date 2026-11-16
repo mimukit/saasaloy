@@ -1,6 +1,8 @@
 # Plan: in-house `ecommerce` module
 
-Grilled: 2026-11-07
+Grilled: 2026-11-16
+
+First grill 2026-11-07 (Q1 to Q17). Re-grilled 2026-11-16 against `main` at `08a5072a` (Q18 to Q32), after #327 (cms) merged and #308's PR #324 was found to refuse a code for a known number.
 
 ## Context
 
@@ -18,11 +20,11 @@ Target: no number fits a new module with no baseline. The check is one end-to-en
 | Module shape | One `saasaloy:feature` named `ecommerce`, laid out like `cms`: a scaffolded `packages/ecommerce` plus `files[]` for db, api, admin and web. It wraps no external service, so it takes neither providers nor drivers (ADR 0033, ADR 0037). It holds product, inventory, cart, order with checkout, customer and reports. Every other commerce module waits (research 0009, "Module catalog for later"). |
 | Dependencies | `dependsOn`: `api`, `database-postgres`, `validators`, `auth`, `auth-phone`, `admin`, `file-uploads`, `payment`, `cms`. |
 | Postgres only | `dependsOn: ["database-postgres"]` installs Postgres in a project with no driver. In a D1 project the existing `conflictsWith` pair makes `add` refuse and name `saasaloy remove database-d1` (`packages/cli/src/lib/conflicts.ts`). No CLI change. Schema ships as `.pg.ts` only. |
-| Prerequisite | `auth-phone` (PR #324) merges to `main` before any build phase starts. The build does not stack on its branch. |
+| Prerequisite | `auth-phone` merges to `main` before Phase 3 starts: both parts of the #324 split (plan 0099, Q20). `cms` (#327) is already on `main`. The build does not stack on any branch. |
 | Rich text and media | Product descriptions reuse `@repo/cms/editor` and the CMS renderer: the api renders HTML once on save and stores it beside the Tiptap JSON, as the CMS does at publish. Images reuse `file-uploads`. `ecommerce` depends on `cms` as it is, so a shop also gets the blog collection; a developer who does not want it removes one collection registration. Extracting a `rich-text` module stays a later refactor with no data change. The `ecommerce` build waits for the CMS Phase 2 package (#327) on `main`. (grill Q1) |
 | Money | Integer minor units plus an ISO 4217 code, the same as `payment`. One store currency from config (default `BDT`). `variant_prices` keys on (variant, currency), so a second currency adds rows later, not a migration. Prices include tax. |
 | Customers | No `customers` table and no customer role. A buyer is a client user with role `"user"`. `orders.user_id` references `users.id`. `customer_addresses` holds saved addresses. The admin Customers screen lists users with at least one order and computes counts, total spent and COD refusals from `orders`. |
-| Checkout identity | Every order belongs to a user. Checkout uses the `auth-phone` OTP endpoints, its send log and its rate limits; `ecommerce` adds no auth code and no limiter. A guest verifies a phone by OTP, which signs them up or in on the client session. A buyer already signed in with a verified phone skips the OTP. A buyer signed in on a verified email skips the phone OTP unless the project sets `requirePhoneOtp: true`. An order links to an existing user only after that user's phone is verified. |
+| Checkout identity | Every order belongs to a user. Checkout uses the `auth-phone` OTP endpoints, its send log and its rate limits; `ecommerce` adds no auth code and no limiter. A guest verifies a phone by OTP, which signs them up or in on the client session. A new number signs up through `auth-phone`'s `send-otp` and `verify`. A known number signs in by code, which `auth-phone` does not offer today (its `send-otp` answers 409 `PHONE_NUMBER_EXIST`), so Phase 2 adds it (grill Q18). A buyer already signed in with a verified phone skips the OTP. A buyer signed in on a verified email skips the phone OTP unless the project sets `requirePhoneOtp: true`. An order links to an existing user only after that user's phone is verified. |
 | Payment at checkout | Create the order, then `createPayment(env).create({ referenceType: "order", referenceId, amount, currency, method, userId })`, with the amount from the order row, never the browser. A `payment` listener moves the order on status changes. The order never keeps its own "paid" flag; it reads `payments` by reference (payment SKILL rule). One order may carry several payments over time (a retry after a failed payment, and later an advance delivery charge); `payments_reference_idx` stays non-unique. |
 | Failed online payment | A `failed` or `cancelled` payment leaves the order `placed`. Its reservation returns to a timed hold (now plus the configured lifetime), and the order page offers "Pay again", which creates a new payment for the same order. (grill Q11) |
 | COD delivery and cash | Two separate staff actions. `delivered` records the handover. Staff confirm the COD payment when the courier remits, from the order or in bulk from the payments list. A COD payment rejected with `delivery_refused` or `delivery_failed` moves a `shipped` order to `returned`. (grill Q12) |
@@ -46,6 +48,17 @@ shipped   -> returned    // staff, or listener on COD reject delivery_refused / 
 
 | Decision | Resolution |
 |----------|-----------|
+| Code sign-in in `auth-phone` (Q18, asked) | `auth-phone` gains sign-in by code for a known number: `send-otp` accepts a known number for sign-in, and `verify` signs that person in. A banned account still gets `BANNED_USER`. The app screens keep phone and password; only checkout uses it. It reaches no account that reset by code does not already reach, and the `saasaloy-auth-phone` skill says so. |
+| Code sign-in switch (Q26, asked) | A `codeSignIn` key in the `auth-phone` config section, default `true`. |
+| Checkout with `codeSignIn: false` (Q32, defaulted) | Checkout asks a known number for its password, with the reset link. The `saasaloy-ecommerce` skill states it. |
+| Code sign-in budget (Q28, defaulted) | The same 60 s wait and 5 codes per hour per phone as sign-up and reset. `sms_messages.purpose` is `sign-in`. |
+| Pull requests (Q19, asked) | One PR for the whole plan, Phases 2 to 7. The plan and the approved mockup images land on `main` first (Q30, defaulted). The PR body gives a reading order by phase and lists the changes to other modules (`auth-phone`, `payment`, `payment-manual`) first (Q31, defaulted). |
+| Admin audit (Q20, defaulted) | Every admin write route is named in `apps/api/src/audit/ecommerce.ts` as `ecommerce.<object>.<verb>`, area "Shop", registered by `plugin-array` into `AUDIT_ACTIONS`. `audit-coverage.test.ts` fails without it. |
+| Mockup medium (Q21, defaulted) | Codex image rounds on the newest Sol model (`gpt-6.1-sol` today), never HTML screenshots. |
+| Shop session (Q22, defaulted) | `ecommerce` ships a web auth client in `apps/web`, which has none today. The skill states that web and api must share a parent domain so the session cookie reaches both (`crossSubDomainCookies` in `auth.ts`). |
+| Staff notice for a new order (Q23, defaulted) | Out of scope. The `nav-counts` badge is the only signal. `notification` (#313) can add one later with no data change. |
+| Column classes (Q24, defaulted) | If #320 (#309) is on `main` at build time, add one `packages/db/src/column-classes/<table>.ts` per new table. Otherwise #320 adds them. |
+| Harness and pickers (Q25, defaulted) | Use the Postgres test harness on `main` at build time (#341 if merged) and the shell date pickers from #311 for the report range. |
 | Order page access | Session only. A buyer opens their orders after signing in, with phone OTP on any device. No URL token exists. (grill Q6) |
 | Buyer SMS | Through `sms`, which `auth-phone` already installs. One SMS on `confirmed` and one on `shipped`, each switchable in config, both on by default. (grill Q10) Config holds `notifyOnConfirmed`, `notifyOnShipped` and one message template each with `{orderNumber}` and `{shopName}` placeholders, English by default. (grill Q15, defaulted) |
 | Shipping in the MVP | `shipping_zones` with a flat rate each (for example inside Dhaka, outside Dhaka), staff-managed. The chosen zone and rate are copied onto the order. No courier API. A later `shipping` capability lifts this out. |
@@ -83,24 +96,27 @@ Rejected alternatives, one line each:
 Attended: the owner approves the mockup screenshots. An unattended run stops before Phase 2 until this plan records the approval. Every later phase waits, Phase 2 included (grill Q17).
 
 - Admin: Products list (title, status, price range, stock, low-stock tone), product editor (title, slug, Tiptap description, images, options and generated variants grid with SKU, price, stock and active flag), Orders list with status filters and a COD tag, order detail (items, totals, address, payments panel with COD confirm and the two delivery reject reasons, status actions, the "Refund due" notice, the "Restock items" checkbox on return, event history), bulk COD confirm on the payments list, Customers list and detail, Shipping zones, Reports with the range picker.
-- Shop: catalog grid, product page with option pickers and an out-of-stock state, cart, checkout (contact phone with the OTP step, address, zone, payment method with COD and bKash instructions), order status page with "Pay again" after a failed payment, and the signed-in orders list. Light and dark themes, phone width included.
+- Shop: catalog grid, product page with option pickers and an out-of-stock state, cart, checkout (contact phone with the OTP step for a new number and code sign-in for a known one, address, zone, payment method with COD and bKash instructions), order status page with "Pay again" after a failed payment, and the signed-in orders list. Light and dark themes, phone width included.
 - Record the approval and the round it settled on as a Design decisions row.
 
 Done when: this plan carries a "Mockup approved" row with the date and the screenshot paths.
 
-### Phase 2: COD in `payment` (#328)
+### Phase 2: code sign-in in `auth-phone` and COD in `payment` (#328)
 
+Starts only when both parts of the #324 split are on `main`.
+
+- `modules/auth-phone`: the code sign-in for a known number behind `codeSignIn` (Q18, Q26, Q28), route tests for sign-in by code, the 409 kept for sign-up when `codeSignIn` is `false`, and the skill section.
 - `modules/payment/files/src/define.ts`: `confirm` accepts `pending` when the payment's method declares no submit fields; every other path is unchanged.
 - Add `delivery_refused` and `delivery_failed` to `RejectReason`, `REJECT_REASONS`, the admin payments screen and the skill.
 - `modules/payment-manual/files/manual.ts`: a `cod` method with empty `fields` and a configurable note.
 - Write the ADR for the state machine change.
 - Update `saasaloy-payment` SKILL.md and add an update note beside the code (ADR 0058).
 
-Done when: `pnpm test` shows that `confirm` on a pending `cod` payment returns `successful`, `confirm` on a pending `bkash` payment still throws `conflict`, and `reject` with `delivery_refused` returns `failed`. `scripts/env-presets.test.ts` passes.
+Done when: route tests show that a code for a known number signs that person in with `codeSignIn: true`, the same request answers 409 with `codeSignIn: false`, and a banned account gets `BANNED_USER`. `pnpm test` shows that `confirm` on a pending `cod` payment returns `successful`, `confirm` on a pending `bkash` payment still throws `conflict`, and `reject` with `delivery_refused` returns `failed`. `scripts/env-presets.test.ts` passes.
 
 ### Phase 3: core package and schema (#328)
 
-Starts only when `auth-phone` (#324) and the CMS Phase 2 package (#327) are on `main`.
+Starts after Phase 2. `cms` (#327) is already on `main`.
 
 - Scaffold `packages/ecommerce` (`@repo/ecommerce`): money helpers, cart and order total math, the order status machine, and the shared types.
 - Add the `ecommerce` config section with a `plugin-array` patch.
@@ -118,6 +134,7 @@ Done when: `pnpm test` passes the money, totals, status machine, validator and r
 - Reading an order, the admin list or checkout cancels any expired unpaid `placed` order it touches, with a `system` event.
 - A `payment` listener registered in `packages/payment/src/index.ts` applies the grill Q2, Q11 and Q12 rules: `successful` online payment → `confirmed` and the hold loses its expiry; `failed` or `cancelled` → timed hold again; COD reject with a delivery reason → `returned`.
 - SMS on `confirmed` and `shipped` through `sms`, per the config switches.
+- The audit action file `apps/api/src/audit/ecommerce.ts` for every admin write route (Q20).
 - Admin: product CRUD with variant generation and price and stock edits, order list and detail, status actions, customer list and detail, zone CRUD, report queries; `nav-counts` for `placed` COD orders awaiting a call.
 
 Done when: route tests show that a signed-out checkout gets 401, a session with an unverified phone gets 403, a quantity above available stock gets 409 and writes no order, a browser-sent price is ignored, and a non-admin gets 403 on admin routes. Listener tests show that a `successful` payment moves the order to `confirmed`, a `failed` payment leaves it `placed` with a timed hold and "Pay again" creates a second payment, and a `delivery_refused` reject moves a `shipped` order to `returned`. A read of an order past its hold returns it `cancelled`.
@@ -134,8 +151,9 @@ Done when: in `.dev`, an admin creates a product with two options, gets the vari
 - `apps/web` pages under the configured base path with `prerender = false`: catalog, product, cart, checkout, order status.
 - Cart and checkout islands; the OTP step calls the `auth-phone` client.
 - The `@repo/ecommerce` web client reads the public routes over `PUBLIC_API_URL`.
+- A web auth client for the OTP step and the session (Q22). A known number signs in by code, or by password when `codeSignIn` is `false` (Q32).
 
-Done when: in `.dev`, a guest buys a product with COD after an OTP, the order status page shows `placed`, `/`, `/privacy` and `/terms` are still prerendered files in `dist/client`, and `wrangler deploy --dry-run` passes for `apps/web`.
+Done when: in `.dev`, a guest buys a product with COD after an OTP, a returning buyer with a known number checks out after a code sign-in, the order status page shows `placed`, `/`, `/privacy` and `/terms` are still prerendered files in `dist/client`, and `wrangler deploy --dry-run` passes for `apps/web`.
 
 ### Phase 7: journey, skill and gates (#328)
 
@@ -153,7 +171,7 @@ The module adds new tables and one sequence and changes no existing rows. Phase 
 
 ## Open questions
 
-None. The grill on 2026-11-07 settled every question (Q1 to Q17).
+None. The grill on 2026-11-07 settled Q1 to Q17, and the re-grill on 2026-11-16 settled Q18 to Q32.
 
 ## Non-goals
 
