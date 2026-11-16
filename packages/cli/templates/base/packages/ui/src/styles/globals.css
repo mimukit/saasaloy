@@ -57,6 +57,12 @@
    block renders an unstyled table and ui-sources.test.ts fails. */
 @source "../components/table.tsx";
 
+/* Rendered by blocks/auth/code-input.tsx, which the `auth-phone` module writes. A module
+   has no patch kind for CSS, so the line ships here. Before that module is added the
+   line costs the slot classes in the stylesheet. Without the line, the code step renders
+   unstyled boxes and ui-sources.test.ts fails. */
+@source "../components/input-otp.tsx";
+
 /* FOUR levels up, not three. From packages/ui/src/styles/ the path walks
    styles → src → ui → packages → <root>, so `../../../apps/**` would resolve to
    packages/apps/** — a directory that does not exist. shadcn's own astro-monorepo

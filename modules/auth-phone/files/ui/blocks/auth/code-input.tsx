@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { SubmitEvent } from "react";
+import { REGEXP_ONLY_DIGITS } from "input-otp";
 
 import { AuthAlert, AuthCard } from "@repo/ui/blocks/auth/auth-card";
 import { Button } from "@repo/ui/components/shell/button";
@@ -8,16 +9,20 @@ import {
   FieldDescription,
   FieldLabel,
 } from "@repo/ui/components/shell/field";
-import { Input } from "@repo/ui/components/shell/input";
+import {
+  InputOTP,
+  InputOTPGroup,
+  InputOTPSlot,
+} from "@repo/ui/components/input-otp";
 
 // The code step of a phone sign-up and of a reset. `auth-phone` ships it into `@repo/ui`
 // when `shell` is installed. The card holds the code field and the resend countdown, a
 // clock being local state a block may keep. It checks only the length: the app checks the
 // code in `onSubmit` and returns a message when the code is wrong.
 //
-// One field, not a box per digit. The shell set has no OTP primitive, and a single
-// numeric field with `autocomplete="one-time-code"` is the one the phone keyboard fills
-// from the SMS. The wide letter spacing makes the digits read as a code.
+// One box per digit over the base `input-otp` primitive. The boxes are drawn; the field
+// itself is one hidden numeric input with `autocomplete="one-time-code"`, so the phone
+// keyboard fills it from the SMS and a pasted code with spaces or dashes keeps its digits.
 
 export function CodeInputCard({
   sentTo,
@@ -51,6 +56,7 @@ export function CodeInputCard({
   const [answer, setAnswer] = useState<string | null>(null);
   const [incomplete, setIncomplete] = useState(false);
   const [remaining, setRemaining] = useState(resendSeconds);
+  const fieldId = useId();
 
   // One tick a second until the clock reaches 0. The effect re-arms on each tick, so it
   // holds no stale `remaining`. At 0 no timer is set, and clearing an unset one is a no-op.
@@ -126,27 +132,35 @@ export function CodeInputCard({
         className="mt-6 flex flex-col gap-4"
       >
         <Field>
-          <FieldLabel>Code</FieldLabel>
-          <Input
-            type="text"
+          <FieldLabel htmlFor={fieldId}>Code</FieldLabel>
+          <InputOTP
+            id={fieldId}
             name="code"
+            maxLength={length}
             inputMode="numeric"
             autoComplete="one-time-code"
-            pattern="[0-9]*"
-            maxLength={length}
-            size="lg"
+            pattern={REGEXP_ONLY_DIGITS}
+            pasteTransformer={(pasted) => pasted.replaceAll(/\D/g, "")}
             autoFocus
             value={code}
             aria-invalid={message === null ? undefined : true}
-            onChange={(event) => {
-              setCode(
-                event.target.value.replaceAll(/\D/g, "").slice(0, length)
-              );
+            onChange={(value) => {
+              setCode(value);
               setIncomplete(false);
               setAnswer(null);
             }}
-            className="font-mono text-lg tracking-[0.5em] tabular-nums sm:text-lg"
-          />
+          >
+            <InputOTPGroup>
+              {Array.from({ length }, (_, index) => (
+                <InputOTPSlot
+                  key={index}
+                  index={index}
+                  aria-invalid={message === null ? undefined : true}
+                  className="size-11 font-mono text-lg tabular-nums"
+                />
+              ))}
+            </InputOTPGroup>
+          </InputOTP>
           <FieldDescription aria-live="polite">
             {remaining > 0 ? (
               `You can ask for a new code in ${String(remaining)} s.`
