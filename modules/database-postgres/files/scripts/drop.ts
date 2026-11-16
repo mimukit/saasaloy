@@ -16,8 +16,8 @@ import { testDatabaseName } from "./lib/branch-name.ts";
 import { removeKey, writeEnvFile } from "./lib/env-file.ts";
 import { BACKEND_LABEL } from "./lib/state.ts";
 
-// `pnpm db:drop`: drop the development database this checkout uses and its `<database>_test`
-// on the same server, then delete `apps/api/.env.db` and remove `DATABASE_URL` from
+// `pnpm db:drop`: drop the development database this checkout uses, its `<database>_test`
+// and the test database's worker copies, `<database>_test_w<N>`, on the same server, then delete `apps/api/.env.db` and remove `DATABASE_URL` from
 // `apps/api/.env`.
 //
 // It drops a database and never a server: no container is stopped, no neon.new project and
@@ -48,6 +48,7 @@ await run(async () => {
   // The database `pnpm test` made beside this one. `DROP DATABASE IF EXISTS` makes a run
   // that never tested a no-op.
   const test = testDatabaseName(state.database);
+  let clones: string[];
   if (state.backend === "neon") {
     if (!url) {
       throw new Error(
@@ -57,17 +58,29 @@ await run(async () => {
     neon.forceIpv4();
     await neon.dropDatabase(context.prefix, url, state.database);
     await neon.dropDatabase(context.prefix, url, test);
+    clones = await server.workerDatabases(neon.adminUrl(url), test);
+    for (const clone of clones) {
+      await neon.dropDatabase(context.prefix, url, clone);
+    }
   } else {
     const admin =
       state.backend === "docker" ? docker.adminUrl() : server.adminUrl(url);
     await server.dropDatabase(context.prefix, admin, state.database);
     await server.dropDatabase(context.prefix, admin, test);
+    clones = await server.workerDatabases(admin, test);
+    for (const clone of clones) {
+      await server.dropDatabase(context.prefix, admin, clone);
+    }
   }
 
   writeEnvFile(context.env.path, removeKey(context.env.lines, "DATABASE_URL"));
   removeState(context);
+  const copies =
+    clones.length === 0
+      ? ""
+      : ` with its ${clones.length} worker ${clones.length === 1 ? "copy" : "copies"}`;
   say(
-    `Dropped ${state.database} and ${test} on ${BACKEND_LABEL[state.backend]}, removed DATABASE_URL from ${API_ENV}, and deleted ${STATE_FILE}.`
+    `Dropped ${state.database} and ${test}${copies} on ${BACKEND_LABEL[state.backend]}, removed DATABASE_URL from ${API_ENV}, and deleted ${STATE_FILE}.`
   );
   if (state.backend === "docker") {
     say(

@@ -105,3 +105,45 @@ export function assertManagedDatabase(prefix: string, database: string): void {
     );
   }
 }
+
+/** The `_w<N>` a worker clone of a test database ends in. */
+const WORKER_SUFFIX = /_w(\d+)$/;
+
+/**
+ * The clone of `testDatabase` that Vitest worker `worker` runs its route tests on:
+ * `<testDatabase>_w<worker>`. One clone per worker lets the api's test files run in
+ * parallel without one file waiting on another's row locks. A name over 63 bytes is cut and
+ * gets `_` plus a SHA-1 prefix of `testDatabase` before the `_w<worker>`.
+ *
+ * Throws unless `worker` is a whole number from 1: `VITEST_POOL_ID` starts at 1.
+ */
+export function workerDatabaseName(
+  testDatabase: string,
+  worker: number
+): string {
+  if (!Number.isInteger(worker) || worker < 1) {
+    throw new Error(
+      `A worker database needs a worker number from 1, not ${worker}.`
+    );
+  }
+  const suffix = `_w${worker}`;
+  const name = `${testDatabase}${suffix}`;
+  if (name.length <= MAX_IDENTIFIER_BYTES) {
+    return name;
+  }
+  const kept = testDatabase
+    .slice(0, MAX_IDENTIFIER_BYTES - HASH_LENGTH - 1 - suffix.length)
+    .replace(/_+$/, "");
+  return `${kept}_${hashOf(testDatabase)}${suffix}`;
+}
+
+/** True when `name` has the shape of a worker clone, `<testDatabase>_w<N>`. */
+export function isWorkerDatabase(name: string): boolean {
+  return WORKER_SUFFIX.test(name);
+}
+
+/** The worker number of a clone, `<testDatabase>_w<N>`, or `undefined` for any other name. */
+export function workerNumber(name: string): number | undefined {
+  const match = WORKER_SUFFIX.exec(name);
+  return match ? Number(match[1]) : undefined;
+}
