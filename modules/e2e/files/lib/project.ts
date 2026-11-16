@@ -37,7 +37,15 @@ interface SaasaloyConfig {
  * could never gate anything, and keeping the vocabulary to module names is what lets the
  * guard test be exact.
  */
-export const SPEC_TAGS = ["api", "admin", "app", "auth", "waitlist"] as const;
+export const SPEC_TAGS = [
+  "api",
+  "admin",
+  "app",
+  "auth",
+  "auth-phone",
+  "sms-console",
+  "waitlist",
+] as const;
 
 export type SpecTag = (typeof SPEC_TAGS)[number];
 

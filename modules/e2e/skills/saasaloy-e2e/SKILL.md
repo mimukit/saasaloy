@@ -99,6 +99,7 @@ Every **other** row a spec writes is unique, with `uniqueEmail()` from `lib/fixt
 | `waitlist.spec.ts` | `@waitlist` | A real browser fills the real form on `apps/web`, the island posts, and the route answers 201. |
 | `admin-login.spec.ts` | `@admin` `@auth` | The login form signs the seeded admin in, the guard redirects, and `GET /admin/users` answers 200. |
 | `admin-unauthenticated.spec.ts` | `@admin` `@auth` | The same guarded route answers 401 with the api's error envelope when nobody is signed in. |
+| `auth-phone-journey.spec.ts` | `@app` `@auth-phone` `@sms-console` | Shipped by `auth-phone`. A new number signs up with the SMS code, sets a password, signs in, and resets the password with a code, on `apps/app`. |
 
 `admin-unauthenticated.spec.ts` is its own flow rather than a second assertion, because the admin SPA's guard runs in the browser and would hide a server that stopped checking.
 
