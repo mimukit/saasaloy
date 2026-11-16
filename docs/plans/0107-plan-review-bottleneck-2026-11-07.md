@@ -2,6 +2,8 @@
 
 Created: 2026-11-07. Source brief: `/home/dev/research-context/review-bottleneck-2026-11-07/brief.md` (27 recommendations, numbered as in the brief). This plan covers the **S** items and the saasaloy side of the **S+K** items. A separate plan in the mimukit/skills repo covers the **K** items and the kit side.
 
+Review: pending
+
 ## Context
 
 The owner is the only reviewer. Agents open PRs faster than the owner can read them, so the PR queue stalls while CI stays green. The owner keeps control of architecture and code quality, and gives every machine-checkable rule to CI. Recaps and decision lists replace line review where the risk is low. The guiding rule: "We want to preserve human time and attention for issues only humans can solve and make sure automated checks catch the rest."
