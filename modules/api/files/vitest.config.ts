@@ -1,6 +1,7 @@
 import { globSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vitest/config";
+import { apiTestWorkers } from "./test/workers";
 
 // The api's tests run in Node, not in workerd. The root `vitest.config.ts` treats this
 // workspace as a project, and Vitest reads this file instead of `vite.config.ts`, whose
@@ -18,6 +19,18 @@ import { defineConfig } from "vitest/config";
 // - Every file in `./test/setup/` is a Vitest global setup, run once before the first test
 //   file. The installed database driver drops one there that prepares the test database.
 //   See the driver's skill, "Route tests".
+//
+// Test files run in parallel, on `maxWorkers` workers. `./test/workers.ts` works the count
+// out from the CPUs and the memory, capped at 4, and `API_TEST_WORKERS` overrides it;
+// `API_TEST_WORKERS=1` runs the files one at a time. On Postgres the driver's global setup
+// copies the seeded test database once per worker, and each worker connects to its own copy
+// by `VITEST_POOL_ID`, so two files never wait on each other's row locks.
+//
+// `maxWorkers` sits at the root of `test`, never in an inline project: Vitest numbers the
+// workers of one group from 1 to that group's `maxWorkers`, and a project-level count lets a
+// worker number pass the number of copies. `sequence.groupOrder` puts the api in a group of
+// its own, after the other workspaces, because Vitest refuses two projects with different
+// `maxWorkers` in one group.
 
 const here = (path: string) => fileURLToPath(new URL(path, import.meta.url));
 
@@ -35,5 +48,7 @@ export default defineConfig({
       .toSorted()
       .map((file) => here(`./${file}`)),
     include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    maxWorkers: apiTestWorkers(),
+    sequence: { groupOrder: 1 },
   },
 });

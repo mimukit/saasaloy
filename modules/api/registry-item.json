@@ -92,6 +92,15 @@
           "target": "test/setup/.gitkeep"
         },
         {
+          "path": "files/test/workers.ts",
+          "target": "test/workers.ts"
+        },
+        {
+          "path": "files/test/workers.vitest.ts",
+          "target": "test/workers.test.ts",
+          "when": { "testing": true }
+        },
+        {
           "path": "files/src/routes/cors.vitest.ts",
           "target": "src/routes/cors.test.ts",
           "when": { "testing": true }
