@@ -52,7 +52,10 @@ shipped   -> returned    // staff, or listener on COD reject delivery_refused / 
 | Code sign-in switch (Q26, asked) | A `codeSignIn` key in the `auth-phone` config section, default `true`. |
 | Checkout with `codeSignIn: false` (Q32, defaulted) | Checkout asks a known number for its password, with the reset link. The `saasaloy-ecommerce` skill states it. |
 | Code sign-in budget (Q28, defaulted) | The same 60 s wait and 5 codes per hour per phone as sign-up and reset. `sms_messages.purpose` is `sign-in`. |
-| Pull requests (Q19, asked) | One PR for the whole plan, Phases 2 to 7. The plan and the approved mockup images land on `main` first (Q30, defaulted). The PR body gives a reading order by phase and lists the changes to other modules (`auth-phone`, `payment`, `payment-manual`) first (Q31, defaulted). |
+| Manual orders (Q33, asked) | Staff create an order from Orders with "New order", which opens a full page, not a dialog. The order takes the same transaction as checkout: row lock, stock check, the order and reservation rows, then `payment.create`. It starts `placed`, and its first `order_events` row names the staff actor. Added in the round 1 mockup review on 2026-11-16. |
+| Manual order buyer (Q34, asked) | Staff enter a phone. A phone that belongs to a user links the order to that user. A new phone creates a client user with role `"user"`, the name staff typed and an unverified phone; the buyer later signs in by code, which verifies it. This is the one place an order links to a user whose phone is not verified, and only staff can reach it. |
+| Manual order payment and price (Q35, asked) | Staff may pick any installed payment method. For a method with submit fields, a "Payment already received" checkbox records the transaction ID and confirms the payment at once through the existing `payment` confirm route. Line prices come from the catalog, and staff cannot change them; discounts wait for a later module. |
+| Pull requests (Q19, asked) | One PR for the whole plan, Phases 2 to 7. The plan lands on `main` first (Q30, defaulted). The mockup images live in a gist, never in the repository. The PR body gives a reading order by phase and lists the changes to other modules (`auth-phone`, `payment`, `payment-manual`) first (Q31, defaulted). |
 | Admin audit (Q20, defaulted) | Every admin write route is named in `apps/api/src/audit/ecommerce.ts` as `ecommerce.<object>.<verb>`, area "Shop", registered by `plugin-array` into `AUDIT_ACTIONS`. `audit-coverage.test.ts` fails without it. |
 | Mockup medium (Q21, defaulted) | Codex image rounds on the newest Sol model (`gpt-6.1-sol` today), never HTML screenshots. |
 | Shop session (Q22, defaulted) | `ecommerce` ships a web auth client in `apps/web`, which has none today. The skill states that web and api must share a parent domain so the session cookie reaches both (`crossSubDomainCookies` in `auth.ts`). |
@@ -68,7 +71,8 @@ shipped   -> returned    // staff, or listener on COD reject delivery_refused / 
 | Admin | A nav group "Shop" with Products, Orders, Customers, Shipping zones and Reports, from `modules/admin/files/DESIGN.md`. Who can edit: the roles that already open the admin shell (`ADMIN_APP_ROLES`). |
 | Tests | Vitest beside the source on the Postgres test harness (`modules/database-postgres/files/src/testing.ts`, one rolled-back transaction per test). Api route tests follow `file-uploads/files/api/routes/files.test.ts`. The end-to-end journey is a Playwright spec in the `e2e` module's pattern (ADR 0051, ADR 0054: a feature module owns its journeys). No new runner. |
 | UI house rules | Admin screens follow `modules/admin/files/DESIGN.md`. Shop pages follow `packages/cli/templates/base/apps/web/DESIGN.md`. |
-| Visual reference | None yet. Phase 1 produces the mockup, and the owner approves it before any build (AGENTS.md rule). Phase 1 gates every later phase, Phase 2 included. (grill Q17) |
+| Visual reference | The approved mockup in the row below. Phase 1 gated every later phase, Phase 2 included. (grill Q17) |
+| Mockup approved | Approved by the owner on 2026-11-16, round 2. The approved set is round 1, with the round 2 images in place of their round 1 versions: 49 images, embedded in https://github.com/mimukit/saasaloy/issues/328#issuecomment-6932224574. The files are in the secret gist https://gist.github.com/mimukit/60e583e0d41a1156c2a59e4b5a6a4b2a under the prefixes `0106-r1-` and `0106-r2-` (55 files, both rounds). Codex made them on `gpt-6.1-sol`. Round 2 added the "New order" page (Q33 to Q35), thumbnails in the Mark returned dialog, and a Confirmed row in the shop orders list. Product names, prices, image sizes and chart labels are example data and do not bind the build. A change after this approval starts a new mockup round. |
 | Tracking | One GitHub issue, #328, tracks the whole plan. |
 | Approved outward action | Phase 7 files one `needs-planning` issue titled `feat(ecommerce): take the delivery charge in advance by bkash`. No other issues. (grill Q16) |
 
@@ -95,7 +99,7 @@ Rejected alternatives, one line each:
 
 Attended: the owner approves the mockup screenshots. An unattended run stops before Phase 2 until this plan records the approval. Every later phase waits, Phase 2 included (grill Q17).
 
-- Admin: Products list (title, status, price range, stock, low-stock tone), product editor (title, slug, Tiptap description, images, options and generated variants grid with SKU, price, stock and active flag), Orders list with status filters and a COD tag, order detail (items, totals, address, payments panel with COD confirm and the two delivery reject reasons, status actions, the "Refund due" notice, the "Restock items" checkbox on return, event history), bulk COD confirm on the payments list, Customers list and detail, Shipping zones, Reports with the range picker.
+- Admin: Products list (title, status, price range, stock, low-stock tone), product editor (title, slug, Tiptap description, images, options and generated variants grid with SKU, price, stock and active flag), Orders list with status filters and a COD tag, the "New order" page for a manual order (Q33 to Q35), order detail (items, totals, address, payments panel with COD confirm and the two delivery reject reasons, status actions, the "Refund due" notice, the "Restock items" checkbox on return, event history), bulk COD confirm on the payments list, Customers list and detail, Shipping zones, Reports with the range picker.
 - Shop: catalog grid, product page with option pickers and an out-of-stock state, cart, checkout (contact phone with the OTP step for a new number and code sign-in for a known one, address, zone, payment method with COD and bKash instructions), order status page with "Pay again" after a failed payment, and the signed-in orders list. Light and dark themes, phone width included.
 - Record the approval and the round it settled on as a Design decisions row.
 
@@ -135,14 +139,15 @@ Done when: `pnpm test` passes the money, totals, status machine, validator and r
 - A `payment` listener registered in `packages/payment/src/index.ts` applies the grill Q2, Q11 and Q12 rules: `successful` online payment → `confirmed` and the hold loses its expiry; `failed` or `cancelled` → timed hold again; COD reject with a delivery reason → `returned`.
 - SMS on `confirmed` and `shipped` through `sms`, per the config switches.
 - The audit action file `apps/api/src/audit/ecommerce.ts` for every admin write route (Q20).
-- Admin: product CRUD with variant generation and price and stock edits, order list and detail, status actions, customer list and detail, zone CRUD, report queries; `nav-counts` for `placed` COD orders awaiting a call.
+- Admin: product CRUD with variant generation and price and stock edits, order list and detail, manual order create (Q33 to Q35) with a customer lookup by phone, status actions, customer list and detail, zone CRUD, report queries; `nav-counts` for `placed` COD orders awaiting a call.
 
-Done when: route tests show that a signed-out checkout gets 401, a session with an unverified phone gets 403, a quantity above available stock gets 409 and writes no order, a browser-sent price is ignored, and a non-admin gets 403 on admin routes. Listener tests show that a `successful` payment moves the order to `confirmed`, a `failed` payment leaves it `placed` with a timed hold and "Pay again" creates a second payment, and a `delivery_refused` reject moves a `shipped` order to `returned`. A read of an order past its hold returns it `cancelled`.
+Done when: route tests show that a signed-out checkout gets 401, a session with an unverified phone gets 403, a quantity above available stock gets 409 and writes no order, a browser-sent price is ignored, and a non-admin gets 403 on admin routes. Listener tests show that a `successful` payment moves the order to `confirmed`, a `failed` payment leaves it `placed` with a timed hold and "Pay again" creates a second payment, and a `delivery_refused` reject moves a `shipped` order to `returned`. A read of an order past its hold returns it `cancelled`. A manual order for a new phone creates a client user with an unverified phone, a manual order for a known phone links to that user, and a manual order line ignores any sent price.
 
 ### Phase 5: admin screens (#328)
 
 - `nav-entry` patches for the "Shop" group.
-- Build the screens from the approved mockup. Use `@repo/cms/editor` for descriptions and the `file-uploads` block for images. Confirm and reject COD payments from the order detail through the existing `/admin/payment` routes.
+- Build the screens from the approved mockup. Use `@repo/cms/editor` for descriptions and the `file-uploads` block for images. Confirm and reject COD payments from the order detail through the existing `/admin/payment` routes. Build the "New order" page from its round 2 mockup. The page shows either the "Existing customer" badge or the new-number line, by the phone lookup, never both.
+- Format every date and address with the shell's shared formatters. The mockup images run words together ("15Nov2026 10:30AM", "House12, Road7"); the build must not.
 
 Done when: in `.dev`, an admin creates a product with two options, gets the variant grid, sets prices and stock, publishes it, confirms a `placed` COD order, ships it, marks it delivered, confirms the COD payment, and sees the customer and the report figures change. A second COD order rejected with `delivery_refused` shows `returned`, and the restock checkbox puts the stock back.
 
@@ -171,7 +176,7 @@ The module adds new tables and one sequence and changes no existing rows. Phase 
 
 ## Open questions
 
-None. The grill on 2026-11-07 settled Q1 to Q17, and the re-grill on 2026-11-16 settled Q18 to Q32.
+None. The grill on 2026-11-07 settled Q1 to Q17, the re-grill on 2026-11-16 settled Q18 to Q32, and the round 1 mockup review on 2026-11-16 settled Q33 to Q35.
 
 ## Non-goals
 
