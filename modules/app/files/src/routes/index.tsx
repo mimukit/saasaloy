@@ -12,6 +12,8 @@ import {
 } from "@repo/ui/components/shell/card";
 import { PageBody } from "@repo/ui/containers/shell/page-body";
 
+import { contactOf } from "@app/lib/contact";
+
 // The home screen the scaffold ships: a welcome and an empty state. There is no demo
 // entity on purpose. Your first feature replaces the empty state; the `saasaloy-feature`
 // skill builds one end to end, and "Add a screen" in `saasaloy-app` has the list and form
@@ -21,7 +23,8 @@ export const Route = createFileRoute("/")({ component: Home });
 function Home() {
   // The root guard put the session in the route context, so this screen never fetches it.
   const { session } = Route.useRouteContext();
-  const name = session?.user.name || session?.user.email;
+  const contact = session ? contactOf(session.user.email) : undefined;
+  const name = session?.user.name || contact;
 
   return (
     <>
@@ -33,9 +36,7 @@ function Home() {
               Welcome to {siteName}
               {name ? `, ${name}` : ""}
             </CardTitle>
-            <CardDescription>
-              You are signed in as {session?.user.email}.
-            </CardDescription>
+            <CardDescription>You are signed in as {contact}.</CardDescription>
           </CardHeader>
         </Card>
 

@@ -1,6 +1,7 @@
 import { accounts as accountsTable } from "../../schema/auth";
 import { seedId } from "../id";
 import { defineSlice } from "../slice";
+import type { SliceOptions } from "../slice";
 
 // One email-and-password account for each seed user in `./users.ts`.
 //
@@ -23,9 +24,39 @@ function credential(user: string) {
   };
 }
 
+type AccountRows = SliceOptions<typeof accountsTable>["rows"];
+
+/** Rows another module adds, and the line `db:seed` prints for them. */
+export interface ExtraAccounts {
+  rows: AccountRows;
+  message?: string;
+}
+
+/** Every set in `accounts`, merged into one row object and one list of lines. */
+function moreAccounts(input: { accounts: readonly ExtraAccounts[] }) {
+  const rows: AccountRows = {};
+  const messages: string[] = [];
+  for (const extra of input.accounts) {
+    Object.assign(rows, extra.rows);
+    if (extra.message) {
+      messages.push(extra.message);
+    }
+  }
+  return { messages, rows };
+}
+
+// Accounts another module adds to this slice, such as `auth-phone`'s phone accounts. A
+// `plugin-array` patch appends the module's factory call to the array, and `remove` takes
+// it back out. Keep the shape `export const <name> = <fn>({ accounts: [...] })`.
+export const extraAccounts = moreAccounts({ accounts: [] });
+
 export const accounts = defineSlice(accountsTable, {
-  message: `Every seeded user signs in with the password "${DEV_PASSWORD}": superadmin@example.test, admin@example.test, member@example.test and banned@example.test (refused, it is banned).`,
+  message: [
+    `Every seeded user signs in with the password "${DEV_PASSWORD}": superadmin@example.test, admin@example.test, member@example.test and banned@example.test (refused, it is banned).`,
+    ...extraAccounts.messages,
+  ].join("\n"),
   rows: {
+    ...extraAccounts.rows,
     admin: credential("admin"),
     banned: credential("banned"),
     member: credential("member"),

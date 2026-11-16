@@ -98,6 +98,10 @@ export const base: Hono<{ Bindings: Bindings; Variables: Variables }> =
       "*",
       cors({
         credentials: true,
+        // A browser hides every response header outside the CORS safelist from a
+        // cross-origin caller. A 429 names its wait in `Retry-After`, and a screen on
+        // another origin needs it to say how long.
+        exposeHeaders: ["Retry-After"],
         // The browser keeps a preflight answer this many seconds (two hours, Chromium's
         // cap). Without it every credentialed call from the admin paid an OPTIONS round trip.
         maxAge: 7200,

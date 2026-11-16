@@ -37,12 +37,17 @@ interface SaasaloyConfig {
  * could never gate anything, and keeping the vocabulary to module names is what lets the
  * guard test be exact.
  */
-export const SPEC_TAGS = ["api", "admin", "auth", "waitlist"] as const;
+export const SPEC_TAGS = ["api", "admin", "app", "auth", "waitlist"] as const;
 
 export type SpecTag = (typeof SPEC_TAGS)[number];
 
 /** Each app's pinned dev port. These match the port map in the project's `AGENTS.md`. */
-export const PINNED_PORTS = { web: 3000, admin: 3001, api: 4000 } as const;
+export const PINNED_PORTS = {
+  web: 3000,
+  admin: 3001,
+  app: 3002,
+  api: 4000,
+} as const;
 
 export type App = keyof typeof PINNED_PORTS;
 
@@ -100,8 +105,17 @@ export const PORTS: Readonly<Record<App, number>> = devPorts.ports;
 export const URLS: Readonly<Record<App, string>> = {
   web: `http://${devPorts.host}:${PORTS.web}`,
   admin: `http://${devPorts.host}:${PORTS.admin}`,
+  app: `http://${devPorts.host}:${PORTS.app}`,
   api: `http://${devPorts.host}:${PORTS.api}`,
 };
+
+/**
+ * The api dev server's output for this run. `playwright.config.ts` writes it, through
+ * `lib/tee-log.ts`, whenever it starts the api itself. A spec runs in a worker process and
+ * cannot read the `webServer` pipe, so a spec that needs what the api printed (such as a
+ * code the console SMS provider wrote) reads this file. `logs/` is gitignored.
+ */
+export const API_LOG = path.resolve(import.meta.dirname, "../logs/api.log");
 
 /**
  * `saasaloy.json`, read from the repo root.
@@ -158,6 +172,9 @@ export function installedApps(config: SaasaloyConfig): App[] {
   if (hasModule(config, "admin")) {
     apps.push("admin");
   }
+  if (hasModule(config, "app")) {
+    apps.push("app");
+  }
   return apps;
 }
 
@@ -172,6 +189,7 @@ export function installedApps(config: SaasaloyConfig): App[] {
 export const READY: Record<App, string> = {
   web: URLS.web,
   admin: URLS.admin,
+  app: URLS.app,
   api: `${URLS.api}/health`,
 };
 

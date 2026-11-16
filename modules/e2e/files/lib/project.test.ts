@@ -15,11 +15,11 @@ describe("portsFrom", () => {
       block: 423,
       host: "devaloy",
       cookiePrefix: "wtabcdef",
-      services: { web: 14_230, admin: 14_231, api: 14_235 },
+      services: { web: 14_230, admin: 14_231, app: 14_232, api: 14_235 },
     });
     assert.deepEqual(portsFrom(record), {
       host: "devaloy",
-      ports: { web: 14_230, admin: 14_231, api: 14_235 },
+      ports: { web: 14_230, admin: 14_231, app: 14_232, api: 14_235 },
     });
   });
 
@@ -31,6 +31,7 @@ describe("portsFrom", () => {
     assert.deepEqual(portsFrom(record).ports, {
       web: 14_230,
       admin: 3001,
+      app: 3002,
       api: 4000,
     });
   });
