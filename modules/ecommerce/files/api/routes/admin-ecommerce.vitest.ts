@@ -1,9 +1,10 @@
+import { ADMIN_APP_ROLES } from "@repo/auth/server";
 import { auditEvents } from "@repo/db/schema/audit";
 import { users } from "@repo/db/schema/auth";
 import { stockMovements } from "@repo/db/schema/ecommerce";
 import { testDatabase } from "@repo/db/testing";
 import { and, eq } from "drizzle-orm";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { makeVariant, makeZone } from "../lib/ecommerce/fixtures";
 import {
   ADDRESS,
@@ -203,6 +204,43 @@ describe("POST /admin/shop/orders (New order)", () => {
     });
   });
 
+  it("writes the payment confirm audit row when the payment is already received", async () => {
+    const { variantId } = await makeVariant(database.db, { onHand: 4 });
+    const zoneId = await makeZone(database.db);
+    const admin = await userOf(eq(users.email, "admin@example.test"));
+
+    const res = await staffAnswer("/orders", {
+      address: ADDRESS,
+      lines: [{ quantity: 1, variantId }],
+      name: "Karim Mia",
+      paymentMethod: "bkash",
+      paymentReceived: { transactionId: "8N7A6D5E4G" },
+      phone: "01912345674",
+      zoneId,
+    });
+
+    const { order } = res.body as {
+      order: { id: string; payments: { id: string }[] };
+    };
+    const [paymentId] = order.payments.map((payment) => payment.id);
+    const rows = await database.db
+      .select()
+      .from(auditEvents)
+      .where(
+        and(
+          eq(auditEvents.action, "payment.review.confirm"),
+          eq(auditEvents.targetId, paymentId ?? "")
+        )
+      );
+    expect(rows).toMatchObject([
+      {
+        actorUserId: admin?.id,
+        targetLabel: `order · ${order.id}`,
+        targetType: "payment",
+      },
+    ]);
+  });
+
   it("answers 409 for a line above the available stock and writes no order or user", async () => {
     const { variantId } = await makeVariant(database.db, { onHand: 1 });
     const zoneId = await makeZone(database.db);
@@ -222,6 +260,67 @@ describe("POST /admin/shop/orders (New order)", () => {
     });
     await expect(
       userOf(eq(users.phoneNumber, "+8801912345670"))
+    ).resolves.toBeUndefined();
+  });
+});
+
+describe("a shop role outside admin and superadmin", () => {
+  const EXTRA = "support";
+
+  afterEach(() => {
+    const roles = ADMIN_APP_ROLES as string[];
+    const at = roles.indexOf(EXTRA);
+    if (at !== -1) {
+      roles.splice(at, 1);
+    }
+  });
+
+  /** A staff session whose role is an extra `ADMIN_APP_ROLES` role, such as `support`. */
+  async function supportSession(): Promise<string> {
+    (ADMIN_APP_ROLES as string[]).push(EXTRA);
+    const cookie = await adminSession(database);
+    await database.db
+      .update(users)
+      .set({ role: EXTRA })
+      .where(eq(users.email, "admin@example.test"));
+    return cookie;
+  }
+
+  async function asSupport(
+    cookie: string,
+    phone: string,
+    extra: Record<string, unknown>
+  ) {
+    const { variantId } = await makeVariant(database.db, { onHand: 4 });
+    const zoneId = await makeZone(database.db);
+    return call(database, "/admin/shop/orders", {
+      admin: true,
+      body: {
+        address: ADDRESS,
+        lines: [{ quantity: 1, variantId }],
+        name: "Karim Mia",
+        phone,
+        zoneId,
+        ...extra,
+      },
+      cookie,
+    });
+  }
+
+  it("takes a manual order, but not one with the payment already received", async () => {
+    const cookie = await supportSession();
+
+    const plain = await asSupport(cookie, "01912345675", {
+      paymentMethod: "cod",
+    });
+    const received = await asSupport(cookie, "01912345676", {
+      paymentMethod: "bkash",
+      paymentReceived: { transactionId: "8N7A6D5E4H" },
+    });
+
+    expect([plain.status, received.status]).toStrictEqual([201, 403]);
+    await expect(
+      userOf(eq(users.phoneNumber, "+8801912345676"))
     ).resolves.toBeUndefined();
   });
 });

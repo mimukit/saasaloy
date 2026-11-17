@@ -1,6 +1,7 @@
 import { zValidator } from "@hono/zod-validator";
 import {
   ADMIN_APP_ROLES,
+  requireAdmin,
   requireAdminApp,
   withAuthScope,
 } from "@repo/auth/server";
@@ -688,12 +689,20 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
 
   // The "New order" page (Q33 to Q35). A phone that belongs to a user links the order to
   // them; a new phone becomes a client user with the typed name and an unverified phone.
-  // Line prices come from the catalog: a sent price is stripped by the validator. "Payment
-  // already received" submits the transaction id and confirms through the payment core,
-  // and the listener confirms the order, all inside this write's transaction.
+  // Line prices come from the catalog: a sent price is stripped by the validator.
+  //
+  // "Payment already received" (Q35) confirms money, so it takes the payment confirm
+  // route's own gate, `requireAdmin` (admin or superadmin), not the shop's
+  // `ADMIN_APP_ROLES`, and writes the `payment.review.confirm` audit row that route writes.
+  // The submit, the confirm, both audit rows and the listener's move to `confirmed` all
+  // commit in this write's transaction.
   .post("/orders", shopGate, validManualOrder, (c) =>
     staffWrite(c, async ({ db, actor, audit }) => {
       const body = c.req.valid("json");
+      if (body.paymentReceived) {
+        // Throws 403 for a shop role outside admin and superadmin, before anything is written.
+        await withAuthScope(c, () => requireAdmin(c));
+      }
       const known = await findUserByPhone(db, body.phone);
       const customer =
         known ??
@@ -729,9 +738,22 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
           senderAccount: body.paymentReceived.senderAccount ?? body.phone,
           transactionId: body.paymentReceived.transactionId,
         });
-        await payments.confirm(placed.payment.id, {
+        const note = "Received when the order was taken.";
+        const submitted = await payments.get(placed.payment.id);
+        const confirmed = await payments.confirm(placed.payment.id, {
           actorUserId: actor.id,
-          note: "Received when the order was taken.",
+          note,
+        });
+        // The row `/admin/payment/payments/:id/review` writes for a confirm, target and
+        // label alike, so the payments audit trail shows who confirmed this payment.
+        audit({
+          action: "payment.review.confirm",
+          after: { note, status: confirmed.status },
+          before: { status: submitted.status },
+          target: {
+            id: confirmed.id,
+            label: `${confirmed.referenceType} · ${confirmed.referenceId}`,
+          },
         });
       }
       const order = await mustGetOrder(db, placed.order.id);
