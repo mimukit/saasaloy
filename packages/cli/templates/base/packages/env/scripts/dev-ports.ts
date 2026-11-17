@@ -27,6 +27,7 @@ import {
 } from "../src/dev-ports.ts";
 import type { DevPortsRecord, PortService } from "../src/dev-ports.ts";
 import { readEnvFile } from "../src/env-file.ts";
+import { projectRoot } from "../src/project-root.ts";
 import { LOCAL_VALUES, SERVICES } from "../src/services.ts";
 
 // `pnpm dev:ports [--host <name>] [--clean]`: give this checkout its own dev ports, and
@@ -61,6 +62,24 @@ function readOptions(args: string[]): { host?: string; clean: boolean } {
 
 function git(args: string[], cwd?: string): string {
   return execFileSync("git", args, { cwd, encoding: "utf-8" }).trim();
+}
+
+/**
+ * Whether `root` is a linked git worktree. A project with no repository (`saasaloy init
+ * --no-git`) is not one, and takes the pinned ports like a main checkout.
+ */
+function isLinkedWorktree(root: string): boolean {
+  let dirs: string;
+  try {
+    dirs = git(
+      ["rev-parse", "--path-format=absolute", "--git-dir", "--git-common-dir"],
+      root
+    );
+  } catch {
+    return false;
+  }
+  const [gitDir, commonDir] = dirs.split("\n");
+  return path.resolve(gitDir ?? "") !== path.resolve(commonDir ?? "");
 }
 
 function readText(file: string): string | undefined {
@@ -141,13 +160,7 @@ async function assign(
       (readEnvFile(path.join(root, LOCAL_VALUES)).values.get("DEV_HOST") ||
         "localhost")
   );
-  const [gitDir, commonDir] = git([
-    "rev-parse",
-    "--path-format=absolute",
-    "--git-dir",
-    "--git-common-dir",
-  ]).split("\n");
-  const linked = path.resolve(gitDir ?? "") !== path.resolve(commonDir ?? "");
+  const linked = isLinkedWorktree(root);
 
   // Fail on a devPort outside the two ranges before anything is probed or written.
   blockPorts(0, services);
@@ -209,7 +222,7 @@ async function assign(
 
 try {
   const options = readOptions(process.argv.slice(2));
-  const root = git(["rev-parse", "--show-toplevel"]);
+  const root = projectRoot(import.meta.dirname);
   const services = portServices(SERVICES);
   if (options.clean) {
     removeBlocks(root, services);

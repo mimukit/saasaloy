@@ -1,8 +1,9 @@
 #!/usr/bin/env node
-import { execFileSync, spawnSync } from "node:child_process";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { selectServices } from "../src/services.ts";
 import type { Environment } from "../src/services.ts";
+import { projectRoot } from "../src/project-root.ts";
 import { setupServices } from "../src/setup.ts";
 import { sources } from "../src/sources.ts";
 
@@ -51,9 +52,8 @@ function say(message: string): void {
 try {
   const options = readOptions(process.argv.slice(2));
   const services = selectServices(options.environment, options.only);
-  const root = execFileSync("git", ["rev-parse", "--show-toplevel"], {
-    encoding: "utf-8",
-  }).trim();
+  // From this file, not from git: a project made with `init --no-git` has no repository.
+  const root = projectRoot(import.meta.dirname);
 
   const report = await setupServices({
     root,
