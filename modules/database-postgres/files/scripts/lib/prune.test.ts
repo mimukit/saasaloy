@@ -3,7 +3,11 @@
 
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { branchDatabaseName, testDatabaseName } from "./branch-name.ts";
+import {
+  branchDatabaseName,
+  testDatabaseName,
+  workerDatabaseName,
+} from "./branch-name.ts";
 import { looksForeign, planPrune, readRefs } from "./prune.ts";
 import type { DatabaseInfo, PruneInput, SkipReason } from "./prune.ts";
 
@@ -219,6 +223,89 @@ describe("planPrune", () => {
     );
     assert.deepEqual(plan.candidates, []);
     assert.deepEqual(Object.values(reasons(plan)), ["in use"]);
+  });
+});
+
+describe("planPrune: worker clones", () => {
+  /** An unmapped worker clone of `base`, as `CREATE DATABASE ... TEMPLATE` leaves it. */
+  function clone(
+    base: DatabaseInfo,
+    worker: number,
+    sessions = 0
+  ): DatabaseInfo {
+    return { name: workerDatabaseName(base.name, worker), sessions };
+  }
+
+  it("keeps a clone while its test database is kept: base kept", () => {
+    const test = db("feat-a", { test: true });
+    const plan = planPrune(
+      input({
+        databases: [test, clone(test, 1), clone(test, 2)],
+        localBranches: ["main", "feat-a"],
+      })
+    );
+    assert.deepEqual(plan.candidates, []);
+    assert.deepEqual(reasons(plan), {
+      [test.name]: "branch open",
+      [clone(test, 1).name]: "base kept",
+      [clone(test, 2).name]: "base kept",
+    });
+  });
+
+  it("keeps the clones of the default test database: base kept", () => {
+    const mainTest = { name: testDatabaseName(PREFIX), sessions: 0 };
+    const plan = planPrune(
+      input({ databases: [mainTest, clone(mainTest, 1)] })
+    );
+    assert.deepEqual(plan.candidates, []);
+    assert.equal(reasons(plan)[clone(mainTest, 1).name], "base kept");
+  });
+
+  it("drops a clone with its test database once the branch closes", () => {
+    const test = db("feat-b", { test: true });
+    const plan = planPrune(input({ databases: [clone(test, 1), test] }));
+    assert.deepEqual(
+      plan.candidates.map((d) => d.name),
+      [test.name, clone(test, 1).name]
+    );
+  });
+
+  it("drops a clone whose test database is gone, without --include-unmapped", () => {
+    const test = db("feat-b", { test: true });
+    const plan = planPrune(input({ databases: [clone(test, 3)] }));
+    assert.deepEqual(
+      plan.candidates.map((d) => d.name),
+      [clone(test, 3).name]
+    );
+  });
+
+  it("keeps a clone of a long test database while its base is kept", () => {
+    const test = db(`feature-${"x".repeat(80)}`, { test: true });
+    const plan = planPrune(
+      input({
+        databases: [test, clone(test, 2)],
+        localBranches: ["main", `feature-${"x".repeat(80)}`],
+      })
+    );
+    assert.equal(reasons(plan)[clone(test, 2).name], "base kept");
+  });
+
+  it("keeps a clone with an open session even when its base goes: in use", () => {
+    const test = db("feat-b", { test: true });
+    const plan = planPrune(input({ databases: [test, clone(test, 1, 1)] }));
+    assert.deepEqual(
+      plan.candidates.map((d) => d.name),
+      [test.name]
+    );
+    assert.equal(reasons(plan)[clone(test, 1).name], "in use");
+  });
+
+  it("judges a mapped branch database whose name ends in _w<N> as a branch", () => {
+    const branch = db("feat-w2");
+    const plan = planPrune(
+      input({ databases: [branch], localBranches: ["main", "feat-w2"] })
+    );
+    assert.deepEqual(reasons(plan), { [branch.name]: "branch open" });
   });
 });
 

@@ -1,6 +1,8 @@
 import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 import { afterAll, aroundEach, beforeAll, inject } from "vitest";
+import { workerDatabaseName } from "../scripts/lib/branch-name";
+import { databaseOf, swapDatabase } from "../scripts/lib/url";
 import { TEST_DB } from "./client";
 import type { Db, DbBindings } from "./client";
 import { schema } from "./schema";
@@ -23,7 +25,9 @@ import { schema } from "./schema";
 //   });
 //
 // The Vitest global setup in `scripts/test-setup.ts` creates `<database>_test`, migrates it
-// and seeds it once per run, and provides its URL here. Each test then runs inside one
+// and seeds it once per run, and provides its URL here. When the api runs more than one
+// Vitest worker, the setup also copies it once per worker, and each worker connects to its
+// own copy, `<database>_test_w<VITEST_POOL_ID>`. Each test then runs inside one
 // transaction on that database, and `getDb` returns the transaction through the `TEST_DB`
 // key on `env`, so a seeded row is there to read and nothing a test writes reaches the next
 // one. See the `saasaloy-database-postgres` skill, "Route tests".
@@ -32,6 +36,8 @@ declare module "vitest" {
   interface ProvidedContext {
     /** The test database's URL, provided by `scripts/test-setup.ts`. Unset without a `DATABASE_URL`. */
     testDatabaseUrl?: string;
+    /** How many worker copies of it the setup made. Above 1, each worker uses its own. */
+    testDatabaseWorkers?: number;
   }
 }
 
@@ -73,7 +79,18 @@ function testDatabaseUrl(): string {
       "testDatabase(): there is no test database. Run pnpm db:setup so apps/api/.env holds DATABASE_URL, or set TEST_DATABASE_URL, then run the tests again."
     );
   }
-  return url;
+  const workers = inject("testDatabaseWorkers") ?? 1;
+  if (workers <= 1) {
+    return url;
+  }
+  const raw = process.env.VITEST_POOL_ID;
+  const worker = Number(raw);
+  if (!Number.isInteger(worker) || worker < 1 || worker > workers) {
+    throw new Error(
+      `testDatabase(): VITEST_POOL_ID is ${raw ?? "unset"}, but the setup made ${workers} worker databases, numbered 1 to ${workers}. Set maxWorkers and sequence.groupOrder at the root of test in apps/api/vitest.config.ts, not in an inline project, so the api's workers are numbered 1 to ${workers}.`
+    );
+  }
+  return swapDatabase(url, workerDatabaseName(databaseOf(url), worker));
 }
 
 /** Thrown inside the transaction once the test is done, so Drizzle rolls it back. */

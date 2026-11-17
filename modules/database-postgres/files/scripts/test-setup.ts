@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import type { TestProject } from "vitest/node";
 import * as docker from "./backends/docker.ts";
 import * as server from "./backends/server.ts";
-import { testDatabaseName } from "./lib/branch-name.ts";
+import { testDatabaseName, workerDatabaseName } from "./lib/branch-name.ts";
 import {
   journalEntries,
   loadContext,
@@ -36,8 +36,14 @@ import { databaseOf, swapDatabase } from "./lib/url.ts";
 // 3. Run the seed. It is an upsert, so a database that already holds the rows is left as it
 //    was, and a slice edited since the last run is picked up.
 //
-// Then it provides the URL to `testDatabase()` in `src/testing.ts`, which runs each test in
-// a transaction and rolls it back.
+// 4. When the api project runs more than one worker (`maxWorkers` in
+//    `apps/api/vitest.config.ts`), copy the seeded database once per worker, into
+//    `<database>_test_w1` to `_w<N>`. The copies are made fresh on every run, so each starts
+//    from the seed just written. Two test files on one database wait on each other's row
+//    locks; one database per worker removes the wait.
+//
+// Then it provides the URL and the worker count to `testDatabase()` in `src/testing.ts`,
+// which picks its worker's copy, runs each test in a transaction and rolls it back.
 
 const ROOT = fileURLToPath(new URL("../../..", import.meta.url));
 
@@ -96,7 +102,8 @@ export async function setup(project: TestProject): Promise<void> {
     );
   }
 
-  if (resolveState(context)?.backend === "docker") {
+  const backend = resolveState(context)?.backend;
+  if (backend === "docker") {
     await docker.ensureRunning(context.root);
   }
   const admin = server.adminUrl(url);
@@ -128,5 +135,26 @@ export async function setup(project: TestProject): Promise<void> {
     );
   });
 
+  // No copies on neon.new. `CREATE DATABASE ... TEMPLATE` refuses to copy a database that
+  // has another session on it, and neon.new's compute now and then holds one on the test
+  // database that ending every session the project's role can see does not remove. A check
+  // on 2026-11-16 failed one run in four, after five tries per copy. So every worker shares the
+  // one test database there, and two files may wait on each other's row locks.
+  // `API_TEST_WORKERS=1` runs the files one at a time instead.
+  const workers = backend === "neon" ? 1 : project.config.maxWorkers;
+  if (workers > 1) {
+    await Promise.all(
+      Array.from({ length: workers }, (_, index) =>
+        server.cloneDatabase(
+          context.prefix,
+          admin,
+          database,
+          workerDatabaseName(database, index + 1)
+        )
+      )
+    );
+  }
+
   project.provide("testDatabaseUrl", url);
+  project.provide("testDatabaseWorkers", workers);
 }

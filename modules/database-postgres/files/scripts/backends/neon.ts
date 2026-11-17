@@ -82,6 +82,11 @@ export async function createDatabase(
   };
 }
 
+/** The direct endpoint of `url`'s project, pointed at `postgres`, for `CREATE` and `DROP DATABASE`. */
+export function adminUrl(url: string): string {
+  return directHost(swapDatabase(url, MAINTENANCE_DATABASE));
+}
+
 /**
  * Drop the database inside the neon.new project, over the direct endpoint and from the
  * maintenance database, because a session cannot drop the database it is connected to.
@@ -95,8 +100,7 @@ export async function dropDatabase(
   database: string
 ): Promise<void> {
   assertManagedDatabase(prefix, database);
-  const admin = directHost(swapDatabase(url, MAINTENANCE_DATABASE));
-  await withSql(admin, NEON_UNREACHABLE, async (sql) => {
+  await withSql(adminUrl(url), NEON_UNREACHABLE, async (sql) => {
     await sql.unsafe(`DROP DATABASE IF EXISTS "${database}" WITH (FORCE)`);
   });
 }

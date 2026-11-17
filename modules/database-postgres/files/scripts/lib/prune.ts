@@ -1,4 +1,9 @@
-import { branchDatabaseName, testDatabaseName } from "./branch-name.ts";
+import {
+  branchDatabaseName,
+  testDatabaseName,
+  workerDatabaseName,
+  workerNumber,
+} from "./branch-name.ts";
 import type { Mapping } from "./mapping.ts";
 
 // The decision `db:prune` makes, kept free of SQL, git and `gh` so a test can drive every
@@ -20,6 +25,11 @@ import type { Mapping } from "./mapping.ts";
 // prefix ends in `_dev`, so a `dev` segment after this prefix marks another project's name,
 // and `--include-unmapped` keeps it too. A branch with a `dev` segment of its own is kept
 // the same way, which errs on the side of keeping.
+//
+// A worker clone, `<test database>_w<N>`, follows the test database it was copied from. The
+// copy carries no mapping comment, so it is matched to its base by name: it stays while the
+// base stays, and goes with the base when the base goes. A clone whose base is gone, from a
+// run that stopped before the base was pruned, goes too. An open session still keeps it.
 
 export type SkipReason =
   | "default"
@@ -28,7 +38,8 @@ export type SkipReason =
   | "foreign, gh missing"
   | "unmapped"
   | "other project"
-  | "in use";
+  | "in use"
+  | "base kept";
 
 /** What `gh` says about a branch: a merged PR, none, or nothing because `gh` is missing. */
 export type MergeState = "merged" | "not merged" | "gh missing";
@@ -129,6 +140,31 @@ function keepReason(
   return merged === "merged" ? undefined : "foreign, no merged PR";
 }
 
+/** The database `clone` was copied from, among `databases`, or `undefined` when none is. */
+function baseOf(
+  clone: DatabaseInfo,
+  databases: readonly DatabaseInfo[]
+): DatabaseInfo | undefined {
+  const worker = workerNumber(clone.name);
+  if (clone.mapping || worker === undefined) {
+    return undefined;
+  }
+  return databases.find(
+    (database) =>
+      database !== clone &&
+      workerDatabaseName(database.name, worker) === clone.name
+  );
+}
+
+/** True for an unmapped `<x>_w<N>` name, which only a worker clone carries. */
+function isClone(prefix: string, database: DatabaseInfo): boolean {
+  return (
+    !database.mapping &&
+    workerNumber(database.name) !== undefined &&
+    !looksForeign(prefix, database.name)
+  );
+}
+
 export function planPrune(input: PruneInput): PrunePlan {
   const defaults = new Set([input.prefix, testDatabaseName(input.prefix)]);
   const open = new Set([...input.localBranches, ...input.remoteBranches]);
@@ -139,7 +175,12 @@ export function planPrune(input: PruneInput): PrunePlan {
   };
 
   const plan: PrunePlan = { candidates: [], skipped: [] };
+  const clones: DatabaseInfo[] = [];
   for (const database of input.databases) {
+    if (isClone(input.prefix, database)) {
+      clones.push(database);
+      continue;
+    }
     const reason = defaults.has(database.name)
       ? "default"
       : (keepReason(input, database, open, computed) ??
@@ -148,6 +189,23 @@ export function planPrune(input: PruneInput): PrunePlan {
       plan.skipped.push({ database, reason });
     } else {
       plan.candidates.push(database);
+    }
+  }
+
+  // A clone is judged after every base, so it follows the verdict its base got.
+  const kept = new Set(plan.skipped.map((skip) => skip.database));
+  for (const clone of clones) {
+    const base = baseOf(clone, input.databases);
+    const reason =
+      base && kept.has(base)
+        ? "base kept"
+        : clone.sessions > 0
+          ? "in use"
+          : undefined;
+    if (reason) {
+      plan.skipped.push({ database: clone, reason });
+    } else {
+      plan.candidates.push(clone);
     }
   }
   return plan;

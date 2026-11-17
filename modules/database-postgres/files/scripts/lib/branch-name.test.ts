@@ -8,7 +8,10 @@ import {
   assertManagedDatabase,
   branchDatabaseName,
   databasePrefix,
+  isWorkerDatabase,
   testDatabaseName,
+  workerDatabaseName,
+  workerNumber,
 } from "./branch-name.ts";
 
 describe("databasePrefix", () => {
@@ -130,5 +133,59 @@ describe("testDatabaseName", () => {
       "app_dev",
       testDatabaseName(branchDatabaseName("app_dev", "issue-339-prune"))
     );
+  });
+});
+
+describe("workerDatabaseName", () => {
+  it("appends _w<worker> to the test database", () => {
+    assert.equal(workerDatabaseName("app_dev_test", 1), "app_dev_test_w1");
+    assert.equal(workerDatabaseName("app_dev_test", 4), "app_dev_test_w4");
+  });
+
+  it("stays a managed name inside 63 bytes for a long test database", () => {
+    const test = testDatabaseName(
+      branchDatabaseName("app_dev", `feature-${"x".repeat(80)}`)
+    );
+    const name = workerDatabaseName(test, 12);
+    assert.ok(name.length <= 63);
+    assert.match(name, /_[0-9a-f]{6}_w12$/);
+    assertManagedDatabase("app_dev", name);
+  });
+
+  it("gives each worker and each long test database its own name", () => {
+    const first = testDatabaseName(
+      branchDatabaseName("app_dev", `feature-${"x".repeat(80)}-one`)
+    );
+    const second = testDatabaseName(
+      branchDatabaseName("app_dev", `feature-${"x".repeat(80)}-two`)
+    );
+    assert.notEqual(workerDatabaseName(first, 1), workerDatabaseName(first, 2));
+    assert.notEqual(
+      workerDatabaseName(first, 1),
+      workerDatabaseName(second, 1)
+    );
+  });
+
+  // `VITEST_POOL_ID` starts at 1, so 0 or a fraction means the caller read it wrong.
+  it("refuses a worker below 1 or not a whole number", () => {
+    assert.throws(() => workerDatabaseName("app_dev_test", 0), /from 1/);
+    assert.throws(() => workerDatabaseName("app_dev_test", 1.5), /from 1/);
+  });
+});
+
+describe("isWorkerDatabase", () => {
+  it("tells a worker clone from a test database and from a branch database", () => {
+    assert.equal(isWorkerDatabase("app_dev_test_w3"), true);
+    assert.equal(isWorkerDatabase("app_dev_test"), false);
+    assert.equal(isWorkerDatabase("app_dev_wallet"), false);
+    assert.equal(
+      isWorkerDatabase(branchDatabaseName("app_dev", "wallet")),
+      false
+    );
+  });
+
+  it("reads the worker number back", () => {
+    assert.equal(workerNumber(workerDatabaseName("app_dev_test", 7)), 7);
+    assert.equal(workerNumber("app_dev_test"), undefined);
   });
 });
