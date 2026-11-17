@@ -6,11 +6,11 @@ Run the first two in order. The third runs whenever you want the look changed.
 
 ## 1. Tell the project what it is: `/saasaloy-setup`
 
-The setup skill interviews you once — ten questions, starting with the product's name, each with sample answers you can take, edit, or ignore — and writes the answers to `docs/product-brief.md`. That brief is the shared context every other skill reads instead of interviewing you again.
+The setup skill interviews you once, in about fifteen questions, starting with the product's name. Each question has sample answers you can take, edit, or ignore. The first ten go to `docs/product-brief.md`: the landing page's audience, problem, proof, tone, pricing and sign-up link. The last five go to `docs/product-spec.md`: the entities your product keeps (the agent proposes a table for each and you correct it), their order, the optional modules, the database driver, and whether to deploy a preview. Every other skill reads these two files instead of interviewing you again.
 
 It also sets the two facts that live in code rather than prose: `app.name` and `app.locale` in `packages/config/src/project.ts`. `siteName` and the page's `lang` attribute read them. It writes no landing copy.
 
-Its last question is "Run the build unattended?". Answer yes and it writes `autonomy: afk` into the brief's frontmatter. From then on the setup, landing-copy and design skills run without asking you anything, and log what they did in `docs/build-log.md`. A brief with a missing or weak answer stops an unattended run, and the log lists the sections to fill. To work attended again, delete the `autonomy` line, or ask the skill for the interview.
+The interview ends with one read-back: the brief, the module list, each entity with its screens, the wishes this build leaves out, and the steps that stay yours. You confirm it once. That confirmation accepts each thin answer as written (it is tagged `weak-accepted:`, and the copy leaves its claim out), approves the screens, and writes `autonomy: afk` into the brief's frontmatter. Then the skill starts `saasaloy-build` in the same session, and [Build with an agent](build-with-an-agent.md) takes over. To build attended instead, say so at the read-back. To work attended later, delete the `autonomy` line, or ask the skill for the interview.
 
 Re-running it is how you update the brief later: it summarises what it has, asks only about what changed, and re-asks anything it recorded as weak.
 

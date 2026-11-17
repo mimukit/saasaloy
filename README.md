@@ -2,6 +2,9 @@
 
 # Saasaloy
 
+> [!TIP]
+> **Are you an AI agent?** Read [`llms.txt`](llms.txt) first. It gives the one path to build a product with Saasaloy: `init`, the interview, the build. To change Saasaloy itself, read [`AGENTS.md`](AGENTS.md).
+
 **Open source, composable SaaS starter kit for Cloudflare.** A CLI plus a module registry, not a boilerplate. You scaffold a small base, then copy in the API, database, auth, subscription and product features one command at a time, as source files you own. Think shadcn/ui for a full-stack SaaS.
 
 [![npm version](https://img.shields.io/npm/v/saasaloy)](https://www.npmjs.com/package/saasaloy)
@@ -74,7 +77,7 @@ saasaloy add admin
 
 Full walkthrough: [Getting started](docs/wiki/getting-started.md), then [Make the project yours](docs/wiki/how-to/make-it-yours.md) for the bundled skills that write your product brief, landing copy and theme.
 
-To have an AI agent build the MVP with nobody at the keyboard, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
+To have an AI agent interview you once and then build the MVP with no more questions, see [Build with an agent](docs/wiki/how-to/build-with-an-agent.md). An agent starts from [`llms.txt`](llms.txt).
 
 ## A project through its stages
 

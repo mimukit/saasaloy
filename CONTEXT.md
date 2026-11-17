@@ -410,11 +410,15 @@ A module's on-demand guidance, shipped as a Claude skill folder (`skills/saasalo
 _Avoid (superseded): agent fragment, `.agents/*.md` fragment, `saasaloy sync`. Avoid an unprefixed module skill name (`api` → use `saasaloy-api`)._
 
 ### Product brief
-`docs/product-brief.md` in a generated project: what the product is, for whom, and in which language, written once through the attended `saasaloy-setup` interview. Every other skill reads it instead of asking the owner again, and an unattended run requires a complete one.
-_Avoid: PRD, spec._
+`docs/product-brief.md` in a generated project: what the product is, for whom, and in which language, written by the agent from the owner's answers in the `saasaloy-setup` interview. Its frontmatter holds the run settings, `autonomy` and `deploy`. Every other skill reads it instead of asking the owner again, and an unattended run requires a complete one; an answer the owner accepted at the read-back as thin is tagged `weak-accepted:` and counts as filled.
+_Avoid: PRD._
+
+### Product spec
+`docs/product-spec.md` in a generated project: the product part of the `saasaloy-setup` interview. It holds the module picks, the database driver, one table for each entity (its fields, who may see it, its actions and its screens) in the owner's order, the wishes that are not in this build, and the steps left for the owner. Its headings are fixed by `product-spec-template.md` beside the setup skill. `saasaloy-build` makes one Feature pass and one commit for each entity.
+_Avoid: PRD, data model._
 
 ### Unattended run
-A build in which an agent works from a complete product brief that carries `autonomy: afk` in its frontmatter, and asks no question after it starts. It commits once per stage on `build/mvp`, never pushes, and records what it could not do in the build log ([ADR 0046](docs/adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) is the CLI half).
+A build in which an agent works from a complete product brief that carries `autonomy: afk` in its frontmatter, and asks no question after it starts. The owner sets the flag by confirming the interview's read-back, and the build starts in the same session. It commits once per stage on `build/mvp`, never pushes, and records what it could not do in the build log ([ADR 0046](docs/adr/0046-adr-the-cli-runs-unattended-by-refusing-never-by-guessing-2026-10-21.md) is the CLI half).
 _Avoid: AFK mode, autopilot. `afk` is only the field value._
 
 ### Build log
