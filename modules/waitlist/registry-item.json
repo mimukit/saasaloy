@@ -39,6 +39,13 @@
       "section": "dependencies",
       "name": "@repo/api",
       "range": "workspace:*"
+    },
+    {
+      "file": "apps/web/package.json",
+      "kind": "package-json-dependency",
+      "section": "devDependencies",
+      "name": "@cloudflare/workers-types",
+      "range": "5.20261001.1"
     }
   ],
   "files": [
