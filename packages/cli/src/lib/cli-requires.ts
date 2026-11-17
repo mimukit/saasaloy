@@ -19,8 +19,16 @@ import type { RequestedInput } from "./requested.js";
 // the applier in front of it will get the module wrong, and a warning would leave the
 // project half-written with no way back.
 
-/** How a consumer gets a newer CLI. Named in every refusal so the fix is in the message. */
-export const UPGRADE_COMMAND = "pnpm add --global saasaloy@latest";
+/**
+ * How a consumer gets a CLI inside `range`. Named in every refusal so the fix is in the
+ * message. It names the range, not `@latest`: under a floor above the newest published
+ * version `@latest` reinstalled the CLI that was just refused (research 0011, 0.8.0 under
+ * `>=0.9.0`). pnpm installs the highest version inside the range, or fails and says no
+ * version matches, so the command never ends on the version it started from.
+ */
+export function upgradeCommand(range: string): string {
+  return `pnpm add --global 'saasaloy@${range}'`;
+}
 
 /** What `readVersion()` returns when the CLI's own package.json will not parse. */
 export const UNKNOWN_VERSION = "unknown";
@@ -103,9 +111,9 @@ function describe(
     return `${subject} declares requires.saasaloy "${range}", which isn't a semver range — the module's author has to fix it.`;
   }
   if (reason === "unknown-version") {
-    return `${subject} needs saasaloy ${range}, and this CLI's own version could not be read. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+    return `${subject} needs saasaloy ${range}, and this CLI's own version could not be read. Upgrade with \`${upgradeCommand(range)}\`.`;
   }
-  return `${subject} needs saasaloy ${range}, and ${cliVersion} is installed. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+  return `${subject} needs saasaloy ${range}, and ${cliVersion} is installed. Upgrade with \`${upgradeCommand(range)}\`.`;
 }
 
 /** The refusal a command prints. One line per mismatch, under a heading. */
@@ -150,10 +158,10 @@ export function describeInvalidDescriptor(
   const range = rawRequiresRange(raw);
   if (range !== undefined && isValidRange(range)) {
     if (cliVersion === UNKNOWN_VERSION) {
-      return `Module "${name}" needs saasaloy ${range}, and this CLI's own version could not be read. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+      return `Module "${name}" needs saasaloy ${range}, and this CLI's own version could not be read. Upgrade with \`${upgradeCommand(range)}\`.`;
     }
     if (!satisfies(cliVersion, range)) {
-      return `Module "${name}" needs saasaloy ${range}, and ${cliVersion} is installed. Upgrade with \`${UPGRADE_COMMAND}\`.`;
+      return `Module "${name}" needs saasaloy ${range}, and ${cliVersion} is installed. Upgrade with \`${upgradeCommand(range)}\`.`;
     }
   }
   const lines = [
@@ -164,7 +172,9 @@ export function describeInvalidDescriptor(
   // required key is the author's bug on every version, so it gets no hint.
   if (errors.some((e) => e.includes("unexpected property"))) {
     lines.push(
-      `It may use a field newer than saasaloy ${cliVersion}. Upgrade with \`${UPGRADE_COMMAND}\` and retry.`
+      `It may use a field newer than saasaloy ${cliVersion}. Upgrade with \`${upgradeCommand(
+        cliVersion === UNKNOWN_VERSION ? "latest" : `>${cliVersion}`
+      )}\` and retry.`
     );
   }
   return lines.join("\n");
