@@ -205,21 +205,32 @@ describe("orderTrack", () => {
 });
 
 describe("methodPreview", () => {
-  it("names the amount and the account a wallet payer sends to", () => {
+  function wallet(kind: string) {
+    return {
+      account: { kind, label: `bKash ${kind}`, number: "01712000000" },
+      id: "bkash",
+      label: "bKash",
+    };
+  }
+
+  it("tells a personal wallet's payer to use Send Money", () => {
     assert.equal(
-      methodPreview(
-        {
-          account: {
-            kind: "personal",
-            label: "bKash personal",
-            number: "01712000000",
-          },
-          id: "bkash",
-          label: "bKash",
-        },
-        "৳3,610"
-      ),
-      "Send ৳3,610 to the bKash personal number 01712000000, then enter the transaction ID on the next page."
+      methodPreview(wallet("personal"), "৳3,610"),
+      "Send ৳3,610 to the bKash personal number 01712000000 with Send Money, then enter the transaction ID on the next page."
+    );
+  });
+
+  it("tells a merchant wallet's payer to use Make Payment", () => {
+    assert.equal(
+      methodPreview(wallet("merchant"), "৳3,610"),
+      "Send ৳3,610 to the bKash merchant number 01712000000 with Make Payment, then enter the transaction ID on the next page."
+    );
+  });
+
+  it("sends an agent wallet's payer to the agent's counter", () => {
+    assert.equal(
+      methodPreview(wallet("agent"), "৳3,610"),
+      "Pay ৳3,610 at the counter of the bKash agent number 01712000000, then enter the transaction ID on the next page."
     );
   });
 

@@ -561,8 +561,24 @@ export function methodPreview(
   if (account.kind === "bank") {
     return `Transfer ${amount} to ${account.label} account ${account.number}, then enter the transfer reference on the next page.`;
   }
-  return `Send ${amount} to the ${account.label} number ${account.number}, then enter the transaction ID on the next page.`;
+  const next = "then enter the transaction ID on the next page.";
+  if (account.kind === "agent") {
+    return `Pay ${amount} at the counter of the ${account.label} number ${account.number}, ${next}`;
+  }
+  const menu = WALLET_MENU[account.kind ?? ""];
+  const using = menu ? ` with ${menu}` : "";
+  return `Send ${amount} to the ${account.label} number ${account.number}${using}, ${next}`;
 }
+
+/**
+ * The wallet app menu each account kind takes, as `payment-manual`'s `KIND_NOTE` names it:
+ * Send Money to a personal number, Make Payment to a merchant. An agent is paid at the
+ * counter. A kind not listed here gets no menu line.
+ */
+const WALLET_MENU: Readonly<Record<string, string>> = {
+  merchant: "Make Payment",
+  personal: "Send Money",
+};
 
 /** Why a cart line blocks checkout, or null when it does not. */
 export function cartLineNotice(line: {
