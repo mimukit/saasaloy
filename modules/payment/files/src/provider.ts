@@ -29,7 +29,10 @@ export interface PaymentEnv {
 
 /** Every status a payment can hold. There is no `refunded`: see `payment_refunds`. */
 export type PaymentStatus =
-  /** Created. The payer has not paid, or has not told us yet. */
+  /**
+   * Created. The payer has not paid, or has not told us yet. A payment whose method takes
+   * no submission (cash on delivery) waits here until staff confirm or reject it.
+   */
   | "pending"
   /** The payer submitted a transaction id. Staff confirm or reject it. */
   | "submitted"
@@ -48,14 +51,25 @@ export const PAYMENT_STATUSES: readonly PaymentStatus[] = [
   "cancelled",
 ];
 
-/** Why staff rejected a submission. Required on every rejection. */
+/**
+ * Why staff rejected a payment. Required on every rejection. The first three are about a
+ * submission; `delivery_refused` (the buyer would not take the parcel) and
+ * `delivery_failed` (the courier could not deliver it) close a cash-on-delivery payment.
+ */
 export type RejectReason =
-  "amount_mismatch" | "not_found" | "duplicate" | "other";
+  | "amount_mismatch"
+  | "not_found"
+  | "duplicate"
+  | "delivery_refused"
+  | "delivery_failed"
+  | "other";
 
 export const REJECT_REASONS: readonly RejectReason[] = [
   "amount_mismatch",
   "not_found",
   "duplicate",
+  "delivery_refused",
+  "delivery_failed",
   "other",
 ];
 
@@ -121,10 +135,17 @@ export interface SubmitField {
   placeholder?: string;
 }
 
-/** What a manual payment shows the payer: where to send money, and what to type back. */
+/**
+ * What a manual payment shows the payer: where to send money, and what to type back. An
+ * empty `fields` declares a method nobody submits, such as cash on delivery: staff
+ * confirm or reject its payment straight from `pending`.
+ */
 export interface PaymentInstructions {
-  /** The account the payer sends money to. Also shown to staff in the review queue. */
-  account: {
+  /**
+   * The account the payer sends money to. Also shown to staff in the review queue. Absent
+   * for a method that sends no money ahead, such as cash on delivery.
+   */
+  account?: {
     /** e.g. `bKash personal`, `City Bank`. */
     label: string;
     /** The wallet number or account number. */
@@ -134,7 +155,7 @@ export interface PaymentInstructions {
     /** e.g. `personal`, `merchant`, `agent`. */
     kind?: string;
   };
-  /** The fields `submit` expects, in display order. */
+  /** The fields `submit` expects, in display order. Empty: the method takes no submission. */
   fields: SubmitField[];
   /** One short line of extra guidance, e.g. "Use Send Money, not Cash Out." */
   note?: string;

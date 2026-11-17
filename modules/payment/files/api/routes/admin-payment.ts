@@ -1,6 +1,6 @@
 import { zValidator } from "@hono/zod-validator";
-import { createPayment, PaymentError } from "@repo/payment";
-import type { PaymentEnv, PaymentStatus } from "@repo/payment";
+import { createPayment, PaymentError, REJECT_REASONS } from "@repo/payment";
+import type { PaymentEnv, PaymentStatus, RejectReason } from "@repo/payment";
 import { adminGate, requireAdmin, withAuthScope } from "@repo/auth/server";
 import { withDb } from "@repo/db/client";
 import { Hono } from "hono";
@@ -62,7 +62,7 @@ const reviewBody = z.discriminatedUnion("action", [
   z.object({
     action: z.literal("reject"),
     note,
-    reason: z.enum(["amount_mismatch", "not_found", "duplicate", "other"]),
+    reason: z.enum(REJECT_REASONS as [RejectReason, ...RejectReason[]]),
   }),
 ]);
 
@@ -159,8 +159,9 @@ export const adminPayment = new Hono<{ Bindings: PaymentBindings }>()
     })
   )
 
-  // One decision. Both are conditional updates on `status = 'submitted'`, so two staff
-  // racing get one 200 and one 409. The decision, its event row and its audit row commit
+  // One decision. Both are conditional updates on `status = 'submitted'`, or on
+  // `status = 'pending'` for a method that takes no submission (cash on delivery), so two
+  // staff racing get one 200 and one 409. The decision, its event row and its audit row commit
   // together: `staffWrite` runs it inside `adminWrite`.
   .post("/payments/:id/review", adminGate, validReviewBody, (c) =>
     staffWrite(c, async ({ db, actorUserId, audit }) => {

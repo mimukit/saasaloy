@@ -21,6 +21,13 @@ import {
 //   for a number that already has an account, before a code goes out or a session opens.
 //   That customer signs in with the password, or sets one through the reset endpoints. A
 //   `verify` that adds a number to the signed-in account (`updatePhoneNumber`) passes.
+// - Code sign-in: with `codeSignIn` on, a `send-otp` and a `verify` that carry
+//   `signIn: true` pass for a known number, so `verify` opens a session on that account.
+//   The flag keeps the app's sign-up screen as it was: it sends no flag, so a known number
+//   still gets the 409 there. A banned account gets 403 `BANNED_USER` before a code goes
+//   out; Better Auth's `admin()` session hook answers the same if a ban lands between the
+//   send and the check. This reaches no account a reset code does not already reach: both
+//   send a code to the number and act on the account that owns it.
 // - `check-reset-code` checks a reset code before the customer types a new password, so a
 //   wrong code fails on the code screen. It keeps a right code for `reset-password` and
 //   spends one of the same tries on a wrong one, so it adds no extra guesses.
@@ -45,6 +52,27 @@ function phoneOf(body: unknown): string | null {
     return body.phoneNumber;
   }
   return null;
+}
+
+/** Whether the body asks for a code sign-in (`signIn: true`). */
+function asksForSignIn(body: unknown): boolean {
+  return (
+    typeof body === "object" &&
+    body !== null &&
+    "signIn" in body &&
+    body.signIn === true
+  );
+}
+
+/** Whether a user row carries a ban that still holds, read as `admin()` reads it. */
+function isBanned(user: {
+  banned?: boolean | null;
+  banExpires?: Date | string | null;
+}): boolean {
+  if (user.banned !== true) {
+    return false;
+  }
+  return !user.banExpires || new Date(user.banExpires).getTime() >= Date.now();
 }
 
 function addsNumberToSession(body: unknown): boolean {
@@ -215,17 +243,33 @@ export function phoneAccount() {
             if (phone === null) {
               return;
             }
-            const user = await context.context.adapter.findOne({
+            const user = await context.context.adapter.findOne<{
+              banned?: boolean | null;
+              banExpires?: Date | string | null;
+            }>({
               model: "user",
               where: [{ field: "phoneNumber", value: phone }],
             });
-            if (user) {
-              throw APIError.from("CONFLICT", {
-                code: "PHONE_NUMBER_EXIST",
-                message:
-                  "This number already has an account. Sign in with the password, or set a new one.",
-              });
+            if (!user) {
+              return;
             }
+            if (
+              config["auth-phone"].codeSignIn &&
+              asksForSignIn(context.body)
+            ) {
+              if (isBanned(user)) {
+                throw APIError.from("FORBIDDEN", {
+                  code: "BANNED_USER",
+                  message: "You have been banned from this application",
+                });
+              }
+              return;
+            }
+            throw APIError.from("CONFLICT", {
+              code: "PHONE_NUMBER_EXIST",
+              message:
+                "This number already has an account. Sign in with the password, or set a new one.",
+            });
           }),
         },
       ],

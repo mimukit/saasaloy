@@ -17,7 +17,7 @@ export function authPhoneConfig() {
     codeAttempts: 3,
     /** The wait before a second code to one number, in seconds. */
     resendSeconds: 60,
-    /** Codes one number may get in an hour, sign-up and reset together. */
+    /** Codes one number may get in an hour, sign-up, sign-in and reset together. */
     codesPerHour: 5,
     /**
      * E.164 prefixes the server takes, such as `["+880"]`. Empty allows every E.164
@@ -29,5 +29,12 @@ export function authPhoneConfig() {
      * the screen asks for a number that starts with `+`.
      */
     defaultCountryCode: undefined as string | undefined,
+    /**
+     * Whether a known number may sign in by code: `send-otp` and `verify` with
+     * `signIn: true` open a session on the account that owns the number. The app screens
+     * keep phone and password either way; checkout uses this. `false` answers 409
+     * `PHONE_NUMBER_EXIST`, as a sign-up code does for a known number.
+     */
+    codeSignIn: true as boolean,
   });
 }

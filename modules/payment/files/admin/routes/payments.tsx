@@ -62,7 +62,9 @@ import { api } from "@admin/lib/api";
 // the providers that cannot check a payment themselves. A `submitted` payment is a claim: a
 // shopper says they sent money and typed a transaction ID. Nothing on this screen verifies
 // that claim. The staff member finds the ID in the receiving account's own statement, then
-// confirms or rejects here, and the api records who decided.
+// confirms or rejects here, and the api records who decided. A `pending` payment whose
+// method takes no submission (cash on delivery) is reviewed from `pending`: confirm it when
+// the courier remits the cash, or reject it with a delivery reason.
 //
 // Every call goes to `apps/api`'s `/admin/payment` routes behind `requireAdmin`, and this
 // file names no provider. Adding `payment-manual` or a gateway later changes the rows, not
@@ -92,19 +94,27 @@ const STATUS_LABEL: Record<StatusFilter, string> = {
 };
 
 const REJECT_REASONS = [
-  { id: "amount_mismatch", label: "Amount does not match" },
-  { id: "not_found", label: "Transaction not found" },
-  { id: "duplicate", label: "Duplicate submission" },
-  { id: "other", label: "Other" },
+  { id: "amount_mismatch", label: "Amount does not match", for: "submission" },
+  { id: "not_found", label: "Transaction not found", for: "submission" },
+  { id: "duplicate", label: "Duplicate submission", for: "submission" },
+  { id: "delivery_refused", label: "Buyer refused delivery", for: "delivery" },
+  { id: "delivery_failed", label: "Delivery failed", for: "delivery" },
+  { id: "other", label: "Other", for: "both" },
 ] as const;
 
 type RejectReason = (typeof REJECT_REASONS)[number]["id"];
 
-/** The reasons as Select items, so the trigger shows the label and not the id. */
-const REJECT_ITEMS = REJECT_REASONS.map((item) => ({
-  label: item.label,
-  value: item.id,
-}));
+/**
+ * The reasons that fit `payment`, as Select items, so the trigger shows the label and not
+ * the id. A payment nobody submits (cash on delivery) fails at the door, so it takes the
+ * delivery reasons; a submitted claim takes the submission ones.
+ */
+function rejectItems(payment: Payment) {
+  const kind = payment.takesNoSubmission ? "delivery" : "submission";
+  return REJECT_REASONS.filter(
+    (item) => item.for === kind || item.for === "both"
+  ).map((item) => ({ label: item.label, value: item.id }));
+}
 
 const LIST_KEY = ["admin", "payment", "payments"] as const;
 
@@ -429,9 +439,10 @@ function describeEvent(event: PaymentEvent, provider: string): string {
     }
     case "failed": {
       const reason = REJECT_REASONS.find((item) => item.id === event.reason);
-      return event.fromStatus === "submitted"
-        ? `Rejected${by}${reason === undefined ? "" : `: ${reason.label}`}`
-        : `Failed${by}`;
+      // A staff rejection always carries a reason; a gateway's decline never does.
+      return reason === undefined
+        ? `Failed${by}`
+        : `Rejected${by}: ${reason.label}`;
     }
     case "cancelled": {
       return `Cancelled${by}`;
@@ -551,6 +562,7 @@ function RejectForm({
 }) {
   const [reason, setReason] = useState<RejectReason | null>(null);
   const [note, setNote] = useState("");
+  const items = rejectItems(payment);
 
   return (
     <form
@@ -576,7 +588,7 @@ function RejectForm({
         <Field>
           <FieldLabel>Reason</FieldLabel>
           <Select
-            items={REJECT_ITEMS}
+            items={items}
             value={reason}
             required
             onValueChange={(next: RejectReason | null) => {
@@ -587,7 +599,7 @@ function RejectForm({
               <SelectValue placeholder="Choose a reason" />
             </SelectTrigger>
             <SelectPopup>
-              {REJECT_ITEMS.map((item) => (
+              {items.map((item) => (
                 <SelectItem key={item.value} value={item.value}>
                   {item.label}
                 </SelectItem>
@@ -606,8 +618,9 @@ function RejectForm({
           />
         </Field>
         <p className="text-muted-foreground text-sm">
-          The shopper can submit the same transaction ID again after a
-          rejection.
+          {payment.takesNoSubmission
+            ? "The payment closes as failed. The order that owns it decides what happens next."
+            : "The shopper can submit the same transaction ID again after a rejection."}
         </p>
         {error === null ? null : (
           <p className="text-destructive text-sm" role="alert">
@@ -918,7 +931,7 @@ function PaymentDetailView({
           : [paymentGroup, historyGroup]
       }
       footer={
-        isSubmitted || (isSuccessful && refundable(payment) > 0) ? (
+        payment.reviewable || (isSuccessful && refundable(payment) > 0) ? (
           <>
             {error === null ? null : (
               <p className="text-destructive text-sm" role="alert">
@@ -926,7 +939,7 @@ function PaymentDetailView({
               </p>
             )}
             <div className="flex gap-2">
-              {isSubmitted ? (
+              {payment.reviewable ? (
                 <>
                   <Button
                     className="flex-1"

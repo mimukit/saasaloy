@@ -2,6 +2,7 @@ import {
   PaymentError,
   setPaymentStoreResolver,
   setPaymentStoreRunner,
+  takesNoSubmission,
 } from "@repo/payment";
 import type {
   NewPayment,
@@ -200,6 +201,13 @@ export interface PaymentView {
   senderAccount: string | null;
   /** The account the payer was told to pay, from a manual provider's instructions. */
   receivingAccount: ReceivingAccount | null;
+  /**
+   * Whether the method takes no submission, such as cash on delivery. Staff confirm or
+   * reject such a payment from `pending`, with the delivery reasons.
+   */
+  takesNoSubmission: boolean;
+  /** Whether staff can confirm or reject it now: `submitted`, or `pending` with no submission. */
+  reviewable: boolean;
   submittedAt: string | null;
   settledAt: string | null;
   createdAt: string;
@@ -354,6 +362,10 @@ function toView(payment: Payment, userEmail: string | null): PaymentView {
     provider: payment.provider,
     receivingAccount: receivingAccountOf(payment),
     referenceId: payment.referenceId,
+    reviewable:
+      payment.status === "submitted" ||
+      (payment.status === "pending" && takesNoSubmission(payment)),
+    takesNoSubmission: takesNoSubmission(payment),
     referenceType: payment.referenceType,
     refundedAmount: payment.refundedAmount,
     senderAccount: payment.senderAccount,

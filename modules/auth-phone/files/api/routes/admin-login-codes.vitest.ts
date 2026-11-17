@@ -218,6 +218,24 @@ describe("GET /admin/login-codes", () => {
     expect(raw).not.toContain(second);
   });
 
+  it("lists a sign-in code under its purpose and the account it signs in to", async () => {
+    const sent = await post("/auth/phone-number/send-otp", {
+      phoneNumber: PHONE_WITH_PASSWORD,
+      signIn: true,
+    });
+    expect(sent.status).toBe(200);
+    const code = codeSentTo(PHONE_WITH_PASSWORD);
+
+    const { body, raw } = await adminList();
+
+    expect(body.codes[0]).toMatchObject({
+      account: { id: expect.any(String) },
+      purpose: "sign_in",
+      state: "live",
+    });
+    expect(raw).not.toContain(code);
+  });
+
   it("masks a code in the error of a failed send", async () => {
     await database.db.insert(smsMessages).values({
       error: 'provider refused "482913 is your verification code"',

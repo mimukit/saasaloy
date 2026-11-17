@@ -195,6 +195,7 @@ describe("payment-manual methods", () => {
         ["nagad", false],
         ["rocket", false],
         ["bank", true],
+        ["cod", false],
         ["card", false],
       ]
     );
@@ -273,8 +274,8 @@ describe("payment-manual create", () => {
       typeof next,
       { kind: "instructions" }
     >;
-    assert.equal(instructions.account.number, "1501 2345 6789 01");
-    assert.equal(instructions.account.label, "City Bank");
+    assert.equal(instructions.account?.number, "1501 2345 6789 01");
+    assert.equal(instructions.account?.label, "City Bank");
     assert.match(
       instructions.note ?? "",
       /Branch: Gulshan\. Routing number: 225261725\./
@@ -410,6 +411,90 @@ describe("payment-manual submit and review", () => {
       "x"
     );
     assert.deepEqual(reply, { kind: "ignored" });
+  });
+});
+
+describe("payment-manual cash on delivery", () => {
+  const codClient = (note?: string) =>
+    definePayment({
+      listeners: [],
+      providers: [
+        manual({
+          methods: {
+            ...OPTIONS.methods,
+            cod: note === undefined ? {} : { note },
+          },
+        }),
+      ],
+    }).create(ENV);
+  const codOrder = () => ({ ...bkashOrder(), method: "cod" });
+
+  it("offers cod once it is configured", () => {
+    assert.ok(
+      codClient()
+        .methods()
+        .some((m) => m.id === "cod" && m.label === "Cash on delivery")
+    );
+  });
+
+  it("answers instructions with no account, no fields and the default note", async () => {
+    const { next } = await codClient().create(codOrder());
+    assert.equal(next.kind, "instructions");
+    const { instructions } = next as Extract<
+      typeof next,
+      { kind: "instructions" }
+    >;
+    assert.equal(instructions.account, undefined);
+    assert.deepEqual(instructions.fields, []);
+    assert.match(instructions.note ?? "", /Pay BDT\s1,250\.00 in cash/);
+  });
+
+  it("answers the configured note in place of the default", async () => {
+    const { next } = await codClient("Cash or bKash to the rider.").create(
+      codOrder()
+    );
+    const { instructions } = next as Extract<
+      typeof next,
+      { kind: "instructions" }
+    >;
+    assert.match(instructions.note ?? "", /Cash or bKash to the rider\.$/);
+  });
+
+  it("refuses a submission, and staff confirm it from pending", async () => {
+    const c = codClient();
+    const { payment } = await c.create(codOrder());
+    await assert.rejects(c.submit(payment.id, submission), {
+      code: "invalid_request",
+      providerCode: "no_submission",
+    });
+
+    const confirmed = await c.confirm(payment.id, { actorUserId: "staff_1" });
+
+    assert.equal(confirmed.status, "successful");
+    assert.equal(confirmed.settledAmount, 125_000);
+  });
+
+  it("rejects from pending with delivery_refused as failed", async () => {
+    const c = codClient();
+    const { payment } = await c.create(codOrder());
+
+    const rejected = await c.reject(payment.id, { reason: "delivery_refused" });
+
+    assert.equal(rejected.status, "failed");
+    assert.equal(events.at(-1)?.reason, "delivery_refused");
+  });
+
+  it("throws method_unavailable for cod when it is not configured", async () => {
+    await assert.rejects(client().create(codOrder()), {
+      code: "method_unavailable",
+    });
+  });
+
+  it("refuses a cod note that is not a string at construction", () => {
+    assert.throws(
+      () => manual({ methods: { cod: { note: 5 as unknown as string } } }),
+      /methods\.cod\.note/
+    );
   });
 });
 

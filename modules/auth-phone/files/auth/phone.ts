@@ -30,12 +30,20 @@ export {
 /** The `sms_messages.purpose` of every code this module sends. The send limits count it. */
 export const LOGIN_CODE_PURPOSE = "login_code";
 
-/** Why a code went out: to prove a phone at sign-up, or to set or reset a password. */
-export type LoginCodeReason = "sign_up" | "password_reset";
+/**
+ * Why a code went out: to prove a phone at sign-up, to sign a known number in, or to set
+ * or reset a password.
+ */
+export type LoginCodeReason = "sign_up" | "sign_in" | "password_reset";
 
-/** The template name each reason logs. Both send the same `verification-code` body. */
+/**
+ * The template name each reason logs. All three send the same `verification-code` body.
+ * `loginCodePurposeOf()` in `@repo/db/repositories/login-code-rules` reads these names
+ * back: change one and change the other.
+ */
 const TEMPLATES: Record<LoginCodeReason, string> = {
   password_reset: "password-reset-code",
+  sign_in: "sign-in-code",
   sign_up: "verification-code",
 };
 

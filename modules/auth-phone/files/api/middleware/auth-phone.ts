@@ -32,7 +32,7 @@ import { CLIENT_IP_HEADER, RATE_LIMIT_NAMESPACE, rateLimit } from "./ratelimit";
 // They fill the gaps Better Auth's `phoneNumber()` plugin leaves open:
 //
 // - The send limits. One code per number per `resendSeconds`, and `codesPerHour` per
-//   number in a rolling hour, sign-up and reset in one budget. They count `sms_messages`
+//   number in a rolling hour, sign-up, sign-in and reset in one budget. They count `sms_messages`
 //   rows, not a `ratelimit` budget, because `kv-cloudflare` counts in 10 s or 60 s
 //   windows only. They are off under `SMS_PROVIDER=console`.
 // - A reset for a number with no account. Better Auth answers success and sends nothing,
@@ -137,8 +137,9 @@ async function sendRefusal(phone: string) {
 }
 
 /**
- * The code sends: `send-otp` for a sign-up and `request-password-reset` for a set or a
- * reset. The reset code is the same SMS, so it spends the same budget.
+ * The code sends: `send-otp` for a sign-up or a code sign-in, and
+ * `request-password-reset` for a set or a reset. Every code is the same SMS, so all three
+ * spend one budget.
  */
 export function phoneSendGuard(): MiddlewareHandler<GuardEnv> {
   return async function phoneSend(c, next) {

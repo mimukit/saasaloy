@@ -241,6 +241,35 @@ describe("auth-phone guards", () => {
       expect(textsTo(PHONE_WITHOUT_PASSWORD)).toHaveLength(0);
     });
 
+    it("answers 429 to a reset inside the wait after a sign-in code", async () => {
+      const first = await post(
+        "/phone-number/send-otp",
+        { phoneNumber: PHONE_WITH_PASSWORD, signIn: true },
+        { smsProvider: "gateway" }
+      );
+      expect(first.status).toBe(200);
+
+      const res = await resetCode(PHONE_WITH_PASSWORD);
+
+      expect(res.status).toBe(429);
+      expect(res.headers.get("Retry-After")).toBe("60");
+      expect(textsTo(PHONE_WITH_PASSWORD)).toHaveLength(1);
+    });
+
+    it("answers 429 to a sign-in code past the hour's budget", async () => {
+      await codesSent(PHONE_WITHOUT_PASSWORD, 5, 2);
+
+      const res = await post(
+        "/phone-number/send-otp",
+        { phoneNumber: PHONE_WITHOUT_PASSWORD, signIn: true },
+        { smsProvider: "gateway" }
+      );
+
+      expect(res.status).toBe(429);
+      expect(res.headers.get("Retry-After")).toBe("3600");
+      expect(textsTo(PHONE_WITHOUT_PASSWORD)).toHaveLength(0);
+    });
+
     it("lets every send go under the console provider", async () => {
       await codesSent(NEW_PHONE, 5, 0);
       await codesSent(PHONE_WITHOUT_PASSWORD, 5, 0);

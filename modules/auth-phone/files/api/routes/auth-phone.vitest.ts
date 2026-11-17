@@ -34,10 +34,16 @@ vi.mock(import("@repo/config"), async (importOriginal) => {
       "auth-phone": {
         ...original.config["auth-phone"],
         allowedPrefixes: ["+1202"],
+        codeSignIn: true,
       },
     },
   };
 });
+
+/** Turn code sign-in on or off for one test. `afterEach` turns it back on. */
+function setCodeSignIn(on: boolean): void {
+  (config["auth-phone"] as { codeSignIn: boolean }).codeSignIn = on;
+}
 
 const database = testDatabase();
 
@@ -182,6 +188,7 @@ describe("phone sign-in", () => {
 
   afterEach(() => {
     log.mockRestore();
+    setCodeSignIn(true);
   });
 
   describe("sign-up", () => {
@@ -279,6 +286,142 @@ describe("phone sign-in", () => {
           new RegExp(`${signUp}|${reset}`)
         );
       }
+    });
+  });
+
+  describe("sign-in by code", () => {
+    /** Ask for a sign-in code, then check it, both with `signIn: true`. */
+    async function signInByCode(phone: string) {
+      const send = await post("/phone-number/send-otp", {
+        phoneNumber: phone,
+        signIn: true,
+      });
+      const verify =
+        send.status === 200
+          ? await post("/phone-number/verify", {
+              code: codeSentTo(phone),
+              phoneNumber: phone,
+              signIn: true,
+            })
+          : await post("/phone-number/verify", {
+              code: "123456",
+              phoneNumber: phone,
+              signIn: true,
+            });
+      return { send, verify };
+    }
+
+    it("signs a known number in with codeSignIn true", async () => {
+      const { send, verify } = await signInByCode(PHONE_WITH_PASSWORD);
+
+      expect(send.status).toBe(200);
+      expect(verify.status).toBe(200);
+      const session = await app.request(
+        "/auth/get-session",
+        { headers: { cookie: sessionCookie(verify), ...ORIGIN } },
+        env
+      );
+      const body = (await session.json()) as { user?: { id?: string } };
+      const owner = await userByPhone(PHONE_WITH_PASSWORD);
+      expect(body.user?.id).toBe(owner?.id);
+    });
+
+    it("signs in an account that has no password yet", async () => {
+      const { verify } = await signInByCode(PHONE_WITHOUT_PASSWORD);
+
+      expect(verify.status).toBe(200);
+      await expect(userByPhone(PHONE_WITHOUT_PASSWORD)).resolves.toMatchObject({
+        phoneNumberVerified: true,
+      });
+    });
+
+    it("logs the code with the sign-in template, in the same budget as sign-up and reset", async () => {
+      await signInByCode(PHONE_WITH_PASSWORD);
+
+      const rows = await database.db
+        .select()
+        .from(smsMessages)
+        .where(eq(smsMessages.toPhone, PHONE_WITH_PASSWORD));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        purpose: "login_code",
+        status: "sent",
+        template: "sign-in-code",
+      });
+    });
+
+    it("answers 409 PHONE_NUMBER_EXIST with codeSignIn false, and sends nothing", async () => {
+      setCodeSignIn(false);
+
+      const { send, verify } = await signInByCode(PHONE_WITH_PASSWORD);
+
+      expect(send.status).toBe(409);
+      await expect(send.json()).resolves.toMatchObject({
+        code: "PHONE_NUMBER_EXIST",
+      });
+      expect(verify.status).toBe(409);
+      expect(textsTo(PHONE_WITH_PASSWORD)).toHaveLength(0);
+    });
+
+    it("keeps 409 PHONE_NUMBER_EXIST for a known number without signIn, so the sign-up screen is unchanged", async () => {
+      const send = await post("/phone-number/send-otp", {
+        phoneNumber: PHONE_WITH_PASSWORD,
+      });
+
+      expect(send.status).toBe(409);
+      expect(textsTo(PHONE_WITH_PASSWORD)).toHaveLength(0);
+    });
+
+    it("answers 403 BANNED_USER for a banned account, sends nothing and opens no session", async () => {
+      await database.db
+        .update(users)
+        .set({ banned: true })
+        .where(eq(users.phoneNumber, PHONE_WITH_PASSWORD));
+
+      const { send, verify } = await signInByCode(PHONE_WITH_PASSWORD);
+
+      expect([send.status, verify.status]).toStrictEqual([403, 403]);
+      await expect(
+        Promise.all([send.json(), verify.json()])
+      ).resolves.toMatchObject([
+        { code: "BANNED_USER" },
+        { code: "BANNED_USER" },
+      ]);
+      expect(sessionCookie(verify)).toBe("");
+      expect(textsTo(PHONE_WITH_PASSWORD)).toHaveLength(0);
+    });
+
+    it("answers BANNED_USER from Better Auth when a ban lands after the code went out", async () => {
+      const send = await post("/phone-number/send-otp", {
+        phoneNumber: PHONE_WITH_PASSWORD,
+        signIn: true,
+      });
+      expect(send.status).toBe(200);
+      await database.db
+        .update(users)
+        .set({ banned: true })
+        .where(eq(users.phoneNumber, PHONE_WITH_PASSWORD));
+
+      const verify = await post("/phone-number/verify", {
+        code: codeSentTo(PHONE_WITH_PASSWORD),
+        phoneNumber: PHONE_WITH_PASSWORD,
+        signIn: true,
+      });
+
+      expect(verify.status).toBe(403);
+      await expect(verify.json()).resolves.toMatchObject({
+        code: "BANNED_USER",
+      });
+    });
+
+    it("signs a new number up when signIn is set, as a plain sign-up does", async () => {
+      const { verify } = await signInByCode(NEW_PHONE);
+
+      expect(verify.status).toBe(200);
+      await expect(userByPhone(NEW_PHONE)).resolves.toMatchObject({
+        phoneNumberVerified: true,
+        role: "user",
+      });
     });
   });
 
