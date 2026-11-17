@@ -806,10 +806,12 @@ function NewOrder() {
                     </FieldDescription>
                   </Field>
                 ) : (
-                  <FieldDescription>
+                  // Plain text, not a FieldDescription: no Field wraps the checkbox,
+                  // and a Field part outside a Field throws in Base UI.
+                  <p className="text-muted-foreground text-sm">
                     Check it to record a payment the buyer already sent, with
                     its transaction ID.
-                  </FieldDescription>
+                  </p>
                 )}
               </div>
             ) : null}
