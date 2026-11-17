@@ -62,6 +62,12 @@ function capture(): { lines: string[]; restore: () => void } {
   };
 }
 
+/** The body of the "Next steps" note in `init`'s output, up to the closing line. */
+function nextSteps(out: string): string {
+  const start = out.lastIndexOf("Next steps");
+  return start === -1 ? "" : out.slice(start, out.indexOf("Created", start));
+}
+
 async function run(argv: string[]): Promise<{ code: number; out: string }> {
   const captured = capture();
   try {
@@ -730,5 +736,57 @@ describe("runInit — the first commit", () => {
     expect(git(target, ["log", "--format=%s", "main"])).toBe(
       "chore(repo): initial commit"
     );
+    expect(nextSteps(out)).toContain("pnpm env:setup");
+  });
+
+  it("lists only the interview once the install and env:setup ran", async () => {
+    useGitConfig("with-identity");
+    process.stdin.isTTY = false;
+    process.stdout.isTTY = false;
+    await fakePnpm();
+    const { code, out } = await run(["steps-after-install", "--yes"]);
+    const steps = nextSteps(out);
+
+    expect(code).toBe(0);
+    expect(steps).toContain("/saasaloy-setup");
+    expect(steps).not.toContain("pnpm install");
+    expect(steps).not.toContain("pnpm env:setup");
+  });
+});
+
+// Plan 0109: the next steps give one path, `init`, the interview, the build, so a person
+// who follows them never starts a dev server with no env files.
+describe("runInit — the next steps (plan 0109)", () => {
+  let out: string;
+
+  beforeAll(async () => {
+    ({ out } = await run(["next-steps-app", "--no-install", "--no-git"]));
+  });
+
+  afterAll(async () => {
+    await rm(join(dir, "next-steps-app"), { recursive: true, force: true });
+  });
+
+  it("installs, writes the env files, then runs the interview, in that order", () => {
+    const steps = nextSteps(out);
+    const install = steps.indexOf("pnpm install");
+    const env = steps.indexOf("pnpm env:setup");
+    const setup = steps.indexOf("/saasaloy-setup");
+
+    expect(install).toBeGreaterThan(-1);
+    expect(env).toBeGreaterThan(install);
+    expect(setup).toBeGreaterThan(env);
+  });
+
+  it("names the build as what the interview starts", () => {
+    expect(nextSteps(out)).toMatch(/\/saasaloy-setup[^\n]*starts the build/);
+  });
+
+  it("offers no second path", () => {
+    const steps = nextSteps(out);
+
+    expect(steps).not.toContain("pnpm dev");
+    expect(steps).not.toContain("/saasaloy-landing-copy");
+    expect(steps).not.toContain("/saasaloy-build ");
   });
 });

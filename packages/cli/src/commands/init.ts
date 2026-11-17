@@ -617,8 +617,10 @@ async function initProject(opts: InitOptions): Promise<number> {
   // `pnpm dev` pass with no env step (plan 0109). Only in a repository init made: the
   // script finds the project root through git. A failure is a warning, because the
   // scaffold is complete and the command is the one step left to run by hand.
+  let envWritten = false;
   if (installed && gitCreated) {
     const envSetup = await run("pnpm", ["env:setup"], target);
+    envWritten = envSetup.ok;
     if (envSetup.ok) {
       logger.step(
         `Wrote each service's .env from the local defaults ${pc.dim("(pnpm env:setup)")}.`
@@ -653,16 +655,16 @@ async function initProject(opts: InitOptions): Promise<number> {
     }
   }
 
+  // One path (plan 0109): `init`, the interview, the build. The interview skill starts
+  // the build itself, so the list names no second skill and no `pnpm dev`: a dev server
+  // started before `pnpm env:setup` fails on the missing env files.
   const steps = [
     nameArg === "." ? null : `cd ${nameArg}`,
     installed ? null : "pnpm install",
-    `pnpm dev                     ${pc.dim("# run dev servers")}`,
-    // The skills the base ships are the fastest way to make the scaffold yours, and an
-    // owner who never opens AGENTS.md would otherwise not know they exist.
-    // Pad to the same column the commands above comment at (`pnpm dev` + 21 spaces).
-    ...skills.linked.map(
-      (name) => `${`/${name}`.padEnd(29)}${pc.dim("# in your AI coding tool")}`
-    ),
+    envWritten
+      ? null
+      : `${"pnpm env:setup".padEnd(22)}${pc.dim("# write each service's .env")}`,
+    `${"/saasaloy-setup".padEnd(22)}${pc.dim("# the interview; it starts the build")}`,
   ]
     .filter((line): line is string => line !== null)
     .map((line) => pc.cyan(line))
