@@ -317,7 +317,7 @@ _Avoid: registry server, registry service._
 The built-in registry source (`mimukit/saasaloy`) a bare `saasaloy add <name>` resolves against. An explicit `owner/repo/name` [module coordinate](#module-coordinate) targets a third-party registry instead.
 
 ### Module coordinate
-How a module is addressed on the `saasaloy add` command line: `name` (default registry) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
+How a module is addressed on the `saasaloy add` command line: `name` (default registry at the release tag of the CLI that runs, ADR 0062) | `name@ref` (default registry at a branch/tag/SHA, such as `@main`) | `owner/repo/name` | `owner/repo@ref/name` (pinned branch/tag/SHA) | `owner/repo` (no module ⇒ interactive picker over that repo).
 
 ### `registry-item.json`
 A module descriptor, shadcn-shaped: `files[]` (path → alias target), `dependsOn[]`, `dependencies[]` (npm), `patches`, and an `agent` block.

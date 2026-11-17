@@ -48,8 +48,7 @@ intermediate package registry and no publish step
 
 A remote install resolves in this order:
 
-1. **Ref to SHA, once.** The requested ref, or the repo's default branch, is resolved to a
-   concrete commit SHA. Every module in one install pins to that same SHA.
+1. **Ref to SHA, once.** The requested ref is resolved to a concrete commit SHA. With no ref, the default registry resolves the tag `v<version>` of the CLI that runs ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)) and a third-party repo resolves its default branch. Every module in one install pins to that same SHA.
 2. **Fetch the subtree.** `modules/<name>/` is downloaded at that SHA into a temp
    directory.
 3. **Validate.** The descriptor is checked against `registry-item.schema.json`, and its

@@ -527,9 +527,9 @@ One package is published — `packages/cli`, as [`saasaloy`](https://www.npmjs.c
 
 ### When to release
 
-After a merged pull request, if it changed `packages/cli/**` — source, templates, or schemas.
+After a merged pull request, if it changed `packages/cli/**` (source, templates, or schemas) or `modules/**`.
 
-- A PR that only touched `modules/**` needs **no release**. The CLI fetches the registry from this repo at run time, so a module change reaches users the moment it lands on `main`.
+- A PR that only touched `modules/**` needs a release too. The CLI reads the default registry at the tag of its own version ([ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)), so a module change reaches a plain `saasaloy add` at the next release. Until then it reaches only someone who asks for it with `saasaloy add <module>@main`. A module hotfix is a CLI patch release.
 - A PR whose commits are all `docs`, `chore`, or `refactor` gets **no release**. Nothing a user runs changed.
 
 Nothing enforces this. Read the diff and decide.
@@ -573,6 +573,8 @@ Both release scripts read `GITHUB_TOKEN` from your shell and fall back to `gh au
 
 That bumps `packages/cli/package.json`, prepends a section to `packages/cli/CHANGELOG.md` written from the commits, commits it as `chore(release): vX.Y.Z`, tags `vX.Y.Z`, pushes, creates the GitHub Release, and publishes to npm. It prompts before each step.
 
+npm publishes last, after the push. A published CLI reads the modules at its own tag, so the tag must be on GitHub before npm offers the version to anyone. release-it's built-in order is npm first; `packages/cli/release-npm-last.js` moves its npm plugin behind git and github, and `scripts/release-order.test.ts` fails the gate when the push no longer comes first. See [ADR 0062](docs/adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md).
+
 To see the whole plan without doing any of it:
 
 ```sh
@@ -603,24 +605,25 @@ Before release-it writes anything it runs `pnpm release:preflight`, which:
 1. Fails if `GITHUB_TOKEN` is empty. Without it release-it silently degrades to a web release that GitHub rejects.
 2. Fails if local `main` is not `origin/main`. A release cut from a stale checkout tags code that origin does not hold.
 3. Fails if a breaking commit since the last tag adds no update note and carries no `Update-Note: none (<reason>)` footer, and prints each opt-out reason. See [Breaking changes need an update note](#breaking-changes-need-an-update-note).
-4. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as the `gate` job in `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree. The `scaffold` job there (`pnpm scaffold:check`) is left to step 5, whose projects hold its modules and more.
-5. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It runs `pnpm env:setup` and checks the web app's development server. Then it runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in each compatible combination of module choices, with testing on so the module tests run. Each database driver runs with each API key owner, and each project adds its driver first. A module that depends on a module the project's choice excludes stays out: `ecommerce` runs in the Postgres projects only. Before the checks each project runs `db:generate`, `db:setup` and `env:setup`, and fills each key with no default with a local value. The Postgres projects need Docker with the compose plugin, because `db:setup` starts their server with `docker compose`; the script stops it at the end. The projects and the development server check run at the same time.
+4. Builds the CLI and fails if the root `llms.txt` names a skill, a command or a flag the release does not hold. The release is the npm package (the base skills under `packages/cli/templates/base/_agents/skills/`, and the commands and flags `saasaloy --help` and `saasaloy <command> --help` print) plus the registry at the release tag, which is this commit's `modules/`. `scripts/llms-txt.ts` reads the file.
+5. Runs `lint`, `typecheck`, `test`, `verify:content`, and `verify:pins` — the same five scripts, in the same order, as the `gate` job in `.github/workflows/ci.yml`. It re-runs them rather than asking GitHub, so a release never depends on GitHub's view of a run against a different tree. The `scaffold` job there (`pnpm scaffold:check`) is left to step 6, whose projects hold its modules and more.
+6. Runs `pnpm release:smoke` to check the packed artifact. The script installs the tarball with npm in `.dev/release-smoke/`, outside the workspace. It checks `saasaloy --version`, `saasaloy init`, and `saasaloy add api` through the installed command. The script uses local modules for `add` and installs project dependencies from npm. It runs `pnpm env:setup` and checks the web app's development server. Then it runs `pnpm lint`, `pnpm typecheck`, `pnpm test` and `pnpm build` in each compatible combination of module choices, with testing on so the module tests run. Each database driver runs with each API key owner, and each project adds its driver first. A module that depends on a module the project's choice excludes stays out: `ecommerce` runs in the Postgres projects only. Before the checks each project runs `db:generate`, `db:setup` and `env:setup`, and fills each key with no default with a local value. The Postgres projects need Docker with the compose plugin, because `db:setup` starts their server with `docker compose`; the script stops it at the end. The projects and the development server check run at the same time.
 
-On a rerun after a transient failure you can skip step 4:
+On a rerun after a transient failure you can skip step 5:
 
 ```sh
 SAASALOY_RELEASE_SKIP_GATE=1 pnpm release
 ```
 
-Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3 and 5 always run.
+Use it only when you have just watched the gate pass on this exact tree. Steps 1, 2, 3, 4 and 6 always run.
 
 ### Modules that need a new CLI
 
-A module change reaches users the moment it merges, and a CLI change reaches them only at the next release, so the PR that teaches the CLI something a descriptor uses does three things in the same diff:
+A module change and a CLI change both reach a plain `saasaloy add` at the next release, because the CLI reads the modules at its own tag. A module on `main` still reaches anyone who reads `@main`, and a published CLI meets it there. So the PR that teaches the CLI something a descriptor uses does three things in the same diff:
 
 1. Bump `packages/cli/package.json` to the version that will ship the change, at least a **minor**.
 2. Set `requires.saasaloy` on every module that uses it to `>=` that version. See [Declaring the CLI a descriptor needs](#declaring-the-cli-a-descriptor-needs).
-3. Ask for a release in the PR body, because until it ships every published CLI refuses those modules.
+3. Ask for a release in the PR body, because until it ships every published CLI refuses those modules at `@main`, and no CLI reads them by default.
 
 `registry-floors.test.ts` fails the gate when step 1 or 2 is missing. Nothing enforces step 3, so release soon after the merge.
 
@@ -634,7 +637,7 @@ Replace `0.6.0` with the version in `packages/cli/package.json`. The explicit ve
 
 ### If it fails after the push
 
-release-it has no rollback. Once the commit, tag, and push exist, the version is spent.
+release-it has no rollback. Once the commit, tag, and push exist, the version is spent. npm publishes last, so a failed publish leaves a tag with no npm version. That is safe: no installed CLI names the tag until npm offers it.
 
 1. **Never rerun `pnpm release` for the same version**, and never rewrite pushed `main` history.
 2. Fix whatever failed.

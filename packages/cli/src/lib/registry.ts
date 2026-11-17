@@ -2,7 +2,7 @@ import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 import { downloadTemplate } from "giget";
-import { readVersion } from "../version.js";
+import { readVersion, UNKNOWN_VERSION } from "../version.js";
 import { describeInvalidDescriptor } from "./cli-requires.js";
 import { RefusalError } from "./exit.js";
 import { pathExists, readDirNames } from "./fs-utils.js";
@@ -14,8 +14,10 @@ import { validateRegistryItem } from "./schema.js";
 // module's `registry-item.json` descriptor plus the files it drops in (build spec §2.4,
 // ADR 0012 — remote-first, the repo *is* the registry). `saasaloy add` resolves a ref to
 // a commit SHA and fetches the module subtree at that SHA; the resolved SHA is written to
-// `saasaloy-lock.json` for reproducibility. A local checkout (SAASALOY_REGISTRY_DIR) is a
-// dev/offline override. This module is the single seam that knows *where* descriptors live.
+// `saasaloy-lock.json` for reproducibility. With no ref, the default registry reads the
+// release tag of the CLI that runs (ADR 0062) and any other repo reads its default branch.
+// A local checkout (SAASALOY_REGISTRY_DIR) is a dev/offline override. This module is the
+// single seam that knows *where* descriptors live.
 
 // Point the applier at a local `modules/` checkout instead of fetching — for developing
 // modules and for offline/CI runs against fixtures.
@@ -25,6 +27,16 @@ export const REGISTRY_ENV = "SAASALOY_REGISTRY_DIR";
 // registry. An explicit `owner/repo/name` coordinate overrides it.
 export const DEFAULT_OWNER = "mimukit";
 export const DEFAULT_REPO = "saasaloy";
+/** The default registry as a lock entry's `source` names it. */
+export const DEFAULT_SOURCE = `${DEFAULT_OWNER}/${DEFAULT_REPO}`;
+
+/**
+ * The tag the default registry is read at for a CLI version (ADR 0062): the tag release-it
+ * pushes for that version, so a CLI and the modules it applies come from one release.
+ */
+export function releaseTag(cliVersion: string): string {
+  return `v${cliVersion}`;
+}
 
 export interface LoadedModule {
   /** Absolute path to a local copy of the module's folder (source of `files[].path`). */
@@ -84,21 +96,25 @@ export interface RegistrySource {
 export interface Coordinate {
   owner?: string;
   repo?: string;
-  /** Branch/tag/SHA; undefined means the repo's default branch. */
+  /**
+   * Branch/tag/SHA. Undefined means the CLI's release tag on the default registry and
+   * the default branch on any other repo (ADR 0062).
+   */
   ref?: string;
   /** The module to add; undefined means "show a picker". */
   module?: string;
 }
 
-// Grammar (build spec §3, ADR 0012):
-//   waitlist                → default repo, module `waitlist`
+// Grammar (build spec §3, ADR 0012, ADR 0062):
+//   waitlist                → default repo at the CLI's release tag, module `waitlist`
+//   waitlist@main           → default repo at `main` (any branch, tag or SHA)
 //   owner/repo/waitlist     → third-party repo, module `waitlist`
 //   owner/repo@ref/waitlist → pinned ref
 //   owner/repo              → no module ⇒ picker over that repo
+//   @main                   → picker over the default repo at `main`
 //   (nothing)               → picker over the default repo
 // A ref carrying a `/` (e.g. a `feature/x` branch) isn't addressable in v1 — pin such a
-// branch's tip SHA instead, or rely on the default branch. Pinning a ref on the *default*
-// repo (`waitlist@v2`) is likewise unsupported: a ref requires an explicit `owner/repo`.
+// branch's tip SHA instead, or rely on the default branch.
 export function parseCoordinate(input?: string): Coordinate {
   if (!input) {
     return {};
@@ -123,8 +139,11 @@ export function parseCoordinate(input?: string): Coordinate {
 
   const segs = rest.split("/").filter(Boolean);
 
-  if (ref === undefined && segs.length === 1) {
-    return { module: segs[0] };
+  if (segs.length === 0 && ref !== undefined) {
+    return { ref };
+  }
+  if (segs.length === 1) {
+    return ref === undefined ? { module: segs[0] } : { module: segs[0], ref };
   }
   if (segs.length === 2) {
     return { owner: segs[0], repo: segs[1], ref };
@@ -134,7 +153,7 @@ export function parseCoordinate(input?: string): Coordinate {
   }
 
   throw new RefusalError(
-    `Malformed coordinate "${input}" — expected "name", "owner/repo", or "owner/repo[@ref]/name".`
+    `Malformed coordinate "${input}" — expected "name[@ref]", "owner/repo", or "owner/repo[@ref]/name".`
   );
 }
 
@@ -362,6 +381,30 @@ function subjectOf(message: string): string {
   return message.split("\n", 1)[0]?.trim() ?? "";
 }
 
+/** A 404 from the GitHub API: the repo, the ref or the path does not exist there. */
+class GithubNotFoundError extends RefusalError {
+  override readonly name = "GithubNotFoundError";
+}
+
+/**
+ * The refusal for a default registry that has no tag for the CLI that runs (ADR 0062). A
+ * development build, a version bumped ahead of its release, or a release whose tag push
+ * failed all land here. Refused rather than read at `main`: a silent fallback would hand a
+ * CLI modules it was never released with, which is the drift the tag exists to stop.
+ */
+export function missingReleaseTagMessage(cliVersion: string): string {
+  const what =
+    cliVersion === UNKNOWN_VERSION
+      ? `This CLI cannot read its own version, so it cannot name the tag of ${DEFAULT_SOURCE} to read.`
+      : `${DEFAULT_SOURCE} has no tag ${releaseTag(cliVersion)} for saasaloy ${cliVersion}, the CLI that runs. ` +
+        "The default registry reads modules at the release tag of the CLI, and a development build or an unreleased version has none.";
+  return (
+    `${what} Read the modules on main with \`saasaloy add <module>@main\` or \`saasaloy list @main\`, ` +
+    `install a released CLI with \`pnpm add --global saasaloy@latest\`, ` +
+    `or set ${REGISTRY_ENV} to a local \`modules/\` checkout.`
+  );
+}
+
 /** A GitHub repo fetched via giget; descriptors + files pulled at a pinned commit SHA. */
 export class RemoteRegistrySource implements RegistrySource {
   private resolved?: { ref: string; sha: string };
@@ -373,8 +416,11 @@ export class RemoteRegistrySource implements RegistrySource {
     private readonly ref?: string
   ) {}
 
+  // Once resolved, the label names the ref the source settled on, so `list` says which
+  // tag it read rather than leaving the default to the reader's guess.
   get label(): string {
-    return `${this.owner}/${this.repo}${this.ref ? `@${this.ref}` : ""}`;
+    const ref = this.ref ?? this.resolved?.ref;
+    return `${this.owner}/${this.repo}${ref ? `@${ref}` : ""}`;
   }
 
   async readModule(name: string, requiredBy?: string): Promise<LoadedModule> {
@@ -476,25 +522,50 @@ export class RemoteRegistrySource implements RegistrySource {
     this.tempDirs.length = 0;
   }
 
-  // Resolve the requested ref (or the repo's default branch) to a concrete commit SHA,
-  // once per source — every module in one install pins to the same SHA.
+  // Resolve the requested ref to a concrete commit SHA, once per source — every module in
+  // one install pins to the same SHA. With no ref, the default registry reads the running
+  // CLI's release tag and any other repo its default branch (ADR 0062). GitHub answers
+  // `commits/<tag>` with the commit an annotated tag points at, so the lock records a
+  // commit SHA either way.
   private async resolve(): Promise<{ ref: string; sha: string }> {
     if (this.resolved) {
       return this.resolved;
     }
+    const isDefault = `${this.owner}/${this.repo}` === DEFAULT_SOURCE;
+    const cliVersion = isDefault ? await readVersion() : UNKNOWN_VERSION;
+    if (isDefault && this.ref === undefined && cliVersion === UNKNOWN_VERSION) {
+      throw new RefusalError(missingReleaseTagMessage(cliVersion));
+    }
     const ref =
       this.ref ??
-      (
-        await this.api<{ default_branch: string }>(
-          `/repos/${this.owner}/${this.repo}`
+      (isDefault
+        ? releaseTag(cliVersion)
+        : (
+            await this.api<{ default_branch: string }>(
+              `/repos/${this.owner}/${this.repo}`
+            )
+          ).default_branch);
+    let sha: string;
+    try {
+      sha = (
+        await this.apiText(
+          `/repos/${this.owner}/${this.repo}/commits/${ref}`,
+          "application/vnd.github.sha"
         )
-      ).default_branch;
-    const sha = (
-      await this.apiText(
-        `/repos/${this.owner}/${this.repo}/commits/${ref}`,
-        "application/vnd.github.sha"
-      )
-    ).trim();
+      ).trim();
+    } catch (error) {
+      if (
+        error instanceof GithubNotFoundError &&
+        isDefault &&
+        cliVersion !== UNKNOWN_VERSION &&
+        ref === releaseTag(cliVersion)
+      ) {
+        throw new RefusalError(missingReleaseTagMessage(cliVersion), {
+          cause: error,
+        });
+      }
+      throw error;
+    }
     this.resolved = { ref, sha };
     return this.resolved;
   }
@@ -550,7 +621,7 @@ export class RemoteRegistrySource implements RegistrySource {
         );
       }
       if (res.status === 404) {
-        throw new RefusalError(
+        throw new GithubNotFoundError(
           `Not found on GitHub: ${this.owner}/${this.repo} (${path}). ${OFFLINE_HINT}`
         );
       }

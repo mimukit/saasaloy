@@ -58,11 +58,21 @@ describe(parseCoordinate, () => {
     expect(() => parseCoordinate("a/b/c/d")).toThrow(/Malformed coordinate/);
   });
 
-  it("rejects pinning a ref on the default repo (a ref needs an explicit owner/repo)", () => {
-    // Documents the v1 limitation: `waitlist@v2` has no owner/repo to carry the ref.
-    expect(() => parseCoordinate("waitlist@v2")).toThrow(
-      /Malformed coordinate/
-    );
+  // ADR 0062: the default registry reads the CLI's release tag, so `@main` on a bare
+  // name is how a person asks for a module that has not been released yet.
+  it("reads a ref on a bare name as that module on the default repo", () => {
+    expect(parseCoordinate("waitlist@main")).toStrictEqual({
+      module: "waitlist",
+      ref: "main",
+    });
+  });
+
+  it("reads a bare @ref as a picker over the default repo at that ref", () => {
+    expect(parseCoordinate("@main")).toStrictEqual({ ref: "main" });
+  });
+
+  it("rejects an empty ref on a bare name", () => {
+    expect(() => parseCoordinate("waitlist@")).toThrow(/empty ref/);
   });
 });
 

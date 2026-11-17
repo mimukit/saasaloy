@@ -96,8 +96,10 @@ With no terminal, `init` refuses with exit 2 before it writes a file: with no `<
 ## `saasaloy add`
 
 ```text
-saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
+saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]
 ```
+
+A bare module name reads the default registry at the tag `v<version>` of the CLI that runs, so the CLI and its modules come from one release ([ADR 0062](../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). The lock records that tag as `ref` and its commit as `resolved`. `saasaloy add <module>@main` reads `main` instead, for a module merged after the release. A CLI whose tag the registry lacks, such as a development build or a version bumped ahead of its release, exits 2 and names `@main` and `SAASALOY_REGISTRY_DIR` as the ways out; it never falls back to `main` by itself.
 
 With no module named, `add` shows a multi-select over the source, listing only modules this project has not installed. With no terminal it exits 2 and prints the usage line. Unknown flags are rejected before any work happens, with exit 2.
 
@@ -263,7 +265,7 @@ Two cases stop before anything is applied. A project with no usable base record 
 
 | Flag | Effect |
 |---|---|
-| `--ref <ref>` | update one named module to this branch, tag or SHA instead of the registry's current default branch. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. |
+| `--ref <ref>` | update one named module to this branch, tag or SHA instead of this CLI's release tag. Needs an explicit module; a bare `update --ref` exits 2, and so does `update base --ref`. Without it, every module from the default registry that is not pinned to a SHA moves to the tag `v<version>` of the running CLI, a lock entry an older CLI wrote at `main` included. A third-party module stays on the ref its lock names. |
 | `--out <path>` | write the merge plan to a file instead of stdout. Refuses a path that resolves to one of the project's own state files. |
 | `--resolved <path>` | record a file you merged, or keep a file you deleted deleted, so the next `update` stops offering it. Repeatable. See [Recording a merge](#recording-a-merge) and [Keeping a deleted file deleted](#keeping-a-deleted-file-deleted). |
 | `--restore <path>` | bring back a file kept deleted: write the current upstream file and stop keeping it deleted. A path that is not kept deleted exits 2. Repeatable. |
@@ -364,10 +366,10 @@ See [Remove a module](how-to/remove-a-module.md), and read
 ## `saasaloy list`
 
 ```text
-saasaloy list [<owner/repo[@ref]>] [--installed] [--available] [--json]
+saasaloy list [<owner/repo[@ref]>|@<ref>] [--installed] [--available] [--json]
 ```
 
-One optional coordinate names a registry; with none it lists the default registry. Output
+One optional coordinate names a registry; with none it lists the default registry at this CLI's release tag, and `@main` lists it on `main`. The `--json` document's `registry` names the ref it read, such as `mimukit/saasaloy@v0.9.0`. Output
 is names only, read from one listing of the repo's git tree, which is why a module with an
 invalid descriptor still appears here and only fails at `add`. `--json` is the exception:
 it reads each listed module's descriptor, so an invalid one fails the run.
@@ -440,18 +442,16 @@ A path that does not exist exits 2, and so does a directory with no module folde
 ## Module coordinates
 
 ```text
-waitlist                → default registry (mimukit/saasaloy), module `waitlist`
-owner/repo/waitlist     → third-party repo, module `waitlist`
+waitlist                → default registry (mimukit/saasaloy) at this CLI's tag v<version>
+waitlist@main           → default registry at a branch, tag or SHA
+owner/repo/waitlist     → third-party repo at its default branch, module `waitlist`
 owner/repo@ref/waitlist → pinned to a branch, tag or SHA
 owner/repo              → no module named ⇒ picker over that repo
+@main                   → picker over the default registry at a branch, tag or SHA
 (nothing)               → picker over the default registry
 ```
 
-Two forms are not supported and produce a `Malformed coordinate` error:
-
-- a ref containing `/`, such as `owner/repo@feature/x/waitlist`. Pin that branch's tip SHA
-  instead.
-- a ref without an explicit `owner/repo`, such as `waitlist@v2`.
+A ref containing `/`, such as `owner/repo@feature/x/waitlist`, is not supported and produces a `Malformed coordinate` error. Pin that branch's tip SHA instead.
 
 Third-party module identity is expected to change with
 [#39](https://github.com/mimukit/saasaloy/issues/39).

@@ -378,6 +378,96 @@ describe(compareInstalled, () => {
   });
 });
 
+// ADR 0062: a plain `update` moves every default-registry module that is not pinned to
+// a SHA onto the running CLI's release tag. A lock an older CLI wrote names `main`, and
+// it still resolves: the comparison reads its recorded SHA and targets the tag.
+describe("compareInstalled — the release tag (ADR 0062)", () => {
+  const TAG = "v0.10.0";
+
+  it("moves a default-registry module that tracks main onto the release tag", async () => {
+    const asked: string[] = [];
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock(),
+      releaseRef: TAG,
+      resolveRef: async (_name, _entry, ref) => {
+        asked.push(ref);
+        return NEW_SHA;
+      },
+    });
+
+    expect(asked).toStrictEqual([TAG]);
+    expect(result).toMatchObject({
+      ref: TAG,
+      current: OLD_SHA,
+      latest: NEW_SHA,
+      status: "outdated",
+    });
+  });
+
+  it("moves a module on an older release tag onto the new one", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock({ ref: "v0.9.0" }),
+      releaseRef: TAG,
+      resolveRef: resolvesTo(NEW_SHA),
+    });
+
+    expect(result).toMatchObject({ ref: TAG, status: "outdated" });
+  });
+
+  it("records the tag as the ref when it points at the commit main was at", async () => {
+    const lock = emailLock();
+    const comparisons = await compareInstalled({
+      installed: ["email"],
+      lock,
+      releaseRef: TAG,
+      resolveRef: resolvesTo(OLD_SHA),
+    });
+
+    expect(comparisons[0]).toMatchObject({
+      status: "current",
+      refRewrite: true,
+    });
+    expect(recordRefRewrites(lock, comparisons)).toStrictEqual(["email"]);
+    expect(lock.modules.email).toMatchObject({ ref: TAG, resolved: OLD_SHA });
+  });
+
+  it("leaves a third-party registry on the ref its lock names", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock({ source: "acme/kit" }),
+      releaseRef: TAG,
+      resolveRef: resolvesTo(NEW_SHA),
+    });
+
+    expect(result).toMatchObject({ ref: "main", source: "acme/kit" });
+  });
+
+  it("leaves a SHA pin pinned", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock({ ref: OLD_SHA }),
+      releaseRef: TAG,
+      resolveRef: resolvesTo(NEW_SHA),
+    });
+
+    expect(result).toMatchObject({ ref: OLD_SHA, status: "pinned" });
+  });
+
+  it("lets an explicit --ref main win over the tag", async () => {
+    const [result] = await compareInstalled({
+      installed: ["email"],
+      lock: emailLock({ ref: TAG }),
+      overrideRef: "main",
+      releaseRef: TAG,
+      resolveRef: resolvesTo(NEW_SHA),
+    });
+
+    expect(result).toMatchObject({ ref: "main", status: "outdated" });
+  });
+});
+
 describe(recordRefRewrites, () => {
   it("takes the pin off a module whose new ref resolves to the same SHA", async () => {
     const lock = emailLock({ ref: OLD_SHA });

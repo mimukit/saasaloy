@@ -97,10 +97,7 @@ where the gaps show up. See [Remove a module](remove-a-module.md#what-stays-behi
 
 Open a pull request against `main` the same as any other change. A GitHub Actions gate runs on every push and pull request, and it runs the same four scripts you run locally, in this order: `pnpm lint`, `pnpm typecheck`, `pnpm test`, `pnpm verify:content`. `pnpm deps:verify` is deliberately left out of it. A green local tree is a green CI run, so run the four before you push.
 
-Because merging is publishing, a broken descriptor on `main` is a live incident rather
-than a stale build.
-[A bad descriptor reached `main`](../runbooks/bad-descriptor-on-main.md) is the runbook for
-that, and it is worth reading before your first merge, not after.
+A merged module reaches a plain `saasaloy add` at the next CLI release, because the CLI reads the default registry at the tag of its own version ([ADR 0062](../../adr/0062-adr-the-default-registry-reads-the-release-tag-of-the-cli-2026-11-17.md)). It reaches anyone who reads `@main` at once, so a broken descriptor on `main` is still a live incident for them. [A bad descriptor reached `main`](../runbooks/bad-descriptor-on-main.md) is the runbook for that, and it is worth reading before your first merge, not after.
 
 ## Registries other than this one
 

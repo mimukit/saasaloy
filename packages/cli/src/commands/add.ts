@@ -108,7 +108,7 @@ const KNOWN_FLAGS = new Set([
   "-h",
 ]);
 const USAGE =
-  "saasaloy add [<module>...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]";
+  "saasaloy add [<module>[@ref]...|<owner/repo[@ref]/module>...|<owner/repo>] [--with <module>]... [--dry-run [--json]] [--diff] [--yes] [--force]";
 const HELP: CommandHelp = {
   name: "add",
   describe: DESCRIPTIONS.add,
