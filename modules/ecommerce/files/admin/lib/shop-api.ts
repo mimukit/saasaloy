@@ -77,8 +77,8 @@ export const shopKeys = {
   orders: (status: string, page: number) =>
     [...SHOP_KEY, "orders", "list", status, page] as const,
   product: (id: string) => [...SHOP_KEY, "products", "detail", id] as const,
-  products: (status: string, page: number) =>
-    [...SHOP_KEY, "products", "list", status, page] as const,
+  products: (status: string, page: number, q = "") =>
+    [...SHOP_KEY, "products", "list", status, page, q] as const,
   report: (range: string, from: string, to: string) =>
     [...SHOP_KEY, "reports", range, from, to] as const,
   zones: [...SHOP_KEY, "zones"] as const,
@@ -97,13 +97,18 @@ export async function refreshShop(queryClient: QueryClient): Promise<void> {
 
 export type ProductFilter = "all" | "active" | "draft";
 
-export const productsQuery = (status: ProductFilter, page: number) =>
+/** A page of products; `q` matches a part of the title or a variant's SKU. */
+export const productsQuery = (status: ProductFilter, page: number, q = "") =>
   queryOptions({
-    queryKey: shopKeys.products(status, page),
+    queryKey: shopKeys.products(status, page, q.trim()),
     queryFn: async () =>
       answer(
         await api.admin.shop.products.$get({
-          query: { page: String(page), status },
+          query: {
+            page: String(page),
+            status,
+            ...(q.trim() === "" ? {} : { q: q.trim() }),
+          },
         }),
         "The product list did not load."
       ),

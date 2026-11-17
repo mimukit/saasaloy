@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link, createFileRoute, useNavigate } from "@tanstack/react-router";
-import { MinusIcon, PlusIcon, XIcon } from "lucide-react";
+import { MinusIcon, PlusIcon, SearchIcon, XIcon } from "lucide-react";
 import { useEffect, useId, useState } from "react";
 import type { ReactNode } from "react";
 
@@ -21,15 +21,13 @@ import {
   FieldLabel,
 } from "@repo/ui/components/shell/field";
 import { Input } from "@repo/ui/components/shell/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+} from "@repo/ui/components/shell/input-group";
 import { Label } from "@repo/ui/components/shell/label";
 import { Radio, RadioGroup } from "@repo/ui/components/shell/radio-group";
-import {
-  Select,
-  SelectItem,
-  SelectPopup,
-  SelectTrigger,
-  SelectValue,
-} from "@repo/ui/components/shell/select";
 import { toastManager } from "@repo/ui/components/shell/toast";
 import { PageBody } from "@repo/ui/containers/shell/page-body";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
@@ -54,10 +52,10 @@ import {
   addLine,
   addressLines,
   draftTotals,
-  money,
   phoneReady,
   setLineQuantity,
 } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 import type { DraftLine } from "@admin/lib/shop-format";
 
 // The "New order" page at `/shop/orders/new` (Q33 to Q35, round 2 mockup): staff take an
@@ -197,7 +195,19 @@ function NewOrder() {
   const savedAddresses = known ? (saved.data?.addresses ?? []) : [];
 
   // Items -----------------------------------------------------------------------------
-  const products = useQuery(productsQuery("active", 1));
+  // The picker searches the active products by a part of the title or a SKU, on the api,
+  // so a product past the first page is reachable. The search waits until typing pauses.
+  const [productSearch, setProductSearch] = useState("");
+  const [askedSearch, setAskedSearch] = useState("");
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setAskedSearch(productSearch.trim());
+    }, 250);
+    return () => {
+      clearTimeout(timer);
+    };
+  }, [productSearch]);
+  const products = useQuery(productsQuery("active", 1, askedSearch));
   const [productId, setProductId] = useState<string | null>(null);
   const product = useQuery({
     ...productQuery(productId ?? ""),
@@ -310,10 +320,7 @@ function NewOrder() {
     },
   });
 
-  const productItems = (products.data?.products ?? []).map((item) => ({
-    label: item.title,
-    value: item.id,
-  }));
+  const matches = (products.data?.products ?? []).slice(0, 8);
   const variants = (product.data?.variants ?? []).filter(
     (variant) => variant.active
   );
@@ -425,25 +432,59 @@ function NewOrder() {
           <Section title="Items">
             <div className="grid gap-3 sm:grid-cols-[minmax(0,16rem)_1fr] sm:items-start">
               <Field>
-                <FieldLabel>Product</FieldLabel>
-                <Select
-                  items={productItems}
-                  value={productId}
-                  onValueChange={(next: string | null) => {
-                    setProductId(next);
-                  }}
+                <FieldLabel htmlFor={`${ids}-product`}>Product</FieldLabel>
+                <InputGroup>
+                  <InputGroupAddon>
+                    <SearchIcon aria-hidden="true" />
+                  </InputGroupAddon>
+                  <InputGroupInput
+                    id={`${ids}-product`}
+                    type="search"
+                    placeholder="Add a product"
+                    autoComplete="off"
+                    value={productSearch}
+                    onChange={(event) => {
+                      setProductSearch(event.target.value);
+                    }}
+                  />
+                </InputGroup>
+                <ul
+                  aria-label="Matching products"
+                  className="flex flex-col gap-1"
                 >
-                  <SelectTrigger className="w-full">
-                    <SelectValue placeholder="Add a product" />
-                  </SelectTrigger>
-                  <SelectPopup>
-                    {productItems.map((item) => (
-                      <SelectItem key={item.value} value={item.value}>
-                        {item.label}
-                      </SelectItem>
-                    ))}
-                  </SelectPopup>
-                </Select>
+                  {matches.length === 0 && !products.isFetching ? (
+                    <li className="text-muted-foreground text-sm">
+                      {askedSearch === ""
+                        ? "No active product yet."
+                        : `No active product matches "${askedSearch}".`}
+                    </li>
+                  ) : null}
+                  {matches.map((item) => (
+                    <li key={item.id}>
+                      <Button
+                        size="sm"
+                        variant={item.id === productId ? "secondary" : "ghost"}
+                        aria-pressed={item.id === productId}
+                        className="w-full justify-between gap-2 text-left"
+                        onClick={() => {
+                          setProductId(item.id);
+                        }}
+                      >
+                        <span className="min-w-0 truncate">{item.title}</span>
+                        <span className="text-muted-foreground shrink-0 text-xs tabular-nums">
+                          {item.available > 0
+                            ? `${String(item.available)} in stock`
+                            : "Out of stock"}
+                        </span>
+                      </Button>
+                    </li>
+                  ))}
+                  {(products.data?.total ?? 0) > matches.length ? (
+                    <li className="text-muted-foreground text-xs">
+                      Type more of the name or the SKU to narrow the list.
+                    </li>
+                  ) : null}
+                </ul>
               </Field>
               {productId === null ? null : (
                 <ul

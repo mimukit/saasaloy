@@ -55,12 +55,8 @@ import {
 } from "@admin/lib/shop-api";
 import type { Zone, ZoneFields } from "@admin/lib/shop-api";
 import { SHOP_LOCALE } from "@admin/lib/shop-dates";
-import {
-  amountText,
-  money,
-  parseAmount,
-  relativeTime,
-} from "@admin/lib/shop-format";
+import { amountText, parseAmount, relativeTime } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 import { useNow } from "@admin/lib/cms-now";
 
 // The shop's Shipping zones at `/shop/shipping-zones`: one flat rate per zone, such as

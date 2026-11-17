@@ -33,7 +33,8 @@ import { OrderStatusPill } from "@admin/components/shop/shop-pills";
 import { customerQuery, customersQuery } from "@admin/lib/shop-api";
 import type { Customer, CustomerRow } from "@admin/lib/shop-api";
 import { SHOP_LOCALE, shownDay } from "@admin/lib/shop-dates";
-import { addressLines, money, relativeTime } from "@admin/lib/shop-format";
+import { addressLines, relativeTime } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 import { useNow } from "@admin/lib/cms-now";
 
 // The shop's Customers screen at `/shop/customers`. A customer is a client user with one or

@@ -347,6 +347,33 @@ describe("the catalog editor", () => {
     return (body as { id: string }).id;
   }
 
+  it("finds products by a part of the title or of a SKU", async () => {
+    const id = await newProduct();
+    const options = await staffAnswer(
+      `/products/${id}/options`,
+      { options: [{ name: "Size", values: ["S"] }] },
+      "PUT"
+    );
+    const {
+      variants: [variant],
+    } = options.body as { variants: { id: string }[] };
+    await staffAnswer(
+      `/variants/${variant?.id ?? ""}`,
+      { active: false, price: null, sku: "TEE-ZQX-S" },
+      "PUT"
+    );
+
+    const ids = async (q: string) => {
+      const listed = await staffAnswer(`/products?q=${encodeURIComponent(q)}`);
+      const { products } = listed.body as { products: { id: string }[] };
+      return products.map((product) => product.id);
+    };
+
+    await expect(ids("tee sh")).resolves.toContain(id);
+    await expect(ids("zqx")).resolves.toContain(id);
+    await expect(ids("no-such-product-zz")).resolves.toStrictEqual([]);
+  });
+
   it("generates one variant per combination of option values", async () => {
     const productId = await newProduct();
 

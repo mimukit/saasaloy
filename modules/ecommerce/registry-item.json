@@ -181,6 +181,13 @@
         "name": "ChartColumnIcon",
         "from": "lucide-react"
       }
+    },
+    {
+      "file": "apps/admin/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ecommerce",
+      "range": "workspace:*"
     }
   ],
   "files": [
@@ -417,6 +424,10 @@
     {
       "path": "files/admin/lib/shop-api.ts",
       "target": "@admin/lib/shop-api.ts"
+    },
+    {
+      "path": "files/admin/lib/shop-money.ts",
+      "target": "@admin/lib/shop-money.ts"
     },
     {
       "path": "files/admin/components/shop/shop-pills.tsx",

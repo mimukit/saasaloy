@@ -129,6 +129,8 @@ export const productListQuery = z.object({
   page,
   category: productSlug.optional(),
   status: z.enum(["draft", "active", "all"]).default("all"),
+  /** The staff list's search: a part of the title or of a variant's SKU, any case. */
+  q: z.string().trim().max(120).optional(),
 });
 export type ProductListQuery = z.infer<typeof productListQuery>;
 

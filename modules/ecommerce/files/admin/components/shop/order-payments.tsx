@@ -25,12 +25,8 @@ import { Textarea } from "@repo/ui/components/shell/textarea";
 import { PaymentStatusPill } from "@admin/components/shop/shop-pills";
 import type { OrderPayment, RejectReason } from "@admin/lib/shop-api";
 import { SHOP_LOCALE } from "@admin/lib/shop-dates";
-import {
-  amountText,
-  methodLabel,
-  money,
-  parseAmount,
-} from "@admin/lib/shop-format";
+import { amountText, methodLabel, parseAmount } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 
 // The Payments panel on the order page, and its two dialogs. Every decision goes through
 // the existing `/admin/payment` routes (plan 0106, Phase 5): Confirm and Reject call the

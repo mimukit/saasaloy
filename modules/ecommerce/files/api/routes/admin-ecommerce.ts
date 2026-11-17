@@ -364,6 +364,7 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
         currency: shop().currency,
         page: query.page,
         pageSize: shop().pageSize,
+        search: query.q,
         status: query.status,
       });
       const images = await imagesOf(

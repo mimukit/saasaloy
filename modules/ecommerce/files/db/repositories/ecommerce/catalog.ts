@@ -691,12 +691,20 @@ export async function listProducts(
     pageSize: number;
     status?: ProductStatus | "all";
     categorySlug?: string;
+    /** A part of the title or of a variant's SKU, matched in any case. */
+    search?: string;
     now?: Date;
   }
 ): Promise<ProductPage> {
   const now = input.now ?? new Date();
   const page = Math.max(1, input.page ?? 1);
+  const search = input.search?.trim() ?? "";
+  // `%`, `_` and `\` in the typed text match themselves, not any character.
+  const pattern = `%${search.replaceAll(/[\\%_]/g, (char) => `\\${char}`)}%`;
   const filters = [
+    search === ""
+      ? undefined
+      : sql`(${products.title} ilike ${pattern} or exists (select 1 from ${productVariants} where ${productVariants.productId} = ${products.id} and ${productVariants.sku} ilike ${pattern}))`,
     input.status && input.status !== "all"
       ? eq(products.status, input.status)
       : undefined,

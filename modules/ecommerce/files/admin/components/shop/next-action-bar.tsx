@@ -7,31 +7,30 @@ import {
 import { Button } from "@repo/ui/components/shell/button";
 import { cn } from "@repo/ui/lib/utils";
 
-import type { NextAction, OrderAction } from "@admin/lib/shop-format";
+import type { NextAction } from "@admin/lib/shop-format";
 
-// The order page's next-action bar: the one thing the order waits on, why, and the button
-// that does it, under the page header. Every status action on the page lives here, so a
-// staff member reads the order's state and its next step in one place, and the rest of the
-// page is the record. `nextAction` in shop-format.ts decides what it says.
+// The line under the order header that says what the order waits on and why. It holds no
+// status button: the header carries those, as the approved mockup lays them out. The one
+// button it may show is "Record refund" while a refund is due, a payment action the
+// approved Refund due banner carries. `nextAction` in shop-format.ts decides what it says.
 //
 // The tone follows the status pair rules in DESIGN.md: `warn` while money or a call is
-// owed, `ok` once the order is done, neutral otherwise. Only the left rule and the icon
-// take the colour, so the bar stays calm beside the panels.
+// owed, `ok` once the order is done, neutral otherwise.
 
 const TONE = {
   neutral: {
+    box: "bg-card border-border",
     icon: CircleDotIcon,
-    rule: "before:bg-border",
     text: "text-muted-foreground",
   },
   ok: {
+    box: "bg-card border-border",
     icon: CircleCheckIcon,
-    rule: "before:bg-status-ok",
     text: "text-status-ok-foreground",
   },
   warn: {
+    box: "bg-status-warn/8 dark:bg-status-warn/16 border-transparent",
     icon: TriangleAlertIcon,
-    rule: "before:bg-status-warn",
     text: "text-status-warn-foreground",
   },
 } as const;
@@ -39,22 +38,21 @@ const TONE = {
 export function NextActionBar({
   next,
   pending,
-  onAction,
+  onRecordRefund,
 }: {
   next: NextAction;
-  /** The action in flight, so its button shows it and every button waits. */
-  pending: OrderAction | null;
-  onAction: (action: OrderAction) => void;
+  pending: boolean;
+  onRecordRefund: () => void;
 }) {
   const tone = TONE[next.tone];
   const Icon = tone.icon;
+  const refund = next.primary?.action === "recordRefund";
   return (
     <section
-      aria-label="Next step"
+      aria-label="What this order waits on"
       className={cn(
-        "bg-card border-border relative flex flex-col gap-3 overflow-hidden rounded-xl border py-3 pr-3 pl-5 sm:flex-row sm:items-center",
-        "before:absolute before:inset-y-0 before:left-0 before:w-1",
-        tone.rule
+        "flex flex-col gap-3 rounded-xl border px-4 py-3 sm:flex-row sm:items-center",
+        tone.box
       )}
     >
       <div className="flex min-w-0 flex-1 items-start gap-2.5">
@@ -62,47 +60,21 @@ export function NextActionBar({
           aria-hidden="true"
           className={cn("mt-0.5 size-4 shrink-0", tone.text)}
         />
-        <div className="min-w-0">
-          <p className="text-sm font-semibold">{next.title}</p>
-          <p className="text-muted-foreground text-sm">{next.detail}</p>
-        </div>
+        <p className="min-w-0 text-sm">
+          <span className="font-semibold">{next.title}.</span>{" "}
+          <span className="text-muted-foreground">{next.detail}</span>
+        </p>
       </div>
-      {next.primary === null && next.secondary.length === 0 ? null : (
-        <div className="flex shrink-0 flex-wrap gap-2">
-          {next.secondary.map((step) => (
-            <Button
-              key={step.action}
-              size="sm"
-              variant={
-                step.action === "cancel" || step.action === "return"
-                  ? "destructive-outline"
-                  : "outline"
-              }
-              disabled={pending !== null}
-              onClick={() => {
-                onAction(step.action);
-              }}
-            >
-              {step.label}
-            </Button>
-          ))}
-          {next.primary === null ? null : (
-            <Button
-              size="sm"
-              disabled={pending !== null}
-              onClick={() => {
-                if (next.primary) {
-                  onAction(next.primary.action);
-                }
-              }}
-            >
-              {pending === next.primary.action
-                ? "Working…"
-                : next.primary.label}
-            </Button>
-          )}
-        </div>
-      )}
+      {refund ? (
+        <Button
+          size="sm"
+          className="shrink-0"
+          disabled={pending}
+          onClick={onRecordRefund}
+        >
+          Record refund
+        </Button>
+      ) : null}
     </section>
   );
 }

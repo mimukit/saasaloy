@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { createFileRoute } from "@tanstack/react-router";
 import type { ErrorComponentProps } from "@tanstack/react-router";
-import { MapPinIcon, PhoneIcon, UserIcon } from "lucide-react";
+import { EllipsisIcon, MapPinIcon, PhoneIcon, UserIcon } from "lucide-react";
 import { useState } from "react";
 import type { ReactNode } from "react";
 
@@ -36,6 +36,12 @@ import {
   DialogTitle,
 } from "@repo/ui/components/shell/dialog";
 import { Label } from "@repo/ui/components/shell/label";
+import {
+  Menu,
+  MenuItem,
+  MenuPopup,
+  MenuTrigger,
+} from "@repo/ui/components/shell/menu";
 import { toastManager } from "@repo/ui/components/shell/toast";
 import { PageBody } from "@repo/ui/containers/shell/page-body";
 import { PageLayout } from "@repo/ui/containers/shell/page-layout";
@@ -68,20 +74,23 @@ import {
   ORDER_STATUS_TONE,
   addressLines,
   eventText,
-  money,
+  headerActions,
   nextAction,
   orderStatus,
 } from "@admin/lib/shop-format";
-import type { OrderAction } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
+import type { HeaderActions, OrderAction } from "@admin/lib/shop-format";
 
-// One order at `/shop/orders/<id>`. The next-action bar under the header holds every
-// status action, chosen by `nextAction`; the page below it is the record: the items and
-// totals, the contact and address, the payments, and the history.
+// One order at `/shop/orders/<id>`, laid out as the approved mockup: the status buttons sit
+// in the header beside the order number (the next move, the other moves, and Cancel in the
+// overflow menu), chosen by `nextAction` and `headerActions`. A line under the header says
+// what the order waits on and carries "Record refund" while a refund is due. Below it is
+// the record: the items and totals, the contact and address, the payments, and the history.
 //
 // Confirm, Reject and Record refund on a payment go through the `/admin/payment` routes.
 // Cancel asks first. Mark returned opens a dialog with the "Restock items" checkbox,
 // checked by default (grill Q8); an order the payment listener returned offers "Restock
-// items" in the bar until its items are back.
+// items" in the header until its items are back.
 
 export const Route = createFileRoute("/shop/orders/$orderId")({
   loader: ({ context, params }) =>
@@ -263,9 +272,23 @@ function OrderPage() {
           </span>
         }
         description={`Placed ${shownDateTime(order.createdAt)}`}
+        actions={
+          <OrderHeaderActions
+            actions={headerActions(next)}
+            pending={pendingAction}
+            busy={step.isPending}
+            onAction={run}
+          />
+        }
       />
       <PageBody className="flex flex-col gap-4">
-        <NextActionBar next={next} pending={pendingAction} onAction={run} />
+        <NextActionBar
+          next={next}
+          pending={step.isPending}
+          onRecordRefund={() => {
+            run("recordRefund");
+          }}
+        />
 
         <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_20rem]">
           <div className="flex min-w-0 flex-col gap-4">
@@ -416,6 +439,81 @@ function OrderPage() {
         }}
       />
     </PageLayout>
+  );
+}
+
+/**
+ * The status buttons beside the order number, as the approved mockup lays them out: the
+ * next move filled, the other moves outlined, and Cancel in the overflow menu.
+ */
+function OrderHeaderActions({
+  actions,
+  pending,
+  busy,
+  onAction,
+}: {
+  actions: HeaderActions;
+  pending: OrderAction | null;
+  busy: boolean;
+  onAction: (action: OrderAction) => void;
+}) {
+  const { primary, secondary, overflow } = actions;
+  return (
+    <span className="flex items-center gap-2">
+      {primary === null ? null : (
+        <Button
+          size="sm"
+          disabled={busy}
+          onClick={() => {
+            onAction(primary.action);
+          }}
+        >
+          {pending === primary.action ? "Saving…" : primary.label}
+        </Button>
+      )}
+      {secondary.map((step) => (
+        <Button
+          key={step.action}
+          size="sm"
+          variant="outline"
+          disabled={busy}
+          onClick={() => {
+            onAction(step.action);
+          }}
+        >
+          {step.label}
+        </Button>
+      ))}
+      {overflow.length === 0 ? null : (
+        <Menu>
+          <MenuTrigger
+            render={
+              <Button
+                size="icon-sm"
+                variant="outline"
+                aria-label="More order actions"
+                disabled={busy}
+              />
+            }
+          >
+            <EllipsisIcon aria-hidden="true" />
+          </MenuTrigger>
+          <MenuPopup align="end">
+            {overflow.map((step) => (
+              <MenuItem
+                key={step.action}
+                variant={step.action === "cancel" ? "destructive" : "default"}
+                onClick={() => {
+                  onAction(step.action);
+                }}
+              >
+                {step.label}
+              </MenuItem>
+            ))}
+          </MenuPopup>
+        </Menu>
+      )}
+    </span>
   );
 }
 

@@ -8,6 +8,7 @@ import {
   assertCurrency,
   assertMinor,
   formatMoney,
+  formatPrice,
   fromMinor,
   isCurrencyCode,
   minorExponent,
@@ -145,5 +146,19 @@ describe("formatMoney", () => {
     const text = formatMoney(125_050, "BDT", "en-US");
     assert.match(text, /1,250\.50/);
     assert.match(text, /BDT|৳/);
+  });
+});
+
+describe("formatPrice", () => {
+  it("shows the narrow sign and no decimals on a whole amount", () => {
+    assert.equal(formatPrice(145_000, "BDT", "en"), "৳1,450");
+    assert.equal(formatPrice(0, "BDT", "en"), "৳0");
+    assert.equal(formatPrice(125_000, "USD", "en-US"), "$1,250");
+  });
+
+  it("keeps the currency's own decimals when the amount has a fraction", () => {
+    assert.equal(formatPrice(145_050, "BDT", "en"), "৳1,450.50");
+    assert.equal(formatPrice(145_005, "BDT", "en"), "৳1,450.05");
+    assert.equal(formatPrice(990, "JPY", "en"), "¥990");
   });
 });

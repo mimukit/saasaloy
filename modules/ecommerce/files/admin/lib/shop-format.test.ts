@@ -12,8 +12,8 @@ import {
   draftTotals,
   eventText,
   formatAddress,
+  headerActions,
   methodLabel,
-  money,
   nextAction,
   parseAmount,
   percent,
@@ -24,16 +24,6 @@ import {
   variantProblem,
 } from "./shop-format.ts";
 import type { NextActionInput } from "./shop-format.ts";
-
-// Intl puts a no-break space between the code and the number.
-const spaced = (text: string) => text.replaceAll("\u00A0", " ");
-
-describe("money", () => {
-  it("formats minor units with the currency's own exponent", () => {
-    assert.equal(spaced(money(145_000, "BDT", "en")), "BDT 1,450.00");
-    assert.equal(spaced(money(990, "JPY", "en")), "¥990");
-  });
-});
 
 describe("parseAmount and amountText", () => {
   it("reads a typed amount exactly, in minor units", () => {
@@ -397,5 +387,55 @@ describe("phoneReady", () => {
     assert.equal(phoneReady("01712345678"), true);
     assert.equal(phoneReady("+880 1712-345678"), true);
     assert.equal(phoneReady("call me"), false);
+  });
+});
+
+describe("headerActions", () => {
+  const base: NextActionInput = {
+    paymentMethod: "cod",
+    payments: [
+      { reviewable: true, status: "pending", takesNoSubmission: true },
+    ],
+    refundDue: false,
+    restocked: false,
+    status: "placed",
+  };
+  const ids = (steps: readonly { action: string }[]) =>
+    steps.map((step) => step.action);
+
+  it("puts the next status move first and Cancel in the overflow menu", () => {
+    const actions = headerActions(nextAction(base));
+    assert.equal(actions.primary?.action, "confirm");
+    assert.deepEqual(ids(actions.secondary), []);
+    assert.deepEqual(ids(actions.overflow), ["cancel"]);
+  });
+
+  it("shows Mark delivered and Mark returned on a shipped order", () => {
+    const actions = headerActions(nextAction({ ...base, status: "shipped" }));
+    assert.equal(actions.primary?.action, "deliver");
+    assert.deepEqual(ids(actions.secondary), ["return"]);
+    assert.deepEqual(ids(actions.overflow), []);
+  });
+
+  it("keeps the payment decisions out of the header", () => {
+    const delivered = headerActions(
+      nextAction({ ...base, status: "delivered" })
+    );
+    assert.equal(delivered.primary, null);
+    const refund = headerActions(
+      nextAction({ ...base, refundDue: true, status: "returned" })
+    );
+    assert.equal(refund.primary?.action, "restock");
+    const waiting = headerActions(
+      nextAction({
+        ...base,
+        paymentMethod: "bkash",
+        payments: [
+          { reviewable: true, status: "submitted", takesNoSubmission: false },
+        ],
+      })
+    );
+    assert.equal(waiting.primary, null);
+    assert.deepEqual(ids(waiting.overflow), ["cancel"]);
   });
 });

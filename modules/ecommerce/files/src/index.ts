@@ -10,6 +10,7 @@ export {
   assertCurrency,
   assertMinor,
   formatMoney,
+  formatPrice,
   fromMinor,
   isCurrencyCode,
   minorExponent,

@@ -24,7 +24,8 @@ import { useNow } from "@admin/lib/cms-now";
 import { productsQuery } from "@admin/lib/shop-api";
 import type { ProductFilter, ProductRow } from "@admin/lib/shop-api";
 import { SHOP_LOCALE } from "@admin/lib/shop-dates";
-import { money, relativeTime } from "@admin/lib/shop-format";
+import { relativeTime } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 
 // The Products list, at `/shop/products`. Each row shows the cover image, the title, the
 // status, the price range of the active variants in the store currency, the stock that is

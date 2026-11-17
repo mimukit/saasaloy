@@ -96,16 +96,8 @@ export function minorDigits(currency: string): number {
   );
 }
 
-/** An amount in minor units for a person: `money(145000, "BDT", "en")` is "BDT 1,450.00". */
-export function money(
-  amount: number,
-  currency: string,
-  locale?: string
-): string {
-  return currencyFormat(currency, locale).format(
-    amount / 10 ** minorDigits(currency)
-  );
-}
+// Display: `money` in `shop-money.ts` wraps `formatPrice` from `@repo/ecommerce`, which
+// this file may not import (it runs under `node --test` with no workspace packages).
 
 const DECIMAL = /^(\d+)(?:\.(\d*))?$/;
 
@@ -575,4 +567,44 @@ export function phoneReady(text: string): boolean {
   }
   const digits = trimmed.replaceAll(/\D/g, "").length;
   return digits >= 11 && digits <= 15;
+}
+
+// The order page header ------------------------------------------------------------------
+
+/** The moves of the order itself; a payment decision is not one of them. */
+const STATUS_ACTIONS: ReadonlySet<OrderAction> = new Set([
+  "confirm",
+  "ship",
+  "deliver",
+  "cancel",
+  "return",
+  "restock",
+]);
+
+export interface HeaderActions {
+  /** The filled button beside the order number: the next move. */
+  primary: NextStep | null;
+  /** Outline buttons after it, such as "Mark returned" on a shipped order. */
+  secondary: NextStep[];
+  /** The overflow menu: "Cancel order". */
+  overflow: NextStep[];
+}
+
+/**
+ * The status buttons of the order header, as the approved mockup lays them out: the next
+ * move, the other moves as outline buttons, and Cancel in the overflow menu. Confirming,
+ * rejecting or refunding a payment stays in the Payments panel and the Refund due banner.
+ */
+export function headerActions(next: NextAction): HeaderActions {
+  const steps = [
+    ...(next.primary === null ? [] : [next.primary]),
+    ...next.secondary,
+  ].filter((step) => STATUS_ACTIONS.has(step.action));
+  const moves = steps.filter((step) => step.action !== "cancel");
+  const [primary = null, ...secondary] = moves;
+  return {
+    overflow: steps.filter((step) => step.action === "cancel"),
+    primary,
+    secondary,
+  };
 }

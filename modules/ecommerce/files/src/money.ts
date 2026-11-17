@@ -81,6 +81,29 @@ export function formatMoney(
   }).format(assertMinor(amount) / 10 ** exponent);
 }
 
+/**
+ * A price for a screen: the narrow sign (`৳`, `$`) and no decimals on a whole amount,
+ * `formatPrice(145000, "BDT")` is `"৳1,450"`. An amount with a fraction keeps the
+ * currency's own decimals (`"৳1,450.50"`), so no figure is ever rounded away. The decimals
+ * come from `minorExponent`, so any currency formats with its own minor unit.
+ */
+export function formatPrice(
+  amount: number,
+  currency: string,
+  locale = "en"
+): string {
+  const exponent = minorExponent(currency);
+  const scale = 10 ** exponent;
+  const digits = assertMinor(amount) % scale === 0 ? 0 : exponent;
+  return new Intl.NumberFormat(locale, {
+    currency,
+    currencyDisplay: "narrowSymbol",
+    maximumFractionDigits: digits,
+    minimumFractionDigits: digits,
+    style: "currency",
+  }).format(amount / scale);
+}
+
 /** The sum of amounts in one currency's minor units. */
 export function addMinor(...amounts: number[]): number {
   let total = 0;

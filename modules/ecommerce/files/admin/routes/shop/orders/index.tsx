@@ -29,9 +29,9 @@ import { SHOP_LOCALE, shownDateTime } from "@admin/lib/shop-dates";
 import {
   ORDER_STATUSES,
   ORDER_STATUS_LABEL,
-  money,
   relativeTime,
 } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 
 // The Orders screen at `/shop/orders`: every order, newest first, with a chip per status
 // and the COD tag on each cash-on-delivery row. The sidebar's badge on this row counts the

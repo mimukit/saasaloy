@@ -27,7 +27,8 @@ import { OrderStatusPill } from "@admin/components/shop/shop-pills";
 import { reportQuery } from "@admin/lib/shop-api";
 import type { Report, ReportRangeId } from "@admin/lib/shop-api";
 import { SHOP_LOCALE, shownDay } from "@admin/lib/shop-dates";
-import { ORDER_STATUSES, money, percent } from "@admin/lib/shop-format";
+import { ORDER_STATUSES, percent } from "@admin/lib/shop-format";
+import { money } from "@admin/lib/shop-money";
 import { useNow } from "@admin/lib/cms-now";
 
 // The shop's Reports at `/shop/reports`: sales by day, top products, orders by status and
