@@ -77,6 +77,8 @@ Every `weak:` tag in the brief is a standing question, and re-asking one is alwa
 > Last time "it's faster" had no number behind it, so the hero avoided the claim. Do you
 > have a benchmark now?
 
+A `weak-accepted:` tag is a thin answer the owner accepted at the interview's read-back. It counts as filled, and you still leave its claim out.
+
 If a gap stays a gap, write around it. Describe what the product does and leave the claim
 out. A page that says less is recoverable; a page that says something false about the
 product is not.
@@ -368,7 +370,7 @@ Removing a block is not redesigning one. You are editing lines in a page, not ed
 `autonomy: afk` in the brief's frontmatter means nobody is at the keyboard. Write the page from the brief with no draft approval and no question, and record every decision in `docs/build-log.md`, which is where the owner reviews it later. Every rule in Steps 1 to 5 still holds, except where this section replaces it.
 
 1. **Read the brief, the content module and the icon registry**, as [Step 0](#step-0--before-you-write-anything) says.
-2. **Ask nothing.** Write around every gap and every `weak:` tag the brief left, the way [Step 1](#step-1--fill-only-the-gaps-the-brief-left) says to when a gap stays a gap: describe what the product does, and leave the claim out.
+2. **Ask nothing.** Write around every gap and every `weak:` or `weak-accepted:` tag the brief left, the way [Step 1](#step-1--fill-only-the-gaps-the-brief-left) says to when a gap stays a gap: describe what the product does, and leave the claim out.
 3. **Write no draft file, and wait for no review.** Skip Steps 2 and 3. When a `docs/landing-copy-draft.md` from an earlier run is on disk, leave it alone and list it under `## Left for a human`.
 4. **Leave hand-written copy alone.** When the content module has been rewritten by hand and the brief does not explain it, write nothing to it. List it under `## Left for a human` and stop.
 5. **Write `landing.ts`** as [Step 4](#step-4--write-the-content-module) says, with no confirmation. First copy `landing.ts` and `apps/web/src/pages/index.astro` to a temporary folder outside the repo, because a fresh project may have no commit to restore them from.
