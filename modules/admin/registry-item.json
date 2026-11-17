@@ -204,6 +204,10 @@
       "target": "@db/seed/slices/audit-events.ts"
     },
     {
+      "path": "files/db/column-classes/audit-events.ts",
+      "target": "@db/column-classes/audit-events.ts"
+    },
+    {
       "path": "files/ui/styles/admin.css",
       "target": "@ui/styles/admin.css"
     }

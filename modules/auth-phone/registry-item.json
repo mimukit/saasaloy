@@ -116,6 +116,20 @@
       }
     },
     {
+      "file": "packages/db/src/column-classes/users.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "phoneNumber",
+      "value": "\"pii\""
+    },
+    {
+      "file": "packages/db/src/column-classes/users.ts",
+      "kind": "drizzle-column",
+      "exportName": "users",
+      "column": "phoneNumberVerified",
+      "value": "\"plain\""
+    },
+    {
       "file": "packages/db/src/seed/slices/users.ts",
       "kind": "plugin-array",
       "exportName": "extraUsers",

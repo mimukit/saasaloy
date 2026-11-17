@@ -197,6 +197,18 @@
       "target": "@db/seed/slices/cms-redirects.ts"
     },
     {
+      "path": "files/db/column-classes/cms-entries.ts",
+      "target": "@db/column-classes/cms-entries.ts"
+    },
+    {
+      "path": "files/db/column-classes/cms-revisions.ts",
+      "target": "@db/column-classes/cms-revisions.ts"
+    },
+    {
+      "path": "files/db/column-classes/cms-redirects.ts",
+      "target": "@db/column-classes/cms-redirects.ts"
+    },
+    {
       "path": "files/validators/cms.ts",
       "target": "@validators/cms.ts"
     },
