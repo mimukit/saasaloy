@@ -443,6 +443,76 @@ export async function countPlacedCod(db: Executor): Promise<number> {
   return row?.n ?? 0;
 }
 
+/** How many orders hold each status, for the staff list's filter chips. */
+export async function countOrdersByStatus(
+  db: Executor
+): Promise<Record<string, number>> {
+  const rows = await db
+    .select({ n: count(), status: orders.status })
+    .from(orders)
+    .groupBy(orders.status);
+  return Object.fromEntries(rows.map((row) => [row.status, row.n]));
+}
+
+/** What a staff list row shows beside the order: its unit count and its last payment. */
+export interface OrderListExtra {
+  itemCount: number;
+  paymentStatus: string | null;
+}
+
+/**
+ * The unit count and the newest payment's status of each order, in two queries for the
+ * whole page. An order with no payment yet reads `paymentStatus: null`.
+ */
+export async function orderListExtras(
+  db: Executor,
+  orderIds: readonly string[]
+): Promise<Map<string, OrderListExtra>> {
+  const extras = new Map<string, OrderListExtra>(
+    orderIds.map((id) => [id, { itemCount: 0, paymentStatus: null }])
+  );
+  if (orderIds.length === 0) {
+    return extras;
+  }
+  const [counts, rows] = await Promise.all([
+    db
+      .select({
+        orderId: orderItems.orderId,
+        units: sql<number>`coalesce(sum(${orderItems.quantity}), 0)::int`,
+      })
+      .from(orderItems)
+      .where(inArray(orderItems.orderId, [...orderIds]))
+      .groupBy(orderItems.orderId),
+    db
+      .select({
+        orderId: payments.referenceId,
+        status: payments.status,
+      })
+      .from(payments)
+      .where(
+        and(
+          eq(payments.referenceType, "order"),
+          inArray(payments.referenceId, [...orderIds])
+        )
+      )
+      .orderBy(asc(payments.createdAt), asc(payments.id)),
+  ]);
+  for (const row of counts) {
+    const extra = extras.get(row.orderId);
+    if (extra) {
+      extra.itemCount = Number(row.units);
+    }
+  }
+  // Oldest first, so the last write per order is its newest payment.
+  for (const row of rows) {
+    const extra = extras.get(row.orderId);
+    if (extra) {
+      extra.paymentStatus = row.status;
+    }
+  }
+  return extras;
+}
+
 /** The stock an order still holds, for the order page. Empty once shipped or cancelled. */
 export async function orderReservations(
   db: Executor,

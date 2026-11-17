@@ -46,6 +46,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@repo/ui/components/shell/select";
+import { Checkbox } from "@repo/ui/components/shell/checkbox";
 import { StatusPill } from "@repo/ui/components/shell/status-pill";
 import type { StatusTone } from "@repo/ui/components/shell/status-pill";
 import { Textarea } from "@repo/ui/components/shell/textarea";
@@ -65,6 +66,11 @@ import { api } from "@admin/lib/api";
 // confirms or rejects here, and the api records who decided. A `pending` payment whose
 // method takes no submission (cash on delivery) is reviewed from `pending`: confirm it when
 // the courier remits the cash, or reject it with a delivery reason.
+//
+// On the Pending chip, each cash-on-delivery payment that waits for its decision has a
+// checkbox. Staff tick the ones the courier paid in and confirm them together from the bar
+// under the list; each still goes through the review route one by one, so each writes its
+// own event and audit row. The Method select narrows the list to one method.
 //
 // Every call goes to `apps/api`'s `/admin/payment` routes behind `requireAdmin`, and this
 // file names no provider. Adding `payment-manual` or a gateway later changes the rows, not
@@ -975,14 +981,87 @@ function PaymentDetailView({
   );
 }
 
+/**
+ * A payment staff may confirm in bulk: one with no submission to check (cash on delivery)
+ * that still waits for its decision. A submitted claim is checked one by one, against the
+ * statement, so it never joins a bulk confirm.
+ */
+function bulkConfirmable(payment: Payment): boolean {
+  return payment.reviewable && payment.takesNoSubmission;
+}
+
+/** The checkbox column of the bulk COD confirm, ahead of the queue's own columns. */
+function selectColumn(
+  rows: readonly Payment[],
+  checked: ReadonlySet<string>,
+  onToggle: (ids: readonly string[], on: boolean) => void
+): DataTableColumn<Payment> {
+  const eligible = rows.filter(bulkConfirmable).map((row) => row.id);
+  const all = eligible.length > 0 && eligible.every((id) => checked.has(id));
+  return {
+    id: "select",
+    header: (
+      <Checkbox
+        aria-label="Select every cash on delivery payment"
+        checked={all}
+        indeterminate={!all && eligible.some((id) => checked.has(id))}
+        disabled={eligible.length === 0}
+        onCheckedChange={(on) => {
+          onToggle(eligible, on);
+        }}
+      />
+    ),
+    value: (payment) => checked.has(payment.id),
+    cell: (payment) =>
+      bulkConfirmable(payment) ? (
+        // The row opens the panel on click; the box only selects.
+        <span
+          role="presentation"
+          className="inline-flex"
+          onClick={(event) => {
+            event.stopPropagation();
+          }}
+          onKeyDown={(event) => {
+            event.stopPropagation();
+          }}
+        >
+          <Checkbox
+            aria-label={`Select ${reference(payment)}`}
+            checked={checked.has(payment.id)}
+            onCheckedChange={(on) => {
+              onToggle([payment.id], on);
+            }}
+          />
+        </span>
+      ) : null,
+  };
+}
+
 function Payments() {
   const queryClient = useQueryClient();
   const [status, setStatus] = useState<StatusFilter>("submitted");
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [dialog, setDialog] = useState<"reject" | "refund" | null>(null);
 
+  const [method, setMethod] = useState<string | null>(null);
+  const [checked, setChecked] = useState<ReadonlySet<string>>(new Set());
+
   const { data, isFetching } = useQuery(paymentsQuery(status));
-  const rows = useMemo(() => data?.payments ?? [], [data]);
+  const allRows = useMemo(() => data?.payments ?? [], [data]);
+  const methods = useMemo(
+    () => [...new Set(allRows.map((row) => row.method))].toSorted(),
+    [allRows]
+  );
+  const rows = useMemo(
+    () =>
+      method === null
+        ? allRows
+        : allRows.filter((row) => row.method === method),
+    [allRows, method]
+  );
+  const selectedRows = rows.filter(
+    (row) => checked.has(row.id) && bulkConfirmable(row)
+  );
 
   // The panel reads the detail route, which carries the events and refunds the list does
   // not. The list row fills the panel until that answer lands, and keeps the panel open
@@ -1098,6 +1177,57 @@ function Payments() {
     onSuccess: settle,
   });
 
+  // Bulk COD confirm: one review call per payment, in order, so each writes its own event
+  // and audit row exactly as a single confirm does. A payment someone else decided first
+  // answers 409 and is counted, not retried.
+  const bulk = useMutation({
+    mutationFn: async (ids: readonly string[]) => {
+      let confirmed = 0;
+      const failed: string[] = [];
+      for (const id of ids) {
+        const res = await api.admin.payment.payments[":id"].review.$post({
+          json: { action: "confirm" },
+          param: { id },
+        });
+        if (res.status === 200) {
+          confirmed += 1;
+        } else {
+          failed.push(id);
+        }
+      }
+      return { confirmed, failed };
+    },
+    onSuccess: async ({ confirmed, failed }) => {
+      setChecked(new Set());
+      await Promise.all([refresh(), refreshCount()]);
+      toastManager.add({
+        description:
+          failed.length === 0
+            ? undefined
+            : `${String(failed.length)} could not be confirmed. The list shows their current status.`,
+        title:
+          confirmed === 1
+            ? "1 cash payment confirmed"
+            : `${String(confirmed)} cash payments confirmed`,
+        type: failed.length === 0 ? "success" : "error",
+      });
+    },
+  });
+
+  const toggle = (ids: readonly string[], on: boolean) => {
+    setChecked((current) => {
+      const next = new Set(current);
+      for (const id of ids) {
+        if (on) {
+          next.add(id);
+        } else {
+          next.delete(id);
+        }
+      }
+      return next;
+    });
+  };
+
   const reviewError =
     review.error === null || review.error instanceof ReviewConflictError
       ? null
@@ -1201,14 +1331,49 @@ function Payments() {
           onSelect={(id) => {
             // The chips are literal ids out of STATUS_FILTERS.
             select();
+            setChecked(new Set());
             setStatus(id as StatusFilter);
           }}
         />
+        {methods.length > 1 ? (
+          <div className="ml-auto flex shrink-0 items-center gap-2">
+            <span className="text-muted-foreground text-sm">Method</span>
+            <Select
+              items={[
+                { label: "All methods", value: null },
+                ...methods.map((id) => ({ label: methodLabel(id), value: id })),
+              ]}
+              value={method}
+              onValueChange={(next: string | null) => {
+                setChecked(new Set());
+                setMethod(next);
+              }}
+            >
+              <SelectTrigger size="sm" className="w-44">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectPopup>
+                <SelectItem value={null}>All methods</SelectItem>
+                {methods.map((id) => (
+                  <SelectItem key={id} value={id}>
+                    {methodLabel(id)}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          </div>
+        ) : null}
       </div>
 
       <DataTable
         caption="Payments, with the amount asked, the transaction ID the shopper gave, and the status."
-        columns={status === "successful" ? SETTLED_COLUMNS : QUEUE_COLUMNS}
+        columns={
+          status === "successful"
+            ? SETTLED_COLUMNS
+            : status === "pending"
+              ? [selectColumn(rows, checked, toggle), ...QUEUE_COLUMNS]
+              : QUEUE_COLUMNS
+        }
         rows={rows}
         rowId={(row) => row.id}
         selectedId={selectedId}
@@ -1228,6 +1393,47 @@ function Payments() {
           )
         }
       />
+
+      {selectedRows.length > 0 ? (
+        <div
+          role="region"
+          aria-label="Selected payments"
+          className="border-border bg-card flex shrink-0 items-center justify-between gap-3 border-t px-(--page-gutter) py-2.5"
+        >
+          <span className="text-sm font-medium tabular-nums">
+            {selectedRows.length} selected
+            {selectedRows.every(
+              (row) => row.currency === selectedRows[0]?.currency
+            )
+              ? `, ${money(
+                  selectedRows.reduce((sum, row) => sum + row.amount, 0),
+                  selectedRows[0]?.currency ?? "USD"
+                )}`
+              : ""}
+          </span>
+          <span className="flex gap-2">
+            <Button
+              size="sm"
+              variant="outline"
+              disabled={bulk.isPending}
+              onClick={() => {
+                setChecked(new Set());
+              }}
+            >
+              Clear
+            </Button>
+            <Button
+              size="sm"
+              disabled={bulk.isPending}
+              onClick={() => {
+                bulk.mutate(selectedRows.map((row) => row.id));
+              }}
+            >
+              {bulk.isPending ? "Confirming…" : "Confirm cash received"}
+            </Button>
+          </span>
+        </div>
+      ) : null}
     </PageLayout>
   );
 }

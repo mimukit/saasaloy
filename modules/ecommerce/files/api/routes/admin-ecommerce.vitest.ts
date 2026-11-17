@@ -464,6 +464,38 @@ describe("customers, reports and the nav count", () => {
     expect(ids).toContain(created.order.id);
   });
 
+  it("gives each list row its unit count and last payment, and counts every status", async () => {
+    const created = await manualOrder("01912345674");
+
+    const listed = await staffAnswer("/orders");
+    const body = listed.body as {
+      counts: Record<string, number>;
+      orders: {
+        id: string;
+        itemCount: number;
+        paymentStatus: string | null;
+      }[];
+    };
+    expect(
+      body.orders.find((row) => row.id === created.order.id)
+    ).toMatchObject({ itemCount: 1, paymentStatus: "pending" });
+    expect(body.counts.placed).toBeGreaterThanOrEqual(1);
+  });
+
+  it("names the staff member on each history event of the order page", async () => {
+    const created = await manualOrder("01912345675");
+
+    const detail = await staffAnswer(`/orders/${created.order.id}`);
+    const {
+      events: [first],
+    } = detail.body as {
+      events: { actorType: string; actorName: string | null }[];
+    };
+    expect(first?.actorType).toBe("staff");
+    expect(first?.actorName).toBeTypeOf("string");
+    expect(first?.actorName).not.toBe("");
+  });
+
   it("reports today's sales, statuses and COD figures", async () => {
     await manualOrder("01912345673");
 
@@ -488,5 +520,224 @@ describe("customers, reports and the nav count", () => {
     );
 
     expect(report.status).toBe(400);
+  });
+});
+
+// The admin flow of plan 0106 Phase 5, through the routes the admin screens call: the
+// product editor, the order page's next-action bar and payments panel, the Customers and
+// Reports screens, and the Mark returned dialog's "Restock items".
+describe("the admin screens' flow (plan 0106, Phase 5)", () => {
+  interface ProductBody {
+    id: string;
+    status: string;
+    variants: { id: string; stock: { onHand: number } }[];
+  }
+
+  interface OrderBody {
+    id: string;
+    status: string;
+    userId: string;
+    restocked: boolean;
+    payments: { id: string; status: string; reviewable: boolean }[];
+  }
+
+  interface Report {
+    cod: { collected: { count: number } };
+    salesByDay: { total: number }[];
+  }
+
+  async function as(
+    cookie: string,
+    path: string,
+    body?: unknown,
+    method?: string
+  ) {
+    return answer(
+      await call(database, path, { admin: true, body, cookie, method })
+    );
+  }
+
+  /** A 2xx body, or a thrown error naming the status, so a test reads one value. */
+  async function ok<T>(
+    cookie: string,
+    path: string,
+    body?: unknown,
+    method?: string
+  ): Promise<T> {
+    const result = await as(cookie, path, body, method);
+    if (result.status !== 200 && result.status !== 201) {
+      throw new Error(`${path} answered ${String(result.status)}`);
+    }
+    return result.body as T;
+  }
+
+  /** A product with two options, its grid priced and stocked (5 each), published. */
+  async function publishedProduct(cookie: string): Promise<ProductBody> {
+    const { id } = await ok<ProductBody>(cookie, "/admin/shop/products", {
+      categoryId: null,
+      description: null,
+      slug: `flow-shirt-${String(Date.now())}`,
+      title: "Flow shirt",
+    });
+    const { variants } = await ok<ProductBody>(
+      cookie,
+      `/admin/shop/products/${id}/options`,
+      {
+        options: [
+          { name: "Size", values: ["S", "M"] },
+          { name: "Colour", values: ["Indigo", "White"] },
+        ],
+      },
+      "PUT"
+    );
+    for (const [index, variant] of variants.entries()) {
+      await ok(
+        cookie,
+        `/admin/shop/variants/${variant.id}`,
+        { active: true, price: 145_000, sku: `FLOW-${String(index)}` },
+        "PUT"
+      );
+      await ok(cookie, `/admin/shop/variants/${variant.id}/stock`, {
+        onHand: 5,
+      });
+    }
+    return ok<ProductBody>(cookie, `/admin/shop/products/${id}/status`, {
+      status: "active",
+    });
+  }
+
+  async function onHand(cookie: string, productId: string, variantId: string) {
+    const { variants } = await ok<ProductBody>(
+      cookie,
+      `/admin/shop/products/${productId}`
+    );
+    return variants.find((variant) => variant.id === variantId)?.stock.onHand;
+  }
+
+  /** A placed COD order of two units, then confirmed and shipped. */
+  async function shippedCodOrder(
+    cookie: string,
+    variantId: string,
+    phone: string
+  ): Promise<OrderBody> {
+    const zoneId = await makeZone(database.db, 6000);
+    const { order } = await ok<{ order: OrderBody }>(
+      cookie,
+      "/admin/shop/orders",
+      {
+        address: ADDRESS,
+        lines: [{ quantity: 2, variantId }],
+        name: "Nusrat Jahan",
+        paymentMethod: "cod",
+        phone,
+        zoneId,
+      }
+    );
+    await move(cookie, order.id, "confirmed");
+    return move(cookie, order.id, "shipped");
+  }
+
+  async function move(
+    cookie: string,
+    orderId: string,
+    status: string,
+    extra = {}
+  ): Promise<OrderBody> {
+    return ok<OrderBody>(cookie, `/admin/shop/orders/${orderId}/status`, {
+      status,
+      ...extra,
+    });
+  }
+
+  function salesTotal(report: Report): number {
+    return report.salesByDay.reduce((total, day) => total + day.total, 0);
+  }
+
+  it("publishes a two-option product with a four-variant grid", async () => {
+    const cookie = await adminSession(database);
+    const product = await publishedProduct(cookie);
+    expect(product.status).toBe("active");
+    expect(product.variants).toHaveLength(4);
+  });
+
+  it("ships a COD order, delivers it, confirms the cash, and moves the figures", async () => {
+    const cookie = await adminSession(database);
+    const {
+      id: productId,
+      variants: [variant],
+    } = await publishedProduct(cookie);
+    const variantId = variant?.id ?? "";
+    const before = await ok<Report>(cookie, "/admin/shop/reports?range=today");
+
+    const shipped = await shippedCodOrder(cookie, variantId, "01812345601");
+    const stockAfterShip = await onHand(cookie, productId, variantId);
+    const delivered = await move(cookie, shipped.id, "delivered");
+    const [payment] = delivered.payments;
+    await ok(cookie, `/admin/payment/payments/${payment?.id ?? ""}/review`, {
+      action: "confirm",
+    });
+    const after = await ok<OrderBody>(
+      cookie,
+      `/admin/shop/orders/${shipped.id}`
+    );
+    const customer = await ok<unknown>(
+      cookie,
+      `/admin/shop/customers/${shipped.userId}`
+    );
+    const report = await ok<Report>(cookie, "/admin/shop/reports?range=today");
+
+    expect(stockAfterShip).toBe(3);
+    expect({
+      payment: after.payments[0]?.status,
+      status: after.status,
+    }).toStrictEqual({ payment: "successful", status: "delivered" });
+    expect(customer).toMatchObject({ orderCount: 1, totalSpent: 296_000 });
+    expect(salesTotal(report)).toBe(salesTotal(before) + 296_000);
+    expect(report.cod.collected.count).toBe(before.cod.collected.count + 1);
+  });
+
+  it("returns a COD order the buyer refused, then the restock puts the stock back", async () => {
+    const cookie = await adminSession(database);
+    const {
+      id: productId,
+      variants: [, variant],
+    } = await publishedProduct(cookie);
+    const variantId = variant?.id ?? "";
+
+    const shipped = await shippedCodOrder(cookie, variantId, "01812345602");
+    const stockAfterShip = await onHand(cookie, productId, variantId);
+    const [payment] = shipped.payments;
+    await ok(cookie, `/admin/payment/payments/${payment?.id ?? ""}/review`, {
+      action: "reject",
+      reason: "delivery_refused",
+    });
+    const returned = await ok<OrderBody>(
+      cookie,
+      `/admin/shop/orders/${shipped.id}`
+    );
+    const restocked = await ok<OrderBody>(
+      cookie,
+      `/admin/shop/orders/${shipped.id}/restock`,
+      {}
+    );
+
+    expect(stockAfterShip).toBe(3);
+    expect(returned).toMatchObject({ restocked: false, status: "returned" });
+    expect(restocked.restocked).toBeTruthy();
+    await expect(onHand(cookie, productId, variantId)).resolves.toBe(5);
+  });
+
+  it("puts stock back from the Mark returned dialog's checkbox", async () => {
+    const cookie = await adminSession(database);
+    const { id: productId, variants } = await publishedProduct(cookie);
+    const variantId = variants.at(2)?.id ?? "";
+
+    const shipped = await shippedCodOrder(cookie, variantId, "01812345603");
+    const returned = await move(cookie, shipped.id, "returned", {
+      restock: true,
+    });
+
+    expect(returned.status).toBe("returned");
+    await expect(onHand(cookie, productId, variantId)).resolves.toBe(5);
   });
 });

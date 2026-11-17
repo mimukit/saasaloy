@@ -1,4 +1,4 @@
-import { and, count, desc, eq, ilike, or, sql } from "drizzle-orm";
+import { and, count, desc, eq, ilike, inArray, or, sql } from "drizzle-orm";
 import { EcommerceError } from "@repo/ecommerce";
 import { users } from "../../schema/auth";
 import { customerAddresses, orders } from "../../schema/ecommerce";
@@ -262,4 +262,20 @@ export async function listAddresses(
       desc(customerAddresses.isDefault),
       desc(customerAddresses.createdAt)
     );
+}
+
+/** The names of the given users, for an order's history ("Confirmed by …"). */
+export async function userNames(
+  db: Executor,
+  userIds: readonly string[]
+): Promise<Map<string, string>> {
+  const ids = [...new Set(userIds)];
+  if (ids.length === 0) {
+    return new Map();
+  }
+  const rows = await db
+    .select({ id: users.id, name: users.name })
+    .from(users)
+    .where(inArray(users.id, ids));
+  return new Map(rows.map((row) => [row.id, row.name]));
 }

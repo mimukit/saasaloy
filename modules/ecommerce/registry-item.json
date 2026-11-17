@@ -106,6 +106,81 @@
         "to": "/shop/orders",
         "path": "/admin/shop/orders/awaiting-call-count"
       }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/products",
+        "label": "Products"
+      },
+      "icon": {
+        "name": "PackageIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/orders",
+        "label": "Orders"
+      },
+      "icon": {
+        "name": "ShoppingCartIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/customers",
+        "label": "Customers"
+      },
+      "icon": {
+        "name": "ContactIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/shipping-zones",
+        "label": "Shipping zones"
+      },
+      "icon": {
+        "name": "TruckIcon",
+        "from": "lucide-react"
+      }
+    },
+    {
+      "file": "apps/admin/src/components/nav.ts",
+      "kind": "nav-entry",
+      "constName": "NAV_AREAS",
+      "area": "/",
+      "group": "Shop",
+      "entry": {
+        "to": "/shop/reports",
+        "label": "Reports"
+      },
+      "icon": {
+        "name": "ChartColumnIcon",
+        "from": "lucide-react"
+      }
     }
   ],
   "files": [
@@ -330,6 +405,78 @@
         "testing": true,
         "installed": ["payment-manual", "payment-console"]
       }
+    },
+    {
+      "path": "files/admin/lib/shop-format.ts",
+      "target": "@admin/lib/shop-format.ts"
+    },
+    {
+      "path": "files/admin/lib/shop-dates.ts",
+      "target": "@admin/lib/shop-dates.ts"
+    },
+    {
+      "path": "files/admin/lib/shop-api.ts",
+      "target": "@admin/lib/shop-api.ts"
+    },
+    {
+      "path": "files/admin/components/shop/shop-pills.tsx",
+      "target": "@admin/components/shop/shop-pills.tsx"
+    },
+    {
+      "path": "files/admin/components/shop/next-action-bar.tsx",
+      "target": "@admin/components/shop/next-action-bar.tsx"
+    },
+    {
+      "path": "files/admin/components/shop/order-payments.tsx",
+      "target": "@admin/components/shop/order-payments.tsx"
+    },
+    {
+      "path": "files/admin/components/shop/product-editor.tsx",
+      "target": "@admin/components/shop/product-editor.tsx"
+    },
+    {
+      "path": "files/admin/components/shop/variant-grid.tsx",
+      "target": "@admin/components/shop/variant-grid.tsx"
+    },
+    {
+      "path": "files/admin/components/shop/product-images.tsx",
+      "target": "@admin/components/shop/product-images.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/products/index.tsx",
+      "target": "@admin/routes/shop/products/index.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/products/new.tsx",
+      "target": "@admin/routes/shop/products/new.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/products/$productId.tsx",
+      "target": "@admin/routes/shop/products/$productId.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/orders/index.tsx",
+      "target": "@admin/routes/shop/orders/index.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/orders/new.tsx",
+      "target": "@admin/routes/shop/orders/new.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/orders/$orderId.tsx",
+      "target": "@admin/routes/shop/orders/$orderId.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/customers.tsx",
+      "target": "@admin/routes/shop/customers.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/shipping-zones.tsx",
+      "target": "@admin/routes/shop/shipping-zones.tsx"
+    },
+    {
+      "path": "files/admin/routes/shop/reports.tsx",
+      "target": "@admin/routes/shop/reports.tsx"
     }
   ],
   "scaffolds": [

@@ -34,18 +34,22 @@ import {
   findUserByPhone,
   getCustomer,
   listCustomers,
+  userNames,
 } from "@repo/db/repositories/ecommerce/customers";
 import {
   cancelExpiredOrders,
+  countOrdersByStatus,
   countPlacedCod,
   getOrder,
   listOrders,
+  orderListExtras,
   orderPayments,
   restockReturnedOrder,
   wasRestocked,
 } from "@repo/db/repositories/ecommerce/orders";
 import type {
   OrderDetail,
+  OrderListExtra,
   OrderRow,
 } from "@repo/db/repositories/ecommerce/orders";
 import {
@@ -227,9 +231,11 @@ function writeError(c: StaffContext, error: unknown): Response {
   return shopError(c, error);
 }
 
-/** An order row as the staff list shows it. */
-function orderRow(order: OrderRow) {
+/** An order row as the staff list shows it, with its unit count and last payment. */
+function orderRow(order: OrderRow, extra?: OrderListExtra) {
   return {
+    itemCount: extra?.itemCount ?? null,
+    paymentStatus: extra?.paymentStatus ?? null,
     contactName: order.contactName,
     contactPhone: order.contactPhone,
     createdAt: order.createdAt.toISOString(),
@@ -246,13 +252,28 @@ function orderRow(order: OrderRow) {
 }
 
 async function orderDetail(db: Db, order: OrderDetail) {
-  const [payments, restocked, customer] = await Promise.all([
+  const [payments, restocked, customer, names] = await Promise.all([
     orderPayments(db, order.id),
     wasRestocked(db, order.id),
     getCustomer(db, order.userId),
+    userNames(
+      db,
+      order.events.flatMap((event) =>
+        event.actorUserId === null ? [] : [event.actorUserId]
+      )
+    ),
   ]);
+  const view = staffOrderView(order, payments, { restocked });
   return {
-    ...staffOrderView(order, payments, { restocked }),
+    ...view,
+    // The history names who moved the order: "Confirmed by Rafi Ahmed".
+    events: view.events.map((event) => ({
+      ...event,
+      actorName:
+        event.actorUserId === null
+          ? null
+          : (names.get(event.actorUserId) ?? null),
+    })),
     customer: customer
       ? {
           email: customer.email,
@@ -658,9 +679,19 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
         paymentMethod: query.cod === true ? "cod" : undefined,
         status: query.status === "all" ? undefined : query.status,
       });
+      const [extras, counts] = await Promise.all([
+        orderListExtras(
+          db,
+          page.orders.map((order) => order.id)
+        ),
+        countOrdersByStatus(db),
+      ]);
       return c.json(
         {
-          orders: page.orders.map(orderRow),
+          counts,
+          orders: page.orders.map((order) =>
+            orderRow(order, extras.get(order.id))
+          ),
           page: page.page,
           pageCount: page.pageCount,
           total: page.total,
@@ -862,7 +893,19 @@ export const adminEcommerce = new Hono<{ Bindings: Bindings }>()
         pageSize: 50,
         userId: id,
       });
-      return c.json({ ...customer, orders: orders.orders.map(orderRow) }, 200);
+      const extras = await orderListExtras(
+        db,
+        orders.orders.map((order) => order.id)
+      );
+      return c.json(
+        {
+          ...customer,
+          orders: orders.orders.map((order) =>
+            orderRow(order, extras.get(order.id))
+          ),
+        },
+        200
+      );
     })
   )
 
