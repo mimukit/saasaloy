@@ -6,7 +6,8 @@
       "inputs": [
         "$TURBO_DEFAULT$",
         "$TURBO_ROOT$/modules/*/registry-item.json",
-        "$TURBO_ROOT$/packages/cli/package.json"
+        "$TURBO_ROOT$/packages/cli/package.json",
+        "$TURBO_ROOT$/llms.txt"
       ]
     }
   }
