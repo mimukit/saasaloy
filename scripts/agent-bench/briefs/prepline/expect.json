@@ -1,0 +1,6 @@
+{
+  "status": "draft, awaiting the owner's approval in #350",
+  "productName": "Prepline",
+  "entity": { "table": "prep_tasks", "word": "prep" },
+  "defaultLandingMarkers": ["not the scaffolding"]
+}

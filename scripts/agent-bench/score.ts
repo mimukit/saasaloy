@@ -1,11 +1,17 @@
-// Scores one agent benchmark run against the MVP bar of plan 0074 (issue #222).
+// Scores one agent benchmark run against the MVP bar of plan 0074 (issue #222), with the
+// three lines plan 0109 adds (issue #347): the interview, each entity of the spec, and the
+// preview.
 //
 // `scripts/agent-bench.ts` calls `scoreRun()` after the agent exits, or on its own with
-// `--score <run-dir>`. Each MVP bar line becomes one PASS or FAIL row. The static lines
-// read the filesystem and git; the runtime lines run `pnpm check` and `pnpm db:seed`, then
-// start the project's dev servers on their pinned ports and check over HTTP. Every process
-// the scorer starts runs in its own process group, and the group is killed before the
-// scorer returns. For a FAIL row, the scorer reads `docs/build-log.md` for the stop point.
+// `--score <run-dir>`. Each MVP bar line becomes one PASS, FAIL or N/A row. N/A is for a
+// line the run does not ask for: the interview in brief mode, the spec's entities with no
+// spec in brief mode, and the preview under `deploy: none` when the agent made no deploy
+// call. The static lines read the filesystem, git and the run's transcript; the runtime
+// lines run `pnpm check` and `pnpm db:seed`, then start the project's dev servers and check
+// over HTTP. Given a port block, the scorer runs `pnpm dev:ports` with `DEV_PORTS_BLOCK`
+// first, so the servers take that block and not the pinned ports. Every process the scorer
+// starts runs in its own process group, and the group is killed before the scorer
+// returns. For a FAIL row, the scorer reads `docs/build-log.md` for the stop point.
 //
 // The parsers at the top are pure, and `./score.test.ts` covers them on `node --test`.
 // Imports nothing but node: builtins. Node 24 strips the types, so there is no build step;
@@ -17,13 +23,17 @@ import { mkdir, open } from "node:fs/promises";
 import { createConnection } from "node:net";
 import { join, relative } from "node:path";
 
+import { specEntities } from "../product-spec.ts";
+import { isReadBack, looksLikeQuestion } from "./interview.ts";
+import type { Mode } from "./harness.ts";
+
 export interface Expect {
   productName: string;
   entity: { table: string; word: string };
   defaultLandingMarkers: string[];
 }
 
-export type Verdict = "PASS" | "FAIL";
+export type Verdict = "PASS" | "FAIL" | "N/A";
 
 export interface LineResult {
   id: LineId;
@@ -42,12 +52,64 @@ export const MVP_BAR = [
   },
   { id: "commits", text: "One commit per stage on build/mvp, nothing pushed" },
   { id: "build-log", text: "docs/build-log.md records stages and human steps" },
+  {
+    id: "interview",
+    text: "Interview ends with one read-back, no question after it",
+  },
+  { id: "entities", text: "Each entity of the spec end to end" },
+  { id: "preview", text: "Preview answers when the brief asks for one" },
 ] as const;
 
 export type LineId = (typeof MVP_BAR)[number]["id"];
 
+/** The dev ports the scorer checks. */
+export interface Ports {
+  web: number;
+  admin: number;
+  app: number;
+  api: number;
+}
+
 /** The pinned dev ports of a generated project, from the base AGENTS.md port map. */
-export const PORTS = { web: 3000, admin: 3001, app: 3002, api: 4000 } as const;
+export const PINNED_PORTS: Ports = {
+  web: 3000,
+  admin: 3001,
+  app: 3002,
+  api: 4000,
+};
+
+/**
+ * The ports of `block`, read from the project's `.devports.json` when it records them,
+ * else computed the way `pnpm dev:ports` does: `10000 + 10 * block + slot`.
+ */
+export function portsFromRecord(
+  text: string | undefined,
+  block: number
+): Ports {
+  const base = 10_000 + 10 * block;
+  const ports: Ports = {
+    web: base,
+    admin: base + 1,
+    app: base + 2,
+    api: base + 5,
+  };
+  let services: Record<string, unknown> = {};
+  try {
+    const record = JSON.parse(text ?? "{}") as { services?: unknown };
+    if (typeof record.services === "object" && record.services !== null) {
+      services = record.services as Record<string, unknown>;
+    }
+  } catch {
+    // A malformed record: keep the computed ports.
+  }
+  for (const name of ["web", "admin", "app", "api"] as const) {
+    const port = services[name];
+    if (typeof port === "number") {
+      ports[name] = port;
+    }
+  }
+  return ports;
+}
 
 // --- Pure parsers ------------------------------------------------------------------
 
@@ -245,8 +307,12 @@ export function formatTable(results: LineResult[], stop?: string): string {
       );
     }
   }
-  const passed = rows.length - failed.length;
-  lines.push("", `${passed}/${rows.length} MVP bar lines pass.`);
+  const passed = rows.filter((row) => row[2] === "PASS").length;
+  const na = rows.filter((row) => row[2] === "N/A").length;
+  lines.push(
+    "",
+    `${passed}/${rows.length} MVP bar lines pass, ${na} N/A, ${failed.length} FAIL.`
+  );
   return lines.join("\n");
 }
 
@@ -256,6 +322,318 @@ function pass(id: LineId, detail: string): LineResult {
 
 function fail(id: LineId, detail: string): LineResult {
   return { id, verdict: "FAIL", detail };
+}
+
+function notApplicable(id: LineId, detail: string): LineResult {
+  return { id, verdict: "N/A", detail };
+}
+
+// --- The interview, the spec's entities and the preview (plan 0109) -----------------
+
+/** One agent call of an interview run, as the harness writes it to `interview.json`. */
+export interface Exchange {
+  /** The agent call, from 1. */
+  call: number;
+  /** What the harness sent: `opening`, `answers`, `follow-up` or `read-back`. */
+  kind: string;
+  /** The question numbers the message answered. */
+  numbers: number[];
+  sent: string;
+  /** The agent's reply to it. */
+  reply: string;
+}
+
+export interface InterviewRecord {
+  exchanges: Exchange[];
+  /** Why the interview ended. */
+  end: string;
+}
+
+const PICKER = /"name"\s*:\s*"AskUserQuestion"/;
+
+/**
+ * Judges the interview: exactly one read-back, and no question after it. `transcripts`
+ * holds each call's transcript, in call order. A question after the read-back is the
+ * build call's last reply asking something, or a call of the question-picker tool.
+ */
+export function judgeInterview(
+  mode: Mode,
+  record: InterviewRecord | undefined,
+  transcripts: string[]
+): LineResult {
+  if (mode === "brief") {
+    return notApplicable("interview", "brief mode: no interview");
+  }
+  if (!record) {
+    return fail("interview", "no interview.json in the run's out folder");
+  }
+  const readBacks = record.exchanges.filter((e) => isReadBack(e.reply)).length;
+  if (readBacks === 0) {
+    return fail(
+      "interview",
+      `no read-back; the interview ended: ${record.end}`
+    );
+  }
+  if (readBacks > 1) {
+    return fail("interview", `${String(readBacks)} read-backs`);
+  }
+  const index = record.exchanges.findIndex((e) => e.kind === "read-back");
+  const build = record.exchanges[index];
+  if (!build) {
+    return fail(
+      "interview",
+      `the read-back got no answer; the interview ended: ${record.end}`
+    );
+  }
+  if (looksLikeQuestion(build.reply)) {
+    const last = build.reply.trim().split("\n").at(-1) ?? "";
+    return fail(
+      "interview",
+      `a question after the read-back: "${last.slice(0, 100)}"`
+    );
+  }
+  if (transcripts.slice(index).some((text) => PICKER.test(text))) {
+    return fail(
+      "interview",
+      "the question-picker tool ran after the read-back"
+    );
+  }
+  const answered = record.exchanges.filter((e) => e.kind === "answers").length;
+  return pass(
+    "interview",
+    `1 read-back after ${String(answered)} answer messages; no question after it`
+  );
+}
+
+/** The table of each `## Feature: <table>` heading in a build log. */
+export function featureSections(log: string): string[] {
+  return [...log.matchAll(/^##\s+Feature:\s*`?([a-z0-9_]+)`?\s*$/gm)].map(
+    (match) => match[1] ?? ""
+  );
+}
+
+function kebab(table: string): string {
+  return table.replaceAll("_", "-");
+}
+
+/**
+ * Which parts of one spec entity exist: its build log section, its `feat(build): feature
+ * <table>` commit, its Drizzle table, an api route file, and an app screen. A route or a
+ * screen is found by the table's name, snake or kebab case, in its path or as a route path.
+ */
+export function entityParts(
+  project: string,
+  table: string,
+  log: string,
+  subjects: string[]
+): [string, boolean][] {
+  const names = `(?:${escape(table)}|${escape(kebab(table))})`;
+  const routePath = new RegExp(`["'\`]/${names}(?![a-z0-9_-])`);
+  const inPath = new RegExp(`(?:^|[^a-z0-9_-])${names}(?:[^a-z0-9_-]|$)`);
+  const tableName = new RegExp(`["'\`]${escape(table)}["'\`]`);
+  const routes = files(project, "apps/api/src/routes", ".ts").filter(
+    (f) => !f.endsWith(".test.ts")
+  );
+  const screens = [
+    ...files(project, "apps/app/src/routes", ".tsx"),
+    ...files(project, "apps/app/src/routes", ".ts"),
+  ];
+  const routesDir = join(project, "apps/api/src/routes");
+  const screensDir = join(project, "apps/app/src/routes");
+  return [
+    ["build log section", featureSections(log).includes(table)],
+    [
+      "commit",
+      subjects.some((subject) =>
+        new RegExp(`^feat\\(build\\): feature \`?${escape(table)}\`?$`).test(
+          subject.trim()
+        )
+      ),
+    ],
+    [
+      "table",
+      files(project, "packages/db/src/schema", ".ts").some((f) =>
+        tableName.test(read(f))
+      ),
+    ],
+    [
+      "api route",
+      routes.some(
+        (f) => inPath.test(relative(routesDir, f)) || routePath.test(read(f))
+      ),
+    ],
+    [
+      "app screen",
+      screens.some(
+        (f) => inPath.test(relative(screensDir, f)) || routePath.test(read(f))
+      ),
+    ],
+  ];
+}
+
+/**
+ * Judges each entity of `docs/product-spec.md` end to end. `http`, given after the dev
+ * servers ran, maps each table to the status its list route gave with no session: a 401
+ * or 403 proves the route is mounted and guarded.
+ */
+export function judgeEntities(input: {
+  mode: Mode;
+  project: string;
+  spec: string | undefined;
+  log: string;
+  subjects: string[];
+  http?: Map<string, number | undefined>;
+}): LineResult {
+  if (input.spec === undefined) {
+    return input.mode === "brief"
+      ? notApplicable(
+          "entities",
+          "brief mode with no docs/product-spec.md; line 4 scores the entity"
+        )
+      : fail("entities", "no docs/product-spec.md");
+  }
+  const tables = specEntities(input.spec)
+    .map((entity) =>
+      (entity.parts.get("Table") ?? "").replaceAll("`", "").trim()
+    )
+    .filter((table) => table !== "");
+  if (tables.length === 0) {
+    return fail("entities", "the spec names no table under ## Entities");
+  }
+  const problems: string[] = [];
+  for (const table of tables) {
+    const parts = entityParts(input.project, table, input.log, input.subjects);
+    if (input.http) {
+      const status = input.http.get(table);
+      parts.push(
+        status === 401 || status === 403
+          ? ["http", true]
+          : [
+              `http ${status === undefined ? "no answer" : String(status)}`,
+              false,
+            ]
+      );
+    }
+    const missing = parts.filter(([, ok]) => !ok).map(([name]) => name);
+    if (missing.length > 0) {
+      problems.push(`\`${table}\` missing: ${missing.join(", ")}`);
+    }
+  }
+  if (problems.length > 0) {
+    return fail("entities", problems.join("; "));
+  }
+  const checked = input.http
+    ? "log section, commit, table, api route, app screen, 401 with no session"
+    : "log section, commit, table, api route, app screen (no HTTP: static scoring)";
+  return pass(
+    "entities",
+    `${String(tables.length)} entities, each with its ${checked}`
+  );
+}
+
+/** The brief's `deploy` field: `preview` or `none`, and `none` when it is absent. */
+export function deployOf(brief?: string): "preview" | "none" {
+  const front = /^---\n([\s\S]*?)\n---/.exec(brief ?? "")?.[1] ?? "";
+  return /^deploy:\s*preview\s*$/m.test(front) ? "preview" : "none";
+}
+
+const DEPLOY_COMMAND = /\bwrangler\b|\bdeploy:(?:preview|production)\b/;
+const PLAIN_DEPLOY =
+  /\bwrangler\s+(?:deploy|publish|d1|pages|versions|secret)\b|\bdeploy:(?:preview|production)\b/;
+
+interface ToolEvent {
+  type?: string;
+  message?: {
+    content?: { type?: string; input?: { command?: unknown } }[];
+  };
+}
+
+/**
+ * Every command in a transcript that calls `wrangler` or a deploy script. In a
+ * stream-json transcript only tool calls count, not prose; a plain-text line counts when it
+ * holds a wrangler subcommand or a deploy script.
+ */
+export function deployCalls(transcript: string): string[] {
+  const calls: string[] = [];
+  for (const line of transcript.split("\n")) {
+    const trimmed = line.trim();
+    if (trimmed === "") {
+      continue;
+    }
+    let event: ToolEvent | undefined;
+    try {
+      event = JSON.parse(trimmed) as ToolEvent;
+    } catch {
+      event = undefined;
+    }
+    if (!event || typeof event !== "object") {
+      if (PLAIN_DEPLOY.test(trimmed)) {
+        calls.push(trimmed);
+      }
+      continue;
+    }
+    if (event.type !== "assistant") {
+      continue;
+    }
+    for (const block of event.message?.content ?? []) {
+      const command = block.input?.command;
+      if (
+        block.type === "tool_use" &&
+        typeof command === "string" &&
+        DEPLOY_COMMAND.test(command)
+      ) {
+        calls.push(command);
+      }
+    }
+  }
+  return calls;
+}
+
+/** The `https://` addresses in the build log's `## ... Preview ...` section. */
+export function previewUrls(log: string): string[] {
+  const urls: string[] = [];
+  for (const section of log.split(/^(?=## )/m)) {
+    const title = section.split("\n")[0] ?? "";
+    if (!/^##\s.*preview/i.test(title)) {
+      continue;
+    }
+    for (const match of section.matchAll(/https:\/\/[^\s<>()`"']+/g)) {
+      urls.push(match[0].replace(/[.,;:]+$/, ""));
+    }
+  }
+  return urls;
+}
+
+/**
+ * Judges the preview line. With `deploy: none` it is N/A while the agent made no deploy
+ * call, and FAIL when it made one. With `deploy: preview` it passes when the first preview
+ * address answered 200.
+ */
+export function judgePreview(
+  deploy: "preview" | "none",
+  calls: string[],
+  probe?: { url: string; status: number | undefined }
+): LineResult {
+  if (deploy === "none") {
+    return calls.length === 0
+      ? notApplicable("preview", "deploy: none, and no wrangler or deploy call")
+      : fail(
+          "preview",
+          `deploy: none, but the agent ran \`${calls[0] ?? ""}\``
+        );
+  }
+  if (!probe) {
+    return fail(
+      "preview",
+      "deploy: preview, but no address in the build log's Preview section"
+    );
+  }
+  return probe.status === 200
+    ? pass("preview", `${probe.url} answers 200`)
+    : fail(
+        "preview",
+        `${probe.url} answers ${probe.status === undefined ? "nothing" : String(probe.status)}`
+      );
 }
 
 function escape(text: string): string {
@@ -555,9 +933,13 @@ function sleep(ms: number): Promise<void> {
 export interface ScoreOptions {
   /** The folder the agent ran in. */
   runDir: string;
-  /** Where the scorer writes its logs. */
+  /** Where the scorer writes its logs. The harness's `interview.json` and `agent/` sit here. */
   outDir: string;
   expect: Expect;
+  /** `interview` when the harness ran the interview; `brief` by default. */
+  mode?: Mode;
+  /** The port block for the dev servers. Without one they take the pinned ports. */
+  block?: number;
   /** Skip the lines that run commands or start servers. */
   staticOnly?: boolean;
 }
@@ -569,26 +951,64 @@ export interface Score {
   project: string | undefined;
 }
 
+function readIf(path: string): string | undefined {
+  return existsSync(path) ? read(path) : undefined;
+}
+
+/** Each agent call's transcript in `<outDir>/agent/`, in call order. */
+export function readTranscripts(outDir: string): string[] {
+  const dir = join(outDir, "agent");
+  return safeReaddir(dir)
+    .filter((entry) => entry.isFile() && entry.name.endsWith(".jsonl"))
+    .map((entry) => entry.name)
+    .toSorted()
+    .map((name) => read(join(dir, name)));
+}
+
+function readInterview(outDir: string): InterviewRecord | undefined {
+  const text = readIf(join(outDir, "interview.json"));
+  return text === undefined ? undefined : (JSON.parse(text) as InterviewRecord);
+}
+
 export async function scoreRun(options: ScoreOptions): Promise<Score> {
   const { runDir, outDir, expect } = options;
+  const mode = options.mode ?? "brief";
   await mkdir(outDir, { recursive: true });
   const project = findProject(runDir);
-  const results: LineResult[] = [];
+  const transcripts = readTranscripts(outDir);
+  const results: LineResult[] = [
+    judgeInterview(mode, readInterview(outDir), transcripts),
+  ];
   let stop: string | undefined;
 
   if (!project) {
     const detail = "no saasaloy project (no saasaloy.json) in the run folder";
     for (const line of MVP_BAR) {
-      results.push(fail(line.id, detail));
+      if (line.id !== "interview") {
+        results.push(fail(line.id, detail));
+      }
     }
     return finish(results);
   }
 
   const logPath = join(project, "docs/build-log.md");
-  const log = existsSync(logPath) ? parseBuildLog(read(logPath)) : undefined;
+  const logText = readIf(logPath) ?? "";
+  const log = existsSync(logPath) ? parseBuildLog(logText) : undefined;
   if (log) {
     stop = stopPoint(log);
   }
+  const spec = readIf(join(project, "docs/product-spec.md"));
+  const tables = spec
+    ? specEntities(spec)
+        .map((e) => (e.parts.get("Table") ?? "").replaceAll("`", "").trim())
+        .filter((table) => table !== "")
+    : [];
+  const subjects = await commitSubjects(project, outDir);
+  const brief =
+    readIf(join(project, "docs/product-brief.md")) ??
+    readIf(join(runDir, "product-brief.md"));
+  const deploy = deployOf(brief);
+  const calls = transcripts.flatMap((text) => deployCalls(text));
 
   results.push(
     checkEntity(project, expect),
@@ -600,14 +1020,71 @@ export async function scoreRun(options: ScoreOptions): Promise<Score> {
     for (const id of ["landing", "auth", "reset", "check"] as const) {
       results.push(fail(id, "not run (static scoring only)"));
     }
+    results.push(
+      judgeEntities({ mode, project, spec, log: logText, subjects }),
+      deploy === "preview"
+        ? fail("preview", "not run (static scoring only)")
+        : judgePreview(deploy, calls)
+    );
   } else {
-    results.push(...(await checkRuntime(project, outDir, expect)));
+    const runtime = await checkRuntime(
+      project,
+      outDir,
+      expect,
+      options.block,
+      tables
+    );
+    results.push(
+      ...runtime.results,
+      judgeEntities({
+        mode,
+        project,
+        spec,
+        log: logText,
+        subjects,
+        http: runtime.http,
+      }),
+      judgePreview(deploy, calls, await probePreview(deploy, logText))
+    );
   }
   return finish(results, stop, project);
 }
 
 function finish(results: LineResult[], stop?: string, project?: string): Score {
   return { results, stop, table: formatTable(results, stop), project };
+}
+
+/** The subject of each commit on `build/mvp`, newest first; empty with no such branch. */
+async function commitSubjects(
+  project: string,
+  outDir: string
+): Promise<string[]> {
+  if (!existsSync(join(project, ".git"))) {
+    return [];
+  }
+  const log = await git(project, outDir, [
+    "log",
+    "--format=%s",
+    "refs/heads/build/mvp",
+  ]);
+  return log.code === 0 ? log.output.split("\n").filter((s) => s !== "") : [];
+}
+
+/** Fetches the first preview address of the build log, with `deploy: preview`. */
+async function probePreview(
+  deploy: "preview" | "none",
+  log: string
+): Promise<{ url: string; status: number | undefined } | undefined> {
+  const url = previewUrls(log)[0];
+  if (deploy !== "preview" || !url) {
+    return undefined;
+  }
+  try {
+    const response = await fetch(url, { signal: AbortSignal.timeout(30_000) });
+    return { url, status: response.status };
+  } catch {
+    return { url, status: undefined };
+  }
 }
 
 async function git(
@@ -722,11 +1199,45 @@ async function checkBuildLog(
     : fail("build-log", problems.join("; "));
 }
 
+interface Runtime {
+  results: LineResult[];
+  /** Each spec table's list route status with no session; absent when the api never ran. */
+  http?: Map<string, number | undefined>;
+}
+
+/**
+ * The ports the dev servers take. Given a block and a project with `pnpm dev:ports`, it
+ * runs that command with `DEV_PORTS_BLOCK`, which writes the block into each service's
+ * `.env.local`, and reads `.devports.json`. Otherwise the pinned ports.
+ */
+async function devPorts(
+  project: string,
+  outDir: string,
+  block: number | undefined,
+  scripts: Record<string, string>
+): Promise<{ ports: Ports; problem?: string }> {
+  if (block === undefined || !scripts["dev:ports"]) {
+    return { ports: PINNED_PORTS };
+  }
+  const ran = await run("pnpm", ["dev:ports"], {
+    cwd: project,
+    logFile: join(outDir, "dev-ports.log"),
+    timeoutMs: 120_000,
+    env: { ...process.env, DEV_PORTS_BLOCK: String(block) },
+  });
+  const ports = portsFromRecord(readIf(join(project, ".devports.json")), block);
+  return ran.code === 0
+    ? { ports }
+    : { ports, problem: `pnpm dev:ports exited ${String(ran.code)}` };
+}
+
 async function checkRuntime(
   project: string,
   outDir: string,
-  expect: Expect
-): Promise<LineResult[]> {
+  expect: Expect,
+  block: number | undefined,
+  tables: string[]
+): Promise<Runtime> {
   const results: LineResult[] = [];
   const pkg = existsSync(join(project, "package.json"))
     ? (JSON.parse(read(join(project, "package.json"))) as {
@@ -780,31 +1291,33 @@ async function checkRuntime(
       : fail("check", checkProblems.join("; "))
   );
 
-  // The dev servers, for the three HTTP lines.
+  // The dev servers, for the HTTP lines.
+  const notScored = (detail: string): Runtime => ({
+    results: [
+      ...results,
+      fail("landing", detail),
+      fail("auth", detail),
+      fail("reset", detail),
+    ],
+  });
+  const { ports, problem } = await devPorts(project, outDir, block, scripts);
+  if (problem) {
+    return notScored(`${problem}; not scored`);
+  }
   const busy: number[] = [];
-  for (const port of Object.values(PORTS)) {
+  for (const port of [ports.web, ports.admin, ports.app, ports.api]) {
     if (await portBusy(port)) {
       busy.push(port);
     }
   }
   if (busy.length > 0) {
-    const detail = `port ${busy.join(", ")} busy before scoring; not scored`;
-    return [
-      ...results,
-      fail("landing", detail),
-      fail("auth", detail),
-      fail("reset", detail),
-    ];
+    return notScored(`port ${busy.join(", ")} busy before scoring; not scored`);
   }
   if (!scripts.dev) {
-    const detail = "no `dev` script";
-    return [
-      ...results,
-      fail("landing", detail),
-      fail("auth", detail),
-      fail("reset", detail),
-    ];
+    return notScored("no `dev` script");
   }
+  const origins = originsOf(ports);
+  let http: Map<string, number | undefined> | undefined;
 
   const devLog = join(outDir, "dev.log");
   const handle = await open(devLog, "w");
@@ -815,29 +1328,27 @@ async function checkRuntime(
   });
   trackGroup(dev.pid);
   try {
-    const webUp = await waitForHttp(`http://localhost:${PORTS.web}/`, 180_000);
-    const apiUp = await waitForHttp(
-      `http://localhost:${PORTS.api}/health`,
-      60_000
-    );
+    const webUp = await waitForHttp(`${origins.web}/`, 180_000);
+    const apiUp = await waitForHttp(`${origins.api}/health`, 60_000);
 
     if (webUp) {
-      const html = await (await fetch(`http://localhost:${PORTS.web}/`)).text();
+      const html = await (await fetch(`${origins.web}/`)).text();
       results.push(judgeLanding(html, expect));
     } else {
-      results.push(fail("landing", `web did not answer on ${PORTS.web}`));
+      results.push(fail("landing", `web did not answer on ${ports.web}`));
     }
 
-    const email = `bench-${Date.now()}@shelfnote.test`;
+    const email = `bench-${Date.now()}@bench.test`;
     if (apiUp) {
       results.push(
-        await checkAuth(email, project),
-        await checkReset(`reset-${email}`, devLog)
+        await checkAuth(email, project, origins, ports),
+        await checkReset(`reset-${email}`, devLog, origins)
       );
+      http = await listRouteStatus(origins.api, tables);
     } else {
       results.push(
-        fail("auth", `api did not answer on ${PORTS.api}`),
-        fail("reset", `api did not answer on ${PORTS.api}`)
+        fail("auth", `api did not answer on ${ports.api}`),
+        fail("reset", `api did not answer on ${ports.api}`)
       );
     }
   } finally {
@@ -848,22 +1359,65 @@ async function checkRuntime(
     await handle.close();
     await killStrays(project);
   }
-  return results;
+  return { results, http };
 }
 
-const APP_ORIGIN = `http://localhost:${PORTS.app}`;
+/**
+ * Each table's list route status with no session: `GET /<kebab-table>`, then
+ * `GET /<table>` when the first answers 404.
+ */
+async function listRouteStatus(
+  api: string,
+  tables: string[]
+): Promise<Map<string, number | undefined>> {
+  const statuses = new Map<string, number | undefined>();
+  for (const table of tables) {
+    let status: number | undefined;
+    for (const path of new Set([kebab(table), table])) {
+      try {
+        const response = await fetch(`${api}/${path}`, {
+          signal: AbortSignal.timeout(15_000),
+        });
+        status = response.status;
+      } catch {
+        status = undefined;
+      }
+      if (status !== 404) {
+        break;
+      }
+    }
+    statuses.set(table, status);
+  }
+  return statuses;
+}
+
 // The reset line tests the mail, not the app, so it calls from the web origin, which
 // the base trusts. The auth line calls from `app`, because the bar says "through app".
-const WEB_ORIGIN = `http://localhost:${PORTS.web}`;
-const AUTH = `http://localhost:${PORTS.api}/auth`;
+interface Origins {
+  web: string;
+  app: string;
+  api: string;
+  auth: string;
+}
+
+function originsOf(ports: Ports): Origins {
+  return {
+    web: `http://localhost:${ports.web}`,
+    app: `http://localhost:${ports.app}`,
+    api: `http://localhost:${ports.api}`,
+    auth: `http://localhost:${ports.api}/auth`,
+  };
+}
+
 const PASSWORD = "bench-password-1234";
 
 async function post(
+  origins: Origins,
   path: string,
   body: unknown,
-  origin = APP_ORIGIN
+  origin = origins.app
 ): Promise<Response> {
-  return fetch(`${AUTH}${path}`, {
+  return fetch(`${origins.auth}${path}`, {
     method: "POST",
     headers: {
       "content-type": "application/json",
@@ -874,7 +1428,7 @@ async function post(
   });
 }
 
-function statusOf(response: Response, origin = APP_ORIGIN): string {
+function statusOf(response: Response, origin: string): string {
   return response.status === 403
     ? `403 (origin ${origin} not trusted)`
     : String(response.status);
@@ -887,29 +1441,37 @@ function cookieOf(response: Response): string {
     .join("; ");
 }
 
-async function checkAuth(email: string, project: string): Promise<LineResult> {
+async function checkAuth(
+  email: string,
+  project: string,
+  origins: Origins,
+  ports: Ports
+): Promise<LineResult> {
   const problems: string[] = [];
   if (!existsSync(join(project, "apps/app"))) {
     problems.push("no apps/app");
-  } else if (!(await waitForHttp(`${APP_ORIGIN}/`, 60_000))) {
-    problems.push(`app did not answer on ${PORTS.app}`);
+  } else if (!(await waitForHttp(`${origins.app}/`, 60_000))) {
+    problems.push(`app did not answer on ${ports.app}`);
   }
   try {
-    const signUp = await post("/sign-up/email", {
+    const signUp = await post(origins, "/sign-up/email", {
       email,
       password: PASSWORD,
       name: "Bench Reader",
     });
     if (!signUp.ok) {
-      problems.push(`sign-up returned ${statusOf(signUp)}`);
+      problems.push(`sign-up returned ${statusOf(signUp, origins.app)}`);
     }
-    const signIn = await post("/sign-in/email", { email, password: PASSWORD });
+    const signIn = await post(origins, "/sign-in/email", {
+      email,
+      password: PASSWORD,
+    });
     if (!signIn.ok) {
-      problems.push(`sign-in returned ${statusOf(signIn)}`);
+      problems.push(`sign-in returned ${statusOf(signIn, origins.app)}`);
     }
     const cookie = cookieOf(signIn);
-    const session = await fetch(`${AUTH}/get-session`, {
-      headers: { cookie, origin: APP_ORIGIN },
+    const session = await fetch(`${origins.auth}/get-session`, {
+      headers: { cookie, origin: origins.app },
       signal: AbortSignal.timeout(15_000),
     });
     const data = session.ok
@@ -926,24 +1488,29 @@ async function checkAuth(email: string, project: string): Promise<LineResult> {
     : fail("auth", problems.join("; "));
 }
 
-async function checkReset(email: string, devLog: string): Promise<LineResult> {
-  const body = { email, redirectTo: `${WEB_ORIGIN}/reset-password` };
+async function checkReset(
+  email: string,
+  devLog: string,
+  origins: Origins
+): Promise<LineResult> {
+  const web = origins.web;
+  const body = { email, redirectTo: `${web}/reset-password` };
   try {
     const user = { email, password: PASSWORD, name: "Bench Reset" };
-    const signUp = await post("/sign-up/email", user, WEB_ORIGIN);
+    const signUp = await post(origins, "/sign-up/email", user, web);
     if (!signUp.ok) {
-      return fail("reset", `sign-up returned ${statusOf(signUp, WEB_ORIGIN)}`);
+      return fail("reset", `sign-up returned ${statusOf(signUp, web)}`);
     }
     // Better Auth renamed `/forget-password` to `/request-password-reset`; try both.
-    let response = await post("/request-password-reset", body, WEB_ORIGIN);
+    let response = await post(origins, "/request-password-reset", body, web);
     if (response.status === 404) {
-      response = await post("/forget-password", body, WEB_ORIGIN);
+      response = await post(origins, "/forget-password", body, web);
     }
     if (!response.ok) {
       const reason = await response.text().catch(() => "");
       return fail(
         "reset",
-        `reset request returned ${statusOf(response, WEB_ORIGIN)} ${reason.slice(0, 120)}`.trim()
+        `reset request returned ${statusOf(response, web)} ${reason.slice(0, 120)}`.trim()
       );
     }
   } catch (error) {
