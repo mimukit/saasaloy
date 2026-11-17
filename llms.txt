@@ -26,7 +26,7 @@ No env file is needed. A missing `packages/env/.env` reads as empty, so every ke
 
 ## When nobody can answer
 
-- **No brief and no person in the session: stop.** When the folder holds no `product-brief.md` and nobody can answer the interview (the prompt says so, or you run headless), do not run the interview and do not write a brief yourself. Say "No product brief exists and nobody is here to answer the saasaloy-setup interview", and stop.
+- **No brief and no person in the session: stop.** When the folder holds no `product-brief.md` and nobody can answer the interview (the prompt says so, or you run headless), do not run the interview and do not write a brief yourself. Say "No product brief exists and nobody is here to answer the saasaloy-setup interview", and stop. A headless run whose prompt says the owner is here and answers your questions has a person: ask in text, end your turn, and read the answer in the next message.
 - **A brief a person wrote earlier.** When the folder holds `product-brief.md` with `autonomy: afk` in its YAML frontmatter, run step 1, then `saasaloy-build`. It moves the brief to `docs/product-brief.md` and runs with no interview. A `product-spec.md` beside it moves to `docs/` too; with no spec, the build makes the MVP set and one entity from the brief. A brief without `autonomy: afk` needs a person to confirm it: with nobody to answer, stop and say so.
 
 ## The interview's output
