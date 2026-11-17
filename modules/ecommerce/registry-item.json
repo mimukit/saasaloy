@@ -1,0 +1,236 @@
+{
+  "$schema": "https://saasaloy.dev/schemas/registry-item.schema.json",
+  "name": "ecommerce",
+  "type": "saasaloy:feature",
+  "description": "An in-house shop on Postgres: products with variants, stock holds, carts, orders with a status machine, and flat-rate shipping zones.",
+  "stage": "money",
+  "needs": [],
+  "requires": {
+    "saasaloy": ">=0.9.0"
+  },
+  "dependsOn": [
+    "api",
+    "database-postgres",
+    "validators",
+    "auth",
+    "auth-phone",
+    "admin",
+    "file-uploads",
+    "payment",
+    "cms"
+  ],
+  "dependencies": [],
+  "patches": [
+    {
+      "file": "packages/config/src/sections.ts",
+      "kind": "plugin-array",
+      "exportName": "sections",
+      "arrayProp": "sections",
+      "call": "ecommerceConfig",
+      "import": {
+        "name": "ecommerceConfig",
+        "from": "./sections/ecommerce"
+      }
+    },
+    {
+      "file": "packages/db/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ecommerce",
+      "range": "workspace:*"
+    },
+    {
+      "file": "apps/api/package.json",
+      "kind": "package-json-dependency",
+      "section": "dependencies",
+      "name": "@repo/ecommerce",
+      "range": "workspace:*"
+    }
+  ],
+  "files": [
+    {
+      "path": "files/config/ecommerce.ts",
+      "target": "@config/sections/ecommerce.ts"
+    },
+    {
+      "path": "files/db/schema/ecommerce.pg.ts",
+      "target": "@db/schema/ecommerce.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/shared.ts",
+      "target": "@db/repositories/ecommerce/shared.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/stock.ts",
+      "target": "@db/repositories/ecommerce/stock.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/catalog.ts",
+      "target": "@db/repositories/ecommerce/catalog.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/cart.ts",
+      "target": "@db/repositories/ecommerce/cart.ts"
+    },
+    {
+      "path": "files/db/repositories/ecommerce/orders.ts",
+      "target": "@db/repositories/ecommerce/orders.ts"
+    },
+    {
+      "path": "files/db/seed/cart-items.ts",
+      "target": "@db/seed/slices/cart-items.ts"
+    },
+    {
+      "path": "files/db/seed/carts.ts",
+      "target": "@db/seed/slices/carts.ts"
+    },
+    {
+      "path": "files/db/seed/customer-addresses.ts",
+      "target": "@db/seed/slices/customer-addresses.ts"
+    },
+    {
+      "path": "files/db/seed/inventory-levels.ts",
+      "target": "@db/seed/slices/inventory-levels.ts"
+    },
+    {
+      "path": "files/db/seed/order-events.ts",
+      "target": "@db/seed/slices/order-events.ts"
+    },
+    {
+      "path": "files/db/seed/order-items.ts",
+      "target": "@db/seed/slices/order-items.ts"
+    },
+    {
+      "path": "files/db/seed/orders.ts",
+      "target": "@db/seed/slices/orders.ts"
+    },
+    {
+      "path": "files/db/seed/product-categories.ts",
+      "target": "@db/seed/slices/product-categories.ts"
+    },
+    {
+      "path": "files/db/seed/product-images.ts",
+      "target": "@db/seed/slices/product-images.ts"
+    },
+    {
+      "path": "files/db/seed/product-option-values.ts",
+      "target": "@db/seed/slices/product-option-values.ts"
+    },
+    {
+      "path": "files/db/seed/product-options.ts",
+      "target": "@db/seed/slices/product-options.ts"
+    },
+    {
+      "path": "files/db/seed/product-variants.ts",
+      "target": "@db/seed/slices/product-variants.ts"
+    },
+    {
+      "path": "files/db/seed/products.ts",
+      "target": "@db/seed/slices/products.ts"
+    },
+    {
+      "path": "files/db/seed/shipping-zones.ts",
+      "target": "@db/seed/slices/shipping-zones.ts"
+    },
+    {
+      "path": "files/db/seed/stock-movements.ts",
+      "target": "@db/seed/slices/stock-movements.ts"
+    },
+    {
+      "path": "files/db/seed/stock-reservations.ts",
+      "target": "@db/seed/slices/stock-reservations.ts"
+    },
+    {
+      "path": "files/db/seed/variant-prices.ts",
+      "target": "@db/seed/slices/variant-prices.ts"
+    },
+    {
+      "path": "files/validators/ecommerce.ts",
+      "target": "@validators/ecommerce.ts"
+    },
+    {
+      "path": "files/api/lib/ecommerce/catalog.vitest.ts",
+      "target": "@api/lib/ecommerce/catalog.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/ecommerce/stock.vitest.ts",
+      "target": "@api/lib/ecommerce/stock.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/ecommerce/cart.vitest.ts",
+      "target": "@api/lib/ecommerce/cart.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/ecommerce/orders.vitest.ts",
+      "target": "@api/lib/ecommerce/orders.test.ts",
+      "when": {
+        "testing": true
+      }
+    },
+    {
+      "path": "files/api/lib/ecommerce/fixtures.ts",
+      "target": "@api/lib/ecommerce/fixtures.ts",
+      "when": {
+        "testing": true
+      }
+    }
+  ],
+  "scaffolds": [
+    {
+      "workspace": "packages/ecommerce",
+      "aliases": {
+        "@ecommerce": "packages/ecommerce/src"
+      },
+      "files": [
+        {
+          "path": "files/package.json",
+          "target": "package.json"
+        },
+        {
+          "path": "files/tsconfig.json",
+          "target": "tsconfig.json"
+        },
+        {
+          "path": "files/src/index.ts",
+          "target": "src/index.ts"
+        },
+        {
+          "path": "files/src/errors.ts",
+          "target": "src/errors.ts"
+        },
+        {
+          "path": "files/src/money.ts",
+          "target": "src/money.ts"
+        },
+        {
+          "path": "files/src/totals.ts",
+          "target": "src/totals.ts"
+        },
+        {
+          "path": "files/src/status.ts",
+          "target": "src/status.ts"
+        },
+        {
+          "path": "files/src/rules.ts",
+          "target": "src/rules.ts"
+        },
+        {
+          "path": "files/src/types.ts",
+          "target": "src/types.ts"
+        }
+      ]
+    }
+  ],
+  "agent": {
+    "skills": ["skills/saasaloy-ecommerce"]
+  }
+}
