@@ -105,7 +105,7 @@ pnpm db:setup --docker && pnpm db:seed
      - the rule section and the "answer against the last deploy tag" rule
      - the commands table and the masking caveat
      - the symptom table and the report shape
-2. Read `modules/auth/update-notes/0002-no-first-user-hook.md`.
+2. Read `modules/auth/update-notes/0003-no-first-user-hook.md`.
    - [ ] An owner of an existing project knows what to delete and how to make the first superadmin on Postgres and on D1
 
 **Result**
