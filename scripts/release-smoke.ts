@@ -18,9 +18,12 @@
 // side, and then a fresh project's dev server fails for everyone. Only a real install
 // finds that, so `.github/workflows/smoke.yml` runs this script on a schedule as well.
 // The second scaffolds a project with every module, one per database driver, and runs
-// that project's own `pnpm lint` (issue #152) and `pnpm typecheck` (issue #220). Only
-// there do imports between workspaces resolve, the type-aware pass reach the installed
-// blocks, `add` format its patches, and a module's files typecheck against each other.
+// that project's own `pnpm lint` (issue #152), `pnpm typecheck` (issue #220), `pnpm test`
+// and `pnpm build` (issue #347). Only there do imports between workspaces resolve, the
+// type-aware pass reach the installed blocks, `add` format its patches, a module's files
+// typecheck against each other, and the module route tests run. The Postgres projects'
+// tests need Docker: `pnpm db:setup` starts their server with `docker compose`, and the
+// script stops it and deletes its volume at the end.
 //
 // The upgrade step needs the network too (issue #298). It installs the previous published
 // CLI, which scaffolds a project with modules fetched from GitHub at that release's tag,
@@ -114,9 +117,67 @@ const FULL_SCAFFOLD_TESTS = ["apps/api/src/routes/auth.test.ts"];
  * What each full scaffold runs, in order, once every module is installed. `lint` came
  * with issue #152. `typecheck` came with issue #220: a module's files only typecheck
  * inside a project, so a route that read `error.message` off an `unknown`, and a route
- * tree one module behind, passed every check in this repo. Exported for its own test.
+ * tree one module behind, passed every check in this repo. `test` and `build` came with
+ * issue #347: the module route tests and each app's build run only inside a project too,
+ * and they are the rest of the project's own `pnpm check`. Exported for its own test.
  */
-export const FULL_SCAFFOLD_CHECKS = ["lint", "typecheck"] as const;
+export const FULL_SCAFFOLD_CHECKS = [
+  "lint",
+  "typecheck",
+  "test",
+  "build",
+] as const;
+
+/**
+ * The value a full scaffold gives a key that has no default and no person to type it.
+ * Long enough for a key that signs links, and plainly not a real secret.
+ */
+const PLACEHOLDER_VALUE = "release-smoke-placeholder-0123456789abcdef";
+
+/**
+ * Every key `pnpm env:setup` names as having no value, once each, in the order it names
+ * them. It prints one `<service> has no value for A, B.` line per service. Exported for
+ * its own test.
+ */
+export function missingEnvKeys(output: string): string[] {
+  const keys = new Set<string>();
+  for (const match of output.matchAll(/has no value for ([A-Z0-9_, ]+)\./g)) {
+    for (const key of (match[1] ?? "").split(",")) {
+      if (key.trim() !== "") {
+        keys.add(key.trim());
+      }
+    }
+  }
+  return [...keys];
+}
+
+/**
+ * A local value for a key with no default, or `undefined` when there is none. The rule
+ * is the build skill's "Fill a key with no default": a `<CAP>_PROVIDER` key takes the
+ * capability's local provider from the registry (`<cap>-console`, else `<cap>-memory`),
+ * an address takes one on the reserved `example.test` domain, and a URL an origin there.
+ * Any other key is a vendor credential or a secret no local run sends anywhere, and takes
+ * a placeholder. Exported for its own test.
+ */
+export function localEnvValue(
+  key: string,
+  modules: readonly string[]
+): string | undefined {
+  const provider = /^([A-Z0-9_]+)_PROVIDER$/.exec(key);
+  if (provider !== null) {
+    const capability = (provider[1] ?? "").toLowerCase().replaceAll("_", "-");
+    return ["console", "memory"].find((local) =>
+      modules.includes(`${capability}-${local}`)
+    );
+  }
+  if (key.includes("EMAIL") || key.endsWith("_FROM")) {
+    return "hello@example.test";
+  }
+  if (key.endsWith("_URL")) {
+    return "https://example.test";
+  }
+  return PLACEHOLDER_VALUE;
+}
 
 /** A registry module as the full-scaffold step reads it: its name and the modules it excludes. */
 export interface ModuleEntry {
@@ -270,8 +331,27 @@ export function fullScaffolds(modules: readonly ModuleEntry[]): FullScaffold[] {
       for (const name of choice) {
         visit(name);
       }
+      // A free module that depends on a module this choice excludes cannot be added here:
+      // `add ecommerce` refuses in a D1 project by design. Leave it to the projects that
+      // can take it.
+      const dependencies = (
+        name: string,
+        seen = new Set<string>()
+      ): string[] => {
+        for (const dependency of entries.get(name)?.dependsOn ?? []) {
+          if (!seen.has(dependency)) {
+            seen.add(dependency);
+            dependencies(dependency, seen);
+          }
+        }
+        return [...seen];
+      };
+      const fits = (name: string): boolean =>
+        dependencies(name).every(
+          (dependency) => !choice.some((other) => conflicts(dependency, other))
+        );
       return {
-        modules: [...ordered, ...free],
+        modules: [...ordered, ...free.filter(fits)],
         name: `full-${ordered.join("-")}`,
       };
     });
@@ -775,6 +855,82 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
   return entries;
 }
 
+/** The driver whose full scaffolds need a Postgres server for their tests. */
+const POSTGRES_DRIVER = "database-postgres";
+
+/**
+ * Runs one task at a time, in the order they arrive. The Postgres scaffolds' `db:setup`
+ * goes through it: the first starts its compose project on port 5432, and the second finds
+ * the server answering and creates its own database there. Two at once would race for the
+ * port.
+ */
+function serialQueue(): <T>(task: () => Promise<T>) => Promise<T> {
+  let tail: Promise<unknown> = Promise.resolve();
+  return <T>(task: () => Promise<T>): Promise<T> => {
+    const next = tail.then(task);
+    tail = next.catch(() => {
+      // The caller reads the failure; the queue only keeps the order.
+    });
+    return next;
+  };
+}
+
+/**
+ * Write every service's `.env`, as a person does after an `add`. A key with no default
+ * makes `pnpm env:setup` refuse by name, so each named key gets the value
+ * `localEnvValue` gives it through the packed CLI's `saasaloy env --set`, and the setup
+ * runs again. A key with no local value fails the step by name.
+ */
+async function setupEnv(
+  bin: string,
+  dir: string,
+  label: string,
+  env: NodeJS.ProcessEnv,
+  registry: readonly string[]
+): Promise<void> {
+  const first = await capture(
+    "pnpm",
+    ["env:setup"],
+    `pnpm env:setup in ${label}`,
+    {
+      cwd: dir,
+    }
+  );
+  if (first.code === 0) {
+    return;
+  }
+  const output = `${first.stdout}\n${first.stderr}`;
+  const keys = missingEnvKeys(output);
+  if (keys.length === 0) {
+    throw new StepError(`pnpm env:setup in ${label} failed`, [
+      `exit code ${String(first.code)}`,
+      ...output.trim().split("\n").slice(-30),
+    ]);
+  }
+  const values = keys.map(
+    (key) => [key, localEnvValue(key, registry)] as const
+  );
+  const unfilled = values.filter(([, value]) => value === undefined);
+  if (unfilled.length > 0) {
+    throw new StepError(
+      `pnpm env:setup in ${label} names keys with no local value`,
+      [
+        unfilled.map(([key]) => key).join(", "),
+        "A <CAP>_PROVIDER key needs a <cap>-console or <cap>-memory module in the registry.",
+      ]
+    );
+  }
+  await runQuiet(
+    bin,
+    ["env", ...values.flatMap(([key, value]) => ["--set", `${key}=${value}`])],
+    `saasaloy env --set in ${label}`,
+    { cwd: dir, env }
+  );
+  await runQuiet("pnpm", ["env:setup"], `pnpm env:setup in ${label}`, {
+    cwd: dir,
+  });
+}
+
 /**
  * Scaffold one project with every module in `scaffold`, then run each of the project's
  * own `FULL_SCAFFOLD_CHECKS`, in the order a user takes: install the base, add the
@@ -785,11 +941,19 @@ async function readModules(registryDir: string): Promise<ModuleEntry[]> {
  * Testing is on (`--testing=tests-after`), because a module test ships only into a
  * project with testing on, and the project's Vitest rules reach it only here (issue
  * #266). `tdd` ships the same files.
+ *
+ * Before the checks it takes the database and env steps the build skill gives after an
+ * `add`: `db:generate`, `db:setup`, `env:setup`. The route tests migrate their own
+ * database from the generated migrations and read `BETTER_AUTH_URL` from the env files,
+ * and on Postgres they need the server `db:setup` starts. `db:seed` is left out: the test
+ * setup seeds its own database.
  */
 async function checkFullScaffold(
   bin: string,
   scaffold: FullScaffold,
-  env: NodeJS.ProcessEnv
+  env: NodeJS.ProcessEnv,
+  registry: readonly string[],
+  serialPostgres: <T>(task: () => Promise<T>) => Promise<T>
 ): Promise<void> {
   const started = Date.now();
   const dir = join(workDir, scaffold.name);
@@ -804,7 +968,8 @@ async function checkFullScaffold(
   );
   // A real project is its own git repository, and oxlint honours `.gitignore` up to
   // the repository root. Without this one, oxlint walks up into this repo, whose
-  // `.gitignore` excludes `.dev/`, and finds nothing to lint.
+  // `.gitignore` excludes `.dev/`, and finds nothing to lint. `pnpm env:setup` finds the
+  // project root through git as well.
   await runQuiet("git", ["init", "--quiet"], `git init in ${scaffold.name}`, {
     cwd: dir,
   });
@@ -823,6 +988,21 @@ async function checkFullScaffold(
     cwd: dir,
   });
   await assertExists(dir, FULL_SCAFFOLD_TESTS, `add in ${scaffold.name}`);
+  step(`setting up the database and env files in ${scaffold.name}`);
+  await runQuiet(
+    "pnpm",
+    ["--filter", "@repo/db", "db:generate"],
+    `pnpm --filter @repo/db db:generate in ${scaffold.name}`,
+    { cwd: dir }
+  );
+  const dbSetup = () =>
+    runQuiet("pnpm", ["db:setup"], `pnpm db:setup in ${scaffold.name}`, {
+      cwd: dir,
+    });
+  await (scaffold.modules.includes(POSTGRES_DRIVER)
+    ? serialPostgres(dbSetup)
+    : dbSetup());
+  await setupEnv(bin, dir, scaffold.name, env, registry);
   for (const check of FULL_SCAFFOLD_CHECKS) {
     step(`running \`pnpm ${check}\` in ${scaffold.name}`);
     await runQuiet("pnpm", [check], `pnpm ${check} in ${scaffold.name}`, {
@@ -830,8 +1010,28 @@ async function checkFullScaffold(
     });
   }
   step(
-    `${scaffold.name} passes ${FULL_SCAFFOLD_CHECKS.map((check) => `\`pnpm ${check}\``).join(" and ")} (${seconds(started)})`
+    `${scaffold.name} passes ${FULL_SCAFFOLD_CHECKS.map((check) => `\`pnpm ${check}\``).join(", ")} (${seconds(started)})`
   );
+}
+
+/**
+ * Stop the Postgres container a full scaffold's `db:setup` started, and delete its volume.
+ * `docker compose down -v` in a project that started nothing changes nothing, so it runs
+ * in every Postgres scaffold that got far enough to hold a `compose.yaml`.
+ */
+async function stopPostgres(scaffolds: readonly FullScaffold[]): Promise<void> {
+  for (const scaffold of scaffolds) {
+    const dir = join(workDir, scaffold.name);
+    if (
+      scaffold.modules.includes(POSTGRES_DRIVER) &&
+      (await pathPresent(join(dir, "compose.yaml")))
+    ) {
+      spawnSync("docker", ["compose", "down", "-v"], {
+        cwd: dir,
+        stdio: "ignore",
+      });
+    }
+  }
 }
 
 /** A finished command's exit code and its two streams, kept apart. */
@@ -1477,8 +1677,17 @@ async function main(): Promise<void> {
 
   // --- Start the web app's dev server (needs the network) ---------------------------
 
+  // `pnpm env:setup` finds the project root through git, and `init --no-git` made none.
+  run("git", ["init", "--quiet"], "git init", { cwd: projectDir });
+
   step("installing the scaffolded project with pnpm");
   run("pnpm", SCAFFOLD_INSTALL, "pnpm install", { cwd: projectDir });
+
+  // The web app's env gate throws in the dev server when `apps/web/.env` is missing. A
+  // person runs this after an install that `init` did not run; `init` runs it after its
+  // own install. The 2026-11-17 nightly failed here (issue #347).
+  step("running `pnpm env:setup` in the scaffolded project");
+  run("pnpm", ["env:setup"], "pnpm env:setup", { cwd: projectDir });
 
   step(`starting \`astro dev\` in apps/web and requesting ${WEB_DEV_URL}`);
   const webDev = checkWebDev(join(projectDir, "apps/web")).then((failure) => {
@@ -1490,7 +1699,7 @@ async function main(): Promise<void> {
     }
   });
 
-  // --- Lint and typecheck a project that holds every module (needs the network) ------
+  // --- Check a project that holds every module (needs the network and Docker) --------
 
   // The repo lints each shipped file with the template's oxlint config, but only a real
   // project resolves the imports between workspaces, runs the type-aware pass over the
@@ -1501,17 +1710,38 @@ async function main(): Promise<void> {
   // they run side by side with the dev server check above. In sequence they were most
   // of this script's time. Every check runs to its end, so one run reports every
   // project that fails, not only the first.
-  const scaffolds = fullScaffolds(
-    await readModules(offlineEnv.SAASALOY_REGISTRY_DIR)
-  );
+  const registry = await readModules(offlineEnv.SAASALOY_REGISTRY_DIR);
+  const scaffolds = fullScaffolds(registry);
+  // The Postgres scaffolds' route tests need a server, and `db:setup` starts one with
+  // `docker compose`. Say so before minutes of installs, not after them.
+  if (
+    scaffolds.some((scaffold) => scaffold.modules.includes(POSTGRES_DRIVER)) &&
+    spawnSync("docker", ["compose", "version"], { stdio: "ignore" }).status !==
+      0
+  ) {
+    fail(
+      "`docker compose` is not available",
+      `The ${POSTGRES_DRIVER} scaffolds run their route tests on the Postgres that \`pnpm db:setup\` starts with docker compose.`,
+      "Install Docker with the compose plugin, or start the Docker daemon, then run the smoke again."
+    );
+  }
+  const registryNames = registry.map((entry) => entry.name);
+  const serialPostgres = serialQueue();
   const results = await Promise.allSettled([
     upgrade,
     skipped,
     webDev,
     ...scaffolds.map((scaffold) =>
-      checkFullScaffold(bin, scaffold, offlineEnv)
+      checkFullScaffold(
+        bin,
+        scaffold,
+        offlineEnv,
+        registryNames,
+        serialPostgres
+      )
     ),
   ]);
+  await stopPostgres(scaffolds);
   const failures = results.flatMap((result) =>
     result.status === "rejected" ? [result.reason as unknown] : []
   );
@@ -1533,7 +1763,7 @@ async function main(): Promise<void> {
 
   const kept = options.keep ? ` Kept ${relative(root, scratch)}.` : "";
   console.log(
-    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\` and \`pnpm typecheck\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a deleted block kept deleted and a three-way base.${kept}`
+    `release-smoke: saasaloy@${version} packs, installs outside the workspace, scaffolds a project that takes the api module and serves its web app in dev, passes \`pnpm lint\`, \`pnpm typecheck\`, \`pnpm test\` and \`pnpm build\` with every module and testing on in ${String(scaffolds.length)} project(s), lists every update note a project from the previous release is owed, and updates a ${SKIPPED_FROM} project with a deleted block kept deleted and a three-way base.${kept}`
   );
 }
 

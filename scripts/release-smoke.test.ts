@@ -25,6 +25,8 @@ import {
   fullScaffolds,
   installedAfterUpdate,
   listsDeletedLocally,
+  localEnvValue,
+  missingEnvKeys,
   parseArgs,
   parsePlanNotes,
   previousVersion,
@@ -297,6 +299,26 @@ describe("fullScaffolds", () => {
       combinations.add(`${drivers[0]}/${owners[0]}`);
     }
     assert.equal(combinations.size, 4);
+  });
+
+  // `ecommerce` depends on `database-postgres` by design (plan 0106: "Postgres only"), so
+  // `add ecommerce` refuses in a D1 project. The smoke expects that refusal and leaves the
+  // module out of every D1 project, as it does a module that depends on it.
+  it("leaves a module out of a project whose choice conflicts with what it depends on", () => {
+    const scaffolds = fullScaffolds([
+      { conflictsWith: ["database-postgres"], name: "database-d1" },
+      { conflictsWith: ["database-d1"], name: "database-postgres" },
+      free("api"),
+      { ...free("shop"), dependsOn: ["api", "database-postgres"] },
+      { ...free("shop-reports"), dependsOn: ["shop"] },
+    ]);
+    assert.deepEqual(scaffolds, [
+      { modules: ["database-d1", "api"], name: "full-database-d1" },
+      {
+        modules: ["database-postgres", "api", "shop", "shop-reports"],
+        name: "full-database-postgres",
+      },
+    ]);
   });
 
   it("honours one-sided conflicts without dropping compatible modules", () => {
@@ -634,9 +656,86 @@ describe("findUnknownAliases", () => {
 
 // Issue #220. A module's files only typecheck inside a scaffolded project, so dropping
 // `typecheck` from this list lets a type error ship to every new project again. `lint`
-// stays first: it is the cheaper check, and it fails on a formatting slip.
+// stays first: it is the cheaper check, and it fails on a formatting slip. `test` and
+// `build` came with issue #347: a module's route tests and each app's build only run
+// inside a project, and a scaffold that lints and typechecks can still fail both.
 describe("FULL_SCAFFOLD_CHECKS", () => {
-  it("lints, then typechecks, every full scaffold", () => {
-    assert.deepEqual(FULL_SCAFFOLD_CHECKS, ["lint", "typecheck"]);
+  it("lints, typechecks, tests, then builds every full scaffold", () => {
+    assert.deepEqual(FULL_SCAFFOLD_CHECKS, [
+      "lint",
+      "typecheck",
+      "test",
+      "build",
+    ]);
+  });
+});
+
+// Issue #347. A full scaffold installs every module, and `pnpm env:setup` refuses while a
+// key has no value. The smoke reads the keys from its message and fills each one.
+describe("missingEnvKeys", () => {
+  it("reads the keys env:setup names, for every service", () => {
+    const output = [
+      "$ node packages/env/scripts/env-setup.ts",
+      'api has no value for EMAIL_FROM, EMAIL_PROVIDER. Set them at the value source, or mark them "# Blank on purpose" in packages/env/.env.example.',
+      "web has no value for PUBLIC_SHOP_URL. Set it at the value source.",
+    ].join("\n");
+    assert.deepEqual(missingEnvKeys(output), [
+      "EMAIL_FROM",
+      "EMAIL_PROVIDER",
+      "PUBLIC_SHOP_URL",
+    ]);
+  });
+
+  it("names a key two services miss once", () => {
+    const output =
+      "api has no value for KV_PROVIDER.\nadmin has no value for KV_PROVIDER.";
+    assert.deepEqual(missingEnvKeys(output), ["KV_PROVIDER"]);
+  });
+
+  it("finds nothing in a run that names no key", () => {
+    assert.deepEqual(missingEnvKeys("Error: ENOENT"), []);
+  });
+});
+
+describe("localEnvValue", () => {
+  const modules = [
+    "email-console",
+    "kv-memory",
+    "kv-upstash",
+    "payment-console",
+  ];
+
+  it("gives a provider key the registry's console provider", () => {
+    assert.equal(localEnvValue("EMAIL_PROVIDER", modules), "console");
+    assert.equal(localEnvValue("PAYMENT_PROVIDER", modules), "console");
+  });
+
+  it("gives a provider key the memory provider when there is no console one", () => {
+    assert.equal(localEnvValue("KV_PROVIDER", modules), "memory");
+  });
+
+  it("gives no value to a provider key with no local provider", () => {
+    assert.equal(localEnvValue("SEARCH_PROVIDER", modules), undefined);
+  });
+
+  it("gives an email key an address on a reserved domain", () => {
+    assert.equal(localEnvValue("EMAIL_FROM", modules), "hello@example.test");
+    assert.equal(
+      localEnvValue("SSLCOMMERZ_RECEIPT_EMAIL", modules),
+      "hello@example.test"
+    );
+  });
+
+  it("gives a URL key an origin on a reserved domain", () => {
+    assert.equal(
+      localEnvValue("UPSTASH_REDIS_REST_URL", modules),
+      "https://example.test"
+    );
+  });
+
+  it("gives any other key a placeholder long enough for a signing secret", () => {
+    const value = localEnvValue("STORAGE_URL_SECRET", modules) ?? "";
+    assert.ok(value.length >= 32, value);
+    assert.equal(localEnvValue("KV_KEY_PREFIX", modules), value);
   });
 });

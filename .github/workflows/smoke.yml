@@ -1,7 +1,9 @@
 # The tarball smoke on a timer. `pnpm release:smoke` packs the CLI, scaffolds a project
 # from the tarball, installs it from the network, and starts the web app's `astro dev`.
 # Then it scaffolds one project per database driver with every module and runs that
-# project's `pnpm lint` (issue #152) and `pnpm typecheck` (issue #220).
+# project's `pnpm lint` (issue #152), `pnpm typecheck` (issue #220), `pnpm test` and
+# `pnpm build` (issue #347). The Postgres projects' tests run on the Postgres that
+# `pnpm db:setup` starts with docker compose, which the runner image ships.
 #
 # It runs on a schedule because the break it looks for arrives with no commit of ours.
 # The web template reaches `@cloudflare/vite-plugin` through a range in
@@ -27,7 +29,8 @@ jobs:
   release-smoke:
     name: release-smoke
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    # Four full scaffolds now test and build as well as lint and typecheck.
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@v7
 
