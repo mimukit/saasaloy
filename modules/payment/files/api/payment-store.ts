@@ -1,11 +1,13 @@
 import {
   PaymentError,
+  setPaymentProviderEnv,
   setPaymentStoreResolver,
   setPaymentStoreRunner,
 } from "@repo/payment";
 import type {
   NewPayment,
   Payment,
+  PaymentEnv,
   PaymentEventRecord,
   PaymentPatch,
   PaymentRefund,
@@ -46,6 +48,10 @@ setPaymentStoreResolver(() => storeScope.getStore());
 // that calls `createPayment(c.env).create(...)` directly, a listener, a queue job. It
 // opens a client for the one call and closes it afterwards. `withDb` rather than `getDb`,
 // because under `database-postgres` the call owns a real socket.
+// A provider-owned job (`payment-bkash`'s token refresh) gets no `env` from the queue, so
+// the Worker environment is registered here once for it to read back (ADR 0057).
+setPaymentProviderEnv(env as unknown as PaymentEnv);
+
 setPaymentStoreRunner((body) =>
   withDb(
     {
