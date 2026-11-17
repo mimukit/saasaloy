@@ -54,3 +54,7 @@ A push that adds a file under `packages/db/migrations/` stops at the migration g
 ## When a run fails
 
 Read the failed step's log. `pnpm deploy:production` names the command that clears each gate. A failure after the first Worker went live follows the same steps as a local one: the `saasaloy-deploy` skill lists the Worker rollback, and `docs/runbook-deploy.md` holds what only this project knows.
+
+## Next
+
+Run `saasaloy-deploy` to read the gates and the Worker rollback that every CI deploy runs through.
