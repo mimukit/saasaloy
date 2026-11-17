@@ -388,6 +388,58 @@ describe("runEnv — --set and --from-file (#223)", () => {
     await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
   });
 
+  it("accepts a key the base's key list holds, such as PUBLIC_SITE_URL", async () => {
+    await put(
+      "packages/env/.env.example",
+      "# @services web\nPUBLIC_SITE_URL=http://localhost:3000\n"
+    );
+    await put("values.env", "PUBLIC_SITE_URL=https://shop.example.com\n");
+
+    const { code } = await run(["--from-file", "values.env"]);
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readProject(LOCAL)).resolves.toBe(
+      "PUBLIC_SITE_URL=https://shop.example.com\n"
+    );
+  });
+
+  it("accepts a base key before any module is installed", async () => {
+    await put(
+      "saasaloy.json",
+      JSON.stringify({ aliases: {}, base: "web", installed: [] })
+    );
+    await put(
+      "packages/env/.env.example",
+      "# @services web\nPUBLIC_SITE_URL=http://localhost:3000\n"
+    );
+
+    const { code } = await run(["--set", "PUBLIC_SITE_URL=https://a.example"]);
+
+    expect(code).toBe(EXIT_OK);
+    await expect(readProject(LOCAL)).resolves.toBe(
+      "PUBLIC_SITE_URL=https://a.example\n"
+    );
+  });
+
+  it("still refuses a key neither a module nor the key list declares", async () => {
+    await put(
+      "packages/env/.env.example",
+      "# @services web\nPUBLIC_SITE_URL=http://localhost:3000\n"
+    );
+
+    const { code, out } = await run([
+      "--set",
+      "PUBLIC_SITE_URL=https://a.example",
+      "--set",
+      "TYPO_KEY=x",
+    ]);
+
+    expect(code).toBe(EXIT_REFUSED);
+    expect(out).toContain("TYPO_KEY");
+    expect(out).not.toContain("PUBLIC_SITE_URL —");
+    await expect(readProject(LOCAL)).rejects.toThrow("ENOENT");
+  });
+
   it("refuses when the target file is not gitignored, and writes nothing", async () => {
     await put(".gitignore", "node_modules\n");
 

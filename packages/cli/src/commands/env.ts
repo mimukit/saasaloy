@@ -59,9 +59,11 @@ import { DESCRIPTIONS } from "./descriptions.js";
 //
 // `--set KEY=VALUE` and `--from-file <path>` answer the prompts on the command line, so an
 // agent with no terminal can fill the file (#223). A value passed that way is a value a
-// person chose, so it replaces what the file holds. A key no installed module declares is
-// refused before anything is written: a typo would otherwise land in a file no service
-// reads, and the run would report success.
+// person chose, so it replaces what the file holds. A key that no installed module
+// declares and `packages/env/.env.example` does not list is refused before anything is
+// written: a typo would otherwise land in a file no service reads, and the run would
+// report success. The key list counts because it holds the base's own keys, such as
+// `PUBLIC_SITE_URL`, which no module declares and a service still reads.
 //
 // `--check --json` prints the report as one document on stdout (#223). `--json` without
 // `--check` refuses: the prompt and the flag paths write, and a write has no report.
@@ -443,8 +445,8 @@ interface FlagRun {
 /**
  * The `--set`/`--from-file` half of `env` (#223). No prompt opens, so it runs the same
  * with or without a terminal. The gitignore check runs first, as it does before the
- * prompts, then every passed key is checked against the declarations, and one unknown key
- * refuses the whole run before a byte is written. A key still unset afterwards is a
+ * prompts, then every passed key is checked against the declarations and the key list,
+ * and one unknown key refuses the whole run before a byte is written. A key still unset afterwards is a
  * warning, not a failure: the agent filled what it was given, and `--check` is the gate.
  */
 async function writeFlagValues(run: FlagRun): Promise<number> {
@@ -455,13 +457,18 @@ async function writeFlagValues(run: FlagRun): Promise<number> {
     return out.refuse(NOT_IGNORED, EXIT_REFUSED);
   }
 
-  const declared = new Set(declarations.map((declaration) => declaration.name));
+  const declared = new Set([
+    ...declarations.map((declaration) => declaration.name),
+    ...Object.keys(
+      parseEnvExample((await readTarget(root, ENV_EXAMPLE)) ?? "")
+    ),
+  ]);
   const unknown = values
     .map(([name]) => name)
     .filter((name) => !declared.has(name));
   if (unknown.length > 0) {
     return out.refuse(
-      `No installed module declares ${unknown.join(", ")} — nothing written. ` +
+      `No installed module declares ${unknown.join(", ")}, and ${ENV_EXAMPLE} does not list ${unknown.length === 1 ? "it" : "them"} — nothing written. ` +
         `Check the spelling, or \`saasaloy add\` the module that reads ${unknown.length === 1 ? "it" : "them"}.`,
       EXIT_REFUSED
     );
