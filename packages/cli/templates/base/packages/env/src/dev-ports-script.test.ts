@@ -22,7 +22,10 @@ describe("scripts/dev-ports.ts with no git repository", () => {
     });
   }
   writeFileSync(path.join(dir, "pnpm-workspace.yaml"), "packages: []\n");
-  const env = { ...process.env, GIT_CEILING_DIRECTORIES: path.dirname(dir) };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    GIT_CEILING_DIRECTORIES: path.dirname(dir),
+  };
   delete env.DEV_PORTS_BLOCK;
   const result = spawnSync(
     process.execPath,
