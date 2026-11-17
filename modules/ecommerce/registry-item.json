@@ -336,6 +336,74 @@
       "target": "@db/seed/slices/variant-prices.ts"
     },
     {
+      "path": "files/db/column-classes/cart-items.ts",
+      "target": "@db/column-classes/cart-items.ts"
+    },
+    {
+      "path": "files/db/column-classes/carts.ts",
+      "target": "@db/column-classes/carts.ts"
+    },
+    {
+      "path": "files/db/column-classes/customer-addresses.ts",
+      "target": "@db/column-classes/customer-addresses.ts"
+    },
+    {
+      "path": "files/db/column-classes/inventory-levels.ts",
+      "target": "@db/column-classes/inventory-levels.ts"
+    },
+    {
+      "path": "files/db/column-classes/order-events.ts",
+      "target": "@db/column-classes/order-events.ts"
+    },
+    {
+      "path": "files/db/column-classes/order-items.ts",
+      "target": "@db/column-classes/order-items.ts"
+    },
+    {
+      "path": "files/db/column-classes/orders.ts",
+      "target": "@db/column-classes/orders.ts"
+    },
+    {
+      "path": "files/db/column-classes/product-categories.ts",
+      "target": "@db/column-classes/product-categories.ts"
+    },
+    {
+      "path": "files/db/column-classes/product-images.ts",
+      "target": "@db/column-classes/product-images.ts"
+    },
+    {
+      "path": "files/db/column-classes/product-option-values.ts",
+      "target": "@db/column-classes/product-option-values.ts"
+    },
+    {
+      "path": "files/db/column-classes/product-options.ts",
+      "target": "@db/column-classes/product-options.ts"
+    },
+    {
+      "path": "files/db/column-classes/product-variants.ts",
+      "target": "@db/column-classes/product-variants.ts"
+    },
+    {
+      "path": "files/db/column-classes/products.ts",
+      "target": "@db/column-classes/products.ts"
+    },
+    {
+      "path": "files/db/column-classes/shipping-zones.ts",
+      "target": "@db/column-classes/shipping-zones.ts"
+    },
+    {
+      "path": "files/db/column-classes/stock-movements.ts",
+      "target": "@db/column-classes/stock-movements.ts"
+    },
+    {
+      "path": "files/db/column-classes/stock-reservations.ts",
+      "target": "@db/column-classes/stock-reservations.ts"
+    },
+    {
+      "path": "files/db/column-classes/variant-prices.ts",
+      "target": "@db/column-classes/variant-prices.ts"
+    },
+    {
       "path": "files/validators/ecommerce.ts",
       "target": "@validators/ecommerce.ts"
     },
