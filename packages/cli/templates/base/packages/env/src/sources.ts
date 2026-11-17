@@ -12,7 +12,7 @@ import type { EnvSource } from "./source.ts";
 //
 // The built-in `local` source reads the gitignored `packages/env/.env`, the file
 // `saasaloy env` prompts into, so a project distributes values with no vendor account and
-// no network. For production it reads `packages/env/.env.prod` instead, which you fill in
+// no network. A project with no such file yet gets the example's local defaults. For production it reads `packages/env/.env.prod` instead, which you fill in
 // by hand. `saasaloy add env-infisical` registers a second source.
 
 export { EnvError } from "./error.ts";
@@ -42,11 +42,12 @@ export const local: EnvSource = {
     const relative =
       request.environment === "prod" ? LOCAL_PROD_VALUES : LOCAL_VALUES;
     const held = readEnvFile(path.join(request.root, relative));
-    if (!held.exists) {
+    // A missing dev file reads as an empty one, so a fresh project takes every default
+    // below and a key with no default still fails the check by name. A missing
+    // production file is a refusal: production takes no default.
+    if (!held.exists && request.environment === "prod") {
       throw new EnvError(
-        request.environment === "prod"
-          ? `${LOCAL_PROD_VALUES} does not exist, so the local source has no production values. Copy the keys from packages/env/.env.example into it and set the production value of each.`
-          : `${LOCAL_VALUES} does not exist, so the local source has no values. Run saasaloy env to fill it in.`,
+        `${LOCAL_PROD_VALUES} does not exist, so the local source has no production values. Copy the keys from packages/env/.env.example into it and set the production value of each.`,
         { code: "not_configured" }
       );
     }

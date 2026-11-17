@@ -118,13 +118,17 @@ describe("the local source", () => {
     await assert.rejects(local.load(prod), /\.env\.prod does not exist/);
   });
 
-  it("says the project is not set up when the file is missing", async () => {
-    await assert.rejects(local.load(request(makeRoot())), (error: unknown) => {
-      assert.ok(error instanceof EnvError);
-      assert.equal(error.code, "not_configured");
-      assert.equal(error.retryable, false);
-      return true;
-    });
+  it("reads a missing file as an empty one, so every key takes its default", async () => {
+    const root = makeRoot(undefined, "# @services api\nA=\nB=fallback\n");
+    assert.deepEqual(
+      [...(await local.load(request(root)))],
+      [["B", "fallback"]]
+    );
+  });
+
+  it("leaves a key with no default unanswered when the file is missing", async () => {
+    const root = makeRoot(undefined, "# @services api\nA=\n");
+    assert.deepEqual([...(await local.load(request(root)))], []);
   });
 });
 
