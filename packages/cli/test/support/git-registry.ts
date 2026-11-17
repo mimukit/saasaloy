@@ -82,9 +82,17 @@ export async function startGitRegistry(
     }
     const commit = new RegExp(`^${repoPath}/commits/([^/]+)$`).exec(path);
     if (commit?.[1]) {
-      const sha = peel(decodeURIComponent(commit[1]));
+      const ref = decodeURIComponent(commit[1]);
+      const sha = peel(ref);
       if (!sha) {
-        notFound();
+        // GitHub answers a missing ref on this endpoint with 422, not 404.
+        res.writeHead(422, { "content-type": "application/json" });
+        res.end(
+          JSON.stringify({
+            message: `No commit found for SHA: ${ref}`,
+            status: "422",
+          })
+        );
         return;
       }
       res.writeHead(200, { "content-type": "text/plain" });

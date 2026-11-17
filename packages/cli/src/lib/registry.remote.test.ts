@@ -71,6 +71,19 @@ afterEach(async () => {
   await rm(cache, { recursive: true, force: true });
 });
 
+/** What GitHub answers for `GET /repos/<o>/<r>/commits/<ref>` when the ref is missing. */
+function noCommit(ref: string): { status: number; body: string } {
+  return {
+    status: 422,
+    body: JSON.stringify({
+      message: `No commit found for SHA: ${ref}`,
+      documentation_url:
+        "https://docs.github.com/rest/commits/commits#get-a-commit",
+      status: "422",
+    }),
+  };
+}
+
 function source(ref?: string): RemoteRegistrySource {
   return new RemoteRegistrySource("mimukit", "saasaloy", ref);
 }
@@ -104,7 +117,7 @@ describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
     await start({
       failure: (path) =>
         path === `/repos/mimukit/saasaloy/commits/${TAG}`
-          ? { status: 404 }
+          ? noCommit(TAG)
           : undefined,
     });
 
@@ -133,11 +146,45 @@ describe("RemoteRegistrySource — resolving a ref to a commit SHA", () => {
     await start({
       failure: (path) =>
         path === `/repos/mimukit/saasaloy/commits/${TAG}`
-          ? { status: 404 }
+          ? noCommit(TAG)
           : undefined,
     });
 
     await expect(source(TAG).resolveSha()).rejects.toThrow(`has no tag ${TAG}`);
+  });
+
+  it("still refuses with the way out when GitHub answers 404 for the tag", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? { status: 404 }
+          : undefined,
+    });
+
+    await expect(source().resolveSha()).rejects.toThrow(
+      "saasaloy add <module>@main"
+    );
+  });
+
+  it("keeps a 422 for another cause an error, not a missing tag", async () => {
+    await fixture.close();
+    await start({
+      failure: (path) =>
+        path === `/repos/mimukit/saasaloy/commits/${TAG}`
+          ? {
+              status: 422,
+              body: JSON.stringify({ message: "Validation Failed" }),
+            }
+          : undefined,
+    });
+
+    const caught = await source()
+      .resolveSha()
+      .catch((error: unknown) => error);
+
+    expect(isRefusal(caught)).toBeFalsy();
+    expect((caught as Error).message).toContain("GitHub API error 422");
   });
 
   it("honours an explicit ref, and never asks for the default branch", async () => {

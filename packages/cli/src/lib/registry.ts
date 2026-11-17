@@ -620,7 +620,15 @@ export class RemoteRegistrySource implements RegistrySource {
           `GitHub API rate limit hit for ${this.owner}/${this.repo}. Set GITHUB_TOKEN to raise it. ${OFFLINE_HINT}`
         );
       }
-      if (res.status === 404) {
+      // GitHub answers a missing ref on `commits/<ref>` with 422 "No commit found for
+      // SHA: <ref>", not 404. Any other 422 stays an error.
+      if (
+        res.status === 404 ||
+        (res.status === 422 &&
+          (await res.text().catch(() => "")).includes(
+            "No commit found for SHA"
+          ))
+      ) {
         throw new GithubNotFoundError(
           `Not found on GitHub: ${this.owner}/${this.repo} (${path}). ${OFFLINE_HINT}`
         );
